@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useId, type CSSProperties, type SVGProps } from "react";
 import { type ButlerMarkTheme, type ButlerMarkThemeColors, inkForButlerMarkTheme } from "./butlerMarkTheme.ts";
 
@@ -11,9 +13,10 @@ interface ButlerMarkIconProps extends Omit<SVGProps<SVGSVGElement>, "color"> {
 export function ButlerMarkIcon({
   theme = "dark",
   themeColors,
-  title = "Butler",
+  title = appCopy.firstRun.product,
   ...props
 }: ButlerMarkIconProps) {
+  useAppLocale();
   const ink = inkForButlerMarkTheme(theme, themeColors);
   const generatedId = `butler-mark-${useId().replace(/:/gu, "-")}`;
   const titleId = title ? `${generatedId}-title` : undefined;

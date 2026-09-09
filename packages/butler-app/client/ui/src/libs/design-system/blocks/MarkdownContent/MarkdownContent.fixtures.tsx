@@ -13,6 +13,10 @@ export function MarkdownContentFixture() {
       <pre>
         <code>{"bun test tests/unit/app-client-design.test.ts"}</code>
       </pre>
+      <h1>Next document section</h1>
+      <p>A new major section is separated from the previous content.</p>
+      <h2>Implementation</h2>
+      <p>Subsections retain a smaller, consistent section gap.</p>
     </MarkdownContent>
   );
 }

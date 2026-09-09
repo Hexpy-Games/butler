@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { ButtonContainer, IconButton, Minus, Square, X } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@/app/nativeWindowControls.ts";
 
 export function WindowControls() {
+  useAppLocale();
   if (!shouldShowAppWindowControls()) return null;
 
   return (

@@ -6,6 +6,23 @@ import {
 } from "../../packages/butler-agent/src/gateways/app/domain/workers/worker-activity-projection.ts";
 import type { WorkerActivitySummary } from "../../packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
 import type { WorkOrchestrationRecord } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
+import { relabelWorkerActivities } from "../../packages/butler-agent/src/gateways/app/domain/workers/worker-activity-ordering.ts";
+
+test("worker activity projection assigns 50 stable unique instance names", () => {
+  const workers = Array.from({ length: 50 }, (_, index) => workerSummary({
+    worker_id: `worker-instance-${index + 1}`,
+  }));
+  const first = relabelWorkerActivities(workers);
+  const second = relabelWorkerActivities(workers);
+
+  expect(new Set(first.map((worker) => worker.worker_display_name)).size).toBe(50);
+  expect(second.map((worker) => worker.worker_display_name)).toEqual(
+    first.map((worker) => worker.worker_display_name),
+  );
+  expect(relabelWorkerActivities([
+    workerSummary({ worker_id: "worker-timeline" }),
+  ])[0]?.worker_display_name).toBe("Kai");
+});
 
 test("worker activity projection keeps terminal linked children only for reporting orchestrations", () => {
   const worker = workerSummary({

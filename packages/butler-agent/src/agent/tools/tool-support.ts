@@ -13,10 +13,14 @@ export type {
 } from "./tool-support-contracts.ts";
 
 export {
+  beginToolResultModelPreviewBatch,
   createToolResultModelPreviewContext,
+  MAX_PROVIDER_TOOL_RESULT_BYTES,
   serializeToolResultPayloadForProvider,
   toolResultPayloadForProvider,
 } from "./tool-result-serialization.ts";
+export type { ToolResultExactReadReference } from
+  "./tool-result-serialization.ts";
 export { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
 export type { ToolResultModelPreviewContext } from "./tool-result-model-preview.ts";
 export { validateJsonObjectSchema, validateToolCallArguments } from

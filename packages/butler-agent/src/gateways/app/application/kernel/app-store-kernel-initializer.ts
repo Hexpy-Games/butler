@@ -23,9 +23,19 @@ import { AppRuntimeInfoStore } from "../../domain/runtime/runtime-info-store.ts"
 import { AppSystemMonitorStore } from "../../domain/runtime/system-monitor-store.ts";
 import { DeveloperLogStore } from "../../../../operations/diagnostics/developer-log-store.ts";
 import { AppNavigationStore } from "../../domain/sessions/navigation-store.ts";
+import { AppSpaceOrganization } from "../../domain/sessions/space-organization.ts";
+import { AppSessionRelocation } from "../../domain/sessions/session-relocation.ts";
+import { AppSessionBranchStore } from "../../domain/sessions/session-branch-store.ts";
+import { messageFromRow } from "../../domain/sessions/message-read-model.ts";
+import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
+import { createAppTextProvider } from "../../infrastructure/transport/app-text-provider.ts";
+import { summarizeBranch } from "../../../../agent/output/session-branch.ts";
+import { classifySession } from "../../../../agent/output/session-grouping.ts";
+import { AppSessionTopicGrouping } from "../../domain/sessions/session-topic-grouping.ts";
 import { AppNewChatBriefingStore } from "../../domain/sessions/new-chat-briefing-store.ts";
 import { AppConversationProjectionStore } from "../../domain/projections/app-conversation-projection-store.ts";
 import { AppSessionCatalogStore } from "../../domain/sessions/session-catalog-store.ts";
+import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 import { AppSessionControlsStore } from "../../domain/sessions/session-controls-store.ts";
 import { createAppSessionModuleGraph } from "../../domain/sessions/session-module-graph.ts";
 import { AppTurnRecordStore } from "../../domain/sessions/turn-record-store.ts";
@@ -57,9 +67,6 @@ export function initializeAppStoreKernel(
   options: AppServerStoreOptions,
 ): void {
   kernel.closed = false;
-  kernel.projectWorkspaceRoot = resolve(
-    options.projectWorkspaceRoot ?? join(homedir(), "butler-workspace"),
-  );
   kernel.folderSelectionSecret = options.folderSelectionSecret;
   kernel.butlerData = resolve(
     options.butlerData ??
@@ -68,6 +75,9 @@ export function initializeAppStoreKernel(
   );
   kernel.butlerHome = resolve(
     options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
+  );
+  kernel.projectWorkspaceRoot = resolve(
+    options.projectWorkspaceRoot ?? join(kernel.butlerData, "workspaces", "projects"),
   );
   kernel.stewardObserver = options.stewardObserver;
   if (options.sessionBindings) {
@@ -163,8 +173,13 @@ export function initializeAppStoreKernel(
       kernel.appendEvent(type, payload);
     },
   );
-  kernel.sessionCatalog = new AppSessionCatalogStore(kernel.db);
+  kernel.sessionCatalog = new AppSessionCatalogStore(kernel.db,
+    id => kernel.stewardObserver.plan(sessionHintForRow(id)));
+  kernel.space = new AppSpaceOrganization(kernel.db, (type, payload) => {
+    kernel.appendEvent(type, payload);
+  });
   kernel.navigation = new AppNavigationStore(
+    kernel.space,
     () => kernel.automationStore.list(),
     () => kernel.preferences.getSettings(),
     () => kernel.sessionCatalog.listSessions(),
@@ -236,6 +251,14 @@ export function initializeAppStoreKernel(
     getProject: (projectId) => kernel.projects.getProjectRow(projectId),
     getSettings: () => kernel.preferences.getSettings(),
   });
+  kernel.sessionRelocation = new AppSessionRelocation({
+    db: kernel.db, butlerData: kernel.butlerData, bindings: kernel.sessionBindings,
+    space: kernel.space, observer: kernel.stewardObserver,
+    getSession: (id) => kernel.sessionRecords.getSession(id),
+    getProject: (id) => kernel.projects.getProjectRow(id),
+    getSettings: () => kernel.preferences.getSettings(),
+    appendEvent: (type, payload) => kernel.appendEvent(type, payload),
+  });
   kernel.assistantMessages = sessionModules.assistantMessages;
   kernel.sessionMessageProjection = sessionModules.sessionMessageProjection;
   kernel.turnProgressView = sessionModules.turnProgressView;
@@ -253,6 +276,7 @@ export function initializeAppStoreKernel(
     butlerData: kernel.butlerData,
     getSettings: () => kernel.preferences.getSettings(),
     getProjectRow: (projectId) => kernel.getProjectRow(projectId),
+    getProjectMaterials: (projectId) => kernel.projectDashboard.sources.list(projectId, { limit: 12 }),
   });
   kernel.projectDashboard = new AppProjectDashboardStore(
     kernel.db,
@@ -261,7 +285,31 @@ export function initializeAppStoreKernel(
     (projectId) =>
       kernel.sessionCatalog.listSessions({ kind: "project", projectId })
         .sessions,
+    () => kernel.preferences.getSettings(),
+    (projectId) => { kernel.appendEvent("project_dashboard_updated", { project_id: projectId }); },
   );
+  kernel.sessionBranches = new AppSessionBranchStore({
+    db: kernel.db,
+    butlerData: kernel.butlerData,
+    getSession: id => kernel.sessionRecords.getSession(id),
+    getMessage: id => {
+      const row = kernel.sessionRecords.getMessageRow(id);
+      if (!row) throw new AppStoreOperationError(404, "message_not_found", "원본 답변을 찾을 수 없습니다.");
+      return messageFromRow(row);
+    },
+    createSession: request => kernel.sessionRecords.createSession(request, { emitCreated: false }).session,
+    createProject: name => kernel.projects.createProject({ source: "scratch", display_name: name }).project,
+    provision: (id, signal, requestId) => kernel.projectSessionWorktrees.provision(id, signal, requestId),
+    publish: id => kernel.sessionRecords.publishSessionCreated(id),
+    summarize: (text, signal) => summarizeBranch(createAppTextProvider(kernel.butlerData), {
+      text, model: kernel.preferences.getSettings().model as `${string}/${string}`, signal,
+    }),
+  });
+  kernel.sessionTopicGrouping = new AppSessionTopicGrouping({
+    db: kernel.db, space: kernel.space,
+    enabled: () => kernel.preferences.getSettings().smart_grouping_enabled,
+    classify: (text, candidates, model, signal) => classifySession(createAppTextProvider(kernel.butlerData), { text, candidates, model, signal }),
+  });
   const transportModules = createAppTransportModuleGraph({
     db: kernel.db,
     butlerData: kernel.butlerData,
@@ -330,6 +378,7 @@ export function initializeAppStoreKernel(
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??
     kernel.projectWorkspaceRoot;
   seedAppStoreDefaults(kernel.db);
+  kernel.sessionRelocation.recoverPending();
   void kernel.sessionQueueDispatcher.recoverAndDrain().catch(() => undefined);
   kernel.transportProjectionOwner.start();
   kernel.turnActions.reconcileCancellationSettlements();

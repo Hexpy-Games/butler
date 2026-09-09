@@ -536,7 +536,7 @@ function validatePreparedStandaloneRuntime(context: StandaloneAgentActivationCon
     BUTLER_UPDATE_ACTIVATION_CHECK: "1",
   };
   const startup = spawnSync(process.execPath, [launcherPath, "--help"], {
-    cwd: context.runtimeHome,
+    cwd: context.butlerData,
     encoding: "utf8",
     env: activationEnv,
     timeout: 30_000,
@@ -545,7 +545,7 @@ function validatePreparedStandaloneRuntime(context: StandaloneAgentActivationCon
     throw new Error(`startup check failed: ${summarizeProcessFailure(startup) || "Agent launcher failed"}`);
   }
   const doctor = spawnSync(process.execPath, [launcherPath, "doctor", "--json"], {
-    cwd: context.runtimeHome,
+    cwd: context.butlerData,
     encoding: "utf8",
     env: activationEnv,
     timeout: 30_000,

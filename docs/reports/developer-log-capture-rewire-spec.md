@@ -1,5 +1,11 @@
 # Developer log capture rewire — spec phase report
 
+> Historical August report. The September correction is governed by Project
+> Ledger `SPEC-DEVLOG-CAPTURE-RECOVERY-20260909`. Its execution-local capture
+> retains the last actual provider request/response and declares that scope and
+> round count in metadata. The old route/work-status substitute described below
+> is no longer used. Current verification is recorded in the recovery report.
+
 Branch: `fix/developer-log-capture`
 Worktree: `/Users/yeonwoo/butler-log-fix`
 
@@ -175,4 +181,3 @@ on-disk JSONL entry assertions, secret redaction assertion.
 - Success entries record structured route/work-status metadata in
   `response.raw`; raw provider payloads are not available at the BTCC
   runtime boundary (spec-permitted null/neutral payload).
-

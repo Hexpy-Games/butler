@@ -14,6 +14,7 @@ import {
   type RegisteredEditFileInvocation,
 } from "./guided-workspace-file-edit-contracts.ts";
 import { workspaceFileEditBatchTarget } from "./guided-workspace-file-edit-batch.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 
 export type GuidedWorkspaceFileEditBatchAdapterOptions =
   GuidedWorkspaceEditGuardOptions & {
@@ -66,11 +67,7 @@ export async function dispatchGuidedWorkspaceEditBatch(
   });
   const afterStates = await observeBatchStates(options, input.normalizedInput);
   if (isRegisteredPartialApply(registeredResult)) {
-    return uncertain({
-      code: "partial_apply",
-      message:
-        "The registered edit_file batch reported partial application; inspect every file before retrying.",
-    });
+    return uncertain(registeredToolRejection(registeredResult)!);
   }
   if (afterStates.error) return uncertain(afterStates.error);
   const afterMatches = afterStates.states.every(
@@ -78,7 +75,11 @@ export async function dispatchGuidedWorkspaceEditBatch(
       state.sha256 === input.normalizedInput.edits[index]!.after_sha256,
   );
   if (afterMatches)
-    return appliedBatch(input.normalizedInput, afterStates.states);
+    return appliedBatch(
+      input.normalizedInput,
+      afterStates.states,
+      changedFilesFromRegisteredResult(registeredResult),
+    );
   const beforeMatches = afterStates.states.every(
     (state, index) =>
       state.sha256 === input.normalizedInput.edits[index]!.before_sha256,
@@ -182,6 +183,7 @@ async function observeBatchStates(
 function appliedBatch(
   input: GuidedWorkspaceFileEditBatchInput,
   states: readonly { bytes: number; sha256: string }[],
+  changedFiles: readonly ChangedFileDetail[] = [],
 ): Extract<
   EffectDispatchOutcome<GuidedWorkspaceFileEditBatchResult>,
   { status: "applied" }
@@ -193,17 +195,28 @@ function appliedBatch(
     before_sha256: entry.before_sha256,
     after_sha256: entry.after_sha256,
   }));
+  const files = [...new Map(input.edits.map((entry, index) => [entry.path, entries[index]!])).values()];
   return {
     status: "applied",
     result: {
       ok: true,
       effect: "workspace_file_edit_batch",
-      files: entries.length,
-      bytes: entries.reduce((total, entry) => total + entry.bytes, 0),
+      files: files.filter((entry) => entry.before_sha256 !== entry.after_sha256).length,
+      bytes: files.reduce((total, entry) => total + entry.bytes, 0),
       entries,
       target_observed: true,
+      ...(changedFiles.length > 0 ? { changed_files: [...changedFiles] } : {}),
     },
   };
+}
+
+function changedFilesFromRegisteredResult(value: unknown): ChangedFileDetail[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const details = (value as Record<string, unknown>).changed_files;
+  return Array.isArray(details)
+    ? details.filter((detail): detail is ChangedFileDetail =>
+      Boolean(detail && typeof detail === "object" && !Array.isArray(detail)))
+    : [];
 }
 
 function batchTargetInputMismatch(
@@ -234,7 +247,11 @@ function registeredToolRejection(value: unknown): EffectAdapterError | null {
       typeof record.error === "string"
         ? record.error
         : "registered_edit_file_rejected",
-    message: "The registered edit_file tool rejected the reviewed batch.",
+    message: [
+      typeof record.message === "string" ? record.message : "The registered edit_file tool rejected the reviewed batch.",
+      typeof record.recovery_hint === "string" ? record.recovery_hint : "",
+      JSON.stringify(Object.fromEntries(["preflight_failures", "applied", "conflicting", "not_attempted"].filter((key) => record[key] !== undefined).map((key) => [key, record[key]]))),
+    ].filter(Boolean).join(" "),
   };
 }
 

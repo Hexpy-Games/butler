@@ -1,0 +1,59 @@
+.diff {
+  overflow-x: auto;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.lines {
+  display: grid;
+  grid-template-columns:
+    minmax(var(--space-xl), auto)
+    minmax(var(--space-xl), auto)
+    var(--space-md)
+    minmax(max-content, 1fr);
+  width: max-content;
+  min-width: 100%;
+  font: var(--font-code);
+}
+
+.added,
+.deleted {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+.added {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.deleted {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.lineNumber,
+.marker,
+.content {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.lineNumber {
+  color: var(--text-tertiary);
+  text-align: end;
+  user-select: none;
+}
+
+.marker {
+  padding-inline: var(--space-xs);
+  user-select: none;
+}
+
+.content {
+  color: var(--text-primary);
+  font: inherit;
+  white-space: pre;
+}

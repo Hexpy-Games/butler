@@ -38,7 +38,7 @@ import {
 import { includeRecentContext } from "./recent-conversation-context.ts";
 import { buildModelRoute } from "../model-route/index.ts";
 import {
-  emptySubsessionContextAssembly,
+  admitButlerContextAssembly, admitStewardContextAssembly,
   isSubsessionBinding,
   readSubsessionMetadata,
 } from "./subsession-turn-context.ts";
@@ -46,7 +46,8 @@ export type BtccTurnPreparationDependencies = {
   bindingStore: Pick<SessionBindingStore, "getBySessionId">;
   conversationStore: ConversationWriter & ConversationContextStoreReader;
   butlerData: string;
-  promptAssembler: Pick<PromptAssembler, "buildButlerContextAssembly">;
+  promptAssembler: Pick<PromptAssembler,
+    "buildButlerContextAssembly" | "buildStewardContextAssembly">;
   contextDocuments: BtccContextDocumentWriter;
   turns: Pick<TurnStateRepository, "findTurn">;
   wakeAuthorizations: import("./contracts.ts").BtccWakeAuthorizationReader;
@@ -88,12 +89,14 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
     const envelope = inboundEnvelopeFor(request);
     const subsession = isSubsessionBinding(binding);
     const assembly = subsession
-      ? emptySubsessionContextAssembly()
+      ? admitStewardContextAssembly(this.dependencies.promptAssembler.buildStewardContextAssembly({
+          binding, envelope,
+        }))
       : includeRecentContext(
         this.dependencies.conversationStore,
         binding,
         envelope,
-        this.dependencies.promptAssembler.buildButlerContextAssembly({
+        admitButlerContextAssembly(this.dependencies.promptAssembler.buildButlerContextAssembly({
           binding,
           envelope,
           route: {
@@ -103,7 +106,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
             workspacePath: request.route.workspacePath,
             ...(request.route.projectId ? { projectId: request.route.projectId } : {}),
           },
-        }),
+        })),
       );
     const controls = request.executionControls
       ? verifyTurnExecutionControls(request.executionControls)
@@ -114,8 +117,10 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       documents: this.dependencies.contextDocuments,
       attachments: request.message.attachments,
       imageAdmission: request.message.imageAdmission,
-      authorityRequestRef: request.appTurnContext?.authorityRequestRef,
-      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId,
+      authorityRequestRef: request.appTurnContext?.authorityRequestRef ??
+        request.authorityRequestRef,
+      authorityClientMessageId: request.appTurnContext?.authorityClientMessageId ??
+        request.authorityClientMessageId,
       turnAccessMode: controls?.access_mode,
     });
     const modelSelection = admitModel(binding, controls);
@@ -181,20 +186,16 @@ export function snapshotTurnContext(input: {
     ...input.assembly.workingContext,
     ...input.assembly.retrievedContext,
   ];
-  const userRef = principalRef(input.binding);
-  const snapshot = subsession ? {
-        userRef: "steward-role",
-        ...(subsession.projectContext?.projectId ? { projectRef: subsession.projectContext.projectId } : {}),
-        profileRefs: [],
-        recentFeedbackRefs: [],
-        mandatoryHotCacheRefs: [...(subsession.projectContext?.mandatoryHotCacheRefs ?? [])],
-        optionalHotCacheRefs: [...(subsession.projectContext?.optionalHotCacheRefs ?? [])],
-        baselineObservationScopeRefs: [],
-      }
-    : snapshotContextDocuments({
+  const userRef = subsession ? "steward-role" : principalRef(input.binding);
+  const projectRef = subsession?.projectContext?.projectId ?? input.binding.projectId;
+  const planId = typeof input.binding.metadata?.plan_id === "string" &&
+      input.binding.metadata.plan_id.trim()
+    ? input.binding.metadata.plan_id.trim()
+    : undefined;
+  const documentSnapshot = snapshotContextDocuments({
       userRef,
       sessionId: input.binding.sessionId,
-      ...(input.binding.projectId ? { projectRef: input.binding.projectId } : {}),
+      ...(projectRef ? { projectRef } : {}),
       workspacePath: input.binding.workspacePath,
       sections: sections.map((section) => ({
         id: section.id,
@@ -209,15 +210,28 @@ export function snapshotTurnContext(input: {
         scopeKind: section.scopeKind,
       })),
     }, input.documents);
+  const snapshot = subsession ? {
+      ...documentSnapshot,
+      recentFeedbackRefs: uniqueStrings([
+        ...documentSnapshot.recentFeedbackRefs,
+        ...(subsession.recentFeedbackRefs ?? []),
+      ]),
+      mandatoryHotCacheRefs: uniqueStrings([
+        ...documentSnapshot.mandatoryHotCacheRefs,
+        ...(subsession.projectContext?.mandatoryHotCacheRefs ?? []),
+      ]),
+      optionalHotCacheRefs: uniqueStrings([
+        ...documentSnapshot.optionalHotCacheRefs,
+        ...(subsession.projectContext?.optionalHotCacheRefs ?? []),
+      ]),
+      baselineObservationScopeRefs: [],
+    }
+    : documentSnapshot;
   return {
     ...snapshot,
     executionPolicy: {
       role: input.binding.role,
-      accessMode: input.turnAccessMode ?? accessMode(
-        input.binding.metadata?.runtimePolicy && record(input.binding.metadata.runtimePolicy).accessMode
-          ? record(input.binding.metadata.runtimePolicy).accessMode
-          : input.binding.metadata?.accessMode,
-      ),
+      accessMode: input.turnAccessMode ?? bindingAccessMode(input.binding),
       trackingMode: trackingMode(input.binding),
       requiredNativeToolProfiles: uniqueStrings([
         ...stringArray(input.binding.metadata?.requiredNativeToolProfiles),
@@ -235,6 +249,7 @@ export function snapshotTurnContext(input: {
     },
     ...(input.authorityRequestRef ? { authorityRequestRef: input.authorityRequestRef } : {}),
     ...(input.authorityClientMessageId ? { authorityClientMessageId: input.authorityClientMessageId } : {}),
+    ...(planId ? { planId } : {}),
     ...(input.attachments?.length
       ? { attachments: input.attachments.map((attachment) => ({
           id: attachment.id,
@@ -278,7 +293,7 @@ function admitModel(
         catalogGeneration: controls.catalog_generation,
       }
     : {
-        accessMode: String(binding.metadata?.accessMode ?? "full_access"),
+        accessMode: bindingAccessMode(binding),
         planMode: Boolean(binding.metadata?.plan_mode),
         source: "stored_session_binding",
       };
@@ -310,6 +325,10 @@ function admittedContextWindow(binding: StoredSessionBinding, modelRef: string):
 function accessMode(value: unknown): TurnAccessMode {
   if (value === "full_access" || value === "ask_first" || value === "read_only") return value;
   return "read_only";
+}
+function bindingAccessMode(binding: StoredSessionBinding): TurnAccessMode {
+  const runtime = record(binding.metadata?.runtimePolicy);
+  return accessMode(runtime.accessMode ?? binding.metadata?.accessMode);
 }
 function trackingMode(binding: StoredSessionBinding): "ledger" | "local" | "none" {
   const value = record(binding.metadata?.runtimePolicy).trackingMode ??

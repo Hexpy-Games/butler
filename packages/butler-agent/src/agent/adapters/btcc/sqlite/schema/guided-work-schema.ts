@@ -1,3 +1,19 @@
+export const BTCC_GUIDED_WORK_PLAN_TABLE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
+  plan_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  objective TEXT NOT NULL,
+  governing_refs_json TEXT NOT NULL,
+  execution_mode TEXT CHECK (execution_mode IN ('direct', 'steward', 'workers')),
+  actions_json TEXT NOT NULL,
+  checks_json TEXT NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+`;
+
 export const BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS btcc_guided_work_checkpoint_revisions (
   checkpoint_revision_id TEXT PRIMARY KEY,
@@ -103,6 +119,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_works (
   session_id TEXT NOT NULL,
   scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
   scope_ref TEXT NOT NULL,
+  ledger_project_id TEXT,
+  canonical_head_sha256 TEXT,
   origin_turn_id TEXT NOT NULL,
   origin_message_id TEXT NOT NULL,
   objective TEXT NOT NULL,
@@ -146,18 +164,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_relation_commands (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
-  plan_revision_id TEXT PRIMARY KEY,
-  work_id TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  objective TEXT NOT NULL,
-  governing_refs_json TEXT NOT NULL,
-  actions_json TEXT NOT NULL,
-  checks_json TEXT NOT NULL,
-  origin_turn_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(work_id, revision)
-);
+${BTCC_GUIDED_WORK_PLAN_TABLE_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_guided_work_results (
   result_ref TEXT PRIMARY KEY,

@@ -46,11 +46,13 @@ export type ButlerToolExecutionBoundary = (input: {
 }) => Promise<unknown>;
 
 export type ButlerToolExecutorInput = {
+  projectSources?: readonly import("../../foundation/message-content.ts").ResolvedProjectSource[];
   butlerHome: string;
   butlerData: string;
   workspacePath?: string;
   sessionId?: string;
   originChatId?: string;
+  appSessionId?: string;
   projectId?: string;
   turnId?: string;
   imageManifests?: readonly VisualAdmittedManifest[];
@@ -83,6 +85,6 @@ export type ButlerToolExecutorInput = {
   anchorMessageId?: string;
   modelRef?: string;
   reasoningEffort?: string;
+  parentAccessMode?: "full_access" | "ask_first" | "read_only";
   subsessionMutationScope?: readonly string[];
-  subsessionAllowedToolsAndEffects?: readonly string[];
 };

@@ -1,3 +1,5 @@
+import { butlerDataPath } from "../../../../runtime/paths.ts";
+
 export interface ParsedToolArgsOk { ok: true; args: Record<string, unknown>; }
 export interface ParsedToolArgsError { ok: false; error: "invalid_arguments_json" | "invalid_arguments_shape"; detail: string; }
 export type ParsedToolArgs = ParsedToolArgsOk | ParsedToolArgsError;
@@ -31,7 +33,7 @@ export function getWorkspaceRoot(args: Record<string, unknown>, fallback?: strin
   if (fallback && fallback.trim()) return fallback;
   const explicit = args.workspace_root;
   if (typeof explicit === "string" && explicit.trim()) return explicit;
-  return process.cwd();
+  return butlerDataPath();
 }
 
 export function stringArray(value: unknown): string[] {

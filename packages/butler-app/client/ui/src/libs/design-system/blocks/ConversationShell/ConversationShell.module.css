@@ -1,4 +1,6 @@
 .shell {
+  container-name: conversation;
+  container-type: inline-size;
   --conversation-shell-content-gutter: 7%;
   --conversation-content-width: min(
     760px,
@@ -114,6 +116,16 @@
   }
 }
 
+@container workspace (width <= 560px) {
+  .shell {
+    --adaptive-composer-inset: var(--space-md);
+    --adaptive-page-gutter: var(--space-lg);
+    --conversation-content-width: calc(
+      100% - var(--adaptive-composer-inset) - var(--adaptive-composer-inset)
+    );
+  }
+}
+
 .virtualizedMessageList {
   position: relative;
   flex: 0 0 auto;
@@ -132,15 +144,8 @@
   z-index: 11;
   right: 50%;
   bottom: max(96px, calc(var(--composer-reserve) - 12px));
-  min-height: 32px;
   max-width: calc(100% - 32px);
-  border: 1px solid var(--composer-glass-border);
-  background: var(--composer-glass-bg);
-  box-shadow: var(--shadow-card);
-  color: var(--text-primary);
-  font-size: var(--font-size-2);
   transform: translateX(50%);
-  backdrop-filter: var(--composer-glass-filter);
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
@@ -149,31 +154,12 @@
 }
 
 .scrollToBottomButton:hover {
-  border-color: var(--line-strong);
-  background: var(--composer-glass-control-bg);
   transform: translateX(50%) translateY(-1px);
-}
-
-.scrollToBottomButton:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 3px var(--ring),
-    var(--shadow-card);
 }
 
 .scrollToBottomButton[data-unread-messages="true"] {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
   color: var(--accent);
-}
-
-.scrollToBottomButton [data-slot="button-icon"] {
-  flex: 0 0 auto;
-}
-
-.scrollToBottomButton [data-slot="button-text"] {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 @media (width <=720px) {

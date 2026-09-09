@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -21,9 +21,10 @@ const butlerData = defaultButlerData();
 const butlerHome = process.env.BUTLER_HOME || join(homedir(), "butler");
 const butlerBun = resolveButlerRuntime(butlerData);
 const entrypoint = join(butlerHome, "bin", "butler.js");
+mkdirSync(butlerData, { recursive: true });
 
 const result = spawnSync(butlerBun, ["run", entrypoint, ...process.argv.slice(2)], {
-  cwd: butlerHome,
+  cwd: butlerData,
   stdio: "inherit",
   env: {
     ...process.env,

@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
+import { AppConfirmationDialog } from "@/components/common/AppConfirmationDialog.tsx";
 import { AppShell } from "@/pages/AppShell.tsx";
 import { ThinkingMarkHarness } from "@/pages/ThinkingMarkHarness.tsx";
 import { VisualHarness } from "@/pages/VisualHarness.tsx";
@@ -23,5 +24,6 @@ createRoot(rootElement).render(
         : visualMode === "design-system"
           ? <DesignSystemWorkbench />
           : <AppShell />}
+    <AppConfirmationDialog />
   </ErrorBoundary>,
 );

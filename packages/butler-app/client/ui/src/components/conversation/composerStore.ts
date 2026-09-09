@@ -1,115 +1,51 @@
 import type {
-  Dispatch,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
-  RefObject,
-  SetStateAction,
 } from "react";
 import { create } from "zustand";
-import type {
-  AccessMode,
-  AppModelSummary,
-  ComposerModelState,
-  ContextDetailsView,
-  ReasoningEffort,
-  ProjectDashboardDocument,
-  WorkerActivitySummary,
-} from "@/app/types.ts";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
-import type { ComposerAttachment } from "./hooks/useFileAttachments";
 import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
-
-type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
-
-interface ComposerStore {
-  draftRevision: number;
-  draftSessionId: string;
-  activateDraftSession: (sessionId: string, text: string) => number;
-  restoreDraftSession: (input: {
-    revision: number;
-    sessionId: string;
-    text: string;
-  }) => boolean;
-  engaged: boolean;
-  setEngaged: (engaged: boolean) => void;
-  text: string;
-  setText: (text: string) => void;
-  setIsComposing: (value: boolean) => void;
-  large: boolean;
-  textAreaRef: RefObject<HTMLTextAreaElement | null> | null;
-  fileInputRef: RefObject<HTMLInputElement | null> | null;
-  attachments: ComposerAttachment[];
-  setAttachments: AttachmentSetter;
-  removeAttachment: (id: string) => void;
-  uploadingCount: number;
-  addFiles: (files: FileList | null) => void;
-  addProjectDocument: (document: ProjectDashboardDocument) => Promise<void>;
-  modelMenuOpen: boolean;
-  setModelMenuOpen: (open: boolean) => void;
-  accessMenuOpen: boolean;
-  setAccessMenuOpen: (open: boolean) => void;
-  contextPopoverOpen: boolean;
-  setContextPopoverOpen: (open: boolean) => void;
-  accessMode: AccessMode;
-  planMode: boolean;
-  model: string;
-  modelState: ComposerModelState;
-  reasoning: ReasoningEffort;
-  context: ContextDetailsView | null | undefined;
-  models: AppModelSummary[];
-  activeModel: AppModelSummary | null;
-  availableReasoning: string[];
-  popoverThemeClass: string;
-  isSending: boolean;
-  activeTurn: boolean;
-  canStop: boolean;
-  canSend: boolean;
-  workers: WorkerActivitySummary[];
-  submit: (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => void;
-  handleKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
-  focusDraftFromComposerChrome: (
-    event: ReactPointerEvent<HTMLFormElement>,
-  ) => void;
-  handleAccessModeChange: (mode: AccessMode) => void;
-  handlePlanModeChange: (checked: boolean) => void;
-  handleModelChoice: (model: AppModelSummary) => void;
-  handleReasoningChange: (effort: ReasoningEffort) => void;
-  onStop: () => void;
-  onOpenContext: () => void;
-  openAttachmentPicker: () => void;
-  setSnapshot: (snapshot: Partial<ComposerStore>) => void;
-}
+import type { ComposerStore } from "./composerStoreContract";
+import { messageContentText } from "@/app/messageContent";
 
 const noop = () => {};
 const noopAsync = async () => {};
 const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
   event.preventDefault();
 };
-const noopKeyDown = (_event: ReactKeyboardEvent<HTMLTextAreaElement>) => {};
+const noopKeyDown = (_event: ReactKeyboardEvent<HTMLElement>) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
   draftRevision: 0,
   draftSessionId: "draft:chat",
-  activateDraftSession: (draftSessionId, text) => {
+  activateDraftSession: (draftSessionId, text, contentParts) => {
     const draftRevision = get().draftRevision + 1;
-    set({ draftRevision, draftSessionId, text });
+    set({ draftRevision, draftSessionId, text, contentParts });
     return draftRevision;
   },
-  restoreDraftSession: ({ revision, sessionId, text }) => {
+  restoreDraftSession: ({ revision, sessionId, text, contentParts }) => {
     const state = get();
     if (state.draftRevision !== revision || state.draftSessionId !== sessionId) {
       return false;
     }
-    set({ text });
+    set({ text, contentParts });
     return true;
   },
   engaged: false,
   setEngaged: (engaged) => set({ engaged }),
   text: "",
+  contentParts: undefined,
+  insertSessionReference: null,
+  setContentParts: (content) => {
+    const state = get();
+    const text = messageContentText(content);
+    const contentParts = content.parts.some(part => part.type !== "text") ? content : undefined;
+    set({ draftRevision: state.draftRevision + 1, text, contentParts });
+    writeCachedComposerDraft(state.draftSessionId, text, contentParts);
+  },
   setText: (text) => {
     const state = get();
-    set({ draftRevision: state.draftRevision + 1, text });
+    set({ draftRevision: state.draftRevision + 1, text, contentParts: undefined });
     writeCachedComposerDraft(state.draftSessionId, text);
   },
   setIsComposing: noop,
@@ -151,6 +87,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   focusDraftFromComposerChrome: noop,
   handleAccessModeChange: noop,
   handlePlanModeChange: noop,
+  applyServerPlanMode: noop,
   handleModelChoice: noop,
   handleReasoningChange: noop,
   onStop: noop,

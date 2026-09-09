@@ -26,7 +26,7 @@ export function Clickable({
 }: ClickableProps) {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event);
-    if (event.defaultPrevented || disabled || !onClick) return;
+    if (event.defaultPrevented || event.target !== event.currentTarget || disabled || !onClick) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       event.currentTarget.click();

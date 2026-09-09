@@ -47,6 +47,9 @@ const expectedNamesByBoundary = {
     "ingest_task_memory",
     "update_onboarding_profile",
     "update_explicit_memory",
+    "delegate_to_steward",
+    "steer_steward",
+    "cancel_steward",
   ],
   reviewed_persistent: [
     "transform_public_data_table",

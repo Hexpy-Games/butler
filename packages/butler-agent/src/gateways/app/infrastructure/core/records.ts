@@ -7,6 +7,7 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 
 export interface ChatRow {
+  archived?: number;
   id: string;
   title: string;
   kind: ChatKind;
@@ -24,6 +25,9 @@ export interface ProjectRow {
   workspace_label: string;
   safe_path_label: string;
   ledger_project_id?: string | null;
+  description?: string | null;
+  dashboard_preferences_json?: string | null;
+  dashboard_preferences_revision?: number;
   pinned: number;
   archived: number;
   error_summary: string | null;
@@ -43,12 +47,16 @@ export interface SessionSummaryRow {
   last_message_preview: string | null;
   active_turn_state: TurnState | null;
   safe_status_label: string | null;
+  safe_status_label_key?: string | null;
+  safe_status_label_parameters_json?: string | null;
+  safe_status_content_json?: string | null;
   active_turn_safe_error_code: string | null;
   pinned: number;
   archived: number;
 }
 
 export interface MessageRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;
@@ -63,9 +71,11 @@ export interface MessageRow {
   updated_at: string;
   safe_error_code: string | null;
   retryable: number;
+  plan_json?: string | null;
 }
 
 export interface QueuedMessageRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;
@@ -102,6 +112,7 @@ export interface TurnRow {
   user_message_id: string | null;
   state: TurnState;
   safe_status_label: string;
+  safe_status_label_key?: string | null;
   safe_error_code: string | null;
   retryable: number;
   cancellable: number;

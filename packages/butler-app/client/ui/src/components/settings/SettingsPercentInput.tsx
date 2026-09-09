@@ -17,6 +17,7 @@ export function SettingsPercentInput({
   onCommit: (value: string) => Promise<boolean>;
 }) {
   const descriptionId = useId();
+  const inputId = useId();
   const [text, setText] = useState(value);
   const committedValue = useRef(value);
 
@@ -44,12 +45,14 @@ export function SettingsPercentInput({
 
   return (
     <SettingsField
+      id={inputId}
       data-test-class="settings-field"
       label={label}
       description={description}
       descriptionId={descriptionId}
       control={<Stack gap="2">
         <Input
+          id={inputId}
           aria-label={`${label} percent value`}
           aria-describedby={descriptionId}
           disabled={disabled}

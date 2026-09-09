@@ -401,13 +401,14 @@ test("operator model and auth commands use canonical refs and avoid secret leaka
     expect(list.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(list));
     expect(parsed.data.models[0]).toBe("openai/gpt-5.5-codex");
+    expect(parsed.data.models).toContain("openai/gpt-6-astra");
     expect(parsed.data.models).not.toContain("openai/auto:codex-latest");
 
-    const set = runCli(["model", "set", "openai/gpt-5.6-sol", "--json"], butlerData);
+    const set = runCli(["model", "set", "openai/gpt-6-astra", "--json"], butlerData);
     expect(set.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(set));
-    expect(parsed.data.newModel).toBe("openai/gpt-5.6-sol");
-    expect(JSON.parse(readFileSync(join(butlerData, "butler.config.json"), "utf8")).system.defaultModel).toBe("openai/gpt-5.6-sol");
+    expect(parsed.data.newModel).toBe("openai/gpt-6-astra");
+    expect(JSON.parse(readFileSync(join(butlerData, "butler.config.json"), "utf8")).system.defaultModel).toBe("openai/gpt-6-astra");
 
     const logout = runCli(["auth", "logout", "--yes", "--json"], butlerData);
     expect(logout.exitCode).toBe(0);

@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -8,6 +9,7 @@ const GIT_DEPENDENCY_NOTICE_DISMISSED_KEY =
   "butler:git-dependency-notice:v1:dismissed";
 
 export function GitDependencyNotice() {
+  useAppLocale();
   const gitMissing = useButlerStore(
     (state) => shouldShowGitDependencyNotice(state.summary),
   );

@@ -1,0 +1,286 @@
+import { NativeInboundQueue } from "../../../gateways/core/inbound-queue.ts";
+import { digest, stableJson } from "../identity/index.ts";
+import { loadReviewedDelegationPlan } from "./reviewed-delegation-plan.ts";
+import {
+  SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS,
+  SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
+} from "./scope.ts";
+import { renderWorkerInput } from "./worker-input.ts";
+import { subsessionRootWorkId } from "./identities.ts";
+import { snapshotChildProjectContext } from "./project-context.ts";
+import type {
+  CreatedDelegation,
+  DelegationPacket,
+  ReviewedWorkerDelegationRequest,
+  SessionRelation,
+  SubsessionDispatchIntent,
+  SubsessionDelegationDependencies,
+} from "./contracts.ts";
+
+export async function delegateReviewedWorker(
+  input: SubsessionDelegationDependencies,
+  queue: NativeInboundQueue,
+  request: ReviewedWorkerDelegationRequest,
+): Promise<CreatedDelegation> {
+  const parent = input.sessionBindings.getBySessionId(request.parent_session_id);
+  if (!parent || parent.role !== "steward") throw new Error("parent_steward_session_required");
+  const parentTurn = await input.parentTurns.findTurn(request.parent_turn_id);
+  if (!parentTurn || parentTurn.sessionId !== request.parent_session_id) {
+    throw new Error("worker_parent_turn_required");
+  }
+  const reviewed = await loadReviewedDelegationPlan(input, {
+    parentSessionId: request.parent_session_id,
+    parentTurnId: request.parent_turn_id,
+  });
+  const planAction = selectedPlanAction(reviewed, request.action_key);
+  const active = findActiveWorkerAssignment(
+    input.store,
+    request.parent_session_id,
+    reviewed.parent_work_ref.work_id,
+    request.action_key,
+  );
+  if (active) return existingWorker(input, queue, active);
+  const { projectContext, inheritedProject, recentFeedbackRefs } = await snapshotChildProjectContext({
+    parentSessionId: request.parent_session_id,
+    parentTurnId: request.parent_turn_id,
+    parent,
+    turns: input.parentTurns,
+    documents: input.contextDocuments,
+  });
+  if (!input.workerProfiles) throw new Error("worker_profiles_unavailable");
+  const profile = await input.workerProfiles.read(request.profile_id);
+  const identity = stableJson({
+    parent_session_id: request.parent_session_id,
+    parent_turn_id: request.parent_turn_id,
+    action_key: request.action_key,
+    objective: request.objective,
+    acceptance_criteria: request.acceptance_criteria,
+    implementation_brief: request.implementation_brief,
+    profile_id: profile.id,
+  });
+  const delegationId = `delegation-${digest(`btcc.worker.delegation.v1\0${identity}`)}`;
+  const existing = input.store.relationByDelegationId(delegationId);
+  if (existing) return existingWorker(input, queue, existing);
+  const relationId = `relation-${digest(`btcc.worker.relation.v1\0${delegationId}`).slice(0, 40)}`;
+  const taskId = `worker-task-${digest(`btcc.worker.task.v1\0${delegationId}`).slice(0, 40)}`;
+  const childSessionId = `worker-${digest(`btcc.worker.session.v1\0${relationId}`).slice(0, 32)}`;
+  const childTurnId = `worker-turn-${digest(`btcc.worker.turn.v1\0${relationId}`).slice(0, 32)}`;
+  const rootWorkId = subsessionRootWorkId(delegationId, taskId, childSessionId);
+  const now = new Date().toISOString();
+  const allowedToolsAndEffects = request.parent_access_mode === "read_only"
+    ? [...SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS]
+    : [...SUBSESSION_ALLOWED_TOOLS_AND_EFFECTS];
+  const relation: SessionRelation = {
+    relation_id: relationId,
+    parent_session_id: request.parent_session_id,
+    parent_turn_id: request.parent_turn_id,
+    child_session_id: childSessionId,
+    anchor_message_id: request.anchor_message_id,
+    ordinal: (input.store.relationsByParentSessionId(request.parent_session_id).at(-1)?.ordinal ?? 0) + 1,
+    safe_title: request.safe_title ?? "Worker task",
+    created_at: now,
+  };
+  const packet: DelegationPacket = {
+    delegation_id: delegationId,
+    ...(request.source_tool_call_id ? { source_tool_call_id: request.source_tool_call_id } : {}),
+    task_id: taskId,
+    parent_session_id: request.parent_session_id,
+    parent_turn_id: request.parent_turn_id,
+    relation_id: relationId,
+    execution_mode: request.parent_access_mode === "read_only" ? "read_only" : "mutation",
+    objective: request.objective,
+    acceptance_criteria: [...request.acceptance_criteria],
+    implementation_brief: request.implementation_brief,
+    task_or_plan_refs: [reviewed.parent_work_ref.plan_revision_id],
+    ...(projectContext ? { project_context: projectContext } : {}),
+    plan_action: {
+      action_key: planAction.actionKey,
+      description: planAction.description,
+      dependency_keys: [...planAction.dependencyKeys],
+      ...(planAction.effect ? { effect: { ...planAction.effect } } : {}),
+      ...(reviewed.latest_checkpoint?.publicSummary
+        ? { checkpoint_summary: reviewed.latest_checkpoint.publicSummary }
+        : {}),
+      ...(reviewed.latest_checkpoint?.nextStep
+        ? { next_step: reviewed.latest_checkpoint.nextStep }
+        : {}),
+    },
+    constraints_and_non_goals: ["Execute only this bounded Task and report to the Steward."],
+    allowed_tools_and_effects: allowedToolsAndEffects,
+    mutation_scope: request.parent_access_mode === "read_only" ? [] : ["."],
+    workspace_and_worktree: {
+      ownership: "parent_session",
+      workspace_label: "Inherited parent session workspace",
+      repository_anchor_ref: "parent-session-workspace",
+    },
+    expected_result_schema: {
+      version: 1,
+      status: "success",
+      required_fields: ["summary", "acceptance_evidence", "changed_artifacts"],
+    },
+    work_creation_policy: "one_recoverable_child_work",
+    access_and_budget_policy: {
+      access_mode: request.parent_access_mode,
+      max_turns: 8,
+      model_ref: profile.model,
+      reasoning_effort: profile.reasoning_effort,
+    },
+    parent_work_ref: reviewed.parent_work_ref,
+    model_ref: profile.model,
+    reasoning_effort: profile.reasoning_effort,
+  };
+  const childBinding: SubsessionDispatchIntent["childBinding"] = {
+    sessionId: childSessionId,
+    role: "worker",
+    ...(inheritedProject?.sessionBinding ?? {}),
+    workspacePath: parent.workspacePath,
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: profile.model.split("/", 1)[0] || parent.modelProviderId,
+    modelRef: profile.model as `${string}/${string}`,
+    transportBindings: [],
+    metadata: {
+      source: "btcc-worker",
+      reasoning_effort: profile.reasoning_effort,
+      subsession: {
+        relation_id: relationId,
+        delegation_id: delegationId,
+        task_id: taskId,
+        parent_session_id: request.parent_session_id,
+        recent_feedback_refs: recentFeedbackRefs,
+        execution_mode: packet.execution_mode,
+        mutation_scope: [...packet.mutation_scope],
+        allowed_tools_and_effects: allowedToolsAndEffects,
+        ...(inheritedProject ? { project_context: inheritedProject.metadata } : {}),
+      },
+      runtimePolicy: {
+        accessMode: request.parent_access_mode,
+        trackingMode: "local",
+        tracking_mode: "local",
+        requiredNativeTools: [],
+        required_tools: [],
+        requiredNativeToolProfiles: request.parent_access_mode === "full_access" ? ["workspace"] : [],
+        authoritySource: "parent_session",
+        authority_source: "parent_session",
+      },
+    },
+  };
+  const envelope: SubsessionDispatchIntent["envelope"] = {
+    eventId: `worker:${delegationId}`,
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: childSessionId, parentId: request.parent_session_id },
+    sender: { id: "butler-worker-dispatch", displayName: "Butler Worker" },
+    message: {
+      id: `worker-message:${delegationId}`,
+      text: renderWorkerInput(packet, profile.prompt),
+      timestamp: now,
+    },
+    routingHints: { sessionId: childSessionId, turnId: childTurnId },
+    nativeStewardContext: {
+      version: 1,
+      role: "worker",
+      projectName: parent.projectId ?? "",
+      workspacePath: parent.workspacePath,
+      modelRef: profile.model as `${string}/${string}`,
+      reasoningEffort: profile.reasoning_effort,
+    },
+    raw: { source: "btcc-worker-delegation" },
+  };
+  const dispatchIntent: SubsessionDispatchIntent = {
+    childBinding,
+    envelope,
+    metadata: { source: "btcc-worker-delegation" },
+  };
+  const assignedRelation = input.store.createWorkerAssignment?.({
+    relation,
+    packet,
+    childTurnId,
+    rootWorkId,
+    dispatchIntent,
+  }) ?? (input.store.create({ relation, packet, childTurnId, rootWorkId, dispatchIntent }), relation);
+  if (assignedRelation.relation_id !== relation.relation_id) {
+    return existingWorker(input, queue, assignedRelation);
+  }
+  replayDispatchIntent(input, queue, relation.relation_id, dispatchIntent);
+  return {
+    relation,
+    packet,
+    child_turn_id: childTurnId,
+    root_work_id: rootWorkId,
+    child_workspace_path: parent.workspacePath,
+  };
+}
+
+function selectedPlanAction(
+  reviewed: Awaited<ReturnType<typeof loadReviewedDelegationPlan>>,
+  actionKey: string,
+) {
+  const action = reviewed.actions.find((candidate) => candidate.actionKey === actionKey);
+  if (!action) throw new Error("worker_plan_action_missing");
+  const progress = new Map(reviewed.action_progress.map((item) => [item.actionKey, item.status]));
+  const status = progress.get(actionKey) ?? "pending";
+  if (status === "done" || status === "skipped" || status === "blocked") {
+    throw new Error("worker_plan_action_not_executable");
+  }
+  if (action.dependencyKeys.some((dependency) => {
+    const dependencyStatus = progress.get(dependency);
+    return dependencyStatus !== "done" && dependencyStatus !== "skipped";
+  })) {
+    throw new Error("worker_plan_action_dependency_incomplete");
+  }
+  return action;
+}
+
+function existingWorker(
+  input: SubsessionDelegationDependencies,
+  queue: NativeInboundQueue,
+  relation: SessionRelation,
+): CreatedDelegation {
+  const packet = input.store.packetByRelationId(relation.relation_id);
+  const childTurnId = input.store.childTurnIdByRelationId(relation.relation_id);
+  const rootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
+  if (!packet || !childTurnId || !rootWorkId) throw new Error("worker_existing_identity_incomplete");
+  const dispatchIntent = input.store.dispatchIntentByRelationId?.(relation.relation_id);
+  if (dispatchIntent) replayDispatchIntent(input, queue, relation.relation_id, dispatchIntent);
+  const child = input.sessionBindings.getBySessionId(relation.child_session_id);
+  if (!child) throw new Error("worker_existing_identity_incomplete");
+  return {
+    relation,
+    packet,
+    child_turn_id: childTurnId,
+    root_work_id: rootWorkId,
+    child_workspace_path: child.workspacePath,
+  };
+}
+
+export function findActiveWorkerAssignment(
+  store: SubsessionDelegationDependencies["store"],
+  parentSessionId: string,
+  parentWorkId: string,
+  actionKey: string,
+): SessionRelation | undefined {
+  return store.relationsByParentSessionId(parentSessionId).find((relation) => {
+    if (store.resultByRelationId(relation.relation_id)) return false;
+    const packet = store.packetByRelationId(relation.relation_id);
+    return packet?.parent_work_ref.work_id === parentWorkId &&
+      packet.plan_action?.action_key === actionKey;
+  });
+}
+
+export function replayDispatchIntent(
+  input: Pick<SubsessionDelegationDependencies, "sessionBindings" | "store">,
+  queue: NativeInboundQueue,
+  relationId: string,
+  intent: SubsessionDispatchIntent,
+): void {
+  const existing = input.sessionBindings.getBySessionId(intent.childBinding.sessionId);
+  if (!existing) {
+    input.sessionBindings.upsert(intent.childBinding);
+  } else if (existing.role !== intent.childBinding.role ||
+    existing.workspacePath !== intent.childBinding.workspacePath ||
+    existing.modelRef !== intent.childBinding.modelRef) {
+    throw new Error("subsession_dispatch_binding_mismatch");
+  }
+  queue.enqueueIdempotent(intent.envelope, intent.metadata);
+  input.store.markDispatchEnqueued?.(relationId);
+}

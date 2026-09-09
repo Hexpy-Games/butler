@@ -1,4 +1,6 @@
 import type { ChatKind, ProjectStatus, TurnState } from "./base-contract.ts";
+import type { SpaceView } from "./space-contract.ts";
+import type { InterfaceContentReferences } from "../../../../../../butler-i18n/src/index.ts";
 
 export interface ChatSummary {
   id: string;
@@ -10,6 +12,8 @@ export interface ChatSummary {
 }
 
 export interface SessionSummary {
+  work_progress?: { completed: number; total: number };
+  branch_seed?: import("../../../../foundation/session-branch.ts").SessionBranchSeed;
   id: string;
   kind: ChatKind;
   title: string;
@@ -25,6 +29,9 @@ export interface SessionSummary {
   last_message_preview?: string;
   active_turn_state?: TurnState;
   safe_status_label?: string;
+  safe_status_label_key?: string;
+  safe_status_label_parameters?: { attempt: number; maxAttempts: number };
+  safe_status_content?: InterfaceContentReferences;
   unread_count: number;
   pinned: boolean;
   archived: boolean;
@@ -46,6 +53,7 @@ export interface ProjectSummary {
 }
 
 export interface NavigationView {
+  space: SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {

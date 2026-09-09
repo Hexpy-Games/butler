@@ -5,7 +5,10 @@ import type {
 } from "../../../gateways/core/contracts.ts";
 import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
 import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
-import { projectTurnOutcome } from "./project-turn-outcome.ts";
+import {
+  projectChildTerminalReport,
+  projectTurnOutcome,
+} from "./project-turn-outcome.ts";
 import type { BtccGatewayHandlerOptions } from "./contracts.ts";
 
 export function createBtccGatewayHandlers(
@@ -17,20 +20,18 @@ export function createBtccGatewayHandlers(
       if (envelope.control.turnId !== turnId) {
         throw new Error("BTCC cancellation identity mismatch");
       }
-      const outcome = await options.btcc.stopTurn({ turnId });
-      if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
-        throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
-      }
-      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
+      const cancellation = await cancelOwnedDelegation(options, route, turnId);
+      const { outcome } = cancellation;
+      const alreadyDelivered = outcome.kind === "already_delivered" && !cancellation.cancelledDelegation;
       return {
         ok: true,
         handledBy: "btcc/turn-stop",
         metadata: {
           text: "",
-          kind: "turn_cancelled",
+          kind: alreadyDelivered ? "turn_cancellation_noop" : "turn_cancelled",
           turnId,
           appQueueClaimId: envelope.routingHints?.appQueueClaimId,
-          safeErrorCode: "turn_cancelled",
+          ...(!alreadyDelivered ? { safeErrorCode: "turn_cancelled" } : {}),
           controlAck: {
             kind: "cancel_turn",
             requestId: envelope.control.requestId,
@@ -40,10 +41,9 @@ export function createBtccGatewayHandlers(
         },
       };
     }
-    const request = toBtccRequest(route, envelope, turnId);
-    const outcome = await options.btcc.runTurn(request);
+    const outcome = await options.btcc.runTurn(toBtccRequest(route, envelope, turnId));
     if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
-      await completeStewardTerminalResult(options, route, turnId, "cancelled", "steward_cancelled");
+      await completeChildTerminalResult(options, route, turnId);
       return {
         ok: true,
         handledBy: "btcc/turn-cancelled",
@@ -59,26 +59,62 @@ export function createBtccGatewayHandlers(
     if (outcome.kind === "already_finalizing" || outcome.kind === "fenced_pending_persistence") {
       throw new Error(`BTCC turn remains recoverable: ${outcome.kind}`);
     }
+    if (outcome.kind === "suspended") {
+      return {
+        ok: true,
+        handledBy: "btcc/turn-suspended",
+        metadata: {
+          kind: "turn_suspended",
+          suspension: outcome.reason,
+          text: "",
+          turnId: outcome.turnId,
+          appQueueClaimId: envelope.routingHints?.appQueueClaimId,
+        },
+      };
+    }
     const result = projectTurnOutcome(outcome);
-    if (route.role === "steward" && options.subsessionDelegation &&
+    if (options.subsessionDelegation &&
       (outcome.kind === "delivered" || outcome.kind === "already_delivered")) {
-      await options.subsessionDelegation.completeStewardResult({
-        childSessionId: route.sessionId,
-        childTurnId: outcome.turnId,
-        resultId: subsessionResultId(route.sessionId, outcome.turnId),
-        summary: result.text,
-        status: result.workStatus === "blocked" ? "blocked" : "success",
-      });
+      if (route.role === "worker" && result.acceptedWorkResult) {
+        await completeAcceptedChildResult(options, route, outcome.turnId, result);
+      } else if (route.role === "steward" && result.acceptedWorkResult) {
+        const activeChildren = await options.subsessionDelegation.activeParentDelegations({
+          parentSessionId: route.sessionId,
+        });
+        if (activeChildren.length === 0 || result.runtimeFailure) {
+          // Record the manager outcome first. Existing Worker outbox delivery
+          // then consumes cleanup results without waking this terminal manager.
+          await completeAcceptedChildResult(options, route, outcome.turnId, result);
+        }
+        if (result.runtimeFailure) {
+          // A failed manager execution must not leave owned Workers running with
+          // nobody to consume their results. Stop children, never cancel the
+          // already accepted failed Steward outcome or abandon its saved Work.
+          for (const child of activeChildren) {
+            await cancelOwnedDelegation(options, {
+              ...route, role: "worker", sessionId: child.relation.child_session_id,
+            }, child.child_turn_id);
+          }
+        }
+      }
     }
     const generatedSessionTitle = result.text && outcome.admission !== "replay"
       ? await safeTitle(options, envelope, route)
       : null;
     return {
       ok: true,
-      handledBy: "btcc/turn",
+      handledBy: envelope.control?.kind === "resume_turn"
+        ? "btcc/turn-resume"
+        : "btcc/turn",
       metadata: {
         text: result.text,
         artifacts: result.artifacts,
+        changedFiles: result.changedFiles,
+        ...(result.runtimeFailure ? {
+          kind: "turn_failed",
+          safeErrorCode: result.runtimeFailure.code,
+        } : {}),
+        ...(result.plan ? { plan: result.plan } : {}),
         generatedSessionTitle,
         loadedSkillNames: [],
         ...("modelIdentity" in outcome && outcome.modelIdentity
@@ -96,24 +132,92 @@ export function createBtccGatewayHandlers(
   return {
     butler: ({ route, envelope }) => handle(route, envelope),
     steward: ({ route, envelope }) => handle(route, envelope),
+    worker: ({ route, envelope }) => handle(route, envelope),
   };
 }
 
-async function completeStewardTerminalResult(
+async function cancelOwnedDelegation(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  requestedTurnId: string,
+) {
+  const service = options.subsessionDelegation;
+  const stopOwned = async (current: GatewayRoute, requested: string): Promise<{
+    outcome: Awaited<ReturnType<BtccGatewayHandlerOptions["btcc"]["stopTurn"]>>;
+    cancelledDelegation: boolean;
+  }> => {
+    const owned = service && current.role !== "butler"
+      ? await service.activeChildCancellationTarget(current.sessionId)
+      : null;
+    const turnId = owned?.child_turn_id ?? requested;
+    const outcome = await options.btcc.stopTurn({ turnId });
+    if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled" &&
+      outcome.kind !== "already_delivered") {
+      throw new Error(`BTCC cancellation remains recoverable: ${outcome.kind}`);
+    }
+    // Close parent waiting before aborting descendants: an in-flight Worker can
+    // concurrently publish its normal cancelled result as soon as stop is installed.
+    if (outcome.kind === "already_delivered" && outcome.acceptedWorkResult) {
+      await completeAcceptedChildResult(options, current, turnId, projectTurnOutcome(outcome));
+    } else if (owned || outcome.kind !== "already_delivered") {
+      await completeChildTerminalResult(options, current, turnId);
+    }
+    const children = service ? await service.activeParentDelegations({
+      parentSessionId: current.sessionId,
+    }) : [];
+    for (const child of children) {
+      if (current.role === "butler" && child.relation.parent_turn_id !== turnId) continue;
+      await stopOwned({
+        ...current,
+        sessionId: child.relation.child_session_id,
+        role: current.role === "butler" ? "steward" : "worker",
+      }, child.child_turn_id);
+    }
+    return { outcome, cancelledDelegation: Boolean(owned) &&
+      !(outcome.kind === "already_delivered" && outcome.acceptedWorkResult) };
+  };
+  return stopOwned(route, requestedTurnId);
+}
+
+async function completeAcceptedChildResult(
   options: BtccGatewayHandlerOptions,
   route: GatewayRoute,
   childTurnId: string,
-  status: "cancelled",
-  code: "steward_cancelled",
+  result: ReturnType<typeof projectTurnOutcome>,
 ): Promise<void> {
-  if (route.role !== "steward" || !options.subsessionDelegation) return;
-  await options.subsessionDelegation.completeStewardResult({
+  if (!options.subsessionDelegation || !result.acceptedWorkResult) return;
+  const report = projectChildTerminalReport(result);
+  const input = {
     childSessionId: route.sessionId,
     childTurnId,
     resultId: subsessionResultId(route.sessionId, childTurnId),
-    status,
-    code,
-  });
+    summary: report.summary,
+    status: result.acceptedWorkResult.status,
+    changedArtifacts: report.changedArtifacts,
+    changedFiles: report.changedFiles,
+  };
+  if (route.role === "worker") await options.subsessionDelegation.completeWorkerResult(input);
+  else if (route.role === "steward") await options.subsessionDelegation.completeStewardResult(input);
+}
+
+async function completeChildTerminalResult(
+  options: BtccGatewayHandlerOptions,
+  route: GatewayRoute,
+  childTurnId: string,
+): Promise<void> {
+  if (!options.subsessionDelegation) return;
+  const result = {
+    childSessionId: route.sessionId,
+    childTurnId,
+    resultId: subsessionResultId(route.sessionId, childTurnId),
+    status: "cancelled" as const,
+    code: "steward_cancelled" as const,
+  };
+  if (route.role === "steward") {
+    await options.subsessionDelegation.completeStewardResult(result);
+  } else if (route.role === "worker") {
+    await options.subsessionDelegation.completeWorkerResult(result);
+  }
 }
 
 function toBtccRequest(
@@ -172,6 +276,10 @@ function toBtccRequest(
       : "safe_fallback",
     ...(envelope.appTurnContext
       ? { appTurnContext: envelope.appTurnContext } : {}),
+    ...(envelope.routingHints?.authorityRequestRef
+      ? { authorityRequestRef: envelope.routingHints.authorityRequestRef } : {}),
+    ...(envelope.routingHints?.authorityClientMessageId
+      ? { authorityClientMessageId: envelope.routingHints.authorityClientMessageId } : {}),
     ...(envelope.routingHints?.appQueueClaimId
       ? { appQueueClaimId: envelope.routingHints.appQueueClaimId } : {}),
     ...(envelope.signal ? { signal: envelope.signal } : {}),

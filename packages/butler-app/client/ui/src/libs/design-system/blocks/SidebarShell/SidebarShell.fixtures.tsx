@@ -7,7 +7,7 @@ export function SidebarShellFixture() {
     <SidebarShell
       titlebar={<SidebarTrafficSpace />}
       footer={<NavRow icon={<Search />} label="Settings" />}
-      header={
+      scrollHeader={
         <SidebarNav>
           <NavRow icon={<PencilLine />} label="New chat" active />
           <NavRow icon={<Search />} label="Search" />
@@ -15,6 +15,7 @@ export function SidebarShellFixture() {
         </SidebarNav>
       }
       ariaLabel="Sidebar"
+      stickyHeader={<NavRow label="All · Recent · Running" />}
     >
       <NavRow label="Project session" badge="2d" />
       <NavRow label="General chat" badge="5d" />

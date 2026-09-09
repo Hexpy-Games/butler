@@ -14,7 +14,7 @@ export function createWorkspaceToolHandlers(input: {
   mutationScope?: readonly string[];
   allowedToolsAndEffects?: readonly string[];
 }): ButlerToolExecutorRegistry {
-  const workspacePath = input.workspacePath ?? input.butlerHome;
+  const workspacePath = input.workspacePath ?? input.butlerData;
   return {
     ...createRunCommandToolHandlers({
       butlerHome: input.butlerHome,
@@ -24,6 +24,7 @@ export function createWorkspaceToolHandlers(input: {
       allowedToolsAndEffects: input.allowedToolsAndEffects,
     }),
     ...createFileToolHandlers({
+      butlerHome: input.butlerHome,
       butlerData: input.butlerData,
       workspacePath,
       workspaceReference: input.workspaceReference,

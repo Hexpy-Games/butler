@@ -47,7 +47,6 @@ export class AppResponderRuntime {
     const project = chat?.project_id
       ? this.input.getProjectRow(chat.project_id)
       : null;
-    const settings = this.input.getSettings();
     if (!input.responder) {
       throw new Error("App responder is not configured for direct execution.");
     }
@@ -67,7 +66,6 @@ export class AppResponderRuntime {
           projectWorkspacePath: project?.workspace_path,
           model: input.options?.controls?.model,
           reasoningEffort: input.options?.controls?.reasoning_effort,
-          workerModelRules: settings.worker_model_rules,
           accessMode: input.options?.controls?.access_mode,
           planMode: input.options?.controls?.plan_mode,
           onSessionTitle: this.input.generatedSessionTitleHandler(

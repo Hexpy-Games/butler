@@ -222,6 +222,9 @@ test("transport handoff failure is a safe terminal queue result visible to the A
     enqueueAppCancellation() {
       throw new Error("unexpected cancellation");
     },
+    enqueueAppResume() {
+      throw new Error("unexpected resume");
+    },
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
     },
@@ -250,6 +253,14 @@ test("transport handoff failure is a safe terminal queue result visible to the A
       safe_error_code: "app_turn_queue_failed",
     }));
     expect(JSON.stringify(queue)).not.toContain("simulated queue write failure");
+    const failed = queue.data.queued_messages.find((item: { client_message_id?: string }) =>
+      item.client_message_id === "client-33333333-3333-4333-8333-333333333333",
+    );
+    const deleted = await fetch(`${server.url}session-queue/${failed.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted.status).toBe(200);
+    expect((await deleted.json()).data.queued_messages).toEqual([]);
   } finally {
     server.stop();
   }
@@ -1088,6 +1099,11 @@ function oneRoundAnswer(text: string): ModelRoundPort {
 }
 
 function publishNativeReadiness(root: string): void {
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   mkdirSync(join(root, "state"), { recursive: true });
   writeFileSync(
     join(root, "state", "butler-main-native.json"),

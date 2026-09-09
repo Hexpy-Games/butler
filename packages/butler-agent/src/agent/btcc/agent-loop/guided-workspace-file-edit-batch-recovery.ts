@@ -1,4 +1,4 @@
-import { locateExactText } from "../../tools/file-tools/edit_file/index.ts";
+import { prepareOrderedExactEdits } from "../../tools/file-tools/edit_file/index.ts";
 import type { GuidedEffectRecoveryHint } from "../effects/index.ts";
 import {
   createGuidedWorkspaceFileEditEffectAdapter,
@@ -32,18 +32,13 @@ export function recoverGuidedWorkspaceFileEditBatch(input: {
   if (input.priorRecoveryHint.entries.length !== input.decoded.length)
     return null;
   const entries: GuidedWorkspaceFileEditEntry[] = [];
+  const beforeTexts = new Map<string, string>();
   for (const [index, recovery] of input.priorRecoveryHint.entries.entries()) {
     const decoded = input.decoded[index];
     const observed = input.observed[index];
     if (!decoded || !observed || decoded.path !== recovery.path) return null;
     if (observed.sha256 === recovery.beforeSha256) {
-      const location = locateExactText({
-        text: observed.text,
-        oldText: decoded.oldText,
-        startLine: recovery.startLine,
-      });
-      if (!location.ok || location.value.startLine !== recovery.startLine)
-        return null;
+      beforeTexts.set(decoded.path, observed.text);
     } else if (observed.sha256 !== recovery.afterSha256) {
       return null;
     }
@@ -56,6 +51,9 @@ export function recoverGuidedWorkspaceFileEditBatch(input: {
       after_sha256: recovery.afterSha256,
     });
   }
+  const beforeEdits = entries.filter((entry) => beforeTexts.has(entry.path));
+  const ordered = prepareOrderedExactEdits(beforeEdits.map((entry) => ({ path: entry.path, oldText: entry.old_text, newText: entry.new_text, startLine: entry.start_line })), beforeTexts);
+  if (!ordered.ok || ordered.locations.some((location, index) => location.startLine !== beforeEdits[index]!.start_line)) return null;
   let candidate: GuidedWorkspaceFileEditBatchInput;
   try {
     const normalized = input.adapter.normalizeInput({

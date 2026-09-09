@@ -1,0 +1,53 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(15rem, 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: var(--space-md);
+}
+.spinner {
+  animation: spin 1s linear infinite;
+}
+.lane {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: var(--space-md);
+  align-self: start;
+  align-content: start;
+}
+.card {
+  display: block;
+  width: 100%;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  text-align: left;
+}
+.cardTitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.session {
+  max-width: 100%;
+}
+.sessionTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

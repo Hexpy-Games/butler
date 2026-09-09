@@ -2,41 +2,57 @@ import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopInput, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { ActiveProjectLedgerResolver } from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { runProjectLedgerTool } from "../../../integrations/project-ledger/client.ts";
 import { createProviderModelRoundPort } from "../../../integrations/providers/runtime.ts";
-import { providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
+import { createGuidedToolBatchTransition } from "./guided-tool-batch-transition.ts";
+import { guidedPlanModeInstructions, providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
 import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
-import { loadGuidedTurnWork, safeBoundWork, workScopeForTurn } from "./guided-work-runtime.ts";
+import { createGuidedWorkContextRefresh } from "./guided-work-context-refresh.ts";
+import { loadGuidedTurnWork, safeBindOpenWork, safeBoundWork, safeLoadWorkContext, workScopeForTurn } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from "../projection/index.ts";
 import { createGuidedPersistentEffectResolver } from "./guided-persistent-effect-resolution.ts";
-import { createGuidedExecutionWindowObserver } from "./execution-window-observation.ts";
 import { createGuidedSessionWorkspaceRuntime } from "./guided-session-workspace-recovery.ts";
 import { createGuidedOperationResultRuntime } from "../operation-result-replay/index.ts";
 import type { ProductionGuidedTurnAgentInput } from "./guided-turn-agent-input.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { guidedContinuationBudget } from "./guided-continuation-budget.ts";
+import { modelContextByteLimit } from "../turn/index.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
-import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
-import { createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
+import { createContextCompactor } from "./context-compaction.ts";
+import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
+import { createActiveDelegationAdmissionGuard, createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
 import { createFileStoreVerifiedImagePayloadPort } from "../../image-attachment/index.ts";
 import { createGuidedAskFirstProgress, createGuidedAuthorityProjection, createGuidedOperationalProgressCapture } from "./guided-operational-progress.ts";
 import { loadGuidedOperationalFacts } from "./guided-operational-facts.ts";
 import { collectGuidedFinalArtifacts } from "./guided-final-artifacts.ts";
+import { collectGuidedChangedFiles } from "./guided-changed-files.ts";
 import { recordRuntimeMemoryEvent } from "./runtime-memory-attribution-events.ts";
-import { privateModifyContinuationPromptInput } from "./guided-authority-continuation.ts";
+import { guidedAuthorityLoopDecision } from "./guided-authority-continuation.ts";
 import type { PrincipalAuthority } from "../authority/index.ts";
-import { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
+import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
+import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
-import { guidedSubsessionRoutingLoopControls, requiresAppSubsessionRouting } from "./guided-subsession-routing.ts";
-type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority"> & { modelRound: ModelRoundPort };
+import { digest } from "../identity/index.ts";
+import {
+  projectLedgerPlanFromRecordResult,
+  projectLedgerPlanFromToolRecords,
+  renderAcceptedProjectPlanContext,
+} from "../project-plan.ts";
+import {
+  createProjectPlanModeExecution,
+  isAllowedProjectPlanMutation,
+  projectPlanModeTools,
+} from "./guided-project-plan-mode.ts";
+type TestGuidedTurnAgentInput = Omit<ProductionGuidedTurnAgentInput, "authority" | "contextCompactions"> & { modelRound: ModelRoundPort; contextCompactions?: ProductionGuidedTurnAgentInput["contextCompactions"] };
 export function createProductionGuidedTurnAgent(input: ProductionGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(input: TestGuidedTurnAgentInput): BtccAgentLoop;
 export function createProductionGuidedTurnAgent(
@@ -50,6 +66,7 @@ export function createProductionGuidedTurnAgent(
       turn, recoveryAttempt,
       signal,
       memoryAttribution,
+      modelRoundObserver,
       progress,
       recordModelRouteEvent,
       loadModelRouteAttemptHistory,
@@ -61,9 +78,25 @@ export function createProductionGuidedTurnAgent(
       const subsessionResultEvidence = await input.subsessionDelegation?.resolveParentResultEvidence({ parentSessionId: turn.sessionId, parentInputText: turn.originalMessage });
       const phasePolicy = selectGuidedTurnPhasePolicy(turn);
       const policy = phasePolicy.executionPolicy;
+      const projectId = policy.projectId ?? turn.context.projectRef;
+      const planMode = turn.modelSelection.controls.planMode === true &&
+        policy.trackingMode === "ledger" && Boolean(projectId);
+      const workerResultIntegration = policy.role === "steward" &&
+        turn.turnId.startsWith("steward-worker-result-") &&
+        Boolean(subsessionResultEvidence);
+      const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
+      const authorityOwnerSessionId = askFirstTurn &&
+          (policy.role === "steward" || policy.role === "worker")
+        ? input.subsessionDelegation?.authorityOwnerSessionId({
+            sourceSessionId: turn.sessionId,
+          })
+        : turn.sessionId;
+      if (!authorityOwnerSessionId) {
+        throw new Error("subsession_authority_owner_missing");
+      }
       const progressCapture = createGuidedOperationalProgressCapture(
-        askFirstTurn
+        askFirstTurn && !planMode
           ? createGuidedAskFirstProgress(progress)
           : progress,
       );
@@ -77,44 +110,133 @@ export function createProductionGuidedTurnAgent(
         throw new Error("operation_result_route_acceptance_dependency_missing");
       }
       const workspaceReference = await sessionWorkspace.recover({ sessionId: turn.sessionId, projectWorkspacePath: policy.workspacePath, signal });
+      const acceptedPlan = !planMode && turn.context.planId && projectId
+        ? readAcceptedProjectPlan({
+            resolver: projectLedgerResolver,
+            butlerHome: input.butlerHome,
+            butlerData: input.butlerData,
+            appProjectId: projectId,
+            workspacePath: workspaceReference.get(),
+            planId: turn.context.planId,
+          })
+        : undefined;
+      if (!planMode && turn.context.planId && !acceptedPlan) {
+        throw new Error("accepted_project_plan_unavailable");
+      }
       const workScope = workScopeForTurn(turn, policy.trackingMode);
-      if (policy.role === "steward" && input.subsessionDelegation) await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
+      if ((policy.role === "steward" || policy.role === "worker") &&
+        input.subsessionDelegation) {
+        await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
+      }
+      if (subsessionResultEvidence?.outcome === "success" && terminalParentSynthesis) {
+        const parentWork = await safeBindOpenWork(
+          input.durableWork,
+          workScope,
+          subsessionResultEvidence.parentWorkId,
+        );
+        if (parentWork) {
+          await input.durableWork.recordDisposition({
+            ...workScope,
+            mutationCallId: digest(
+              `btcc-parent-work-settlement.v2\0${turn.turnId}\0${parentWork.workId}`,
+            ),
+            workId: parentWork.workId,
+            disposition: "completed",
+            summary: "Delegated Work completed successfully.",
+            actionUpdates: (parentWork.currentPlan?.actions ?? []).map((action) => ({
+              actionKey: action.actionKey,
+              status: "done" as const,
+            })),
+            remainingActions: [],
+            evidenceRefs: [],
+            followups: [],
+          });
+        }
+      }
       const { context: initialWork, bound: initialWorkBound } = await loadGuidedTurnWork({
         durableWork: input.durableWork,
-        toolJournal: input.toolJournal,
         scope: workScope,
         trackingMode: policy.trackingMode,
         authority,
         authorityRequestRef: turn.context.authorityRequestRef,
         authorityClientMessageId: turn.context.authorityClientMessageId,
+        authorityOwnerSessionId,
         workspacePath: workspaceReference.get(),
       });
       const operationResults = createGuidedOperationResultRuntime({
         ...phasePolicy.exactResultReplay,
         turnId: turn.turnId,
         turnRevision: turn.revision,
+        workId: initialWork?.work.workId,
         journal: input.toolJournal,
         exactReader: input.operationResultReader,
         sessionId: turn.sessionId,
         projectRef: policy.projectId ?? turn.context.projectRef,
       });
-      const authorizedTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.authorizedTools) : phasePolicy.authorizedTools;
+      const phaseAuthorizedTools = terminalParentSynthesis
+        ? directSynthesisToolDefinitions(phasePolicy.authorizedTools)
+        : phasePolicy.authorizedTools;
+      const authorizedTools = planMode
+        ? projectPlanModeTools({
+            tools: phaseAuthorizedTools,
+            exactResultRead: phasePolicy.exactResultReplay.exactReadCapability,
+            planId: turn.context.planId,
+          })
+        : phaseAuthorizedTools;
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = subsessionResultEvidence ? directSynthesisToolDefinitions(phasePolicy.providerTools) : phasePolicy.providerTools;
+      const baseVisibleTools = planMode
+        ? authorizedTools
+        : terminalParentSynthesis
+        ? directSynthesisToolDefinitions(phasePolicy.providerTools)
+        : phasePolicy.providerTools;
+      const workerProfiles = policy.role === "steward" &&
+          baseVisibleTools.some((tool) => tool.name === "delegate_to_worker")
+        ? await input.subsessionDelegation?.enabledWorkerProfiles?.() ?? []
+        : [];
+      const visibleTools = baseVisibleTools.map((tool) =>
+        withWorkerProfileChoices(tool, workerProfiles),
+      );
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
+      const authorityDecision = guidedAuthorityLoopDecision({ authority, turn, ownerSessionId: authorityOwnerSessionId });
       const describedToolIds = new Set<string>();
-      const effectService = createGuidedEffectService(input.effectJournal);
+      // An admitted progressive invocation already completed discovery in its
+      // source Turn. Restore that fact; the bridge still validates current schema
+      // and availability before the approved operation reaches its effect boundary.
+      for (const message of turn.authorityContinuation?.messages ?? []) {
+        for (const call of message.toolCalls ?? []) {
+          if (call.name === "tool_call" && typeof call.arguments.id === "string") describedToolIds.add(call.arguments.id);
+        }
+      }
+      const shouldWaitForWorker = async () => policy.role === "steward" &&
+        Boolean(await input.subsessionDelegation?.shouldWaitForWorker({
+          parentSessionId: turn.sessionId, parentTurnId: turn.turnId,
+        }));
+      const activeDelegationAdmission = createActiveDelegationAdmissionGuard(
+        shouldWaitForWorker,
+        {
+          role: policy.role === "steward"
+            ? "steward"
+            : policy.role === "worker" ? "worker" : "butler",
+          turnId: turn.turnId,
+          durableWork: input.durableWork,
+          workScope,
+          workerResultIntegration,
+        },
+      );
+      const effectService = createGuidedEffectService(input.effectJournal, input.guidedEffectFaultHook ? { faultHook: input.guidedEffectFaultHook } : {});
       const execute = createButlerToolExecutor({
+        projectSources: turn.context.projectSources,
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
         workspacePath: policy.workspacePath,
         sessionId: turn.sessionId,
         originChatId: turn.sessionId,
+        appSessionId: turn.context.appSessionId,
         projectId: policy.projectId ?? turn.context.projectRef,
         workspaceReference,
         sessionBindingStore: sessionWorkspace.bindingStore,
         operationResultExactReader: operationResults.read,
-        ...subsessionToolInput(input.subsessionDelegation, turn),
+        ...subsessionToolInput(input.subsessionDelegation, turn, policy.accessMode),
         turnId: turn.turnId,
         imageManifests: providerImageAttachments(turn).flatMap((a) => a.visualManifest ? [a.visualManifest] : []),
         ...(turn.context.imageAdmission ? { imageCarrier: turn.context.imageAdmission.tuple, imageCapability: turn.context.imageAdmission.capability } : {}),
@@ -131,7 +253,7 @@ export function createProductionGuidedTurnAgent(
           phasePolicy.exactResultReplay.exactReadCapability,
         ),
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
-          policy.accessMode === "full_access" &&
+          policy.accessMode !== "read_only" &&
             policy.trackingMode === "ledger" &&
             Boolean(policy.projectId),
         ),
@@ -142,12 +264,13 @@ export function createProductionGuidedTurnAgent(
           durableWork: input.durableWork,
           workScope,
           effectService,
-          authority: authority!, ownerSessionId: turn.sessionId, sourceTurnId: turn.turnId,
+          authority: authority!, ownerSessionId: authorityOwnerSessionId,
+          sourceSessionId: turn.sessionId, sourceTurnId: turn.turnId,
           authorityClientMessageId: turn.context.authorityClientMessageId,
           modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`, reasoningEffort: turn.modelSelection.reasoningEffort,
           workspacePath: workspaceReference.get(),
           toolJournal: input.toolJournal,
-          ...(turn.context.authorityRequestRef
+          ...(turn.context.authorityRequestRef && authorityDecision?.action === "allow"
             ? { authorityRequestRef: turn.context.authorityRequestRef }
             : {}),
           accessMode: policy.accessMode,
@@ -162,6 +285,7 @@ export function createProductionGuidedTurnAgent(
             executeRegistered,
           }),
           resolvePersistentEffect: createGuidedPersistentEffectResolver({
+            appSessionId: turn.context.appSessionId,
             butlerHome: input.butlerHome,
             butlerData: input.butlerData,
             workspacePath: policy.workspacePath,
@@ -175,11 +299,19 @@ export function createProductionGuidedTurnAgent(
             originalRequest: turn.originalMessage,
             memoryAttribution,
           }),
+          ...(planMode
+            ? {
+                allowDirectPersistentEffects: (call) =>
+                  isAllowedProjectPlanMutation(call, turn.context.planId),
+              }
+            : {}),
         }),
       });
-      let progressSourceRevision = 0;
+      let progressSourceRevision = turn.authorityContinuation?.presentation?.sourceRevision ?? 0;
       const nextSourceRevision = () => ++progressSourceRevision;
-      const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision });
+      const activity = createGuidedActivityProjection({ turnId: turn.turnId, progress: observedProgress, managedInitially: initialWorkBound, nextSourceRevision,
+        initialWork: initialWorkBound ? initialWork?.work : undefined,
+        restored: turn.authorityContinuation?.presentation?.activity });
       const authorityProjection = createGuidedAuthorityProjection({
         accessMode: policy.accessMode,
         activity,
@@ -188,13 +320,22 @@ export function createProductionGuidedTurnAgent(
           turn.sessionId,
           turn.context.authorityClientMessageId,
         ),
-        ownerSessionId: turn.sessionId,
+        ownerSessionId: authorityOwnerSessionId,
         turnId: turn.turnId,
-        ...(turn.context.authorityRequestRef
-          ? { requestRef: turn.context.authorityRequestRef }
-          : {}),
+        // A decision resumes the ordinary loop; it is not a replacement report.
       });
-      const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
+      const provider = input.modelRound ?? createProviderModelRoundPort();
+      const baseModelRound: ModelRoundPort = modelRoundObserver ? {
+        contextSizing: provider.contextSizing?.bind(provider),
+        initialRequestBytes: provider.initialRequestBytes?.bind(provider),
+        statelessMessageBytes: provider.statelessMessageBytes?.bind(provider),
+        async runRound(request) {
+          try { modelRoundObserver.request(request); } catch { /* Diagnostics are passive. */ }
+          const response = await provider.runRound(request);
+          try { modelRoundObserver.response(response); } catch { /* Diagnostics are passive. */ }
+          return response;
+        },
+      } : provider;
       const {
         modelRound,
         activeModelRef: resolveActiveModelRef,
@@ -234,34 +375,100 @@ export function createProductionGuidedTurnAgent(
         stableInstructionPrefix: phasePolicy.stableInstructionPrefix,
         responseLanguage,
         promptInput: {
-          ...input, workContext: renderDurableWorkContext(initialWork), effectContext,
-          ...(subsessionResultEvidence ? { subsessionResultEvidence } : {}),
-          ...privateModifyContinuationPromptInput(
-            authority, turn.sessionId, turn.context.authorityRequestRef, turn.turnId,
-            turn.context.authorityClientMessageId,
-          ),
+          ...input, workContext: renderDurableWorkContext(initialWork, { includeResultHistory: false }), effectContext,
+          ...(acceptedPlan
+            ? { acceptedPlanContext: renderAcceptedProjectPlanContext(acceptedPlan) }
+            : {}),
+          ...(subsessionResultEvidence
+            ? { subsessionResultEvidence: subsessionResultEvidence.synthesisEvidence }
+            : {}),
         },
         initialRequestBytes: modelRound.initialRequestBytes,
         butlerData: input.butlerData,
       });
+      const refreshWorkContext = createGuidedWorkContextRefresh({
+        initial: initialWork,
+        load: async () => policy.trackingMode === "none"
+          ? null
+          : await safeLoadWorkContext(input.durableWork, workScope),
+      });
       const closeout = createGuidedTurnCloseout({
-        durableWork: input.durableWork, toolJournal: input.toolJournal, workScope,
+        durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
-        subsessionRoutingRequired: requiresAppSubsessionRouting({ turn, policy, hasSubsessionResultEvidence: Boolean(subsessionResultEvidence) }),
+        requiresTerminalResult: policy.role !== "butler",
       });
-      const resolveGuidedTools = phasePolicy.mode === "phase_minimal"
-        ? createGuidedRoundToolSurfaceResolver({
-            turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
-            requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
-          })
-        : undefined;
-      const directionAware = withStewardDirection({ modelRound, safeBoundary: stewardSafeBoundary({ service: input.subsessionDelegation, turn }), reviewFinalCandidate: closeout.reviewFinalCandidate });
+      const delegationRelease = policy.role === "butler" ? createGuidedDelegationTurnRelease({
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
+        reconcileAfterLoop: closeout.reconcileAfterLoop,
+        turnId: turn.turnId,
+        toolJournal: input.toolJournal,
+        delegationTool: "delegate_to_steward",
+      }) : closeout;
+      const resolveGuidedTools = createGuidedRoundToolSurfaceResolver({
+        turnId: turn.turnId, tools: visibleTools, workScope, durableWork: input.durableWork,
+        requiredToolNames: new Set(policy.requiredNativeTools), toolJournal: input.toolJournal, effectJournal: input.effectJournal,
+        parentSessionId: turn.sessionId,
+        subsessionDelegation: input.subsessionDelegation,
+        onActiveDelegationAdmission: activeDelegationAdmission.observe,
+        shouldWaitForWorker,
+        ...(policy.role === "butler"
+          ? { turnReleaseDelegationTool: "delegate_to_steward" as const }
+          : {}),
+      });
+      const directionAware = withStewardDirection({
+        modelRound,
+        safeBoundary: subsessionDirectionSafeBoundary({ service: input.subsessionDelegation, turn }),
+        reviewFinalCandidate: async (candidate) => await shouldWaitForWorker()
+          ? { status: "wait" }
+          : delegationRelease.reviewFinalCandidate(candidate),
+        afterToolBatch: createGuidedToolBatchTransition({
+          turnId: turn.turnId,
+          durableWork: input.durableWork,
+          shouldWaitForWorker,
+          requiresTerminalResult: policy.role !== "butler",
+        }),
+      });
+      const planExecution = createProjectPlanModeExecution({
+        enabled: planMode,
+        planId: turn.context.planId,
+        executeTool: toolCalls.executeTool,
+      });
       const loopOptions: BtccAgentLoopInput = {
+        ...(input.contextCompactions ? { contextCompactor: createContextCompactor({
+          turnId: turn.turnId, store: input.contextCompactions,
+          summarySizing: () => {
+            const size = baseModelRound.contextSizing?.({ model: resolveActiveModelRef(), tools: [], butlerData: input.butlerData });
+            return size ? { maxBytes: size.maxMessageBytes,
+              measure: (content) => size.messageBytes([{ role: "user", content }]) } : undefined;
+          },
+          summarize: async ({ text, maxOutputBytes, sourceDigest }) => {
+            const capacity = baseModelRound.contextSizing?.({ model: resolveActiveModelRef(), tools: [], butlerData: input.butlerData });
+            const response = await baseModelRound.runRound({
+              roundId: `btcc-summary-${sourceDigest}`, model: resolveActiveModelRef(),
+              messages: [{ role: "user", content: text }], tools: [], signal,
+              reasoningEffort: selectedReasoningEffort, butlerData: input.butlerData,
+              // Reasoning and visible summary share the provider output window.
+              // The summary's text allowance is not the reasoning allowance.
+              maxOutputTokens: Math.max(1, Math.min(capacity?.maxOutputTokens ?? Infinity,
+                capacity ? Math.floor(capacity.maxMessageBytes / 8) : Infinity,
+                Math.max(16_384, Math.floor(maxOutputBytes / 4)))),
+              usageAttribution: { turnId: turn.turnId, phase: "guided" },
+            });
+            return response.text ?? "";
+          },
+        }) } : {}),
+        maxModelFacingBytes: modelContextByteLimit(turn.modelSelection.contextWindowTokens),
         prompt: requestAttribution.prompt,
+        authorityContinuation: turn.authorityContinuation,
+        authorityDecision,
+        onUnexecutedToolCall: toolCalls.recordUnexecuted,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         turnId: turn.turnId,
-        instructions: requestAttribution.instructions,
+        instructions: [
+          requestAttribution.instructions,
+          ...(planMode ? [guidedPlanModeInstructions(turn.context.planId)] : []),
+        ].join("\n"),
         recoveryAttempt,
         progress: observedProgress,
         model: resolveActiveModelRef(),
@@ -282,33 +489,36 @@ export function createProductionGuidedTurnAgent(
         verifiedImagePayloadPort: createFileStoreVerifiedImagePayloadPort(input.butlerData),
         onProviderResponseIdentity,
         onEvent: (event) => recordRuntimeMemoryEvent(memoryAttribution, event),
+        afterToolBatch: async (batch) => {
+          const disposition = await directionAware.afterToolBatch(batch);
+          return planMode && planExecution.completed() ? "final_report" : disposition;
+        },
         tools: visibleTools,
-        ...guidedSubsessionRoutingLoopControls({
-          repairRequired: closeout.subsessionRoutingRepairRequired,
-          resolveTools: resolveGuidedTools,
-        }),
-        // This is an internal execution-window size. The same Turn remains
-        // active across windows until the model reaches a final answer.
-        maxIterations: Math.max(1, input.executionWindowSize ?? 60),
+        resolveTools: resolveGuidedTools,
         modelRound: directionAware.modelRound,
+        beforeModelRound: async () => {
+          const observations = [
+            ...(await directionAware.beforeModelRound?.() ?? []),
+          ];
+          const workContext = await refreshWorkContext();
+          if (workContext) observations.push({ content: workContext, requestSegmentKind: "project_ledger_and_work_authority" });
+          return observations;
+        },
         operationResultReplay: operationResults.replay,
         ...(continuationBudget ? { continuationBudget } : {}),
         resolveOperationResultCallId: toolCalls.journalCallIdForProviderCall,
-        onExecutionWindowBoundary: createGuidedExecutionWindowObserver({
-          durableWork: input.durableWork, workScope, turnId: turn.turnId,
-          trackingMode: policy.trackingMode, signal,
-        }),
         ...authorityProjection.loopCallbacks,
         reviewFinalCandidate: directionAware.reviewFinalCandidate,
-        executeTool: async (call) => await toolCalls.executeTool({
-          name: call.name,
-          args: call.arguments,
-          rawArguments: call.rawArguments,
-          providerCallId: call.id,
-          signal: call.signal,
-        }),
+        executeTool: activeDelegationAdmission.execute(planExecution.executeTool),
       };
-      const candidate = await runGuidedAgentLoopWithOperationalReport({
+      let suspension: BtccAgentLoopResult["suspension"];
+      let authorityContinuation: BtccAgentLoopResult["authorityContinuation"];
+      const loopResult = await runGuidedAgentLoopWithOperationalReport({
+        onSuspension: (reason, continuation) => {
+          suspension = reason;
+          authorityContinuation = continuation && { ...continuation,
+            presentation: { sourceRevision: progressSourceRevision, activity: activity.snapshot() } };
+        },
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
@@ -322,27 +532,68 @@ export function createProductionGuidedTurnAgent(
           responseLanguage,
         }),
       });
-      const text = await closeout.reconcileAfterLoop(candidate);
-      const publicText = authorityProjection.project(text);
-      const terminalOutcome = turn.context.emptyResponsePolicy === "typed_terminal" &&
-        !text.trim()
+      const runtimeFailure = typeof loopResult === "string" ? undefined : loopResult.failure;
+      const candidate = typeof loopResult === "string" ? loopResult : "";
+      const text = suspension || runtimeFailure ? "" : await delegationRelease.reconcileAfterLoop(candidate);
+      const publicText = suspension || runtimeFailure ? "" : authorityProjection.project(text);
+      const terminalOutcome = !suspension && !runtimeFailure && turn.context.emptyResponsePolicy === "typed_terminal" &&
+        !publicText.trim()
         ? "no_visible" as const
         : undefined;
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      const artifacts = collectGuidedFinalArtifacts(input.toolJournal.list(turn.turnId));
+      const acceptedWorkResult = suspension ? undefined : await closeout.acceptedWorkResult();
+      const finalToolRecords = input.toolJournal.list(turn.turnId);
+      const artifacts = collectGuidedFinalArtifacts(
+        finalToolRecords,
+        subsessionResultEvidence?.artifacts ?? [],
+      );
+      const changedFiles = collectGuidedChangedFiles(
+        finalToolRecords,
+        subsessionResultEvidence?.changedFiles ?? [],
+      );
       return guidedTurnResult({
         content: publicText,
-        ...(terminalOutcome && !authorityProjection.continuation ? { terminalOutcome } : {}),
+        ...(suspension ? { suspension } : {}),
+        ...(authorityContinuation ? { authorityContinuation } : {}),
+        ...(terminalOutcome ? { terminalOutcome } : {}),
+        ...(runtimeFailure ? { runtimeFailure } : {}),
         ...(finalWork?.status === "completed" || finalWork?.status === "blocked"
           ? { workStatus: finalWork.status }
           : {}),
+        ...(acceptedWorkResult ? { acceptedWorkResult } : {}),
         artifacts,
+        changedFiles,
+        ...(planMode
+          ? { plan: projectLedgerPlanFromToolRecords(finalToolRecords, { expectedId: turn.context.planId }) }
+          : {}),
         modelIdentity: acceptedModelIdentity(),
         usedTools: toolCalls.usedTools,
         hasFinalWork: Boolean(finalWork),
       });
     },
   };
+}
+
+function readAcceptedProjectPlan(input: {
+  resolver: ActiveProjectLedgerResolver;
+  butlerHome: string;
+  butlerData: string;
+  appProjectId: string;
+  workspacePath: string;
+  planId: string;
+}) {
+  input.resolver.clear();
+  const reference = input.resolver.resolve({
+    butlerData: input.butlerData,
+    appProjectId: input.appProjectId,
+    workspacePath: input.workspacePath,
+  });
+  const result = runProjectLedgerTool(
+    { butlerHome: input.butlerHome, butlerData: input.butlerData },
+    ["record", "show", "--project", reference.ledger_root, "--kind", "plan", "--id", input.planId, "--body"],
+  );
+  const plan = projectLedgerPlanFromRecordResult(result, input.planId);
+  return plan?.status === "active" ? plan : undefined;
 }
 function projectionAuthority(authority: PrincipalAuthority | undefined, sourceSessionId: string, clientMessageId: string | undefined): PrincipalAuthority | undefined {
   if (!authority || !clientMessageId) return authority;

@@ -5,6 +5,8 @@ export type ProjectLedgerHead = {
   sourceFileCount: number;
   storageSha256: string;
   storageEntryCount: number;
+  /** Present only for changed-record publications; old heads retain full-root semantics. */
+  recordPaths?: string[];
 };
 
 export type ProjectLedgerCorePublication = {

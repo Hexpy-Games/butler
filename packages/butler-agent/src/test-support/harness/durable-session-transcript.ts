@@ -7,7 +7,7 @@ import type {
 } from "./contracts.ts";
 import { appendTranscriptEvent, createTranscriptEvent, type TranscriptEvent } from "./transcripts.ts";
 
-type DurableSessionRole = Exclude<SessionRole, "worker">;
+type DurableSessionRole = SessionRole;
 
 export interface DurableInboundTranscriptInput {
   sessionId: string;

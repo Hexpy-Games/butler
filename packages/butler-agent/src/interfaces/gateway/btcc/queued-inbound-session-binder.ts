@@ -4,6 +4,8 @@ import type { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
 import { resolveSessionWorkspaceAuthority } from
   "../../../agent/session-workspaces/index.ts";
+import { butlerDataPath } from "../../../runtime/paths.ts";
+import { dirname } from "node:path";
 
 export function bindQueuedInboundSession(
   envelope: InboundEnvelope,
@@ -27,11 +29,13 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
   store.upsert({
     sessionId,
     role: existing?.role ?? "butler",
-    projectId: context.project?.id ?? existing?.projectId,
+    projectId: context.project?.id,
+    appProjectId: context.project?.id,
+    ledgerProjectId: context.project?.ledgerProjectId,
     workspacePath:
       workspaceAuthority.kind === "project"
-        ? workspaceAuthority.workspacePath ?? process.cwd()
-        : existing?.workspacePath ?? process.cwd(),
+        ? workspaceAuthority.workspacePath ?? butlerDataPath(dirname(dirname(store.path)))
+        : existing?.workspacePath ?? butlerDataPath(dirname(dirname(store.path))),
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || "openai",
     modelRef,
@@ -50,6 +54,7 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
       accessMode: controls.access_mode,
       reasoning_effort: controls.reasoning_effort,
       plan_mode: controls.plan_mode,
+      ...(context.planId ? { plan_id: context.planId } : {}),
       turnExecutionControls: controls,
       runtimePolicy: runtimePolicy(context.session.kind, Boolean(context.project), controls.access_mode),
     },
@@ -58,15 +63,19 @@ function bindAppTurn(envelope: InboundEnvelope, store: SessionBindingStore): voi
 
 function bindStewardTurn(envelope: InboundEnvelope, store: SessionBindingStore): void {
   const context = envelope.nativeStewardContext!;
-  const sessionId = envelope.routingHints?.stewardId?.trim();
+  const sessionId = envelope.routingHints?.sessionId?.trim() ||
+    envelope.routingHints?.stewardId?.trim();
   if (!sessionId) throw new Error("queued_steward_context_missing");
   const existing = store.getBySessionId(sessionId);
   const modelRef = context.modelRef ?? existing?.modelRef ?? "openai/auto:codex-latest";
   const reasoningEffort = context.reasoningEffort ?? existing?.metadata?.reasoning_effort;
   store.upsert({
     sessionId,
-    role: "steward",
+    role: context.role ?? "steward",
     ...(context.projectName.trim() ? { projectId: context.projectName.trim() } : {}),
+    ...(context.projectName.trim()
+      ? { appProjectId: context.projectName.trim() }
+      : {}),
     workspacePath: context.workspacePath,
     runtimeAdapterId: "btcc-turn-runtime",
     modelProviderId: modelRef.split("/", 1)[0] || (existing?.modelProviderId ?? "openai"),
@@ -93,18 +102,22 @@ function runtimePolicy(
   hasProject: boolean,
   accessMode: string,
 ): Record<string, unknown> {
-  const trackingMode = hasProject ? "ledger" : "local";
   const profiles = accessMode === "full_access"
     ? hasProject ? ["workspace", "project", "project-lifecycle"] : ["workspace"]
     : hasProject ? ["project"] : [];
   return {
     accessMode,
-    trackingMode,
-    tracking_mode: trackingMode,
+    ...(hasProject ? {
+      trackingMode: "ledger",
+      tracking_mode: "ledger",
+    } : {
+      workLedgerScope: "session",
+      work_ledger_scope: "session",
+    }),
     trackingModeSource: hasProject ? "app_project_default" : sessionKind === "project" ? "project_shell_default" : "session_default",
     tracking_mode_source: hasProject ? "app_project_default" : sessionKind === "project" ? "project_shell_default" : "session_default",
-    closeoutStrategy: hasProject ? "ledger" : "local_workstream",
-    closeout_strategy: hasProject ? "ledger" : "local_workstream",
+    closeoutStrategy: hasProject ? "ledger" : "session_ledger",
+    closeout_strategy: hasProject ? "ledger" : "session_ledger",
     thinFirstResponse: true,
     thin_first_response: true,
     requiredNativeTools: [],

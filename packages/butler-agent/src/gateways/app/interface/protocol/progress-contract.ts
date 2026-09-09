@@ -7,6 +7,9 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressSummaryRow {
+  interface_label_key?: string;
+  interface_content?: InterfaceContentReferences;
+  interface_label_parameters?: { attempt: number; maxAttempts: number };
   id: string;
   kind:
     | "explored"
@@ -85,3 +88,4 @@ export interface WorkerActivityWorkBlock {
   decision_evidence_refs?: string[];
   created_at?: string;
 }
+import type { InterfaceContentReferences } from "../../../../../../butler-i18n/src/index.ts";

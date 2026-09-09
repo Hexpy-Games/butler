@@ -46,7 +46,7 @@ export function resolveReviewedEffect<TNormalizedInput, TResult>(
       input.adapter.normalizeTarget(input.target),
       "normalized target",
     );
-    const actionKey = resolveActionKey({
+    const actionKey = resolveReviewedEffectActionKey({
       actions: plan.actions,
       adapter: input.adapter,
       normalizedTarget,
@@ -84,7 +84,7 @@ export function resolveReviewedEffect<TNormalizedInput, TResult>(
   }
 }
 
-function resolveActionKey<TNormalizedInput, TResult>(input: {
+export function resolveReviewedEffectActionKey<TNormalizedInput, TResult>(input: {
   actions: NonNullable<ExecuteGuidedEffectInput<TNormalizedInput, TResult>[
     "work"
   ]["currentPlan"]>["actions"];

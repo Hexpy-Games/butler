@@ -17,7 +17,9 @@ import { createAppTransportAdapter } from "../../packages/butler-agent/src/inter
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import type { ModelRoundPort } from "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/open-btcc-sqlite-stores.ts";
 import { BTCC_AUTHORITY_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/authority-schema.ts";
+import { parseAuthorityOutcomeReceipt } from "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 
 const AUTHORITY_DENIAL_TEXT = "Reviewed command denied. No command was run.";
 const PRIVATE_PROVIDER_TEXT = "provider-private-deny-text";
@@ -31,7 +33,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test("real App ask_first Deny schedules one same-Work Turn with typed denial and zero effect dispatch", async () => {
+test("real App Deny resumes the original Turn with a nonexecution result and zero effect dispatch", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-self-deny-vertical-"));
   roots.push(root);
   publishNativeReadiness(root);
@@ -125,7 +127,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
     expect(await Bun.file(join(root, "denied-command.txt")).exists()).toBe(false);
 
     const btccDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
@@ -180,11 +182,10 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
         SELECT client_message_id, turn_id, control_resolution_json
         FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      expect(rows[1]?.control_resolution_json).toContain(String(requestRef));
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
-      expect(resumedTurnId).not.toBe(rows[0]!.turn_id);
+      expect(rows).toHaveLength(1);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
+      expect(resumedTurnId).toBe(rows[0]!.turn_id);
     } finally {
       scheduled.close();
     }
@@ -212,7 +213,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
       (message) => message.role === "assistant" && message.turn_id === resumedTurnId,
     );
     expect(finalMessages).toHaveLength(1);
-    expect(finalMessages[0]?.text).toBe(AUTHORITY_DENIAL_TEXT);
+    expect(finalMessages[0]?.text).toBe("요청하신 명령은 실행하지 않았습니다.");
     expect(JSON.stringify(finalMessages)).not.toContain("private-deny-value");
     expect(JSON.stringify(finalMessages)).not.toContain("denied-command.txt");
 
@@ -229,12 +230,12 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
     expect(serializedEvents).not.toContain(PRIVATE_CONTINUATION_INPUT);
     expect(serializedEvents).not.toContain(PRIVATE_PROVIDER_TEXT);
     const denialEvents = eventsBody.data.events.filter((event) =>
-      JSON.stringify(event.payload).includes(AUTHORITY_DENIAL_TEXT),
+      JSON.stringify(event.payload).includes("요청하신 명령은 실행하지 않았습니다."),
     );
     expect(denialEvents.length).toBeGreaterThan(0);
     expect(denialEvents.every((event) => {
       const text = JSON.stringify(event.payload);
-      return text.includes(AUTHORITY_DENIAL_TEXT) &&
+      return text.includes("요청하신 명령은 실행하지 않았습니다.") &&
         !text.includes("denied-command.txt") &&
         !text.includes("private-deny-value") &&
         !text.includes("--private-deny-flag");
@@ -260,9 +261,8 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
         SELECT turn_id, work_id FROM btcc_guided_turn_work_bindings
         WHERE is_current = 1 ORDER BY rowid
       `).all();
-      expect(bindingsForWork).toHaveLength(2);
-      expect(bindingsForWork[1]?.work_id).toBe(bindingsForWork[0]?.work_id);
-      expect(bindingsForWork[1]?.turn_id).toBe(resumedTurnId);
+      expect(bindingsForWork).toHaveLength(1);
+      expect(bindingsForWork[0]?.turn_id).toBe(resumedTurnId);
       const blockedDisposition = finalDb.query<{
         disposition: string;
         summary: string;
@@ -275,7 +275,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
           next_condition, origin_turn_id
         FROM btcc_guided_work_disposition_revisions
         WHERE work_id = ? ORDER BY revision DESC LIMIT 1
-      `).get(bindingsForWork[1]!.work_id);
+      `).get(bindingsForWork[0]!.work_id);
       expect(blockedDisposition).toMatchObject({
         disposition: "blocked",
         summary: AUTHORITY_DENIAL_TEXT,
@@ -304,7 +304,7 @@ test("real App ask_first Deny schedules one same-Work Turn with typed denial and
   }
 });
 
-test("real App ask_first Modify schedules one same-Work replan Turn before a replacement authority request", async () => {
+test("real App Modify resumes the same Turn before a replacement authority request", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-self-modify-vertical-"));
   roots.push(root);
   publishNativeReadiness(root);
@@ -374,7 +374,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     expect(summary.claimed).toBe(1);
     expect(summary.failed).toBe(0);
     expect(summary.interrupted).toBe(0);
-    await waitForQueueState(appDbPath, clientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, clientMessageId, "dispatching");
     expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
     const authorityResponse = await fetch(`${server.url}authority-requests?session_id=general`);
     expect(authorityResponse.status).toBe(200);
@@ -421,13 +421,12 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
         SELECT client_message_id, turn_id, text, control_resolution_json
         FROM session_queued_messages WHERE chat_id = 'general' ORDER BY rowid ASC
       `).all();
-      expect(rows).toHaveLength(2);
-      expect(rows[1]?.control_resolution_json).toContain(String(requestRef));
-      expect(rows[1]?.text).not.toContain(PRIVATE_MODIFY_INPUT);
-      scheduledClientMessageId = rows[1]!.client_message_id;
-      resumedTurnId = rows[1]!.turn_id;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.text).not.toContain(PRIVATE_MODIFY_INPUT);
+      scheduledClientMessageId = rows[0]!.client_message_id;
+      resumedTurnId = rows[0]!.turn_id;
       sourceTurnId = rows[0]!.turn_id;
-      expect(resumedTurnId).not.toBe(sourceTurnId);
+      expect(resumedTurnId).toBe(sourceTurnId);
     } finally {
       scheduled.close();
     }
@@ -443,7 +442,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     await inbound.waitForIdle();
     expect(resumedSummary.claimed).toBe(1);
     expect(resumedSummary.failed).toBe(0);
-    await waitForQueueState(appDbPath, scheduledClientMessageId, "dispatched");
+    await waitForQueueState(appDbPath, scheduledClientMessageId, "dispatching");
     expect(await Bun.file(join(root, "old-modify-command.txt")).exists()).toBe(false);
     expect(await Bun.file(join(root, "replacement-modify-command.txt")).exists()).toBe(false);
 
@@ -470,8 +469,7 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
     const resumedMessages = messagesBody.data.messages.filter(
       (message) => message.role === "assistant" && message.turn_id === resumedTurnId,
     );
-    expect(resumedMessages).toHaveLength(1);
-    expect(resumedMessages[0]?.text).toBe("Replacement command is waiting for Allow.");
+    expect(resumedMessages).toHaveLength(0);
     const serializedMessages = JSON.stringify(messagesBody.data.messages);
     expect(serializedMessages).not.toContain(PRIVATE_MODIFY_INPUT);
     expect(serializedMessages).not.toContain(PRIVATE_MODIFY_PROVIDER_TEXT);
@@ -522,10 +520,10 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
       `).get(replacementRequestRef);
       expect(replacementAuthority).toMatchObject({
         decision: "pending",
-        authority_generation: 2,
+        authority_generation: 1,
         source_turn_id: resumedTurnId,
         source_work_id: oldAuthority?.source_work_id,
-        action_key: "run-replacement-modify-command",
+        action_key: "accepted-plan",
       });
       expect(replacementAuthority?.plan_revision_id).not.toBe(oldAuthority?.plan_revision_id);
 
@@ -578,6 +576,212 @@ test("real App ask_first Modify schedules one same-Work replan Turn before a rep
   }
 });
 
+test("authority schema preserves current and prior accepted outcome rows across reopen", () => {
+  const rootCurrent = mkdtempSync(join(tmpdir(), "butler-authority-current-reopen-"));
+  roots.push(rootCurrent);
+  const currentDbPath = join(rootCurrent, "agent-runtime", "btcc.sqlite");
+  const currentRows: AuthorityOutcomeRow[] = [
+    authorityOutcomeRow({
+      slot: 1,
+      identityHexCharacter: "a",
+      decision: "pending",
+      outcome: "pending",
+      privateAlternativeInput: null,
+      outcomeReceiptJson: null,
+      workspacePath: rootCurrent,
+    }),
+    authorityOutcomeRow({
+      slot: 2,
+      identityHexCharacter: "b",
+      decision: "allowed",
+      outcome: "applied",
+      privateAlternativeInput: "synthetic-private-alternative-applied",
+      outcomeReceiptJson: appliedAuthorityReceiptJson({
+        identitySha256: "b".repeat(64),
+        journalEffectIdHexCharacter: "e",
+        dispatchAttempt: 3,
+      }),
+      workspacePath: rootCurrent,
+    }),
+    authorityOutcomeRow({
+      slot: 3,
+      identityHexCharacter: "c",
+      decision: "denied",
+      outcome: "failed",
+      privateAlternativeInput: null,
+      outcomeReceiptJson: null,
+      workspacePath: rootCurrent,
+    }),
+    authorityOutcomeRow({
+      slot: 4,
+      identityHexCharacter: "d",
+      decision: "modified",
+      outcome: "uncertain",
+      privateAlternativeInput: "synthetic-private-alternative-uncertain",
+      outcomeReceiptJson: uncertainAuthorityReceiptJson({
+        identitySha256: "d".repeat(64),
+        journalEffectIdHexCharacter: "f",
+        dispatchAttempt: 2,
+      }),
+      workspacePath: rootCurrent,
+    }),
+  ];
+
+  const created = openBtccSqliteStores({
+    dbPath: currentDbPath,
+    ownerId: AUTHORITY_REOPEN_OWNER_ID,
+  });
+  created.close();
+  const seeded = new Database(currentDbPath);
+  try {
+    for (const row of currentRows) insertAuthorityOutcomeRow(seeded, row);
+  } finally {
+    seeded.close();
+  }
+  const firstReopen = openBtccSqliteStores({
+    dbPath: currentDbPath,
+    ownerId: AUTHORITY_REOPEN_OWNER_ID,
+  });
+  firstReopen.close();
+  const secondReopen = openBtccSqliteStores({
+    dbPath: currentDbPath,
+    ownerId: AUTHORITY_REOPEN_OWNER_ID,
+  });
+  secondReopen.close();
+
+  const currentSnapshot = readAuthorityTableSnapshot(currentDbPath);
+  expect(currentSnapshot.tableDefinition).toContain(
+    "outcome IN ('pending', 'applied', 'failed', 'uncertain')",
+  );
+  expect(currentSnapshot.tableDefinition).not.toContain("schedule_state");
+  expect(currentSnapshot.tableDefinition).not.toContain("schedule_turn_id");
+  expect(currentSnapshot.legacyTableNamePresent).toBe(false);
+  expect(currentSnapshot.rows).toEqual(currentRows);
+  const appliedRow = currentSnapshot.rows[1]!;
+  expect(appliedRow.outcome).toBe("applied");
+  expect(appliedRow.identity_sha256).toBe("b".repeat(64));
+  expect(appliedRow.private_alternative_input).toBe("synthetic-private-alternative-applied");
+  expect(appliedRow.schedule_client_message_id).toBe("client-synthetic-02");
+  expect(appliedRow.schedule_input_text).toBe("Continue synthetic scheduled operation 02.");
+  expect(appliedRow.outcome_receipt_json).toBe(currentRows[1]!.outcome_receipt_json);
+  const uncertainRow = currentSnapshot.rows[3]!;
+  expect(uncertainRow.outcome).toBe("uncertain");
+  expect(uncertainRow.private_alternative_input).toBe("synthetic-private-alternative-uncertain");
+  expect(uncertainRow.outcome_receipt_json).toBe(currentRows[3]!.outcome_receipt_json);
+  expect(parseAuthorityOutcomeReceipt(appliedRow.outcome_receipt_json)).toEqual({
+    schema: AUTHORITY_OUTCOME_RECEIPT_SCHEMA,
+    outcome: "applied",
+    evidenceRef: `authority-evidence-${"b".repeat(64)}`,
+    journalEffectId: `guided-effect-${"e".repeat(64)}`,
+    dispatchAttempt: 3,
+  });
+  expect(parseAuthorityOutcomeReceipt(uncertainRow.outcome_receipt_json)).toEqual({
+    schema: AUTHORITY_OUTCOME_RECEIPT_SCHEMA,
+    outcome: "uncertain",
+    evidenceRef: `authority-evidence-${"d".repeat(64)}`,
+    journalEffectId: `guided-effect-${"f".repeat(64)}`,
+    dispatchAttempt: 2,
+    errorCode: "effect_reconciliation_required",
+  });
+
+  const rootPrior = mkdtempSync(join(tmpdir(), "butler-authority-af02d-reopen-"));
+  roots.push(rootPrior);
+  const priorDbPath = join(rootPrior, "agent-runtime", "btcc.sqlite");
+  const priorSchema = BTCC_AUTHORITY_SCHEMA.replace(
+    "outcome IN ('pending', 'applied', 'failed', 'uncertain')",
+    "outcome IN ('pending', 'applied', 'failed')",
+  );
+  if (
+    priorSchema === BTCC_AUTHORITY_SCHEMA ||
+    !priorSchema.includes("outcome IN ('pending', 'applied', 'failed')") ||
+    priorSchema.includes("'uncertain'") ||
+    !priorSchema.includes("decision IN ('pending', 'allowed', 'denied', 'modified')") ||
+    !priorSchema.includes("schedule_client_message_id TEXT NOT NULL UNIQUE,") ||
+    !priorSchema.includes("schedule_input_text TEXT NOT NULL,") ||
+    !priorSchema.includes("private_alternative_input TEXT,") ||
+    !priorSchema.includes("idx_btcc_authority_requests_owner_pending") ||
+    !priorSchema.includes("idx_btcc_authority_requests_slot_action")
+  ) {
+    throw new Error("AF-02D prior accepted authority schema was not constructed exactly");
+  }
+  const priorRows: AuthorityOutcomeRow[] = [
+    authorityOutcomeRow({
+      slot: 1,
+      identityHexCharacter: "a",
+      decision: "pending",
+      outcome: "pending",
+      privateAlternativeInput: null,
+      outcomeReceiptJson: null,
+      workspacePath: rootPrior,
+    }),
+    authorityOutcomeRow({
+      slot: 2,
+      identityHexCharacter: "b",
+      decision: "allowed",
+      outcome: "applied",
+      privateAlternativeInput: "synthetic-private-alternative-legacy-applied",
+      outcomeReceiptJson: appliedAuthorityReceiptJson({
+        identitySha256: "b".repeat(64),
+        journalEffectIdHexCharacter: "9",
+        dispatchAttempt: 5,
+      }),
+      workspacePath: rootPrior,
+    }),
+    authorityOutcomeRow({
+      slot: 3,
+      identityHexCharacter: "c",
+      decision: "denied",
+      outcome: "failed",
+      privateAlternativeInput: null,
+      outcomeReceiptJson: null,
+      workspacePath: rootPrior,
+    }),
+  ];
+  mkdirSync(join(rootPrior, "agent-runtime"), { recursive: true });
+  const priorSeeded = new Database(priorDbPath);
+  try {
+    priorSeeded.exec(priorSchema);
+    for (const row of priorRows) insertAuthorityOutcomeRow(priorSeeded, row);
+  } finally {
+    priorSeeded.close();
+  }
+
+  const migrated = openBtccSqliteStores({
+    dbPath: priorDbPath,
+    ownerId: AUTHORITY_REOPEN_OWNER_ID,
+  });
+  migrated.close();
+  const migratedSnapshot = readAuthorityTableSnapshot(priorDbPath);
+  expect(migratedSnapshot.tableDefinition).toContain(
+    "outcome IN ('pending', 'applied', 'failed', 'uncertain')",
+  );
+  expect(migratedSnapshot.tableDefinition).toContain(
+    "decision IN ('pending', 'allowed', 'denied', 'modified')",
+  );
+  expect(migratedSnapshot.tableDefinition).not.toContain("schedule_state");
+  expect(migratedSnapshot.tableDefinition).not.toContain("schedule_turn_id");
+  expect(migratedSnapshot.indexNames).toContain("idx_btcc_authority_requests_owner_pending");
+  expect(migratedSnapshot.indexNames).toContain("idx_btcc_authority_requests_slot_action");
+  expect(migratedSnapshot.legacyTableNamePresent).toBe(false);
+  expect(migratedSnapshot.rows).toEqual(priorRows);
+  const migratedAppliedReceipt = migratedSnapshot.rows[1]!.outcome_receipt_json!;
+  expect(migratedAppliedReceipt).toBe(priorRows[1]!.outcome_receipt_json!);
+  expect(parseAuthorityOutcomeReceipt(migratedAppliedReceipt)).toEqual({
+    schema: AUTHORITY_OUTCOME_RECEIPT_SCHEMA,
+    outcome: "applied",
+    evidenceRef: `authority-evidence-${"b".repeat(64)}`,
+    journalEffectId: `guided-effect-${"9".repeat(64)}`,
+    dispatchAttempt: 5,
+  });
+
+  const reopenedAfterMigration = openBtccSqliteStores({
+    dbPath: priorDbPath,
+    ownerId: AUTHORITY_REOPEN_OWNER_ID,
+  });
+  reopenedAfterMigration.close();
+  expect(readAuthorityTableSnapshot(priorDbPath)).toEqual(migratedSnapshot);
+});
+
 function deniedCommandRound(): ModelRoundPort {
   let round = 0;
   const command = commandValueForPrivacy();
@@ -588,6 +792,7 @@ function deniedCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one reviewed command",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-denied-command",
             description: "Run the reviewed command only after approval",
@@ -615,23 +820,14 @@ function deniedCommandRound(): ModelRoundPort {
         };
       }
       if (round === 2) {
-        return {
-          toolCalls: [toolCall("run-resume", "run_command", {
-            command: "printf tampered > wrong-deny-target.txt",
-            cwd: ".",
-            state_effect: "mutation",
-            summary: "Resume reviewed command",
-          })],
-        };
-      }
-      if (round === 3) {
         assertDenialDeliveredToProvider(request);
         const workId = request.messages
-          .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
+          .filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id)
           .find(Boolean);
         if (!workId) throw new Error("same Work identity was not projected to the fresh Turn");
         return {
-          text: `${PRIVATE_CONTINUATION_INPUT} ${PRIVATE_PROVIDER_TEXT}`,
+          text: "명령을 실행하지 않고 요청을 정리합니다.",
           toolCalls: [toolCall("blocked", "record_work_disposition", {
             work_id: workId,
             disposition: "blocked",
@@ -642,7 +838,7 @@ function deniedCommandRound(): ModelRoundPort {
           })],
         };
       }
-      return { text: "No further action is required.", toolCalls: [] };
+      return { text: "요청하신 명령은 실행하지 않았습니다.", toolCalls: [] };
     },
   };
 }
@@ -657,6 +853,7 @@ function modifyingCommandRound(): ModelRoundPort {
         const plan = {
           start_new: true,
           objective: "Run one command with a possible replacement",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-old-modify-command",
             description: "Run the original command only after approval",
@@ -689,12 +886,14 @@ function modifyingCommandRound(): ModelRoundPort {
           throw new Error(`private Modify input missing from exact scheduled Turn: ${serialized}`);
         }
         const workId = request.messages
-          .map((message) => message.content.match(/Explicit relation Work id .*?: ([A-Za-z0-9-]+)/u)?.[1])
+          .filter((message) => message.role === "tool")
+          .map((message) => JSON.parse(message.content)?.output?.work?.work_id)
           .find(Boolean);
         if (!workId) throw new Error("same Work identity was not projected to the Modify Turn");
         const replacementPlan = {
           start_new: false,
           objective: "Run one command with a possible replacement",
+          execution_mode: "direct",
           actions: [{
             action_key: "run-replacement-modify-command",
             description: "Run the replacement command only after approval",
@@ -716,7 +915,7 @@ function modifyingCommandRound(): ModelRoundPort {
           }],
         };
         return {
-          text: PRIVATE_MODIFY_PROVIDER_TEXT,
+          text: "수정 요청에 맞춰 계획을 변경합니다.",
           toolCalls: [
             toolCall("modify-continue", "continue_work", { work_id: workId }),
             toolCall("modify-result-review", "record_work_review", {
@@ -752,7 +951,7 @@ function assertDenialDeliveredToProvider(request: {
   const toolMessages = request.messages.filter((message) => message.role === "tool");
   const serialized = JSON.stringify(toolMessages);
   if (!serialized.includes("authority_request_denied") ||
-      !serialized.includes(AUTHORITY_DENIAL_TEXT)) {
+      !serialized.includes("It was not executed.")) {
     throw new Error(`provider denial delivery missing: ${serialized}`);
   }
 }
@@ -922,6 +1121,11 @@ async function waitForQueueState(
 }
 
 function publishNativeReadiness(root: string): void {
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
   mkdirSync(join(root, "state"), { recursive: true });
   writeFileSync(
     join(root, "state", "butler-main-native.json"),
@@ -937,4 +1141,188 @@ function publishNativeReadiness(root: string): void {
 
 function clearNativeReadiness(root: string): void {
   rmSync(join(root, "state", "butler-main-native.json"), { force: true });
+}
+
+const AUTHORITY_REOPEN_OWNER_ID = "af02e-criterion-6-authority-reopen";
+const AUTHORITY_OUTCOME_RECEIPT_SCHEMA = "butler.authority-outcome-receipt.v1";
+
+type AuthorityDecisionValue = "pending" | "allowed" | "denied" | "modified";
+type AuthorityOutcomeValue = "pending" | "applied" | "failed" | "uncertain";
+
+type AuthorityOutcomeRow = {
+  request_id: string;
+  request_ref: string;
+  identity_sha256: string;
+  owner_session_id: string;
+  source_session_id: string;
+  source_turn_id: string;
+  source_work_id: string;
+  workspace_path: string;
+  plan_revision_id: string;
+  action_key: string;
+  authority_generation: number;
+  capability: string;
+  normalized_target: string;
+  normalized_input_json: string;
+  model_ref: string;
+  reasoning_effort: string;
+  category: string;
+  reason: string;
+  executable: string;
+  command_count: number;
+  decision: string;
+  schedule_client_message_id: string;
+  schedule_input_text: string;
+  private_alternative_input: string | null;
+  outcome: string;
+  outcome_receipt_json: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const AUTHORITY_ROW_COLUMNS = [
+  "request_id",
+  "request_ref",
+  "identity_sha256",
+  "owner_session_id",
+  "source_session_id",
+  "source_turn_id",
+  "source_work_id",
+  "workspace_path",
+  "plan_revision_id",
+  "action_key",
+  "authority_generation",
+  "capability",
+  "normalized_target",
+  "normalized_input_json",
+  "model_ref",
+  "reasoning_effort",
+  "category",
+  "reason",
+  "executable",
+  "command_count",
+  "decision",
+  "schedule_client_message_id",
+  "schedule_input_text",
+  "private_alternative_input",
+  "outcome",
+  "outcome_receipt_json",
+  "created_at",
+  "updated_at",
+] as const;
+
+function authorityOutcomeRow(config: {
+  slot: number;
+  identityHexCharacter: string;
+  decision: AuthorityDecisionValue;
+  outcome: AuthorityOutcomeValue;
+  privateAlternativeInput: string | null;
+  outcomeReceiptJson: string | null;
+  workspacePath: string;
+}): AuthorityOutcomeRow {
+  const slotLabel = String(config.slot).padStart(2, "0");
+  return {
+    request_id: `authority-request-id-${slotLabel}`,
+    request_ref: `authority-request-ref-${slotLabel}`,
+    identity_sha256: config.identityHexCharacter.repeat(64),
+    owner_session_id: "synthetic-owner-session",
+    source_session_id: "synthetic-source-session",
+    source_turn_id: `synthetic-source-turn-${slotLabel}`,
+    source_work_id: `synthetic-work-${slotLabel}`,
+    workspace_path: config.workspacePath,
+    plan_revision_id: `synthetic-plan-${slotLabel}`,
+    action_key: `run-synthetic-action-${slotLabel}`,
+    authority_generation: 1,
+    capability: "run_command",
+    normalized_target: "workspace-command:synthetic",
+    normalized_input_json: JSON.stringify({
+      command: `printf synthetic-${slotLabel}`,
+      cwd: ".",
+      state_effect: "mutation",
+    }),
+    model_ref: "openai/gpt-5.5",
+    reasoning_effort: "low",
+    category: "command",
+    reason: `Synthetic authority row ${slotLabel}`,
+    executable: "printf",
+    command_count: 1,
+    decision: config.decision,
+    schedule_client_message_id: `client-synthetic-${slotLabel}`,
+    schedule_input_text: `Continue synthetic scheduled operation ${slotLabel}.`,
+    private_alternative_input: config.privateAlternativeInput,
+    outcome: config.outcome,
+    outcome_receipt_json: config.outcomeReceiptJson,
+    created_at: "2026-08-21T00:00:00.000Z",
+    updated_at: "2026-08-21T00:00:00.000Z",
+  };
+}
+
+function appliedAuthorityReceiptJson(config: {
+  identitySha256: string;
+  journalEffectIdHexCharacter: string;
+  dispatchAttempt: number;
+}): string {
+  return JSON.stringify({
+    schema: AUTHORITY_OUTCOME_RECEIPT_SCHEMA,
+    outcome: "applied" as const,
+    evidenceRef: `authority-evidence-${config.identitySha256}`,
+    journalEffectId: `guided-effect-${config.journalEffectIdHexCharacter.repeat(64)}`,
+    dispatchAttempt: config.dispatchAttempt,
+  });
+}
+
+function uncertainAuthorityReceiptJson(config: {
+  identitySha256: string;
+  journalEffectIdHexCharacter: string;
+  dispatchAttempt: number;
+}): string {
+  return JSON.stringify({
+    schema: AUTHORITY_OUTCOME_RECEIPT_SCHEMA,
+    outcome: "uncertain" as const,
+    evidenceRef: `authority-evidence-${config.identitySha256}`,
+    journalEffectId: `guided-effect-${config.journalEffectIdHexCharacter.repeat(64)}`,
+    dispatchAttempt: config.dispatchAttempt,
+    errorCode: "effect_reconciliation_required" as const,
+  });
+}
+
+function insertAuthorityOutcomeRow(db: Database, row: AuthorityOutcomeRow): void {
+  db.query(`
+    INSERT INTO btcc_authority_requests (${AUTHORITY_ROW_COLUMNS.join(", ")})
+    VALUES (${AUTHORITY_ROW_COLUMNS.map(() => "?").join(", ")})
+  `).run(...AUTHORITY_ROW_COLUMNS.map((column) => row[column]));
+}
+
+type AuthorityTableSnapshot = {
+  tableDefinition: string;
+  indexNames: string[];
+  legacyTableNamePresent: boolean;
+  rows: AuthorityOutcomeRow[];
+};
+
+function readAuthorityTableSnapshot(dbPath: string): AuthorityTableSnapshot {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return {
+      tableDefinition: db.query<{ sql: string }, []>(`
+        SELECT sql FROM sqlite_schema
+        WHERE type = 'table' AND name = 'btcc_authority_requests'
+      `).get()?.sql ?? "",
+      indexNames: db.query<{ name: string }, []>(`
+        SELECT name FROM sqlite_schema
+        WHERE type = 'index' AND tbl_name = 'btcc_authority_requests'
+        ORDER BY name
+      `).all().map((row) => row.name),
+      legacyTableNamePresent: Boolean(db.query<{ name: string }, []>(`
+        SELECT name FROM sqlite_schema
+        WHERE type = 'table' AND name = 'btcc_authority_requests_af02d_legacy'
+      `).get()),
+      rows: db.query<AuthorityOutcomeRow, []>(`
+        SELECT ${AUTHORITY_ROW_COLUMNS.join(", ")}
+        FROM btcc_authority_requests ORDER BY rowid ASC
+      `).all(),
+    };
+  } finally {
+    db.close();
+  }
 }

@@ -1,6 +1,6 @@
 import { isAbsolute, posix, win32 } from "node:path";
 
-/** Runtime-owned state needed to reconcile one entry of a guided edit batch. */
+/** One ordered edit location, with the enclosing file's initial/final hashes. */
 export type GuidedEffectRecoveryEntry = {
   path: string;
   startLine: number;
@@ -30,7 +30,7 @@ export function normalizeGuidedEffectRecoveryEntries(
     );
   }
 
-  const paths = new Set<string>();
+  const files = new Map<string, { beforeSha256: string; afterSha256: string }>();
   return value.map((entry, index) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error(`Guided edit batch recovery entry ${index} is invalid`);
@@ -50,12 +50,6 @@ export function normalizeGuidedEffectRecoveryEntries(
       );
     }
     const path = normalizeRecoveryPath(record.path, index);
-    if (paths.has(path)) {
-      throw new Error(
-        `Guided edit batch recovery entry ${index} duplicates a path`,
-      );
-    }
-    paths.add(path);
     if (
       !Number.isSafeInteger(record.startLine) ||
       Number(record.startLine) < 1
@@ -74,6 +68,13 @@ export function normalizeGuidedEffectRecoveryEntries(
       index,
       "afterSha256",
     );
+    // Several ordered edits may address one file. They share one file commit,
+    // but retain separate positions so recovery can reconstruct the same input.
+    const file = files.get(path);
+    if (file && (file.beforeSha256 !== beforeSha256 || file.afterSha256 !== afterSha256)) {
+      throw new Error(`Guided edit batch recovery entry ${index} has inconsistent file hashes`);
+    }
+    files.set(path, { beforeSha256, afterSha256 });
     return {
       path,
       startLine: Number(record.startLine),

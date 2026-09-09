@@ -1,59 +1,85 @@
 import type { Database } from "bun:sqlite";
 import type { StewardObserverPlan } from "../../../../gateways/app/domain/sessions/steward-observer.ts";
+import { readProjectWorkPlan } from "../project-ledger/index.ts";
 
 export function readStewardObserverPlan(
   db: Database,
   sessionId: string,
+  butlerData?: string,
 ): StewardObserverPlan | null {
+  const work = db.query<{
+    work_id: string;
+    scope_kind: "session" | "project";
+    scope_ref: string;
+    ledger_project_id: string | null;
+    current_plan_revision_id: string | null;
+  }, [string]>(`
+    SELECT work.* FROM btcc_guided_turn_work_bindings binding
+    JOIN btcc_guided_works work ON work.work_id = binding.work_id
+      AND work.session_id = binding.session_id
+    WHERE binding.turn_id = (
+      SELECT turn_id FROM btcc_turns WHERE session_id = ? ORDER BY rowid DESC LIMIT 1
+    ) AND binding.is_current = 1
+  `).get(sessionId);
+  if (!work) return null;
+  if (work.scope_kind === "project") {
+    if (!butlerData || !work.ledger_project_id) return null;
+    const view = readProjectWorkPlan({
+      butlerData,
+      appProjectId: work.scope_ref,
+      ledgerProjectId: work.ledger_project_id,
+      workId: work.work_id,
+    });
+    const plan = view?.currentPlan;
+    if (!plan) return null;
+    return {
+      plan_revision_id: plan.planRevisionId,
+      revision: plan.revision,
+      actions: plan.actions.map((action) => ({
+        action_key: action.actionKey, description: action.description,
+      })),
+      action_progress: view.actionProgress.map((action) => ({
+        action_key: action.actionKey, status: action.status,
+      })),
+      approved: view.latestPlanReview?.verdict === "accept" &&
+        view.latestPlanReview.boundPlanRevisionId === plan.planRevisionId,
+    };
+  }
   const plan = db.query<{
     plan_revision_id: string;
     revision: number;
     actions_json: string;
-    current_plan_revision_id: string;
-  }, [string]>(`
-    SELECT plan.plan_revision_id, plan.revision, plan.actions_json,
-      work.current_plan_revision_id
-    FROM btcc_guided_works work
-    JOIN btcc_guided_work_plan_revisions plan
-      ON plan.plan_revision_id = work.current_plan_revision_id
-    WHERE work.session_id = ?
-    ORDER BY work.updated_at DESC, work.work_id ASC
-    LIMIT 1
-  `).get(sessionId);
+  }, [string, string | null]>(`
+    SELECT plan_revision_id, revision, actions_json
+    FROM btcc_guided_work_plan_revisions
+    WHERE work_id = ? AND plan_revision_id = ?
+  `).get(work.work_id, work.current_plan_revision_id);
   if (!plan) return null;
   const actions = parsePlanActions(plan.actions_json);
   if (actions.length === 0) return null;
   const checkpoint = db.query<{
     plan_revision_id: string;
     action_states_json: string;
-  }, [string, string]>(`
+  }, [string]>(`
     SELECT plan_revision_id, action_states_json
     FROM btcc_guided_work_checkpoint_revisions
-    WHERE work_id = (
-      SELECT work_id FROM btcc_guided_works
-      WHERE session_id = ? AND current_plan_revision_id = ?
-      ORDER BY updated_at DESC, work_id ASC LIMIT 1
-    )
+    WHERE work_id = ?
     ORDER BY revision DESC
     LIMIT 1
-  `).get(sessionId, plan.current_plan_revision_id);
+  `).get(work.work_id);
   const actionProgress = checkpoint?.plan_revision_id === plan.plan_revision_id
     ? parseActionProgress(checkpoint.action_states_json)
     : [];
   const planReview = db.query<{
     verdict: string;
     bound_plan_revision_id: string | null;
-  }, [string, string]>(`
+  }, [string]>(`
     SELECT verdict, bound_plan_revision_id
     FROM btcc_guided_work_review_revisions
-    WHERE work_id = (
-      SELECT work_id FROM btcc_guided_works
-      WHERE session_id = ? AND current_plan_revision_id = ?
-      ORDER BY updated_at DESC, work_id ASC LIMIT 1
-    ) AND subject = 'plan'
+    WHERE work_id = ? AND subject = 'plan'
     ORDER BY revision DESC
     LIMIT 1
-  `).get(sessionId, plan.current_plan_revision_id);
+  `).get(work.work_id);
   return {
     plan_revision_id: plan.plan_revision_id,
     revision: plan.revision,

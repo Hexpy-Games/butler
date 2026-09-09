@@ -22,8 +22,10 @@ import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { projectChildTerminalReport, projectTurnOutcome } from
+  "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-outcome.ts";
 
-const executionWindowEchoTool = {
+const echoTool = {
   name: "echo",
   description: "Echo a message.",
   parameters: {
@@ -87,6 +89,58 @@ test("Guided Turn answers directly through only durable admission and delivery s
         "admitted",
         "delivery_committed",
       ]);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a suspended Turn does not commit closeout or canonical delivery", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-suspended-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-suspended",
+    storageProfile: "ephemeral",
+  });
+  let agentCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run() {
+        agentCalls += 1;
+        return {
+          route: "assisted",
+          content: "",
+          suspension: "waiting_for_worker",
+        };
+      },
+    },
+  });
+  const command = runCommand("guided-suspended-turn");
+  try {
+    const suspended = {
+      kind: "suspended",
+      turnId: command.turnId,
+      reason: "waiting_for_worker",
+    } as const;
+    expect(await runtime.runTurn(command)).toEqual(suspended);
+    expect(await runtime.runTurn(command)).toEqual(suspended);
+    expect(agentCalls).toBe(1);
+    const stored = await stores.turns.findTurn(command.turnId);
+    expect(stored?.semanticState).toBe("admitted");
+    expect(stored?.finalPayload).toBeUndefined();
+    expect(stored?.deliveryOutbox).toBeUndefined();
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_messages WHERE role = 'assistant'",
+      ).get()?.count).toBe(0);
     } finally {
       db.close();
     }
@@ -171,7 +225,7 @@ test("Guided Turn persists final artifacts and returns them unchanged on replay"
   }
 });
 
-test("Guided execution windows stay in one Turn and commit one canonical answer", async () => {
+test("Guided tool rounds stay in one Turn and commit one canonical answer", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-same-turn-window-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({
@@ -208,14 +262,11 @@ test("Guided execution windows stay in one Turn and commit one canonical answer"
         const loop = await runBtccAgentLoop({
           prompt: turn.originalMessage,
           turnId: turn.turnId,
-          tools: [executionWindowEchoTool],
-          maxIterations: 1,
+          tools: [echoTool],
           modelRound,
           executeTool: async (call) => ({
             message: call.arguments.message,
           }),
-          onExecutionWindowBoundary: () =>
-            "Execution checkpoint: use the existing evidence and finish the original request.",
         });
         return { route: "direct", content: loop.finalText };
       },
@@ -355,7 +406,7 @@ test("Guided Turn does not retry a non-contention final commit failure", async (
   }
 });
 
-test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fault", async () => {
+test("Guided Turn delivers exhausted provider failure without parking an unfinished execution", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-failure-"));
   const stores = openBtccSqliteStores({
     dbPath: join(root, "btcc.sqlite"),
@@ -383,14 +434,15 @@ test("Guided Turn surfaces exhausted provider recovery as a retryable runtime fa
     },
   });
   try {
-    await expect(runtime.runTurn(runCommand("guided-provider-failure-turn")))
-      .rejects.toMatchObject({ code: "provider_network_error" });
-    expect(faults).toHaveLength(1);
-    expect(faults[0]).toMatchObject({
-      kind: "provider_transport_exhausted",
-      retryable: true,
-      safeErrorCode: "provider_network_error",
+    const result = await runtime.runTurn(runCommand("guided-provider-failure-turn"));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      runtimeFailure: { code: "provider_network_error", retryable: true },
+      acceptedWorkResult: { status: "failed" },
+      content: "모델과의 연결이 끊겨 작업을 더 진행하지 못했습니다. 진행한 내용은 저장되어 있습니다.",
     });
+    expect(faults).toHaveLength(0);
+    expect(await runtime.runTurn(runCommand("guided-provider-failure-turn"))).toEqual(result);
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });
@@ -423,13 +475,38 @@ test("Guided Turn reports a permanent provider failure without a retry request",
     const result = await runtime.runTurn(runCommand("guided-provider-permanent-turn"));
     expect(result).toMatchObject({
       kind: "delivered",
-      content: "모델 제공자 설정 또는 요청이 승인되지 않아 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
+      content: "모델 제공자 인증에 실패해 작업을 더 진행하지 못했습니다. 진행한 내용은 저장되어 있습니다.",
+      runtimeFailure: { code: "provider_auth_error", retryable: false },
     });
-    expect(JSON.stringify(result)).not.toMatch(/다시 요청|이어|retry|continue/iu);
+    if (result.kind === "delivered") {
+      expect(result.content).not.toMatch(/다시 요청|이어|retry|continue/iu);
+    }
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("final model failure preserves accepted Work success and artifacts through parent projection", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-completed-report-failure-"));
+  const stores = openBtccSqliteStores({ dbPath: join(root, "btcc.sqlite"),
+    ownerId: "completed-report-failure", storageProfile: "ephemeral" });
+  const artifact = { id: "report", kind: "document" as const, title: "Report", safePathLabel: "reports/result.pdf" };
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission, turns: stores.turns, messages: stores.messages,
+    agent: { async run() { return { route: "managed", content: "", workStatus: "completed",
+      acceptedWorkResult: { status: "success" }, artifacts: [artifact],
+      runtimeFailure: { code: "provider_rate_limited", retryable: true } }; } },
+  });
+  try {
+    const result = await runtime.runTurn(runCommand("completed-report-failure"));
+    expect(result).toMatchObject({ kind: "delivered", workStatus: "completed",
+      acceptedWorkResult: { status: "success" }, artifacts: [artifact] });
+    const projected = projectTurnOutcome(result);
+    expect(projected.text).toContain("작업은 완료했지만");
+    expect(projectChildTerminalReport(projected).changedArtifacts).toEqual(["reports/result.pdf"]);
+    expect(projectChildTerminalReport(projected).summary).not.toContain("현재 진행 내용");
+  } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Guided Turn preserves an admitted Turn when route durability fails before dispatch", async () => {
@@ -442,6 +519,7 @@ test("Guided Turn preserves an admitted Turn when route durability fails before 
   });
   const turns: TurnStateRepository = {
     findTurn: (turnId) => stores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => stores.turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => stores.turns.commitTransition(input),
@@ -721,6 +799,7 @@ test("Guided Turn preserves an admitted Turn for acceptance and history faults b
     });
     const turns: TurnStateRepository = {
       findTurn: (turnId) => stores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => stores.turns.resumeAuthorityContinuation(turnId),
       activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
       acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
       commitTransition: (input) => stores.turns.commitTransition(input),
@@ -802,6 +881,7 @@ test("Guided Turn reclaims a route-durability interruption and dispatches exactl
   });
   const firstTurns: TurnStateRepository = {
     findTurn: (turnId) => firstStores.turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => firstStores.turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => firstStores.turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => firstStores.turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => firstStores.turns.commitTransition(input),
@@ -1155,6 +1235,7 @@ function overrideTransitionCommit(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition,
@@ -1168,6 +1249,7 @@ function overrideModelRouteEvent(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => turns.commitTransition(input),
@@ -1182,6 +1264,7 @@ function overrideModelRoundAcceptance(
 ): TurnStateRepository {
   return {
     findTurn: (turnId) => turns.findTurn(turnId),
+    resumeAuthorityContinuation: (turnId) => turns.resumeAuthorityContinuation(turnId),
     activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
     acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
     commitTransition: (input) => turns.commitTransition(input),

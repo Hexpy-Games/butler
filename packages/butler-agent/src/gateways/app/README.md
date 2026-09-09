@@ -62,6 +62,9 @@ source root for local development.
   resolve a selected label or displayed prompt line back to that preset id
   before applying the persona, so choosing a preset never degrades into a
   custom persona that merely imitates the preview text.
+- The composer distinguishes messages that are still queued from messages whose
+  transport handoff already failed. A failed accepted input remains available
+  for retry or deletion, but it must never be labelled as a waiting message.
 
 ## Related Specs
 

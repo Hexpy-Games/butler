@@ -8,6 +8,13 @@ import {
   subsessionFileMutationScopeRequired,
 } from "./scope.ts";
 
+/** Normalizes the already-public child report without discarding its findings. */
+export function normalizeTerminalReportContent(value: string): string {
+  return value
+    .replace(/\r\n?/gu, "\n")
+    .trim();
+}
+
 export function completePacketContext(packet: DelegationPacket): boolean {
   if (!packet || typeof packet !== "object") return false;
   const stringValue = (value: unknown): boolean =>
@@ -18,16 +25,16 @@ export function completePacketContext(packet: DelegationPacket): boolean {
   const expectedSchema = packet.expected_result_schema;
   const workspace = packet.workspace_and_worktree;
   const access = packet.access_and_budget_policy;
+  const parentWork = packet.parent_work_ref;
   const executionMode = packet.execution_mode;
   const workspaceValid = executionMode === "read_only"
     ? workspace?.ownership === "project" &&
       workspace.workspace_label === "Validated project workspace" &&
       workspace.repository_anchor_ref === "parent-session-project"
     : executionMode === "mutation" &&
-      workspace?.ownership === "session" &&
-      stringValue(workspace.repository_anchor_ref) &&
-      stringValue(workspace.branch) &&
-      stringValue(workspace.workspace_label);
+      workspace?.ownership === "parent_session" &&
+      workspace.repository_anchor_ref === "parent-session-workspace" &&
+      workspace.workspace_label === "Inherited parent session workspace";
   const readOnlySurfaceValid = executionMode !== "read_only" ||
     (Array.isArray(packet.mutation_scope) && Array.isArray(packet.allowed_tools_and_effects) &&
       packet.mutation_scope.length === 0 &&
@@ -48,10 +55,17 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     stringValue(packet.task_id) &&
     stringValue(packet.parent_session_id) &&
     stringValue(packet.parent_turn_id) &&
+    stringValue(parentWork?.work_id) &&
+    stringValue(parentWork?.session_id) &&
+    stringValue(parentWork?.turn_id) &&
+    stringValue(parentWork?.plan_revision_id) &&
+    stringValue(parentWork?.review_revision_id) &&
+    parentWork?.session_id === packet.parent_session_id &&
+    parentWork.turn_id === packet.parent_turn_id &&
     stringValue(packet.relation_id) &&
     (executionMode === "read_only" || executionMode === "mutation") &&
     stringValue(packet.objective) &&
-    stringArray(packet.acceptance_criteria, 1) &&
+    stringArray(packet.acceptance_criteria) &&
     stringArray(packet.task_or_plan_refs) &&
     stringArray(packet.constraints_and_non_goals) &&
     stringArray(packet.allowed_tools_and_effects, 1) &&
@@ -66,7 +80,7 @@ export function completePacketContext(packet: DelegationPacket): boolean {
     expectedSchema.required_fields.includes("summary") &&
     expectedSchema.required_fields.includes("acceptance_evidence") &&
     expectedSchema.required_fields.includes("changed_artifacts") &&
-    access?.access_mode === (executionMode === "read_only" ? "read_only" : "full_access") &&
+    ["read_only", "ask_first", "full_access"].includes(String(access?.access_mode)) &&
     Number.isInteger(access.max_turns) && access.max_turns > 0 &&
     stringValue(access.model_ref) &&
     stringValue(access.reasoning_effort) &&

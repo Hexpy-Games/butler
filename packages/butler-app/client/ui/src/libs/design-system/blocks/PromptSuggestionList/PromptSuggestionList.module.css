@@ -334,7 +334,7 @@
   color: var(--text-secondary);
 }
 
-@media (width <= 900px) {
+@container conversation (width <= 900px) {
   .title {
     font-size: var(--typo-new-chat-title-size-md);
   }
@@ -344,7 +344,7 @@
   }
 }
 
-@media (width <= 640px) {
+@container conversation (width <= 640px) {
   .root {
     --prompt-content-width: calc(
       100% - var(--adaptive-page-gutter) - var(--adaptive-page-gutter)
@@ -368,7 +368,7 @@
   }
 }
 
-@media (width <= 560px) {
+@container conversation (width <= 560px) {
   .fluidBackground {
     border-radius: 0;
   }
@@ -391,7 +391,7 @@
   }
 
   .grid {
-    grid-auto-columns: minmax(200px, 66vw);
+    grid-auto-columns: minmax(200px, 66cqw);
   }
 
   .itemFrame {

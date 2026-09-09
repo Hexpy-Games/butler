@@ -48,6 +48,8 @@ export function createAppTransportModuleGraph(input: {
     },
     <T>(callback: () => T) => host.db.transaction(callback)(),
     (input) => host.sessionQueue.fenceQueuedTurnClaim(input),
+    sessionId => readSessionBranchSeed(db, sessionId),
+    (chatId, messageId) => host.sessionQueue.projectSourcesForMessage(chatId, messageId),
   );
   const transportProjection = new AppTransportProjectionStore({
     db,
@@ -61,10 +63,38 @@ export function createAppTransportModuleGraph(input: {
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     getLatestAssistantMessageForTurn: (turnId) =>
       host.getLatestAssistantMessageForTurn(turnId),
+    updateSessionControlsView: (sessionId, controls) =>
+      host.updateSessionControlsView(sessionId, controls),
+    createAcceptedPlanContinuation: ({
+      sessionId,
+      sourceTurnId,
+      planId,
+      planTitle,
+    }) => {
+      host.sessionQueue.createPlanContinuation({
+        chatId: sessionId,
+        clientMessageId: `client-plan-activated-${sourceTurnId}`,
+        planId,
+        text: `Proceed with the accepted plan "${planTitle}".`,
+      });
+    },
     insertMessage: (chatId, role, text, status, options) =>
       host.insertMessage(chatId, role, text, status, options),
-    insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
-      host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
+    insertOrReplaceAssistantReplies: (
+      chatId,
+      turnId,
+      texts,
+      files,
+      changedFiles,
+      plan,
+    ) => host.insertOrReplaceAssistantReplies(
+      chatId,
+      turnId,
+      texts,
+      files,
+      changedFiles,
+      plan,
+    ),
     updateTurnState: (turnId, state, options) =>
       host.updateTurnState(turnId, state, options),
     appendTerminalTurnStateChanged: (turn) =>
@@ -124,3 +154,4 @@ export function createAppTransportModuleGraph(input: {
   });
   return { appTransportQueue, transportProjection, transportProjectionOwner };
 }
+import { readSessionBranchSeed } from "../../domain/sessions/session-branch-store.ts";

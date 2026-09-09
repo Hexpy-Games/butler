@@ -191,6 +191,7 @@ const HARNESS_STEWARD_CHILD: StewardSessionSummaryView = {
   approved_plan_total: 3,
   approved_plan_completed: 1,
   artifacts: [],
+  changed_files: [],
   result: null,
   updated_at: "2026-05-01T00:10:00.000Z",
   terminal: false,
@@ -262,6 +263,10 @@ const HARNESS_SS03_STEWARD_CHILD: StewardSessionSummaryView = {
 };
 
 export const HARNESS_NAVIGATION: NavigationView = {
+  space: { revision: 1, groups: [], nodes: [
+    { key: "p:butler", kind: "project", entityId: "butler", parentKey: null, position: 0, revision: 1, manualPlacement: false, scopeProjectId: null },
+    { key: "s:butler-client", kind: "session", entityId: "butler-client", parentKey: "p:butler", position: 0, revision: 1, manualPlacement: false, scopeProjectId: "butler" },
+  ] },
   chats: [
     {
       id: "general",

@@ -1,5 +1,5 @@
 import { ACTIVE_TURN_STATES } from "./constants.ts";
-import { appCopy } from "./copy.ts";
+import { appCopy, interfaceText } from "./copy.ts";
 import {
   progressRowFromSharedTurnEvent,
 } from "../../../../../butler-progress-projection/src/index.ts";
@@ -967,6 +967,14 @@ export function isRuntimeFaultRetryableMessage(
   return message.retryable === true && message.safe_error_code === "runtime_fault";
 }
 
+export function isAssistantFailureNoticeMessage(
+  message: Pick<MessageRecord, "role" | "status" | "safe_error_code">,
+): boolean {
+  return message.role === "assistant" &&
+    message.status === "failed" &&
+    Boolean(message.safe_error_code);
+}
+
 function systemEventMessageFromEvent(
   event: TimelineEvent,
   activeChatId: string,
@@ -977,9 +985,10 @@ function systemEventMessageFromEvent(
     id: `system-${event.type}-${event.id ?? createdAt}`,
     chat_id: activeChatId,
     role: "system_event",
+    system_event_kind: compacting ? "context.compaction.started" : "context.compaction.completed",
     text: compacting
-      ? "Context automatically compacting"
-      : "Context automatically compacted",
+      ? appCopy.interfaceFeedback.compacting
+      : appCopy.interfaceFeedback.compacted,
     status: compacting ? "streaming" : "delivered",
     retryable: false,
     cursor: Number(event.id ?? 0) + 0.25,
@@ -1523,6 +1532,8 @@ function progressMergeState(current: string, incoming: string): string {
   if (shouldResetProgressForRetry(current, incoming)) return incoming;
   if (shouldReviveProgressForRetry(current, incoming)) return incoming;
   if (isTerminalProgressState(current)) return current;
+  // Waiting is a resumable Turn state, not lower-priority progress.
+  if (incoming === "waiting_for_form" || current === "waiting_for_form") return incoming;
   return progressStateRank(incoming) >= progressStateRank(current)
     ? incoming
     : current;
@@ -1604,8 +1615,8 @@ export function activeChatFromNavigation(
   const draft = parseDraftChatId(activeChatId);
   if (draft.kind === "chat") {
     return {
-      title: "오늘의 일을 같이 펼쳐볼까요",
-      shortTitle: "New chat",
+      title: appCopy.interfaceTemplates.homeTitle,
+      shortTitle: appCopy.interfaceFeedback.newChat,
       project: "",
     };
   }
@@ -1613,18 +1624,18 @@ export function activeChatFromNavigation(
     const project = (navigation.projects ?? []).find(
       (item) => item.id === draft.projectId,
     );
-    const projectName = project?.display_name ?? "Project";
+    const projectName = project?.display_name ?? appCopy.briefing.projectMoment;
     return {
-      title: `${projectName}에서 오늘 이어갈 일을 골라볼까요`,
-      shortTitle: "New project chat",
+      title: appCopy.interfaceTemplates.projectHomeTitle(projectName),
+      shortTitle: appCopy.interfaceFeedback.newProjectChat,
       project: projectName,
     };
   }
   for (const chat of navigation.chats ?? []) {
     if (chat.id === activeChatId) {
       return {
-        title: chat.title || "New chat",
-        shortTitle: chat.title || "New chat",
+        title: chat.title || appCopy.interfaceFeedback.newChat,
+        shortTitle: chat.title || appCopy.interfaceFeedback.newChat,
         project: "",
       };
     }
@@ -1635,15 +1646,15 @@ export function activeChatFromNavigation(
     );
     if (session) {
       return {
-        title: session.title || "Project chat",
-        shortTitle: session.title || "Project chat",
+        title: session.title || appCopy.interfaceFeedback.projectChat,
+        shortTitle: session.title || appCopy.interfaceFeedback.projectChat,
         project: project.display_name,
       };
     }
   }
   return {
-    title: "오늘의 일을 같이 펼쳐볼까요",
-    shortTitle: "New chat",
+    title: appCopy.interfaceTemplates.homeTitle,
+    shortTitle: appCopy.interfaceFeedback.newChat,
     project: "",
   };
 }
@@ -1698,7 +1709,7 @@ export function projectDraftId(projectId: string): string {
 export function titleFromPrompt(text: string): string {
   const firstLine = text.trim().split(/\r?\n/u)[0] ?? "";
   const collapsed = firstLine.replace(/\s+/gu, " ").trim();
-  if (!collapsed) return "New chat";
+  if (!collapsed) return appCopy.interfaceFeedback.newChat;
   return collapsed.length > 48 ? `${collapsed.slice(0, 45)}...` : collapsed;
 }
 
@@ -1815,26 +1826,20 @@ export function relativeAge(value: string | null | undefined): string {
   const timestamp = Date.parse(value ?? "");
   if (!Number.isFinite(timestamp)) return "";
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return "now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return appCopy.interfaceTemplates.relativeAge(seconds);
 }
 
 export function contextTooltip(context?: ContextDetailsView | null): string {
-  if (!context) return "No context yet";
+  if (!context) return appCopy.interfaceFeedback.noContext;
   return `${Math.round(context.used_tokens / 1000)}k / ${Math.round(context.budget_tokens / 1000)}k`;
 }
 
 export function modelDisplayName(model?: AppModelSummary | null): string {
-  return model?.display_name ?? model?.model_id ?? "Model";
+  return model?.display_name ?? model?.model_id ?? appCopy.interfaceFeedback.model;
 }
 
 export function tokenWindowLabel(tokens?: number): string {
-  if (typeof tokens !== "number" || !Number.isFinite(tokens)) return "context unknown";
+  if (typeof tokens !== "number" || !Number.isFinite(tokens)) return appCopy.interfaceFeedback.contextUnknown;
   if (tokens >= 1_000_000)
     return `${Number((tokens / 1_000_000).toFixed(2))}M API context`;
   return `${Math.round(tokens / 1000)}k API context`;
@@ -1853,10 +1858,10 @@ export function accessDescription(value: string): string {
 }
 
 export function reasoningLabel(value: ReasoningEffort | string): string {
-  if (value === "none") return "Instant";
-  if (value === "xhigh") return "Extra High";
-  if (value === "max") return "Max";
-  return value ? value[0].toUpperCase() + value.slice(1) : "Medium";
+  if (value === "none") return appCopy.interfaceFeedback.instant;
+  if (value === "xhigh") return appCopy.interfaceFeedback.extraHigh;
+  if (value === "max") return appCopy.interfaceFeedback.max;
+  return value ? value[0].toUpperCase() + value.slice(1) : appCopy.interfaceFeedback.medium;
 }
 
 export function reasoningOptionLabel(
@@ -1880,7 +1885,7 @@ export function reasoningBudgetSummary(
   model: AppModelSummary | undefined,
   value: ReasoningEffort,
 ): string {
-  if (value === "none") return "Instant";
+  if (value === "none") return appCopy.interfaceFeedback.instant;
   if (model?.provider_id === "local") return reasoningOptionLabel(model, value);
   const budget = model?.reasoning_budget_tokens?.[value];
   if (typeof budget === "number" && Number.isFinite(budget) && budget > 0) {
@@ -1896,16 +1901,16 @@ function formatReasoningTokens(tokens: number): string {
 }
 
 export function phaseLabel(value: string): string {
-  if (value === "orienting") return "Thinking";
-  if (value === "planning") return "Planning";
-  if (value === "inspecting") return "Inspecting";
-  if (value === "executing") return "Executing";
-  if (value === "verifying") return "Verifying";
-  if (value === "committing") return "Committing";
-  if (value === "consolidating") return "Consolidating";
-  if (value === "reporting") return "Reporting";
-  if (value === "complete") return "Complete";
-  if (value === "recoverable") return "Recoverable";
+  if (value === "orienting") return appCopy.interfaceFeedback.thinking;
+  if (value === "planning") return appCopy.interfaceFeedback.planning;
+  if (value === "inspecting") return appCopy.interfaceFeedback.inspecting;
+  if (value === "executing") return appCopy.interfaceFeedback.executing;
+  if (value === "verifying") return appCopy.interfaceFeedback.verifying;
+  if (value === "committing") return appCopy.interfaceFeedback.committing;
+  if (value === "consolidating") return appCopy.interfaceFeedback.consolidating;
+  if (value === "reporting") return appCopy.interfaceFeedback.reporting;
+  if (value === "complete") return appCopy.interfaceFeedback.complete;
+  if (value === "recoverable") return appCopy.interfaceFeedback.recoverable;
   return value ? value[0].toUpperCase() + value.slice(1) : "Worker";
 }
 
@@ -1984,9 +1989,9 @@ export function workerActivityStatusLine(
   worker: WorkerActivitySummary,
 ): string {
   const planned = isPlannedWorkerActivity(worker);
-  const statusLine = worker.status_line.trim();
-  const currentTitle = worker.current_activity_title?.trim();
-  if (worker.terminal)
+  const statusLine = interfaceText(worker.status_reference, worker.status_line).trim();
+  const currentTitle = interfaceText(worker.current_activity_reference, worker.current_activity_title ?? "").trim();
+  if (worker.terminal || worker.phase === "recoverable" || worker.phase === "blocked")
     return statusLine || currentTitle || phaseLabel(worker.phase);
   if (!planned && currentTitle) return currentTitle;
   return currentTitle || statusLine || phaseLabel(worker.phase);
@@ -2019,9 +2024,9 @@ export function workerActivityCollapsedSummaryLine(
 }
 
 function workerActivityCollapsedAction(worker: WorkerActivitySummary): string {
-  const currentTitle = worker.current_activity_title?.trim();
+  const currentTitle = interfaceText(worker.current_activity_reference, worker.current_activity_title ?? "").trim();
   if (currentTitle) return currentTitle;
-  const statusLine = worker.status_line.trim();
+  const statusLine = interfaceText(worker.status_reference, worker.status_line).trim();
   if (statusLine) return stripWorkerPhasePrefix(statusLine, worker.phase);
   return phaseLabel(worker.phase);
 }
@@ -2098,7 +2103,7 @@ export function hasFollowableWorkerActivity(
 }
 
 export function workerControlLabel(value: string): string {
-  if (value === "resume") return "Request resume";
-  if (value === "cancel") return "Request cancel";
+  if (value === "resume") return appCopy.interfaceFeedback.requestResume;
+  if (value === "cancel") return appCopy.interfaceFeedback.requestCancel;
   return `Request ${String(value).replace(/_/gu, " ")}`;
 }

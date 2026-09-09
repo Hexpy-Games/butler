@@ -310,7 +310,7 @@ describe("R3 read-only command boundary", () => {
     }).map((file) => file.name)).toEqual(["page.png", "crop.png"]);
   });
 
-  test("fails a declared attachment request when no workspace file can be published", async () => {
+  test("reports failed attachment publication without changing successful command execution", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-missing-attachment-"));
     roots.push(root);
     const data = join(root, "data");
@@ -330,10 +330,14 @@ describe("R3 read-only command boundary", () => {
 
     if (process.platform !== "darwin") return;
     expect(result).toMatchObject({
-      ok: false,
+      ok: true,
       sandbox: "read_only_no_network",
-      artifact_publication: { requested: 1, published: 0 },
-      error: { code: "declared_output_files_unavailable" },
+      artifact_publication: {
+        ok: false,
+        requested: 1,
+        published: 0,
+        error: { code: "declared_output_files_unavailable" },
+      },
     });
     expect(result).not.toHaveProperty("artifacts");
   });
@@ -650,7 +654,7 @@ describe("R3 read-only command boundary", () => {
     }
   });
 
-  test("mutation treats a blank validation suite as omitted at the effect boundary", async () => {
+  test("mutation treats validation suite as metadata at the effect boundary", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-blank-suite-"));
     roots.push(root);
     const workspace = join(root, "workspace");
@@ -722,9 +726,12 @@ describe("R3 read-only command boundary", () => {
       for (const input of preparedInputs) {
         expect(input).not.toHaveProperty("validation_suite");
       }
-      await expect(execute("unit-tests", "rejected.txt", "named-suite"))
-        .rejects.toThrow("A persistent command cannot also be a validation suite");
-      expect(existsSync(join(workspace, "rejected.txt"))).toBe(false);
+      expect(await execute("unit-tests", "named.txt", "named-suite")).toMatchObject({
+        ok: true,
+        effect_receipt: { capability: "run_command" },
+      });
+      expect(readFileSync(join(workspace, "named.txt"), "utf8")).toBe("marker");
+      expect(preparedInputs[2]?.validation_suite).toBe("unit-tests");
     } finally {
       db.close(false);
     }

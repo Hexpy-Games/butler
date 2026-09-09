@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
+  existsSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -727,34 +729,73 @@ async function recordBody(
 }
 
 function occurrencePaths(butlerData: string): string[] {
-  const root = join(
-    butlerData,
-    "runtime",
-    "btcc-project-ledger-effects",
-    "occurrences",
-  );
-  try {
-    return readdirSync(root).filter((name) => name.endsWith(".json"));
-  } catch {
-    return [];
-  }
+  return ["btcc-project-ledger-effects", "btcc-project-ledger-effects-v2"]
+    .flatMap((storageRoot) => {
+      const root = join(butlerData, "runtime", storageRoot, "occurrences");
+      if (!existsSync(root)) return [];
+      return readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map((entry) => join(root, entry.name))
+        .sort();
+    })
+    .sort();
 }
 
 function removeLegacyOccurrence(
   harness: Awaited<ReturnType<typeof createHarness>>,
 ): void {
-  const occurrenceId = sha256(stableJson({
-    schema: "butler.btcc-project-ledger-effect.v1",
-    projectRoot: harness.project.ledgerRoot,
-    effectKey: LEGACY_EFFECT_KEY,
-  }));
-  rmSync(join(
+  const project = JSON.parse(readFileSync(
+    join(harness.project.ledgerRoot, "project.json"),
+    "utf8",
+  )) as { id: string };
+  const v1Root = join(
     harness.butlerData,
     "runtime",
     "btcc-project-ledger-effects",
     "occurrences",
-    `${occurrenceId}.json`,
-  ));
+  );
+  const v1OccurrenceId = sha256(stableJson({
+    schema: "butler.btcc-project-ledger-effect.v1",
+    projectRoot: harness.project.ledgerRoot,
+    effectKey: LEGACY_EFFECT_KEY,
+  }));
+  const v2Root = join(
+    harness.butlerData,
+    "runtime",
+    "btcc-project-ledger-effects-v2",
+    "occurrences",
+  );
+  const v2OccurrenceId = sha256(JSON.stringify({
+    ledgerProjectId: project.id,
+    operationKind: "mutation_call",
+    operationId: LEGACY_EFFECT_KEY,
+  }));
+  const intendedPaths = occurrencePaths(harness.butlerData).filter((path) => {
+    if (path === join(v1Root, `${v1OccurrenceId}.json`)) {
+      const occurrence = JSON.parse(readFileSync(path, "utf8")) as {
+        schema?: unknown;
+        effectKey?: unknown;
+      };
+      return occurrence.schema === "butler.btcc-project-ledger-effect-occurrence.v1" &&
+        occurrence.effectKey === LEGACY_EFFECT_KEY;
+    }
+    if (path !== join(v2Root, `${v2OccurrenceId}.json`)) return false;
+    const occurrence = JSON.parse(readFileSync(path, "utf8")) as {
+      schema?: unknown;
+      ledgerProjectId?: unknown;
+      ledgerRoot?: unknown;
+      operationIdentity?: { kind?: unknown; id?: unknown };
+      occurrenceId?: unknown;
+    };
+    return occurrence.schema === "butler.btcc-project-ledger-effect-occurrence.v2" &&
+      occurrence.ledgerProjectId === project.id &&
+      occurrence.ledgerRoot === realpathSync(harness.project.ledgerRoot) &&
+      occurrence.operationIdentity?.kind === "mutation_call" &&
+      occurrence.operationIdentity.id === LEGACY_EFFECT_KEY &&
+      occurrence.occurrenceId === v2OccurrenceId;
+  });
+  expect(intendedPaths).toHaveLength(1);
+  rmSync(intendedPaths[0]!);
 }
 
 function writeConflictingOccurrence(input: {

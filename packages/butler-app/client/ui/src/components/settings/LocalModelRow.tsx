@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Pencil, Trash2 } from "@/butler-ds";
 import {
   Button,
@@ -26,6 +27,7 @@ export function LocalModelRow({
   onEdit,
   onDelete,
 }: LocalModelRowProps) {
+  useAppLocale();
   const copy = appCopy.settings.localModels;
 
   return (

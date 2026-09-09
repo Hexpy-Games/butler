@@ -1,0 +1,36 @@
+.reference {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  vertical-align: baseline;
+  text-align: inherit;
+}
+
+.reference[data-unavailable="true"] {
+  color: var(--text-tertiary);
+}
+
+button.reference {
+  cursor: pointer;
+}
+
+.reference:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent);
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.icon svg {
+  width: 1em;
+  height: 1em;
+}

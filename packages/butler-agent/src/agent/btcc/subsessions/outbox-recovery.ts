@@ -8,6 +8,11 @@ export async function recoverPendingParentInputs(input: {
   const pending = input.store.pendingParentInputs();
   let delivered = 0;
   for (const parentInput of pending) {
+    if (parentSubsessionIsTerminal(input.store, parentInput.parent_session_id)) {
+      input.store.markParentInputDelivered(parentInput.result_id);
+      delivered += 1;
+      continue;
+    }
     // Startup readiness is only true after the durable obligation is handed
     // off and marked delivered.  A failed handoff must reject readiness so a
     // later process restart retries the still-pending row; swallowing the
@@ -17,4 +22,14 @@ export async function recoverPendingParentInputs(input: {
     delivered += 1;
   }
   return { attempted: pending.length, delivered };
+}
+
+export function parentSubsessionIsTerminal(
+  store: SubsessionDelegationStore,
+  parentSessionId: string,
+): boolean {
+  const parentRelation = store.relationByChildSessionId(parentSessionId);
+  return Boolean(
+    parentRelation && store.resultByRelationId(parentRelation.relation_id),
+  );
 }

@@ -169,7 +169,7 @@ ${Object.entries(serviceEnvironment(input))
     .join("\n")}
   </dict>
   <key>WorkingDirectory</key>
-  <string>${escapeXml(input.butlerHome)}</string>
+  <string>${escapeXml(input.butlerData)}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -192,7 +192,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${input.butlerHome}
+WorkingDirectory=${input.butlerData}
 ${Object.entries(serviceEnvironment(input))
     .map(([key, value]) => `Environment=${key}=${systemdEnvironmentValue(value)}`)
     .join("\n")}

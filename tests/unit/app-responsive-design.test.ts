@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   classifyAdaptiveMode,
+  adaptiveDrawerQuery,
   normalizeAdaptivePanelState,
   restoreAdaptivePanelState,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/responsive";
@@ -17,6 +18,10 @@ describe("responsive adaptive design contracts", () => {
     expect(classifyAdaptiveMode(641)).toBe("medium");
     expect(classifyAdaptiveMode(1023)).toBe("medium");
     expect(classifyAdaptiveMode(1024)).toBe("expanded");
+    expect(classifyAdaptiveMode(800, "electron")).toBe("expanded");
+    expect(classifyAdaptiveMode(640, "electron")).toBe("compact");
+    expect(adaptiveDrawerQuery("electron")).toBe("(max-width: 640px)");
+    expect(adaptiveDrawerQuery("browser")).toBe("(max-width: 1023px)");
   });
 
   test("starts compact and medium shells with overlays closed", () => {
@@ -143,7 +148,8 @@ describe("responsive adaptive design contracts", () => {
     expect(shell).toContain(
       "transform: translateX(var(--adaptive-drawer-width))",
     );
-    expect(shell).toContain('.root[data-left-open="true"] .workspace');
+    expect(shell).toContain('.root[data-panel-layout="drawer"]');
+    expect(shell).toContain('&[data-left-open="true"] .workspace');
     expect(tokens).toContain("--sidebar-row-height: 48px");
     expect(tokens).toContain("--sidebar-icon-size: 22px");
     expect(navRow).toContain("var(--sidebar-icon-size, 17px)");
@@ -236,7 +242,7 @@ describe("responsive adaptive design contracts", () => {
     expect(sidebar).toContain(
       "padding: max(var(--safe-area-top), var(--space-sm))",
     );
-    expect(sidebar).toContain(".titlebar {\n    display: none;");
+    expect(sidebar).toContain("display: var(--sidebar-compact-titlebar-display, none)");
   });
 
   test("enlarges the compact shell toggle and omits titlebar new chat", () => {

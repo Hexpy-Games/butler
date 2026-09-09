@@ -13,10 +13,12 @@ import type {
   ButlerToolCall,
   ButlerToolExecutionBoundary,
 } from "../../tools/butler-tools.ts";
-import type {
-  AuthorityCommandInput,
-  PrincipalAuthority,
+import {
+  deriveAppliedAuthorityOutcomeReceipt,
+  type AuthorityCommandInput,
+  type PrincipalAuthority,
 } from "../authority/index.ts";
+import { settleNonAppliedAuthorityOutcome } from "./guided-authority-outcome.ts";
 import type { GuidedToolJournal } from "../ports/guided-tool-journal.ts";
 import {
   acceptedGuidedPlanActionKey,
@@ -28,9 +30,9 @@ import {
   unavailableGuidedEffect,
 } from "./guided-persistent-effect-resolution.ts";
 import {
-  hasModifyReplanProvenance,
   resolveGuidedAuthorityContinuation,
 } from "./guided-authority-continuation.ts";
+import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 
 export type GuidedPersistentEffectRequest = {
   target: string;
@@ -53,6 +55,7 @@ type GuidedToolExecutionBoundaryInput = {
   effectService: GuidedEffectService;
   authority: PrincipalAuthority;
   ownerSessionId?: string;
+  sourceSessionId?: string;
   sourceTurnId?: string;
   modelRef?: string;
   reasoningEffort?: string;
@@ -61,6 +64,7 @@ type GuidedToolExecutionBoundaryInput = {
   authorityClientMessageId?: string;
   toolJournal?: GuidedToolJournal;
   accessMode: GuidedEffectAccessMode;
+  allowDirectPersistentEffects?: boolean | ((call: ButlerToolCall) => boolean);
   signal: AbortSignal;
   executeCommand(
     call: ButlerToolCall,
@@ -97,6 +101,11 @@ export function createGuidedToolExecutionBoundary(
   input: GuidedToolExecutionBoundaryInput | LegacyGuidedToolExecutionBoundaryInput,
 ): ButlerToolExecutionBoundary {
   const authority = "authority" in input ? input.authority : undefined;
+  const authorityCallId = input.authorityRequestRef && authority
+    ? authority.execution({ requestRef: input.authorityRequestRef,
+      ownerSessionId: input.ownerSessionId!, turnId: input.sourceTurnId! }).sourceCallId
+    : undefined;
+  let authorityContinuationAvailable = Boolean(input.authorityRequestRef);
   const executePersistentEffect = async (
     call: ButlerToolCall,
     execute: (prepared?: {
@@ -105,6 +114,17 @@ export function createGuidedToolExecutionBoundary(
     }) => Promise<unknown>,
     occurrenceId?: string,
   ): Promise<unknown> => {
+    const allowDirect = typeof input.allowDirectPersistentEffects === "function"
+      ? input.allowDirectPersistentEffects(call)
+      : input.allowDirectPersistentEffects;
+    // Planning mode has one intentionally narrow exception to the normal
+    // accepted-Durable-Work-Plan gate: its single top-level Ledger Plan
+    // mutation is the planning artifact itself. The caller must bind this
+    // predicate to kind=plan; all other effects stay on the ordinary path.
+    if (allowDirect) return await execute();
+    if (input.accessMode === "read_only") return ordinaryGuidedEffectError(
+      "read_only", "This Turn has read-only access; no change was applied.",
+    );
     const work = await loadGuidedEffectWork(input.durableWork, input.workScope);
     if (!work) {
       return ordinaryGuidedEffectError(
@@ -113,25 +133,33 @@ export function createGuidedToolExecutionBoundary(
       );
     }
     let authorityExecution: Awaited<ReturnType<PrincipalAuthority["execution"]>> | undefined;
+    let conversationAllowed = false;
     let effectiveCall = call;
-    if (input.authorityRequestRef) {
+    const authorityRequestRef = authorityContinuationAvailable && occurrenceId === authorityCallId
+      ? input.authorityRequestRef
+      : undefined;
+    if (authorityRequestRef) {
       const continuation = resolveGuidedAuthorityContinuation({
         authority,
-        requestRef: input.authorityRequestRef,
+        toolJournal: input.toolJournal,
+        requestRef: authorityRequestRef,
         ownerSessionId: input.ownerSessionId,
+        sourceSessionId: input.sourceSessionId,
         sourceTurnId: input.sourceTurnId,
         clientMessageId: input.authorityClientMessageId,
         workspacePath: input.workspacePath,
         sourceWorkId: work.workId,
         call,
+        occurrenceId,
       });
-      if (!continuation.ok) return continuation.result;
+      if (!continuation.ok) {
+        if (continuation.consumesRequest) authorityContinuationAvailable = false;
+        return continuation.result;
+      }
       authorityExecution = continuation.execution;
       effectiveCall = continuation.effectiveCall;
     }
-    const effectOccurrenceId = authorityExecution
-      ? `authority:${authorityExecution.requestRef}`
-      : occurrenceId;
+    const effectOccurrenceId = occurrenceId;
     const resolution = await input.resolvePersistentEffect(effectiveCall, execute, {
       work,
       ...(effectOccurrenceId ? { occurrenceId: effectOccurrenceId } : {}),
@@ -155,7 +183,7 @@ export function createGuidedToolExecutionBoundary(
         "The stored command identity changed before execution.",
       );
     }
-    if ((!authorityExecution || authorityExecution.decision === "modified") &&
+    if (!authorityExecution &&
         input.accessMode === "ask_first") {
       if (!authority) {
         return ordinaryGuidedEffectError(
@@ -163,7 +191,8 @@ export function createGuidedToolExecutionBoundary(
           "The command authority context is unavailable.",
         );
       }
-      if (!input.ownerSessionId || !input.sourceTurnId || !input.modelRef ||
+      if (!input.ownerSessionId || !input.sourceSessionId ||
+          !input.sourceTurnId || !input.modelRef ||
           !input.reasoningEffort || !input.workspacePath) {
         return ordinaryGuidedEffectError(
           "authority_context_missing",
@@ -172,7 +201,20 @@ export function createGuidedToolExecutionBoundary(
       }
       const normalizedInput = resolution.adapter.normalizeInput(
         resolution.input,
-      ) as AuthorityCommandInput;
+      );
+      if (effectiveCall.name !== "run_command" && !occurrenceId?.trim()) {
+        return ordinaryGuidedEffectError(
+          "authority_operation_occurrence_missing",
+          "The reviewed operation occurrence is unavailable.",
+        );
+      }
+      const authorityOperation = effectiveCall.name === "run_command"
+        ? { normalizedInput: normalizedInput as AuthorityCommandInput }
+        : {
+            category: "reviewed_effect" as const,
+            operationOccurrenceId: occurrenceId!,
+            normalizedInput: reviewedEffectAuthorityInput(normalizedInput),
+          };
       const planRevisionId = work.currentPlan?.planRevisionId;
       if (!planRevisionId) {
         return ordinaryGuidedEffectError(
@@ -182,32 +224,18 @@ export function createGuidedToolExecutionBoundary(
       }
       const actionKey = acceptedGuidedPlanActionKey(
         work,
-        resolution.adapter.capability,
+        resolution.adapter,
         resolution.target,
       );
       if (!actionKey.ok) {
         return ordinaryGuidedEffectError(actionKey.code, actionKey.message);
       }
-      const authorityGeneration = authorityExecution?.decision === "modified"
-        ? authorityExecution.authorityGeneration + 1
-        : 1;
-      if (authorityExecution?.decision === "modified" &&
-          (!input.toolJournal ||
-            !hasModifyReplanProvenance({
-              toolJournal: input.toolJournal,
-              work,
-              priorPlanRevisionId: authorityExecution.planRevisionId,
-              sourceTurnId: input.sourceTurnId!,
-            }))) {
-        return ordinaryGuidedEffectError(
-          "authority_modify_replan_required",
-          "The replacement command requires a new Plan and accepted Review in this scheduled Turn.",
-        );
-      }
+      const authorityGeneration = 1;
       try {
         const admission = authority.admit({
+          ...(effectiveCall.name === "run_command" ? { publicActionTitle: safeCommandActionLabel(effectiveCall.args) } : {}),
           ownerSessionId: input.ownerSessionId,
-          sourceSessionId: input.ownerSessionId,
+          sourceSessionId: input.sourceSessionId,
           sourceTurnId: input.sourceTurnId,
           sourceWorkId: work.workId,
           workspacePath: input.workspacePath,
@@ -216,7 +244,8 @@ export function createGuidedToolExecutionBoundary(
           authorityGeneration,
           capability: resolution.adapter.capability,
           target: resolution.target,
-          normalizedInput,
+          operationOccurrenceId: occurrenceId,
+          ...authorityOperation,
           modelRef: input.modelRef,
           reasoningEffort: input.reasoningEffort,
         });
@@ -233,17 +262,18 @@ export function createGuidedToolExecutionBoundary(
             "The reviewed command was replaced before it could run.",
           );
         }
+        if (admission.status === "granted") conversationAllowed = true;
+        else return deferredGuidedAuthorityResult(admission.requestRef);
       } catch (error) {
         return ordinaryGuidedEffectError(
           error instanceof Error ? error.message : "authority_request_identity_mismatch",
           "The command authority identity could not be admitted.",
         );
       }
-      return deferredGuidedAuthorityResult();
     } else if (approvedAuthorityExecution) {
       const actionKey = acceptedGuidedPlanActionKey(
         work,
-        resolution.adapter.capability,
+        resolution.adapter,
         resolution.target,
       );
       if (!actionKey.ok) {
@@ -259,7 +289,7 @@ export function createGuidedToolExecutionBoundary(
     }
     const outcome = await input.effectService.execute({
       work,
-      accessMode: approvedAuthorityExecution
+      accessMode: approvedAuthorityExecution || conversationAllowed
         ? "full_access"
         : input.accessMode,
       occurrenceId: effectOccurrenceId,
@@ -268,14 +298,42 @@ export function createGuidedToolExecutionBoundary(
       input: resolution.input,
       adapter: resolution.adapter,
     });
-    if (approvedAuthorityExecution) {
+    if (approvedAuthorityExecution && !outcome.ok) {
+      const settled = settleNonAppliedAuthorityOutcome(
+        authority!,
+        {
+          requestRef: authorityRequestRef!,
+          ownerSessionId: input.ownerSessionId!,
+          sourceWorkId: work.workId,
+        },
+        outcome,
+      );
+      if (!settled) {
+        return ordinaryGuidedEffectError(
+          "authority_outcome_receipt_invalid",
+          "The uncertain command outcome could not be recorded.",
+        );
+      }
+      authorityContinuationAvailable = false;
+    }
+    if (approvedAuthorityExecution && outcome.ok) {
+      const appliedReceipt = deriveAppliedAuthorityOutcomeReceipt(
+        outcome.receipt,
+      );
+      if (!appliedReceipt) {
+        return ordinaryGuidedEffectError(
+          "authority_outcome_receipt_invalid",
+          "The applied command outcome could not be recorded.",
+        );
+      }
       authority!.recordOutcome({
-        requestRef: input.authorityRequestRef!,
+        requestRef: authorityRequestRef!,
         ownerSessionId: input.ownerSessionId!,
         sourceWorkId: work.workId,
-        status: outcome.ok ? "applied" : "failed",
-        ...(outcome.ok ? { receipt: outcome.receipt } : {}),
+        status: "applied",
+        receipt: appliedReceipt,
       });
+      authorityContinuationAvailable = false;
     }
     if (!outcome.ok) {
       return ordinaryGuidedEffectError(outcome.error.code, outcome.error.message, {
@@ -315,4 +373,11 @@ export function createGuidedToolExecutionBoundary(
     }
     return executePersistentEffect(call, execute, context.effectOccurrenceId);
   };
+}
+
+function reviewedEffectAuthorityInput(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("authority_reviewed_effect_input_invalid");
+  }
+  return value as Record<string, unknown>;
 }

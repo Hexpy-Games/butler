@@ -9,6 +9,8 @@ import {
   assertGuidedTurnSemanticState,
 } from "./guided-turn-state.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
+import type { AuthoritySelfSessionCloseCapability } from
+  "../../../btcc/authority/index.ts";
 import { SqliteGuidedStopController } from
   "./sqlite-guided-stop-controller.ts";
 import { SqliteGuidedTransitionWriter } from
@@ -40,13 +42,22 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   constructor(
     private readonly db: Database,
     owner: RuntimeOwnerAuthority,
+    authorityClose: AuthoritySelfSessionCloseCapability,
   ) {
     this.transitions = new SqliteGuidedTransitionWriter(db);
-    this.stops = new SqliteGuidedStopController(db);
+    this.stops = new SqliteGuidedStopController(db, authorityClose);
     this.stateClaims = new SqliteStateExecutionClaims(db, owner);
     this.modelRoute = new SqliteModelRouteRepository(db);
     this.hydration = new SqliteGuidedTurnHydration(db);
     this.continuationBudget = new SqliteTurnContinuationBudgetStore(db);
+  }
+
+  async findLatestTurnForSession(sessionId: string): Promise<TurnRecord | null> {
+    const row = this.db.query<{ turn_id: string }, [string]>(`
+      SELECT turn_id FROM btcc_turns WHERE session_id = ?
+      ORDER BY rowid DESC LIMIT 1
+    `).get(sessionId);
+    return row ? this.findTurn(row.turn_id) : null;
   }
 
   async findTurn(turnId: string): Promise<TurnRecord | null> {
@@ -55,7 +66,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         original_message, model_selection_json, context_json,
         route_state_json,
         continuation_budget_json,
-        progress_destination_json, semantic_state,
+        progress_destination_json, semantic_state, suspension_reason, authority_continuation_json,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
         final_disposition
@@ -70,6 +81,10 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const route = hydrateRoute(row.route);
     const finalDisposition = hydrateFinalDisposition(row.final_disposition);
     const wakeIdentity = this.hydration.loadWakeIdentity(row.turn_id);
+    if (row.suspension_reason && row.suspension_reason !== "authority_pending" &&
+      row.suspension_reason !== "waiting_for_worker") {
+      throw new Error("BTCC suspension reason is invalid");
+    }
     const turn: TurnRecord = {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -90,6 +105,13 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
         : {}),
       semanticState: state,
+      ...(row.authority_continuation_json
+        ? { authorityContinuation: JSON.parse(row.authority_continuation_json) }
+        : {}),
+      ...(row.suspension_reason === "authority_pending" ||
+          row.suspension_reason === "waiting_for_worker"
+        ? { suspension: row.suspension_reason }
+        : {}),
       ...(checkpoint ? { checkpoint } : {}),
       ...(route ? { route } : {}),
       ...(finalPayload ? { finalPayload } : {}),
@@ -111,11 +133,17 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     return turn;
   }
 
+  async resumeAuthorityContinuation(turnId: string): Promise<TurnRecord | null> {
+    this.transitions.resumeAuthority(turnId);
+    return this.findTurn(turnId);
+  }
+
   async acquireStateExecutionClaim(
     turn: TurnRecord,
   ): Promise<StateExecutionClaim> {
     assertGuidedTurnSemanticState(turn.semanticState);
     if (
+      turn.suspension ||
       turn.semanticState === "delivered" ||
       turn.semanticState === "cancelled"
     ) {

@@ -1,3 +1,6 @@
+import { appCopy } from "@/app/copy.ts";
+import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
+import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useEffect, useRef } from "react";
 import { subscribeLiveEvents } from "@/app/api.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
@@ -57,6 +60,9 @@ export function useLiveSessionEvents(): void {
     );
 
     const markStreamHealthy = () => {
+      if (useButlerStore.getState().liveConnectionLost) {
+        useButlerStore.setState({ liveConnectionLost: false });
+      }
       consecutiveFailures = 0;
       if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
       stableConnectionTimer = undefined;
@@ -65,6 +71,8 @@ export function useLiveSessionEvents(): void {
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       markStreamHealthy();
+      const dashboardState = useButlerStore.getState();
+      if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
       if (event.type === "stream.reconcile_required") {
         useButlerStore.getState().noteNavigationEvent();
         navigationReconciliation.noteLiveNavigationEvent();
@@ -106,6 +114,18 @@ export function useLiveSessionEvents(): void {
           }
         }
       }
+      if (
+        event.type === "space.changed" || event.type === "session.created" ||
+        event.type === "project.created" || event.type === "project.updated" ||
+        event.type === "turn.state_changed" ||
+        (event.type === "session.updated" && !isProjectNavigationEvent(event))
+      ) {
+        if (!isProjectNavigationEvent(event)) {
+          state.noteNavigationEvent();
+          navigationReconciliation.noteLiveNavigationEvent();
+        }
+        navigationReconciliation.requestRefresh();
+      }
       navigationReconciliation.noteLiveEvent();
       state.applyTimelineEvents([event]);
       advanceEventCursor(eventCursorRef, event.id);
@@ -136,6 +156,8 @@ export function useLiveSessionEvents(): void {
         consecutiveFailures = 0;
       }, LIVE_EVENT_STABLE_CONNECTION_MS);
       if (reconnect) {
+        const view = useButlerStore.getState().view;
+        if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
       }
@@ -144,6 +166,7 @@ export function useLiveSessionEvents(): void {
         applyEvent,
         () => {
           if (cancelled || reconnectTimer) return;
+          useButlerStore.setState({ liveConnectionLost: true });
           if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
           stableConnectionTimer = undefined;
           unsubscribe?.();
@@ -155,6 +178,9 @@ export function useLiveSessionEvents(): void {
             connect(true);
           }, delayMs);
         },
+        () => {
+          if (!cancelled) useButlerStore.setState({ liveConnectionLost: false });
+        },
       );
       if (reconnectTimer) nextUnsubscribe();
       else unsubscribe = nextUnsubscribe;
@@ -163,6 +189,7 @@ export function useLiveSessionEvents(): void {
     connect();
     return () => {
       cancelled = true;
+      useButlerStore.setState({ liveConnectionLost: false });
       unsubscribe?.();
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconciliation.dispose();
@@ -209,8 +236,8 @@ function notifyDesktopEvent(
     if (message.turn_id) turnIdsRef.current.add(message.turn_id);
     void showDesktopNotification({
       kind: "assistant_message",
-      title: "Butler",
-      body: message.text || "새 메시지가 도착했습니다.",
+      title: appCopy.firstRun.product,
+      body: message.text || appCopy.interfaceTemplates.notificationNewMessage,
       sessionId: message.chat_id,
     });
   }
@@ -227,7 +254,7 @@ function notifyDesktopEvent(
   turnIdsRef.current.add(turn.id);
   void showDesktopNotification({
     kind: "task_completion",
-    title: "Butler",
+    title: appCopy.firstRun.product,
     body: turnCompletionBody(turn.state, turn.safe_status_label),
     sessionId: turn.chat_id,
   });
@@ -255,8 +282,8 @@ function isDeliveredAssistantMessage(event: TimelineEvent): boolean {
 
 function turnCompletionBody(state: string, safeStatusLabel?: string): string {
   if (safeStatusLabel?.trim()) return safeStatusLabel.trim();
-  if (state === "delivered") return "작업이 완료되었습니다.";
-  if (state === "failed") return "작업이 실패했습니다.";
-  if (state === "cancelled") return "작업이 취소되었습니다.";
-  return "작업 상태가 업데이트되었습니다.";
+  if (state === "delivered") return appCopy.interfaceTemplates.notificationCompleted;
+  if (state === "failed") return appCopy.interfaceTemplates.notificationFailed;
+  if (state === "cancelled") return appCopy.interfaceTemplates.notificationCancelled;
+  return appCopy.interfaceTemplates.notificationUpdated;
 }

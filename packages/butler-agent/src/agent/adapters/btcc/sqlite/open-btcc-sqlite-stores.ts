@@ -5,6 +5,7 @@ import {
   type SqliteStorageProfile,
 } from "../../../../foundation/sqlite-writer-coordination.ts";
 import { SqliteCanonicalMessageStore } from "./canonical-message-store.ts";
+import { SqliteContextCompactionStore } from "./context-compaction-store.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "./schema.ts";
 import { migrateBtccSchema } from "./schema/migrate-schema.ts";
 import { SqliteTurnAdmissionRepository } from "./turn-admission-repository.ts";
@@ -42,6 +43,15 @@ import { SqlitePrincipalAuthorityRepository } from "./authority-repository.ts";
 import { agentBtccStoragePaths } from "./storage-ownership/index.ts";
 import { SqliteSubsessionDelegationStore } from "./subsession-store.ts";
 import { SqliteStewardObserverStore } from "./steward-observer-store.ts";
+import type { Database } from "bun:sqlite";
+import {
+  createProductionScopeSelectedWorkStore,
+  type ProductionWorkSelection,
+} from "../scope-selected-work-store.ts";
+import { SqliteProjectWorkResultRuntime } from "./project-work-result-runtime.ts";
+import { SqliteProjectWorkLegacyRuntime } from "./project-work-legacy-runtime.ts";
+import { createSqliteProjectWorkRuntimeProjection } from
+  "./project-work-runtime-projection.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -50,6 +60,34 @@ export function openBtccSqliteStores(input: {
   runtimeOwnerIdentity?: RuntimeOwnerIdentity;
   processLiveness?: ProcessLiveness;
   storageProfile?: SqliteStorageProfile;
+}) {
+  return openStores(input);
+}
+
+export function openProductionBtccSqliteStores(input: {
+  dbPath: string;
+  ownerId: string;
+  legacyProjectWorkSource?: LegacyProjectWorkSource;
+  runtimeOwnerIdentity?: RuntimeOwnerIdentity;
+  processLiveness?: ProcessLiveness;
+  storageProfile?: SqliteStorageProfile;
+  workSelection: ProductionWorkSelection;
+}) {
+  if (!input.workSelection?.sessionBindings ||
+      !input.workSelection.projectLedgerResolver) {
+    throw new Error("production_work_selection_collaborator_missing");
+  }
+  return openStores(input);
+}
+
+function openStores(input: {
+  dbPath: string;
+  ownerId: string;
+  legacyProjectWorkSource?: LegacyProjectWorkSource;
+  runtimeOwnerIdentity?: RuntimeOwnerIdentity;
+  processLiveness?: ProcessLiveness;
+  storageProfile?: SqliteStorageProfile;
+  workSelection?: ProductionWorkSelection;
 }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
   const connection = openOwnedSqliteConnection(input.dbPath);
@@ -60,21 +98,38 @@ export function openBtccSqliteStores(input: {
   migrateBtccSchema(db);
   const legacyCutover = cutoverLegacyBtccTurns(db);
 
+  const processLiveness = input.processLiveness ?? new LocalProcessLiveness();
   const owner = new SqliteRuntimeOwnerRegistry(
     db,
     input.runtimeOwnerIdentity ?? currentRuntimeOwnerIdentity(input.ownerId),
-    input.processLiveness ?? new LocalProcessLiveness(),
+    processLiveness,
   );
-  const turns = new SqliteGuidedTurnStateRepository(db, owner);
-  const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
-  const durableWork = createDurableWorkService(new SqliteGuidedWorkStore(
-    db,
-    input.legacyProjectWorkSource,
-  ));
-  const subsessionStore = new SqliteSubsessionDelegationStore(db);
+  // The one PrincipalAuthority aggregate/repository instance is constructed
+  // before the Turn repository so Turn-stop persistence can reuse its narrow
+  // closeSelfSession capability inside the same SQLite stop transaction, and
+  // before the Guided Work store so factual Work abandonment can reuse its
+  // narrow closeAbandonedWork capability inside the same SQLite Work
+  // transaction. Every authority path shares this single instance.
   const authority = createPrincipalAuthority(
     new SqlitePrincipalAuthorityRepository(db),
   );
+  const turns = new SqliteGuidedTurnStateRepository(db, owner, authority);
+  const sqliteWriteReadiness = createSqliteWriteReadiness(input.dbPath);
+  const sessionWorkStore = new SqliteGuidedWorkStore(
+    db,
+    authority,
+    input.legacyProjectWorkSource,
+  );
+  const durableWorkStore = input.workSelection
+    ? productionWorkStore(
+        db,
+        sessionWorkStore,
+        input.legacyProjectWorkSource,
+        input.workSelection,
+      )
+    : sessionWorkStore;
+  const durableWork = createDurableWorkService(durableWorkStore);
+  const subsessionStore = new SqliteSubsessionDelegationStore(db);
   return {
     admission: new SqliteTurnAdmissionRepository(
       db,
@@ -87,12 +142,14 @@ export function openBtccSqliteStores(input: {
     wakeAuthorizations: new SqliteBtccWakeAuthorizationRepository(db),
     messages: new SqliteCanonicalMessageStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
+    contextCompactions: new SqliteContextCompactionStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
     guidedOperationResultReader: new SqliteGuidedOperationResultReader(db),
     guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
     subsessionStore,
     authority,
+    stewardObserver: new SqliteStewardObserverStore(db, processLiveness, input.workSelection?.butlerData),
     legacyCutover,
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
@@ -101,6 +158,29 @@ export function openBtccSqliteStores(input: {
       connection.close();
     },
   };
+}
+
+function productionWorkStore(
+  db: Database,
+  sessionStore: SqliteGuidedWorkStore,
+  legacyProjectWorkSource: LegacyProjectWorkSource | undefined,
+  selection: ProductionWorkSelection,
+) {
+  const resultRuntime = new SqliteProjectWorkResultRuntime(db);
+  return createProductionScopeSelectedWorkStore({
+    db,
+    sessionStore,
+    selection,
+    runtimeProjection: createSqliteProjectWorkRuntimeProjection(
+      db,
+      resultRuntime,
+    ),
+    resultRuntime,
+    legacyRuntime: new SqliteProjectWorkLegacyRuntime(
+      db,
+      legacyProjectWorkSource,
+    ),
+  });
 }
 
 export function openBtccAuthorityStore(input: { butlerData: string }) {
@@ -115,7 +195,7 @@ export function openBtccAuthorityStore(input: { butlerData: string }) {
   const authority = createPrincipalAuthority(
     new SqlitePrincipalAuthorityRepository(db),
   );
-  const observer = new SqliteStewardObserverStore(db);
+  const observer = new SqliteStewardObserverStore(db, undefined, input.butlerData);
   let closed = false;
   return {
     authority,

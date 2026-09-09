@@ -136,8 +136,14 @@ function readProjectedDocuments(input: {
     }
   });
   return validated.filter((document) =>
-    input.allowed.has(document.projectionClass),
-  );
+    input.allowed.has(document.projectionClass) || basicSystemContextPriority(document) > 0,
+  ).sort((a, b) => basicSystemContextPriority(b) - basicSystemContextPriority(a));
+}
+
+function basicSystemContextPriority(document: ContextDocumentRead): number {
+  if (document.projectionClass !== "mandatory_hot_cache") return 0;
+  if (document.sourceId === "runtime-state") return 2;
+  return document.sourceId === "rules" ? 1 : 0;
 }
 
 function createProjectedDocumentReader(

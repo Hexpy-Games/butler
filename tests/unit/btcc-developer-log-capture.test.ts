@@ -69,7 +69,7 @@ test("A converted operational failure appends only one model_turn_error entry", 
   }
 });
 
-test("An exhausted provider failure that rethrows still appends one error entry", async () => {
+test("An exhausted provider failure is delivered as an operational report and logged as error", async () => {
   const harness = harnessWithGate(() => true);
   try {
     harness.runtime = createGuidedTurnRuntime({
@@ -81,9 +81,8 @@ test("An exhausted provider failure that rethrows still appends one error entry"
         retryable: true,
       })),
     });
-    await expect(
-      harness.runtime.runTurn(runCommand("devlog-provider-exhausted-turn")),
-    ).rejects.toMatchObject({ code: "provider_network_error" });
+    expect((await harness.runtime.runTurn(runCommand("devlog-provider-exhausted-turn"))).kind)
+      .toBe("delivered");
 
     const errors = harness.store.list({ kind: "model_turn_error" });
     expect(errors.total).toBe(1);
@@ -185,6 +184,68 @@ test("Replay admissions do not duplicate developer log entries", async () => {
   } finally {
     harness.close();
   }
+});
+
+test("Resolved runtime failures are errors, and the final provider snapshot is isolated and redacted", async () => {
+  const harness = harnessWithGate(() => true);
+  try {
+    harness.runtime = createGuidedTurnRuntime({
+      ...harness.dependencies,
+      agent: {
+        async run({ turn, modelRoundObserver }) {
+          for (let index = 0; index < 2; index += 1) {
+            modelRoundObserver?.request({
+              model: "openai/gpt-5.6-sol", roundId: `round-${index}`,
+              instructions: "system API_KEY=private-fixture-key",
+              messages: [{ role: "user", content: `${turn.turnId}:${index}`,
+                toolCalls: [{ id: "call", name: "fixture", rawArguments: '{"api_key":"hidden-raw-argument"}', arguments: { api_key: "hidden-argument" } }] }],
+              tools: [], signal: new AbortController().signal,
+            });
+            modelRoundObserver?.response({ text: "provider text", toolCalls: [],
+              raw: { output: turn.turnId, api_key: "hidden-response" } });
+          }
+          await Promise.resolve();
+          return { route: "assisted", content: "failure report",
+            runtimeFailure: { code: "provider_network_error", retryable: true } };
+        },
+      },
+    });
+    await Promise.all(["snapshot-a", "snapshot-b"].map((id) =>
+      harness.runtime.runTurn({ ...runCommand(id), sessionId: id })));
+    expect(harness.store.list().total).toBe(2);
+    for (const entry of harness.store.list().entries) {
+      expect(entry.kind).toBe("model_turn_error");
+      expect(entry.request.metadata).toMatchObject({ provider_round_count: 2,
+        capture_scope: "last_provider_round", round_id: "round-1", response_format: "provider_raw" });
+      const serialized = JSON.stringify(entry);
+      expect(serialized).toContain(`${entry.turn_id}:1`);
+      expect(serialized).not.toContain(`${entry.turn_id}:0`);
+      expect(serialized).not.toContain("private-fixture-key");
+      expect(serialized).not.toContain("hidden-argument");
+      expect(serialized).not.toContain("hidden-raw-argument");
+      expect(serialized).not.toContain("hidden-response");
+      expect(entry.response.raw).toMatchObject({ diagnostics: {
+        provider_response: { output: entry.turn_id, api_key: "[REDACTED]" },
+      } });
+    }
+  } finally { harness.close(); }
+});
+
+test("Turning diagnostics off during a provider request prevents terminal persistence", async () => {
+  let enabled = true;
+  const harness = harnessWithGate(() => enabled);
+  try {
+    harness.runtime = createGuidedTurnRuntime({ ...harness.dependencies, agent: {
+      async run({ modelRoundObserver }) {
+        modelRoundObserver?.request({ model: "openai/gpt-5.6-sol", messages: [], tools: [] });
+        enabled = false;
+        modelRoundObserver?.response({ text: "off", toolCalls: [] });
+        return { route: "direct", content: "off" };
+      },
+    } });
+    expect((await harness.runtime.runTurn(runCommand("gate-during-request"))).kind).toBe("delivered");
+    expect(existsSync(harness.logPath)).toBe(false);
+  } finally { harness.close(); }
 });
 
 type Harness = {

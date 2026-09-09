@@ -44,6 +44,36 @@ export interface WorkerModelRule {
   enabled: boolean;
 }
 
+export type WorkerProfileBuiltinJobName =
+  | "coding"
+  | "research"
+  | "debug"
+  | "review"
+  | "writing";
+
+export interface WorkerProfileBuiltinJob {
+  kind: "builtin";
+  job: WorkerProfileBuiltinJobName;
+}
+
+export interface WorkerProfileCustomJob {
+  kind: "custom";
+  text: string;
+}
+
+export type WorkerProfileJob = WorkerProfileBuiltinJob | WorkerProfileCustomJob;
+
+export interface WorkerProfile {
+  id: string;
+  label: string;
+  enabled: boolean;
+  job: WorkerProfileJob;
+  domain?: string;
+  model: string;
+  reasoning_effort: ReasoningEffort;
+  prompt?: string;
+}
+
 export interface AppModelSummary {
   provider_id: string;
   provider_label: string;
@@ -477,7 +507,8 @@ export interface SettingsView {
   effective_consolidation_model: string;
   consolidation_uses_butler_model: boolean;
   context_window_tokens: number;
-  worker_model_rules: WorkerModelRule[];
+  worker_profiles: WorkerProfile[];
+  max_simultaneous_workers: number;
   access_mode: AccessMode;
   plan_mode_default: boolean;
   follow_up_behavior: "queue" | "steer";
@@ -502,6 +533,7 @@ export interface SettingsView {
     string,
   ];
   translucent_sidebar: boolean;
+  smart_grouping_enabled: boolean;
   diagnostics_enabled: boolean;
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
@@ -626,6 +658,14 @@ export interface SessionControlsView {
   catalog_generation: string;
 }
 
+export type PlanDecisionAction = "accept" | "reject" | "instruct";
+
+export interface PlanDecisionResultView {
+  plan_document: ProjectDashboardDocument;
+  controls: SessionControlsView;
+  queued?: SessionQueueView;
+}
+
 export type ModelCatalogState =
   | "loading"
   | "ready"
@@ -637,6 +677,7 @@ export type ComposerModelState = ModelCatalogState;
 export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
+  work_progress?: { completed: number; total: number };
   id: string;
   kind: ChatKind;
   title: string;
@@ -653,6 +694,9 @@ export interface SessionSummary {
   archived: boolean;
   last_message_preview?: string;
   safe_status_label?: string;
+  safe_status_label_key?: string;
+  safe_status_label_parameters?: { attempt: number; maxAttempts: number };
+  safe_status_content?: InterfaceContentReferences;
   unread_count?: number;
   automation_target_count?: number;
 }
@@ -670,7 +714,10 @@ export interface ProjectSummary {
   sessions?: SessionSummary[];
 }
 
+export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
+
 export interface NavigationView {
+  space: import("../../../../../butler-agent/src/gateways/app/interface/protocol/app-protocol.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {
@@ -700,7 +747,30 @@ export interface MessageFileRef {
   created_at: string;
 }
 
+export interface ChangedFileLine {
+  type: "added" | "deleted";
+  old_line?: number;
+  new_line?: number;
+  content: string;
+}
+
+export interface ChangedFileDetail {
+  path: string;
+  additions: number;
+  deletions: number;
+  lines: ChangedFileLine[];
+}
+
+export interface PlanDocumentRecord {
+  id: string;
+  title: string;
+  status: string;
+  markdown: string;
+}
+
 export interface MessageRecord {
+  system_event_kind?: "context.compaction.started" | "context.compaction.completed";
+  content_parts?: import("./messageContent").MessageContent;
   id: string;
   chat_id?: string;
   turn_id?: string;
@@ -712,8 +782,10 @@ export interface MessageRecord {
     | "tool_summary"
     | "automation";
   text: string;
+  plan_document?: PlanDocumentRecord;
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
+  changed_files?: ChangedFileDetail[];
   work_blocks?: WorkBlockView[];
   turn_activity_rows?: ProgressRow[];
   status?: string;
@@ -728,9 +800,11 @@ export interface MessageRecord {
 }
 
 export interface QueuedMessageRecord {
+  content_parts?: import("./messageContent").MessageContent;
   id: string;
   chat_id: string;
   text: string;
+  plan_id?: string;
   attachments?: MessageFileRef[];
   controls: {
     model: string;
@@ -803,6 +877,9 @@ export interface ProgressRow {
   tool_result_id?: string;
   tool_result_byte_length?: number;
   bridge_phase?: string;
+  interface_label_key?: string;
+  interface_content?: InterfaceContentReferences;
+  interface_label_parameters?: { attempt: number; maxAttempts: number };
   receipt_kind?: string;
   public_decision_role?: string;
   public_decision_summary?: string;
@@ -851,6 +928,7 @@ export interface OperationOutputView {
 }
 
 export interface TurnProgressSnapshot {
+  summary_reference?: InterfaceTextReference;
   turn_id?: string;
   started_at?: string;
   summary?: string;
@@ -948,6 +1026,7 @@ export interface StewardResultView {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -958,17 +1037,20 @@ export interface StewardSessionSummaryView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   activity_rows: ProgressRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
   artifacts: SessionArtifactSummary[];
+  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;
 }
 
 export interface SessionView {
+  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
   kind: ChatKind;
@@ -976,7 +1058,9 @@ export interface SessionView {
   status: SessionViewStatus;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
   messages: MessageRecord[];
+  activity_history?: Array<{ turn_id: string; created_at: string; rows: ProgressRow[] }>;
   message_window: SessionViewMessageWindow;
   workers: WorkerActivitySummary[];
   work_streams: WorkStreamSummary[];
@@ -1061,6 +1145,10 @@ export interface ProjectDashboardActivityDay {
 }
 
 export type ProjectDashboardDocumentType =
+  | "artifact"
+  | "reference"
+  | "message"
+  | "report"
   | "spec"
   | "plan"
   | "roadmap"
@@ -1068,8 +1156,14 @@ export type ProjectDashboardDocumentType =
   | "task";
 
 export interface ProjectDashboardDocument {
+  artifact?: SessionArtifactSummary;
+  unavailable?: boolean;
+  revision?: string;
+  project_id?: string;
+  truncated?: boolean;
+  nextCursor?: string | null;
   id: string;
-  kind: "spec" | "plan";
+  kind: "spec" | "plan" | "report";
   document_type?: ProjectDashboardDocumentType;
   title: string;
   category?: string;
@@ -1256,6 +1350,10 @@ export interface PaginationView {
 }
 
 export interface ProjectDashboardView {
+  briefing?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardBriefingView;
+  description?: string | null;
+  preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
+  overview?: import("../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
     active_sessions: number;
@@ -1321,13 +1419,20 @@ export interface WorkerActivitySummary {
   semantic_phase?: WorkerActivityPhase;
   action_kind?: string;
   status_line: string;
+  status_reference?: InterfaceTextReference;
+  current_activity_reference?: InterfaceTextReference;
   current_activity_title?: string;
   work_blocks?: WorkBlockView[];
   session_id?: string;
+  parent_turn_id?: string;
+  source_tool_call_id?: string;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   project_id?: string;
   task_id?: string;
   orchestration_id?: string;
   terminal: boolean;
+  created_at?: string;
   updated_at?: string;
   supported_controls: string[];
 }
@@ -1346,6 +1451,7 @@ export interface WorkStreamSummary {
 }
 
 export interface SessionSummaryView {
+  branch_seed?: import("../../../../../butler-agent/src/foundation/session-branch.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;
@@ -1403,6 +1509,32 @@ export interface TimelineEvent {
   };
 }
 
+export type WorkStatusState =
+  | "running"
+  | "completed"
+  | "attention"
+  | "operational_action"
+  | "operational_interruption";
+
+export interface WorkStatusItemView {
+  session_id: string;
+  safe_title: string;
+  safe_summary: string;
+  state: WorkStatusState;
+  stage?: "conception" | "planning" | "execution" | "review" | "validation" | "reporting";
+  completed_actions: number;
+  total_actions: number;
+  effect_count: number;
+  latest_report_summary?: string;
+  recent_artifacts?: string[];
+  updated_at: string;
+}
+
+export interface WorkStatusView {
+  items: WorkStatusItemView[];
+  counts: Record<WorkStatusState, number>;
+}
+
 export type AppView =
   | { kind: "session" }
   | { kind: "settings"; section: SettingsSectionId }
@@ -1412,7 +1544,7 @@ export type AppView =
 
 export interface CommandPaletteResult {
   id: string;
-  kind: "chat" | "project" | "project_session" | "automation" | "settings";
+  kind: "chat" | "project" | "project_session" | "group" | "automation" | "settings";
   title: string;
   subtitle?: string;
   route: string;
@@ -1438,6 +1570,11 @@ export interface SessionOption {
 }
 
 export interface ComposerControls {
+  /** UI target for the existing sender; dashboard remains visible until acceptance. */
+  dashboardTarget?: { projectId: string; sessionId?: string; clientMessageId?: string; onSessionCreated?: (id: string) => void };
+  contentParts?: import("./messageContent").MessageContent;
+  /** UI-only acknowledgement; never serialized into the transport request. */
+  onAccepted?: () => void;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
@@ -1448,5 +1585,55 @@ export interface ComposerControls {
 
 export type Updater<T> = T | ((previous: T) => T);
 
+/**
+ * Raw transport shape of the durable `GET /authority-requests` projection.
+ * Fields stay `unknown` on purpose: the store normalizer is the only place
+ * allowed to narrow them, and it must fail closed on malformed data.
+ */
+export interface AuthorityRequestsTransportView {
+  session_id?: unknown;
+  requests?: unknown;
+}
+
+/** Raw transport response from a narrow durable authority decision endpoint. */
+export interface AuthorityDecisionTransportView {
+  request_ref?: unknown;
+  decision?: unknown;
+  scheduled?: unknown;
+}
+
+/** Opaque decision handle. Never renderable outside transport state. */
+export type AuthorityRequestRef = string;
+
+/**
+ * Narrow read-only UI card for one pending self-session authority request.
+ * Only category, reason, executable, and command count are renderable; the
+ * request reference exists solely as an in-memory React key and narrow
+ * decision handle.
+ */
+export interface AuthorityApprovalCard {
+  requestRef: AuthorityRequestRef;
+  category: "command" | "reviewed_effect";
+  reason: string;
+  executable: string;
+  commandCount: number;
+  scope?: { title: string; description: string };
+  sourceTurnId?: string;
+  sourceCallId?: string;
+  sourceSessionId?: string;
+}
+
+export interface ConversationPermissionView {
+  grant_ref: string; title: string; description: string;
+}
+
+/** Server-backed projection bound to the session id it was fetched for. */
+export interface AuthorityApprovalProjection {
+  sessionId: string;
+  cards: AuthorityApprovalCard[];
+  permissions?: ConversationPermissionView[];
+}
+
 export type IconElement = ReactElement<{ size?: number }>;
 export type ChildrenProps = { children?: ReactNode };
+import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";

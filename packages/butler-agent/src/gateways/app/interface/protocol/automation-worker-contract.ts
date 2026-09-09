@@ -1,4 +1,5 @@
 import type { ChatKind } from "./base-contract.ts";
+import type { InterfaceTextReference } from "../../../../../../butler-i18n/src/index.ts";
 import type { MessageRecord } from "./messaging-contract.ts";
 import type { WorkerActivityWorkBlock } from "./progress-contract.ts";
 
@@ -123,13 +124,20 @@ export interface WorkerActivitySummary {
   objective: string;
   phase: WorkerActivityPhase;
   status_line: string;
+  status_reference?: InterfaceTextReference;
+  current_activity_reference?: InterfaceTextReference;
   current_activity_title?: string;
   work_blocks?: WorkerActivityWorkBlock[];
   session_id?: string;
+  parent_turn_id?: string;
+  source_tool_call_id?: string;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   project_id?: string;
   task_id?: string;
   orchestration_id?: string;
   terminal: boolean;
+  created_at?: string;
   updated_at: string;
   supported_controls: Array<"cancel" | "resume">;
 }

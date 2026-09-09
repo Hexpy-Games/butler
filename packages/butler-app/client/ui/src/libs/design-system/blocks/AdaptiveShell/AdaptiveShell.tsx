@@ -1,14 +1,16 @@
 import type {
-  CSSProperties,
   HTMLAttributes,
   KeyboardEvent,
   PointerEvent,
   ReactNode,
+  Ref,
 } from "react";
 import { cn } from "../../lib/utils";
+import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 
 export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
+  ref?: Ref<HTMLDivElement>;
   leftOpen: boolean;
   rightOpen: boolean;
   settingsActive?: boolean;
@@ -16,6 +18,7 @@ export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
   transparentWorkspace?: boolean;
   chromeEnvironment?: "browser" | "electron";
   platform?: "browser" | "darwin" | "linux" | "win32";
+  compactSidebarFullWidth?: boolean;
 }
 export function AdaptiveShell({
   leftOpen,
@@ -25,10 +28,12 @@ export function AdaptiveShell({
   transparentWorkspace = false,
   chromeEnvironment = "browser",
   platform = "browser",
+  compactSidebarFullWidth = false,
   className,
   children,
   ...props
 }: AdaptiveShellProps) {
+  const drawer = useAdaptiveDrawer(chromeEnvironment);
   return (
     <div
       className={cn(styles.root, className)}
@@ -38,7 +43,9 @@ export function AdaptiveShell({
       data-resizing={resizing}
       data-transparent-workspace={transparentWorkspace}
       data-chrome-environment={chromeEnvironment}
+      data-panel-layout={drawer ? "drawer" : "docked"}
       data-platform={platform}
+      data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
       {...props}
     >
       {children}
@@ -144,17 +151,4 @@ export function AdaptivePanelTitlebar({
       {children}
     </div>
   );
-}
-
-export function adaptivePanelStyle({
-  leftWidth,
-  rightWidth,
-}: {
-  leftWidth: number;
-  rightWidth: number;
-}): CSSProperties {
-  return {
-    "--sidebar-width": `${leftWidth}px`,
-    "--right-panel-width": `${rightWidth}px`,
-  } as CSSProperties;
 }

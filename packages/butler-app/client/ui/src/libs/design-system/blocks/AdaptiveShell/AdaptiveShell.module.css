@@ -76,6 +76,8 @@
 }
 
 .workspace {
+  container-name: workspace;
+  container-type: inline-size;
   position: relative;
   display: grid;
   contain: paint;
@@ -175,14 +177,20 @@
   display: none;
 }
 
-@media (width <= 1023px) {
-  .root {
-    display: block;
+.root[data-panel-layout="drawer"] {
+  display: block;
+
+  &[data-compact-sidebar-full-width="true"] {
+    --adaptive-drawer-width: 100vw;
   }
 
   .workspace {
     width: 100%;
     border-radius: 0;
+  }
+
+  &[data-left-open="true"] .workspace {
+    transform: translateX(var(--adaptive-drawer-width));
   }
 
   .resizeHandle {
@@ -205,11 +213,11 @@
 
   .sidebar {
     left: 0;
-    width: min(var(--sidebar-width), 88vw);
+    width: var(--adaptive-drawer-width);
     transform: translateX(-100%);
   }
 
-  .root[data-chrome-environment="electron"][data-platform="win32"] .sidebar {
+  &[data-chrome-environment="electron"][data-platform="win32"] .sidebar {
     background: var(--windows-sidebar-bg);
     backdrop-filter: var(--windows-sidebar-overlay-filter);
   }
@@ -227,7 +235,7 @@
     visibility: visible;
   }
 
-  .root .inspector > * {
+  .inspector > * {
     width: 100%;
     min-width: 100%;
     max-width: 100%;
@@ -260,6 +268,18 @@
     opacity: 1;
     pointer-events: auto;
   }
+
+  .chrome {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: block;
+    pointer-events: none;
+  }
+
+  &[data-right-open="true"] .chrome {
+    display: none;
+  }
 }
 
 @media (width <= 640px) {
@@ -272,21 +292,6 @@
   .workspace {
     border: 0;
     border-radius: 0;
-  }
-
-  .chrome {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    display: block;
-    pointer-events: none;
-    transition: transform var(--adaptive-panel-duration)
-      var(--adaptive-panel-easing);
-  }
-
-  .root[data-left-open="true"] .workspace,
-  .root[data-left-open="true"] .chrome {
-    transform: translateX(var(--adaptive-drawer-width));
   }
 
   .sidebar {
@@ -322,10 +327,6 @@
   .panelTitlebar[data-open="true"] {
     pointer-events: auto;
     visibility: visible;
-  }
-
-  .root[data-right-open="true"] .chrome {
-    display: none;
   }
 }
 

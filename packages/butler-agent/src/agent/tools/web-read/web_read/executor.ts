@@ -44,7 +44,7 @@ export function createWebReadHandler(input: {
     ]);
     const duplicateObservation = modelObservationCache.get(observationCacheKey);
     if (duplicateObservation) {
-      return compactDuplicateObservation(duplicateObservation);
+      return { ...duplicateObservation, cache_hit: true, duplicate_observation: true };
     }
     const cached = pageReadCache.get(cacheKey);
     const result = cached ?? await readPage({
@@ -114,7 +114,9 @@ export function createWebReadHandler(input: {
         evidenceReceipt({
           producerName: "web_read",
           receiptType: "source",
-          summary: "A public source page was read and bounded page evidence was returned.",
+          summary: sourceVerified
+            ? "A public source page was read and bounded page evidence was returned."
+            : "A public source read did not produce readable evidence; its limitation was returned.",
           verified: sourceVerified,
           covers: ["source_verified"],
           references: urlReferences([capabilitySourceUrl]),
@@ -138,23 +140,6 @@ function boundedInteger(
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(minimum, Math.min(maximum, Math.trunc(value)))
     : fallback;
-}
-
-function compactDuplicateObservation(
-  observation: Record<string, unknown>,
-): Record<string, unknown> {
-  const {
-    markdown: _markdown,
-    chunks: _chunks,
-    public_web_evidence_items: _publicWebEvidenceItems,
-    ...metadata
-  } = observation;
-  return {
-    ...metadata,
-    public_web_evidence_items: [],
-    cache_hit: true,
-    duplicate_observation: true,
-  };
 }
 
 function isHttpUrl(value: string): boolean {

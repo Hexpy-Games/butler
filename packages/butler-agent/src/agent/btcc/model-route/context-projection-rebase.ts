@@ -38,7 +38,7 @@ function continuationProjectionIdentity(
   return parseProjectionIdentity(value);
 }
 
-function parseProjectionIdentity(value: unknown): ContextProjectionRebaseIdentity {
+export function parseProjectionIdentity(value: unknown): ContextProjectionRebaseIdentity {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new PhaseContinuityProjectionError(
       "phase_continuity_projection_rebase_identity_invalid",
@@ -50,7 +50,7 @@ function parseProjectionIdentity(value: unknown): ContextProjectionRebaseIdentit
   ]);
   if (Object.keys(record).some((key) => !allowed.has(key)) ||
       record.schemaVersion !== "butler.context-projection-rebase.v1" ||
-      record.projectionRevision !== "butler.phase-continuity-projection.v1" ||
+      !["butler.phase-continuity-projection.v1", "butler.rolling-context.v1"].includes(String(record.projectionRevision)) ||
       typeof record.projectionDigest !== "string" ||
       !/^[a-f0-9]{64}$/u.test(record.projectionDigest) ||
       !Number.isSafeInteger(record.projectedThroughOrdinal) ||

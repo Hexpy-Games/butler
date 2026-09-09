@@ -1,20 +1,35 @@
-import type { DurableWorkContext } from "../work/index.ts";
-import { structuredToolResultModelPreview } from "../../tools/tool-result-model-preview.ts";
+import {
+  availableWorkReviewSubjects,
+  executableWorkActionKeys,
+  type DurableWorkContext,
+} from "../work/index.ts";
+import type { ToolResultExactReadReference } from
+  "../../tools/tool-result-serialization.ts";
+import { toolResultPayloadForProvider } from
+  "../../tools/tool-result-serialization.ts";
+import { OPERATION_RESULT_EXACT_READ_MAX_BYTES } from
+  "../../tools/monitoring/read_operation_results/index.ts";
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,
+  options: { includeResultHistory?: boolean } = {},
 ): string | null {
   if (!context) return null;
   const { work } = context;
   const plan = work.currentPlan;
   const rows = [
-    `Original request (highest priority): ${singleLine(context.originalRequest.content, 900)}`,
     `Status: ${work.status}`,
-    `Stable Work objective: ${singleLine(work.objective, 500)}`,
+    `Current stage: ${work.currentStage ?? "not recorded"}`,
+    `Plan execution ownership: ${plan?.executionMode ?? "not yet recorded; replace and review the Plan before new owned execution"}`,
+    `Allowed next stages: ${work.allowedNextStages.join(", ") || "none"}`,
+    `Available review subjects: ${availableWorkReviewSubjects(work).join(", ") || "none"}`,
+    `Stable Work objective: ${singleLine(work.objective)}`,
     `Explicit relation Work id (model-only; never report to user): ${work.workId}`,
   ];
+  if (plan?.executionMode === "steward") {
+    rows.push("Execution next step: delegate_to_steward after Plan Review; Butler manages this Work and synthesizes the returned result, without executing the assigned actions itself.");
+  }
   if (work.currentStage) {
-    rows.push(`Current stage: ${work.currentStage}`);
     if (work.currentStage === "review") {
       rows.push(
         "Optional stage focus: review the current Plan or actual execution result and " +
@@ -29,16 +44,16 @@ export function renderDurableWorkContext(
   }
   if (plan) {
     if (plan.objective !== work.objective) {
-      rows.push(`Current Plan focus: ${singleLine(plan.objective, 400)}`);
+      rows.push(`Current Plan focus: ${singleLine(plan.objective)}`);
     }
     if ((plan.governingRefs?.length ?? 0) > 0) {
       rows.push(
-        `Governing references: ${summarizeList(plan.governingRefs ?? [], 6, 100)}`,
+        `Governing references: ${summarizeList(plan.governingRefs ?? [], 12, 160)}`,
       );
     }
     rows.push(`Action progress: ${summarizeActionProgress(work)}`);
     if (plan.checks.length > 0) {
-      rows.push(`Checks: ${summarizeList(plan.checks, 8, 110)}`);
+      rows.push(`Checks: ${summarizeList(plan.checks, 20, 240)}`);
     }
   }
   for (const blocker of (work.effectBlockers ?? []).slice(0, 3)) {
@@ -104,12 +119,13 @@ export function renderDurableWorkContext(
     }
   }
   rows.push(
-    "Guardrail: choose the next useful unresolved action, stay within the original " +
-      "request and governing checks. Use optional Reviews or Validation when they help, " +
-      "then settle the bound Work with a truthful disposition before reporting.",
+    "Guardrail: follow the current Work policy, stay within the original request and " +
+      "governing checks, and settle the bound Work with a truthful disposition before reporting.",
   );
   if (plan) {
-    rows.push("Current plan details:");
+    const executable = new Set(executableWorkActionKeys(work));
+    rows.push(`Executable action keys: ${[...executable].join(", ") || "none"}`);
+    rows.push("Current executable plan details:");
     const progressByKey = new Map(
       work.actionProgress.map((item) => [item.actionKey, item]),
     );
@@ -118,10 +134,11 @@ export function renderDurableWorkContext(
       const rightDone = isTerminalAction(progressByKey.get(right.actionKey)?.status);
       return Number(leftDone) - Number(rightDone);
     });
-    for (const action of orderedActions.slice(0, 8)) {
+    for (const action of orderedActions) {
       const progress = work.actionProgress.find((item) =>
         item.actionKey === action.actionKey);
       const status = progress?.status ?? "pending";
+      if (isTerminalAction(status) || !executable.has(action.actionKey)) continue;
       const dependencies = action.dependencyKeys.length > 0
         ? ` (after: ${action.dependencyKeys.join(", ")})`
         : "";
@@ -129,7 +146,8 @@ export function renderDurableWorkContext(
         ? ` [effect: ${singleLine(action.effect.capability, 80)} -> ${singleLine(action.effect.target, 160)}]`
         : "";
       rows.push(
-        `- [${status}] ${singleLine(action.actionKey, 80)}: ` +
+        `- [${status}${executable.has(action.actionKey) ? ", executable" : ""}] ` +
+          `${singleLine(action.actionKey, 80)}: ` +
           `${singleLine(action.description, 280)}${dependencies}${effect}` +
           (progress?.note ? ` — ${singleLine(progress.note, 180)}` : ""),
       );
@@ -146,13 +164,45 @@ export function renderDurableWorkContext(
       rows.push(`Next step: ${singleLine(work.latestCheckpoint.nextStep, 400)}`);
     }
   }
-  for (const fact of context.resultFacts.slice(-8)) {
-    rows.push(
-      `Result (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
-        singleLine(resultFactText(fact), 1_000),
-    );
+  if (options.includeResultHistory !== false) {
+    const factsByResultRef = new Map(context.resultFacts.flatMap((fact) =>
+      fact.resultRef ? [[fact.resultRef, fact] as const] : [],
+    ));
+    work.resultRefs.forEach((result) => {
+      const fact = factsByResultRef.get(result.resultRef);
+      rows.push(renderOperationResultReference(
+        work.workId,
+        result,
+        fact?.resultJson,
+      ));
+    });
+    context.resultFacts.forEach((fact) => {
+      const result = fact.resultRef
+        ? work.resultRefs.find((candidate) => candidate.resultRef === fact.resultRef)
+        : undefined;
+      const exactReadReference = result
+        ? operationResultExactReadReference(work.workId, result, fact.resultJson)
+        : undefined;
+      const payload = toolResultPayloadForProvider({
+        ok: fact.status === "completed",
+        ...(fact.resultJson !== undefined ? { output: fact.resultJson } : {}),
+        ...(fact.errorCode ? { error: { code: fact.errorCode } } : {}),
+      }, {
+        toolName: fact.toolName,
+        ...(exactReadReference ? { exactReadReference } : {}),
+      });
+      rows.push(
+        `Result fact (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +
+          JSON.stringify(payload),
+      );
+    });
+  } else {
+    rows.push("Prior operation requests and results remain available through list_operation_results and read_operation_results; this context contains current Work state, not a duplicate of execution history.");
   }
-  return rows.join("\n").slice(0, 8_000);
+  rows.push(
+    `Original request (highest priority): ${singleLine(context.originalRequest.content)}`,
+  );
+  return rows.join("\n");
 }
 
 export function isDurableWorkResultReviewCurrent(
@@ -229,7 +279,11 @@ function summarizeActionProgress(work: DurableWorkContext["work"]): string {
   );
 }
 
-function summarizeList(values: string[], limit: number, itemLimit: number): string {
+function summarizeList(
+  values: string[],
+  limit = values.length,
+  itemLimit?: number,
+): string {
   const shown = values.slice(0, limit).map((value) => singleLine(value, itemLimit));
   const remaining = values.length - shown.length;
   return `${shown.join("; ")}${remaining > 0 ? `; (+${remaining} more)` : ""}`;
@@ -239,33 +293,53 @@ function isTerminalAction(status: string | undefined): boolean {
   return status === "done" || status === "skipped";
 }
 
-function singleLine(value: string, limit: number): string {
-  return value.replace(/\s+/gu, " ").trim().slice(0, limit);
+function singleLine(value: string, limit?: number): string {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  return limit === undefined ? normalized : normalized.slice(0, limit);
 }
 
-function resultFactText(fact: {
-  toolName: string;
-  resultJson?: unknown;
-  errorCode?: string;
-}): string {
-  if (fact.resultJson !== undefined) {
-    const preview = structuredToolResultModelPreview({
-      toolName: fact.toolName,
-      output: fact.resultJson,
-    });
-    if (preview) {
-      try {
-        return JSON.stringify(preview) ?? "No result body recorded.";
-      } catch {
-        return "Result body is unavailable.";
-      }
-    }
-    if (typeof fact.resultJson === "string") return fact.resultJson;
-    try {
-      return JSON.stringify(fact.resultJson) ?? "No result body recorded.";
-    } catch {
-      return "Result body is unavailable.";
-    }
+function renderOperationResultReference(
+  workId: string,
+  result: DurableWorkContext["work"]["resultRefs"][number],
+  resultJson?: unknown,
+): string {
+  if (!result.resultSha256) {
+    return `Result reference (${result.toolName}, ${result.status}): ` +
+      `result_ref=${result.resultRef}; exact read unavailable (sha256 missing)`;
   }
-  return fact.errorCode ?? "No result body recorded.";
+  const reference = operationResultExactReadReference(workId, result, resultJson);
+  if (!reference) {
+    return `Result reference (${result.toolName}, ${result.status}): ` +
+      `result_ref=${result.resultRef}; sha256=${result.resultSha256}; ` +
+      "exact read metadata unavailable in this context";
+  }
+  return `Result reference (${result.toolName}, ${result.status}): ` +
+    JSON.stringify(reference);
+}
+
+function operationResultExactReadReference(
+  workId: string,
+  result: DurableWorkContext["work"]["resultRefs"][number],
+  resultJson?: unknown,
+): ToolResultExactReadReference | undefined {
+  if (!result.resultSha256 || result.revision === undefined ||
+      resultJson === undefined) return undefined;
+  const serialized = JSON.stringify(resultJson);
+  const totalBytes = Buffer.byteLength(serialized, "utf8");
+  const arguments_: ToolResultExactReadReference["arguments"] = {
+    result_ref: result.resultRef,
+    sha256: result.resultSha256,
+    revision: result.revision,
+    work_id: workId,
+    offset: 0,
+    length: Math.min(
+      OPERATION_RESULT_EXACT_READ_MAX_BYTES,
+      Math.max(1, totalBytes),
+    ),
+  };
+  return {
+    capability: "read_operation_results",
+    arguments: arguments_,
+    total_bytes: totalBytes,
+  };
 }

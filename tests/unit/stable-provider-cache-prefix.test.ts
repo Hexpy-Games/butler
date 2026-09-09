@@ -333,10 +333,16 @@ test("flag matrix selects canonical rollback, each single feature, and the cumul
     return Response.json({ id: `matrix-${bodies.length}`, model: "gpt-5.6-sol", output: [] });
   }) as typeof fetch;
   const cases = [
-    { name: "all_off", env: {} },
+    { name: "all_off", env: { BUTLER_PHASE_TOOL_SURFACE: "off" } },
     { name: "tool_surface_only", env: { BUTLER_PHASE_TOOL_SURFACE: "on" } },
-    { name: "exact_replay_only", env: { BUTLER_OPERATION_RESULT_REPLAY: "on" } },
-    { name: "bounded_only", env: { BUTLER_BOUNDED_STATELESS_CONTEXT: "on" } },
+    {
+      name: "exact_replay_only",
+      env: { BUTLER_PHASE_TOOL_SURFACE: "off", BUTLER_OPERATION_RESULT_REPLAY: "on" },
+    },
+    {
+      name: "bounded_only",
+      env: { BUTLER_PHASE_TOOL_SURFACE: "off", BUTLER_BOUNDED_STATELESS_CONTEXT: "on" },
+    },
     {
       name: "cumulative",
       env: {

@@ -6,12 +6,17 @@ import type { VisualAttachmentManifest } from "../../gateways/core/contracts.ts"
 import type { VisualImageAdmissionResult } from "../image-attachment/contracts.ts";
 import type { BtccTurnProgressObserver } from
   "./projection/progress-observer-contract.ts";
+import type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "./project-plan.ts";
+export type { ChangedFileDetail } from "../tools/file-tools/shared/changed-file-detail.ts";
 export type {
   BtccTurnProgressObserver,
   WorkProgressTask,
 } from "./projection/progress-observer-contract.ts";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type BtccEmptyResponsePolicy = "safe_fallback" | "typed_terminal";
+/** Execution failure, independent of message delivery and accepted Work completion. */
+export type BtccRuntimeFailure = { code: string; retryable: boolean };
 
 export type AdmittedModelSelection = {
   provider: string;
@@ -23,6 +28,11 @@ export type AdmittedModelSelection = {
   modelRoute?: ModelRouteState;
 };
 export type ButlerContextInput = {
+  branchSeed?: import("../../foundation/session-branch.ts").SessionBranchSeed;
+  appSessionId?: string;
+  messageContent?: import("../../foundation/message-content.ts").MessageContent;
+  sessionReferences?: import("../../foundation/message-content.ts").ResolvedSessionReference[];
+  projectSources?: import("../../foundation/message-content.ts").ResolvedProjectSource[];
   userRef: string;
   projectRef?: string;
   profileRefs: string[];
@@ -38,6 +48,8 @@ export type ButlerContextInput = {
   authorityRequestRef?: string;
   /** Durable App queue identity paired with the stored authority request. */
   authorityClientMessageId?: string;
+  /** Internal Project Ledger Plan binding for a Plan-mode continuation. */
+  planId?: string;
 };
 
 export type ButlerExecutionPolicy = {
@@ -55,6 +67,7 @@ export type ButlerExecutionPolicy = {
     executionMode: "read_only" | "mutation";
     mutationScope: string[];
     allowedToolsAndEffects: string[];
+    recentFeedbackRefs?: string[];
     projectContext?: {
       projectId: string;
       mandatoryHotCacheRefs: string[];
@@ -153,7 +166,12 @@ export type BtccTurnOutcome = (
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
+      acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+      runtimeFailure?: BtccRuntimeFailure;
+      executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
+      changedFiles?: ChangedFileDetail[];
+      plan?: ProjectLedgerPlan;
       modelIdentity?: {
         requestedModelRef: string;
         effectiveModelRef: string;
@@ -161,6 +179,11 @@ export type BtccTurnOutcome = (
       };
     }
   | { kind: "cancelled"; turnId: string }
+  | {
+      kind: "suspended";
+      turnId: string;
+      reason: "authority_pending" | "waiting_for_worker";
+    }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }
   | { kind: "fenced_pending_persistence"; turnId: string }
@@ -252,7 +275,7 @@ export type BtccTurnRequest = {
         resultScopeRef?: string;
       };
   route: {
-    role: "butler" | "steward";
+    role: "butler" | "steward" | "worker";
     workspacePath: string;
     projectId?: string;
     reason?:
@@ -268,6 +291,10 @@ export type BtccTurnRequest = {
   executionControls?: BtccTurnExecutionControls;
   emptyResponsePolicy?: BtccEmptyResponsePolicy;
   appTurnContext?: InboundEnvelope["appTurnContext"];
+  /** Internal authority identity for a fresh descendant continuation Turn. */
+  authorityRequestRef?: string;
+  /** Queue identity paired with authorityRequestRef. */
+  authorityClientMessageId?: string;
   appQueueClaimId?: string;
   signal?: AbortSignal;
 };
@@ -319,6 +346,8 @@ export interface BtccWakeProjectionHost {
 
 export interface BtccProgressProjectionHost {
   hasCommittedEvent(turnId: string, kind: string): boolean;
+  connect(publisher: BtccTurnProgressPublisher): void;
+  publishCommitted(event: BtccCommittedProgressEvent): Promise<void>;
   reconcile(publisher: BtccTurnProgressPublisher): Promise<{
     attempted: number;
     published: number;

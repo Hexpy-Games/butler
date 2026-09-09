@@ -1,3 +1,4 @@
+import { getAppCopy } from "./copy.ts";
 import type { SettingsView } from "./types.ts";
 import { api } from "./api.ts";
 
@@ -65,82 +66,7 @@ export const FIRST_RUN_STEPS: FirstRunStep[] = [
   "model",
 ];
 
-export const firstRunCopy = {
-  ko: {
-    product: "Butler",
-    steps: ["언어", "안전고지", "설치", "모델"],
-    languageTitle: "언어 선택",
-    continue: "계속",
-    back: "이전",
-    safetyTitle: "안전고지",
-    safetyBody:
-      "Butler는 사용자가 요청한 로컬 작업을 대신 실행합니다. 시작 전에 아래 기준을 확인하세요.",
-    safetyItems: [
-      "파일 변경, 명령 실행, 외부 요청은 사용자의 지시 안에서만 진행됩니다.",
-      "민감한 경로나 토큰이 포함된 요청은 실행 전에 한 번 더 확인하세요.",
-      "자동화 결과는 App 안의 기록과 진단 로그로 확인할 수 있습니다.",
-    ],
-    accept: "동의",
-    installTitle: "Butler Agent를 준비합니다",
-    installReady: "준비 완료",
-    installChecking: "상태 확인 중",
-    installFailed: "Butler Agent를 준비하지 못했습니다.",
-    retry: "다시 시도",
-    repair: "복구",
-    diagnostics: "진단 복사",
-    diagnosticsCopied: "진단을 복사했습니다.",
-    diagnosticsUnavailable: "진단을 복사하지 못했습니다.",
-    quit: "종료",
-    modelTitle: "모델 설정",
-    modelBody:
-      "기본 모델과 연결 방식을 설정하세요.",
-    modelSelectLabel: "기본 모델",
-    modelLoading: "모델 목록을 불러오는 중",
-    modelLoadFailed: "모델 목록을 불러오지 못했습니다.",
-    modelRetry: "다시 불러오기",
-    modelSave: "저장하고 시작",
-    modelSaving: "저장 중",
-    modelSaved: "모델 설정을 저장했습니다.",
-    modelSaveFailed: "모델 설정을 저장하지 못했습니다.",
-  },
-  en: {
-    product: "Butler",
-    steps: ["Language", "Safety", "Install", "Model"],
-    languageTitle: "Language",
-    continue: "Continue",
-    back: "Back",
-    safetyTitle: "Safety notice",
-    safetyBody:
-      "Butler runs local work on your behalf. Review these basics before starting.",
-    safetyItems: [
-      "File changes, commands, and network requests stay within your instructions.",
-      "Review requests that include sensitive paths or tokens before running them.",
-      "Automation results are visible in App history and diagnostics logs.",
-    ],
-    accept: "Accept",
-    installTitle: "Prepare Butler Agent",
-    installReady: "Ready",
-    installChecking: "Checking status",
-    installFailed: "Butler Agent is not ready.",
-    retry: "Retry",
-    repair: "Repair",
-    diagnostics: "Copy diagnostics",
-    diagnosticsCopied: "Diagnostics copied.",
-    diagnosticsUnavailable: "Diagnostics unavailable.",
-    quit: "Quit",
-    modelTitle: "Model setup",
-    modelBody:
-      "Set the default model and connection method.",
-    modelSelectLabel: "Default model",
-    modelLoading: "Loading models",
-    modelLoadFailed: "Could not load models.",
-    modelRetry: "Reload models",
-    modelSave: "Save and start",
-    modelSaving: "Saving",
-    modelSaved: "Model settings saved.",
-    modelSaveFailed: "Model settings could not be saved.",
-  },
-} as const;
+export const firstRunCopy = { ko: getAppCopy("ko-KR").firstRun, en: getAppCopy("en-US").firstRun };
 
 export function detectFirstRunLanguage(
   languages: readonly string[] = [],

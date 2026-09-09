@@ -1,5 +1,14 @@
 import type { DurableWorkService } from "../work/index.ts";
+import type { BtccFinalArtifact } from "../contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
+import type { InboundEnvelope } from "../../../gateways/core/contracts.ts";
+import type { WorkerProfile } from "../../../gateways/app/interface/protocol/settings-contract.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
+import type {
+  DurableWorkActionProgress,
+  DurableWorkCheckpoint,
+  DurableWorkPlanAction,
+} from "../work/index.ts";
 
 /** The only persisted SessionRelation shape for the SS-02 vertical. */
 export type SessionRelation = {
@@ -22,10 +31,9 @@ export type SubsessionWorkspaceAndWorktree =
       repository_anchor_ref: "parent-session-project";
     }
   | {
-      ownership: "session";
-      workspace_label: "Steward session worktree";
-      repository_anchor_ref: "parent-session-repository";
-      branch: string;
+      ownership: "parent_session";
+      workspace_label: "Inherited parent session workspace";
+      repository_anchor_ref: "parent-session-workspace";
     };
 
 export type DelegationProjectContextRef = {
@@ -46,6 +54,9 @@ export type DelegationProjectContextSnapshot = {
 
 export type DelegationPacket = {
   delegation_id: string;
+  /** Runtime correlation for the invoking activity; not model instructions. */
+  source_tool_call_id?: string;
+  /** Compatibility name for the Butler managerial assignment, never a Worker Task. */
   task_id: string;
   parent_session_id: string;
   parent_turn_id: string;
@@ -53,7 +64,16 @@ export type DelegationPacket = {
   execution_mode: SubsessionExecutionMode;
   objective: string;
   acceptance_criteria: string[];
+  implementation_brief?: string;
   task_or_plan_refs: string[];
+  plan_action?: {
+    action_key: string;
+    description: string;
+    dependency_keys: string[];
+    effect?: { capability: string; target: string };
+    checkpoint_summary?: string;
+    next_step?: string;
+  };
   project_context?: DelegationProjectContextSnapshot;
   constraints_and_non_goals: string[];
   allowed_tools_and_effects: string[];
@@ -64,17 +84,19 @@ export type DelegationPacket = {
     status: "success" | "blocked" | "failed" | "cancelled";
     required_fields: ["summary", "acceptance_evidence", "changed_artifacts"];
   };
-  work_creation_policy: "one_recoverable_child_work";
+  work_creation_policy: "one_recoverable_child_work" | "none";
   access_and_budget_policy: {
-    access_mode: "full_access" | "read_only";
+    access_mode: "full_access" | "ask_first" | "read_only";
     max_turns: number;
     model_ref: string;
     reasoning_effort: string;
   };
-  parent_work_ref?: {
+  parent_work_ref: {
     work_id: string;
     session_id: string;
     turn_id: string;
+    plan_revision_id: string;
+    review_revision_id: string;
   };
   model_ref: string;
   reasoning_effort: string;
@@ -84,7 +106,9 @@ export type StewardResultStatus = "success" | "blocked" | "failed" | "cancelled"
 export type StewardResultCode =
   | "delegation_context_incomplete"
   | "steward_execution_failed"
-  | "steward_cancelled";
+  | "steward_cancelled"
+  | "worker_work_incomplete"
+  | "worker_no_progress";
 
 export type StewardResultEnvelope = {
   result_id: string;
@@ -97,6 +121,7 @@ export type StewardResultEnvelope = {
   summary: string;
   acceptance_evidence: string[];
   changed_artifacts: string[];
+  changed_files?: ChangedFileDetail[];
   commits: string[];
   tests: string[];
   remaining_risks: string[];
@@ -116,7 +141,7 @@ export type ParentInputSink = (input: {
   text: string;
   model_ref: string;
   reasoning_effort: string;
-  access_mode: "full_access";
+  access_mode: "full_access" | "ask_first" | "read_only";
   timestamp: string;
 }) => Promise<void> | void;
 
@@ -124,6 +149,7 @@ export type DelegationRequest = {
   parent_session_id: string;
   parent_turn_id: string;
   anchor_message_id: string;
+  parent_access_mode: "full_access" | "ask_first" | "read_only";
   execution_mode: SubsessionExecutionMode;
   safe_title: string;
   objective: string;
@@ -138,7 +164,43 @@ export type DelegationRequest = {
     work_id: string;
     session_id: string;
     turn_id: string;
+    plan_revision_id: string;
+    review_revision_id: string;
   };
+};
+
+export type ReviewedDelegationPlan = {
+  parent_work_ref: DelegationPacket["parent_work_ref"];
+  objective: string;
+  acceptance_criteria: string[];
+  task_or_plan_refs: string[];
+  actions: DurableWorkPlanAction[];
+  action_progress: DurableWorkActionProgress[];
+  latest_checkpoint?: Pick<DurableWorkCheckpoint, "publicSummary" | "nextStep">;
+};
+
+type ReviewedDelegationIdentity = Pick<DelegationRequest,
+  | "parent_session_id"
+  | "parent_turn_id"
+  | "anchor_message_id"
+  | "parent_access_mode"
+  | "model_ref"
+  | "reasoning_effort"
+>;
+
+export type ReviewedDelegationRequest = ReviewedDelegationIdentity & {
+  request: string;
+  safe_title?: string;
+};
+
+export type ReviewedWorkerDelegationRequest = ReviewedDelegationIdentity & {
+  source_tool_call_id?: string;
+  action_key: string;
+  objective: string;
+  acceptance_criteria: string[];
+  implementation_brief: string;
+  safe_title?: string;
+  profile_id?: string;
 };
 
 export type CreatedDelegation = {
@@ -147,6 +209,12 @@ export type CreatedDelegation = {
   child_turn_id: string;
   root_work_id: string;
   child_workspace_path: string;
+};
+
+export type SubsessionDispatchIntent = {
+  childBinding: Parameters<SessionBindingStore["upsert"]>[0];
+  envelope: InboundEnvelope;
+  metadata: Record<string, unknown>;
 };
 
 export type StewardDirection = {
@@ -172,6 +240,8 @@ export type CompleteStewardResultInput = {
   childTurnId: string;
   resultId: string;
   summary?: string;
+  changedArtifacts?: string[];
+  changedFiles?: ChangedFileDetail[];
   status?: StewardResultStatus;
   code?: StewardResultCode;
 };
@@ -187,7 +257,16 @@ export interface SubsessionDelegationStore {
     packet: DelegationPacket;
     childTurnId: string;
     rootWorkId: string;
+    /** Required for new delegations; optional only for legacy/test callers. */
+    dispatchIntent?: SubsessionDispatchIntent;
   }): void;
+  createWorkerAssignment?(input: {
+    relation: SessionRelation;
+    packet: DelegationPacket;
+    childTurnId: string;
+    rootWorkId: string;
+    dispatchIntent: SubsessionDispatchIntent;
+  }): SessionRelation;
   relationById(relationId: string): SessionRelation | null;
   relationByDelegationId(delegationId: string): SessionRelation | null;
   relationsByParentSessionId(parentSessionId: string): SessionRelation[];
@@ -196,6 +275,12 @@ export interface SubsessionDelegationStore {
   rootWorkIdByRelationId(relationId: string): string | null;
   taskIdByRelationId(relationId: string): string | null;
   childTurnIdByRelationId(relationId: string): string | null;
+  dispatchIntentByRelationId?(relationId: string): SubsessionDispatchIntent | null;
+  pendingDispatchIntents?(): Array<{
+    relationId: string;
+    intent: SubsessionDispatchIntent;
+  }>;
+  markDispatchEnqueued?(relationId: string): void;
   createDirection(direction: CreateStewardDirectionInput): StewardDirection;
   consumePendingDirection(input: {
     relationId: string;
@@ -215,6 +300,7 @@ export interface SubsessionDelegationStore {
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles?: ChangedFileDetail[];
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -232,7 +318,7 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }; inserted: boolean };
   pendingParentInputForResult(resultId: string): {
@@ -246,7 +332,7 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   } | null;
   pendingParentInputCount(): number;
@@ -262,12 +348,32 @@ export interface SubsessionDelegationStore {
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }>;
 }
 
 export type SubsessionDelegationService = {
+  authorityOwnerSessionId(input: { sourceSessionId: string }): string;
+  activeChildCancellationTarget(childSessionId: string): Promise<{
+    relation: SessionRelation;
+    child_turn_id: string;
+  } | null>;
+  enabledWorkerProfiles?(): Promise<WorkerProfile[]>;
+  activeParentDelegations(input: {
+    parentSessionId: string;
+  }): Promise<Array<{ relation: SessionRelation; parent_work_ref:
+      DelegationPacket["parent_work_ref"]; child_turn_id: string }>>;
+  shouldWaitForWorker(input: {
+    parentSessionId: string;
+    parentTurnId: string;
+  }): Promise<boolean>;
+  reviewedDelegationPlan(input: {
+    parentSessionId: string;
+    parentTurnId: string;
+  }): Promise<ReviewedDelegationPlan>;
+  delegateReviewed(input: ReviewedDelegationRequest): Promise<CreatedDelegation>;
+  delegateWorkerReviewed(input: ReviewedWorkerDelegationRequest): Promise<CreatedDelegation>;
   delegate(input: DelegationRequest): Promise<CreatedDelegation>;
   ensureChildRootWork(input: {
     childSessionId: string;
@@ -275,11 +381,21 @@ export type SubsessionDelegationService = {
     objective: string;
   }): Promise<string>;
   completeStewardResult(input: CompleteStewardResultInput): Promise<CompleteStewardResultOutcome>;
+  completeWorkerResult(input: CompleteStewardResultInput & {
+    changedArtifacts?: string[];
+    changedFiles?: ChangedFileDetail[];
+  }): Promise<CompleteStewardResultOutcome>;
   recoverPendingParentInputs(): Promise<{ attempted: number; delivered: number }>;
   resolveParentResultEvidence(input: {
     parentSessionId: string;
     parentInputText: string;
-  }): Promise<string | null>;
+  }): Promise<{
+    synthesisEvidence: string;
+    outcome: StewardResultStatus;
+    parentWorkId: string;
+    changedFiles: ChangedFileDetail[];
+    artifacts: BtccFinalArtifact[];
+  } | null>;
   resultIdForRelation(relationId: string): string | null;
   pendingParentInputCount(): number;
   steerSteward(input: {
@@ -311,7 +427,13 @@ export type SubsessionDelegationDependencies = {
   parentInputSink: ParentInputSink;
   toolJournal: import("../ports/guided-tool-journal.ts").GuidedToolJournal;
   effectJournal: import("../effects/contracts.ts").GuidedEffectJournal;
-  parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn">;
+  parentTurns: Pick<import("../turn/index.ts").TurnStateRepository, "findTurn"> & {
+    findLatestTurnForSession(sessionId: string): Promise<import("../turn/index.ts").TurnRecord | null>;
+  };
   contextDocuments: import("../../context/context-projection.ts").ContextDocumentReader;
   conversations: import("../../conversation/index.ts").ConversationContextStoreReader;
+  workerProfiles?: {
+    list(): Promise<WorkerProfile[]>;
+    read(profileId?: string): Promise<WorkerProfile>;
+  };
 };

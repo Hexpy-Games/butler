@@ -253,6 +253,9 @@ export function codexRequestBody(body: Record<string, any>): Record<string, any>
   delete next.previous_response_id;
   delete next.__butler_codex_stateless_input;
   delete next.prompt_cache_retention;
+  // Codex subscription controls output allocation server-side and rejects this
+  // official Responses parameter, including for summary-only requests.
+  delete next.max_output_tokens;
   if (!next.text) {
     next.text = { verbosity: "medium" };
   }

@@ -10,7 +10,6 @@ export type RuntimeMemoryAttributionEvent =
   | "tool_call_end"
   | "tool_call_failure"
   | "project_ledger_phase"
-  | "execution_window_boundary"
   | "terminal_state"
   | "idle_checkpoint"
   | "idle_pre_gc"

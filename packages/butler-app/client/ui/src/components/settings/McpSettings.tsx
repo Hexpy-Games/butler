@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -19,6 +20,7 @@ import {
 } from "./mcpSettingsUtils";
 
 export function McpSettings() {
+  useAppLocale();
   const copy = appCopy.settings;
   const [servers, setServers] = useState<McpServerView[]>([]);
   const [form, setForm] = useState<McpServerFormState>(emptyMcpServerForm);
@@ -106,7 +108,7 @@ export function McpSettings() {
           </Button>
         </Stack>
         <CardList
-          empty={<Typo.Caption>등록된 MCP 서버가 없습니다.</Typo.Caption>}
+          empty={<Typo.Caption>{appCopy.interfaceDetails.noMcp}</Typo.Caption>}
         >
           {servers.map((server) => (
             <McpServerRow

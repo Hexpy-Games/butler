@@ -15,9 +15,11 @@ import type {
   ModelCatalogView,
   ProviderAuthMethod,
   SettingsView,
+  SpaceView,
 } from "@/app/types.ts";
 
 interface TestStoreState {
+  navigation: { space: SpaceView };
   activeChatId: string;
   commandOpen: boolean;
   effectiveRightOpen: boolean;
@@ -40,6 +42,7 @@ type ReactActGlobal = typeof globalThis & {
 };
 
 const storeState: TestStoreState = {
+  navigation: { space: { revision: 0, nodes: [], groups: [] } },
   activeChatId: "session-shell",
   commandOpen: false,
   effectiveRightOpen: false,
@@ -267,6 +270,8 @@ async function renderAppShell(
   });
   const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
   Object.assign(dom.window, {
+    matchMedia: (media: string) => ({ media, matches: false, onchange: null,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }),
     butlerApp: {
       startSetup: async () => ({
         diagnostics_available: true,

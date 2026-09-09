@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   Button,
   ChevronsUpDown,
@@ -18,6 +18,7 @@ export interface SettingsSearchableSelectOption {
 export function SettingsSearchableSelect({
   label,
   description,
+  id,
   value,
   options,
   searchLabel,
@@ -29,6 +30,7 @@ export function SettingsSearchableSelect({
 }: {
   label: string;
   description?: string;
+  id?: string;
   value: string;
   options: SettingsSearchableSelectOption[];
   searchLabel: string;
@@ -38,6 +40,9 @@ export function SettingsSearchableSelect({
   emptyLabel: string;
   onChange: (value: string) => void;
 }) {
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
+  const descriptionId = useId();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const selectedOption = options.find((option) => option.value === value);
@@ -54,14 +59,18 @@ export function SettingsSearchableSelect({
   return (
     <SettingsField
       data-test-class="settings-searchable-select-field"
+      id={controlId}
       label={label}
       description={description}
+      descriptionId={description ? descriptionId : undefined}
       control={
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button
               type="button"
               variant="outline"
+              id={controlId}
+              aria-describedby={description ? descriptionId : undefined}
               data-test-class="settings-searchable-select-trigger"
               iconEnd={<ChevronsUpDown size={14} />}
               stretch

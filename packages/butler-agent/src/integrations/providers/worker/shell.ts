@@ -25,6 +25,7 @@ export async function executeShellCommand(
   timed_out: boolean;
 }> {
   return await executeLegacyCommandCompatibility(commandExecutor, {
+    readOnlyProgramHome: getButlerHome(),
     command,
     cwd,
     timeoutMs,

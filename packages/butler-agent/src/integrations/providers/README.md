@@ -23,6 +23,19 @@ and execution live under `local/`. Hosted provider registration is shared
 because it stores user-configured provider/model records rather than executing
 one provider protocol.
 
+## OpenAI catalog contract
+
+- The bundled OpenAI catalog follows the official provider model metadata and
+  exposes `openai/gpt-6-astra` as the current latest selectable model.
+- `auto:codex-latest` resolves to the newest eligible model returned by OpenAI
+  model discovery, including GPT-6 Astra. It fails closed when discovery is
+  unavailable.
+- Adding a selectable model does not change Butler's persisted or fallback
+  default model. Default changes require a separate product decision.
+- GPT-6 Astra uses the Responses runtime with the documented 1,050,000-token
+  context window, 128,000-token maximum output, image input, and reasoning
+  efforts from `low` through `max`; unsupported `none` is not exposed.
+
 ## Boundaries
 
 Provider integrations translate between Butler and model backends. They should

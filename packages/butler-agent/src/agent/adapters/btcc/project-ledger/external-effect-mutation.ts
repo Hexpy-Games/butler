@@ -1,260 +1,316 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { exchangeCompleteRoots } from "../../../../foundation/complete-root-commit/index.ts";
-import { writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
-import type {
-  ProjectLedgerCorePublication,
-  ProjectLedgerHead,
-} from "./runtime-types.ts";
-import { loadProjectLedgerCore } from "./project-ledger-core.ts";
-import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
-import {
-  applyProjectLedgerRecordUpdate,
-  type ProjectLedgerRecordUpdate,
-} from "./external-effect-record-update.ts";
+import { existsSync } from "node:fs";
 import {
   runRuntimeMemoryAttributionAsyncPhase,
   runRuntimeMemoryAttributionPhase,
   type RuntimeMemoryAttributionPort,
 } from "../../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import {
+  admitProjectLedgerEffectOccurrence,
+  appendProjectLedgerEffectAttempt,
+  ProjectLedgerEffectConflictError,
+  readProjectLedgerEffectOccurrence,
+  type ProjectLedgerEffectAttempt,
+  type ProjectLedgerEffectOccurrence,
+} from "./external-effect-occurrence.ts";
+import {
+  applyProjectLedgerRecordUpdate,
+  type ProjectLedgerRecordUpdate,
+} from "./external-effect-record-update.ts";
+import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
+import {
+  captureExactPublicationAttempt,
+  hasUnsupportedLegacyProjectLedgerOccurrence,
+  applyProjectLedgerPublicationAttempt,
+  publicationPaths,
+  reconcileProjectLedgerPublication,
+  resolveExactProjectLedgerScope,
+  type AppliedPublicationEvidence,
+} from "./publication-recovery/index.ts";
+import {
+  loadProjectLedgerCore,
+  type ProjectLedgerCore,
+} from "./project-ledger-core.ts";
+import type { ProjectLedgerHead } from "./runtime-types.ts";
 export type { ProjectLedgerRecordUpdate } from "./external-effect-record-update.ts";
-
+export { ProjectLedgerEffectConflictError } from "./external-effect-occurrence.ts";
 export type ProjectLedgerEffectResult = {
   schema: "butler.btcc-project-ledger-effect-result.v1";
   publicationId: string;
   effectKey: string;
   updatedRecords: Array<{ id: string; kind?: string }>;
-  baseHead: ProjectLedgerHead;
-  currentHead: ProjectLedgerHead;
-  promotion: unknown;
-  observation: unknown;
+  baseHead: PublicProjectLedgerHead;
+  currentHead: PublicProjectLedgerHead;
+  promotion: { status: "promoted" };
+  observation: { status: "observed" };
 };
-
+type PublicProjectLedgerHead = Omit<ProjectLedgerHead, "projectRoot">;
 export type ProjectLedgerEffectReconciliation =
   | { status: "applied"; result: ProjectLedgerEffectResult }
   | { status: "not_applied" }
   | { status: "uncertain"; message: string };
-
-type EffectOccurrence = {
-  schema: "butler.btcc-project-ledger-effect-occurrence.v1";
-  effectKey: string;
-  updatesSha256: string;
-  publicationId: string;
-  status: "pending" | "observed";
-  result?: ProjectLedgerEffectResult;
-};
-
-export class ProjectLedgerEffectConflictError extends Error {
-  readonly code = "project_ledger_effect_occurrence_conflict";
-
-  constructor(readonly effectKey: string) {
-    super("The admitted Project Ledger effect occurrence already has different content");
-    this.name = "ProjectLedgerEffectConflictError";
-  }
-}
-
-export async function applyProjectLedgerRecordUpdates(input: {
+type EffectInput = {
   butlerData: string;
   projectRoot: string;
   effectKey: string;
   updates: ProjectLedgerRecordUpdate[];
   memoryAttribution?: RuntimeMemoryAttributionPort;
-}): Promise<ProjectLedgerEffectResult> {
+};
+const SAFE_UNCERTAIN_MESSAGE =
+  "The Project Ledger publication state could not be verified safely.";
+export async function applyProjectLedgerRecordUpdates(
+  input: EffectInput,
+): Promise<ProjectLedgerEffectResult> {
+  try {
+    return await runRuntimeMemoryAttributionAsyncPhase({
+      attribution: input.memoryAttribution,
+      phase: "work_update",
+      run: async () => {
+        const outcome = await runEffect(input, "apply");
+        if (outcome.status === "applied") return outcome.result;
+        if (outcome.status === "not_applied")
+          throw new ProjectLedgerEffectNotAppliedError();
+        throw new ProjectLedgerEffectUncertainError();
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof ProjectLedgerEffectConflictError ||
+      error instanceof ProjectLedgerEffectNotAppliedError ||
+      error instanceof ProjectLedgerEffectUncertainError
+    )
+      throw error;
+    throw new ProjectLedgerEffectUncertainError();
+  }
+}
+export async function reconcileProjectLedgerRecordUpdates(
+  input: EffectInput,
+): Promise<ProjectLedgerEffectReconciliation> {
+  try {
+    return await runEffect(input, "reconcile");
+  } catch (error) {
+    if (error instanceof ProjectLedgerEffectConflictError) throw error;
+    return { status: "uncertain", message: SAFE_UNCERTAIN_MESSAGE };
+  }
+}
+async function runEffect(
+  input: EffectInput,
+  mode: "apply" | "reconcile",
+): Promise<ProjectLedgerEffectReconciliation> {
+  if (input.updates.length === 0)
+    throw new Error("project_ledger_effect_updates_empty");
+  const core = await loadProjectLedgerCore();
+  const scope = resolveExactProjectLedgerScope(input.projectRoot);
+  if (
+    hasUnsupportedLegacyProjectLedgerOccurrence({
+      butlerData: input.butlerData,
+      projectRoots: [input.projectRoot, scope.ledgerRoot],
+      effectKey: input.effectKey,
+    })
+  ) {
+    return { status: "uncertain", message: SAFE_UNCERTAIN_MESSAGE };
+  }
+  const requestSha256 = digest(stableJson(input.updates));
+  const operationIdentity = {
+    kind: "mutation_call" as const,
+    id: input.effectKey,
+  };
+  let occurrence = readProjectLedgerEffectOccurrence({
+    butlerData: input.butlerData,
+    ledgerProjectId: scope.ledgerProjectId,
+    ledgerRoot: scope.ledgerRoot,
+    operationIdentity,
+    requestSha256,
+  });
+  if (occurrence) {
+    const attempt = occurrence.attempts.at(-1)!;
+    const hadAttemptOutcome = existsSync(
+      publicationPaths({
+        butlerData: input.butlerData,
+        publicationId: attempt.publicationId,
+      }).receiptPath,
+    );
+    const recovered = await reconcileAttempt(input, core, occurrence, attempt);
+    if (recovered.status === "applied") {
+      return {
+        status: "applied",
+        result: await effectResult(
+          input,
+          recovered.evidence,
+          occurrence.ledgerRoot,
+        ),
+      };
+    }
+    if (recovered.status === "uncertain") return recovered;
+    if (recovered.status === "ready")
+      return publish(input, core, occurrence, attempt);
+    if (mode === "reconcile") return { status: "not_applied" };
+    if (!hadAttemptOutcome) return { status: "not_applied" };
+    occurrence = await admitNextAttempt(
+      input,
+      core,
+      occurrence,
+      scope.ledgerProjectId,
+      requestSha256,
+    );
+    return publish(input, core, occurrence, occurrence.attempts.at(-1)!);
+  }
+  if (mode === "reconcile") return { status: "not_applied" };
+  const snapshot = await exactSnapshot(input, core, scope.ledgerProjectId);
+  occurrence = admitProjectLedgerEffectOccurrence({
+    butlerData: input.butlerData,
+    ledgerProjectId: scope.ledgerProjectId,
+    ledgerRoot: scope.ledgerRoot,
+    operationIdentity,
+    requestSha256,
+    expectedBase: snapshot.expectedBase,
+    targetPreconditions: snapshot.targetPreconditions,
+  });
+  return publish(input, core, occurrence, occurrence.attempts[0]!);
+}
+async function reconcileAttempt(
+  input: EffectInput,
+  core: ProjectLedgerCore,
+  occurrence: ProjectLedgerEffectOccurrence,
+  attempt: ProjectLedgerEffectAttempt,
+) {
+  return reconcileProjectLedgerPublication({
+    core,
+    butlerData: input.butlerData,
+    ledgerRoot: occurrence.ledgerRoot,
+    occurrenceId: occurrence.occurrenceId,
+    attempt,
+    observeHead: observeProjectLedgerHead,
+  });
+}
+async function publish(
+  input: EffectInput,
+  core: ProjectLedgerCore,
+  occurrence: ProjectLedgerEffectOccurrence,
+  attempt: ProjectLedgerEffectAttempt,
+): Promise<ProjectLedgerEffectReconciliation> {
+  const recovered = await applyProjectLedgerPublicationAttempt({
+    core,
+    butlerData: input.butlerData,
+    ledgerRoot: occurrence.ledgerRoot,
+    occurrenceId: occurrence.occurrenceId,
+    attempt,
+    observeHead: (root) => attributedHead(input, root),
+    runPhase: (phase, run) => runRuntimeMemoryAttributionPhase({
+      attribution: input.memoryAttribution,
+      phase,
+      run,
+    }),
+    materialize(candidateRoot) {
+      runRuntimeMemoryAttributionPhase({
+        attribution: input.memoryAttribution,
+        phase: "materialize",
+        run: () => materialize(input, core, candidateRoot),
+      });
+    },
+  });
+  if (recovered.status !== "applied") return recovered;
+  return {
+    status: "applied",
+    result: await effectResult(input, recovered.evidence, occurrence.ledgerRoot),
+  };
+}
+function materialize(
+  input: EffectInput,
+  core: ProjectLedgerCore,
+  candidateRoot: string,
+): void {
+  for (const update of input.updates)
+    applyProjectLedgerRecordUpdate(core, candidateRoot, update);
+  for (const view of ["dashboard", "handoff", "roadmap"] as const) {
+    runRuntimeMemoryAttributionPhase({
+      attribution: input.memoryAttribution,
+      phase: `render_${view}`,
+      run: () => core.render(candidateRoot, view, { write: true }),
+    });
+  }
+  runRuntimeMemoryAttributionPhase({
+    attribution: input.memoryAttribution,
+    phase: "write_index",
+    run: () => core.writeIndex(candidateRoot),
+  });
+}
+async function exactSnapshot(
+  input: EffectInput,
+  core: ProjectLedgerCore,
+  projectId: string,
+) {
   return runRuntimeMemoryAttributionAsyncPhase({
     attribution: input.memoryAttribution,
-    phase: "work_update",
-    run: () => applyProjectLedgerRecordUpdatesInternal(input),
-  });
-}
-
-async function applyProjectLedgerRecordUpdatesInternal(input: {
-  butlerData: string;
-  projectRoot: string;
-  effectKey: string;
-  updates: ProjectLedgerRecordUpdate[];
-  memoryAttribution?: RuntimeMemoryAttributionPort;
-}): Promise<ProjectLedgerEffectResult> {
-  if (input.updates.length === 0) {
-    throw new Error("Project Ledger effect requires at least one record update");
-  }
-  const core = await loadProjectLedgerCore();
-  const updatesSha256 = digest(stableJson(input.updates));
-  const { root, occurrenceId, occurrencePath } = effectPaths(input);
-  const occurrence = loadOccurrence(occurrencePath);
-  if (occurrence && occurrence.updatesSha256 !== updatesSha256) {
-    throw new ProjectLedgerEffectConflictError(input.effectKey);
-  }
-  if (occurrence?.status === "observed" && occurrence.result) return occurrence.result;
-  const publicationId = occurrence?.publicationId ?? digest(stableJson({
-    schema: "butler.btcc-project-ledger-effect-publication.v1",
-    occurrenceId,
-    updatesSha256,
-  }));
-  const candidateRoot = join(root, "candidates", publicationId);
-  const journalPath = join(root, "journals", `${publicationId}.json`);
-  const existing = loadJournal(journalPath);
-  const expectedBase = existing?.base ?? await runRuntimeMemoryAttributionAsyncPhase({
-    attribution: input.memoryAttribution,
     phase: "observe_base",
-    run: () => runRuntimeMemoryAttributionAsyncPhase({
-      attribution: input.memoryAttribution,
-      phase: "source_head",
-      run: () => observeProjectLedgerHead(input.projectRoot),
-    }),
-  });
-  const transaction = {
-    publicationId,
-    canonicalRoot: input.projectRoot,
-    candidateRoot,
-    journalPath,
-    expectedBase,
-  };
-  const prepared = runRuntimeMemoryAttributionPhase({
-    attribution: input.memoryAttribution,
-    phase: "prepare",
-    run: () => preparedPublication(existing)
-      ? core.loadPreparedProjectLedgerPublication(transaction) as ProjectLedgerCorePublication
-      : core.prepareProjectLedgerPublication({
-          ...transaction,
-          materialize(projectRoot: string) {
-            runRuntimeMemoryAttributionPhase({
-              attribution: input.memoryAttribution,
-              phase: "materialize",
-              run: () => {
-                for (const update of input.updates) {
-                  applyProjectLedgerRecordUpdate(core, projectRoot, update);
-                }
-              },
-            });
-            for (const view of ["dashboard", "handoff", "roadmap"] as const) {
-              runRuntimeMemoryAttributionPhase({
-                attribution: input.memoryAttribution,
-                phase: `render_${view}`,
-                run: () => core.render(projectRoot, view, { write: true }),
-              });
-            }
-            runRuntimeMemoryAttributionPhase({
-              attribution: input.memoryAttribution,
-              phase: "write_index",
-              run: () => core.writeIndex(projectRoot),
-            });
-          },
-        }) as ProjectLedgerCorePublication,
-  });
-  writeJsonFileAtomic(occurrencePath, {
-    schema: "butler.btcc-project-ledger-effect-occurrence.v1",
-    effectKey: input.effectKey,
-    updatesSha256,
-    publicationId,
-    status: "pending",
-  } satisfies EffectOccurrence);
-  const promotion = runRuntimeMemoryAttributionPhase({
-    attribution: input.memoryAttribution,
-    phase: "promote",
-    run: () => core.promoteProjectLedgerPublication(prepared, exchangeCompleteRoots),
-  });
-  const observation = runRuntimeMemoryAttributionPhase({
-    attribution: input.memoryAttribution,
-    phase: "observe_promotion",
-    run: () => core.observeProjectLedgerPromotion(prepared),
-  });
-  const result: ProjectLedgerEffectResult = {
-    schema: "butler.btcc-project-ledger-effect-result.v1",
-    publicationId,
-    effectKey: input.effectKey,
-    updatedRecords: input.updates.map(({ id, kind }) => ({ id, ...(kind ? { kind } : {}) })),
-    baseHead: prepared.base,
-    currentHead: await runRuntimeMemoryAttributionAsyncPhase({
-      attribution: input.memoryAttribution,
-      phase: "observe_current_head",
-      run: () => runRuntimeMemoryAttributionAsyncPhase({
-        attribution: input.memoryAttribution,
-        phase: "source_head",
-        run: () => observeProjectLedgerHead(input.projectRoot),
+    run: () =>
+      captureExactPublicationAttempt({
+        core,
+        projectRoot: input.projectRoot,
+        projectId,
+        updates: input.updates,
       }),
-    }),
-    promotion,
-    observation,
-  };
-  writeJsonFileAtomic(occurrencePath, {
-    schema: "butler.btcc-project-ledger-effect-occurrence.v1",
-    effectKey: input.effectKey,
-    updatesSha256,
-    publicationId,
-    status: "observed",
-    result,
-  } satisfies EffectOccurrence);
-  return result;
+  });
+}
+async function admitNextAttempt(
+  input: EffectInput,
+  core: ProjectLedgerCore,
+  occurrence: ProjectLedgerEffectOccurrence,
+  projectId: string,
+  requestSha256: string,
+): Promise<ProjectLedgerEffectOccurrence> {
+  const snapshot = await exactSnapshot(input, core, projectId);
+  return appendProjectLedgerEffectAttempt({
+    butlerData: input.butlerData,
+    ledgerProjectId: projectId,
+    ledgerRoot: occurrence.ledgerRoot,
+    operationIdentity: occurrence.operationIdentity,
+    requestSha256,
+    afterAttemptNumber: occurrence.attempts.at(-1)!.number,
+    expectedBase: snapshot.expectedBase,
+    targetPreconditions: snapshot.targetPreconditions,
+  });
 }
 
-export async function reconcileProjectLedgerRecordUpdates(input: {
-  butlerData: string;
-  projectRoot: string;
-  effectKey: string;
-  updates: ProjectLedgerRecordUpdate[];
-  memoryAttribution?: RuntimeMemoryAttributionPort;
-}): Promise<ProjectLedgerEffectReconciliation> {
-  const { occurrencePath } = effectPaths(input);
-  const occurrence = loadOccurrence(occurrencePath);
-  if (!occurrence) return { status: "not_applied" };
-  const updatesSha256 = digest(stableJson(input.updates));
-  if (occurrence.updatesSha256 !== updatesSha256) {
-    return {
-      status: "uncertain",
-      message: "The stored Project Ledger effect occurrence has different content.",
-    };
-  }
-  if (occurrence.status === "observed" && occurrence.result) {
-    return { status: "applied", result: occurrence.result };
-  }
-  try {
-    return {
-      status: "applied",
-      result: await applyProjectLedgerRecordUpdates(input),
-    };
-  } catch (error) {
-    return {
-      status: "uncertain",
-      message: error instanceof Error
-        ? error.message
-        : "The Project Ledger effect could not be reconciled safely.",
-    };
-  }
-}
-
-function effectPaths(input: {
-  butlerData: string;
-  projectRoot: string;
-  effectKey: string;
-}): { root: string; occurrenceId: string; occurrencePath: string } {
-  const occurrenceId = digest(stableJson({
-    schema: "butler.btcc-project-ledger-effect.v1",
-    projectRoot: input.projectRoot,
-    effectKey: input.effectKey,
-  }));
-  const root = join(input.butlerData, "runtime", "btcc-project-ledger-effects");
+async function effectResult(
+  input: EffectInput,
+  evidence: AppliedPublicationEvidence,
+  ledgerRoot: string,
+): Promise<ProjectLedgerEffectResult> {
+  const current = await runRuntimeMemoryAttributionAsyncPhase({
+    attribution: input.memoryAttribution,
+    phase: "observe_current_head",
+    run: () => attributedHead(input, ledgerRoot),
+  });
   return {
-    root,
-    occurrenceId,
-    occurrencePath: join(root, "occurrences", `${occurrenceId}.json`),
+    schema: "butler.btcc-project-ledger-effect-result.v1",
+    publicationId: evidence.publicationId,
+    effectKey: input.effectKey,
+    updatedRecords: input.updates.map(({ id, kind }) => ({
+      id,
+      ...(kind ? { kind } : {}),
+    })),
+    baseHead: publicHead(evidence.baseHead),
+    currentHead: publicHead(current),
+    promotion: { status: evidence.promotionStatus },
+    observation: { status: evidence.observationStatus },
   };
 }
 
-function loadJournal(path: string): (ProjectLedgerCorePublication & { status: string }) | null {
-  if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as
-    ProjectLedgerCorePublication & { status: string };
+function publicHead(head: ProjectLedgerHead): PublicProjectLedgerHead {
+  const { projectRoot: _privatePath, ...safe } = head;
+  return safe;
 }
 
-function loadOccurrence(path: string): EffectOccurrence | null {
-  if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as EffectOccurrence;
-}
-
-function preparedPublication(journal: { status: string } | null): boolean {
-  return Boolean(journal && ["prepared", "committing", "promoted", "observed"]
-    .includes(journal.status));
+async function attributedHead(
+  input: EffectInput,
+  projectRoot: string,
+): Promise<ProjectLedgerHead> {
+  return runRuntimeMemoryAttributionAsyncPhase({
+    attribution: input.memoryAttribution,
+    phase: "source_head",
+    run: () => observeProjectLedgerHead(projectRoot),
+  });
 }
 
 function stableJson(value: unknown): string {
@@ -264,11 +320,27 @@ function stableJson(value: unknown): string {
 function sort(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sort);
   if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => [key, sort(item)]));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, sort(item)]),
+  );
 }
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+class ProjectLedgerEffectNotAppliedError extends Error {
+  readonly code = "project_ledger_effect_not_applied";
+  constructor() {
+    super("The Project Ledger publication was not applied.");
+  }
+}
+
+class ProjectLedgerEffectUncertainError extends Error {
+  readonly code = "project_ledger_effect_uncertain";
+  constructor() {
+    super(SAFE_UNCERTAIN_MESSAGE);
+  }
 }

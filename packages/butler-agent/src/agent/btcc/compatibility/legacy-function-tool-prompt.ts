@@ -12,7 +12,6 @@ import {
   finalEnvelopeRetryInstructions,
   finalNoToolInstructions,
 } from "../../../integrations/providers/shared/tools.ts";
-import { toolBatchCompletedHandoffText } from "../agent-loop/tool-batch-handoff.ts";
 import {
   extractLocalFinalEnvelopeText,
   localChatUrl,
@@ -98,13 +97,6 @@ export async function runLegacyFunctionToolPromptText(
     resolveTools,
     resolveToolChoice: () => requiredToolRepairNames ? "required" : options.toolChoice ?? "auto",
     modelRound,
-    maxIterations: options.maxToolRounds,
-    onExecutionWindowBoundary: options.onExecutionWindowBoundary
-      ? ({ windowIndex, iteration }) => options.onExecutionWindowBoundary!({
-          windowIndex,
-          iteration,
-        })
-      : undefined,
     onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
       if (localModel && toolCalls.every((call) => call.origin !== "text")) {
         requiredToolRepairNames = null;
@@ -141,13 +133,15 @@ export async function runLegacyFunctionToolPromptText(
       providerCallId: call.id,
       signal: call.signal,
     }),
-    finalTextFromToolResult: options.finalTextFromToolResult
+    outcomeFromToolResult: options.finalTextFromToolResult
       ? ({ toolCall, toolResult }) => toolResult.ok
-        ? options.finalTextFromToolResult!({
+        ? Promise.resolve(options.finalTextFromToolResult!({
             name: toolCall.name,
             args: toolCall.arguments,
             output: toolResult.output,
-          })
+          })).then((text) => text?.trim()
+            ? { kind: "reply" as const, text }
+            : null)
         : null
       : undefined,
     reviewFinalCandidate: options.reviewFinalCandidate
@@ -156,9 +150,6 @@ export async function runLegacyFunctionToolPromptText(
           roundIndex: iteration,
         })
       : undefined,
-    onLoopLimit: ({ toolResults }) => options.handoffAfterToolBatch && toolResults.length > 0
-      ? toolBatchCompletedHandoffText()
-      : "",
     finalSynthesis,
   });
   if (!result.finalText.trim()) throw new Error("Runtime finished without a text result");

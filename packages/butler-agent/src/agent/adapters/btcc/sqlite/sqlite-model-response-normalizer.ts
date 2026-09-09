@@ -5,6 +5,7 @@ import type {
 } from "../../../btcc/ports/index.ts";
 import { parseDeliveredThroughOrdinal } from
   "../../../btcc/ports/index.ts";
+import { parseProjectionIdentity } from "../../../btcc/model-route/context-projection-rebase.ts";
 
 /**
  * Acceptance replay is deliberately limited to the normalized response
@@ -94,23 +95,11 @@ function normalizeToolSurfaceDigest(value: unknown): string {
 }
 
 function normalizeContextProjection(value: unknown): Record<string, unknown> {
-  if (!isRecord(value)) {
+  try {
+    return { ...parseProjectionIdentity(value) };
+  } catch {
     throw new Error("BTCC bounded continuation has invalid context projection");
   }
-  const allowed = new Set([
-    "schemaVersion", "projectionRevision", "projectionDigest", "projectedThroughOrdinal",
-  ]);
-  if (Object.keys(value).some((key) => !allowed.has(key)) ||
-      value.schemaVersion !== "butler.context-projection-rebase.v1" ||
-      value.projectionRevision !== "butler.phase-continuity-projection.v1" ||
-      typeof value.projectionDigest !== "string" ||
-      !/^[a-f0-9]{64}$/u.test(value.projectionDigest) ||
-      !Number.isSafeInteger(value.projectedThroughOrdinal) ||
-      Number(value.projectedThroughOrdinal) < 0 ||
-      Number(value.projectedThroughOrdinal) > 1_000_000) {
-    throw new Error("BTCC bounded continuation has invalid context projection");
-  }
-  return { ...value };
 }
 
 function normalizeProviderRouteCacheIdentity(value: unknown): Record<string, unknown> {

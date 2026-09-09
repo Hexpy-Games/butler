@@ -8,6 +8,8 @@ import type {
 import type { KeyboardEventLike } from "./composerEventTypes";
 import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
+import { useComposerStore } from "../composerStore";
+import { readLocalComposerDraft, writeCachedComposerDraft } from "@/app/composerDraftCache";
 
 interface UseComposerSubmitProps {
   text: string;
@@ -55,11 +57,13 @@ export function useComposerSubmit({
       ) {
         return;
       }
-      setText("");
-      setAttachments([]);
+      const submitted = useComposerStore.getState();
+      const revision = submitted.draftRevision;
+      const sessionId = submitted.draftSessionId;
+      const contentParts = submitted.contentParts;
       setModelMenuOpen(false);
       setAccessMenuOpen(false);
-      onSend(value, composerControlsForSubmit({
+      onSend(contentParts ? text : value, { ...composerControlsForSubmit({
         model,
         reasoning,
         accessMode,
@@ -67,7 +71,20 @@ export function useComposerSubmit({
         controlsTouched,
         activeTurn,
         attachments,
-      }));
+      }), contentParts, onAccepted: () => {
+        const current = useComposerStore.getState();
+        if (current.draftSessionId === sessionId && current.draftRevision === revision) {
+          setText("");
+          if (current.attachments === attachments) setAttachments([]);
+        } else if (current.draftSessionId !== sessionId) {
+          // Session creation changes the active ID before the send is acknowledged.
+          // Only clear the submitted cache, never the newly active editor.
+          const cached = readLocalComposerDraft(sessionId);
+          if (cached?.text === text && JSON.stringify(cached.content_parts) === JSON.stringify(contentParts)) {
+            writeCachedComposerDraft(sessionId, "");
+          }
+        }
+      } });
     },
     [
       text,

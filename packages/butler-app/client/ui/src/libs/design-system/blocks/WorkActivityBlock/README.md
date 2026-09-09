@@ -25,6 +25,11 @@ rebuild typography, spacing, or row styles per activity type.
 The product container maps domain rows into `title`, `description`, `running`,
 and `tools`. The block owns the visual structure.
 
+Tool items may supply `after` for always-visible related content at the bottom
+of the group. Collapsed order is button then related content; expanded order is
+button, ordered operation rows, then related content, without duplication.
+Product state is injected through this slot, never read by DS.
+
 ## Who Can Use This Component
 
 Any Butler client agent or developer rendering conversation work state.

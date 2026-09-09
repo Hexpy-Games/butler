@@ -2,9 +2,15 @@ export {
   createSubsessionDelegationService,
 } from "./service.ts";
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
+export { createWorkerProfileReader } from "./worker-profile.ts";
+export { resolveSubsessionAuthorityOwner } from "./authority-owner.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
-export { ensureSubsessionChildRootWork, stewardSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
-export { subsessionResultId, subsessionRootWorkId } from "./identities.ts";
+export { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "./agent-hook.ts";
+export {
+  stewardResumeRequestId,
+  subsessionResultId,
+  subsessionRootWorkId,
+} from "./identities.ts";
 export {
   normalizeSubsessionAllowedToolsAndEffects,
   normalizeSubsessionMutationScope,
@@ -19,12 +25,15 @@ export type {
   DelegationPacket,
   DelegationRequest,
   ParentInputSink,
+  ReviewedDelegationPlan,
+  ReviewedWorkerDelegationRequest,
   SessionRelation,
   StewardResultEnvelope,
   StewardResultCode,
   StewardResultStatus,
   StewardDirection,
   SubsessionDelegationDependencies,
+  SubsessionDispatchIntent,
   SubsessionDelegationService,
   SubsessionDelegationStore,
 } from "./contracts.ts";

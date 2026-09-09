@@ -1,4 +1,5 @@
 import { homedir } from "os";
+import { formatInterfaceText, getAppCopy } from "../../../../../butler-i18n/src/index.ts";
 import { basename } from "path";
 import { sanitizePublicText } from "../../events/public-text.ts";
 import type { ToolProgressSummary } from "../../tools/tool-support.ts";
@@ -28,12 +29,12 @@ export function safeToolDetailRows(
     const value = key.includes("path") || key === "target"
       ? safePathishValue(args[key], key)
       : key === "command" || key === "cmd"
-        ? "명령 세부정보 숨김"
+        ? ""
         : safeTextValue(args[key], key);
     if (!value) continue;
     rows.push({
       id: `${name}-${key}`,
-      kind: key,
+      kind: `argument_${key}`,
       safe_label: labelFromToolArgumentKey(key),
       safe_value: value,
       state: "running",
@@ -43,11 +44,7 @@ export function safeToolDetailRows(
 }
 
 function labelFromToolArgumentKey(key: string): string {
-  if (key === "cmd" || key === "command") return "Command";
-  if (key === "file_path" || key === "path") return "Path";
-  if (key === "objective") return "Objective";
-  if (key === "query" || key === "pattern") return "Query";
-  return key;
+  return getAppCopy().guided.argumentLabels[key] ?? key;
 }
 
 export function safePathishValue(value: unknown, fallback: string): string {
@@ -69,6 +66,15 @@ export function safeFileActionLabel(
   name: "edit_file" | "write_file" | "read_file",
   args: Record<string, unknown>,
 ): string {
+  const fileName = safeFileActionTarget(name, args);
+  if (!fileName) return "";
+  return formatInterfaceText({ key: "toolTitle", parameters: { toolName: name, target: fileName } }, "en-US");
+}
+
+export function safeFileActionTarget(
+  name: "edit_file" | "write_file" | "read_file",
+  args: Record<string, unknown>,
+): string {
   const firstRequest = name === "read_file" && Array.isArray(args.requests)
     ? args.requests.find((value) => value !== null && typeof value === "object") as
       Record<string, unknown> | undefined
@@ -78,13 +84,7 @@ export function safeFileActionLabel(
     "",
   );
   const fileName = basename(path) || path;
-  if (!fileName) return "";
-  const action = name === "edit_file"
-    ? "수정"
-    : name === "write_file"
-      ? "작성"
-      : "읽기";
-  return `${action}: ${fileName}`;
+  return fileName;
 }
 
 export function safeCommandActionIdentity(args: Record<string, unknown>): string {
@@ -100,17 +100,17 @@ function safeCommandIntentDetails(
 ): ToolProgressSummary["detailRows"] {
   const rows: ToolProgressSummary["detailRows"] = [{
     id: `${name}-intent`,
-    kind: "command_intent",
-    safe_label: "Command",
+    kind: "argument_command_intent",
+    safe_label: labelFromToolArgumentKey("command_intent"),
     safe_value: safeCommandActionLabel(args),
     state: "running",
   }];
   if (Array.isArray(args.output_paths) && args.output_paths.length > 0) {
     rows.push({
       id: `${name}-outputs`,
-      kind: "output_count",
-      safe_label: "Outputs",
-      safe_value: `${args.output_paths.length}개`,
+      kind: "argument_output_count",
+      safe_label: labelFromToolArgumentKey("output_count"),
+      safe_value: String(args.output_paths.length),
       state: "running",
     });
   }

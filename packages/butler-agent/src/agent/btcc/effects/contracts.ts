@@ -40,6 +40,14 @@ export type GuidedEffectReceipt<TResult = unknown> = {
   sanitizedTarget: string;
   result: TResult;
   appliedAt: string;
+  dispatchAttempt?: number;
+};
+
+export type GuidedEffectUncertainEvidence = {
+  effectId: string;
+  identitySha256: string;
+  dispatchAttempt: number;
+  errorCode: GuidedEffectError["code"];
 };
 
 export type GuidedEffectOutcome<TResult = unknown> =
@@ -52,8 +60,19 @@ export type GuidedEffectOutcome<TResult = unknown> =
     }
   | {
       ok: false;
-      status: "rejected" | "failed" | "uncertain";
+      status: "rejected";
       error: GuidedEffectError;
+    }
+  | {
+      ok: false;
+      status: "failed";
+      error: GuidedEffectError;
+    }
+  | {
+      ok: false;
+      status: "uncertain";
+      error: GuidedEffectError;
+      evidence?: GuidedEffectUncertainEvidence;
     };
 
 export type EffectAdapterError = {

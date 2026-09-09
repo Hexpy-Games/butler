@@ -12,11 +12,18 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { migrateBtccSchema } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 
 test("six-stage Work persists Validation bindings and replay without duplicate rows", async () => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ));
   const journal = new SqliteGuidedToolJournal(db);
   const scope = insertTurn(db, "turn-six-stage", "session-six-stage");
   try {
@@ -221,8 +228,10 @@ test("R3-11 constraints migrate without rewriting completed Work history", async
     .find((column) => column.name === "runtime_owned_open"))
     .toMatchObject({ dflt_value: "0" });
 
-  const legacy = await new SqliteGuidedWorkStore(db)
-    .boundWorkForTurn("legacy-turn");
+  const legacy = await new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ).boundWorkForTurn("legacy-turn");
   expect(legacy).toMatchObject({
     status: "completed",
     currentStage: "reporting",

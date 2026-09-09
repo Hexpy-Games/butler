@@ -29,6 +29,7 @@ import {
 } from "./message-file-records.ts";
 import { messageFileRefFromRow } from "../sessions/message-read-model.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
+import { isPdfAttachment, preparePdfAttachment } from "../../../../agent/context/pdf-attachment.ts";
 import {
   admitVisualImageRequest,
   assertVisualCarrierMatchesCatalog,
@@ -109,6 +110,13 @@ export class AppMessageFileStore {
       file: messageFileRefFromRow(row),
       bytes: readFileSync(resolve(this.root(), row.storage_name)),
     };
+  }
+
+  async prepareUploadedContent(fileId: string): Promise<void> {
+    const row = this.row(fileId);
+    if (row && isPdfAttachment(row.mime_type, row.safe_name)) {
+      await preparePdfAttachment(resolve(this.root(), row.storage_name));
+    }
   }
 
   row(fileId: string): MessageFileRow | null {

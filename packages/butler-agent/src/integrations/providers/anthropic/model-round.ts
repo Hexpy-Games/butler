@@ -32,12 +32,13 @@ export async function runAnthropicModelRound(
     run: async (context) => await createAnthropicMessage(config, {
       ...(request.instructions?.trim() ? { system: request.instructions.trim() } : {}),
       ...anthropicReasoningParams(config, request.reasoningEffort),
+      ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),
       messages: anthropicModelRoundMessages(request),
       ...(request.tools.length > 0
         ? { tools: anthropicTools(request.tools.map(modelRoundTool)) }
         : {}),
       ...(request.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
-    }, request.signal, context, request.providerRetryAttempts),
+    }, request.signal, { ...context, admitProviderBody: request.boundedContinuation?.admitProviderBody }, request.providerRetryAttempts),
     usage: anthropicUsageSample,
   });
   const content = Array.isArray(response.content) ? response.content : [];

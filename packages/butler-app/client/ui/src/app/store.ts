@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { chromeEnvironment } from "./chromeEnvironment.ts";
 import {
   currentAdaptiveMode,
   normalizeAdaptivePanelState,
@@ -49,6 +50,10 @@ import {
 } from "./panelSizing.ts";
 import type {
   AppView,
+  AuthorityDecisionTransportView,
+  AuthorityApprovalCard,
+  AuthorityApprovalProjection,
+  AuthorityRequestsTransportView,
   CommandPaletteResult,
   ComposerControls,
   MessageListView,
@@ -56,6 +61,8 @@ import type {
   ModelCatalogView,
   ModelCatalogState,
   NavigationView,
+  PlanDecisionAction,
+  PlanDecisionResultView,
   ProjectDashboardDocument,
   ProjectSummary,
   QueuedMessageRecord,
@@ -128,6 +135,8 @@ interface ButlerStore {
   sessionView: SessionView | null;
   sessionViews: Record<string, SessionView>;
   observerSessionId: string | null;
+  observerTargetTurnId: string | null;
+  observerHistory: Array<{ sessionId: string; targetTurnId: string | null }>;
   messageLoadPending: boolean;
   optimisticSessionStart: OptimisticSessionStart | null;
   pendingProjectDocumentAttachment: {
@@ -138,6 +147,7 @@ interface ButlerStore {
   summary: SessionSummaryView | null;
   turnProgress: Record<string, TurnProgressSnapshot>;
   sessionQueue: QueuedMessageRecord[];
+  authorityApprovals: AuthorityApprovalProjection | null;
   settings: SettingsView;
   modelCatalog: ModelCatalogView;
   modelCatalogState: ModelCatalogState;
@@ -149,6 +159,7 @@ interface ButlerStore {
   creatingProject: boolean;
   projectCreateDialogOpen: boolean;
   commandOpen: boolean;
+  liveConnectionLost: boolean;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
   setLeftOpen: (value: Updater<boolean>) => void;
@@ -174,7 +185,8 @@ interface ButlerStore {
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
-  openSessionObserver: (sessionId: string) => void;
+  openSessionObserver: (sessionId: string, targetTurnId?: string) => void;
+  goBackSessionObserver: () => void;
   closeSessionObserver: () => void;
   setSummary: (summary: Updater<SessionSummaryView | null>) => void;
   setTurnProgress: (
@@ -208,10 +220,33 @@ interface ButlerStore {
   ) => Promise<boolean>;
   refreshSessionObserver: (sessionId?: string) => Promise<boolean>;
   cancelObservedSteward: (relationId: string) => Promise<boolean>;
+  resumeObservedSteward: (relationId: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
+  submitPlanDecision: (
+    sessionId: string,
+    planId: string,
+    action: PlanDecisionAction,
+    instruction?: string,
+  ) => Promise<PlanDecisionResultView | null>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
   refreshSessionQueue: (chatId?: string) => Promise<void>;
+  refreshAuthorityApprovals: (sessionId?: string) => Promise<boolean>;
+  allowAuthorityRequest: (
+    requestRef: string,
+    sessionId?: string,
+    scope?: "once" | "conversation",
+  ) => Promise<boolean>;
+  revokeConversationPermission: (grantRef: string, sessionId?: string) => Promise<boolean>;
+  denyAuthorityRequest: (
+    requestRef: string,
+    sessionId?: string,
+  ) => Promise<boolean>;
+  modifyAuthorityRequest: (
+    requestRef: string,
+    alternative: string,
+    sessionId?: string,
+  ) => Promise<boolean>;
   queueMessage: (text: string, controls?: ComposerControls) => Promise<void>;
   updateQueuedMessage: (
     queuedMessageId: string,
@@ -270,6 +305,7 @@ function messageRecordsEqual(
       message.status === other.status &&
       message.turn_id === other.turn_id &&
       message.text === other.text &&
+      structurallyEqual(message.content_parts, other.content_parts) &&
       message.delivery_state === other.delivery_state &&
       structurallyEqual(message.limitation_codes ?? [], other.limitation_codes ?? []) &&
       structurallyEqual(message.limitations ?? [], other.limitations ?? []) &&
@@ -568,6 +604,7 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
   };
   return {
     session_id: view.session_id,
+    branch_seed: view.branch_seed,
     turn_state: view.latest_turn?.state ?? "idle",
     latest_progress: latestProgress,
     latest_turn_cancellable: view.latest_turn?.cancellable,
@@ -649,6 +686,105 @@ function isNonTerminalTurnState(state: string): boolean {
       "completed",
       "idle",
     ].includes(state)
+  );
+}
+
+const EMPTY_AUTHORITY_APPROVAL_CARDS: AuthorityApprovalCard[] = [];
+
+/**
+ * Narrow the durable authority projection fail-closed: only records whose
+ * every renderable field has the exact expected type become UI cards, and
+ * response order is preserved unchanged. Raw records are never spread into
+ * the public shape.
+ */
+function normalizeAuthorityApprovals(
+  view: AuthorityRequestsTransportView,
+): AuthorityApprovalCard[] {
+  if (!Array.isArray(view.requests)) return EMPTY_AUTHORITY_APPROVAL_CARDS;
+  const cards: AuthorityApprovalCard[] = [];
+  for (const entry of view.requests) {
+    const card = normalizeAuthorityApprovalCard(entry);
+    if (card) cards.push(card);
+  }
+  return cards;
+}
+
+function normalizeAuthorityApprovalCard(
+  entry: unknown,
+): AuthorityApprovalCard | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const record = entry as Record<string, unknown>;
+  if (typeof record.request_ref !== "string" || !record.request_ref.trim()) {
+    return null;
+  }
+  if (record.category !== "command" && record.category !== "reviewed_effect") return null;
+  if (typeof record.reason !== "string" || !record.reason.trim()) return null;
+  if (typeof record.executable !== "string" || !record.executable.trim()) {
+    return null;
+  }
+  if (
+    typeof record.command_count !== "number" ||
+    !Number.isSafeInteger(record.command_count) ||
+    record.command_count < 1
+  ) {
+    return null;
+  }
+  return {
+    requestRef: record.request_ref,
+    category: record.category,
+    reason: record.reason,
+    executable: record.executable,
+    commandCount: record.command_count,
+    ...(record.scope && typeof record.scope === "object" && "title" in record.scope && "description" in record.scope &&
+      typeof record.scope.title === "string" && typeof record.scope.description === "string"
+      ? { scope: { title: record.scope.title, description: record.scope.description } } : {}),
+    ...(typeof record.source_turn_id === "string" ? { sourceTurnId: record.source_turn_id } : {}),
+    ...(typeof record.source_call_id === "string" ? { sourceCallId: record.source_call_id } : {}),
+    ...(typeof record.source_session_id === "string" ? { sourceSessionId: record.source_session_id } : {}),
+  };
+}
+
+type AuthorityDecisionKind = "allowed" | "denied" | "modified";
+type AuthorityDecisionAction = "allow" | "deny" | "modify";
+
+function isAcceptedAuthorityDecisionResponse(
+  view: AuthorityDecisionTransportView,
+  requestRef: string,
+  decision: AuthorityDecisionKind,
+): boolean {
+  return (
+    view.request_ref === requestRef &&
+    view.decision === decision &&
+    typeof view.scheduled === "boolean"
+  );
+}
+
+function normalizedAuthorityAlternative(value: string): string | null {
+  return value.trim() ? value : null;
+}
+
+async function submitAuthorityDecision(input: {
+  action: AuthorityDecisionAction;
+  scope?: "once" | "conversation";
+  alternative?: string;
+  decision: AuthorityDecisionKind;
+  requestRef: string;
+  sessionId: string;
+}): Promise<boolean> {
+  const view = await api<AuthorityDecisionTransportView>(
+    `/authority-requests/${encodeURIComponent(input.requestRef)}/${input.action}?session_id=${encodeURIComponent(input.sessionId)}`,
+    {
+      method: "POST",
+      ...(input.action === "allow" ? { body: JSON.stringify({ scope: input.scope ?? "once" }) } : {}),
+      ...(input.action === "modify"
+        ? { body: JSON.stringify({ alternative: input.alternative }) }
+        : {}),
+    },
+  );
+  return isAcceptedAuthorityDecisionResponse(
+    view,
+    input.requestRef,
+    input.decision,
   );
 }
 
@@ -738,6 +874,8 @@ function applySessionView(
 let activeSessionGeneration = 0;
 let nextSessionViewRequestToken = 0;
 const latestSessionViewRequestByChat = new Map<string, number>();
+let nextAuthorityApprovalRefreshToken = 0;
+const latestAuthorityApprovalRefreshBySession = new Map<string, number>();
 
 function beginSessionViewRequest(
   chatId: string,
@@ -778,6 +916,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sessionView: null,
   sessionViews: {},
   observerSessionId: null,
+  observerTargetTurnId: null,
+  observerHistory: [],
   messageLoadPending: false,
   optimisticSessionStart: null,
   pendingProjectDocumentAttachment: null,
@@ -785,6 +925,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   summary: null,
   turnProgress: {},
   sessionQueue: [],
+  authorityApprovals: null,
   settings: initialSettings,
   modelCatalog: EMPTY_MODEL_CATALOG,
   modelCatalogState: "loading",
@@ -796,6 +937,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   creatingProject: false,
   projectCreateDialogOpen: false,
   commandOpen: false,
+  liveConnectionLost: false,
   renameProject: null,
   renameSession: null,
 
@@ -804,7 +946,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const leftOpen = resolveUpdate(value, state.leftOpen);
       return leftOpen
         ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(),
+            mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "left",
             leftOpen,
             rightOpen: state.rightOpen,
@@ -816,7 +958,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const rightOpen = resolveUpdate(value, state.rightOpen);
       return rightOpen
         ? normalizeAdaptivePanelState({
-            mode: currentAdaptiveMode(),
+            mode: currentAdaptiveMode(chromeEnvironment()),
             requested: "right",
             leftOpen: state.leftOpen,
             rightOpen,
@@ -829,7 +971,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openArtifact: (artifactId, artifact) =>
     set((state) => ({
       ...normalizeAdaptivePanelState({
-        mode: currentAdaptiveMode(),
+        mode: currentAdaptiveMode(chromeEnvironment()),
         requested: "right",
         leftOpen: state.leftOpen,
         rightOpen: true,
@@ -860,7 +1002,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     })),
   hydrateUiState: (uiState) => {
     const panels = restoreAdaptivePanelState({
-      mode: currentAdaptiveMode(),
+      mode: currentAdaptiveMode(chromeEnvironment()),
       leftOpen: uiState.left_open,
       rightOpen: uiState.right_open,
     });
@@ -891,6 +1033,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     set({
       activeChatId,
       observerSessionId: null,
+      observerTargetTurnId: null,
+      observerHistory: [],
       selectedArtifactId: null,
       selectedArtifact: null,
     }),
@@ -937,10 +1081,24 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setMessageListView: (view) =>
     set((state) => applyMessageListView(state, view)),
   setSessionView: (view) => set((state) => applySessionView(state, view)),
-  openSessionObserver: (sessionId) => {
-    set({ observerSessionId: sessionId });
+  openSessionObserver: (sessionId, targetTurnId) => {
+    set((state) => ({
+      observerSessionId: sessionId,
+      observerTargetTurnId: targetTurnId ?? null,
+      observerHistory: state.observerSessionId && state.observerSessionId !== sessionId
+        ? [...state.observerHistory, { sessionId: state.observerSessionId, targetTurnId: state.observerTargetTurnId }]
+        : state.observerSessionId ? state.observerHistory : [],
+    }));
   },
-  closeSessionObserver: () => set({ observerSessionId: null }),
+  goBackSessionObserver: () => set((state) => {
+    const previous = state.observerHistory.at(-1);
+    return previous ? {
+      observerSessionId: previous.sessionId,
+      observerTargetTurnId: previous.targetTurnId,
+      observerHistory: state.observerHistory.slice(0, -1),
+    } : {};
+  }),
+  closeSessionObserver: () => set({ observerSessionId: null, observerTargetTurnId: null, observerHistory: [] }),
   setSummary: (summary) =>
     set((state) => {
       const resolvedSummary = resolveUpdate(summary, state.summary);
@@ -1056,11 +1214,15 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   openSession: (chatId) =>
     set((state) => {
       const sessionMessageViews = snapshotActiveSessionView(state);
+      const storedSessionView = state.sessionViews[chatId] ?? null;
+      const storedMessageView = storedSessionView
+        ? messageListViewFromSessionView(storedSessionView)
+        : null;
       const memoryView = sessionMessageViews[chatId];
       const cached =
         memoryView && messageListSyncCursor(memoryView) > 0
           ? memoryView
-          : readCachedMessageListSync(chatId);
+          : (storedMessageView ?? readCachedMessageListSync(chatId));
       const completeCached = cached && messageListSyncCursor(cached) > 0;
       const turnProgress = cached?.turn_progress ?? {};
       const nextSessionMessageViews = completeCached
@@ -1071,12 +1233,18 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
+          ? state.leftOpen : false,
         observerSessionId: null,
+        observerTargetTurnId: null,
+        observerHistory: [],
         view: { kind: "session" },
         selectedArtifactId: null,
         selectedArtifact: null,
-        summary: null,
-        sessionView: null,
+        summary: storedSessionView
+          ? summaryFromSessionView(storedSessionView)
+          : null,
+        sessionView: storedSessionView,
         sessionQueue: [],
         messages: completeCached
           ? freezeMessageWorkBlocks(cached.messages, turnProgress)
@@ -1084,7 +1252,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         turnProgress: completeCached ? turnProgress : {},
         sessionMessageViews: nextSessionMessageViews,
         messageLoadPending:
-          isServerBackedSessionId(chatId) && !completeCached,
+          isServerBackedSessionId(chatId) &&
+          !completeCached &&
+          !storedSessionView,
         status: state.status,
       };
     }),
@@ -1098,11 +1268,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   clearPendingProjectDocumentAttachment: () =>
     set({ pendingProjectDocumentAttachment: null }),
   openProjectDashboard: (projectId) =>
-    set({
+    set((state) => ({
       view: { kind: "project-dashboard", projectId },
+      leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
       selectedArtifactId: null,
       selectedArtifact: null,
-    }),
+    })),
 
   refreshNavigation: async (options) => {
     const requestGeneration = get().navigationGeneration;
@@ -1135,6 +1306,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (!isCurrentRequest()) return false;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
+      // The durable authority projection rides the existing session-view
+      // convergence. It must never fail or delay the canonical refresh.
+      void get().refreshAuthorityApprovals(chatId);
       return true;
     } catch {
       // Keep the last canonical snapshot visible on transient failures.
@@ -1171,7 +1345,24 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       await get().refreshSessionView(parentSessionId);
       return true;
     } catch (error) {
-      notifyError(error, "Steward stop failed", { id: `steward-stop-${relationId}` });
+      notifyError(error, appCopy.interfaceFeedback.stewardStopFailed, { id: `steward-stop-${relationId}` });
+      return false;
+    }
+  },
+
+  resumeObservedSteward: async (relationId) => {
+    const parentSessionId = get().activeChatId;
+    if (!isServerBackedSessionId(parentSessionId) || !relationId.trim()) return false;
+    try {
+      await api(`/steward-relations/${encodeURIComponent(relationId)}/resume`, {
+        method: "POST",
+        body: JSON.stringify({ parent_session_id: parentSessionId }),
+      });
+      await get().refreshSessionObserver();
+      await get().refreshSessionView(parentSessionId);
+      return true;
+    } catch (error) {
+      notifyError(error, appCopy.interfaceFeedback.stewardResumeFailed, { id: `steward-resume-${relationId}` });
       return false;
     }
   },
@@ -1231,6 +1422,57 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
+  submitPlanDecision: async (sessionId, planId, action, instruction) => {
+    const normalizedInstruction = instruction?.trim();
+    if (
+      !isServerBackedSessionId(sessionId) ||
+      !planId.trim() ||
+      (action === "instruct" && !normalizedInstruction)
+    ) {
+      return null;
+    }
+    try {
+      const data = await api<PlanDecisionResultView>(
+        `/sessions/${encodeURIComponent(sessionId)}/plan-decisions/${encodeURIComponent(planId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action,
+            ...(normalizedInstruction
+              ? { instruction: normalizedInstruction }
+              : {}),
+          }),
+        },
+      );
+      if (get().activeChatId === sessionId) {
+        const planDocument = {
+          id: data.plan_document.id,
+          title: data.plan_document.title,
+          status: data.plan_document.status ?? "",
+          markdown: data.plan_document.markdown,
+        };
+        set((state) => ({
+          messages: state.messages.map((message) =>
+            message.plan_document?.id === planId
+              ? { ...message, plan_document: planDocument }
+              : message,
+          ),
+          sessionQueue:
+            data.queued?.session_id === sessionId
+              ? data.queued.queued_messages
+              : state.sessionQueue,
+        }));
+        void get().refreshSessionView(sessionId);
+      }
+      return data;
+    } catch (error) {
+      notifyError(error, appCopy.interfaceFeedback.planDecisionFailed, {
+        id: `plan-decision-${sessionId}-${planId}`,
+      });
+      return null;
+    }
+  },
+
   refreshSessionQueue: async (chatId = get().activeChatId) => {
     if (!isServerBackedSessionId(chatId)) {
       if (get().activeChatId === chatId) set({ sessionQueue: [] });
@@ -1244,6 +1486,103 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ sessionQueue: data.queued_messages });
     } catch {
       if (get().activeChatId === chatId) set({ sessionQueue: [] });
+    }
+  },
+
+  refreshAuthorityApprovals: async (sessionId = get().activeChatId) => {
+    if (!isServerBackedSessionId(sessionId)) return false;
+    const requestToken = ++nextAuthorityApprovalRefreshToken;
+    latestAuthorityApprovalRefreshBySession.set(sessionId, requestToken);
+    try {
+      const data = await api<AuthorityRequestsTransportView & { permissions?: import("./types.ts").ConversationPermissionView[] }>(
+        `/authority-requests?session_id=${encodeURIComponent(sessionId)}`,
+      );
+      if (data.session_id !== sessionId) return false;
+      const cards = normalizeAuthorityApprovals(data);
+      // Only the latest refresh for the still-active session may project.
+      if (
+        latestAuthorityApprovalRefreshBySession.get(sessionId) !== requestToken ||
+        get().activeChatId !== sessionId
+      ) {
+        return false;
+      }
+      const next: AuthorityApprovalProjection = { sessionId, cards, permissions: data.permissions ?? [] };
+      // A transient fetch failure keeps the previous same-session projection.
+      if (structurallyEqual(get().authorityApprovals, next)) return true;
+      set({ authorityApprovals: next });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  allowAuthorityRequest: async (
+    requestRef,
+    sessionId = get().activeChatId,
+    scope = "once",
+  ) => {
+    if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "allow",
+        scope,
+        decision: "allowed",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
+    }
+  },
+
+  revokeConversationPermission: async (grantRef, sessionId = get().activeChatId) => {
+    try {
+      await api(`/authority-permissions/${encodeURIComponent(grantRef)}?session_id=${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch { return false; }
+  },
+
+  denyAuthorityRequest: async (
+    requestRef,
+    sessionId = get().activeChatId,
+  ) => {
+    if (!isServerBackedSessionId(sessionId) || !requestRef.trim()) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "deny",
+        decision: "denied",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
+    }
+  },
+
+  modifyAuthorityRequest: async (
+    requestRef,
+    alternative,
+    sessionId = get().activeChatId,
+  ) => {
+    const normalizedAlternative = normalizedAuthorityAlternative(alternative);
+    if (
+      !isServerBackedSessionId(sessionId) ||
+      !requestRef.trim() ||
+      !normalizedAlternative
+    ) return false;
+    try {
+      if (!await submitAuthorityDecision({
+        action: "modify",
+        alternative: normalizedAlternative,
+        decision: "modified",
+        requestRef,
+        sessionId,
+      })) return false;
+      return await get().refreshAuthorityApprovals(sessionId);
+    } catch {
+      return false;
     }
   },
 
@@ -1261,6 +1600,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           chat_id: targetChatId,
           text,
           model: controls.model,
+          content_parts: controls.contentParts,
           reasoning_effort: controls.reasoningEffort,
           access_mode: controls.accessMode,
           plan_mode: controls.planMode,
@@ -1275,8 +1615,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           status: { label: "ready", tone: "ok" },
         });
       }
+      controls.onAccepted?.();
     } catch (error) {
-      notifyError(error, "Message queue failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueFailed, {
         id: `queue-message-${targetChatId}`,
       });
     }
@@ -1293,6 +1634,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           body: JSON.stringify({
             text,
             model: controls.model,
+            content_parts: controls.contentParts,
             reasoning_effort: controls.reasoningEffort,
             access_mode: controls.accessMode,
             plan_mode: controls.planMode,
@@ -1304,8 +1646,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       );
       if (get().activeChatId === targetChatId)
         set({ sessionQueue: data.queued_messages });
+      controls.onAccepted?.();
     } catch (error) {
-      notifyError(error, "Queued message update failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueUpdateFailed, {
         id: `update-queued-message-${queuedMessageId}`,
       });
     }
@@ -1326,19 +1669,33 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (get().activeChatId === targetChatId)
         set({ sessionQueue: data.queued_messages });
     } catch (error) {
-      notifyError(error, "Queued message delete failed", {
+      notifyError(error, appCopy.interfaceFeedback.queueDeleteFailed, {
         id: `delete-queued-message-${queuedMessageId}`,
       });
     }
   },
 
   sendMessage: async (text, controls = {}) => {
-    const clientMessageId = browserRandomId("client");
+    const dashboardTarget = controls.dashboardTarget;
+    if (dashboardTarget?.sessionId) {
+      try {
+        const targets = await api<{ sessions: SessionSummary[] }>(`/project-sessions?project_id=${encodeURIComponent(dashboardTarget.projectId)}`);
+        const target = targets.sessions.find((session) => session.id === dashboardTarget.sessionId);
+        if (!target || target.project_id !== dashboardTarget.projectId || target.archived) throw new Error("Project conversation is unavailable.");
+      } catch (error) { notifyError(error, appCopy.interfaceFeedback.sendFailed); return; }
+    }
+    const dashboardIsVisible = () => {
+      const view = get().view;
+      return view.kind === "project-dashboard" && view.projectId === dashboardTarget?.projectId;
+    };
+    if (dashboardTarget && !dashboardIsVisible()) return;
+    const clientMessageId = dashboardTarget?.clientMessageId ?? browserRandomId("client");
     const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
     const attachments = controls.attachments ?? [];
-    const messageTitle = text.trim() || attachments[0]?.safe_name || "New chat";
+    const messageTitle = text.trim() || attachments[0]?.safe_name || appCopy.interfaceFeedback.newChat;
     const startedAt = new Date().toISOString();
-    const initialChatId = get().activeChatId;
+    const initialChatId = dashboardTarget ? dashboardTarget.sessionId ?? projectDraftId(dashboardTarget.projectId) : get().activeChatId;
+    if (dashboardTarget) set({ activeChatId: initialChatId, messages: [], summary: null, turnProgress: {}, sessionView: null, sessionQueue: [] });
     const sendOperationId = `send-${clientMessageId}`;
     const initialDraft = isDraftChatId(initialChatId)
       ? parseDraftChatId(initialChatId)
@@ -1365,7 +1722,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         tone: "muted",
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
-      view: optimisticStart ? { kind: "session" } : state.view,
+      view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
       selectedArtifactId: optimisticStart ? null : state.selectedArtifactId,
       selectedArtifact: optimisticStart ? null : state.selectedArtifact,
       navigation: optimisticStart
@@ -1379,6 +1736,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
               role: "user",
               text,
               attachments,
+              content_parts: controls.contentParts,
               status: "pending",
               retryable: false,
               cursor: 0.5,
@@ -1414,7 +1772,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             latest_turn_subsession_result: undefined,
             latest_progress: {
               turn_id: clientTurnId,
-              summary: "Thinking",
+              summary: appCopy.interfaceFeedback.thinking,
               state: "thinking",
               updated_at: startedAt,
               safe_progress_rows: [
@@ -1422,7 +1780,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
                   id: `thinking-${clientMessageId}`,
                   kind: "thinking",
                   state: "thinking",
-                  safe_label: "Thinking",
+                  safe_label: appCopy.interfaceFeedback.thinking,
                   created_at: startedAt,
                 },
               ],
@@ -1444,6 +1802,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
         const previousChatId = targetChatId;
         targetChatId = session.session.id;
+        dashboardTarget?.onSessionCreated?.(targetChatId);
         set((state) => ({
           activeChatId:
             state.activeChatId === previousChatId
@@ -1457,7 +1816,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ...state.sendingOperations,
             [sendOperationId]: targetChatId,
           },
-          view: { kind: "session" },
+          view: dashboardTarget ? state.view : { kind: "session" },
           selectedArtifactId: null,
           selectedArtifact: null,
           navigation: navigationReplacingOptimisticSession(
@@ -1496,6 +1855,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
               role: "user",
               text,
               attachments,
+              content_parts: controls.contentParts,
               status: "pending",
               retryable: false,
               cursor: optimisticCursor,
@@ -1514,8 +1874,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         method: "POST",
         body: JSON.stringify({
           chat_id: targetChatId,
+          ...(dashboardTarget ? { expected_project_id: dashboardTarget.projectId } : {}),
           text,
           client_message_id: clientMessageId,
+          content_parts: controls.contentParts,
           model: controls.model,
           reasoning_effort: controls.reasoningEffort,
           access_mode: controls.accessMode,
@@ -1527,7 +1889,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         }),
       });
       if (result.queued && !result.accepted) {
-        set((state) => ({
+        controls.onAccepted?.();
+        if (dashboardTarget && dashboardIsVisible() && get().activeChatId === targetChatId) set({ view: { kind: "session" } });
+        set((state) => state.activeChatId !== targetChatId ? state : ({
           messages: state.messages.filter(
             (message) => message.id !== clientMessageId,
           ),
@@ -1541,9 +1905,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         throw new Error("Message send returned no accepted message.");
       }
       const accepted = result.accepted;
+      controls.onAccepted?.();
+      if (dashboardTarget && dashboardIsVisible() && get().activeChatId === targetChatId) set({ view: { kind: "session" } });
       const replies = result.replies ?? (result.reply ? [result.reply] : []);
       const hasImmediateAssistantReply = replies.length > 0;
       set((state) => {
+        if (state.activeChatId !== targetChatId) return state;
         const mergedMessages = mergeMessages(
           state.messages.filter((message) => message.id !== clientMessageId),
           [accepted, ...replies],
@@ -1608,7 +1975,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ? null
             : state.optimisticSessionStart,
       }));
-      notifyError(error, "Message send failed", {
+      notifyError(error, appCopy.interfaceFeedback.sendFailed, {
         id: `send-message-${targetChatId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1650,7 +2017,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         return;
       }
       if (!refreshed) {
-        notifyError(new Error("Session view refresh failed."), "Stop failed", {
+        notifyError(new Error("Session view refresh failed."), appCopy.interfaceFeedback.stopFailed, {
           id: "turn-stop",
         });
         set({ status: { label: "ready", tone: "ok" } });
@@ -1704,7 +2071,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       });
     } catch (error) {
       if (get().activeChatId === activeChatId) {
-        notifyError(error, "Stop failed", { id: "turn-stop" });
+        notifyError(error, appCopy.interfaceFeedback.stopFailed, { id: "turn-stop" });
         set({ status: { label: "ready", tone: "ok" } });
       } else {
         settleStoppingStatus();
@@ -1730,7 +2097,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ messages: [], status: { label: "ready", tone: "ok" } });
       return true;
     } catch (error) {
-      notifyError(error, "Project creation failed", { id: "project-create" });
+      notifyError(error, appCopy.interfaceFeedback.projectCreationFailed, { id: "project-create" });
       set({ status: { label: "ready", tone: "ok" } });
       return false;
     } finally {
@@ -1742,9 +2109,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     if (!canSelectProjectFolder()) {
       notifyError(
         new Error(
-          "Project folder picker is only available in the desktop app.",
+          appCopy.interfaceFeedback.desktopFolderOnly,
         ),
-        "Project folder failed",
+        appCopy.interfaceFeedback.projectFolderFailed,
         {
           id: "project-folder-picker-unavailable",
         },
@@ -1778,7 +2145,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         set({ status: { label: "ready", tone: "ok" } });
         return;
       }
-      notifyError(error, "Project folder failed", { id: "project-folder" });
+      notifyError(error, appCopy.interfaceFeedback.projectFolderFailed, { id: "project-folder" });
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ creatingProject: false });
@@ -1801,8 +2168,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
       } else if (action === "delete") {
         if (
-          !window.confirm(
+          !await confirmAction(
             appCopy.sidebar.projectDeleteConfirm(project.display_name),
+            { title: appCopy.common.delete, confirmLabel: appCopy.common.delete, destructive: true },
           )
         )
           return;
@@ -1815,7 +2183,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       await get().refreshNavigation();
     } catch (error) {
-      notifyError(error, "Project action failed", {
+      notifyError(error, appCopy.interfaceFeedback.projectActionFailed, {
         id: `project-action-${project.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1835,7 +2203,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         if (get().activeChatId === session.id) get().openNewChat();
       }
     } catch (error) {
-      notifyError(error, "Session action failed", {
+      notifyError(error, appCopy.interfaceFeedback.sessionActionFailed, {
         id: `session-action-${session.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1856,7 +2224,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         status: { label: "project renamed", tone: "ok" },
       });
     } catch (error) {
-      notifyError(error, "Rename failed", {
+      notifyError(error, appCopy.interfaceFeedback.renameFailed, {
         id: `project-rename-${project.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1877,7 +2245,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         status: { label: "session renamed", tone: "ok" },
       });
     } catch (error) {
-      notifyError(error, "Rename failed", {
+      notifyError(error, appCopy.interfaceFeedback.renameFailed, {
         id: `session-rename-${session.id}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1912,7 +2280,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
       await get().reloadMessages(get().activeChatId);
-      notifyError(error, "Retry failed", { id: `turn-retry-${turnId}` });
+      notifyError(error, appCopy.interfaceFeedback.retryFailed, { id: `turn-retry-${turnId}` });
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ retryingTurnId: null });
@@ -1935,7 +2303,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
       await get().reloadMessages(get().activeChatId);
-      notifyError(error, "Retry with current settings failed", {
+      notifyError(error, appCopy.interfaceFeedback.retryCurrentFailed, {
         id: `turn-retry-current-${turnId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1962,7 +2330,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       await get().refreshSessionSummary(get().activeChatId);
     } catch (error) {
-      notifyError(error, "Worker control failed", {
+      notifyError(error, appCopy.interfaceFeedback.workerControlFailed, {
         id: `worker-control-${workerId}`,
       });
       set({ status: { label: "ready", tone: "ok" } });
@@ -1991,6 +2359,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
 useButlerStore.subscribe((state, previousState) => {
   if (state.activeChatId !== previousState.activeChatId) {
     activeSessionGeneration += 1;
+    // Session navigation/hydration re-projects the durable authority stack
+    // for the newly active server-backed session (no-op for draft ids).
+    void state.refreshAuthorityApprovals(state.activeChatId);
   }
 });
 
@@ -2006,3 +2377,9 @@ export const selectViewTitle = (state: ButlerStore) =>
   activeTitleForView(state.view, selectActiveChat(state));
 export const selectIsSettingsView = (state: ButlerStore) =>
   state.view.kind === "settings";
+/** Only the projection fetched for the active session id is renderable. */
+export const selectActiveAuthorityApprovals = (state: ButlerStore) =>
+  state.authorityApprovals?.sessionId === state.activeChatId
+    ? state.authorityApprovals.cards
+    : EMPTY_AUTHORITY_APPROVAL_CARDS;
+import { confirmAction } from "./confirmation.ts";

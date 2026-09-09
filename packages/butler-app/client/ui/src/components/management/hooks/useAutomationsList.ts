@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -16,7 +17,7 @@ export function useAutomationsList(reportStatus: (status: StatusPill) => void) {
         if (!cancelled) setAutomations(data.automations ?? []);
       } catch (error) {
         if (!cancelled) {
-          notifyError(error, "Automation load failed", {
+          notifyError(error, appCopy.interfacePanels.automationLoadFailed, {
             id: "automation-load",
           });
           reportStatus({ label: "ready", tone: "ok" });

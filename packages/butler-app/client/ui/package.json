@@ -4,10 +4,15 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --configLoader runner --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "lexical": "0.50.0",
+    "@lexical/react": "0.50.0",
+    "@lexical/plain-text": "0.50.0",
+    "@lexical/history": "0.50.0",
+    "@lexical/clipboard": "0.50.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

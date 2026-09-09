@@ -6,6 +6,7 @@ export type {
   BtccAgentLoopInput,
   BtccAgentLoopMessage,
   BtccAgentLoopOutput,
+  BtccAfterToolBatchDisposition,
   BtccFinalSynthesisOptions,
   BtccTextToolCallDisposition,
   BtccAgentLoopToolCall,

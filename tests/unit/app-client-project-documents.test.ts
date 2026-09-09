@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-  PLAN_BOARD_TABS,
+  planBoardTabs,
   planBoardType,
   planLane,
   projectDocumentBadgeLabel,
@@ -66,7 +66,7 @@ test("project dashboard maps specified work to the planned lane", () => {
 });
 
 test("project dashboard keeps top-level plans separate from work records", () => {
-  expect(PLAN_BOARD_TABS.map((tab) => tab.id)).toEqual([
+  expect(planBoardTabs().map((tab) => tab.id)).toEqual([
     "plan",
     "work",
     "task",

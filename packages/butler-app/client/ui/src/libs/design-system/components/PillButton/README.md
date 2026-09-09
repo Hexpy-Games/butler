@@ -21,6 +21,10 @@ import { PillButton } from "@/butler-ds";
 
 Pass text and optionally an icon.
 
+Use `surface="glass"` for floating conversation controls, including jump-to-latest
+and active task status capsules. It owns the shared border, tint, shadow, blur,
+type size and interaction states; callers only own position and label content.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and agents can use it for compact Butler controls.
 

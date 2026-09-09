@@ -22,6 +22,13 @@ import { recoverPendingParentInputs } from "../../packages/butler-agent/src/agen
 import type { SubsessionDelegationStore } from "../../packages/butler-agent/src/agent/btcc/subsessions/contracts.ts";
 import { BTCC_SUBSESSION_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema.ts";
 import { migrateSubsessionResultSchema } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/subsession-schema-migration.ts";
+import { SqliteGuidedWorkStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
+import { createDurableWorkService } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+import type { ReviewedDelegationPlan } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 
 const roots: string[] = [];
 function recoveryStewardReport(receiptId: string): string {
@@ -331,15 +338,12 @@ test("typed Steward terminal results share the outbox and incomplete context blo
   let blockedRound = 0;
   let blockedDispositionCalls = 0;
   const parentCases = [
-    { key: "blocked", status: "blocked" as const },
-    { key: "cancelled", status: "cancelled" as const, code: "steward_cancelled" as const },
+    { key: "blocked", status: "blocked" as const, accessMode: "full_access" as const },
+    { key: "cancelled-read-only", status: "cancelled" as const,
+      code: "steward_cancelled" as const, accessMode: "read_only" as const },
+    { key: "cancelled-ask-first", status: "cancelled" as const,
+      code: "steward_cancelled" as const, accessMode: "ask_first" as const },
   ];
-  bindings.upsert({
-    sessionId: sessionHintForRow("general"), role: "butler", workspacePath: root,
-    runtimeAdapterId: "btcc-turn-runtime", modelProviderId: "openai",
-    modelRef: "openai/gpt-5.5",
-    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
-  });
   const incompleteParentSessionId = sessionHintForRow("general");
   bindings.upsert({
     sessionId: incompleteParentSessionId,
@@ -359,12 +363,19 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     appLocalAuth: { required: true, token: authToken },
     modelRound: { async runRound(request) {
       const requestBody = request.messages.map((message) => message.content).join("\n");
+      const isSynthesis = requestBody.includes("Canonical child result synthesis") ||
+        requestBody.includes("Subsession result");
+      const synthesisStatus = requestBody.match(/Status: (blocked|failed|cancelled)/u)?.[1];
+      if (isSynthesis && synthesisStatus) {
+        return { text: `Terminal synthesis ${synthesisStatus}.`, toolCalls: [] };
+      }
       if (requestBody.includes("blocked terminal result test") &&
         request.tools.some((tool) => tool.name === "record_work_disposition")) {
         blockedRound += 1;
         if (blockedRound === 1) {
           return { toolCalls: [toolCall("blocked-plan", "replace_work_plan", {
             objective: "Apply the verified partial file before the external input blocks completion.",
+            execution_mode: "direct",
             actions: [{
               action_key: "write-partial-file",
               description: "Write the verified partial artifact.",
@@ -394,7 +405,8 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         if (blockedRound > 4) {
           return { text: "Blocked Steward terminal report.", toolCalls: [] };
         }
-        const workId = requestBody.match(/guided-work-[a-f0-9]{64}/u)?.[0];
+        const workId = [...requestBody.matchAll(/guided-work-[a-f0-9]{64}/gu)]
+          .map((match) => match[0]).at(-1);
         if (!workId) throw new Error("blocked Steward Work id was not projected to the model");
         blockedDispositionCalls += 1;
         return { toolCalls: [toolCall("blocked", "record_work_disposition", {
@@ -408,8 +420,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
           ],
         })] };
       }
-      const status = requestBody.match(/Status: (blocked|failed|cancelled)/u)?.[1] ?? "unknown";
-      return { text: `Terminal synthesis ${status}.`, toolCalls: [] };
+      return { text: "Unexpected terminal round.", toolCalls: [] };
     } },
   });
   const queue = new NativeInboundQueue(root);
@@ -429,24 +440,80 @@ test("typed Steward terminal results share the outbox and incomplete context blo
   try {
     for (const parentCase of parentCases) {
       const parentSessionId = sessionHintForRow("general");
-      const created = await composition.subsessions.delegate({
-        parent_session_id: parentSessionId,
-        parent_turn_id: `terminal-parent-turn-${parentCase.key}`,
-        anchor_message_id: `terminal-anchor-${parentCase.key}`,
-        execution_mode: "mutation",
-        safe_title: `Terminal ${parentCase.key}`,
+      const parentTurnId = `terminal-parent-turn-${parentCase.key}`;
+      const reviewed = await installReviewedDelegationPlan({
+        dbPath: join(root, "agent-runtime", "btcc.sqlite"),
+        sessionId: parentSessionId,
+        turnId: parentTurnId,
         objective: parentCase.key === "blocked"
           ? "Perform one blocked terminal result test."
           : "Perform one bounded terminal result test.",
-        acceptance_criteria: ["The typed terminal result is persisted safely."],
-        task_or_plan_refs: [],
-        constraints_and_non_goals: ["Do not create another relation."],
-        allowed_tools_and_effects: ["write_file:workspace"],
-        mutation_scope: ["terminal-result.txt"],
+        ...(parentCase.key === "cancelled-read-only"
+          ? {}
+          : { check: "The typed terminal result is persisted safely." }),
+        accessMode: parentCase.accessMode,
+      });
+      if (parentCase.accessMode !== "full_access") {
+        await expect(composition.subsessions.delegate({
+          parent_session_id: parentSessionId,
+          parent_turn_id: parentTurnId,
+          anchor_message_id: `terminal-anchor-${parentCase.key}`,
+          parent_access_mode: "full_access",
+          execution_mode: "read_only",
+          safe_title: `Forged terminal ${parentCase.key}`,
+          objective: reviewed.objective,
+          acceptance_criteria: reviewed.acceptance_criteria,
+          task_or_plan_refs: reviewed.task_or_plan_refs,
+          constraints_and_non_goals: [],
+          allowed_tools_and_effects: [
+            "grep_files:workspace", "list_files:workspace", "read_file:workspace",
+            "web_read:network", "web_search:network",
+          ],
+          mutation_scope: [],
+          parent_work_ref: reviewed.parent_work_ref,
+          model_ref: "openai/gpt-5.5",
+          reasoning_effort: "low",
+        })).rejects.toThrow("subsession_parent_access_mode_mismatch");
+      }
+      const created = await composition.subsessions.delegate({
+        parent_session_id: parentSessionId,
+        parent_turn_id: parentTurnId,
+        anchor_message_id: `terminal-anchor-${parentCase.key}`,
+        parent_access_mode: parentCase.accessMode,
+        execution_mode: parentCase.accessMode === "read_only" ? "read_only" : "mutation",
+        safe_title: `Terminal ${parentCase.key}`,
+        objective: reviewed.objective,
+        acceptance_criteria: reviewed.acceptance_criteria,
+        task_or_plan_refs: reviewed.task_or_plan_refs,
+        constraints_and_non_goals: [],
+        allowed_tools_and_effects: parentCase.accessMode === "read_only"
+          ? [
+              "grep_files:workspace", "list_files:workspace", "read_file:workspace",
+              "web_read:network", "web_search:network",
+            ]
+          : ["write_file:workspace"],
+        mutation_scope: parentCase.accessMode === "read_only" ? [] : ["terminal-result.txt"],
+        parent_work_ref: reviewed.parent_work_ref,
         model_ref: "openai/gpt-5.5",
         reasoning_effort: "low",
       });
-      if (parentCase.key === "cancelled") {
+      if (parentCase.key === "cancelled-read-only") {
+        const packetDb = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
+          readonly: true,
+        });
+        try {
+          const packetJson = packetDb.query<{ packet_json: string }, [string]>(`
+            SELECT packet_json FROM btcc_subsession_delegations WHERE relation_id = ?
+          `).get(created.relation.relation_id)?.packet_json;
+          expect(JSON.parse(packetJson ?? "{}")).toMatchObject({
+            parent_work_ref: reviewed.parent_work_ref,
+            acceptance_criteria: [],
+          });
+        } finally {
+          packetDb.close();
+        }
+      }
+      if (parentCase.status === "cancelled") {
         const result = await composition.subsessions.completeStewardResult({
           childSessionId: created.relation.child_session_id,
           childTurnId: created.child_turn_id,
@@ -456,21 +523,32 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         });
         expect(result.status).toBe("committed");
         expect(result.result).toMatchObject({ status: parentCase.status, code: parentCase.code ?? null });
+      } else {
+        await drain(inbound, queue, gateway, bindings, deliveryGuard);
       }
     }
 
+    const incompleteReviewed = await installReviewedDelegationPlan({
+      dbPath: join(root, "agent-runtime", "btcc.sqlite"),
+      sessionId: incompleteParentSessionId,
+      turnId: "terminal-parent-turn-incomplete",
+      objective: "This objective will be removed before Steward admission.",
+      check: "The missing packet context is blocked safely.",
+    });
     const incompleteCreated = await composition.subsessions.delegate({
       parent_session_id: incompleteParentSessionId,
       parent_turn_id: "terminal-parent-turn-incomplete",
       anchor_message_id: "terminal-anchor-incomplete",
+      parent_access_mode: "full_access",
       execution_mode: "mutation",
       safe_title: "Terminal incomplete context",
-      objective: "This objective will be removed before Steward admission.",
-      acceptance_criteria: ["The missing packet context is blocked safely."],
-      task_or_plan_refs: [],
-      constraints_and_non_goals: ["Do not invent missing task facts."],
+      objective: incompleteReviewed.objective,
+      acceptance_criteria: incompleteReviewed.acceptance_criteria,
+      task_or_plan_refs: incompleteReviewed.task_or_plan_refs,
+      constraints_and_non_goals: [],
       allowed_tools_and_effects: ["write_file:workspace"],
       mutation_scope: ["terminal-incomplete.txt"],
+      parent_work_ref: incompleteReviewed.parent_work_ref,
       model_ref: "openai/gpt-5.5",
       reasoning_effort: "low",
     });
@@ -481,7 +559,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       `).get(incompleteCreated.relation.relation_id);
       if (!packetRow) throw new Error("incomplete packet row missing");
       const packet = JSON.parse(packetRow.packet_json) as Record<string, unknown>;
-      packet.objective = "";
+      delete packet.parent_work_ref;
       agentDb.query(`
         UPDATE btcc_subsession_delegations SET packet_json = ? WHERE relation_id = ?
       `).run(JSON.stringify(packet), incompleteCreated.relation.relation_id);
@@ -493,6 +571,17 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       childTurnId: incompleteCreated.child_turn_id,
       objective: "must not be used",
     })).rejects.toThrow("delegation_context_incomplete");
+    const noChildWork = new Database(join(root, "agent-runtime", "btcc.sqlite"), {
+      readonly: true,
+    });
+    try {
+      expect(noChildWork.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_turn_work_bindings
+        WHERE turn_id = ?
+      `).get(incompleteCreated.child_turn_id)?.count).toBe(0);
+    } finally {
+      noChildWork.close();
+    }
 
     await drain(inbound, queue, gateway, bindings, deliveryGuard);
     expect(blockedDispositionCalls).toBe(1);
@@ -507,9 +596,10 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       .filter((message) => message.role === "assistant")
       .map((message) => message.text ?? message.content ?? "")
       .filter((text) => text.startsWith("Terminal synthesis "));
-    expect(assistantTexts).toHaveLength(3);
+    expect(assistantTexts).toHaveLength(4);
     for (const expectedText of [
       "Terminal synthesis blocked.",
+      "Terminal synthesis cancelled.",
       "Terminal synthesis cancelled.",
       "Terminal synthesis blocked.",
     ]) {
@@ -522,9 +612,10 @@ test("typed Steward terminal results share the outbox and incomplete context blo
       const rows = finalDb.query<{ status: string; code: string | null }, []>(`
         SELECT status, code FROM btcc_steward_results ORDER BY created_at ASC
       `).all();
-      expect(rows).toHaveLength(3);
+      expect(rows).toHaveLength(4);
       for (const expected of [
         { status: "blocked", code: null },
+        { status: "cancelled", code: "steward_cancelled" },
         { status: "cancelled", code: "steward_cancelled" },
         { status: "blocked", code: "delegation_context_incomplete" },
       ]) {
@@ -596,13 +687,21 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     try {
       expect(appDb.query<{ count: number }, []>(`
         SELECT COUNT(*) AS count FROM session_queued_messages WHERE text LIKE 'Subsession result%'
-      `).get()?.count).toBe(3);
+      `).get()?.count).toBe(4);
       expect(appDb.query<{ count: number }, []>(`
         SELECT COUNT(*) AS count FROM session_queued_messages
         WHERE text LIKE 'Subsession result%'
           AND text LIKE '%Status: blocked%'
           AND text NOT LIKE '%Code: delegation_context_incomplete%'
       `).get()?.count).toBe(1);
+      const cancelledControls = appDb.query<{ controls_json: string }, []>(`
+        SELECT controls_json FROM session_queued_messages
+        WHERE text LIKE 'Subsession result%' AND text LIKE '%Status: cancelled%'
+        ORDER BY created_at ASC
+      `).all().map((row) => JSON.parse(row.controls_json) as { access_mode?: string });
+      expect(cancelledControls.map((controls) => controls.access_mode)).toEqual([
+        "read_only", "ask_first",
+      ]);
     } finally {
       appDb.close();
     }
@@ -632,6 +731,8 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
   let markedDelivered = false;
   const store = {
     pendingParentInputs: () => [pending],
+    relationByChildSessionId: () => null,
+    resultByRelationId: () => null,
     markParentInputDelivered: () => { markedDelivered = true; },
   } as unknown as SubsessionDelegationStore;
   await expect(recoverPendingParentInputs({
@@ -640,6 +741,138 @@ test("pending Steward outbox handoff failure rejects startup recovery and preser
   })).rejects.toThrow("app_subsession_result_ingress_401");
   expect(markedDelivered).toBe(false);
   expect(store.pendingParentInputs()).toEqual([pending]);
+});
+
+test("late Worker result is acknowledged without waking a terminal Steward", async () => {
+  const pending = {
+    result_id: "result-worker-after-steward-terminal",
+    relation_id: "relation-worker-after-steward-terminal",
+    parent_session_id: "steward-terminal",
+    parent_turn_id: "turn-steward-terminal",
+    parent_chat_id: "steward-terminal",
+    message_id: "message-worker-after-steward-terminal",
+    safe_title: "Late Worker result",
+    text: "Worker result after the owning Steward stopped.",
+    model_ref: "openai/gpt-5.6-luna",
+    reasoning_effort: "max",
+    access_mode: "full_access" as const,
+    timestamp: new Date().toISOString(),
+  };
+  let sinkCalls = 0;
+  const deliveredResultIds: string[] = [];
+  const store = {
+    pendingParentInputs: () => [pending],
+    relationByChildSessionId: (sessionId: string) => sessionId === "steward-terminal"
+      ? { relation_id: "relation-owning-steward" }
+      : null,
+    resultByRelationId: (relationId: string) => relationId === "relation-owning-steward"
+      ? { result_id: "result-owning-steward", status: "cancelled" }
+      : null,
+    markParentInputDelivered: (resultId: string) => { deliveredResultIds.push(resultId); },
+  } as unknown as SubsessionDelegationStore;
+
+  expect(await recoverPendingParentInputs({
+    store,
+    sink: async () => { sinkCalls += 1; },
+  })).toEqual({ attempted: 1, delivered: 1 });
+  expect(sinkCalls).toBe(0);
+  expect(deliveredResultIds).toEqual([pending.result_id]);
+});
+
+test("Worker result continuation reuses the admitted Steward Work", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-steward-worker-result-work-"));
+  roots.push(root);
+  initializeGitWorkspace(root);
+  publishNativeReadiness(root);
+  const authToken = "steward-worker-result-auth-token-012345678901234567";
+  const bindings = new SessionBindingStore(
+    join(root, "runtime", "session-store.sqlite"),
+    "ephemeral",
+  );
+  const parentSessionId = sessionHintForRow("general");
+  bindings.upsert({
+    sessionId: parentSessionId,
+    role: "butler",
+    workspacePath: root,
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{ transport: "app", accountId: "local", peerId: "general" }],
+  });
+  const app = createAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerHome: root,
+    butlerData: root,
+    port: 0,
+    localAuth: { required: true, token: authToken },
+  });
+  const composition = createProductionBtccComposition({
+    butlerHome: root,
+    butlerData: root,
+    ownerId: "steward-worker-result-work-test",
+    sessionBindings: bindings,
+    appServerUrl: app.url,
+    appLocalAuth: { required: true, token: authToken },
+    modelRound: { async runRound() { return { text: "unused", toolCalls: [] }; } },
+  });
+  try {
+    const parentTurnId = "parent-turn-worker-result-work";
+    const reviewed = await installReviewedDelegationPlan({
+      dbPath: join(root, "agent-runtime", "btcc.sqlite"),
+      sessionId: parentSessionId,
+      turnId: parentTurnId,
+      objective: "Delegate one bounded Worker task and integrate its result.",
+      check: "The Worker result continues the same Steward Work.",
+    });
+    const created = await composition.subsessions.delegate({
+      parent_session_id: parentSessionId,
+      parent_turn_id: parentTurnId,
+      anchor_message_id: "anchor-worker-result-work",
+      parent_access_mode: "full_access",
+      execution_mode: "mutation",
+      safe_title: "Integrate Worker result",
+      objective: reviewed.objective,
+      acceptance_criteria: reviewed.acceptance_criteria,
+      task_or_plan_refs: reviewed.task_or_plan_refs,
+      constraints_and_non_goals: [],
+      allowed_tools_and_effects: ["write_file:workspace"],
+      mutation_scope: ["worker-result.txt"],
+      parent_work_ref: reviewed.parent_work_ref,
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    const dbPath = join(root, "agent-runtime", "btcc.sqlite");
+    admitSubsessionTurn(dbPath, created.relation.child_session_id, created.child_turn_id);
+    const initialWorkId = await composition.subsessions.ensureChildRootWork({
+      childSessionId: created.relation.child_session_id,
+      childTurnId: created.child_turn_id,
+      objective: reviewed.objective,
+    });
+    const continuationTurnId = `steward-worker-result-${"a".repeat(32)}`;
+    admitSubsessionTurn(dbPath, created.relation.child_session_id, continuationTurnId);
+    expect(await composition.subsessions.ensureChildRootWork({
+      childSessionId: created.relation.child_session_id,
+      childTurnId: continuationTurnId,
+      objective: "Integrate the completed Worker result.",
+    })).toBe(initialWorkId);
+
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_guided_works WHERE session_id = ?
+      `).get(created.relation.child_session_id)?.count).toBe(1);
+      expect(db.query<{ work_id: string }, [string]>(`
+        SELECT work_id FROM btcc_guided_turn_work_bindings WHERE turn_id = ?
+      `).get(continuationTurnId)?.work_id).toBe(initialWorkId);
+    } finally {
+      db.close();
+    }
+  } finally {
+    app.stop();
+    await composition.host.close();
+    bindings.close();
+    clearNativeReadiness(root);
+  }
 });
 
 test("populated current Steward results reopen through the additive detail migration", () => {
@@ -711,7 +944,7 @@ function recoveryRound(input: {
       const body = request.messages.map((message) => message.content).join("\n");
       const isSynthesis = body.includes("Canonical child result synthesis") ||
         body.includes("Subsession result");
-      const isParent = request.tools.some((tool) => tool.name === "delegate_to_steward");
+      const isParent = !request.instructions?.includes("Steward role");
       if (!isParent && !isSynthesis) input.childRequests.push(request);
       if (isSynthesis) {
         input.synthesisEvidence.push(body);
@@ -725,17 +958,28 @@ function recoveryRound(input: {
         }
         const round = (parentRounds.get("delegation") ?? 0) + 1;
         parentRounds.set("delegation", round);
-        if (round > 1) return { text: "Delegation accepted.", toolCalls: [] };
+        if (round === 1) return { toolCalls: [toolCall("start-parent-work", "start_work", {
+          objective: "Create and verify one bounded recovery result file.",
+        })] };
+        if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
+          objective: "Create and verify one bounded recovery result file.",
+          execution_mode: "direct",
+          governing_refs: [],
+          actions: [{ action_key: "delegate-reviewed-recovery-work" }],
+          checks: ["recovery-result.txt contains the expected mutation"],
+        })] };
+        if (round === 3) return { toolCalls: [toolCall("review-parent-work", "record_work_review", {
+          subject: "plan",
+          verdict: "accept",
+          summary: "The exact recovery objective and check are ready.",
+          corrections: [],
+          action_updates: [{ action_key: "delegate-reviewed-recovery-work", status: "active" }],
+        })] };
+        if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
         return {
           toolCalls: [toolCall("delegate", "delegate_to_steward", {
-            execution_mode: "mutation",
+            request: "Create and verify one bounded recovery result file. The result file must contain the expected mutation.",
             safe_title: "Bounded recovery task",
-            objective: "Create and verify one bounded recovery result file.",
-            acceptance_criteria: ["recovery-result.txt contains the expected mutation"],
-            task_or_plan_refs: [],
-            constraints_and_non_goals: ["Do not mutate the Butler workspace or Project Ledger."],
-            allowed_tools_and_effects: ["write_file:workspace"],
-            mutation_scope: ["recovery-result.txt"],
           })],
         };
       }
@@ -756,6 +1000,7 @@ function recoveryRound(input: {
       childRounds.set(childKey, round);
       if (round === 1) return { toolCalls: [toolCall("plan", "replace_work_plan", {
         objective: "Create and verify one bounded recovery result file.",
+        execution_mode: "direct",
         actions: [{ action_key: "write-recovery-result", description: "Write the recovery result file.", dependency_keys: [], effect: { capability: "write_file", target: "recovery-result.txt" } }, {
           action_key: "verify-recovery-result", description: "Verify the recovery result file.", dependency_keys: ["write-recovery-result"],
         }],
@@ -875,8 +1120,141 @@ function initializeGitWorkspace(root: string): void {
   run(["config", "user.email", "butler@example.test"]);
   run(["config", "user.name", "Butler Test"]);
   writeFileSync(join(root, "README.md"), "test\n", "utf8");
+  writeFileSync(join(root, "eol.md"), "Act only from explicit evidence and preserve the exact reviewed objective.\n", "utf8");
   run(["add", "README.md"]);
   run(["commit", "-qm", "initial"]);
+}
+
+async function installReviewedDelegationPlan(input: {
+  dbPath: string;
+  sessionId: string;
+  turnId: string;
+  objective: string;
+  check?: string;
+  accessMode?: "full_access" | "ask_first" | "read_only";
+}): Promise<ReviewedDelegationPlan> {
+  const db = new Database(input.dbPath);
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ));
+  try {
+    const checkpointId = `checkpoint-${input.turnId}`;
+    db.query(`
+      INSERT INTO btcc_turns (
+        turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, active_checkpoint_id, revision, execution_fence
+      ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', ?, ?, 'admitted', ?, 1, 0)
+    `).run(
+      input.turnId,
+      input.sessionId,
+      `inbox-${input.turnId}`,
+      `trigger-${input.turnId}`,
+      `message-${input.turnId}`,
+      input.objective,
+      JSON.stringify({
+        provider: "openai", model: "gpt-5.5", reasoningEffort: "low",
+        controls: { accessMode: input.accessMode ?? "full_access" }, controlsHash: "controls",
+      }),
+      JSON.stringify({
+        userRef: "local-user", profileRefs: [], recentFeedbackRefs: [],
+        mandatoryHotCacheRefs: [], optionalHotCacheRefs: [],
+        baselineObservationScopeRefs: [],
+      }),
+      checkpointId,
+    );
+    db.query(`
+      INSERT INTO btcc_checkpoints (
+        checkpoint_id, turn_id, turn_revision, semantic_state, kind,
+        checkpoint_revision, is_active
+      ) VALUES (?, ?, 1, 'admitted', 'runtime', 1, 1)
+    `).run(checkpointId, input.turnId);
+    const scope = { turnId: input.turnId, sessionId: input.sessionId };
+    await service.startWork({
+      ...scope,
+      mutationCallId: `start-${input.turnId}`,
+      objective: input.objective,
+    });
+    const planned = await service.replacePlan({
+      ...scope,
+      mutationCallId: `plan-${input.turnId}`,
+      objective: input.objective,
+      governingRefs: [],
+      actions: [{
+        actionKey: `delegate-${input.turnId}`,
+        description: "Delegate the reviewed bounded Work.",
+        dependencyKeys: [],
+      }],
+      checks: input.check ? [input.check] : [],
+    });
+    const reviewed = await service.recordReview({
+      ...scope,
+      mutationCallId: `review-${input.turnId}`,
+      subject: "plan",
+      verdict: "accept",
+      summary: "The exact delegation Plan is accepted.",
+      corrections: [],
+    });
+    if (!planned.currentPlan || !reviewed.latestPlanReview) {
+      throw new Error("reviewed_delegation_fixture_invalid");
+    }
+    return {
+      parent_work_ref: {
+        work_id: reviewed.workId,
+        session_id: input.sessionId,
+        turn_id: input.turnId,
+        plan_revision_id: planned.currentPlan.planRevisionId,
+        review_revision_id: reviewed.latestPlanReview.reviewRevisionId,
+      },
+      objective: input.objective,
+      acceptance_criteria: input.check ? [input.check] : [],
+      task_or_plan_refs: [],
+      actions: planned.currentPlan.actions.map((action) => ({ ...action })),
+      action_progress: reviewed.actionProgress.map((progress) => ({ ...progress })),
+    };
+  } finally {
+    db.close();
+  }
+}
+
+function admitSubsessionTurn(dbPath: string, sessionId: string, turnId: string): void {
+  const db = new Database(dbPath);
+  try {
+    const checkpointId = `checkpoint-${turnId}`;
+    db.query(`
+      INSERT INTO btcc_turns (
+        turn_id, session_id, inbox_id, trigger_key, original_message_id,
+        original_message, admission_snapshot_ref, model_selection_json,
+        context_json, semantic_state, active_checkpoint_id, revision, execution_fence
+      ) VALUES (?, ?, ?, ?, ?, 'subsession input', 'snapshot', ?, ?,
+        'admitted', ?, 1, 0)
+    `).run(
+      turnId,
+      sessionId,
+      `inbox-${turnId}`,
+      `trigger-${turnId}`,
+      `message-${turnId}`,
+      JSON.stringify({
+        provider: "openai", model: "gpt-5.5", reasoningEffort: "low",
+        controls: { accessMode: "full_access" }, controlsHash: "controls",
+      }),
+      JSON.stringify({
+        userRef: "local-user", profileRefs: [], recentFeedbackRefs: [],
+        mandatoryHotCacheRefs: [], optionalHotCacheRefs: [],
+        baselineObservationScopeRefs: [],
+      }),
+      checkpointId,
+    );
+    db.query(`
+      INSERT INTO btcc_checkpoints (
+        checkpoint_id, turn_id, turn_revision, semantic_state, kind,
+        checkpoint_revision, is_active
+      ) VALUES (?, ?, 1, 'admitted', 'runtime', 1, 1)
+    `).run(checkpointId, turnId);
+  } finally {
+    db.close();
+  }
 }
 
 function publishNativeReadiness(root: string): void {

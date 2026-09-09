@@ -1,4 +1,6 @@
+import { useAppLocale } from "@/app/copy.ts";
 import type { ProgressRow } from "@/app/types.ts";
+import { interfaceProgressLabel } from "@/app/copy.ts";
 import { Typo } from "@/butler-ds";
 
 const currentStatusTextStyle = {
@@ -20,6 +22,7 @@ export function CurrentStatusText({
   testClass: string;
   ariaLabel?: string;
 }) {
+  useAppLocale();
   return (
     <Typo.Body
       aria-label={ariaLabel}
@@ -28,7 +31,7 @@ export function CurrentStatusText({
       data-turn-state={row.state}
       style={currentStatusTextStyle}
     >
-      {label ?? row.safe_label}
+      {label ?? interfaceProgressLabel(row)}
       {suffix ? ` · ${suffix}` : ""}
     </Typo.Body>
   );

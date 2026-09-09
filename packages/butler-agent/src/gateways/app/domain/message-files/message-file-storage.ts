@@ -40,6 +40,9 @@ export function normalizeAttachmentMimeType(
 ): string {
   const value =
     mimeType?.split(";")[0]?.trim().toLocaleLowerCase("en-US") ?? "";
+  if ((!value || value === "application/octet-stream") && safeName.toLowerCase().endsWith(".pdf")) {
+    return "application/pdf";
+  }
   if (value) return value;
   const lower = safeName.toLocaleLowerCase("en-US");
   if (lower.endsWith(".png")) return "image/png";
@@ -57,6 +60,7 @@ export function classifyMessageFileKind(
   allowGeneric: boolean,
 ): MessageFileKind | null {
   if (SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) return "image";
+  if (mimeType === "application/pdf" || safeName.toLowerCase().endsWith(".pdf")) return "generic";
   if (
     mimeType.startsWith("text/") ||
     mimeType === "application/json" ||

@@ -1,4 +1,5 @@
 import { maxMessageCursor } from "./session-read-model.ts";
+import { readMessageContent, messageContentText } from "../../../../foundation/message-content.ts";
 import type {
   MessageRecord,
   MessageSendRequest,
@@ -42,7 +43,7 @@ export class AppUserMessageTurnStore {
   ): Promise<MessageSendResult> {
     const chatId = input.chat_id?.trim() || this.input.defaultChatId;
     this.input.ensureChat(chatId);
-    const text = (input.text ?? "").trim();
+    const text = input.content_parts ? messageContentText(input.content_parts) : (input.text ?? "").trim();
     const clientMessageId = input.client_message_id?.trim() ||
       `client-${crypto.randomUUID()}`;
     await this.input.createQueuedMessage(
@@ -76,7 +77,7 @@ export class AppUserMessageTurnStore {
     visualAdmission?: VisualImageAdmissionResult,
   ): Promise<MessageSendResult> {
     const chatId = queued.chat_id;
-    const text = queued.text.trim();
+    const text = queued.content_parts_json ? queued.text : queued.text.trim();
     const controls = this.input.controlResolutionFromRow(queued) ??
       this.input.resolveControlsForMessageSend(
         chatId,
@@ -160,6 +161,7 @@ export class AppUserMessageTurnStore {
         "sent",
         {
           clientMessageId: input.queued.client_message_id ?? undefined,
+          contentParts: readMessageContent(input.queued.content_parts_json),
           turnId: turn.id,
           attachments: input.attachableFiles,
         },
@@ -181,6 +183,7 @@ export class AppUserMessageTurnStore {
     const { turn, accepted, executionControls, thinkingTurn } = admission;
     if (this.input.isPublicUserMessage(input.queued.chat_id, input.text)) {
       this.input.appendEvent("message.created", { message: accepted });
+      this.input.organizeFirstMessage(accepted, input.controls.controls.model);
       this.appendCapturedFeedback(
         input.queued.chat_id,
         turn.id,
@@ -202,6 +205,7 @@ export class AppUserMessageTurnStore {
         ...(input.controls.authority_request_ref
           ? { authorityRequestRef: input.controls.authority_request_ref }
           : {}),
+        ...(input.controls.plan_id ? { planId: input.controls.plan_id } : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);
@@ -293,6 +297,7 @@ export class AppUserMessageTurnStore {
         ...(input.controls.authority_request_ref
           ? { authorityRequestRef: input.controls.authority_request_ref }
           : {}),
+        ...(input.controls.plan_id ? { planId: input.controls.plan_id } : {}),
         ...(input.visualAdmission ? { visualAdmission: input.visualAdmission } : {}),
       });
       assertQueuedClaim(this.input, input.queued, claimId);

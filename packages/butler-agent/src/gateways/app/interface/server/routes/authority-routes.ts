@@ -11,14 +11,23 @@ import type { AppRouteContext } from "../server-types.ts";
 export async function handleAuthorityRoutes(
   input: AppRouteContext,
 ): Promise<Response | null> {
-  if (!input.url.pathname.startsWith("/authority-requests")) return null;
+  if (!input.url.pathname.startsWith("/authority-requests") && !input.url.pathname.startsWith("/authority-permissions")) return null;
   const sessionId = input.url.searchParams.get("session_id")?.trim() || "general";
   const ownerSessionId = sessionHintForRow(sessionId);
+
+  const revoke = input.request.method === "DELETE" && input.url.pathname.match(/^\/authority-permissions\/([^/]+)$/u);
+  if (revoke) {
+    input.authority.revokePermission(ownerSessionId, decodeURIComponent(revoke[1]!));
+    return json(apiEnvelope({ revoked: true }));
+  }
 
   if (input.request.method === "GET" && input.url.pathname === "/authority-requests") {
     return json(apiEnvelope({
       session_id: sessionId,
       requests: input.authority.list({ ownerSessionId }),
+      permissions: input.authority.listPermissions(ownerSessionId).map((permission) => ({
+        grant_ref: permission.grantRef, title: permission.title, description: permission.description,
+      })),
     }));
   }
 
@@ -33,10 +42,12 @@ export async function handleAuthorityRoutes(
     handoff = await decideAndAdmitAuthority({
       authority: input.authority,
       store: input.store,
+      butlerData: input.butlerData,
+      stewardObserver: input.stewardObserver,
       ownerSessionId,
       requestRef,
-      sourceSessionId: ownerSessionId,
       action: decisionAction,
+      ...(decisionAction === "allow" ? { allowScope: await allowScope(input.request) } : {}),
       ...(decisionAction === "modify"
         ? { alternativeInput: await modifyInput(input.request) }
         : {}),
@@ -65,6 +76,15 @@ export async function handleAuthorityRoutes(
     decision: handoff.decision.decision,
     scheduled: handoff.admitted,
   }), 202);
+}
+
+async function allowScope(request: Request): Promise<"once" | "conversation"> {
+  const text = await request.text();
+  if (!text.trim()) return "once";
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { throw new RequestError(400, "authority_scope_invalid", "Invalid permission scope."); }
+  if (value && typeof value === "object" && "scope" in value && (value.scope === "once" || value.scope === "conversation")) return value.scope;
+  throw new RequestError(400, "authority_scope_invalid", "Invalid permission scope.");
 }
 
 async function modifyInput(request: Request): Promise<string> {

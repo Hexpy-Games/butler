@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useMemo, useState } from "react";
 import {
   Archive,
@@ -27,10 +28,12 @@ import {
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
+import { SessionFolderMenu } from "./SessionFolderMenu";
 import { TitlebarWorkspaceSubtitle } from "./TitlebarWorkspaceSubtitle";
 import { WindowControls } from "./WindowControls";
 
 export function Titlebar() {
+  useAppLocale();
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
   const storeView = useButlerStore((state) => state.view);
   const storeNavigation = useButlerStore((state) => state.navigation);
@@ -57,17 +60,21 @@ export function Titlebar() {
       ? sessionFromNavigation(storeNavigation, storeActiveChatId)
       : null;
   const branchInfo = useButlerStore((state) =>
-    state.summary?.session_id === storeActiveChatId
+    state.view.kind === "session" && state.summary?.session_id === storeActiveChatId
       ? state.summary.branch_info
       : undefined,
   );
-  const hasWorktree = branchInfo?.workspace_binding === "session_worktree";
+  const hasWorkspaceIdentity = branchInfo?.workspace_binding === "session_worktree" ||
+    branchInfo?.workspace_binding === "project";
+  const canOpenSessionFolder = Boolean(
+    hasWorkspaceIdentity && branchInfo?.workspace_status === "available",
+  );
 
   return (
     <TitlebarShell
       title={<span data-test-class="titlebar-title">{title}</span>}
       subtitle={
-        subtitle || hasWorktree ? (
+        subtitle || hasWorkspaceIdentity ? (
           <TitlebarWorkspaceSubtitle
             branchInfo={branchInfo}
             projectLabel={subtitle}
@@ -105,6 +112,10 @@ export function Titlebar() {
                   >
                     <PencilLine size={14} /> {appCopy.sessionActions.rename}
                   </DropdownMenuItem>
+                  <SessionFolderMenu
+                    disabled={!canOpenSessionFolder}
+                    sessionId={activeSession.id}
+                  />
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "archive")}
                   >

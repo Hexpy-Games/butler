@@ -70,6 +70,7 @@ export function workerActivityFromTaskSummary(
     task_id: task.task_id,
     orchestration_id: orchestrationId,
     terminal,
+    ...(task.created_at ? { created_at: task.created_at } : {}),
     updated_at:
       task.activity_updated_at ?? task.updated_at ?? new Date().toISOString(),
     supported_controls: task.can_resume
@@ -189,6 +190,7 @@ function workerActivityFromOrchestration(
     task_id: orchestration.id,
     orchestration_id: orchestration.id,
     terminal,
+    created_at: orchestration.created_at,
     updated_at:
       orchestration.updated_at || latestChild?.updated_at ||
       new Date().toISOString(),

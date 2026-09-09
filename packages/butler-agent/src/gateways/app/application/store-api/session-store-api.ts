@@ -13,6 +13,8 @@ import type {
   OperationOutputView,
   MessageSendRequest,
   MessageSendResult,
+  PlanDecisionRequest,
+  PlanDecisionResult,
   QueueMessageRequest,
   SessionArtifactSummary,
   SessionControlState,
@@ -32,12 +34,15 @@ import type {
   SendMessageOptions,
 } from "../../domain/sessions/message-responder-contract.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+import { AppPlanDecisionStore } from
+  "../../domain/sessions/plan-decision-store.ts";
 import { operationOutputIsLinked } from
   "../../domain/progress-summary/operation-output-reference.ts";
 import type {
   SessionMessagePage,
   SessionMessagePageOptions,
 } from "../../domain/sessions/session-message-page.ts";
+import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 
 const DEFAULT_CHAT_ID = "general";
 
@@ -54,6 +59,7 @@ export interface AppStoreSessionApi {
   ): SessionControlState;
   getContextDetails(sessionId: string): ContextDetailsView;
   getSessionSummary(sessionId: string): SessionSummaryView;
+  getSessionWorkspacePath(sessionId: string): string | null;
   refreshSessionProjection(sessionId: string): void;
   getConversationProjectionStatus(): AppConversationProjectionStatus;
   replayConversationProjection(input?: { limit?: number }): AppConversationProjectionReplayResult;
@@ -92,13 +98,18 @@ export interface AppStoreSessionApi {
     mimeType?: string;
     bytes: Uint8Array | ArrayBuffer | string;
     allowGeneric?: boolean;
-  }): MessageFileUploadResult;
+  }): Promise<MessageFileUploadResult>;
   getMessageFileDownload(fileId: string): {
     file: MessageFileRef;
     bytes: Buffer;
   };
   listSessionQueue(sessionId?: string): SessionQueueView;
   createQueuedMessage(input: QueueMessageRequest): Promise<SessionQueueView>;
+  decideSessionPlan(
+    sessionId: string,
+    planId: string,
+    input: PlanDecisionRequest,
+  ): Promise<PlanDecisionResult>;
   updateQueuedMessage(
     queuedMessageId: string,
     input: UpdateQueuedMessageRequest,
@@ -125,6 +136,22 @@ export interface AppStoreSessionApi {
 export function createSessionStoreApi(
   kernel: AppStoreKernel,
 ): AppStoreSessionApi {
+  const planDecisions = new AppPlanDecisionStore({
+    butlerData: kernel.butlerData,
+    butlerHome: kernel.butlerHome,
+    getChatRow: (sessionId) => kernel.getChatRow(sessionId),
+    getProjectRow: (projectId) => kernel.getProjectRow(projectId),
+    listMessages: (sessionId) => kernel.listMessages(sessionId),
+    sessionHasActiveTurn: (sessionId) => kernel.sessionHasActiveTurn(sessionId),
+    updateSessionControlsView: (sessionId, input) =>
+      kernel.sessionControls.updateView(sessionId, input),
+    createQueuedMessage: (input) => kernel.sessionQueue.createQueuedMessage(input),
+    drainQueuedSessionMessages: async (sessionId) => {
+      await kernel.drainQueuedSessionMessages(sessionId);
+    },
+    listSessionQueue: (sessionId) => kernel.sessionQueue.listSessionQueue(sessionId),
+    appendEvent: (type, payload) => kernel.appendEvent(type, payload),
+  });
   return {
     getSessionControlsView(sessionId) {
       return kernel.sessionControls.getView(sessionId);
@@ -143,6 +170,14 @@ export function createSessionStoreApi(
     },
     getSessionSummary(sessionId) {
       return kernel.sessionViews.getSessionSummary(sessionId);
+    },
+    getSessionWorkspacePath(sessionId) {
+      const session = kernel.sessionRecords.getSession(sessionId);
+      const binding = kernel.sessionBindings.getBySessionId(
+        sessionHintForRow(session.id),
+      );
+      const workspacePath = binding?.workspacePath?.trim();
+      return workspacePath || null;
     },
     refreshSessionProjection(sessionId) {
       kernel.conversationProjection.replayOutbox();
@@ -218,8 +253,10 @@ export function createSessionStoreApi(
         ),
       });
     },
-    createMessageFile(input) {
-      return kernel.messageFiles.create(input);
+    async createMessageFile(input) {
+      const result = kernel.messageFiles.create(input);
+      await kernel.messageFiles.prepareUploadedContent(result.file.file_id);
+      return result;
     },
     getMessageFileDownload(fileId) {
       return kernel.messageFiles.download(fileId);
@@ -229,6 +266,9 @@ export function createSessionStoreApi(
     },
     async createQueuedMessage(input) {
       return await kernel.sessionQueue.createQueuedMessage(input);
+    },
+    async decideSessionPlan(sessionId, planId, input) {
+      return await planDecisions.decide(sessionId, planId, input);
     },
     async updateQueuedMessage(queuedMessageId, input) {
       return await kernel.sessionQueue.updateQueuedMessage(queuedMessageId, input);

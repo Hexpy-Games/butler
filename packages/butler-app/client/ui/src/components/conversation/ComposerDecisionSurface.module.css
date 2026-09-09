@@ -1,0 +1,56 @@
+.surface {
+  display: grid;
+  min-width: 0;
+}
+.subject {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-primary);
+}
+.subject > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+.title {
+  flex: 1;
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.title:hover {
+  color: var(--text-secondary);
+}
+.title:focus-visible {
+  outline: auto;
+  outline-color: var(--ring);
+}
+.actions {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  padding: var(--space-2);
+}
+.actions button {
+  flex-shrink: 0;
+  border-radius: var(--adaptive-composer-radius);
+}
+.error {
+  color: var(--text-secondary);
+  padding-inline: var(--space-4);
+  font-size: var(--font-size-1);
+}

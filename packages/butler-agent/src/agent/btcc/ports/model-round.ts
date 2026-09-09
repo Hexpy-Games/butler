@@ -99,7 +99,7 @@ export function isPhaseContinuityProjectionError(
 
 export interface ContextProjectionRebaseIdentity {
   schemaVersion: "butler.context-projection-rebase.v1";
-  projectionRevision: "butler.phase-continuity-projection.v1";
+  projectionRevision: "butler.phase-continuity-projection.v1" | "butler.rolling-context.v1";
   projectionDigest: string;
   projectedThroughOrdinal: number;
 }
@@ -216,6 +216,7 @@ export interface ModelRouteRequestContext {
 }
 
 export interface ModelRoundRequest {
+  maxOutputTokens?: number;
   roundId?: string;
   model: ModelRef | string;
   messages: readonly ModelRoundMessage[];
@@ -250,8 +251,8 @@ export interface ModelRoundRequest {
     requestDigest: string;
     responseItemId: string;
     contextProjection?: ContextProjectionRebaseIdentity;
-    /** Required exact serialized-body admission owned by the durable Turn. */
-    admitProviderBody(serializedBytes: number): Promise<void>;
+    /** Present only when the durable Turn explicitly enables execution-budget admission. */
+    admitProviderBody?(serializedBytes: number): Promise<void>;
   };
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
   onProviderResponseIdentity?: (identity: {
@@ -286,7 +287,18 @@ export interface ModelRoundResult {
   };
 }
 
+/** Passive, execution-local diagnostics at the actual provider boundary. */
+export interface ModelRoundObserver {
+  request(request: ModelRoundRequest): void;
+  response(result: ModelRoundResult): void;
+}
+
 export interface ModelRoundPort {
+  contextSizing?(request: Pick<ModelRoundRequest, "model" | "instructions" | "tools" | "attachments" | "maxOutputTokens" | "butlerData">): {
+    maxOutputTokens?: number;
+    maxMessageBytes: number;
+    messageBytes(messages: readonly ModelRoundMessage[]): number;
+  } | undefined;
   /** Performs exactly one provider model request and returns its normalized response. */
   runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
   /** Exact initial prompt/instructions serializer economics for projection admission. */

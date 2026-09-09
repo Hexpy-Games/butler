@@ -23,6 +23,10 @@ export function validateContinueWork(input: ContinueWorkInput): void {
 export function validateReplacePlan(input: ReplaceWorkPlanInput): void {
   validateMutation(input);
   requiredText(input.objective, "objective");
+  if (input.executionMode !== undefined &&
+      input.executionMode !== "direct" && input.executionMode !== "steward" && input.executionMode !== "workers") {
+    throw new Error(`Unsupported durable Work execution mode: ${input.executionMode}`);
+  }
   if (input.actions.length === 0) {
     throw new Error("Durable Work plan requires at least one action");
   }

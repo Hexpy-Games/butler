@@ -107,6 +107,7 @@ export interface DeveloperLogTurnCaptureInput {
   envelope: InboundEnvelope;
   route?: GatewayRoute;
   contextAssembly?: ContextAssembly;
+  contextSections?: DeveloperLogSection[];
   promptContext?: string;
   result: RuntimeTurnResult;
   timestamp: string;
@@ -119,6 +120,7 @@ export interface DeveloperLogTurnErrorCaptureInput {
   envelope: InboundEnvelope;
   route?: GatewayRoute;
   contextAssembly?: ContextAssembly;
+  contextSections?: DeveloperLogSection[];
   promptContext?: string;
   failure: RuntimeFailureDiagnostic;
   diagnostics?: Record<string, unknown>;
@@ -131,6 +133,7 @@ export type DeveloperLogCaptureInput =
   | DeveloperLogTurnErrorCaptureInput;
 
 const SECRET_FIELD_PATTERN = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret|authorization|credential|session[_-]?key)/iu;
+const JSON_SECRET_ASSIGNMENT_PATTERN = /("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*"/giu;
 const BEARER_PATTERN = /\bbearer\s+[\w.~+/=-]+/giu;
 const SECRET_ASSIGNMENT_PATTERN =
   /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+/giu;
@@ -153,6 +156,7 @@ function clampOffset(value: number | undefined): number {
 
 function redactedString(value: string): string {
   return value
+    .replace(JSON_SECRET_ASSIGNMENT_PATTERN, '$1"[REDACTED]"')
     .replace(SECRET_ASSIGNMENT_PATTERN, "[REDACTED]")
     .replace(ENV_SECRET_ASSIGNMENT_PATTERN, "[REDACTED]")
     .replace(BEARER_PATTERN, "Bearer [REDACTED]");
@@ -178,6 +182,13 @@ function safeRecord(value: unknown): Record<string, unknown> {
   return redacted && typeof redacted === "object" && !Array.isArray(redacted)
     ? (redacted as Record<string, unknown>)
     : {};
+}
+
+function redactSection(section: DeveloperLogSection): DeveloperLogSection {
+  let content: string;
+  try { content = JSON.stringify(redactedJsonValue(JSON.parse(section.content))); }
+  catch { content = redactedString(section.content); }
+  return { ...section, title: redactedString(section.title), content, char_count: content.length };
 }
 
 function sectionsFromAssembly(assembly?: ContextAssembly): DeveloperLogSection[] {
@@ -381,9 +392,11 @@ export class DeveloperLogStore {
       context: {
         live_config_hash: input.contextAssembly?.liveConfigHash ?? null,
         region_order: DEVELOPER_LOG_REGION_ORDER,
-        sections: sectionsFromAssembly(input.contextAssembly),
+        sections: input.contextSections?.map(redactSection) ?? sectionsFromAssembly(input.contextAssembly),
         references: redactedReferences(input.contextAssembly?.references),
-        prompt_context: redactedString(input.promptContext ?? ""),
+        prompt_context: input.contextSections
+          ? input.contextSections.map(redactSection).map((section) => `[${section.title}]\n${section.content}`).join("\n\n")
+          : redactedString(input.promptContext ?? ""),
       },
       request: {
         input_text: redactedString(input.envelope.message.text?.trim() ?? ""),
@@ -422,9 +435,11 @@ export class DeveloperLogStore {
       context: {
         live_config_hash: input.contextAssembly?.liveConfigHash ?? null,
         region_order: DEVELOPER_LOG_REGION_ORDER,
-        sections: sectionsFromAssembly(input.contextAssembly),
+        sections: input.contextSections?.map(redactSection) ?? sectionsFromAssembly(input.contextAssembly),
         references: redactedReferences(input.contextAssembly?.references),
-        prompt_context: redactedString(input.promptContext ?? ""),
+        prompt_context: input.contextSections
+          ? input.contextSections.map(redactSection).map((section) => `[${section.title}]\n${section.content}`).join("\n\n")
+          : redactedString(input.promptContext ?? ""),
       },
       request: {
         input_text: redactedString(input.envelope.message.text?.trim() ?? ""),

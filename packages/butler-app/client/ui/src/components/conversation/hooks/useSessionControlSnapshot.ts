@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
@@ -29,7 +30,7 @@ export function useSessionControlSnapshot(activeChatId: string) {
       .catch((error) => {
         if (cancelled) return;
         setLoadState("error");
-        notifyError(error, "Session controls failed", {
+        notifyError(error, appCopy.interfacePanels.controlsFailed, {
           id: `session-controls-${activeChatId}`,
         });
       });
@@ -53,7 +54,7 @@ export function useSessionControlSnapshot(activeChatId: string) {
           setLoadState("ready");
         })
         .catch((error) => {
-          notifyError(error, "Session controls failed", {
+          notifyError(error, appCopy.interfacePanels.controlsFailed, {
             id: `session-controls-${activeChatId}`,
           });
         });

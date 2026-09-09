@@ -329,7 +329,7 @@ export async function bridgeCall<T>(
   method: BridgeMethod,
   argument?: unknown,
 ): Promise<T> {
-  return await page.evaluate<T>(`(async () => {
+  const result = await page.evaluate<unknown>(`(async () => {
     const bridge = window.butlerApp;
     if (!bridge) throw new Error("Electron product bridge is unavailable.");
     const callable = bridge[${JSON.stringify(method)}];
@@ -338,15 +338,20 @@ export async function bridgeCall<T>(
     }
     return await callable(${JSON.stringify(argument)});
   })()`);
+  if (method !== "getSessionView" || !isRecord(result) ||
+      typeof result.ok !== "boolean") return result as T;
+  if (result.ok) return result.data as T;
+  const error = isRecord(result.error) && typeof result.error.message === "string"
+    ? result.error.message
+    : "Electron session view request failed.";
+  throw new Error(error);
 }
 
 export async function openSession(
   run: PreparedRun,
   page: CdpPage,
 ): Promise<void> {
-  const sessionSelector = run.sessionKind === "project"
-    ? '[data-test-class="project-session-row"]'
-    : ".chat-row";
+  const sessionSelector = `[data-tree-item="s:${run.sessionId}"] [data-test-class="tree-row"]`;
   await page.waitForNamedElement(sessionSelector, run.sessionTitle);
   if (
     run.sessionKind === "project" &&
@@ -354,14 +359,14 @@ export async function openSession(
   ) {
     assert(run.projectDisplayName, "Project display name is missing.");
     await page.clickNamedElement(
-      '[data-test-class="project-group-row"]',
+      '[data-test-class="tree-row"]',
       run.projectDisplayName,
     );
   }
   await page.clickNamedElement(sessionSelector, run.sessionTitle);
   await page.waitForNamedElementCurrent(sessionSelector, run.sessionTitle);
   await page.waitFor(
-    `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"] textarea")}) !== null`,
+    `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"]")}) !== null`,
     "composer",
   );
   const view = await bridgeCall<AppSessionView>(page, "getSessionView", {

@@ -1,37 +1,57 @@
-import { createToolResultModelPreviewContext } from "../../tools/tool-result-serialization.ts";
+import {
+  beginToolResultModelPreviewBatch,
+  createToolResultModelPreviewContext,
+  MAX_PROVIDER_TOOL_RESULT_BYTES,
+} from "../../tools/tool-result-serialization.ts";
 import { emptyResponseRecoveryObservation } from "./empty-response-recovery.ts";
-import type { BtccAgentLoopInput, BtccAgentLoopEvent, BtccAgentLoopOutput, BtccAgentLoopToolCall, BtccAgentLoopToolResult } from "./contracts.ts";
+import type { BtccAgentLoopInput, BtccAgentLoopEvent, BtccAgentLoopOutput, BtccAgentLoopToolCall, BtccAgentLoopToolResult, BtccToolResultOutcome } from "./contracts.ts";
 import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
 import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
-import { renderPartialLimitResponse } from "./partial-limit-response.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
 import {
-  emitExecutionWindowBoundary,
-  modelRoundRequestId,
-  resolveExecutionWindowSize,
-  throwIfExecutionWindowAborted,
-} from "./execution-window.ts";
-import { modelRoundOutputBytes, prepareBoundedModelContext } from "./bounded-turn-context.ts";
+  modelRoundOutputBytes,
+  prepareBoundedModelContext,
+  toolResultBatchModelFacingBudget,
+} from "./bounded-turn-context.ts";
 import { appendAssistantResponse } from "./assistant-response.ts";
 import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
+import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
+import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
-  const continuationItems = createTurnContinuationItems(input.prompt);
+  const restored = input.authorityContinuation;
+  if (restored && !input.authorityDecision) throw new Error("authority_decision_missing");
+  const continuationItems = createTurnContinuationItems(input.prompt, restored);
   const { messages } = continuationItems;
   const events: BtccAgentLoopEvent[] = [];
-  const maxIterations = resolveExecutionWindowSize(input);
-  const toolResults: BtccAgentLoopToolResult[] = [];
+  const toolResults: BtccAgentLoopToolResult[] = [...restored?.toolResults ?? []];
   const modelPreviewContext = createToolResultModelPreviewContext();
-  let continuation: unknown;
-  let emptyResponseRecoveryUsed = false;
-  let consecutiveEmptyResponses = 0, modelRoundIndex = 0;
-  let windowIndex = 0;
-  let iteration = 0;
+  let continuation: unknown = restored?.providerContinuation;
+  let emptyResponseRecoveryUsed = restored?.emptyResponseRecoveryUsed ?? false;
+  let modelRoundIndex = restored?.modelRoundIndex ?? 0;
+  let iteration = restored?.iteration ?? 0;
+  let finalReportRound = false;
+  const beginFinalReport = () => {
+    finalReportRound = true;
+    continuationItems.push({ role: "user", content:
+      "Execution is settled. Write the final factual report as your normal assistant response now; the runtime delivers it to the recipient automatically. No reporting tool or further tool call is needed. Include the outcome, checks performed, and any remaining work from the results already received.",
+    });
+  };
+  let resumedToolCall = input.resumedToolCall;
+  let resumedBatch = restored?.batch;
+  const appendObservation = (observation: string | { content: string; requestSegmentKind: "current_user_request" | "project_ledger_and_work_authority" }) => {
+    const message = typeof observation === "string"
+      ? { content: observation, requestSegmentKind: "current_user_request" as const }
+      : observation;
+    if (message.content.trim()) continuationItems.push({ role: "user", ...message });
+  };
+  if (restored) input = { ...input, instructions: restored.instructions,
+    stableProviderCachePrefix: restored.stableProviderCachePrefix };
   const runModelRound = async (request: {
     tools: readonly BtccAgentLoopInput["tools"][number][]; toolSurfaceDigest?: string;
     instructions?: string;
@@ -41,7 +61,6 @@ export async function runBtccAgentLoop(
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
     const requestId = modelRoundRequestId(roundIndex, input.recoveryAttempt);
-    const responseItemId = continuationItems.nextId();
     const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
@@ -57,18 +76,50 @@ export async function runBtccAgentLoop(
     };
     await publishWaiting("started");
     try {
+      // Final synthesis may append an ordinary user instruction to this same
+      // history; give it the same canonical identity before provider projection.
+      for (const message of messages) {
+        message.continuationItemId ??= continuationItems.nextId();
+      }
+      let responseItemId = continuationItems.nextId();
       const replayMessages = input.operationResultReplay
         ? input.operationResultReplay.prepareMessages(messages, requestId, { statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData })
         : [...messages];
-      const bounded = await prepareBoundedModelContext({
-        messages: replayMessages,
+      const prepareContext = () => prepareBoundedModelContext({
+        // Summarize semantic history, not the transport's acknowledged handles.
+        messages: input.contextCompactor ? messages : replayMessages,
         instructions: request.instructions,
         tools: request.tools,
         toolChoice: request.toolChoice,
         budget: input.continuationBudget,
+        compactor: input.contextCompactor,
+        contextSizing: input.modelRound.contextSizing?.({ model: resolveModelRef(),
+          instructions: request.instructions, tools: request.tools, attachments: input.attachments, butlerData: input.butlerData }),
+        maxModelFacingBytes: input.maxModelFacingBytes,
         roundId: requestId, responseItemId,
         phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
         statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData,
+      });
+      let bounded = await prepareContext();
+      if (input.contextCompactor && bounded.requiresRebase) {
+        const directions = await input.beforeModelRound?.() ?? [];
+        for (const observation of directions) appendObservation(observation);
+        if (directions.length) {
+          if (directions.some((observation) => typeof observation === "string" ||
+            observation.requestSegmentKind === "current_user_request")) {
+            finalReportRound = false;
+            const surface = await resolveRoundToolSurface(input.resolveTools, input.tools);
+            request.tools = surface.tools;
+            request.toolSurfaceDigest = surface.toolSurfaceDigest;
+            request.toolChoice = input.resolveToolChoice?.() ?? input.toolChoice;
+          }
+          responseItemId = continuationItems.nextId();
+          bounded = await prepareContext();
+        }
+      }
+      const roundContinuation = continuationForContextProjection({
+        boundedContinuation: bounded.envelope,
+        continuation,
       });
       const response = await input.modelRound.runRound({
         roundId: requestId,
@@ -92,7 +143,7 @@ export async function runBtccAgentLoop(
         cacheScope: input.cacheScope,
         stableProviderCachePrefix: input.stableProviderCachePrefix,
         providerRetryAttempts: input.providerRetryAttempts,
-        continuation,
+        continuation: roundContinuation,
         ...(bounded.envelope
           ? { boundedContinuation: bounded.envelope }
           : {}),
@@ -118,7 +169,7 @@ export async function runBtccAgentLoop(
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
-    maxIterations: iterationBase,
+    iterationBase,
     runModelRound: (request) => runModelRound({ ...request, ...finalRoundToolSurface(request.tools, !!input.resolveTools) }),
     appendAssistantResponse: (response) => appendAssistantResponse(messages, response),
     emit: (event) => emit(events, input.onEvent, event),
@@ -128,11 +179,25 @@ export async function runBtccAgentLoop(
     result: BtccAgentLoopToolResult;
     iteration: number;
     evaluateStop?: boolean;
-  }): Promise<string | null> => {
+  }): Promise<BtccToolResultOutcome | null> => {
+    // The accepted call remains unanswered until the user decides. Never send
+    // a fake successful tool result to the provider or the activity transcript.
+    if (pendingAuthority(record.result.output)) return { kind: "suspend", reason: "authority_pending" };
     toolResults.push(record.result);
+    const operationResultCallId = input.resolveOperationResultCallId?.(record.call.id);
+    const attachExactReference = record.call.name !== "read_operation_results" &&
+      operationResultCallId;
     continuationItems.push(toolResultToMessage({
       result: record.result, modelPreviewContext,
-      operationResultCallId: input.resolveOperationResultCallId?.(record.call.id),
+      ...(operationResultCallId ? { operationResultCallId } : {}),
+      ...(attachExactReference
+        ? {
+            operationResultReference:
+              input.operationResultReplay?.referenceForCall(operationResultCallId) ?? undefined,
+            exactReadReference:
+              input.operationResultReplay?.previewReferenceForCall(operationResultCallId) ?? undefined,
+          }
+        : {}),
     }));
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -140,41 +205,74 @@ export async function runBtccAgentLoop(
       toolResult: record.result,
     });
     if (!record.result.ok || record.evaluateStop === false) return null;
-    return (await input.finalTextFromToolResult?.({
+    return await input.outcomeFromToolResult?.({
       toolCall: record.call,
       toolResult: record.result,
-    }))?.trim() || null;
+    }) ?? null;
   };
 
   while (true) {
-    const windowEndIteration = iteration + maxIterations;
-    while (iteration < windowEndIteration) {
-      throwIfExecutionWindowAborted(input.signal);
-      const currentIteration = iteration;
-      iteration += 1;
+    throwIfAgentLoopAborted(input.signal);
+    const currentIteration = iteration;
+    iteration += 1;
+    const batchToResume = resumedBatch;
+    resumedBatch = undefined;
+    if (!batchToResume && !resumedToolCall) {
+      for (const observation of await input.beforeModelRound?.() ?? []) {
+        // Apply steering before choosing tools, not inside an already tool-free request.
+        if (typeof observation === "string" || observation.requestSegmentKind === "current_user_request") {
+          finalReportRound = false;
+        }
+        appendObservation(observation);
+      }
+    }
+    const surface = batchToResume
+      ? { tools: batchToResume.tools }
+      : finalReportRound
+      ? finalRoundToolSurface([], Boolean(input.resolveTools))
+      : await resolveRoundToolSurface(input.resolveTools, input.tools);
+    let tools = surface.tools;
+    let response: ModelRoundResult | undefined;
+    let text: string;
+    let calls: BtccAgentLoopToolCall[];
+    if (batchToResume) {
+      calls = batchToResume.calls;
+      text = "";
+    } else if (resumedToolCall) {
+      // This call was already chosen and approved. Restore it into the same
+      // tool batch path, then let the model reason from its actual result.
+      calls = [resumedToolCall];
+      text = "";
+      continuationItems.push({ role: "assistant", content: "", toolCalls: calls });
+      resumedToolCall = undefined;
+    } else {
       emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
-    const { tools, ...toolSurfaceIdentity } = await resolveRoundToolSurface(input.resolveTools, input.tools);
-    const response = await runModelRound({
-      tools,
-      ...toolSurfaceIdentity,
-      instructions: input.instructions,
-      toolChoice: input.resolveToolChoice?.() ?? input.toolChoice,
-      iteration: currentIteration,
-    });
-    emit(events, input.onEvent, {
-      type: "model_response",
-      iteration: currentIteration,
-      text: response.text,
-    });
-
-    const { text, calls } = appendAssistantResponse(messages, response);
-    if (calls.length > 0 || text) consecutiveEmptyResponses = 0;
-    if (calls.length === 0 && response.textToolCallNames?.length) {
+      const roundRequest: Parameters<typeof runModelRound>[0] = {
+        tools,
+        toolSurfaceDigest: surface.toolSurfaceDigest,
+        instructions: input.instructions,
+        toolChoice: finalReportRound
+          ? undefined
+          : input.resolveToolChoice?.() ?? input.toolChoice,
+        iteration: currentIteration,
+      };
+      response = await runModelRound(roundRequest);
+      // Compaction can consume steering and replace the report-only surface.
+      // Execute against exactly the surface sent to the model.
+      tools = roundRequest.tools;
+      emit(events, input.onEvent, {
+        type: "model_response",
+        iteration: currentIteration,
+        text: response.text,
+      });
+      ({ text, calls } = appendAssistantResponse(messages, response));
+    }
+    if (calls.length === 0 && response?.textToolCallNames?.length) {
       const lastMessage = messages.at(-1);
       if (lastMessage?.role === "assistant") messages.pop();
     }
     const textToolCallNames = [
-      ...(response.textToolCallNames ?? []),
+      ...(response?.textToolCallNames ?? []),
     ].filter((name, index, names) => names.indexOf(name) === index);
     if (textToolCallNames.length > 0 && input.onTextToolCalls) {
       const disposition = await input.onTextToolCalls({
@@ -194,8 +292,7 @@ export async function runBtccAgentLoop(
     }
 
     if (calls.length === 0) {
-      if (!text) consecutiveEmptyResponses += 1;
-      const candidateAccepted = text && input.finalSynthesis?.acceptCandidate
+      const candidateAccepted = text && response && input.finalSynthesis?.acceptCandidate
         ? await input.finalSynthesis.acceptCandidate({ text, response })
         : false;
       const shouldSynthesize = toolResults.length > 0 && input.finalSynthesis && (
@@ -204,39 +301,30 @@ export async function runBtccAgentLoop(
       );
       if (shouldSynthesize) {
         const synthesized = await synthesizeFinalResponseForLoop(iteration);
-        if (synthesized) {
-          return { finalText: synthesized, messages, events, stoppedByLimit: false };
-        }
-        return {
-          finalText: renderPartialLimitResponse(toolResults),
-          messages,
-          events,
-          stoppedByLimit: true,
-        };
+        text = synthesized || text;
+        if (!input.reviewFinalCandidate) return { finalText: text, messages, events };
       }
       const recoveryObservation = text
         ? null
         : emptyResponseRecoveryObservation({
             recoveryUsed: emptyResponseRecoveryUsed,
-            hasNextModelRound: iteration < windowEndIteration,
+            hasNextModelRound: true,
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
         continuationItems.push({ role: "user", content: recoveryObservation });
         continue;
       }
-      if (!text && consecutiveEmptyResponses >= 2)
-        return { finalText: "", messages, events, stoppedByLimit: false };
-      if (!text && input.onExecutionWindowBoundary) {
-        break;
-      }
-      if (!text) return { finalText: "", messages, events, stoppedByLimit: false };
       if (input.reviewFinalCandidate) {
         const review = await input.reviewFinalCandidate({
           text,
           iteration: currentIteration,
         });
+        if (review.status === "wait") {
+          return { finalText: "", suspension: "waiting_for_worker", messages, events };
+        }
         if (review.status === "continue") {
+          finalReportRound = false;
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
           continuationItems.push({ role: "user", content: observation });
@@ -246,23 +334,37 @@ export async function runBtccAgentLoop(
           finalText: review.text?.trim() || text,
           messages,
           events,
-          stoppedByLimit: false,
         };
       }
-      return { finalText: text, messages, events, stoppedByLimit: false };
+      return { finalText: text, messages, events };
     }
 
-    if (input.continuationBudget) {
+    if (input.continuationBudget && !batchToResume) {
       await input.continuationBudget.recordToolRound({ roundId: `btcc-tool-round-${currentIteration}` });
     }
 
     const preparedCalls = calls.map((call) => prepareBtccToolCall({ tools }, call));
-    await input.onAssistantTextBeforeTools?.({
+    beginToolResultModelPreviewBatch(modelPreviewContext, {
+      resultCount: preparedCalls.length,
+      maxBytes: toolResultBatchModelFacingBudget({
+        messages,
+        instructions: input.instructions,
+        tools,
+        toolChoice: finalReportRound
+          ? undefined
+          : input.resolveToolChoice?.() ?? input.toolChoice,
+        maxModelFacingBytes: input.maxModelFacingBytes,
+        budgetMaxModelFacingBytes: input.continuationBudget?.state.limits.maxModelFacingBytes,
+        resultCount: preparedCalls.length,
+        perResultMaxBytes: MAX_PROVIDER_TOOL_RESULT_BYTES,
+      }),
+    });
+    if (!batchToResume) await input.onAssistantTextBeforeTools?.({
       text,
       toolCalls: preparedCalls.map((prepared) => prepared.call),
       iteration: currentIteration,
     });
-    const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
+    const canRunBatchConcurrently = !batchToResume && preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null && prepared.tool?.concurrencySafe === true,
     );
 
@@ -277,74 +379,114 @@ export async function runBtccAgentLoop(
       const results = await Promise.all(preparedCalls.map((prepared) =>
         executePreparedBtccToolCall(input, prepared, input.signal),
       ));
-      let finalText: string | null = null;
+      let finalOutcome: BtccToolResultOutcome | null = null;
       for (let index = 0; index < preparedCalls.length; index += 1) {
         const candidate = await recordToolResult({
           call: preparedCalls[index]!.call,
           result: results[index]!,
           iteration: currentIteration,
-          evaluateStop: finalText === null,
+          evaluateStop: finalOutcome === null,
         });
-        if (finalText === null && candidate) finalText = candidate;
+        if (finalOutcome === null && candidate) finalOutcome = candidate;
       }
-      if (finalText) {
-        continuationItems.push({ role: "assistant", content: finalText });
-        return { finalText, messages, events, stoppedByLimit: false };
+      if (finalOutcome?.kind === "reply") {
+        const finalText = finalOutcome.text.trim();
+        if (finalText) continuationItems.push({ role: "assistant", content: finalText });
+        return { finalText, messages, events };
+      }
+      if (finalOutcome?.kind === "suspend") {
+        return { finalText: "", suspension: finalOutcome.reason, messages, events };
+      }
+      const disposition = await nextTurnAfterToolBatch(
+        input,
+        preparedCalls.map((item) => item.call),
+        results,
+        currentIteration,
+      );
+      if (disposition === "wait") {
+        return { finalText: "", suspension: "waiting_for_worker", messages, events };
+      }
+      if (disposition === "final_report") {
+        beginFinalReport();
       }
       continue;
     }
 
-    for (const prepared of preparedCalls) {
+    const batchResults: BtccAgentLoopToolResult[] = [...batchToResume?.results ?? []];
+    const decision = batchToResume ? input.authorityDecision : undefined;
+    for (let callIndex = batchToResume?.nextCallIndex ?? 0; callIndex < preparedCalls.length; callIndex++) {
+      const prepared = preparedCalls[callIndex]!;
       emit(events, input.onEvent, {
         type: "tool_call",
         iteration: currentIteration,
         toolCall: prepared.call,
       });
-      const result = await executePreparedBtccToolCall(input, prepared, input.signal);
-      const finalText = await recordToolResult({
+      const result = decision && decision.action !== "allow"
+        ? unexecutedAuthorityCall(prepared.call, decision, callIndex === batchToResume!.nextCallIndex)
+        : await executePreparedBtccToolCall(input, prepared, input.signal);
+      if (decision && decision.action !== "allow") await input.onUnexecutedToolCall?.(prepared.call, result);
+      const pending = pendingAuthority(result.output);
+      if (pending) {
+        const callId = input.resolveOperationResultCallId?.(prepared.call.id);
+        if (!callId) throw new Error("authority_source_call_missing");
+        return { finalText: "", suspension: "authority_pending", messages, events,
+          authorityContinuation: {
+            requestRef: pending.requestRef, callId, messages,
+            nextItemOrdinal: continuationItems.ordinal(), providerContinuation: continuation,
+            instructions: input.instructions, stableProviderCachePrefix: input.stableProviderCachePrefix,
+            modelRoundIndex, iteration: currentIteration, emptyResponseRecoveryUsed, toolResults,
+            batch: { tools, calls, nextCallIndex: callIndex, results: batchResults },
+          },
+        };
+      }
+      batchResults.push(result);
+      const finalOutcome = await recordToolResult({
         call: prepared.call,
         result,
         iteration: currentIteration,
       });
-      if (finalText) {
-        continuationItems.push({ role: "assistant", content: finalText });
-        return { finalText, messages, events, stoppedByLimit: false };
+      if (finalOutcome?.kind === "reply") {
+        const finalText = finalOutcome.text.trim();
+        if (finalText) continuationItems.push({ role: "assistant", content: finalText });
+        return { finalText, messages, events };
+      }
+      if (finalOutcome?.kind === "suspend") {
+        return { finalText: "", suspension: finalOutcome.reason, messages, events };
       }
     }
-  }
-    const boundaryObservation = await emitExecutionWindowBoundary({
-      events,
-      onEvent: input.onEvent,
-      callback: input.onExecutionWindowBoundary,
-      signal: input.signal,
-      windowIndex,
-      iteration,
-      messages,
-      toolResults,
-    });
-    if (boundaryObservation !== undefined) {
-      continuationItems.push({ role: "user", content: boundaryObservation });
-      windowIndex += 1;
-      continue;
+    if (decision?.action === "modify") {
+      continuationItems.push({ role: "user", content: decision.input, requestSegmentKind: "current_user_request" });
     }
-    break;
+    const disposition = await nextTurnAfterToolBatch(
+      input,
+      preparedCalls.map((item) => item.call),
+      batchResults,
+      currentIteration,
+    );
+    if (disposition === "wait") {
+      return { finalText: "", suspension: "waiting_for_worker", messages, events };
+    }
+    if (disposition === "final_report") {
+      beginFinalReport();
+    }
   }
-  const synthesizedText = (await input.onLoopLimit?.({
-    messages,
-    toolResults,
-    maxIterations,
-  }))?.trim();
-  if (synthesizedText) {
-    continuationItems.push({ role: "assistant", content: synthesizedText });
-    return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
-  }
-  const finalSynthesisText = toolResults.length > 0
-    ? await synthesizeFinalResponseForLoop(iteration)
-    : null;
-  if (finalSynthesisText) {
-    return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };
-  }
-  const finalText = renderPartialLimitResponse(toolResults);
-  continuationItems.push({ role: "assistant", content: finalText });
-  return { finalText, messages, events, stoppedByLimit: true };
+}
+
+async function nextTurnAfterToolBatch(
+  input: BtccAgentLoopInput,
+  toolCalls: readonly BtccAgentLoopToolCall[],
+  toolResults: readonly BtccAgentLoopToolResult[],
+  iteration: number,
+): Promise<"continue" | "final_report" | "wait"> {
+  return await input.afterToolBatch?.({ toolCalls, toolResults, iteration }) ?? "continue";
+}
+
+function modelRoundRequestId(index: number, recoveryAttempt = 1): string {
+  return `btcc-model-round-${index}${recoveryAttempt > 1 ? `:retry:${recoveryAttempt}` : ""}`;
+}
+
+function throwIfAgentLoopAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("BTCC agent loop was aborted");
 }

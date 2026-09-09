@@ -795,7 +795,7 @@ export function resolveAppManagedGatewayCommand({
   return {
     command: runtime,
     args: [launcher, "gateway", "app"],
-    cwd: activation.runtimeHome,
+    cwd: butlerData,
     appManaged: true,
     bundledAgentVersion: activation.version,
     env: {
@@ -864,7 +864,7 @@ export function resolveAppManagedForegroundCommand({
     notifyProgress(onProgress, "runtime_windows_host_verified");
     return {
       ...windowsAppForegroundCommand({
-        runtimeHome: activation.runtimeHome,
+        butlerData,
         runtime,
         processHost,
         daemon,
@@ -904,7 +904,7 @@ export function resolveAppManagedForegroundCommand({
   return {
     command: runtime,
     args: ["run", daemon],
-    cwd: activation.runtimeHome,
+    cwd: butlerData,
     stdio: ["pipe", "inherit", "inherit"],
     detached: true,
     appManaged: true,
@@ -934,7 +934,7 @@ export function resolveAppManagedForegroundCommand({
 }
 
 export function windowsAppForegroundCommand({
-  runtimeHome,
+  butlerData,
   runtime,
   processHost,
   daemon,
@@ -952,7 +952,7 @@ export function windowsAppForegroundCommand({
       "run",
       daemon,
     ],
-    cwd: runtimeHome,
+    cwd: butlerData,
     stdio: ["ignore", "inherit", "inherit"],
     detached: false,
   };

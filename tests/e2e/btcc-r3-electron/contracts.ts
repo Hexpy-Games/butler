@@ -83,6 +83,7 @@ export interface ElectronScenarioStep {
     rendererActivityStagesInclude?: ElectronWorkStage[];
     files?: ElectronExpectedFile[];
     terminalState?: TerminalState;
+    stewardDelivered?: boolean;
     work?: ElectronWorkExpectation;
   };
 }
@@ -189,6 +190,10 @@ export interface AppSessionView {
   project_id?: string;
   session_id?: string;
   status?: string;
+  steward_children?: Array<{
+    status?: "idle" | "active" | "delivered" | "failed" | "cancelled";
+    terminal?: boolean;
+  }>;
 }
 
 export interface AppSettingsView {
@@ -218,9 +223,11 @@ export interface StepObservation {
   promptSha256: string;
   turnId: string;
   terminalState: string;
+  stewardDelivered?: boolean;
   finalText: string;
   rendererFinalText: string;
   rendererActivities: RendererVisibleActivity[];
+  requestedModelRef: string | null;
   providerReportedModel: string | null;
   providerAgentModels: string[];
   progressMessages: string[];

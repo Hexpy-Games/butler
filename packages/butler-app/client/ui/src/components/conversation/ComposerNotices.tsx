@@ -16,7 +16,7 @@ export function ComposerNotices({
       <StewardComposerCapsules
         children={summary?.steward_children ?? []}
         synthesis={!pendingClientTurn && summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)
-          ? summary.latest_turn_subsession_result
+            ? summary.latest_turn_subsession_result
           : undefined}
       />
       <GitDependencyNotice />

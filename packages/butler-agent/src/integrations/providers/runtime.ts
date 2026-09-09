@@ -1,4 +1,5 @@
 import { resolveProviderAdapterDefinition } from "./registry.ts";
+import { modelRoundContextSizing } from "./shared/model-round-context-sizing.ts";
 import type {
   ModelRoundPort,
   ModelRoundRequest,
@@ -93,9 +94,6 @@ export async function runModelRound(
     }
   }
   const adapter = resolveProviderAdapterDefinition(model);
-  if (request.boundedContinuation && adapter.providerId !== "openai") {
-    throw new Error(`bounded_provider_serializer_unsupported:${adapter.providerId}`);
-  }
   return await adapter.runRound({
     ...request,
     model,
@@ -106,6 +104,7 @@ export async function runModelRound(
 export function createProviderModelRoundPort(): ModelRoundPort {
   return {
     runRound: runModelRound,
+    contextSizing: modelRoundContextSizing,
     initialRequestBytes: openAIInitialRequestSerializedBytes,
     statelessMessageBytes: openAIBoundedConversationSerializedBytes,
   };

@@ -1,6 +1,9 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { setAppCopyLanguage } from "@/app/copy.ts";
+beforeEach(() => setAppCopyLanguage("ko"));
+afterEach(() => setAppCopyLanguage("en"));
 import type { ProgressRow } from "@/app/types.ts";
 import {
   toolchainGroupLabel,

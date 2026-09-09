@@ -22,7 +22,7 @@ type AppendAssistantResponse = (response: ModelRoundResult) => {
 export async function synthesizeFinalResponse(input: {
   synthesis?: BtccFinalSynthesisOptions;
   messages: BtccAgentLoopMessage[];
-  maxIterations: number;
+  iterationBase: number;
   runModelRound: RunModelRound;
   appendAssistantResponse: AppendAssistantResponse;
   emit: (event: BtccAgentLoopEvent) => void;
@@ -42,19 +42,19 @@ export async function synthesizeFinalResponse(input: {
     try {
       input.emit({
         type: "model_call",
-        iteration: input.maxIterations + attempt,
+        iteration: input.iterationBase + attempt,
       });
       const response = await input.runModelRound({
         tools: [],
         instructions,
-        iteration: input.maxIterations + attempt,
+        iteration: input.iterationBase + attempt,
       });
       lastResponse = response;
       const { text } = input.appendAssistantResponse(response);
       lastText = text;
       input.emit({
         type: "model_response",
-        iteration: input.maxIterations + attempt,
+        iteration: input.iterationBase + attempt,
         text: response.text,
       });
       const accepted = (await synthesis.acceptText?.({

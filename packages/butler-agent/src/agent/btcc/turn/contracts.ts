@@ -3,6 +3,7 @@ import type {
   ButlerContextInput,
   BtccProgressDestination,
   BtccFinalArtifact,
+  BtccRuntimeFailure,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
 import type {
@@ -15,6 +16,8 @@ import type {
   TurnContinuationBudgetEvent,
   TurnContinuationBudgetState,
 } from "./continuation-budget.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../project-plan.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -56,6 +59,8 @@ export type TurnRecord = {
   context: ButlerContextInput;
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
+  suspension?: "authority_pending" | "waiting_for_worker";
+  authorityContinuation?: import("../agent-loop/loop-continuation.ts").AuthorityLoopContinuation;
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
   finalPayload?: {
@@ -63,7 +68,12 @@ export type TurnRecord = {
     content: string;
     contentSha256: string;
     workStatus?: "completed" | "blocked";
+    acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+    runtimeFailure?: BtccRuntimeFailure;
+    executionOutcome?: "waiting_for_worker";
     artifacts?: BtccFinalArtifact[];
+    changedFiles?: ChangedFileDetail[];
+    plan?: ProjectLedgerPlan;
     modelIdentity?: {
       requestedModelRef: string;
       effectiveModelRef: string;
@@ -100,6 +110,12 @@ export type StateExecutionClaim = {
 };
 
 export type AcceptedTurnTransition =
+  | {
+      kind: "suspend";
+      successor: "admitted";
+      reason: "authority_pending" | "waiting_for_worker";
+      authorityContinuation?: import("../agent-loop/loop-continuation.ts").AuthorityLoopContinuation;
+    }
   | {
       kind: "accept_guided_final";
       successor: "delivery_committed";
@@ -140,6 +156,7 @@ export interface BtccWakeAuthorizationReader {
 
 export interface TurnStateRepository {
   findTurn(turnId: string): Promise<TurnRecord | null>;
+  resumeAuthorityContinuation(turnId: string): Promise<TurnRecord | null>;
   activateCommittedSuccessor(turnId: string): Promise<TurnRecord>;
   acquireStateExecutionClaim(turn: TurnRecord): Promise<StateExecutionClaim>;
   commitTransition(input: {
@@ -221,5 +238,9 @@ export type StopPersistenceOutcome =
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
+      acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+      runtimeFailure?: BtccRuntimeFailure;
+      executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];
+      changedFiles?: ChangedFileDetail[];
     };

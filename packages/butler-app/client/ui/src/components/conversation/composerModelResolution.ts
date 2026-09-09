@@ -27,6 +27,7 @@ export function resolveComposerModelTruth(input: {
   controls: SessionControlsView | null;
   controlsState: ControlsLoadState;
   settings: SettingsView;
+  planModeAvailable: boolean;
 }): ComposerModelResolution {
   const preferredModel =
     input.controls?.controls.model ||
@@ -39,7 +40,7 @@ export function resolveComposerModelTruth(input: {
       input.settings.reasoning_effort,
     accessMode:
       input.controls?.controls.access_mode || input.settings.access_mode,
-    planMode: Boolean(
+    planMode: input.planModeAvailable && Boolean(
       input.controls?.controls.plan_mode ?? input.settings.plan_mode_default,
     ),
     generationMismatch: false,

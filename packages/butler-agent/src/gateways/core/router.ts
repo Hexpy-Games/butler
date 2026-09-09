@@ -68,7 +68,7 @@ export class GatewayRouter {
       if (
         hinted &&
         ACTIVE_STATES.some((state) => state === hinted.lifecycleState) &&
-        (hinted.role === "butler" || hinted.role === "steward")
+        (hinted.role === "butler" || hinted.role === "steward" || hinted.role === "worker")
       ) {
         return {
           status: "routed",

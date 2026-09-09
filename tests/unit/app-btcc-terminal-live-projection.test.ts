@@ -16,10 +16,14 @@ import {
 } from "./support/transcript-projection-harness.ts";
 import { AppMessageFileStore } from
   "../../packages/butler-agent/src/gateways/app/domain/message-files/message-file-store.ts";
+import { AppSessionMessageRecordStore } from
+  "../../packages/butler-agent/src/gateways/app/domain/sessions/session-message-record-store.ts";
 import { executeGuidedReadOnlyCommand } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-read-only-command.ts";
 import { collectGuidedFinalArtifacts } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-final-artifacts.ts";
+import type { ChangedFileDetail } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
 
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
@@ -47,11 +51,23 @@ test("completed turn event waits for the durable transcript final", () => {
     turnId: "live-delivered-turn",
     text: "Canonical answer",
     generatedSessionTitle: "Useful title",
+    changedFiles: [{
+      path: "src/answer.ts",
+      additions: 1,
+      deletions: 0,
+      lines: [{ type: "added", new_line: 1, content: "answer" }],
+    }],
   }));
   expect(projection.syncNextBatch()).toBe(false);
   expect(turnState(harness.db, "live-delivered-turn")).toBe("delivered");
   expect(state.generatedTitles).toEqual(["Useful title"]);
   expect(state.assistantWrites).toBe(1);
+  expect(state.assistantChangedFiles).toEqual([{
+    path: "src/answer.ts",
+    additions: 1,
+    deletions: 0,
+    lines: [{ type: "added", new_line: 1, content: "answer" }],
+  }]);
 
   appendTranscript(harness, finalResultEvent({
     actionId: "late-conflicting-final",
@@ -180,6 +196,79 @@ test("guided read-only workspace outputs create real App attachments", async () 
   harness.close();
 });
 
+test("changed files persist separately from message artifacts", () => {
+  const harness = createHarness();
+  const messageFiles = new AppMessageFileStore(
+    harness.db,
+    harness.root,
+    () => undefined,
+  );
+  const messages = new AppSessionMessageRecordStore(
+    harness.db,
+    harness.root,
+    messageFiles,
+    () => undefined,
+  );
+  const now = new Date().toISOString();
+  harness.db.query(`
+    INSERT INTO messages (
+      id, chat_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    ) VALUES (?, ?, 'assistant', 'Updated the files.', 'delivered', ?, ?, NULL, 0)
+  `).run("assistant-changed-files", harness.chatId, now, now);
+
+  const stored = messages.replaceMessageChangedFiles(
+    "assistant-changed-files",
+    ["src/app.ts", "src/app.ts", "../private.env", "/tmp/private"],
+  );
+
+  expect(stored.changed_files).toEqual([{
+    path: "src/app.ts",
+    additions: 0,
+    deletions: 0,
+    lines: [],
+  }]);
+  expect(stored.artifacts).toBeUndefined();
+  expect(messages.listMessages(harness.chatId)[0]?.changed_files).toEqual([{
+    path: "src/app.ts",
+    additions: 0,
+    deletions: 0,
+    lines: [],
+  }]);
+  harness.close();
+});
+
+test("structured changed-file details survive App message reload", () => {
+  const harness = createHarness();
+  const messageFiles = new AppMessageFileStore(harness.db, harness.root, () => undefined);
+  const messages = new AppSessionMessageRecordStore(
+    harness.db,
+    harness.root,
+    messageFiles,
+    () => undefined,
+  );
+  const now = new Date().toISOString();
+  harness.db.query(`
+    INSERT INTO messages (
+      id, chat_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    ) VALUES (?, ?, 'assistant', 'Updated.', 'delivered', ?, ?, NULL, 0)
+  `).run("assistant-detailed-files", harness.chatId, now, now);
+  const detail: ChangedFileDetail = {
+    path: "src/app.ts",
+    additions: 1,
+    deletions: 1,
+    lines: [
+      { type: "deleted", old_line: 2, content: "old" },
+      { type: "added", new_line: 2, content: "new" },
+    ],
+  };
+
+  messages.replaceMessageChangedFiles("assistant-detailed-files", [detail]);
+  expect(messages.listMessages(harness.chatId)[0]?.changed_files).toEqual([detail]);
+  harness.close();
+});
+
 test("cancelled turn event directly closes a non-terminal App turn", () => {
   const harness = createHarness();
   seedBtccTerminalSchema(harness.db);
@@ -257,6 +346,63 @@ test("delivered cancellation ack and terminal event settle the App outbox", () =
     dispatch_claim_id: "cancel-claim",
   });
   expect(turnState(harness.db, "queued-cancel-turn")).toBe("cancelled");
+  harness.close();
+});
+
+test("late cancellation ack completes its outbox without changing a delivered Turn", () => {
+  const harness = createHarness();
+  seedAppTurn(harness.db, harness.chatId, "delivered-cancel-turn");
+  const now = new Date().toISOString();
+  harness.db.query(`
+    UPDATE turns SET state = 'delivered', safe_status_label = 'Completed',
+      cancellable = 0, updated_at = ?
+    WHERE id = ?
+  `).run(now, "delivered-cancel-turn");
+  harness.db.query(`
+    INSERT INTO app_turn_cancel_outbox (turn_id, state, created_at)
+    VALUES (?, 'pending', ?)
+  `).run("delivered-cancel-turn", now);
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  const actionId = "delivered-cancel-ack-action";
+  writeTranscript(harness, [{
+    eventId: "delivered-cancel-ack-outbound",
+    sessionId: "runtime-session",
+    kind: "outbound",
+    timestamp: now,
+    transport: "app",
+    payload: {
+      actionId,
+      message: { text: "" },
+      metadata: {
+        kind: "turn_cancellation_ack",
+        turnId: "delivered-cancel-turn",
+        requestId: "late-cancel-request",
+        queueId: "late-cancel-queue",
+        dispatchClaimId: "late-cancel-claim",
+        outcome: "already_delivered",
+      },
+    },
+  }, {
+    eventId: "delivered-cancel-ack-delivery",
+    sessionId: "runtime-session",
+    kind: "delivery",
+    timestamp: now,
+    transport: "app",
+    payload: { actionId, ok: true },
+  }]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(harness.db.query<Record<string, string>, [string]>(`
+    SELECT state, queue_id, dispatch_claim_id FROM app_turn_cancel_outbox
+    WHERE turn_id = ?
+  `).get("delivered-cancel-turn")).toMatchObject({
+    state: "completed",
+    queue_id: "late-cancel-queue",
+    dispatch_claim_id: "late-cancel-claim",
+  });
+  expect(turnState(harness.db, "delivered-cancel-turn")).toBe("delivered");
+  expect(state.cancelledTurns).toEqual([]);
   harness.close();
 });
 
@@ -368,6 +514,7 @@ test("preserves requested, effective, and provider-reported transcript identity"
 function projectionState(db: Database) {
   let assistant: MessageRow | null = null;
   let assistantWrites = 0;
+  let assistantChangedFiles: ChangedFileDetail[] = [];
   const turnEvents = new Set<string>();
   const generatedTitles: string[] = [];
   const cancelledTurns: string[] = [];
@@ -377,6 +524,9 @@ function projectionState(db: Database) {
     },
     get assistantWrites() {
       return assistantWrites;
+    },
+    get assistantChangedFiles() {
+      return assistantChangedFiles;
     },
     turnEvents,
     generatedTitles,
@@ -400,8 +550,11 @@ function projectionState(db: Database) {
         chatId: string,
         turnId: string,
         texts: string[],
+        _files: unknown[] = [],
+        changedFiles: ChangedFileDetail[] = [],
       ) => {
         assistantWrites += 1;
+        assistantChangedFiles = [...changedFiles];
         assistant = {
           rowid: assistantWrites,
           id: "assistant-message",
@@ -574,6 +727,7 @@ function finalResultEvent(input: {
   generatedSessionTitle: string;
   executionModel?: Record<string, string>;
   artifacts?: ReturnType<typeof collectGuidedFinalArtifacts>;
+  changedFiles?: ChangedFileDetail[];
 }): TranscriptEvent {
   return {
     eventId: `event-${input.actionId}`,
@@ -586,6 +740,7 @@ function finalResultEvent(input: {
       message: {
         text: input.text,
         ...(input.artifacts ? { artifacts: input.artifacts } : {}),
+        ...(input.changedFiles ? { changedFiles: input.changedFiles } : {}),
       },
       metadata: {
         kind: "final_result",

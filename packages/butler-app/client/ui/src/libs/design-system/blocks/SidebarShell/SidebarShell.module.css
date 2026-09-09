@@ -1,7 +1,7 @@
 .shell {
   --sidebar-scrollbar-offset: 10px;
   --sidebar-scroll-fade-size: 14px;
-  --sidebar-scroll-edge-padding: 16px;
+  --sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px);
 
   display: flex;
   position: relative;
@@ -48,7 +48,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sidebar-region-gap, 10px);
   overflow: visible;
   transition:
     opacity 160ms ease,
@@ -142,6 +142,44 @@
   padding-block: var(--sidebar-scroll-edge-padding);
 }
 
+.scroll.unmasked {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.scrollContent[data-sticky-header] {
+  gap: 0;
+  --nav-sticky-offset: calc(
+    var(--sidebar-scroll-fade-size) + var(--sidebar-sticky-header-height, 0px)
+  );
+}
+
+.stickyHeader {
+  position: sticky;
+  top: var(--sidebar-scroll-fade-size);
+  z-index: 30;
+  flex: none;
+  background: var(--nav-sticky-surface, var(--color-surface-base));
+  padding-bottom: var(--space-sm);
+  backdrop-filter: var(--nav-sticky-filter, none);
+}
+
+.clippedContent {
+  min-width: 0;
+  flex: 1 0 auto;
+  clip-path: inset(var(--sticky-clip-top, 0) 0 0);
+}
+
+.stickyHeader::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--sidebar-scroll-fade-size);
+  background: inherit;
+  pointer-events: none;
+}
+
 .scroll::-webkit-scrollbar {
   width: 8px;
 }
@@ -162,7 +200,7 @@
   max-width: 100%;
   min-width: 0;
   flex: none;
-  border-top: 1px solid var(--line);
+  border-top: var(--sidebar-footer-border-width, 1px) solid var(--line);
   padding-top: 10px;
 }
 
@@ -176,7 +214,7 @@
 
 @media (width <= 640px) {
   .titlebar {
-    display: none;
+    display: var(--sidebar-compact-titlebar-display, none);
   }
 
   .trafficSpace {

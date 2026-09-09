@@ -427,7 +427,7 @@ function nativeServiceSpecsForRuntime(
       args: appManaged.runtimeHome && platform === "win32"
         ? ["run", butlerAgentSourcePath(paths.butlerHome, "agent", "cognition", "memory", "scripts", "embed-server.ts")]
         : [butlerAgentScriptPath(paths.butlerHome, "start-embed-server.sh")],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "embed-server-out.log"),
       stderrFile: logPath(paths.butlerData, "embed-server-err.log"),
@@ -438,7 +438,7 @@ function nativeServiceSpecsForRuntime(
       id: "butler-sync-consumer",
       command: serviceBun,
       args: ["run", butlerAgentSourcePath(paths.butlerHome, "agent", "cognition", "memory", "scripts", "sync-consumer.ts")],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "sync-consumer-out.log"),
       stderrFile: logPath(paths.butlerData, "sync-consumer-err.log"),
@@ -449,7 +449,7 @@ function nativeServiceSpecsForRuntime(
       id: "butler-scheduler",
       command: serviceBun,
       args: ["run", butlerAgentScriptPath(paths.butlerHome, "native-scheduler.ts")],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "scheduler-out.log"),
       stderrFile: logPath(paths.butlerData, "scheduler-err.log"),
@@ -460,7 +460,7 @@ function nativeServiceSpecsForRuntime(
       id: "butler-watchdog",
       command: serviceBun,
       args: ["run", butlerAgentSourcePath(paths.butlerHome, "interfaces", "mcp-server", "watchdog.ts")],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "watchdog-out.log"),
       stderrFile: logPath(paths.butlerData, "watchdog-err.log"),
@@ -473,7 +473,7 @@ function nativeServiceSpecsForRuntime(
       args: appManaged.runtimeHome && platform === "win32"
         ? ["run", butlerAgentScriptPath(paths.butlerHome, "native-butler-main.ts")]
         : [butlerAgentScriptPath(paths.butlerHome, "start-butler.sh")],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: {
         ...commonEnv,
         BUTLER_SERVICE_CHILD: "butler-main",
@@ -503,7 +503,7 @@ function nativeServiceSpecsForRuntime(
         butlerAgentSourcePath(paths.butlerHome, "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
         `--port=${appPort}`,
       ],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: {
         ...commonEnv,
         BUTLER_APP_SERVER_HOST: appHost,
@@ -537,7 +537,7 @@ function nativeServiceSpecsForRuntime(
         "run",
         butlerAgentSourcePath(paths.butlerHome, "operations", "tunnel", "tunnel-proxy-cli.ts"),
       ],
-      cwd: paths.butlerHome,
+      cwd: paths.butlerData,
       env: {
         ...commonEnv,
         ...tunnelProxyEnvironmentFromServiceConfig(tunnelConfig),

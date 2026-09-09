@@ -4,12 +4,14 @@ import type { SettingsLocalMessage } from "./settingsTypes";
 
 interface SettingsDetailHeaderProps {
   title: ReactNode;
+  description?: ReactNode;
   secondary?: ReactNode;
   localMessage: SettingsLocalMessage | null;
 }
 
 export function SettingsDetailHeader({
   title,
+  description,
   secondary,
   localMessage,
 }: SettingsDetailHeaderProps) {
@@ -20,6 +22,7 @@ export function SettingsDetailHeader({
     >
       <SettingsHeader
         title={<span data-test-class="settings-detail-title">{title}</span>}
+        description={description}
         secondary={secondary}
         action={
           localMessage ? (

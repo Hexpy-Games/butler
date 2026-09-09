@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import {
   Archive,
   PencilLine,
@@ -22,6 +23,7 @@ export function SidebarSessionActions({
   session,
   setMenuOpen,
 }: SidebarSessionActionsProps) {
+  useAppLocale();
   return (
     <ButtonContainer
       className="no-drag"

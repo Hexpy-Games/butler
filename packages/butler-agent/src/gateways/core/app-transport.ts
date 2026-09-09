@@ -42,6 +42,12 @@ export interface AppCancellationInput {
   appQueueClaimId?: string;
 }
 
+export type AppResumeInput = AppCancellationInput & {
+  originalEventId: string;
+  originalMessageId: string;
+  originalMessage: string;
+};
+
 export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelope {
   const executionControls = input.executionControls
     ? verifyTurnExecutionControls(input.executionControls)
@@ -111,6 +117,7 @@ function verifyAppTurnContext(
     context.conversation.turnId,
     context.project?.id,
     context.project?.ledgerProjectId,
+    context.planId,
   ]) {
     if (value !== undefined && (!value.trim() || value.length > 512)) {
       throw new Error("app_turn_context_value_invalid");
@@ -150,6 +157,34 @@ export function createAppCancellationEnvelope(
     },
     control: {
       kind: "cancel_turn",
+      requestId: input.requestId,
+      turnId: input.turnId,
+      requestedAt: input.requestedAt,
+    },
+    raw: { source: "app-server" },
+  };
+}
+
+export function createAppResumeEnvelope(input: AppResumeInput): InboundEnvelope {
+  return {
+    eventId: `${APP_TRANSPORT}:resume:${input.requestId}`,
+    transport: APP_TRANSPORT,
+    accountId: APP_ACCOUNT,
+    peer: { kind: "dm", id: input.chatId },
+    sender: { id: APP_SENDER_ID, displayName: "Butler App" },
+    message: {
+      id: input.originalMessageId,
+      text: input.originalMessage,
+      timestamp: input.requestedAt,
+    },
+    routingHints: {
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      canonicalEventId: input.originalEventId,
+      ...(input.appQueueClaimId ? { appQueueClaimId: input.appQueueClaimId } : {}),
+    },
+    control: {
+      kind: "resume_turn",
       requestId: input.requestId,
       turnId: input.turnId,
       requestedAt: input.requestedAt,

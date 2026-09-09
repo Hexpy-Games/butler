@@ -10,6 +10,7 @@ import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { SessionMessagePageOptions } from "./session-message-page.ts";
+import { resolveProjectSourceReferences } from "../projects/project-source-references.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -131,6 +132,9 @@ export function createAppSessionInteractionModuleGraph(input: {
     (type, payload) => {
       host.appendEvent(type, payload);
     },
+    (turnId) => host.stewardObserver.retainsApprovalClaim(turnId),
+    (chatId, content) => resolveProjectSourceReferences({ chat: host.getChatRow(chatId), content, messageFiles,
+      readSource: (projectId, query) => host.getProjectDashboardSource(projectId, query) }),
   );
   const sessionQueueDispatcher = new AppSessionQueueDispatcher({
     db,

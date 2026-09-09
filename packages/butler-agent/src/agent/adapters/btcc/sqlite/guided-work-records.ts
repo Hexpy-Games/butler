@@ -45,6 +45,7 @@ export type GuidedWorkPlanRow = {
   revision: number;
   objective: string;
   governing_refs_json: string;
+  execution_mode?: "direct" | "steward" | "workers" | null;
   actions_json: string;
   checks_json: string;
   origin_turn_id: string;

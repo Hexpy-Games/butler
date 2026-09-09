@@ -35,6 +35,10 @@ prompts, provider payloads, or private runtime state.
 - An execution-integrity interruption preserves the admitted Turn and parks the
   exact inbound queue item for process replacement; it must not synthesize a
   failure or replay inside the process that observed the interruption.
+- A control request that reaches an already terminal Turn is itself terminal.
+  In particular, cancelling an `already_delivered` Turn acknowledges the
+  no-op result and completes the control queue item; it must not be parked for
+  process replacement.
 - Native Butler must then end that process cleanly so the watchdog starts a new
   owner. The new owner is the only path that may recover and resume the parked
   item.

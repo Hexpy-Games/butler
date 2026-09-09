@@ -1,3 +1,4 @@
+import { appCopy } from "./copy.ts";
 import type {
   AppInfoView,
   MessageFileRef,
@@ -7,6 +8,7 @@ import type {
   SessionView,
   SessionViewBridgeInput,
   SessionViewBridgeResult,
+  WorkStatusView,
 } from "./types.ts";
 
 declare global {
@@ -15,10 +17,42 @@ declare global {
   }
 }
 
+export type SessionFolderLaunchTarget = "vscode" | "terminal";
+
+export type SessionFolderBridgeCode =
+  | "bridge_unavailable"
+  | "session_workspace_unavailable"
+  | "launch_target_unavailable"
+  | "session_folder_launch_failed";
+
+export type SessionFolderLaunchTargetsResult =
+  | { ok: true; targets: SessionFolderLaunchTarget[] }
+  | {
+      ok: false;
+      code: SessionFolderBridgeCode;
+      recoverable: true;
+      targets: [];
+    };
+
+export type SessionFolderLaunchResult =
+  | { ok: true; target: SessionFolderLaunchTarget }
+  | {
+      ok: false;
+      code: SessionFolderBridgeCode;
+      recoverable: true;
+    };
+
 interface ButlerAppBridge {
   protocolVersion?: string;
   serverUrl?: string;
   platform?: string;
+  getSessionFolderLaunchTargets?: (input: {
+    sessionId: string;
+  }) => Promise<SessionFolderLaunchTargetsResult>;
+  openSessionFolder?: (input: {
+    sessionId: string;
+    target: SessionFolderLaunchTarget;
+  }) => Promise<SessionFolderLaunchResult>;
   saveMessageFile?: (input?: unknown) => Promise<unknown>;
   showDesktopNotification?: (input?: unknown) => Promise<unknown>;
   getNativeNotificationStatus?: () => Promise<unknown>;
@@ -26,6 +60,12 @@ interface ButlerAppBridge {
   getSessionView?: (
     input?: SessionViewBridgeInput,
   ) => Promise<SessionViewBridgeResult | SessionView>;
+  getWorkStatus?: () => Promise<WorkStatusView>;
+  getAuthorityRequests?: (input?: unknown) => Promise<unknown>;
+  allowAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  revokeConversationPermission?: (input?: unknown) => Promise<unknown>;
+  denyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
+  modifyAuthorityRequest?: (input?: unknown) => Promise<unknown>;
   openNativeNotificationSettings?: () => Promise<unknown>;
   setNativeShellPreferences?: (input?: unknown) => Promise<unknown>;
   subscribeLiveEvents?: (
@@ -33,6 +73,7 @@ interface ButlerAppBridge {
     handlers?: {
       onEvent?: (event: TimelineEvent) => void;
       onError?: (error: unknown) => void;
+      onOpen?: () => void;
     },
   ) => (() => void) | void;
   onNativeNavigation?: (
@@ -55,6 +96,10 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     if (!resyncPath) throw error;
     return await request(resyncPath);
   }
+}
+
+export async function getWorkStatus(): Promise<WorkStatusView> {
+  return await api<WorkStatusView>("/work-status");
 }
 
 function sessionViewResyncPath(
@@ -96,7 +141,7 @@ export async function uploadMessageFile(file: File, sessionId?: string): Promise
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? "File upload failed.");
+  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.uploadFailed);
   return payload.data.file as MessageFileRef;
 }
 
@@ -117,7 +162,7 @@ export async function importSkillZip(file: File, projectId?: string): Promise<Sk
     body: form,
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message ?? "Skill import failed.");
+  if (!response.ok) throw new Error(payload?.error?.message ?? appCopy.interfaceFeedback.importFailed);
   return payload.data as SkillImportResult;
 }
 
@@ -135,12 +180,13 @@ export function subscribeLiveEvents(
   cursor: number,
   onEvent: (event: TimelineEvent) => void,
   onError: (error: unknown) => void,
+  onOpen?: () => void,
 ): () => void {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (typeof bridge?.subscribeLiveEvents === "function") {
     const unsubscribe = bridge.subscribeLiveEvents(
       { cursor },
-      { onEvent, onError },
+      { onEvent, onError, onOpen },
     );
     return typeof unsubscribe === "function" ? unsubscribe : () => {};
   }
@@ -149,6 +195,7 @@ export function subscribeLiveEvents(
     return () => {};
   }
   const liveSource = new EventSource(liveEventsUrl(cursor));
+  liveSource.onopen = () => onOpen?.();
   liveSource.onmessage = (message) => {
     try {
       onEvent(JSON.parse(message.data) as TimelineEvent);
@@ -192,7 +239,7 @@ function browserRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   }).then(async (response) => {
     const body = await response.json();
     if (!response.ok) {
-      const error = new Error(body.error?.message ?? "Request failed.");
+      const error = new Error(appCopy.serverErrors[body.error?.code] ?? body.error?.message ?? appCopy.interfaceFeedback.requestFailed);
       Object.assign(error, {
         ...(typeof body.error?.code === "string" ? { code: body.error.code } : {}),
         status: response.status,
@@ -213,6 +260,18 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
+  if (url.pathname.startsWith("/space/")) {
+    const group = url.pathname.match(/^\/space\/groups\/([^/]+)$/);
+    if (group && (method === "PATCH" || method === "DELETE")) {
+      return await callBridge<T>(bridge, "changeSpaceGroup", { groupId: decodeURIComponent(group[1]!), method, body: parseBody(options.body) });
+    }
+    const resources = ["groups", "moves", "group-sessions", "undo", "pins", "relocations", "branches", "branch-source"];
+    const resource = url.pathname.slice("/space/".length);
+    if (method === "POST" && resources.includes(resource)) {
+      return await callBridge<T>(bridge, "mutateSpace", { resource, body: parseBody(options.body) });
+    }
+  }
+  if (method === "GET" && url.pathname === "/work-status") return await callBridge<T>(bridge, "getWorkStatus");
   if (method === "GET" && url.pathname === "/new-chat-briefing") {
     return await callBridge<T>(bridge, "getNewChatBriefing", {
       date: url.searchParams.get("date") ?? undefined,
@@ -399,6 +458,17 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     );
   }
   const projectDashboardMatch = method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard$/) : null;
+  const dashboardResource = url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/(records|materials|source|history|artifacts|statistics|preferences|briefing|attachment)$/u);
+  if (dashboardResource) {
+    const projectId = decodeURIComponent(dashboardResource[1]!);
+    const resource = dashboardResource[2]!;
+    if (method === "GET" && !["preferences", "briefing", "attachment"].includes(resource)) {
+      return await callBridge<T>(bridge, "getProjectDashboardResource", { projectId, resource, query: url.searchParams.toString() });
+    }
+    if ((method === "PATCH" && resource === "preferences") || (method === "POST" && ["briefing", "attachment"].includes(resource))) {
+      return await callBridge<T>(bridge, "updateProjectDashboardResource", { projectId, resource, body: parseBody(options.body) });
+    }
+  }
   if (projectDashboardMatch) {
     return await callBridge<T>(bridge, "getProjectDashboard", { projectId: decodeURIComponent(projectDashboardMatch[1]!) });
   }
@@ -460,6 +530,18 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       controls: parseBody(options.body),
     });
   }
+  const planDecisionMatch = url.pathname.match(
+    /^\/sessions\/([^/]+)\/plan-decisions\/([^/]+)$/u,
+  );
+  if (method === "POST" && planDecisionMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "decideSessionPlan", {
+      sessionId: decodeURIComponent(planDecisionMatch[1]!),
+      planId: decodeURIComponent(planDecisionMatch[2]!),
+      action: body.action,
+      instruction: body.instruction,
+    });
+  }
   if (method === "GET" && url.pathname === "/project-sessions") {
     return await callBridge<T>(bridge, "listProjectSessions", {
       projectId: url.searchParams.get("project_id") ?? undefined,
@@ -476,11 +558,54 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       sessionId: url.searchParams.get("session_id") ?? "general",
     });
   }
+  if (method === "GET" && url.pathname === "/authority-requests") {
+    return await callBridge<T>(bridge, "getAuthorityRequests", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+    });
+  }
+  const authorityAllowMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/allow$/u,
+  );
+  if (method === "POST" && authorityAllowMatch) {
+    return await callBridge<T>(bridge, "allowAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityAllowMatch[1] ?? ""),
+      scope: parseBody(options.body).scope,
+    });
+  }
+  const authorityRevokeMatch = url.pathname.match(/^\/authority-permissions\/([^/]+)$/u);
+  if (method === "DELETE" && authorityRevokeMatch) {
+    return await callBridge<T>(bridge, "revokeConversationPermission", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      grantRef: decodeURIComponent(authorityRevokeMatch[1] ?? ""),
+    });
+  }
+  const authorityDenyMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/deny$/u,
+  );
+  if (method === "POST" && authorityDenyMatch) {
+    return await callBridge<T>(bridge, "denyAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityDenyMatch[1] ?? ""),
+    });
+  }
+  const authorityModifyMatch = url.pathname.match(
+    /^\/authority-requests\/([^/]+)\/modify$/u,
+  );
+  if (method === "POST" && authorityModifyMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "modifyAuthorityRequest", {
+      sessionId: url.searchParams.get("session_id") ?? undefined,
+      requestRef: decodeURIComponent(authorityModifyMatch[1] ?? ""),
+      alternative: body.alternative,
+    });
+  }
   if (method === "POST" && url.pathname === "/session-queue") {
     const body = parseBody(options.body);
     return await callBridge<T>(bridge, "queueMessage", {
       chatId: body.chat_id,
       text: body.text,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -494,6 +619,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "updateQueuedMessage", {
       queuedMessageId: decodeURIComponent(queuedMessageMatch[1]!),
       text: body.text,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -523,6 +649,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       chatId: body.chat_id,
       text: body.text,
       clientMessageId: body.client_message_id,
+      contentParts: body.content_parts,
       model: body.model,
       reasoningEffort: body.reasoning_effort,
       accessMode: body.access_mode,
@@ -537,6 +664,26 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (retryCurrentMatch) return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]) });
   const cancelMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/cancel$/) : null;
   if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]) });
+  const stewardCancelMatch = method === "POST"
+    ? url.pathname.match(/^\/steward-relations\/([^/]+)\/cancel$/)
+    : null;
+  if (stewardCancelMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "cancelSteward", {
+      relationId: decodeURIComponent(stewardCancelMatch[1]!),
+      parentSessionId: body.parent_session_id,
+    });
+  }
+  const stewardResumeMatch = method === "POST"
+    ? url.pathname.match(/^\/steward-relations\/([^/]+)\/resume$/)
+    : null;
+  if (stewardResumeMatch) {
+    const body = parseBody(options.body);
+    return await callBridge<T>(bridge, "resumeSteward", {
+      relationId: decodeURIComponent(stewardResumeMatch[1]!),
+      parentSessionId: body.parent_session_id,
+    });
+  }
   const operationOutputMatch = method === "GET"
     ? url.pathname.match(/^\/turns\/([^/]+)\/operations\/([^/]+)\/output$/u)
     : null;
@@ -621,11 +768,37 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
 export async function selectProjectFolder(): Promise<{ cancelled?: boolean; display_name?: string; folder_selection_token?: string }> {
   const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
   if (!bridge?.selectProjectFolder) {
-    const error = new Error("Project folder picker is only available in the desktop app.");
+    const error = new Error(appCopy.interfaceFeedback.desktopFolderOnly);
     Object.assign(error, { code: "project_folder_picker_unavailable" });
     throw error;
   }
   return await callBridge(bridge, "selectProjectFolder");
+}
+
+export async function getSessionFolderLaunchTargets(
+  sessionId: string,
+): Promise<SessionFolderLaunchTargetsResult> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.getSessionFolderLaunchTargets !== "function") {
+    return {
+      ok: false,
+      code: "bridge_unavailable",
+      recoverable: true,
+      targets: [],
+    };
+  }
+  return await bridge.getSessionFolderLaunchTargets({ sessionId });
+}
+
+export async function openSessionFolder(
+  sessionId: string,
+  target: SessionFolderLaunchTarget,
+): Promise<SessionFolderLaunchResult> {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.openSessionFolder !== "function") {
+    return { ok: false, code: "bridge_unavailable", recoverable: true };
+  }
+  return await bridge.openSessionFolder({ sessionId, target });
 }
 
 export function canSelectProjectFolder(): boolean {

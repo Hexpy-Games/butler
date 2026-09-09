@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
@@ -17,6 +18,7 @@ import {
 import { useProfileMigrationPrompt } from "./useProfileMigrationPrompt";
 
 export function PersonalizationProfileMigration() {
+  useAppLocale();
   const personalization = useSettingsUIStore((state) => state.personalization);
   const importProfileMigration = useSettingsUIStore(
     (state) => state.importProfileMigration,
@@ -72,9 +74,11 @@ export function PersonalizationProfileMigration() {
   return (
     <>
       <SettingsField
+        id="profile-migration-import"
         data-test-class="settings-field"
         label={settingsFields.profileMigrationImport}
         description={settingsDescriptions.profileMigration}
+        descriptionId="profile-migration-import-description"
         meta={
           <span
             aria-live="polite"
@@ -89,6 +93,8 @@ export function PersonalizationProfileMigration() {
         control={
           <Button
             type="button"
+            id="profile-migration-import"
+            aria-describedby="profile-migration-import-description"
             variant="outline"
             aria-expanded={migrationExpanded}
             aria-controls="profile-migration-fields"
@@ -104,8 +110,8 @@ export function PersonalizationProfileMigration() {
       {migrationExpanded ? (
         <Stack id="profile-migration-fields" gap="xl">
           <Field data-test-class="settings-field">
-            <FieldLabel>{settingsFields.profileMigrationPrompt}</FieldLabel>
-            <Textarea value={migrationPrompt} rows={8} readOnly />
+            <FieldLabel htmlFor="profile-migration-prompt">{settingsFields.profileMigrationPrompt}</FieldLabel>
+            <Textarea id="profile-migration-prompt" value={migrationPrompt} rows={8} readOnly />
             <Stack align="row" justify="end">
               <Button
                 type="button"
@@ -118,8 +124,9 @@ export function PersonalizationProfileMigration() {
             </Stack>
           </Field>
           <Field data-test-class="settings-field">
-            <FieldLabel>{settingsFields.profileMigrationDump}</FieldLabel>
+            <FieldLabel htmlFor="profile-migration-dump">{settingsFields.profileMigrationDump}</FieldLabel>
             <Textarea
+              id="profile-migration-dump"
               value={migrationDump}
               onChange={(event) => {
                 setMigrationDump(event.target.value);

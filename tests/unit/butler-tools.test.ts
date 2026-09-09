@@ -343,6 +343,25 @@ test("Project Ledger read tools cannot leave the active App project", async () =
   })).rejects.toThrow("Explicit Project Ledger reference must match the active project id or be omitted.");
 });
 
+test("Project Ledger native list defaults absent and blank kind to all through the real CLI", async () => {
+  const projectPath = join(tempDir, "project-ledger", "projects", "contract");
+  runProjectLedger(["init", "--id", "contract", "--name", "Contract"], projectPath);
+  runProjectLedger(["work", "create", "--id", "W-CONTRACT", "--title", "Contract work", "--acceptance-exemption"], projectPath);
+  runProjectLedger(["record", "create", "--kind", "spec", "--id", "SPEC-CONTRACT", "--title", "Contract spec"], projectPath);
+  runProjectLedger(["index"], projectPath);
+  const execute = createButlerToolExecutor({ butlerHome: root, butlerData: tempDir });
+  for (const kindArgs of [{}, { kind: "" }, { kind: "  " }, { kind: "all" }]) {
+    const args = { project_ref: "contract", ...kindArgs };
+    const result = await execute({ name: "project_ledger_list", args, rawArguments: JSON.stringify(args) }) as Record<string, any>;
+    expect(result.ok).toBe(true);
+    expect(result.data.results.map((record: { id: string }) => record.id).sort()).toEqual(["SPEC-CONTRACT", "W-CONTRACT"]);
+  }
+  const args = { project_ref: "contract", kind: "spec" };
+  const filtered = await execute({ name: "project_ledger_list", args, rawArguments: JSON.stringify(args) }) as Record<string, any>;
+  expect(filtered.ok).toBe(true);
+  expect(filtered.data.results.map((record: { id: string }) => record.id)).toEqual(["SPEC-CONTRACT"]);
+});
+
 test("Project Ledger native tools route task completion through task handlers", async () => {
   const projectPath = join(tempDir, "project-ledger", "projects", "butler");
   runProjectLedger(["init", "--id", "butler", "--name", "Butler"], projectPath);
@@ -402,12 +421,13 @@ test("Project Ledger native tools route task completion through task handlers", 
   }) as {
     ok: boolean;
     recoverable?: boolean;
-    error?: { code?: string; next?: string[]; native_next?: Array<{ tool?: string; reason?: string }> };
+    error?: { code?: string; message?: string; next?: string[]; native_next?: Array<{ tool?: string; reason?: string }> };
   };
   expect(missingParent.ok).toBe(false);
   expect(missingParent.recoverable).toBe(true);
   expect(missingParent.error?.code).toBe("invalid_arguments");
-  expect(JSON.stringify(missingParent.error?.native_next)).toContain("Correct required Project Ledger");
+  expect(missingParent.error?.native_next).toBeUndefined();
+  expect(missingParent.error?.message?.length).toBeGreaterThan(0);
 
   const plannedTodoTask = await executor({
     name: "project_ledger_create",
@@ -538,7 +558,7 @@ test("Project Ledger native tools route task completion through task handlers", 
   const missingEvidenceWorkComplete = await executor({
     name: "project_ledger_work_complete",
     args: {
-      project_path: projectPath,
+      project_ref: "butler",
       id: "W-SANDY",
       validation: "validation evidence",
       review: "review evidence",
@@ -558,8 +578,17 @@ test("Project Ledger native tools route task completion through task handlers", 
   expect(missingEvidenceWorkComplete.error?.code).toBe("completion_gate_failed");
   expect(JSON.stringify(missingEvidenceWorkComplete.error)).toContain("missing_report");
   expect(missingEvidenceWorkComplete.error?.native_next).toContainEqual(expect.objectContaining({
-    tool: "project_ledger_work_complete",
+    tool: "project_ledger_show",
+    args: { project_ref: "butler", id: "W-SANDY", kind: "work" },
   }));
+  const inspectionHint = missingEvidenceWorkComplete.error!.native_next![0]!;
+  const inspected = await executor({
+    name: inspectionHint.tool!,
+    args: inspectionHint.args!,
+    rawArguments: JSON.stringify(inspectionHint.args),
+  }) as { ok: boolean; data?: { id?: string } };
+  expect(inspected.ok).toBe(true);
+  expect(inspected.data?.id).toBe("W-SANDY");
 
   runProjectLedger([
     "work",
@@ -776,6 +805,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_conversation_session",
     "update_explicit_memory",
     "list_skills",
+    "delegate_to_steward",
+    "steer_steward",
+    "cancel_steward",
   ]);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_search")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
@@ -924,17 +956,22 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "run-command",
     "session-workspace",
     "skills",
+    "subsession",
     "tool-bridge",
     "web-read",
     "web-search",
     "work-tracking",
   ];
-  const groupedToolNames = groupNames.flatMap((groupName) => (
-    readdirSync(join(toolsRoot, groupName))
+  const groupedToolNames = groupNames.flatMap((groupName) => {
+    if (groupName === "subsession") {
+      return ["delegate_to_steward", "steer_steward", "cancel_steward"]
+        .map((name) => `${groupName}/${name}`);
+    }
+    return readdirSync(join(toolsRoot, groupName))
       .filter((name) => statSync(join(toolsRoot, groupName, name)).isDirectory())
       .filter((name) => existsSync(join(toolsRoot, groupName, name, "index.ts")))
-      .map((name) => `${groupName}/${name}`)
-  )).sort();
+      .map((name) => `${groupName}/${name}`);
+  }).sort();
   const toolNames = BUTLER_TOOLS.map((tool) => tool.name).sort();
   const nestedToolNames = groupedToolNames.map((name) => name.split("/").at(1)).sort();
 
@@ -942,10 +979,13 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   expect(nestedToolNames).toEqual(toolNames);
 
   for (const groupName of groupNames) {
-    expect(existsSync(join(toolsRoot, groupName, "executor.ts"))).toBe(false);
+    expect(existsSync(join(toolsRoot, groupName, "executor.ts"))).toBe(
+      groupName === "subsession",
+    );
   }
 
   for (const name of groupedToolNames) {
+    if (name.startsWith("subsession/")) continue;
     const source = readFileSync(join(toolsRoot, name, "index.ts"), "utf8");
     expect(source).not.toContain("export * from");
     expect(source).toContain("./definition.ts");
@@ -2693,27 +2733,10 @@ test("run_command verifies structured stdout artifact paths under Butler data", 
 });
 
 test("default app suggestions do not advertise weather workflows", () => {
-  const agentBriefing = [
-    "fallback-copy.ts",
-    "project-fallback-suggestions.ts",
-  ]
-    .map((file) =>
-      readFileSync(
-        join(
-          root,
-          "packages",
-          "butler-agent",
-          "src",
-          "gateways",
-          "app",
-          "domain",
-          "new-chat-briefing",
-          file,
-        ),
-        "utf8",
-      ),
-    )
-    .join("\n");
+  const agentBriefing = ["en", "ko"].map(locale =>
+    readFileSync(join(root, "packages", "butler-i18n", "src", "locales", `${locale}.ts`), "utf8")
+      .split("const firstRun")[0],
+  ).join("\n");
   const clientSuggestions = readFileSync(
     join(root, "packages", "butler-app", "client", "ui", "src", "components", "conversation", "emptyStateSuggestions.ts"),
     "utf8",
@@ -3100,7 +3123,9 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
   expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_ref"]);
   expect(nativeIndex?.parameters.required).toEqual([]);
   expect(Object.keys(nativeIndex?.parameters.properties ?? {})).toEqual(["project_ref"]);
-  expect(nativeList?.parameters.required).toEqual(["kind"]);
+  expect(nativeList?.parameters.required).toEqual([]);
+  expect((nativeList?.parameters.properties as Record<string, unknown>).kind).toMatchObject({ default: "all" });
+  expect((nativeCreate?.parameters.properties as Record<string, unknown>).kind).not.toHaveProperty("default");
   expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_ref", "kind", "status", "query", "limit"]);
   expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
   expect(Object.keys(nativeCreate?.parameters.properties ?? {})).toContain("body");
@@ -3192,6 +3217,8 @@ test("tool output artifact reader schema exposes focused recovery controls", () 
     "path",
     "stream",
     "offset_lines",
+    "offset_chars",
+    "search",
     "limit_lines",
     "max_tokens",
   ]);

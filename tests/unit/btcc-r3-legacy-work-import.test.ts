@@ -11,6 +11,10 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { seedLegacySessionWork } from
   "./support/btcc-r3-legacy-session-work-fixture.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 
 test("open R2 Session Work imports once as concise R3 Work across restart", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-legacy-import-"));
@@ -25,7 +29,10 @@ test("open R2 Session Work imports once as concise R3 Work across restart", asyn
     db.exec(BTCC_SUCCESSOR_SCHEMA);
     seedLegacySessionWork(db);
     insertTurn(db, scope.turnId, scope.sessionId, "이전 작업을 이어서 진행해 주세요.");
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
 
     const imported = await service.importOpenLegacyWork(scope);
     expect(imported).toMatchObject({
@@ -93,7 +100,10 @@ test("open R2 Session Work imports once as concise R3 Work across restart", asyn
 
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     expect(await resumed.importOpenLegacyWork(scope)).toMatchObject({
       sourceProgramId: "program-session",
       imported: false,
@@ -119,7 +129,10 @@ test("SQLite importer ignores local Project rows and closed R2 Programs", async 
       WHERE program_id = 'program-session'
     `).run();
     insertTurn(db, "turn-project-import", "session-fixture", "프로젝트 작업을 이어갑니다.");
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     expect(await service.importOpenLegacyWork({
       turnId: "turn-project-import",
       sessionId: "session-fixture",
@@ -147,7 +160,10 @@ test("fresh R3 storage without legacy Work tables returns no import", async () =
   try {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
     insertTurn(db, "turn-fresh-r3", "session-fresh-r3", "새 작업입니다.");
-    const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     expect(await service.importOpenLegacyWork({
       turnId: "turn-fresh-r3",
       sessionId: "session-fresh-r3",

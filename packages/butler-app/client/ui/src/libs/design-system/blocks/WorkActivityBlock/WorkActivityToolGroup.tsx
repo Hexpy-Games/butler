@@ -1,7 +1,7 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
-import { Typo } from "../../components/Typo";
+import { Stack } from "../../components/Stack";
+import { WorkActivityToolRow } from "./WorkActivityToolRow";
 import styles from "./WorkActivityBlock.module.css";
 
 export interface WorkActivityToolItem {
@@ -10,22 +10,15 @@ export interface WorkActivityToolItem {
   title: ReactNode;
   details?: ReactNode;
   summaryLabel?: string;
+  /** Always-visible footer below the containing disclosure and its expanded list. */
+  after?: ReactNode;
 }
 
-export function WorkActivityToolGroup({
-  tools,
-}: {
-  tools: WorkActivityToolItem[];
-}) {
+export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[] }) {
   const [expanded, setExpanded] = useState(false);
-  if (tools.length === 0) return null;
-  if (tools.length === 1) return <WorkActivityToolRow tool={tools[0]!} />;
-
+  if (tools.length === 1 && !tools[0]!.after) return <WorkActivityToolRow tool={tools[0]!} />;
   return (
-    <div
-      className={styles.toolRow}
-      data-test-class="turn-work-tool-row turn-work-tool-group"
-    >
+    <Stack gap="xs" className={styles.toolRow} data-test-class="turn-work-tool-row turn-work-tool-group">
       <button
         aria-expanded={expanded}
         className={styles.toolGroup}
@@ -38,109 +31,14 @@ export function WorkActivityToolGroup({
         </span>
       </button>
       {expanded ? (
-        <div
-          className={styles.toolDetailList}
-          data-test-class="turn-activity-details turn-work-tool-detail-list"
-        >
-          {tools.map((tool) => (
-            <WorkActivityToolDetailRow key={tool.id} tool={tool} />
-          ))}
+        <div className={styles.toolDetailList} data-test-class="turn-activity-details turn-work-tool-detail-list">
+          {tools.map((tool) => <WorkActivityToolRow key={tool.id} tool={tool} nested />)}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function WorkActivityToolRow({ tool }: { tool: WorkActivityToolItem }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetails = Boolean(tool.details);
-  const content = <WorkActivityToolContent reserveIconSlot tool={tool} />;
-
-  if (!hasDetails) {
-    return (
-      <div className={styles.toolRow} data-test-class="turn-work-tool-row">
-        <div className={styles.tool}>{content}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.toolRow} data-test-class="turn-work-tool-row">
-      <button
-        aria-expanded={expanded}
-        className={styles.tool}
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {content}
-      </button>
-      {expanded ? <ToolDetails>{tool.details}</ToolDetails> : null}
-    </div>
-  );
-}
-
-function WorkActivityToolDetailRow({ tool }: { tool: WorkActivityToolItem }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetails = Boolean(tool.details);
-  const content = <WorkActivityToolContent tool={tool} />;
-
-  return (
-    <div
-      className={styles.toolDetailRow}
-      data-test-class="turn-work-tool-detail-row"
-    >
-      {hasDetails ? (
-        <button
-          aria-expanded={expanded}
-          className={styles.toolDetailButton}
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {content}
-          <span className={styles.toolDetailChevron} aria-hidden="true">
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </span>
-        </button>
-      ) : (
-        <div className={styles.toolDetailButton}>{content}</div>
-      )}
-      {expanded ? <ToolDetails>{tool.details}</ToolDetails> : null}
-    </div>
-  );
-}
-
-function WorkActivityToolContent({
-  reserveIconSlot = false,
-  tool,
-}: {
-  reserveIconSlot?: boolean;
-  tool: WorkActivityToolItem;
-}) {
-  return (
-    <>
-      {tool.icon || reserveIconSlot ? (
-        <span className={styles.toolIcon} aria-hidden={!tool.icon}>
-          {tool.icon}
-        </span>
-      ) : null}
-      <span className={styles.toolCopy}>
-        <Typo.Body as="span" className={styles.toolTitle}>
-          {tool.title}
-        </Typo.Body>
-      </span>
-    </>
-  );
-}
-
-function ToolDetails({ children }: { children: ReactNode }) {
-  return (
-    <Typo.Caption
-      className={`${styles.toolDetails} ${styles.toolDetailText}`}
-      data-slot="work-activity-tool-details"
-      data-test-class="turn-work-tool-detail-text"
-    >
-      {children}
-    </Typo.Caption>
+      {tools.filter((tool) => tool.after).map((tool) => (
+        <div key={tool.id} className={styles.toolAttachment}>{tool.after}</div>
+      ))}
+    </Stack>
   );
 }
 
@@ -150,7 +48,5 @@ function toolSummary(tools: WorkActivityToolItem[]): string {
     const label = tool.summaryLabel?.trim() || "도구";
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return [...counts.entries()]
-    .map(([label, count]) => `${count} ${label}`)
-    .join(", ");
+  return [...counts.entries()].map(([label, count]) => `${count} ${label}`).join(", ");
 }

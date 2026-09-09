@@ -31,6 +31,8 @@ export class ConversationSessionTurnRecords {
     const sessionId = input.sessionId ?? this.dependencies.idFactory("cs");
     const turnId = input.turnId ?? this.dependencies.idFactory("ct");
     const tx = this.dependencies.db.transaction(() => {
+      const existingTurn = this.dependencies.internals.getTurn(turnId);
+      if (existingTurn) return existingTurn;
       this.dependencies.internals.upsertSession({
         id: sessionId,
         workspace_id: input.workspaceId ?? null,
@@ -54,8 +56,6 @@ export class ConversationSessionTurnRecords {
         sessionId,
         now,
       );
-      const existingTurn = this.dependencies.internals.getTurn(turnId);
-      if (existingTurn) return existingTurn;
       const turn = this.dependencies.internals.insertTurn({
         id: turnId,
         session_id: sessionId,

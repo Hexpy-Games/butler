@@ -10,23 +10,12 @@
   align-items: center;
 }
 
-.overlay {
-  position: fixed;
-  z-index: 60;
-  inset: 0;
-  display: grid;
-  place-items: start center;
-  background: var(--command-overlay-bg);
-  padding-top: calc(var(--titlebar-safe-area-top) + 34px);
-}
-
 .palette {
   overflow: hidden;
-  width: min(640px, 82vw);
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
-  background: var(--popover);
-  box-shadow: var(--shadow-command);
+  width: min(640px, calc(100% - var(--space-4) * 2));
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
 }
 
 .inputRow {
@@ -56,7 +45,7 @@
   padding: 6px;
 }
 
-.results button {
+.results > button {
   display: grid;
   width: 100%;
   min-height: 42px;
@@ -72,7 +61,7 @@
   text-align: left;
 }
 
-.results button:hover {
+.results > button:hover {
   background: var(--selection);
 }
 

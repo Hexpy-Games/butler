@@ -1,11 +1,34 @@
-export type AuthorityCategory = "command";
+import type { GuidedEffectError } from "../effects/index.ts";
+
+export type AuthorityCategory = "command" | "reviewed_effect";
 export type AuthorityDecision = "pending" | "allowed" | "denied" | "modified";
-export type AuthorityOutcome = "pending" | "applied" | "failed";
+export type AuthorityOutcome = "pending" | "applied" | "failed" | "uncertain";
 export type AuthorityDecisionAction = "allow" | "deny" | "modify";
+
+export type AuthorityResumeSource = {
+  sessionId: string; turnId: string; originalEventId: string;
+  originalMessageId: string; originalMessage: string;
+  destination?: import("../contracts.ts").BtccProgressDestination;
+};
+
+/**
+ * Bounded typed reason for an operational (non-card) close of still-open
+ * authority requests. Never a decision value and never a card Cancel.
+ */
+export type AuthorityOperationalCloseReason =
+  | "session_archived"
+  | "session_permanently_deleted"
+  | "session_cancelled"
+  | "work_abandoned";
+
+/** Bounded scope of the operational close. */
+export type AuthorityOperationalCloseScope = "self_session" | "work";
 
 /** Fixed safe projection for a terminal self-session Deny decision. */
 export const AUTHORITY_DENIAL_TEXT =
   "Reviewed command denied. No command was run." as const;
+export const AUTHORITY_EFFECT_DENIAL_TEXT =
+  "Reviewed operation denied. No change was applied." as const;
 
 export type AuthorityCommandInput = {
   command: string;
@@ -17,10 +40,18 @@ export type AuthorityCommandInput = {
   output_mode?: "auto" | "silent_on_success" | "full";
 };
 
-export type AuthorityAdmissionInput = {
+export type AuthorityReviewedEffectInput = Record<string, unknown>;
+export type AuthorityOperationInput =
+  | AuthorityCommandInput
+  | AuthorityReviewedEffectInput;
+
+type AuthorityAdmissionIdentity = {
+  /** Already public activity label; display-only, not part of execution identity. */
+  publicActionTitle?: string;
   ownerSessionId: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  operationOccurrenceId?: string;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -28,10 +59,18 @@ export type AuthorityAdmissionInput = {
   authorityGeneration: number;
   capability: string;
   target: string;
-  normalizedInput: AuthorityCommandInput;
   modelRef: string;
   reasoningEffort: string;
 };
+
+export type AuthorityAdmissionInput = AuthorityAdmissionIdentity & (
+  | { category?: "command"; normalizedInput: AuthorityCommandInput }
+  | {
+      category: "reviewed_effect";
+      operationOccurrenceId: string;
+      normalizedInput: AuthorityReviewedEffectInput;
+    }
+);
 
 export type AuthorityRequestProjection = {
   request_ref: string;
@@ -39,9 +78,14 @@ export type AuthorityRequestProjection = {
   reason: string;
   executable: string;
   command_count?: number;
+  scope?: { title: string; description: string };
+  source_turn_id?: string;
+  source_session_id?: string;
+  source_call_id?: string;
 };
 
 export type AuthorityAdmissionResult =
+  | { status: "granted" }
   | {
       status: "pending";
       requestRef: string;
@@ -52,12 +96,12 @@ export type AuthorityAdmissionResult =
       requestRef: string;
       sourceWorkId: string;
       normalizedTarget: string;
-      normalizedInput: AuthorityCommandInput;
+      normalizedInput: AuthorityOperationInput;
     }
   | {
       status: "denied";
       requestRef: string;
-      denialText: typeof AUTHORITY_DENIAL_TEXT;
+      denialText: typeof AUTHORITY_DENIAL_TEXT | typeof AUTHORITY_EFFECT_DENIAL_TEXT;
     }
   | {
       status: "modified";
@@ -68,6 +112,7 @@ export type AuthorityAdmissionResult =
 export type AuthorityDecisionResult = {
   requestRef: string;
   sourceSessionId: string;
+  sourceTurnId: string;
   sourceWorkId: string;
   scheduleClientMessageId: string;
   scheduleInputText: string;
@@ -76,10 +121,32 @@ export type AuthorityDecisionResult = {
   decision: Exclude<AuthorityDecision, "pending">;
 };
 
+/**
+ * Bounded, opaque receipt for a terminal authority outcome.
+ * Carries only reconciliation pointers; never command, input, output, or path data.
+ */
+export type AuthorityOutcomeReceipt =
+  | {
+      schema: "butler.authority-outcome-receipt.v1";
+      outcome: "applied";
+      evidenceRef: string;
+      journalEffectId: string;
+      dispatchAttempt: number;
+    }
+  | {
+      schema: "butler.authority-outcome-receipt.v1";
+      outcome: "uncertain";
+      evidenceRef: string;
+      journalEffectId: string;
+      dispatchAttempt: number;
+      errorCode: GuidedEffectError["code"];
+    };
+
 export type AuthorityStoredExecution = {
   requestRef: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  sourceCallId?: string;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -87,21 +154,85 @@ export type AuthorityStoredExecution = {
   authorityGeneration: number;
   capability: string;
   normalizedTarget: string;
-  normalizedInput: AuthorityCommandInput;
+  category: AuthorityCategory;
+  normalizedInput: AuthorityOperationInput;
   decision: "allowed" | "denied" | "modified";
   alternativeInput?: string;
   outcome: AuthorityOutcome;
+  outcomeReceipt?: AuthorityOutcomeReceipt;
 };
 
-export type AuthorityOutcomeInput = {
-  requestRef: string;
-  ownerSessionId: string;
+export type AuthorityOutcomeInput =
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "applied";
+      receipt: Extract<AuthorityOutcomeReceipt, { outcome: "applied" }>;
+    }
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "uncertain";
+      receipt: Extract<AuthorityOutcomeReceipt, { outcome: "uncertain" }>;
+    }
+  | {
+      requestRef: string;
+      ownerSessionId: string;
+      sourceWorkId: string;
+      status: "failed";
+      receipt?: never;
+    };
+
+export type AuthorityOperationalCloseInput = {
+  selfSessionId: string;
+  reason: AuthorityOperationalCloseReason;
+};
+
+/** Typed input for the factual Work abandonment/supersession close. */
+export type AuthorityAbandonedWorkCloseInput = {
   sourceWorkId: string;
-  status: "applied" | "failed";
-  receipt?: unknown;
+  reason: Extract<AuthorityOperationalCloseReason, "work_abandoned">;
+};
+
+export type AuthorityOperationalCloseResult = {
+  scope: AuthorityOperationalCloseScope;
+  reason: AuthorityOperationalCloseReason;
+  closedCount: number;
+};
+
+/**
+ * Narrow durable capability for closing a factual Butler self-session's
+ * still-open requests. Required by guided Turn-stop persistence so the close
+ * runs inside the same SQLite transaction that cancels the Turn; the
+ * production composition supplies its one PrincipalAuthority instance here.
+ */
+export type AuthoritySelfSessionCloseCapability = {
+  closeSelfSession(
+    input: AuthorityOperationalCloseInput,
+  ): AuthorityOperationalCloseResult;
+};
+
+/**
+ * Narrow durable capability for closing the still-open requests of exactly one
+ * factually abandoned/superseded Work. Required by Guided Work abandonment so
+ * the close runs inside the same SQLite transaction as the Work status
+ * transition; the production composition supplies its one PrincipalAuthority
+ * instance here. Guided Work never sees authority SQL through this port.
+ */
+export type AuthorityAbandonedWorkCloseCapability = {
+  closeAbandonedWork(
+    input: AuthorityAbandonedWorkCloseInput,
+  ): AuthorityOperationalCloseResult;
 };
 
 export interface PrincipalAuthorityRepository {
+  hasConversationPermission(scope: import("./conversation-permission.ts").ConversationPermission["grantRef"]): boolean;
+  listConversationPermissions(ownerSessionId: string): import("./conversation-permission.ts").ConversationPermission[];
+  revokeConversationPermission(ownerSessionId: string, grantRef: string): void;
+  resumeSource(requestRef: string): AuthorityResumeSource | null;
+  waitingSourceSessions(): string[];
   findByIdentity(identitySha256: string): AuthorityRecord | null;
   findBySlot(input: {
     sourceWorkId: string;
@@ -123,16 +254,44 @@ export interface PrincipalAuthorityRepository {
     ownerSessionId: string;
     sourceSessionId: string;
     action: AuthorityDecisionAction;
+    permission?: import("./conversation-permission.ts").ConversationPermission;
     alternativeInput?: string;
     now: string;
   }): AuthorityRecord | null;
   recordOutcome(input: {
     requestRef: string;
     sourceWorkId: string;
-    status: "applied" | "failed";
+    status: "applied" | "failed" | "uncertain";
     receiptJson?: string;
     now: string;
   }): AuthorityRecord | null;
+  /**
+   * Operational (non-decision) close of still-open requests whose factual
+   * owning AND source session both equal the given Butler self-session.
+   * This is not a descendant or subtree close: a row with a child source
+   * session under this owner never matches. Mutually exclusive CAS with
+   * `decide`: only decision-pending rows without an existing close audit win.
+   */
+  closePendingSelfSessionRequests(input: {
+    selfSessionId: string;
+    reason: AuthorityOperationalCloseReason;
+    scope: AuthorityOperationalCloseScope;
+    now: string;
+  }): number;
+  /**
+   * Operational (non-decision) close of still-open requests whose exact
+   * source_work_id equals the factually abandoned Work. This is never a
+   * descendant, ancestor, sibling-subtree, or session-wide close: a request on
+   * any other Work in the same owner session never matches. Mutually exclusive
+   * CAS with `decide`: only decision-pending rows without an existing close
+   * audit win; outcome stays 'pending' by the schema invariant.
+   */
+  closePendingSourceWorkRequests(input: {
+    sourceWorkId: string;
+    reason: AuthorityOperationalCloseReason;
+    scope: AuthorityOperationalCloseScope;
+    now: string;
+  }): number;
 }
 
 export type AuthorityRecord = {
@@ -142,6 +301,7 @@ export type AuthorityRecord = {
   ownerSessionId: string;
   sourceSessionId: string;
   sourceTurnId: string;
+  sourceCallId?: string | null;
   sourceWorkId: string;
   workspacePath: string;
   planRevisionId: string;
@@ -157,23 +317,32 @@ export type AuthorityRecord = {
   executable: string;
   commandCount: number;
   decision: AuthorityDecision;
+  allowScope?: "once" | "conversation";
   scheduleClientMessageId: string;
   scheduleInputText: string;
   privateAlternativeInput: string | null;
   outcome: AuthorityOutcome;
   outcomeReceiptJson: string | null;
+  closeReason: AuthorityOperationalCloseReason | null;
+  closeScope: AuthorityOperationalCloseScope | null;
+  closedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export interface PrincipalAuthority {
+  listPermissions(ownerSessionId: string): import("./conversation-permission.ts").ConversationPermission[];
+  revokePermission(ownerSessionId: string, grantRef: string): void;
+  resumeSource(requestRef: string): AuthorityResumeSource | null;
+  waitingSourceSessions(): string[];
   admit(input: AuthorityAdmissionInput): AuthorityAdmissionResult;
   list(input: { ownerSessionId: string }): AuthorityRequestProjection[];
   decide(input: {
     ownerSessionId: string;
     requestRef: string;
-    sourceSessionId: string;
+    sourceSessionId?: string;
     action: AuthorityDecisionAction;
+    allowScope?: "once" | "conversation";
     alternativeInput?: string;
   }): AuthorityDecisionResult;
   listDecided(): AuthorityDecisionResult[];
@@ -187,4 +356,20 @@ export interface PrincipalAuthority {
     turnId: string;
   }): AuthorityStoredExecution;
   recordOutcome(input: AuthorityOutcomeInput): void;
+  /**
+   * Operational stop for a factual Butler self-session: atomically closes only
+   * still-open requests whose owning AND source session both equal that
+   * session, with bounded typed audit fields and no synthetic card decision.
+   */
+  closeSelfSession(
+    input: AuthorityOperationalCloseInput,
+  ): AuthorityOperationalCloseResult;
+  /**
+   * Operational stop for one factually abandoned/superseded Work: atomically
+   * closes only still-open requests whose exact source_work_id is that Work,
+   * with bounded typed audit fields and no synthetic card decision.
+   */
+  closeAbandonedWork(
+    input: AuthorityAbandonedWorkCloseInput,
+  ): AuthorityOperationalCloseResult;
 }

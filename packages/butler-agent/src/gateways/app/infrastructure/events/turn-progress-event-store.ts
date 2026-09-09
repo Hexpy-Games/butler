@@ -266,12 +266,15 @@ export class AppTurnProgressEventStore {
       .query(
         `
       UPDATE turns
-      SET safe_status_label = ?, updated_at = ?
+      SET safe_status_label = ?, safe_status_label_key = ?, safe_status_label_parameters_json = ?, safe_status_content_json = ?, updated_at = ?
       WHERE id = ?
         AND state NOT IN ('delivered', 'failed', 'cancelled')
     `,
       )
-      .run(label, row.created_at ?? new Date().toISOString(), turnId);
+      .run(label, synthesis || row.work_decision_summary ? null : row.interface_label_key ?? null,
+        !synthesis && !row.work_decision_summary && row.interface_label_parameters ? JSON.stringify(row.interface_label_parameters) : null,
+        !synthesis && row.interface_content ? JSON.stringify(row.work_decision_summary ? { summary: row.interface_content.summary } : row.interface_content) : null,
+        row.created_at ?? new Date().toISOString(), turnId);
   }
 
   private progressEventRowsAfter(turnId: string, afterId: number): EventRow[] {

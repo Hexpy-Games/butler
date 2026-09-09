@@ -2,12 +2,13 @@ import { useRef, useState } from "react";
 import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
+import { useSpaceDrag } from "@/app/space/drag";
 import { useComposerControls } from "./hooks/useComposerControls";
 import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
 import { useComposerHandlers } from "./hooks/useComposerHandlers";
 import { useComposerQueue } from "./hooks/useComposerQueue";
-import { useComposerSession } from "./hooks/useComposerSession";
+import { useComposerSession, type ComposerDraftScope } from "./hooks/useComposerSession";
 import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
@@ -16,23 +17,24 @@ import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
-
+import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
+  scope?: ComposerDraftScope;
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
   large: boolean;
 }
-export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
-  const session = useComposerSession();
-  useComposerDraftSession(session.activeChatId);
+export function Composer({ large, onOpenContext, onReserveChange, scope }: ComposerProps) {
+  const session = useComposerSession(scope);
+  const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
+  useComposerDraftSession(scope?.draftKey ?? session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
-  const submit = useComposerStore((store) => store.submit);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textAreaRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const controls = useComposerControls(
@@ -41,12 +43,11 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     session.modelCatalogState,
     session.settings,
   );
-  const files = useFileAttachments(session.activeChatId);
+  const files = useFileAttachments(scope?.draftKey ?? session.activeChatId);
   const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
-    clearPendingProjectDocumentAttachment:
-      session.clearPendingProjectDocumentAttachment,
+    clearPendingProjectDocumentAttachment: session.clearPendingProjectDocumentAttachment,
     files,
     pendingProjectDocumentAttachment: session.pendingProjectDocumentAttachment,
   });
@@ -89,13 +90,14 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     onSend: session.sendMessage,
   });
   const queue = useComposerQueue({
+    enabled: !scope,
     activeChatId: session.activeChatId,
     files,
     setText,
     summary: session.summary,
     textAreaRef,
   });
-
+  const decision = useComposerDecision(isComposing, !scope);
   useReserveHeight(wrapRef, onReserveChange);
   useComposerStoreBridge({
     accessMenuOpen,
@@ -116,24 +118,20 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     state,
     textAreaRef,
   });
-  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length);
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
-    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
+    protectedExpanded: referenceDragging || modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
-
   return (
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={presentation.expanded}
+      expanded={Boolean(scope || decision.plan || decision.authority) || presentation.expanded}
       floating
-      notice={<ComposerNotices
-        summary={session.summary}
-      />}
+      notice={<ComposerNotices summary={session.summary} />}
       adjunct={
-        showAdjunct ? (
+        composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length) ? (
           <ComposerAdjunctPanels
             queuedMessages={queue.sessionQueue}
             onEditQueued={queue.handleEditQueued}
@@ -149,11 +147,13 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}
-      onSubmit={submit}
+      onSubmit={decision.onSubmit}
     >
       <ComposerInputSurface
         fileInputRef={fileInputRef}
         onFiles={(nextFiles) => void files.addFiles(nextFiles)}
+        planDecision={decision.plan}
+        authorityDecision={decision.authority}
       />
     </ComposerCard>
   );

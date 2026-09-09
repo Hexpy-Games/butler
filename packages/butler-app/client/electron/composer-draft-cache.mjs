@@ -67,14 +67,25 @@ function normalizeSnapshot(value, expectedSessionId, maxBytes = defaultMaxDraftB
     typeof value.text !== "string" ||
     typeof value.updated_at !== "string" ||
     !Number.isFinite(Date.parse(value.updated_at)) ||
-    !draftTextWithinBudget(value.text, maxBytes)
+    (value.content_parts !== undefined && !validContent(value.content_parts)) ||
+    !draftTextWithinBudget(value.content_parts ? JSON.stringify(value.content_parts) : value.text, maxBytes)
   ) return null;
   return {
     schema: composerDraftSchema,
     session_id: sessionId,
     text: value.text,
+    ...(value.content_parts ? { content_parts: value.content_parts } : {}),
     updated_at: value.updated_at,
   };
+}
+
+// Electron's isolated preload accepts only the versioned public content shape.
+function validContent(value) {
+  return value && typeof value === "object" && !Array.isArray(value) && value.version === 1 &&
+    Array.isArray(value.parts) && value.parts.every(part => part && typeof part === "object" &&
+      (part.type === "text" ? typeof part.text === "string" :
+        part.type === "session_ref" && typeof part.sessionId === "string" && part.sessionId.trim().length > 0 &&
+        typeof part.titleSnapshot === "string"));
 }
 
 function draftTextWithinBudget(text, maxBytes) {

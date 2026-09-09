@@ -19,6 +19,7 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/file-tools/list_files/index.ts";
 import { createFileToolHandlers } from "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 import { createWorkspaceReference } from "../../packages/butler-agent/src/agent/session-workspaces/index.ts";
+import { structuredToolResultModelPreview } from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
 
 let root = "";
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "butler-file-tools-")); });
@@ -26,6 +27,19 @@ afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 const call = (a: Record<string, unknown>) => ({ name: "test", arguments: a });
 
 describe("workspace path guard", () => {
+  test("grep distinguishes explicit regex and literal searches while preserving old admitted calls", async () => {
+    await writeFile(join(root, "patterns.txt"), "alpha\nbeta\nalpha|beta\n", "utf8");
+    const search = (mode: Record<string, unknown>) => executeGrepFilesTool(
+      call({ pattern: "alpha|beta", ...mode }), { workspacePath: root });
+    const regex = await search({ literal: false });
+    const literal = await search({ literal: true });
+    const legacy = await search({});
+    expect(regex).toMatchObject({ ok: true, matches: [{ line: 1 }, { line: 2 }, { line: 3 }] });
+    expect(literal).toMatchObject({ ok: true, matches: [{ line: 3 }] });
+    expect(legacy).toMatchObject({ ok: true, matches: [{ line: 3 }] });
+    expect(grepFilesToolDefinition.parameters.properties).not.toHaveProperty("max_output_bytes");
+    expect(grepFilesToolDefinition.parameters.properties).not.toHaveProperty("max_dirs");
+  });
   test("allows in-workspace files and blocks traversal, sensitive paths, and symlink escape", async () => {
     await writeFile(join(root, "ok.txt"), "ok");
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "ok.txt" })).ok).toBe(true);
@@ -102,7 +116,7 @@ describe("read_file", () => {
     expect(res.metrics.output_bytes).toBe(3);
     await writeFile(join(root, "lines.txt"), "one\ntwo\nthree\nfour");
     const lineRes = await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "lines.txt", start_line: 2, limit_lines: 2 }] })) as any;
-    expect(lineRes.files[0].content).toBe("two\nthree"); expect(lineRes.files[0].start_line).toBe(2); expect(lineRes.files[0].end_line).toBe(3); expect(lineRes.truncated).toBe(true);
+    expect(lineRes.files[0].content).toBe("two\nthree"); expect(lineRes.files[0].start_line).toBe(2); expect(lineRes.files[0].end_line).toBe(3); expect(lineRes.truncated).toBe(false);
     await writeFile(join(root, "bin.dat"), Buffer.from([1, 0, 2]));
     expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: "bin.dat" }] }))) as any).files[0].error).toBe("binary_file_not_supported");
     expect(((await executeReadFileTool(call({ workspace_root: root, requests: [{ path: join(root, "a.txt") }] }))) as any).files[0].content).toBe("abcdef");
@@ -165,7 +179,26 @@ describe("read_file", () => {
     expect(stale.error).toBe("cursor_stale");
   });
 
-  test("keeps the requested line offset across aggregate and line continuations", async () => {
+  test("completes every requested line range without treating later lines as a byte limit", async () => {
+    await writeFile(join(root, "one.txt"), "one\ntwo\nthree\nfour", "utf8");
+    await writeFile(join(root, "two.txt"), "alpha\nbeta\ngamma", "utf8");
+    const result = await executeReadFileTool(call({
+      workspace_root: root,
+      requests: [
+        { path: "one.txt", start_line: 2, limit_lines: 2 },
+        { path: "two.txt", start_line: 1, limit_lines: 1 },
+      ],
+      max_total_bytes: 800_000,
+    })) as any;
+    expect(result.files.map((file: any) => file.content)).toEqual(["two\nthree", "alpha"]);
+    expect(result.files.every((file: any) => file.ok && !file.truncated)).toBe(true);
+    expect(result.files_read).toBe(2);
+    expect(result.truncated).toBe(false);
+    expect(result.next_cursor).toBeUndefined();
+    expect(result.stopped_by).toBeUndefined();
+  });
+
+  test("keeps the original requested range across aggregate continuations", async () => {
     await writeFile(join(root, "offset.txt"), "one\ntwo\nthree\n", "utf8");
     const readArgs = { requests: [{ path: "offset.txt", start_line: 2, limit_lines: 1 }], max_total_bytes: 2 };
     const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
@@ -175,10 +208,26 @@ describe("read_file", () => {
     const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
     expect(second.files[0].content).toBe("o");
     expect(second.files[0].start_line).toBe(2);
-    const third = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: second.next_cursor })) as any;
-    expect(third.files[0].content).toBe("th");
-    expect(third.files[0].start_line).toBe(3);
-    expect(third.files[0].content).not.toBe("\n");
+    expect(second.truncated).toBe(false);
+    expect(second.next_cursor).toBeUndefined();
+  });
+
+  test("distinguishes per-file paging from aggregate exhaustion and resumes later requests", async () => {
+    await writeFile(join(root, "one.txt"), "abcdef\nnot requested", "utf8");
+    await writeFile(join(root, "two.txt"), "second", "utf8");
+    const readArgs = {
+      requests: [{ path: "one.txt", limit_lines: 1, max_bytes: 3 }, { path: "two.txt" }],
+      max_total_bytes: 800_000,
+    };
+    const first = await executeReadFileTool(call({ workspace_root: root, ...readArgs })) as any;
+    expect(first.stopped_by).toBe("max_bytes");
+    expect(first.files[0].content).toBe("abc");
+    expect(first.files[1]).toMatchObject({ ok: true, skipped: true, pending: true });
+    expect(first.files[1].error).toBeUndefined();
+    const second = await executeReadFileTool(call({ workspace_root: root, ...readArgs, cursor: first.next_cursor })) as any;
+    expect(second.files.map((file: any) => file.content)).toEqual(["def", "second"]);
+    expect(second.truncated).toBe(false);
+    expect(second.next_cursor).toBeUndefined();
   });
 
   test("preserves UTF-8 boundaries while continuing from a non-first line", async () => {
@@ -616,17 +665,17 @@ describe("Project Ledger protected path roots", () => {
 });
 
 describe("grep_files", () => {
-  test("exposes pattern as the only required search text field", () => {
+  test("exposes explicit search mode without runtime budget controls", () => {
     const parameters = grepFilesToolDefinition.parameters as {
       properties?: Record<string, unknown>;
       required?: string[];
     };
-    expect(parameters.required).toEqual(["pattern"]);
+    expect(parameters.required).toEqual(["pattern", "literal"]);
     expect(parameters.properties).toHaveProperty("pattern");
     expect(parameters.properties).not.toHaveProperty("query");
     expect(parameters.properties).toHaveProperty("include_globs");
     expect(parameters.properties).toHaveProperty("exclude_globs");
-    expect(parameters.properties).toHaveProperty("max_output_bytes");
+    expect(parameters.properties).not.toHaveProperty("max_output_bytes");
     expect(parameters.properties).not.toHaveProperty("mode");
     expect(parameters.properties).not.toHaveProperty("include");
     expect(parameters.properties).not.toHaveProperty("exclude");
@@ -791,7 +840,8 @@ describe("grep_files", () => {
     expect(result.truncated).toBe(true);
     expect(result.stopped_by).toBe("elapsed_ms");
     expect(result.next_cursor).toBeUndefined();
-    expect(result.recovery_hint).toContain("timeout_ms");
+    expect(result.recovery_hint).toContain("narrow the root or globs");
+    expect(result.recovery_hint).not.toContain("raise timeout_ms");
     expect(result.metrics.candidate_reads).toBeLessThanOrEqual(4);
     expect(result.metrics.candidate_reads).toBeLessThan(result.files_considered);
     expect(result.metrics.elapsed_ms).toBeGreaterThanOrEqual(100);
@@ -832,6 +882,12 @@ describe("grep_files", () => {
     expect(result.truncated).toBe(true);
     expect(result.partial_reasons).toContain("max_bytes_per_file");
     expect(result.recovery_hint).toContain("max_bytes_per_file");
+    const preview = structuredToolResultModelPreview({ toolName: "grep_files", output: result });
+    expect(preview).toMatchObject({
+      unsearched_files: [{ path: "large.txt", reason: "max_bytes_per_file" }],
+      recovery_hint: result.recovery_hint,
+    });
+    expect(preview).not.toHaveProperty("metrics");
     expect(result.next_cursor).toBeUndefined();
     expect(result.evidence_receipts[0].summary).toContain("bounded partial result");
     expect(result.evidence_receipts[0].summary).not.toContain("continuation");

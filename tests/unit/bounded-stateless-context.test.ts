@@ -15,6 +15,7 @@ import { OPENAI_MODELS } from
 import { buildBoundedTurnContext } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/bounded-turn-context.ts";
 import {
+  continuationLimitsForModel,
   createTurnContinuationBudgetState,
   selectTurnContinuationBudget,
   transitionTurnContinuationBudget,
@@ -26,6 +27,10 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { SqliteGuidedTurnStateRepository } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-guided-turn-state-repository.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
 import { SqliteRuntimeOwnerRegistry } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
 import { agentBtccStoragePaths } from
@@ -136,8 +141,11 @@ test("an incomplete newest tool pair is mandatory and overflow remains explicit"
   expect(JSON.stringify(bounded.messages)).toContain("open-call");
 });
 
-test("durable budget admissions are monotonic idempotent and terminal exactly once", () => {
-  let state = createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 });
+test("durable context admission treats round counts as metrics and still enforces request size", () => {
+  const oneRoundLimits = { ...limits, maxModelRequests: 1, maxToolRounds: 1 };
+  let state = createTurnContinuationBudgetState({
+    turnId: "turn", limits: oneRoundLimits, nowMs: 1_000,
+  });
   const event = { kind: "admit_request" as const, roundId: "round-1", requestDigest: "a".repeat(64), modelFacingBytes: 900 };
   state = transitionTurnContinuationBudget(state, event, 1_001);
   state = transitionTurnContinuationBudget(state, event, 1_002);
@@ -145,16 +153,24 @@ test("durable budget admissions are monotonic idempotent and terminal exactly on
   state = transitionTurnContinuationBudget(state, { kind: "record_tool_round", roundId: "tool-1" }, 1_003);
   state = transitionTurnContinuationBudget(state, { kind: "record_tool_round", roundId: "tool-1" }, 1_004);
   expect(state.completedToolRounds).toEqual(["tool-1"]);
+  state = transitionTurnContinuationBudget(state, {
+    ...event, roundId: "round-2", requestDigest: "b".repeat(64),
+  }, 1_005);
+  state = transitionTurnContinuationBudget(state, {
+    kind: "record_tool_round", roundId: "tool-2",
+  }, 1_006);
+  expect(state.admittedRequests).toHaveLength(2);
+  expect(state.completedToolRounds).toEqual(["tool-1", "tool-2"]);
   let terminal: TurnContinuationBudgetExhaustedError | undefined;
   try {
-    transitionTurnContinuationBudget(state, { ...event, roundId: "round-over", modelFacingBytes: limits.maxModelFacingBytes + 1 }, 1_005);
+    transitionTurnContinuationBudget(state, { ...event, roundId: "round-over", modelFacingBytes: limits.maxModelFacingBytes + 1 }, 1_007);
   } catch (error) {
     terminal = error as TurnContinuationBudgetExhaustedError;
   }
   expect(terminal?.state.terminal).toMatchObject({
     code: "turn_continuation_budget_exhausted", reason: "model_facing_bytes",
   });
-  expect(() => transitionTurnContinuationBudget(terminal!.state, event, 1_006))
+  expect(() => transitionTurnContinuationBudget(terminal!.state, event, 1_008))
     .toThrow(TurnContinuationBudgetExhaustedError);
 });
 
@@ -164,7 +180,7 @@ test("SQLite atomically retains terminal exhaustion across repository restart", 
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "owner-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   const state = createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 });
   insertBudgetTurn(db, state);
   const turn = await turns.findTurn("turn");
@@ -182,7 +198,7 @@ test("SQLite atomically retains terminal exhaustion across repository restart", 
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "owner-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget?.terminal).toMatchObject({
     code: "turn_continuation_budget_exhausted", reason: "model_facing_bytes",
   });
@@ -197,7 +213,7 @@ test("SQLite restart preserves admitted request tool-round and output accounting
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "progress-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   insertBudgetTurn(db, createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 }));
   const turn = await turns.findTurn("turn");
   const claim = await turns.acquireStateExecutionClaim(turn!);
@@ -222,7 +238,7 @@ test("SQLite restart preserves admitted request tool-round and output accounting
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "progress-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget).toMatchObject({
     admittedRequests: [{ roundId: "round", modelFacingBytes: 700 }],
     completedToolRounds: ["tool-round"], completedOutputRounds: ["round"],
@@ -240,7 +256,7 @@ test("accepted response output overflow terminalizes once and survives restart",
   let db = new Database(dbPath);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   let owner = sqliteOwner(db, "output-terminal-1");
-  let turns = new SqliteGuidedTurnStateRepository(db, owner);
+  let turns = guidedTurns(db, owner);
   insertBudgetTurn(db, createTurnContinuationBudgetState({ turnId: "turn", limits, nowMs: 1_000 }));
   const turn = await turns.findTurn("turn");
   const claim = await turns.acquireStateExecutionClaim(turn!);
@@ -261,7 +277,7 @@ test("accepted response output overflow terminalizes once and survives restart",
 
   db = new Database(dbPath);
   owner = sqliteOwner(db, "output-terminal-2");
-  turns = new SqliteGuidedTurnStateRepository(db, owner);
+  turns = guidedTurns(db, owner);
   expect((await turns.findTurn("turn"))?.continuationBudget?.terminal).toEqual(firstTerminal);
   owner.close();
   db.close();
@@ -306,8 +322,26 @@ test("default-off selection preserves legacy and enabled config rejects unsafe c
   })).toThrow("unsafe_turn_continuation_limit:maxModelRequests");
 });
 
+test("default context bytes scale with the admitted model while an explicit override remains exact", () => {
+  const defaults = selectTurnContinuationBudget({
+    BUTLER_BOUNDED_STATELESS_CONTEXT: "on",
+  })!;
+  expect(continuationLimitsForModel(defaults, 200_000).maxModelFacingBytes)
+    .toBe(400_000);
+  expect(continuationLimitsForModel(defaults, 1_000_000).maxModelFacingBytes)
+    .toBe(2_000_000);
+
+  const explicit = selectTurnContinuationBudget({
+    BUTLER_BOUNDED_STATELESS_CONTEXT: "on",
+    BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES: "180000",
+  })!;
+  expect(continuationLimitsForModel(explicit, 1_000_000).maxModelFacingBytes)
+    .toBe(180_000);
+});
+
 test("production composition reaches the official serializer with bounded multi-round bodies", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-bounded-production-"));
+  installTestEol(root);
   const previous = {
     bounded: process.env.BUTLER_BOUNDED_STATELESS_CONTEXT,
     maxBytes: process.env.BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES,
@@ -416,6 +450,7 @@ test("production composition reaches the official serializer with bounded multi-
 for (const transport of ["official", "codex"] as const) {
   test(`all four features traverse production composition and the ${transport} serializer together`, async () => {
     const root = mkdtempSync(join(tmpdir(), `butler-feature-stack-${transport}-`));
+    installTestEol(root);
     const previous = {
       bounded: process.env.BUTLER_BOUNDED_STATELESS_CONTEXT,
       maxBytes: process.env.BUTLER_CONTINUATION_MAX_MODEL_FACING_BYTES,
@@ -949,6 +984,7 @@ test("route fallback official body preserves the admitted bounded carrier", asyn
 
 test("exact official attachment bytes terminalize durably before fetch", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-bounded-attachment-"));
+  installTestEol(root);
   const dbPath = agentBtccStoragePaths(root).agentBtccDbPath;
   const imagePath = join(root, "large.png");
   const sourceBytes = await sharp(randomBytes(512 * 512 * 3), {
@@ -1227,6 +1263,12 @@ test("flag-off does not create private identity state", async () => {
   }
 });
 
+function guidedTurns(db: Database, owner: SqliteRuntimeOwnerRegistry) {
+  return new SqliteGuidedTurnStateRepository(db, owner, createPrincipalAuthority(
+    new SqlitePrincipalAuthorityRepository(db),
+  ));
+}
+
 function sqliteOwner(db: Database, ownerId: string): SqliteRuntimeOwnerRegistry {
   return new SqliteRuntimeOwnerRegistry(db, {
     ownerId, hostId: "test-host", processId: 100, processStartedAtMs: 1,
@@ -1260,6 +1302,14 @@ function insertBudgetTurn(db: Database, state: ReturnType<typeof createTurnConti
 function restoreEnv(key: string, value: string | undefined): void {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
+}
+
+function installTestEol(root: string): void {
+  writeFileSync(
+    join(root, "eol.md"),
+    "Act only from explicit evidence and preserve the exact reviewed objective.\n",
+    "utf8",
+  );
 }
 
 async function captureFlagOffSerializer(flag: string | undefined): Promise<Record<string, unknown>> {

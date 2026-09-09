@@ -29,6 +29,8 @@ Butler client containers and design-system fixtures can use this block. The bloc
 ## Best practice
 
 - Keep suggestions short and action-oriented.
+- Compose inside `ConversationShell`: its named `conversation` container drives
+  compact layout from the actual panel width, not the desktop window width.
 - Use three to five suggestions.
 - Give each card a short title plus one concise description.
 - Let the rail scroll horizontally at the viewport edge instead of clipping it inside an invisible max-width container.

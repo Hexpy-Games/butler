@@ -34,7 +34,7 @@ export function useComposerKeyboard({
   submit,
 }: UseComposerKeyboardProps) {
   return useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    (event: KeyboardEvent<HTMLElement>) => {
       if (event.key === "Escape") {
         setModelMenuOpen(false);
         setAccessMenuOpen(false);

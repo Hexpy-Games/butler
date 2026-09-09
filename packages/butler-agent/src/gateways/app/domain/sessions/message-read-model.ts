@@ -1,3 +1,4 @@
+import { readMessageContent } from "../../../../foundation/message-content.ts";
 import type {
   MessageFileKind,
   MessageFileRef,
@@ -5,6 +6,7 @@ import type {
   MessageRole,
   MessageStatus,
   SessionArtifactSummary,
+  ProjectDashboardDocument,
   TurnRecord,
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
@@ -12,8 +14,14 @@ import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import type { ChangedFileDetail } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import {
+  projectLedgerPlanFromUnknown,
+  type ProjectLedgerPlan,
+} from "../../../../agent/btcc/project-plan.ts";
 
 export interface MessageReadModelRow {
+  content_parts_json?: string | null;
   rowid: number;
   id: string;
   chat_id: string;
@@ -28,6 +36,7 @@ export interface MessageReadModelRow {
   retryable: number;
   created_at: string;
   updated_at: string;
+  plan_json?: string | null;
 }
 
 export interface MessageFileReadModelRow {
@@ -75,6 +84,7 @@ export interface TurnReadModelRow {
 export function messageFromRow(
   row: MessageReadModelRow,
   attachments: MessageFileRef[] = [],
+  changedFiles: ChangedFileDetail[] = [],
 ): MessageRecord {
   const message: MessageRecord = {
     id: row.id,
@@ -85,6 +95,7 @@ export function messageFromRow(
     conversation_message_id: row.conversation_message_id ?? undefined,
     role: row.role,
     text: row.text,
+    content_parts: readMessageContent(row.content_parts_json),
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -92,10 +103,39 @@ export function messageFromRow(
     retryable: row.retryable === 1,
     cursor: row.rowid,
   };
+  const plan = projectPlanFromJson(row.plan_json);
+  if (plan) message.plan_document = planDocument(plan, row.updated_at);
   if (attachments.length > 0) message.attachments = attachments;
   const artifacts = artifactSummariesFromMessage(row, attachments);
   if (artifacts.length > 0) message.artifacts = artifacts;
+  if (changedFiles.length > 0) message.changed_files = changedFiles;
   return message;
+}
+
+function projectPlanFromJson(value: string | null | undefined): ProjectLedgerPlan | undefined {
+  if (!value) return undefined;
+  try {
+    return projectLedgerPlanFromUnknown(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function planDocument(
+  plan: ProjectLedgerPlan,
+  updatedAt: string,
+): ProjectDashboardDocument {
+  const safeId = plan.id.replace(/[^a-z0-9._/-]+/giu, "-");
+  return {
+    id: plan.id,
+    kind: "plan",
+    document_type: "plan",
+    title: plan.title,
+    status: plan.status,
+    safe_path_label: `plans/${safeId}.md`,
+    markdown: plan.body,
+    updated_at: updatedAt,
+  };
 }
 
 export function messageFileRefFromRow(

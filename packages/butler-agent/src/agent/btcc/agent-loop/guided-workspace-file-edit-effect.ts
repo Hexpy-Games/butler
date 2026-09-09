@@ -2,7 +2,7 @@ import type {
   EffectAdapterError,
   GuidedEffectRecoveryHint,
 } from "../effects/index.ts";
-import { locateExactText } from "../../tools/file-tools/edit_file/index.ts";
+import { prepareOrderedExactEdits } from "../../tools/file-tools/edit_file/index.ts";
 import { workspaceFileEffectTarget } from "./guided-workspace-file-target.ts";
 import {
   createGuidedWorkspaceFileEditEffectAdapter,
@@ -114,27 +114,16 @@ export async function prepareGuidedWorkspaceFileEdit(input: {
       },
     };
   }
-  const location = locateExactText({
-    text: decodedText.text,
-    oldText: decoded.value.oldText,
-    ...(decoded.value.startLine === undefined
-      ? {}
-      : { startLine: decoded.value.startLine }),
-  });
-  if (!location.ok) {
+  const ordered = prepareOrderedExactEdits([decoded.value], new Map([[decoded.value.path, decodedText.text]]));
+  if (!ordered.ok) {
     return rejected(
-      location.error,
-      location.error === "old_text_ambiguous"
+      ordered.error,
+      ordered.error === "old_text_ambiguous"
         ? "The current file contains multiple unresolved old_text occurrences. Provide a more specific exact range."
         : "The current file does not contain old_text; read it again and retry the small edit.",
     );
   }
-  const afterText =
-    decodedText.text.slice(0, location.value.offset) +
-    decoded.value.newText +
-    decodedText.text.slice(
-      location.value.offset + decoded.value.oldText.length,
-    );
+  const afterText = ordered.files.get(decoded.value.path)!.afterText;
   if (afterText === decodedText.text)
     return rejected(
       "edit_file_no_change",
@@ -148,7 +137,7 @@ export async function prepareGuidedWorkspaceFileEdit(input: {
         oldText: decoded.value.oldText,
         newText: decoded.value.newText,
       },
-      location: location.value,
+      location: ordered.locations[0]!,
     },
     {
       beforeSha256: observed.value.sha256,

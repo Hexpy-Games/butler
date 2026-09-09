@@ -17,6 +17,7 @@ export function SettingsTokenInput({
   onCommit: (value: number, clamped: boolean) => void;
 }) {
   const descriptionId = useId();
+  const inputId = useId();
   const sliderId = useId();
   const [text, setText] = useState(String(value));
 
@@ -48,6 +49,7 @@ export function SettingsTokenInput({
 
   return (
     <SettingsField
+      id={inputId}
       data-test-class="settings-field"
       label={label}
       description={description}
@@ -55,6 +57,7 @@ export function SettingsTokenInput({
       control={
         <Stack gap="2">
           <Input
+            id={inputId}
             value={text}
             onChange={(event) => setText(event.target.value)}
             onBlur={(event) => commit(event.target.value)}

@@ -4,128 +4,135 @@ import type {
   WorkTurnScope,
 } from "../work/index.ts";
 import { dispositionMaterialFingerprint } from "../work/index.ts";
-import type { GuidedToolJournal } from "../ports/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
-import { isDurableWorkTool } from "../work/index.ts";
+import type { GuidedToolJournal } from "../ports/index.ts";
+import { guidedWorkReportDecision, isFreshCurrentDisposition, type AcceptedWorkResult } from "./guided-work-report-decision.ts";
+export { isFreshCurrentDisposition } from "./guided-work-report-decision.ts";
 
 type GuidedTurnCloseoutInput = {
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
-  toolJournal: GuidedToolJournal;
   turnId: string;
   trackingMode: "ledger" | "local" | "none";
   responseLanguage: string;
   originalRequest: string;
-  subsessionRoutingRequired?: boolean;
+  requiresTerminalResult?: boolean;
 };
 
 type GuidedTurnCloseoutReview =
   | { status: "accepted"; text?: string }
   | { status: "continue"; observation: string };
 
-/**
- * A disposition is a closeout declaration only while it still describes the
- * current durable Work snapshot.  Result/checkpoint/review/action/effect
- * writes change the material fingerprint, so a same-Turn declaration cannot
- * silently settle a Work after later progress.
- */
-export function isFreshCurrentDisposition(
-  work: DurableWorkView | null,
-  turnId: string,
-): boolean {
-  if (!work || work.status === "abandoned") return true;
-  const disposition = work.latestDisposition;
-  return Boolean(
-    disposition &&
-    disposition.originTurnId === turnId &&
-    disposition.disposition === work.status &&
-    disposition.materialFingerprint &&
-    disposition.materialFingerprint === dispositionMaterialFingerprint(work),
-  );
+/** Keeps the model-authored handoff reply without settling delegated Work. */
+export function createGuidedDelegationTurnRelease(input: {
+  reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
+  reconcileAfterLoop(text: string): Promise<string>;
+  turnId: string;
+  toolJournal: Pick<GuidedToolJournal, "list">;
+  delegationTool: "delegate_to_steward";
+}): {
+  reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
+  reconcileAfterLoop(text: string): Promise<string>;
+} {
+  return {
+    reviewFinalCandidate: async (candidate) => hasQueuedDelegation(input)
+      ? { status: "accepted" }
+      : input.reviewFinalCandidate(candidate),
+    reconcileAfterLoop: async (text) => hasQueuedDelegation(input)
+      ? text
+      : input.reconcileAfterLoop(text),
+  };
+}
+
+function hasQueuedDelegation(input: {
+  turnId: string;
+  toolJournal: Pick<GuidedToolJournal, "list">;
+  delegationTool: "delegate_to_steward";
+}): boolean {
+  return input.toolJournal.list(input.turnId).some((record) => {
+    const result = record.result;
+    return record.toolName === input.delegationTool &&
+      record.status === "completed" &&
+      Boolean(result && typeof result === "object" &&
+        Reflect.get(result, "ok") === true &&
+        Reflect.get(result, "status") === "queued");
+  });
 }
 
 /**
- * Owns the bounded final-candidate reconciliation policy. A bound Work that
- * has no fresh disposition from this Turn gets one extra model opportunity;
- * a still-missing declaration is settled as a durable open disposition and
- * disclosed before the candidate is delivered.
+ * Delegated assignments keep executing until a terminal disposition. Ordinary
+ * conversations retain the bounded reconciliation that permits an open reply.
  */
 export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   reviewFinalCandidate(candidate: { text: string }): Promise<GuidedTurnCloseoutReview>;
   reconcileAfterLoop(text: string): Promise<string>;
-  subsessionRoutingRepairRequired(): boolean;
+  acceptedWorkResult(): Promise<AcceptedWorkResult | undefined>;
 } {
-  let subsessionRoutingCorrectionIssued = false;
-  const hasSubsessionRoutingCall = () => input.toolJournal.list(input.turnId).some(
-    (record) => SUBSESSION_ROUTING_TOOLS.has(record.toolName),
-  );
   return {
+    async acceptedWorkResult() {
+      const decision = guidedWorkReportDecision(await loadBoundWork(input), input.turnId, input.requiresTerminalResult ?? false);
+      return decision.status === "report" ? decision.result : undefined;
+    },
     async reviewFinalCandidate(candidate) {
-      if (input.subsessionRoutingRequired && !hasSubsessionRoutingCall()) {
-        subsessionRoutingCorrectionIssued = true;
+      try {
+        if (input.trackingMode === "none" && !input.requiresTerminalResult) {
+          return { status: "accepted" as const };
+        }
+        const bound = await loadBoundWork(input);
+        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
+        if (input.requiresTerminalResult && decision.status === "continue") return decision;
+        if (!bound) {
+          return { status: "accepted" as const };
+        }
+        if (isFreshCurrentDisposition(bound, input.turnId)) {
+          return bound.latestDisposition?.runtimeOwnedOpen
+            ? { status: "accepted" as const, text: noticeCandidate(input, candidate.text) }
+            : { status: "accepted" as const };
+        }
+        if (!await claimCloseoutCorrection(input, bound.workId)) {
+          return {
+            status: "accepted" as const,
+            text: await settleOpen(input, bound, candidate.text),
+          };
+        }
         return {
           status: "continue" as const,
           observation: [
-            "This objective cannot finish as a direct Butler reply.",
-            "Call exactly one of delegate_to_steward, steer_steward, or cancel_steward now, using the current relation state and the user's complete objective.",
+            "Before reporting the final answer, call record_work_disposition for the explicitly bound Work.",
+            "Choose completed, open, or blocked with a concise summary and valid action/evidence details, then report.",
           ].join(" "),
         };
-      }
-      if (input.trackingMode === "none") {
+      } catch (error) {
+        if (!isOpenDispositionPublicationFailure(error)) throw error;
         return { status: "accepted" as const };
       }
-      const bound = await loadBoundWork(input);
-      if (!bound) {
-        return { status: "accepted" as const };
-      }
-      if (isFreshCurrentDisposition(bound, input.turnId)) {
-        return bound.latestDisposition?.runtimeOwnedOpen
-          ? { status: "accepted" as const, text: noticeCandidate(input, candidate.text) }
-          : { status: "accepted" as const };
-      }
-      if (!await claimCloseoutCorrection(input, bound.workId)) {
-        return {
-          status: "accepted" as const,
-          text: await settleOpen(input, bound, candidate.text),
-        };
-      }
-      return {
-        status: "continue" as const,
-        observation: [
-          "Before reporting the final answer, call record_work_disposition for the explicitly bound Work.",
-          "Choose completed, open, or blocked with a concise summary and valid action/evidence details, then report.",
-        ].join(" "),
-      };
     },
 
     async reconcileAfterLoop(text) {
-      if (input.trackingMode === "none") return text;
-      const bound = await loadBoundWork(input);
-      if (!bound) return text;
-      if (isFreshCurrentDisposition(bound, input.turnId)) {
-        return bound.latestDisposition?.runtimeOwnedOpen
-          ? noticeCandidate(input, text)
-          : text;
+      try {
+        if (input.trackingMode === "none" && !input.requiresTerminalResult) return text;
+        const bound = await loadBoundWork(input);
+        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
+        // The loop must obtain a terminal decision before delivering a child reply.
+        // A missing decision is an execution fault, never a successful partial report.
+        if (input.requiresTerminalResult && decision.status !== "report") {
+          throw new GuidedWorkCloseoutError(new Error("delegated_work_report_without_terminal_result"));
+        }
+        if (!bound) return text;
+        if (isFreshCurrentDisposition(bound, input.turnId)) {
+          return bound.latestDisposition?.runtimeOwnedOpen
+            ? noticeCandidate(input, text)
+            : text;
+        }
+        return await settleOpen(input, bound, text);
+      } catch (error) {
+        if (!isOpenDispositionPublicationFailure(error)) throw error;
+        return text;
       }
-      return settleOpen(input, bound, text);
-    },
-
-    subsessionRoutingRepairRequired() {
-      return Boolean(
-        input.subsessionRoutingRequired &&
-        subsessionRoutingCorrectionIssued &&
-        !hasSubsessionRoutingCall(),
-      );
     },
   };
 }
-
-const SUBSESSION_ROUTING_TOOLS = new Set([
-  "delegate_to_steward",
-  "steer_steward",
-  "cancel_steward",
-]);
 
 async function claimCloseoutCorrection(
   input: GuidedTurnCloseoutInput,
@@ -159,28 +166,35 @@ async function settleOpen(
   const copy = closeoutCopy(input);
   try {
     await claimCloseoutCorrection(input, bound.workId);
-    await backfillCloseoutResults(input);
     const current = await input.durableWork.boundWorkForTurn(input.turnId);
     if (!current || current.workId !== bound.workId) {
       throw new Error("Runtime-owned open Work binding changed before settlement");
     }
     const expectedMaterialFingerprint = dispositionMaterialFingerprint(current);
-    const persisted = await input.durableWork.recordDisposition({
-      ...input.workScope,
-      mutationCallId: digest(
-        `btcc-guided-work-runtime-open.v2\0${input.turnId}\0${bound.workId}\0${expectedMaterialFingerprint}`,
-      ),
-      workId: bound.workId,
-      disposition: "open",
-      summary: copy.summary,
-      actionUpdates: [],
-      remainingActions: [],
-      nextCondition: copy.nextCondition,
-      evidenceRefs: [],
-      followups: [],
-      expectedMaterialFingerprint,
-      runtimeOwnedOpenGeneration: { version: 1 },
-    });
+    let persisted: DurableWorkView;
+    try {
+      persisted = await input.durableWork.recordDisposition({
+        ...input.workScope,
+        mutationCallId: digest(
+          `btcc-guided-work-runtime-open.v2\0${input.turnId}\0${bound.workId}\0${expectedMaterialFingerprint}`,
+        ),
+        workId: bound.workId,
+        disposition: "open",
+        summary: copy.summary,
+        actionUpdates: [],
+        remainingActions: [],
+        nextCondition: copy.nextCondition,
+        evidenceRefs: [],
+        followups: [],
+        expectedMaterialFingerprint,
+        runtimeOwnedOpenGeneration: { version: 1 },
+      });
+    } catch (error) {
+      if (!isOpenDispositionPublicationFailure(error)) throw error;
+      // Runtime-owned open is bookkeeping. The Work is already open, so a
+      // publication failure must not discard an otherwise valid user answer.
+      return candidate.trim();
+    }
     if (persisted.status === "completed" &&
         isFreshCurrentDisposition(persisted, input.turnId)) {
       return candidate.trim();
@@ -195,25 +209,24 @@ async function settleOpen(
   return noticeCandidate(input, candidate);
 }
 
+function isOpenDispositionPublicationFailure(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!current || typeof current !== "object") return false;
+    const code = Reflect.get(current, "code");
+    if (code === "project_ledger_effect_not_applied" ||
+        code === "project_ledger_effect_uncertain") return true;
+    current = Reflect.get(current, "cause");
+  }
+  return false;
+}
+
 function noticeCandidate(input: GuidedTurnCloseoutInput, candidate: string): string {
   const notice = closeoutCopy(input).notice;
   const content = candidate.trim();
   return content.startsWith(`${notice}\n\n`)
     ? content
     : `${notice}\n\n${content}`;
-}
-
-async function backfillCloseoutResults(
-  input: GuidedTurnCloseoutInput,
-): Promise<void> {
-  for (const record of input.toolJournal.list(input.turnId)) {
-    if (record.status !== "completed" || isDurableWorkTool(record.toolName)) continue;
-    await input.durableWork.attachToolResult({
-      ...input.workScope,
-      mutationCallId: digest(`btcc-guided-work-result-attach.v1\0${record.callId}`),
-      toolCallId: record.callId,
-    });
-  }
 }
 
 function closeoutCopy(input: GuidedTurnCloseoutInput): {

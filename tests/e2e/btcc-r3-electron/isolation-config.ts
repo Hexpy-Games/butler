@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -291,6 +292,23 @@ function writeFixtures(
   }
 }
 
+function initializeIsolatedProjectRepository(workspaceRoot: string): void {
+  if (existsSync(join(workspaceRoot, ".git"))) return;
+  execFileSync("git", ["init", "--quiet"], { cwd: workspaceRoot });
+  execFileSync("git", ["config", "user.name", "Butler E2E"], {
+    cwd: workspaceRoot,
+  });
+  execFileSync("git", ["config", "user.email", "butler-e2e@localhost"], {
+    cwd: workspaceRoot,
+  });
+  execFileSync("git", ["add", "--all"], { cwd: workspaceRoot });
+  execFileSync(
+    "git",
+    ["commit", "--quiet", "--allow-empty", "-m", "Initialize isolated project"],
+    { cwd: workspaceRoot },
+  );
+}
+
 function bindPreparedSession(run: PreparedRun): void {
   const bindingStore = new SessionBindingStore(
     join(run.dataRoot, "runtime", "session-store.sqlite"),
@@ -349,7 +367,7 @@ export function activateProjectSessionWorkspace(
   run.projectId = projectId;
   run.workspaceRoot = resolvedWorkspace;
   writeFixtures(resolvedWorkspace, fixtures);
-  bindPreparedSession(run);
+  initializeIsolatedProjectRepository(resolvedWorkspace);
 }
 
 export async function prepareElectronRun(

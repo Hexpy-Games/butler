@@ -61,6 +61,19 @@ test("provider recovery replaces model waiting in the Butler status slot", () =>
   expect(html).not.toContain("응답 생성 중");
 });
 
+test("latest lifecycle activity replaces the whole-Turn response timer fallback", () => {
+  const html = renderToStaticMarkup(
+    <CurrentTurnStatus
+      phaseLabel="계획을 검토하고 있습니다"
+      startedAt={new Date(Date.now() - 270_000).toISOString()}
+    />,
+  );
+
+  expect(html).toContain("계획을 검토하고 있습니다");
+  expect(html).not.toContain("응답 생성 중");
+  expect(html).not.toContain("4분 30초");
+});
+
 function progressRow(label: string): ProgressRow {
   return {
     id: "operation-current-status",

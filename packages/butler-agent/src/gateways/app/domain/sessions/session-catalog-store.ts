@@ -20,17 +20,19 @@ import type {
   SessionSummary,
 } from "../../interface/protocol/app-protocol.ts";
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
+import type { StewardObserverPlan } from "./steward-observer.ts";
 
 export class AppSessionCatalogStore {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database,
+    private readonly readPlan: (sessionId: string) => StewardObserverPlan | null) {}
 
   listChats(): ChatSummary[] {
     const rows = this.db
       .query<ChatRow, []>(
         `
-      SELECT id, title, kind, project_id, created_at, updated_at
+      SELECT id, title, kind, project_id, archived, created_at, updated_at
       FROM chats
-      WHERE archived = 0
+      WHERE archived = 0 AND NOT EXISTS(SELECT 1 FROM app_session_branches b WHERE b.target_session_id=chats.id AND b.state='prepared')
       ORDER BY updated_at DESC, created_at DESC
     `,
       )
@@ -41,7 +43,7 @@ export class AppSessionCatalogStore {
   listSessions(
     options: { kind?: ChatKind; projectId?: string } = {},
   ): SessionListView {
-    const clauses = ["c.archived = 0"];
+    const clauses = ["c.archived = 0", "NOT EXISTS(SELECT 1 FROM app_session_branches b WHERE b.target_session_id=c.id AND b.state='prepared')"];
     const params: string[] = [];
     if (options.kind) {
       clauses.push("c.kind = ?");
@@ -83,6 +85,15 @@ export class AppSessionCatalogStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t
@@ -95,12 +106,21 @@ export class AppSessionCatalogStore {
       FROM chats c
       WHERE ${clauses.join(" AND ")}
       ORDER BY c.pinned DESC, c.updated_at DESC, c.created_at DESC
-      LIMIT 200
     `,
       )
       .all(...params);
     return {
-      sessions: rows.map(sessionFromRow),
+      sessions: rows.map(row => {
+        const session = sessionFromRow(row);
+        if (!session.active_turn_state || ["delivered", "cancelled", "failed", "runtime_fault"].includes(session.active_turn_state)) return session;
+        const plan = this.readPlan(session.id);
+        if (plan?.approved && plan.actions.length) {
+          session.work_progress = { total: plan.actions.length,
+            completed: plan.actions.filter(action => plan.action_progress.some(progress =>
+              progress.action_key === action.action_key && (progress.status === "done" || progress.status === "skipped"))).length };
+        }
+        return session;
+      }),
     };
   }
 
@@ -109,6 +129,26 @@ export class AppSessionCatalogStore {
       project_id: projectId,
       sessions: this.listSessions({ kind: "project", projectId }).sessions,
     };
+  }
+
+  /**
+   * Internal read for project lifecycle authority close: every chat id bound to
+   * an existing project, including already archived chats, without pagination.
+   * An absent project yields no close targets.
+   */
+  projectSessionIdsForLifecycle(projectId: string): string[] {
+    return this.db
+      .query<{ id: string }, [string]>(
+        `
+      SELECT c.id
+      FROM chats c
+      JOIN projects p ON p.id = c.project_id
+      WHERE c.project_id = ?
+      ORDER BY c.created_at ASC, c.rowid ASC
+    `,
+      )
+      .all(projectId)
+      .map((row) => row.id);
   }
 
   listArchives(options: { limit?: number; offset?: number } = {}): ArchiveListView {
@@ -157,6 +197,15 @@ export class AppSessionCatalogStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+
+        (
+          SELECT t.safe_status_label_parameters_json
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS safe_status_label_parameters_json,
+        (SELECT t.safe_status_content_json FROM turns t WHERE t.chat_id = c.id ORDER BY t.rowid DESC LIMIT 1) AS safe_status_content_json,
         (
           SELECT t.safe_error_code
           FROM turns t

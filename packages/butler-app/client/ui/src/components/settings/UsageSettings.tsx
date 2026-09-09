@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -11,20 +12,21 @@ import { UsageSectionPanel } from "./UsageSectionPanel";
 import { UsageToolPanel } from "./UsageToolPanel";
 import { formatTimestamp, usageRows } from "./usageSettingsFormat";
 
-const RANGE_OPTIONS = [
-  { id: "24h", label: "24시간", hours: 24 },
-  { id: "7d", label: "7일", hours: 24 * 7 },
-  { id: "all", label: "전체", hours: null },
+const rangeOptions = () => [
+  { id: "24h", label: appCopy.interfaceDetails.day, hours: 24 },
+  { id: "7d", label: appCopy.interfaceDetails.week, hours: 24 * 7 },
+  { id: "all", label: appCopy.interfaceDetails.all, hours: null },
 ] as const;
 
-type UsageRange = (typeof RANGE_OPTIONS)[number]["id"];
+type UsageRange = ReturnType<typeof rangeOptions>[number]["id"];
 
 export function UsageSettings() {
+  useAppLocale();
   const [range, setRange] = useState<UsageRange>("24h");
   const [view, setView] = useState<UsageMonitorView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const selected = RANGE_OPTIONS.find((item) => item.id === range)!;
+  const selected = rangeOptions().find((item) => item.id === range)!;
 
   const refresh = useCallback(async () => {
     const params = new URLSearchParams();
@@ -35,7 +37,7 @@ export function UsageSettings() {
       const query = params.toString();
       setView(await api<UsageMonitorView>(query ? `/usage-monitor?${query}` : "/usage-monitor"));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Usage monitor failed.");
+      setError(loadError instanceof Error ? loadError.message : appCopy.interfacePanels.usageFailed);
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export function UsageSettings() {
           wrap
         >
           <Stack align="row" gap="xs" wrap>
-            {RANGE_OPTIONS.map((option) => (
+            {rangeOptions().map((option) => (
               <Button
                 key={option.id}
                 type="button"
@@ -115,8 +117,8 @@ export function UsageSettings() {
           activeProviderId={providerUsage?.activeProviderId ?? null}
           providers={providerUsage?.providers ?? []}
         />
-        <UsageBucketPanel title="스코프별 토큰" rows={scopeRows} />
-        <UsageBucketPanel title="모델별 토큰" rows={modelRows} />
+        <UsageBucketPanel title={appCopy.interfaceDetails.scopeTokens} rows={scopeRows} />
+        <UsageBucketPanel title={appCopy.interfaceDetails.modelTokens} rows={modelRows} />
         <UsageSectionPanel rows={sectionRows} />
         <UsageToolPanel rows={toolRows} />
         <Typo.Caption>

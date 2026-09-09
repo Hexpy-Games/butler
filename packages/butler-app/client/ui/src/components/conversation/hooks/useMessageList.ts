@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notifyError } from "@/app/notifications.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
@@ -93,7 +94,7 @@ export function useMessageList(
         2000,
       );
     } catch (error) {
-      notifyError(error, "Copy failed", { id: `copy-${message.id}` });
+      notifyError(error, appCopy.interfacePanels.copyFailed, { id: `copy-${message.id}` });
     }
   }, []);
 
@@ -103,7 +104,7 @@ export function useMessageList(
       const textToCopy = selectedText || message.text;
       await navigator.clipboard.writeText(textToCopy);
     } catch (error) {
-      notifyError(error, "Copy failed", { id: `copy-context-${message.id}` });
+      notifyError(error, appCopy.interfacePanels.copyFailed, { id: `copy-context-${message.id}` });
     }
   }, []);
 

@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import React from "react";
 import type { ReactNode } from "react";
 import { Notice } from "@/butler-ds";
@@ -23,8 +24,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       return this.props.fallback ?? (
         <Notice
           tone="error"
-          title="Butler UI crashed."
-          message="Reload the window or reopen Butler."
+          title={appCopy.interfacePanels.uiCrashed}
+          message={appCopy.interfacePanels.reload}
         />
       );
     }

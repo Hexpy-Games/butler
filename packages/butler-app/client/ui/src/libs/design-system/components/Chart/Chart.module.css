@@ -15,6 +15,19 @@
   min-width: 0;
 }
 
+/* SVG focus outlines follow painted bounds, not the chart viewport. Keep
+   Recharts keyboard navigation, but present focus on the stable container. */
+.chart svg[role="application"]:focus {
+  outline: none;
+}
+.chart:not([data-pointer-focus="true"]):has(
+    svg[role="application"]:focus-visible
+  ) {
+  outline: 2px solid var(--ring);
+  outline-offset: var(--space-xs);
+  border-radius: var(--radius-control);
+}
+
 .tooltip {
   min-width: 140px;
   padding: var(--space-2);

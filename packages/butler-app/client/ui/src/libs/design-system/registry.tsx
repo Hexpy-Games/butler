@@ -30,7 +30,6 @@ import {
   Input,
   Label,
   NativeSelect,
-  PillButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -47,7 +46,6 @@ import {
   Textarea,
   Tooltip,
   Typo,
-  Folder,
   Plus,
   Search,
 } from "./index";
@@ -56,6 +54,8 @@ import {
 import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
 import { NavRowFixture } from "./blocks/NavRow/NavRow.fixtures";
 import { ButtonContainerFixture } from "./components/ButtonContainer/ButtonContainer.fixtures";
+import { IconsFixture } from "./components/Icons/Icons.fixtures";
+import { PillButtonFixture } from "./components/PillButton/PillButton.fixtures";
 import { NavSectionFixture } from "./blocks/NavSection/NavSection.fixtures";
 import { CollapsibleNavGroupFixture } from "./blocks/CollapsibleNavGroup/CollapsibleNavGroup.fixtures";
 import { RowActionClusterFixture } from "./blocks/RowActionCluster/RowActionCluster.fixtures";
@@ -88,6 +88,7 @@ import { MessageAvatarBlockFixture } from "./blocks/MessageAvatarBlock/MessageAv
 import { ActivityFeedFixture } from "./blocks/ActivityFeed/ActivityFeed.fixtures";
 import { WorkActivityBlockFixture } from "./blocks/WorkActivityBlock/WorkActivityBlock.fixtures";
 import { DisclosureRowFixture } from "./blocks/DisclosureRow/DisclosureRow.fixtures";
+import { ChangedLineDiffFixture } from "./blocks/ChangedLineDiff/ChangedLineDiff.fixtures";
 import { InspectorPanelFixture } from "./blocks/InspectorPanel/InspectorPanel.fixtures";
 import { InspectorShellFixture } from "./blocks/InspectorShell/InspectorShell.fixtures";
 import { KeyValueRowFixture } from "./blocks/KeyValueRow/KeyValueRow.fixtures";
@@ -545,7 +546,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "PillButton",
     path: "components/PillButton",
     tags: ["action", "composer", "pill"],
-    fixture: () => <PillButton icon={<Search size={16} />}>Model</PillButton>,
+    fixture: PillButtonFixture,
   },
   {
     name: "Clickable",
@@ -848,13 +849,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "Icons",
     path: "components/Icons",
     tags: ["iconography", "action"],
-    fixture: () => (
-      <Stack align="row" gap="2">
-        <Folder size={18} />
-        <Search size={18} />
-        <Plus size={18} />
-      </Stack>
-    ),
+    fixture: IconsFixture,
   },
   {
     name: "Tooltip",
@@ -1088,6 +1083,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/DisclosureRow",
     tags: ["disclosure", "row", "details"],
     fixture: DisclosureRowFixture,
+  },
+  {
+    name: "ChangedLineDiff",
+    path: "blocks/ChangedLineDiff",
+    tags: ["diff", "code", "changes"],
+    fixture: ChangedLineDiffFixture,
   },
   {
     name: "InspectorPanel",

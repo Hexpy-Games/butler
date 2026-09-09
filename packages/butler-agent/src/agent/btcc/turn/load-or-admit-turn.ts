@@ -33,6 +33,7 @@ export async function loadOrAdmitTurn(
 }
 
 export type StableTurnRequestIdentity = {
+  messageContent?: import("../../../foundation/message-content.ts").MessageContent;
   sessionId: string;
   triggerKey: string;
   messageId: string;
@@ -54,6 +55,7 @@ export function requestIdentityForCommand(
       triggerKey: command.triggerKey,
       messageId: command.message.messageId,
       content: command.message.content,
+      messageContent: command.context.messageContent,
     };
   }
   return {
@@ -80,7 +82,8 @@ export function assertStableRequestIdentity(
     turn.sessionId !== identity.sessionId ||
     turn.triggerKey !== identity.triggerKey ||
     turn.originalMessageId !== identity.messageId ||
-    turn.originalMessage !== identity.content
+    turn.originalMessage !== identity.content ||
+    JSON.stringify(turn.context.messageContent) !== JSON.stringify(identity.messageContent)
   ) {
     throw new Error(`BTCC run replay does not match admitted Turn: ${turn.turnId}`);
   }

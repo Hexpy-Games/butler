@@ -4,6 +4,7 @@ import { executeGuidedCommand } from "./guided-command/execute-command.ts";
 import {
   commandEvidenceCapabilityReceipts,
   commandEvidenceReceipts,
+  type CommandArtifactEvidence,
 } from "../../tools/run-command/run_command/evidence.ts";
 import {
   guidedCommandArtifacts,
@@ -94,11 +95,18 @@ export function guidedCommandPublicResult(
     butlerData: input.butlerData,
     command: input.spooled.summary.command,
     cwd: input.spooled.summary.cwd,
-    maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
+    maxModelTokens: typeof input.args.max_output_tokens === "number" ? input.args.max_output_tokens : undefined,
+    outputMode: input.args.output_mode ?? "auto",
+    validationSuite: input.args.validation_suite,
   });
   const success = budgeted.exit_code === 0 && !budgeted.timed_out;
-  const publication = success
-    ? guidedCommandArtifacts({
+  let publication: { requested: number; artifacts: CommandArtifactEvidence[] } = {
+    requested: declaredOutputCount(input.args.output_paths), artifacts: [],
+  };
+  let publicationError: { code: string; message: string } | undefined;
+  if (success) {
+    try {
+      publication = guidedCommandArtifacts({
         outputPaths: input.args.output_paths,
         butlerData: input.butlerData,
         workspacePath: input.workspacePath,
@@ -109,39 +117,41 @@ export function guidedCommandPublicResult(
               before: input.artifactSnapshot,
             }
           : {}),
-      })
-    : { requested: declaredOutputCount(input.args.output_paths), artifacts: [] };
-  const publicationFailed = success && publication.requested > 0 &&
-    publication.artifacts.length === 0;
-  const ok = success && !publicationFailed;
+      });
+    } catch (error) {
+      publicationError = {
+        code: "artifact_publication_failed",
+        message: error instanceof Error ? error.message : "Attachment publication failed.",
+      };
+    }
+  }
+  const publicationFailed = Boolean(publicationError) || (publication.requested > publication.artifacts.length);
   return {
-    ok,
+    ok: success,
     command: input.spooled.summary.command,
     cwd: input.spooled.summary.cwd,
     exit_code: budgeted.exit_code,
     timed_out: budgeted.timed_out,
     stdout: budgeted.stdout,
     stderr: budgeted.stderr,
+    output_presentation: budgeted.output_presentation,
     sandbox: input.sandbox,
-    ...(publication.requested > 0
+    ...(success && (publication.requested > 0 || publicationError)
       ? {
           artifact_publication: {
+            ok: !publicationFailed,
             requested: publication.requested,
             published: publication.artifacts.length,
             unpublished: Math.max(
               0,
               publication.requested - publication.artifacts.length,
             ),
-          },
-        }
-      : {}),
-    ...(publicationFailed
-      ? {
-          error: {
-            code: "declared_output_files_unavailable",
-            message: "None of the declared output files could be published as attachments.",
-            recoverable: true,
-            next_action: "Declare existing regular files inside the active workspace or Butler artifact directory.",
+            ...(publicationFailed ? {
+              error: publicationError ?? {
+                code: "declared_output_files_unavailable",
+                message: "Some declared output files could not be published. Declare existing regular files inside the active workspace or Butler artifact directory.",
+              },
+            } : {}),
           },
         }
       : {}),
@@ -153,13 +163,13 @@ export function guidedCommandPublicResult(
           artifacts: publication.artifacts,
           verified_output_files: publication.artifacts,
           evidence_receipts: commandEvidenceReceipts({
-            success: ok,
+            success,
             artifacts: publication.artifacts,
           }),
           evidence_capability_receipts: commandEvidenceCapabilityReceipts({
             exitCode: budgeted.exit_code,
             timedOut: budgeted.timed_out,
-            outputSuppressed: false,
+            outputSuppressed: budgeted.output_presentation?.suppressed === true,
             outputBudgeted: Boolean(budgeted.butler_tool_artifact),
             artifacts: publication.artifacts,
           }),
@@ -194,8 +204,6 @@ function commandBoundaryError(code: string, message: string): Record<string, unk
     error: {
       code,
       message,
-      recoverable: true,
-      next_action: "Use native read tools, a typed persistent-effect tool, or report the concrete limitation.",
     },
   };
 }
@@ -206,14 +214,4 @@ function errorCode(error: unknown): string {
     if (typeof value === "string" && value) return value;
   }
   return "read_only_command_failed";
-}
-
-function boundedInteger(
-  value: unknown,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(min, Math.min(max, Math.trunc(value)));
 }

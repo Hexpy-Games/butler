@@ -269,17 +269,6 @@ export interface FunctionToolPromptOptions {
   providerRetryAttempts?: number;
   tools: FunctionToolDefinition[];
   dynamicTools?: () => readonly FunctionToolDefinition[];
-  maxToolRounds?: number;
-  /**
-   * Internal execution-window rollover for the BTCC compatibility facade.
-   * Returning an observation keeps the same Turn running; returning
-   * `undefined` ends the current loop so final synthesis can run.
-   */
-  onExecutionWindowBoundary?: (input: {
-    windowIndex: number;
-    iteration: number;
-  }) => Promise<string | undefined> | string | undefined;
-  handoffAfterToolBatch?: boolean;
   toolChoice?: "auto" | "required";
   log?: (line: string) => void;
   onAssistantTextBeforeTools?: (input: {

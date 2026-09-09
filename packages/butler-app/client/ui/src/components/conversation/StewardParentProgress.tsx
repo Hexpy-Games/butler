@@ -1,7 +1,11 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { useState } from "react";
+import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import {
   Eye,
   IconButton,
+  Play,
   Stack,
   SurfacePanel,
   Typo,
@@ -19,9 +23,14 @@ export function StewardParentProgress({
 }: {
   progress: AnchoredStewardProgress;
 }) {
+  useAppLocale();
   const { child, rows } = progress;
+  const [resuming, setResuming] = useState(false);
   const openSessionObserver = useButlerStore(
     (state) => state.openSessionObserver,
+  );
+  const resumeObservedSteward = useButlerStore(
+    (state) => state.resumeObservedSteward,
   );
   const turn = child.active_turn ?? child.latest_turn;
   const toolRows = stewardToolRows(rows);
@@ -43,28 +52,45 @@ export function StewardParentProgress({
           >
             {child.title}
           </Typo.Label>
-          <IconButton
-            className={styles.observerAction}
-            data-test-class="steward-observer-action"
-            label="진행 상세 보기"
-            onClick={() => openSessionObserver(child.session_id)}
-          >
-            <Eye size={16} />
-          </IconButton>
+          <Stack align="row" gap="xs">
+            {turn?.retryable && !child.active_turn && !child.result ? (
+              <IconButton
+                className={styles.observerAction}
+                data-test-class="steward-resume-action"
+                disabled={resuming}
+                label={appCopy.conversation.work.resumeInterrupted}
+                onClick={() => {
+                  setResuming(true);
+                  void resumeObservedSteward(child.relation.relation_id)
+                    .finally(() => setResuming(false));
+                }}
+              >
+                <Play size={16} />
+              </IconButton>
+            ) : null}
+            <IconButton
+              className={styles.observerAction}
+              data-test-class="steward-observer-action"
+              label={appCopy.interfaceDetails.progressDetails}
+              onClick={() => openSessionObserver(child.session_id)}
+            >
+              <Eye size={16} />
+            </IconButton>
+          </Stack>
         </Stack>
         <Typo.Caption data-test-class="steward-progress-status">
           {stewardProgressStatus(child)}
         </Typo.Caption>
         <Stack
           align="row"
-          aria-label="도구 사용 내역"
+          aria-label={appCopy.interfaceDetails.toolHistory}
           data-test-class="steward-tool-summary"
           gap="xs"
           wrap
         >
-          <Typo.Caption className={styles.toolLabel}>도구 사용</Typo.Caption>
+          <Typo.Caption className={styles.toolLabel}>{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
           <Typo.Caption className={styles.toolSummary}>
-            {toolSummary || "내역 없음"}
+            {toolSummary || appCopy.interfaceDetails.noHistory}
           </Typo.Caption>
         </Stack>
       </Stack>
@@ -77,7 +103,7 @@ function summarizeTools(
 ): string {
   const counts = new Map<string, number>();
   for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || "도구";
+    const label = tool.summaryLabel?.trim() || appCopy.interfaceDetails.tool;
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return [...counts.entries()]

@@ -143,7 +143,12 @@ function createComposedAppServer(
     },
   });
 
-  void retryDecidedAuthorityInputs({ authority, store }).catch(() => undefined);
+  void retryDecidedAuthorityInputs({
+    authority,
+    store,
+    butlerData,
+    stewardObserver,
+  }).catch(() => undefined);
 
   return {
     url: server.url.toString(),
@@ -226,6 +231,12 @@ function corsPreflightResponse(corsHeaders: Record<string, string>): Response {
 }
 
 function errorResponse(error: unknown, extraHeaders: HeadersInit): Response {
+  if (error instanceof Error && error.message === "session_branch_preparing") {
+    return json(apiError("session_branch_preparing", "새 대화의 작업 환경을 준비하고 있습니다."), 409, extraHeaders);
+  }
+  if (error instanceof Error && error.message === "session_relocating") {
+    return json(apiError("session_relocating", "대화를 이동하고 있습니다. 잠시 후 다시 시도해 주세요."), 409, extraHeaders);
+  }
   if (error instanceof AppStoreOperationError) {
     return json(apiError(error.code, error.message), error.status, extraHeaders);
   }

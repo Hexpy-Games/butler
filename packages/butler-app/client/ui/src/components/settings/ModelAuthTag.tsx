@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Tag } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AppModelSummary } from "@/app/types.ts";
@@ -7,6 +8,7 @@ interface ModelAuthTagProps {
 }
 
 export function ModelAuthTag({ model }: ModelAuthTagProps) {
+  useAppLocale();
   if (!model.auth_type) return null;
   const copy = appCopy.settings.modelManagement;
   const authLabel =

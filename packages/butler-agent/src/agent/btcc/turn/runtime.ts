@@ -28,18 +28,17 @@ import {
 } from "../ports/model-round.ts";
 import {
   isModelRouteDurabilityError,
-  ModelRouteRecoveredFailureError,
 } from "../model-route/index.ts";
 import {
-  ModelProviderRequestError,
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
 import { isPhaseScopedMemoryProjectionError } from
   "../../context/context-projection.ts";
-import { operationalFailureMessage } from "./turn-runtime-failure.ts";
+import { runtimeFailureFromError, runtimeFailureMessage } from "./turn-runtime-failure.ts";
 import { guidedFinalTransition } from "./guided-final-transition.ts";
+import { commitTurnSuspension } from "./commit-turn-suspension.ts";
 import {
   createNoopRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
@@ -127,11 +126,25 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await this.publishTerminal(progress, turn);
       return projectTerminalOutcome(turn);
     }
+    if (turn.suspension === "authority_pending") {
+      turn = await this.dependencies.turns.resumeAuthorityContinuation(turn.turnId) ?? turn;
+    }
+    if (turn.suspension) {
+      return { kind: "suspended", turnId: turn.turnId, reason: turn.suspension };
+    }
     if (turn.semanticState === "admitted") {
       await publishState(progress, turn);
     }
     if (turn.semanticState !== "delivery_committed") {
-      turn = await this.runAgentAndCommit(turn, progress, command.recoveryAttempt);
+      const agentOutcome = await this.runAgentAndCommit(
+        turn,
+        progress,
+        command.recoveryAttempt,
+      );
+      if ("kind" in agentOutcome) {
+        return agentOutcome;
+      }
+      turn = agentOutcome;
     }
     if (turn.semanticState === "cancelled") {
       await this.publishTerminal(progress, turn);
@@ -145,7 +158,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     turn: TurnRecord,
     progress: BtccTurnProgressObserver | undefined,
     recoveryAttempt?: number,
-  ): Promise<TurnRecord> {
+  ): Promise<TurnRecord | Extract<BtccTurnOutcome, { kind: "suspended" }>> {
     const permit = this.supervisor.enter({
       turnId: turn.turnId,
       executionFence: turn.executionFence,
@@ -158,12 +171,14 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         permit,
       );
       let result: BtccAgentLoopResult;
+      const diagnostics = this.developerLogCapture.startExecution();
       try {
         result = await this.dependencies.agent.run({
           turn,
           recoveryAttempt,
           signal: permit.signal,
           memoryAttribution: this.memoryAttribution,
+          modelRoundObserver: diagnostics.modelRoundObserver,
           progress,
           ...createModelRouteRuntimeHooks({
             turn,
@@ -171,14 +186,16 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             turns: this.dependencies.turns,
           }),
         });
-        this.developerLogCapture.capture({
-          kind: "model_turn",
-          turn,
-          result,
+        diagnostics.capture(result.runtimeFailure ? {
+          kind: "model_turn_error", turn,
+          failure: { ...result.runtimeFailure, message: result.runtimeFailure.code },
+          timestamp: new Date().toISOString(),
+        } : {
+          kind: "model_turn", turn, result,
           timestamp: new Date().toISOString(),
         });
       } catch (error) {
-        this.developerLogCapture.capture({
+        diagnostics.capture({
           kind: "model_turn_error",
           turn,
           failure: safeRuntimeFailure(error),
@@ -190,31 +207,33 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             isPhaseScopedMemoryProjectionError(error) ||
             isRoundToolSurfaceError(error) ||
             isGuidedWorkCloseoutError(error)) throw error;
-        if (isRetryableProviderExhaustion(error)) {
-          const failure = safeRuntimeFailure(error);
-          const failureCode = error instanceof ModelRouteRecoveredFailureError
-            ? error.failureCode
-            : failure.code;
-          await progress?.runtimeFaulted?.({
-            turnId: turn.turnId,
-            sessionId: turn.sessionId,
-            faultId: `${turn.turnId}:provider-transport-exhausted`,
-            kind: "provider_transport_exhausted",
-            retryable: true,
-            publicSummary: operationalFailureMessage(turn.originalMessage, error),
-            operatorSummary: `Provider recovery exhausted (${failureCode}).`,
-            safeErrorCode: failureCode,
-            createdAt: new Date().toISOString(),
-          });
-          throw error;
-        }
         permit.assertActive();
         result = {
           route: "assisted",
-          content: operationalFailureMessage(turn.originalMessage, error),
+          content: "",
+          runtimeFailure: runtimeFailureFromError(error),
         };
       }
       permit.assertActive();
+      if (result.runtimeFailure) {
+        // Delivery is terminal for this execution interval, not a claim that the
+        // Work completed. Preserve accepted Work outcomes and any produced files.
+        result = {
+          ...result,
+          content: runtimeFailureMessage(turn.originalMessage, result.runtimeFailure,
+            result.acceptedWorkResult?.status === "success"),
+          acceptedWorkResult: result.acceptedWorkResult ?? { status: "failed" },
+        };
+      }
+      if (result.suspension) {
+        return await commitTurnSuspension({
+          turns: this.dependencies.turns,
+          turn,
+          claim,
+          reason: result.suspension,
+          authorityContinuation: result.authorityContinuation,
+        });
+      }
       const transition = guidedFinalTransition(turn, result);
       while (true) {
         try {
@@ -313,12 +332,6 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
     );
     await publishState(progress, turn);
   }
-}
-
-function isRetryableProviderExhaustion(error: unknown): boolean {
-  if (error instanceof ModelProviderRequestError) return error.retryable;
-  return error instanceof ModelRouteRecoveredFailureError &&
-    error.disposition === "retry";
 }
 
 export function createTurnRuntime(dependencies: TurnRuntimeDependencies): BtccTurnRuntime {

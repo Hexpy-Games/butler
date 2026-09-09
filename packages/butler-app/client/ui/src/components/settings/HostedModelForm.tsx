@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { SettingsSection } from "./SettingsFormComponents";
@@ -22,6 +23,7 @@ export function HostedModelForm({
   onProviderIdChange,
   showProviderSelect = true,
 }: HostedModelFormProps) {
+  useAppLocale();
   const form = useHostedModelForm({
     allowedAuthMethods,
     editingModel,

@@ -203,7 +203,12 @@ test("Project Ledger lifecycle closeout fails when render reports success withou
         view: "dashboard",
         ok: false,
         written: false,
-        error: expect.objectContaining({ code: "project_ledger_render_not_written" }),
+        error: expect.objectContaining({
+          code: "project_ledger_render_not_written",
+          native_next: [expect.objectContaining({
+            tool: "project_ledger_render", args: { view: "dashboard", write: true },
+          })],
+        }),
       }),
       expect.objectContaining({ view: "handoff", ok: false, written: false }),
       expect.objectContaining({ view: "roadmap", ok: false, written: false }),

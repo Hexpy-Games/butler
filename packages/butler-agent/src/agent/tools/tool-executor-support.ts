@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { mkdirSync } from "node:fs";
 import { join } from "path";
 import { sanitizePublicText } from "../events/turn-events.ts";
 import type {
@@ -82,6 +83,14 @@ export function butlerToolProcessEnvironment(input: {
   }
   if (input.butlerData) {
     const artifactRoot = join(input.butlerData, "artifacts", "generated");
+    const temporaryRoot = join(input.butlerData, "tmp");
+    const cacheRoot = join(input.butlerData, "cache", "tools");
+    mkdirSync(temporaryRoot, { recursive: true });
+    mkdirSync(cacheRoot, { recursive: true });
+    env.TMPDIR = temporaryRoot;
+    env.TEMP = temporaryRoot;
+    env.TMP = temporaryRoot;
+    env.XDG_CACHE_HOME = cacheRoot;
     env.BUTLER_DATA = input.butlerData;
     env.BUTLER_ARTIFACTS_DIR = artifactRoot;
     env.BUTLER_ARTIFACT_DIR = artifactRoot;

@@ -16,8 +16,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 
 const root = process.cwd();
+const dataRoot = resolve(process.env.BUTLER_DATA || resolve(homedir(), ".butler"));
 const electronAppRoot = "packages/butler-app/client/electron";
 const appDisplayName = "Butler";
 const macDevBundleIdentifier = "com.hexpy.butler.dev";
@@ -63,9 +65,10 @@ function spawnManaged(
   command: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
+  cwd = root,
 ): ChildProcess {
   const child = spawn(command, args, {
-    cwd: root,
+    cwd,
     env,
     stdio: "inherit",
   });
@@ -148,11 +151,11 @@ function prepareMacDevElectronBundle(): ElectronLaunch {
   const sourceBundle = resolve(electronDistRoot, "Electron.app");
   const sourceExecutable = resolve(sourceBundle, "Contents/MacOS/Electron");
   const sourceIcon = resolve(root, electronAppRoot, appIconRelativePath);
-  const targetBundle = resolve(root, ".tmp/app-client-dev", macDevBundleName);
+  const targetBundle = resolve(dataRoot, "cache/app-client-dev", macDevBundleName);
   const targetPlist = resolve(targetBundle, "Contents/Info.plist");
   const targetExecutable = resolve(targetBundle, macDevExecutableRelativePath);
   const targetIcon = resolve(targetBundle, appIconResourcePath);
-  const markerPath = resolve(root, ".tmp/app-client-dev/.bundle-marker");
+  const markerPath = resolve(dataRoot, "cache/app-client-dev/.bundle-marker");
   if (!existsSync(sourceIcon)) {
     throw new Error(`Butler app icon is missing: ${appIconRelativePath}`);
   }
@@ -217,7 +220,7 @@ function electronLaunchCommand(): ElectronLaunch {
   if (process.platform === "darwin") return prepareMacDevElectronBundle();
   return {
     command: "npm",
-    args: ["--prefix", electronAppRoot, "run", "start"],
+    args: ["--prefix", resolve(root, electronAppRoot), "run", "start"],
   };
 }
 
@@ -272,7 +275,7 @@ try {
     BUTLER_APP_SERVER_URL: serverUrl,
     BUTLER_APP_UI_URL: uiUrl,
     BUTLER_APP_DEV_ORIGIN: new URL(uiUrl).origin,
-  });
+  }, dataRoot);
   electron.once("exit", (code) => {
     stopAll();
     process.exit(code ?? 0);

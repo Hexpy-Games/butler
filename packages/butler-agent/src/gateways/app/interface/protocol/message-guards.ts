@@ -1,10 +1,30 @@
-import type { MessageSendRequest, QueueMessageRequest } from "./messaging-contract.ts";
+import type {
+  MessageSendRequest,
+  PlanDecisionRequest,
+  QueueMessageRequest,
+} from "./messaging-contract.ts";
+import { isMessageContent, messageContentText } from "../../../../foundation/message-content.ts";
+
+export function isPlanDecisionRequest(
+  value: unknown,
+): value is PlanDecisionRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Partial<PlanDecisionRequest>;
+  return (input.action === "accept" || input.action === "reject" ||
+      input.action === "instruct") &&
+    (input.instruction === undefined || typeof input.instruction === "string");
+}
 
 export function isMessageSendRequest(
   value: unknown,
 ): value is MessageSendRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<MessageSendRequest>;
+  if (input.expected_project_id !== undefined && (typeof input.expected_project_id !== "string" || !input.expected_project_id || input.expected_project_id.length > 256)) return false;
+  if (input.content_parts !== undefined) {
+    if (!isMessageContent(input.content_parts)) return false;
+    return isMessageSendRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });
+  }
   const hasText =
     typeof input.text === "string" && input.text.trim().length > 0;
   const hasAttachments =
@@ -28,6 +48,11 @@ export function isQueueMessageRequest(
 ): value is QueueMessageRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<QueueMessageRequest>;
+  if (input.expected_project_id !== undefined && (typeof input.expected_project_id !== "string" || !input.expected_project_id || input.expected_project_id.length > 256)) return false;
+  if (input.content_parts !== undefined) {
+    if (!isMessageContent(input.content_parts)) return false;
+    return isQueueMessageRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });
+  }
   const hasText =
     typeof input.text === "string" && input.text.trim().length > 0;
   const hasAttachments =

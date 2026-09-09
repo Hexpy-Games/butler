@@ -4,37 +4,46 @@ export function dedupeProgressRows(
   rows: ProgressSummaryRow[],
 ): ProgressSummaryRow[] {
   const byKey = new Map<string, ProgressSummaryRow>();
+  // Lookup indexes are local to this projection; byKey owns output ordering.
+  const byToolCall = new Map<string, string>();
+  const legacyRows = new Map<string, ProgressSummaryRow>();
+  const toolRows = new Map<string, ProgressSummaryRow>();
   for (const row of rows) {
     const directKey = progressRowDirectMergeKey(row);
     let key = directKey;
     const sameToolKey = row.tool_call_id
-      ? findProgressRowKey(
-          byKey,
-          (candidate) => candidate.tool_call_id === row.tool_call_id,
-        )
-      : null;
+      ? byToolCall.get(row.tool_call_id)
+      : undefined;
     if (sameToolKey) {
       key = sameToolKey;
     } else if (row.tool_call_id && !byKey.has(directKey)) {
       const legacyCandidates = findProgressRowKeys(
-        byKey,
-        (candidate) =>
-          !candidate.tool_call_id &&
-          !isTerminalProgressState(candidate.state) &&
-          progressRowsSemanticallyMatch(candidate, row),
+        legacyRows,
+        (candidate) => progressRowsSemanticallyMatch(candidate, row),
       );
       if (legacyCandidates.length === 1) key = legacyCandidates[0]!;
-    } else if (!row.tool_call_id && !isTerminalProgressState(row.state)) {
+    } else if (!row.tool_call_id && isLegacyMergeCandidate(row)) {
       const toolCandidates = findProgressRowKeys(
-        byKey,
-        (candidate) =>
-          Boolean(candidate.tool_call_id) &&
-          progressRowsSemanticallyMatch(candidate, row),
+        toolRows,
+        (candidate) => progressRowsSemanticallyMatch(candidate, row),
       );
       if (toolCandidates.length === 1) key = toolCandidates[0]!;
     }
     const previous = byKey.get(key);
-    byKey.set(key, previous ? mergeProgressRow(previous, row) : row);
+    const merged = previous ? mergeProgressRow(previous, row) : row;
+    byKey.set(key, merged);
+    if (previous?.tool_call_id !== merged.tool_call_id && previous?.tool_call_id) {
+      byToolCall.delete(previous.tool_call_id);
+    }
+    if (merged.tool_call_id) {
+      byToolCall.set(merged.tool_call_id, key);
+      toolRows.set(key, merged);
+      legacyRows.delete(key);
+    } else {
+      toolRows.delete(key);
+      if (isLegacyMergeCandidate(merged)) legacyRows.set(key, merged);
+      else legacyRows.delete(key);
+    }
   }
   return [...byKey.values()];
 }
@@ -65,14 +74,9 @@ export function progressMergeState(current: string, incoming: string): string {
     : current;
 }
 
-function findProgressRowKey(
-  rows: Map<string, ProgressSummaryRow>,
-  predicate: (row: ProgressSummaryRow) => boolean,
-): string | null {
-  for (const [key, row] of rows) {
-    if (predicate(row)) return key;
-  }
-  return null;
+function isLegacyMergeCandidate(row: ProgressSummaryRow): boolean {
+  return row.kind !== "message" && row.kind !== "system" &&
+    !isTerminalProgressState(row.state);
 }
 
 function findProgressRowKeys(
@@ -222,6 +226,7 @@ function mergeProgressRow(
   }
   const incomingWins =
     progressMergeState(current.state, incoming.state) === incoming.state;
+  const labelOwner = incomingWins ? incoming : current;
   const base = incomingWins
     ? { ...current, ...incoming }
     : { ...incoming, ...current };
@@ -257,6 +262,11 @@ function mergeProgressRow(
       incoming.tool_result_byte_length,
     bridge_phase:
       base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
+    interface_label_key:
+      labelOwner.interface_label_key,
+    interface_content: labelOwner.interface_content,
+    interface_label_parameters:
+      labelOwner.interface_label_parameters,
     turn_event_sequence: minimumOptionalNumber(
       current.turn_event_sequence,
       incoming.turn_event_sequence,

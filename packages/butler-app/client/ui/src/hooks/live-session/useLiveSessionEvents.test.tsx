@@ -6,6 +6,8 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { NavigationView, SessionSummary } from "@/app/types.ts";
 import { activeChatFromNavigation } from "@/app/utils.ts";
+import { projectSpace } from "@/app/space/projection";
+import { spaceActivity } from "@/app/space/activity";
 import {
   FakeClock,
   flushMicrotasks,
@@ -14,6 +16,7 @@ import {
 interface LiveEventHandlers {
   onEvent(event: Record<string, unknown>): void;
   onError(error: unknown): void;
+  onOpen?: () => void;
 }
 
 const subscriptions: LiveEventHandlers[] = [];
@@ -45,6 +48,7 @@ const navigationSession = (input: {
   archived: input.archived ?? false,
 });
 const initialNavigation = (): NavigationView => ({
+  space: { revision: 0, nodes: [], groups: [] },
   chats: [],
   projects: [
     {
@@ -82,6 +86,7 @@ const refreshSnapshots: Array<{ context: string; skills: string[] }> = [];
 let latestContext = "";
 let latestSkills: string[] = [];
 const storeState = {
+  liveConnectionLost: false,
   activeChatId: "session-live-events",
   navigation: initialNavigation(),
   sessionView: {
@@ -145,9 +150,10 @@ mock.module("@/app/api.ts", () => ({
     cursor: number,
     onEvent: LiveEventHandlers["onEvent"],
     onError: LiveEventHandlers["onError"],
+    onOpen: LiveEventHandlers["onOpen"],
   ) {
     subscriptionCursors.push(cursor);
-    subscriptions.push({ onEvent, onError });
+    subscriptions.push({ onEvent, onError, onOpen });
     let active = true;
     return () => {
       if (!active) return;
@@ -171,6 +177,7 @@ function selectStore<T>(selector: (state: typeof storeState) => T): T {
 
 const useButlerStore = Object.assign(selectStore, {
   getState: () => storeState,
+  setState: (patch: Partial<typeof storeState>) => Object.assign(storeState, patch),
 });
 
 mock.module("@/app/store.ts", () => ({ useButlerStore }));
@@ -191,6 +198,7 @@ afterEach(async () => {
   latestContext = "";
   latestSkills = [];
   storeState.activeChatId = "session-live-events";
+  storeState.liveConnectionLost = false;
   storeState.navigation = initialNavigation();
   navigationRefreshCalls = 0;
   navigationRefreshResolver = undefined;
@@ -217,6 +225,7 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   expect(subscriptions).toHaveLength(1);
 
   subscriptions[0]?.onError(new Error("temporary disconnect"));
+  expect(storeState.liveConnectionLost).toBe(true);
   await flushMicrotasks();
   expect(refreshedSessions).toEqual([]);
   expect(unsubscribeCalls).toBe(1);
@@ -225,6 +234,9 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   expect(subscriptions).toHaveLength(1);
   await fakeClock?.advanceBy(1);
   expect(subscriptions).toHaveLength(2);
+  expect(storeState.liveConnectionLost).toBe(true);
+  subscriptions[1]?.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
   await flushMicrotasks();
   expect(refreshedSessions).toEqual(["session-live-events"]);
 
@@ -241,6 +253,15 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   await fakeClock?.advanceBy(1);
   expect(refreshedSessions).toHaveLength(2);
   expect(appliedEvents).toEqual([]);
+});
+
+test("elapsed reconnect time alone does not claim the stream has recovered", async () => {
+  await renderHarness();
+  subscriptions[0]?.onError(new Error("disconnected"));
+  await fakeClock?.advanceBy(30_000);
+  expect(storeState.liveConnectionLost).toBe(true);
+  subscriptions.at(-1)?.onEvent({ type: "stream.reconcile_required", id: 43, payload: {} });
+  expect(storeState.liveConnectionLost).toBe(false);
 });
 
 test("session created and updated events reconcile the visible project session without reload", async () => {
@@ -555,6 +576,34 @@ test("relevant active-session events use leading and trailing refreshes", async 
   expect(refreshedSessions).toHaveLength(1);
   await fakeClock?.advanceBy(1);
   expect(refreshedSessions).toHaveLength(2);
+});
+
+test.each(["general", "session-live-events"])("general completion converges sidebar activity with active session %s", async (activeSession) => {
+  const general: SessionSummary = {
+    id: "general", kind: "chat", title: "일반", pinned: false, archived: false,
+    created_at: "2026-09-07T10:00:00.000Z", updated_at: "2026-09-07T10:00:00.000Z",
+    last_activity_at: "2026-09-07T10:00:00.000Z", active_turn_state: "thinking",
+  };
+  storeState.navigation = { ...initialNavigation(), chats: [general] };
+  storeState.activeChatId = activeSession;
+  await renderHarness();
+  expect(spaceActivity(projectSpace(storeState.navigation).get("s:general")?.session)).toBe("working");
+  navigationRefreshSnapshots.push({ ...storeState.navigation, chats: [{ ...general, active_turn_state: "delivered" }] });
+  deliverEvent(0, {
+    id: 43, type: "turn.state_changed", created_at: "2026-09-07T10:01:00.000Z",
+    payload: { turn: { id: "general-turn", chat_id: "general", state: "delivered" } },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(spaceActivity(projectSpace(storeState.navigation).get("s:general")?.session)).toBeNull();
+  navigationRefreshSnapshots.push({ ...storeState.navigation, chats: [{ ...general, title: "Updated" }] });
+  deliverEvent(0, {
+    id: 44, type: "session.updated", created_at: "2026-09-07T10:02:00.000Z",
+    payload: { session: { ...general, title: "Updated" } },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(2);
+  expect(storeState.navigation.chats[0]?.title).toBe("Updated");
 });
 
 test("a single relevant event causes exactly one refresh", async () => {

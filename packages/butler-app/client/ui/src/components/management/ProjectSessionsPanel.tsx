@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { MessageSquarePlus } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { Section, SessionRow, Stack } from "@/butler-ds";
@@ -11,11 +13,12 @@ export function ProjectSessionsPanel({
   sessions: SessionSummary[];
   onOpenSession: (sessionId: string) => void;
 }) {
+  useAppLocale();
   return (
     <Section
       gap="sm"
       icon={<MessageSquarePlus size={16} />}
-      title="Project chats"
+      title={appCopy.interfacePanels.projectChats}
     >
       {sessions.length > 0 ? (
         <Stack gap="xs">
@@ -32,7 +35,7 @@ export function ProjectSessionsPanel({
           ))}
         </Stack>
       ) : (
-        <EmptyPanelLine label="No project chats yet" />
+        <EmptyPanelLine label={appCopy.interfacePanels.noProjectChats} />
       )}
     </Section>
   );

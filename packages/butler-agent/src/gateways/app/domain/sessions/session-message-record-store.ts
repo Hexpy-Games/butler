@@ -1,3 +1,4 @@
+import type { MessageContent } from "../../../../foundation/message-content.ts";
 import { Database } from "bun:sqlite";
 import { readCompactionSnapshots } from "../../../../agent/context/compaction.ts";
 import type { MessageRow } from "../../infrastructure/core/records.ts";
@@ -19,13 +20,19 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 import { sessionHintForRow } from "./session-read-model.ts";
 import { visibleMessageSqlPredicate } from "./visible-message-sql.ts";
+import { projectMessageArtifacts } from "./project-message-artifacts.ts";
 import {
   normalizeSessionMessagePageOptions,
   type SessionMessagePage,
   type SessionMessagePageOptions,
 } from "./session-message-page.ts";
+import type { ChangedFileDetail, ChangedFileLine } from "../../../../agent/tools/file-tools/shared/changed-file-detail.ts";
+import type { ProjectLedgerPlan } from "../../../../agent/btcc/project-plan.ts";
 
 export class AppSessionMessageRecordStore {
+  listProjectArtifacts(projectId: string, query: { cursor?: string; limit: number }) {
+    return projectMessageArtifacts(this.db, projectId, query);
+  }
   constructor(
     private readonly db: Database,
     private readonly butlerData: string,
@@ -56,7 +63,7 @@ export class AppSessionMessageRecordStore {
     const query = beforeCursor !== undefined
       ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid < ?
@@ -67,7 +74,7 @@ export class AppSessionMessageRecordStore {
       : afterCursor !== undefined
         ? `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND rowid > ?
@@ -77,7 +84,7 @@ export class AppSessionMessageRecordStore {
     `
         : `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE chat_id = ?
         AND ${visibleMessageSqlPredicate()}
@@ -97,8 +104,15 @@ export class AppSessionMessageRecordStore {
     const attachmentsByMessage = this.messageFiles.refsForMessages(
       pageRows.map((row) => row.id),
     );
+    const changedFilesByMessage = this.changedFilesForMessages(
+      pageRows.map((row) => row.id),
+    );
     const messages = pageRows.map((row) =>
-      messageFromRow(row, attachmentsByMessage.get(row.id) ?? []),
+      messageFromRow(
+        row,
+        attachmentsByMessage.get(row.id) ?? [],
+        changedFilesByMessage.get(row.id) ?? [],
+      ),
     );
     const compactionMessages =
       beforeCursor === undefined && afterCursor === undefined
@@ -206,7 +220,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE id = ?
     `,
@@ -224,7 +238,11 @@ export class AppSessionMessageRecordStore {
         "Message not found.",
       );
     }
-    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
+    return messageFromRow(
+      row,
+      this.messageFiles.refsForMessage(messageId),
+      this.changedFilesForMessages([messageId]).get(messageId) ?? [],
+    );
   }
 
   getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {
@@ -233,7 +251,7 @@ export class AppSessionMessageRecordStore {
         .query<MessageRow, [string]>(
           `
       SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at, safe_error_code, retryable, plan_json
       FROM messages
       WHERE turn_id = ? AND role = 'assistant'
       ORDER BY rowid DESC
@@ -251,10 +269,12 @@ export class AppSessionMessageRecordStore {
     status: MessageStatus,
     options: {
       clientMessageId?: string;
+      contentParts?: MessageContent;
       turnId?: string;
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      plan?: ProjectLedgerPlan;
       conversationSessionId?: string | null;
       conversationTurnId?: string | null;
       conversationMessageId?: string | null;
@@ -273,10 +293,10 @@ export class AppSessionMessageRecordStore {
         `
       INSERT INTO messages (
         id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
-        conversation_message_id, role, text, status, created_at, updated_at,
-        safe_error_code, retryable
+        conversation_message_id, role, text, content_parts_json, status, created_at, updated_at,
+        safe_error_code, retryable, plan_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
@@ -288,11 +308,13 @@ export class AppSessionMessageRecordStore {
         options.conversationMessageId ?? null,
         role,
         text,
+        options.contentParts ? JSON.stringify(options.contentParts) : null,
         status,
         createdAt,
         createdAt,
         options.safeErrorCode ?? null,
         options.retryable ? 1 : 0,
+        options.plan ? JSON.stringify(options.plan) : null,
       );
     if (options.attachments?.length) {
       this.messageFiles.attachToMessage(chatId, id, options.attachments);
@@ -309,6 +331,7 @@ export class AppSessionMessageRecordStore {
       status?: MessageStatus;
       safeErrorCode?: string | null;
       retryable?: boolean;
+      plan?: ProjectLedgerPlan | null;
     },
   ): MessageRecord {
     const current = this.getMessageRow(messageId);
@@ -324,7 +347,7 @@ export class AppSessionMessageRecordStore {
       .query(
         `
       UPDATE messages
-      SET text = ?, status = ?, updated_at = ?, safe_error_code = ?, retryable = ?
+      SET text = ?, status = ?, updated_at = ?, safe_error_code = ?, retryable = ?, plan_json = ?
       WHERE id = ?
     `,
       )
@@ -340,11 +363,51 @@ export class AppSessionMessageRecordStore {
           : input.retryable
             ? 1
             : 0,
+        input.plan === undefined
+          ? current.plan_json ?? null
+          : input.plan === null
+            ? null
+            : JSON.stringify(input.plan),
         messageId,
       );
     const row = this.getMessageRow(messageId);
     if (!row) throw new Error(`Failed to update message: ${messageId}`);
-    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
+    return messageFromRow(
+      row,
+      this.messageFiles.refsForMessage(messageId),
+      this.changedFilesForMessages([messageId]).get(messageId) ?? [],
+    );
+  }
+
+  replaceMessageChangedFiles(
+    messageId: string,
+    details: readonly (ChangedFileDetail | string)[],
+  ): MessageRecord {
+    const byPath = new Map<string, ChangedFileDetail>();
+    for (const detail of details.flatMap(normalizeChangedFile)) {
+      const existing = byPath.get(detail.path);
+      if (!existing || existing.lines.length === 0 || detail.lines.length > 0) {
+        byPath.set(detail.path, detail);
+      }
+    }
+    const normalized = [...byPath.values()].slice(0, 40);
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM message_changed_files WHERE message_id = ?")
+        .run(messageId);
+      const insert = this.db.query(`
+        INSERT INTO message_changed_files (message_id, position, safe_path_label, detail_json)
+        VALUES (?, ?, ?, ?)
+      `);
+      normalized.forEach((detail, position) => insert.run(
+        messageId,
+        position,
+        detail.path,
+        detail.lines.length > 0 || detail.additions > 0 || detail.deletions > 0
+          ? JSON.stringify(detail)
+          : null,
+      ));
+    })();
+    return this.messageRecordById(messageId);
   }
 
   touchChat(chatId: string): void {
@@ -352,6 +415,30 @@ export class AppSessionMessageRecordStore {
     this.db
       .query("UPDATE chats SET updated_at = ? WHERE id = ?")
       .run(now, chatId);
+  }
+
+  private changedFilesForMessages(
+    messageIds: readonly string[],
+  ): Map<string, ChangedFileDetail[]> {
+    const result = new Map<string, ChangedFileDetail[]>();
+    if (messageIds.length === 0) return result;
+    const placeholders = messageIds.map(() => "?").join(", ");
+    const rows = this.db.query<{
+      message_id: string;
+      safe_path_label: string;
+      detail_json: string | null;
+    }, string[]>(`
+      SELECT message_id, safe_path_label, detail_json
+      FROM message_changed_files
+      WHERE message_id IN (${placeholders})
+      ORDER BY message_id ASC, position ASC
+    `).all(...messageIds);
+    for (const row of rows) {
+      const details = result.get(row.message_id) ?? [];
+      details.push(parseChangedFileDetail(row.detail_json, row.safe_path_label));
+      result.set(row.message_id, details);
+    }
+    return result;
   }
 
   private compactionMarkerMessages(
@@ -415,4 +502,59 @@ export class AppSessionMessageRecordStore {
       ];
     });
   }
+}
+
+function normalizeChangedFile(value: ChangedFileDetail | string): ChangedFileDetail[] {
+  if (typeof value === "string") {
+    const path = safeChangedFilePath(value);
+    return path ? [{ path, additions: 0, deletions: 0, lines: [] }] : [];
+  }
+  const path = safeChangedFilePath(value.path);
+  if (!path || !Array.isArray(value.lines)) return [];
+  const lines = value.lines.flatMap(normalizeChangedFileLine);
+  return [{
+    path,
+    additions: lines.filter((line) => line.type === "added").length,
+    deletions: lines.filter((line) => line.type === "deleted").length,
+    lines,
+  }];
+}
+
+function normalizeChangedFileLine(value: ChangedFileLine): ChangedFileLine[] {
+  if ((value.type !== "added" && value.type !== "deleted") || typeof value.content !== "string") return [];
+  const oldLine = value.old_line;
+  const newLine = value.new_line;
+  if (oldLine !== undefined && (!Number.isSafeInteger(oldLine) || oldLine < 1)) return [];
+  if (newLine !== undefined && (!Number.isSafeInteger(newLine) || newLine < 1)) return [];
+  return [{
+    type: value.type,
+    ...(oldLine === undefined ? {} : { old_line: oldLine }),
+    ...(newLine === undefined ? {} : { new_line: newLine }),
+    content: value.content,
+  }];
+}
+
+function parseChangedFileDetail(value: string | null, fallbackPath: string): ChangedFileDetail {
+  if (!value) return { path: fallbackPath, additions: 0, deletions: 0, lines: [] };
+  try {
+    const parsed = JSON.parse(value) as ChangedFileDetail;
+    return normalizeChangedFile(parsed)[0] ?? {
+      path: fallbackPath,
+      additions: 0,
+      deletions: 0,
+      lines: [],
+    };
+  } catch {
+    return { path: fallbackPath, additions: 0, deletions: 0, lines: [] };
+  }
+}
+
+function safeChangedFilePath(value: string): string | null {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:\//u.test(normalized)) {
+    return null;
+  }
+  const parts = normalized.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return null;
+  return parts.join("/").slice(0, 1_024);
 }

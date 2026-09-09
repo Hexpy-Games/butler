@@ -4,10 +4,11 @@ import {
 } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-tool-result-context.ts";
 import {
   createToolResultModelPreviewContext,
+  beginToolResultModelPreviewBatch,
   toolResultPayloadForProvider,
 } from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
 
-test("hosted successful results preserve their exact structured payload", () => {
+test("hosted successful results preserve small facts in the shared model projection", () => {
   const logs: string[] = [];
   const payload = { ok: true, output: { text: "EXACT_HOSTED_RESULT", value: 9 } };
   const content = hostedToolResultContent({
@@ -17,10 +18,13 @@ test("hosted successful results preserve their exact structured payload", () => 
     log: (line) => logs.push(line),
   });
 
-  expect(JSON.parse(content)).toEqual(payload);
+  expect(JSON.parse(content)).toEqual({
+    ok: true,
+    output: { tool_name: "read_exact", text: "EXACT_HOSTED_RESULT", value: 9 },
+  });
   expect(content).not.toContain("completed-tool-evidence");
   expect(content).not.toContain("evidence_packet");
-  expect(logs).toEqual(["tool read_exact result serialized exactly"]);
+  expect(logs).toEqual(["tool read_exact result projected for model context"]);
 });
 
 test("hosted failures remain structured provider-valid observations", () => {
@@ -38,7 +42,14 @@ test("hosted failures remain structured provider-valid observations", () => {
     log: () => {},
   });
 
-  expect(JSON.parse(content)).toEqual(payload);
+  expect(JSON.parse(content)).toEqual({
+    ok: false,
+    output: {
+      tool_name: "run_command",
+      observation_kind: "test_failed",
+      model_visible_content: "Expected article but received main",
+    },
+  });
 });
 
 test("provider web results share one bounded live-prompt projection", () => {
@@ -120,7 +131,7 @@ test("provider web results share one bounded live-prompt projection", () => {
   );
 });
 
-test("run_work_block shares web dedupe context without changing non-web results", () => {
+test("run_work_block projects every nested result through the shared context", () => {
   const modelPreviewContext = createToolResultModelPreviewContext();
   const exactNonWebResult = {
     ok: true,
@@ -164,12 +175,40 @@ test("run_work_block shares web dedupe context without changing non-web results"
   });
 
   expect((projected.output as any).frontier).toEqual({ pending: 0 });
-  expect((projected.output as any).results[0].result).toEqual(exactNonWebResult);
-  expect((projected.output as any).results[1].result).toMatchObject({
-    tool_name: "web_search",
-    provider_overview: "Nested provider overview.",
-    evidence_item_count: 1,
+  expect((projected.output as any).results[0]).toMatchObject({
+    name: "read_exact",
+    preview: {
+      tool_name: "read_exact",
+      ok: true,
+      output: { text: "EXACT_NESTED_NON_WEB_RESULT", value: 7 },
+    },
+  });
+  expect((projected.output as any).results[1]).toMatchObject({
+    name: "web_search",
+    preview: {
+      tool_name: "web_search",
+      provider_overview: "Nested provider overview.",
+      evidence_item_count: 1,
+    },
   });
   expect((directRepeat.output as any).provider_overview).toBeUndefined();
   expect((directRepeat.output as any).evidence_item_count).toBe(0);
+});
+
+test("parallel results share the bytes remaining in one model request", () => {
+  const context = createToolResultModelPreviewContext();
+  beginToolResultModelPreviewBatch(context, { maxBytes: 3_000, resultCount: 2 });
+  const first = toolResultPayloadForProvider({
+    ok: true,
+    output: { text: "A".repeat(20_000), next_cursor: "cursor-a" },
+  }, { toolName: "read_exact", context });
+  const second = toolResultPayloadForProvider({
+    ok: true,
+    output: { text: "B".repeat(20_000), artifact_id: "artifact-b" },
+  }, { toolName: "read_exact", context });
+
+  expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(1_500);
+  expect(Buffer.byteLength(JSON.stringify(second))).toBeLessThanOrEqual(1_500);
+  expect(JSON.stringify(first)).toContain("cursor-a");
+  expect(JSON.stringify(second)).toContain("artifact-b");
 });

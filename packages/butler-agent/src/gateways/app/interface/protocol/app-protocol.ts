@@ -3,6 +3,8 @@
 // Contract modules own public response/request shapes. Guard modules own
 // runtime request validation for those contracts. Keep this file as the
 // stable import surface for existing app-server modules.
+export type { SpaceNode, SpaceGroup, SpaceView, SpaceCommand, SpaceMutationResult } from "./space-contract.ts";
+export { isSpaceCommand } from "./space-contract.ts";
 export * from "./base-contract.ts";
 export * from "./runtime-contract.ts";
 export * from "./navigation-contract.ts";
@@ -15,6 +17,7 @@ export * from "./progress-contract.ts";
 export * from "./operation-output-contract.ts";
 export * from "./attachment-contract.ts";
 export * from "./session-contract.ts";
+export * from "./work-status-contract.ts";
 export * from "./automation-worker-contract.ts";
 export * from "./messaging-contract.ts";
 export * from "./message-guards.ts";

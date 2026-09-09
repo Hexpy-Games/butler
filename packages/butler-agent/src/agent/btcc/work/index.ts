@@ -1,4 +1,5 @@
 export { createDurableWorkService } from "./work.ts";
+export type { DurableWorkService, WorkLedgerOperation } from "./work.ts";
 export { dispositionMaterialFingerprint } from "./disposition-freshness.ts";
 export {
   DURABLE_WORK_TOOL_NAMES,
@@ -28,10 +29,10 @@ export type {
   DurableWorkContext,
   DurableWorkEffectBlocker,
   DurableWorkPlan,
+  DurableWorkExecutionMode,
   DurableWorkPlanAction,
   DurableWorkReview,
   DurableWorkScope,
-  DurableWorkService,
   DurableWorkStore,
   DurableWorkToolResultRef,
   DurableWorkView,
@@ -52,11 +53,11 @@ export {
   acceptedCurrentResultReview,
   allowedNextWorkStages,
   applyWorkActionUpdates,
-  assertWorkPlanReplacementStage,
   assertWorkStageTransition,
   progressForReplacementPlan,
   resolveWorkReviewTransition,
   availableWorkReviewSubjects,
+  executableWorkActionKeys,
   unresolvedWorkActionKeys,
   workReviewTargetStage,
   WorkTransitionGuardError,

@@ -1,11 +1,9 @@
-import { useState } from "react";
+import { useAppLocale } from "@/app/copy.ts";
+import { useEffect, useState } from "react";
 import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   MessageRow,
   ScrollArea,
   Stack,
@@ -13,23 +11,38 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { MessageContent } from "@/components/conversation/MessageContent.tsx";
-import { TurnActivityPanel } from "@/components/conversation/TurnActivityPanel.tsx";
+import { TurnActivityPending } from "@/components/conversation/TurnActivityPending.tsx";
+import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
+import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
+import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverDialog() {
+  useAppLocale();
   const [cancelling, setCancelling] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const sessionId = useButlerStore((state) => state.observerSessionId);
+  const targetTurnId = useButlerStore((state) => state.observerTargetTurnId);
   const view = useButlerStore((state) =>
     sessionId ? state.sessionViews[sessionId] : undefined,
   );
   const close = useButlerStore((state) => state.closeSessionObserver);
   const refresh = useButlerStore((state) => state.refreshSessionObserver);
   const cancelObservedSteward = useButlerStore((state) => state.cancelObservedSteward);
+  const resumeObservedSteward = useButlerStore((state) => state.resumeObservedSteward);
 
   useSessionViewSubscription(sessionId, refresh);
+  useEffect(() => {
+    if (!sessionId || !targetTurnId || !view) return;
+    const target = [...document.querySelectorAll<HTMLElement>('[data-test-class="steward-observer-dialog"] [data-turn-id]')]
+      .find((element) => element.dataset.turnId === targetTurnId ||
+        element.dataset.turnIds?.split(" ").includes(targetTurnId));
+    if (!target) return;
+    target.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')?.click();
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    useButlerStore.setState({ observerTargetTurnId: null });
+  }, [sessionId, targetTurnId, view]);
 
-  const title = view?.relation?.safe_title ?? sessionId ?? "";
   return (
     <Dialog
       open={Boolean(sessionId)}
@@ -39,51 +52,54 @@ export function SessionObserverDialog() {
     >
       <DialogContent
         aria-describedby="steward-observer-description"
+        className={styles.dialog}
         data-test-class="steward-observer-dialog"
         glassRadius="composer"
       >
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription id="steward-observer-description">
-            {appCopy.inspector.tabs.activity}
-          </DialogDescription>
-        </DialogHeader>
+        <SessionObserverHeader />
         <ScrollArea fill dataTestClass="steward-observer-transcript">
           <Stack as="section" aria-label={appCopy.inspector.tabs.activity} gap="lg">
-            {view?.messages.map((message) => (
-              <MessageRow
-                key={message.id}
-                role={message.role === "user" ? "user" : "assistant"}
-                data-test-class="steward-observer-message"
-              >
-                <MessageContent
-                  message={message}
-                  copied={false}
-                  footerMeta={null}
-                />
-              </MessageRow>
-            ))}
-            {view?.active_turn ? (
+            <SessionObserverTimeline
+              messages={view?.messages ?? []}
+              activityHistory={view?.activity_history}
+              activeTurn={view?.active_turn}
+            />
+            {view?.waiting_for_children && !view.active_turn ? (
               <MessageRow
                 role="assistant"
                 activity
-                data-test-class="steward-observer-activity"
+                dataTestClass="steward-observer-worker-wait"
               >
-                <TurnActivityPanel
-                  rows={view.active_turn.progress.safe_progress_rows}
-                  state={view.active_turn.state}
-                  startedAt={view.active_turn.created_at}
-                  turnId={view.active_turn.id}
+                <TurnActivityPending
+                  readModels={[]}
+                  state="waiting_for_children"
                 />
               </MessageRow>
             ) : null}
-            {!view?.messages.length && !view?.active_turn ? (
+            {!view?.messages.length && !view?.active_turn &&
+                !view?.waiting_for_children ? (
               <Typo.Caption>{appCopy.conversation.work.pendingLabel}</Typo.Caption>
             ) : null}
           </Stack>
         </ScrollArea>
-        {view?.active_turn && view.relation ? (
-          <Stack align="row" justify="end">
+        {view?.latest_turn?.retryable && !view.active_turn && view.relation ? (
+          <Stack className={styles.actions} align="row" justify="end">
+            <Button
+              type="button"
+              disabled={resuming}
+              onClick={() => {
+                setResuming(true);
+                void resumeObservedSteward(view.relation!.relation_id)
+                  .finally(() => setResuming(false));
+              }}
+            >
+              {resuming
+                ? appCopy.conversation.work.pendingStateLabels.retrying
+                : appCopy.conversation.work.resumeInterrupted}
+            </Button>
+          </Stack>
+        ) : (view?.active_turn || view?.waiting_for_children) && view.relation ? (
+          <Stack className={styles.actions} align="row" justify="end">
             <Button
               type="button"
               variant="destructive"

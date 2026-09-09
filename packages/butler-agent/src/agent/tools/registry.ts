@@ -4,6 +4,7 @@ import { webReadToolDefinition, webReadToolMetadata } from "./web-read/web_read/
 import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./data-table/transform_public_data_table/index.ts";
 import { runCommandToolDefinition, runCommandToolMetadata } from "./run-command/run_command/index.ts";
 import { editFileToolDefinition, editFileToolMetadata, grepFilesToolDefinition, grepFilesToolMetadata, listFilesToolDefinition, listFilesToolMetadata, readFileToolDefinition, readFileToolMetadata, writeFileToolDefinition, writeFileToolMetadata } from "./file-tools/index.ts";
+import { readProjectSourceDefinition, readProjectSourceMetadata } from "./project-source/definition.ts";
 import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./project-ledger/get_work_dashboard/index.ts";
 import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } from "./project-ledger/inspect_project_status/index.ts";
 import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./project-ledger/query_project_work/index.ts";
@@ -26,6 +27,7 @@ import {
   analyzeAttachedImageToolMetadata,
 } from "./image/index.ts";
 import { createAutomationToolDefinition, createAutomationToolMetadata } from "./automation/create_automation/index.ts";
+import { startTopicConversationDefinition, startTopicConversationMetadata } from "./conversation/definition.ts";
 import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./automation/list_automations/index.ts";
 import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./automation/delete_automation/index.ts";
 import { runDueAutomationsToolDefinition, runDueAutomationsToolMetadata } from "./automation/run_due_automations/index.ts";
@@ -51,6 +53,7 @@ import {
 } from "./session-workspace/index.ts";
 import {
   readOperationResultsToolDefinition,
+  listOperationResultsToolDefinition,
   readOperationResultsToolMetadata,
 } from "./monitoring/read_operation_results/index.ts";
 import {
@@ -58,8 +61,14 @@ import {
   cancelStewardToolMetadata,
   delegateToStewardToolDefinition,
   delegateToStewardToolMetadata,
+  delegateToWorkerToolDefinition,
+  delegateToWorkerToolMetadata,
   steerStewardToolDefinition,
   steerStewardToolMetadata,
+  steerWorkerToolDefinition,
+  steerWorkerToolMetadata,
+  waitForWorkerToolDefinition,
+  waitForWorkerToolMetadata,
 } from "./subsession/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
@@ -68,6 +77,7 @@ export const CORE_BUTLER_TOOLS = [
   transformPublicDataTableToolDefinition,
   runCommandToolDefinition,
   readFileToolDefinition,
+  readProjectSourceDefinition,
   writeFileToolDefinition,
   editFileToolDefinition,
   grepFilesToolDefinition,
@@ -81,6 +91,7 @@ export const CORE_BUTLER_TOOLS = [
   completeProjectWorkToolDefinition,
   getContextMonitorToolDefinition,
   readOperationResultsToolDefinition,
+  listOperationResultsToolDefinition,
   readToolEvidenceArtifactToolDefinition,
   readToolOutputArtifactToolDefinition,
   getUsageMonitorToolDefinition,
@@ -93,6 +104,7 @@ export const CORE_BUTLER_TOOLS = [
   readMcpResourceToolDefinition,
   analyzeAttachedImageToolDefinition,
   createAutomationToolDefinition,
+  startTopicConversationDefinition,
   listAutomationsToolDefinition,
   deleteAutomationToolDefinition,
   runDueAutomationsToolDefinition,
@@ -113,7 +125,10 @@ export const CORE_BUTLER_TOOLS = [
   updateExplicitMemoryToolDefinition,
   listSkillsToolDefinition,
   delegateToStewardToolDefinition,
+  delegateToWorkerToolDefinition,
   steerStewardToolDefinition,
+  steerWorkerToolDefinition,
+  waitForWorkerToolDefinition,
   cancelStewardToolDefinition,
 ] satisfies ButlerToolDefinition[];
 
@@ -125,6 +140,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [transformPublicDataTableToolDefinition.name]: transformPublicDataTableToolMetadata,
   [runCommandToolDefinition.name]: runCommandToolMetadata,
   [readFileToolDefinition.name]: readFileToolMetadata,
+  [readProjectSourceDefinition.name]: readProjectSourceMetadata,
   [writeFileToolDefinition.name]: writeFileToolMetadata,
   [editFileToolDefinition.name]: editFileToolMetadata,
   [grepFilesToolDefinition.name]: grepFilesToolMetadata,
@@ -138,6 +154,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [completeProjectWorkToolDefinition.name]: completeProjectWorkToolMetadata,
   [getContextMonitorToolDefinition.name]: getContextMonitorToolMetadata,
   [readOperationResultsToolDefinition.name]: readOperationResultsToolMetadata,
+  [listOperationResultsToolDefinition.name]: readOperationResultsToolMetadata,
   [readToolEvidenceArtifactToolDefinition.name]: readToolEvidenceArtifactToolMetadata,
   [readToolOutputArtifactToolDefinition.name]: readToolOutputArtifactToolMetadata,
   [getUsageMonitorToolDefinition.name]: getUsageMonitorToolMetadata,
@@ -150,6 +167,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [readMcpResourceToolDefinition.name]: readMcpResourceToolMetadata,
   [analyzeAttachedImageToolDefinition.name]: analyzeAttachedImageToolMetadata,
   [createAutomationToolDefinition.name]: createAutomationToolMetadata,
+  [startTopicConversationDefinition.name]: startTopicConversationMetadata,
   [listAutomationsToolDefinition.name]: listAutomationsToolMetadata,
   [deleteAutomationToolDefinition.name]: deleteAutomationToolMetadata,
   [runDueAutomationsToolDefinition.name]: runDueAutomationsToolMetadata,
@@ -170,6 +188,9 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [updateExplicitMemoryToolDefinition.name]: updateExplicitMemoryToolMetadata,
   [listSkillsToolDefinition.name]: listSkillsToolMetadata,
   [delegateToStewardToolDefinition.name]: delegateToStewardToolMetadata,
+  [delegateToWorkerToolDefinition.name]: delegateToWorkerToolMetadata,
   [steerStewardToolDefinition.name]: steerStewardToolMetadata,
+  [steerWorkerToolDefinition.name]: steerWorkerToolMetadata,
+  [waitForWorkerToolDefinition.name]: waitForWorkerToolMetadata,
   [cancelStewardToolDefinition.name]: cancelStewardToolMetadata,
 };

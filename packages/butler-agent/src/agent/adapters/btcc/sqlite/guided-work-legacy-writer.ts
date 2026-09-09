@@ -183,7 +183,7 @@ export class GuidedWorkLegacyWriter {
   }
 }
 
-function legacyImportId(programId: string, scope: WorkTurnScope): string {
+export function legacyImportId(programId: string, scope: WorkTurnScope): string {
   return guidedWorkRecordId(
     "legacy-import",
     `${programId}\0${scope.sessionId}\0${scope.projectRef ?? ""}`,

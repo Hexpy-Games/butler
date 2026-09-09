@@ -5,6 +5,7 @@ import type {
 import type {
   ModelRoundMessage,
   ModelRoundPort,
+  ModelRoundObserver,
   ModelRoundResult,
   ModelRoundTool,
   ModelRoundToolCall,
@@ -16,7 +17,7 @@ import type {
   VerifiedImagePayloadPort,
   VisualAdmittedManifest,
 } from "../../image-attachment/index.ts";
-import type { BtccTurnProgressObserver } from "../contracts.ts";
+import type { BtccTurnProgressObserver, BtccRuntimeFailure } from "../contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
 import type {
   PromptUsageAttribution,
@@ -28,8 +29,10 @@ import type { OperationResultReplay } from "../operation-result-replay/index.ts"
 import type { TurnContinuationBudgetState } from "../turn/index.ts";
 import type { BtccRoundToolSurfaceSnapshot } from "./round-tool-surface.ts";
 import type { BtccFinalArtifact } from "../contracts.ts";
+import type { ChangedFileDetail } from "../../tools/file-tools/shared/changed-file-detail.ts";
 import type { RuntimeMemoryAttributionPort } from
   "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import type { ProjectLedgerPlan } from "../project-plan.ts";
 
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
@@ -38,9 +41,15 @@ export type BtccAgentLoopToolCall = ModelRoundToolCall;
 export type BtccAgentLoopResult = {
   content: string;
   terminalOutcome?: "no_visible";
+  suspension?: BtccTurnSuspension;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
+  acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+  runtimeFailure?: BtccRuntimeFailure;
   artifacts?: BtccFinalArtifact[];
+  changedFiles?: ChangedFileDetail[];
+  plan?: ProjectLedgerPlan;
   modelIdentity?: {
     requestedModelRef: string;
     effectiveModelRef: string;
@@ -48,12 +57,19 @@ export type BtccAgentLoopResult = {
   };
 };
 
+export type BtccTurnSuspension = "authority_pending" | "waiting_for_worker";
+
+export type BtccToolResultOutcome =
+  | { kind: "reply"; text: string }
+  | { kind: "suspend"; reason: BtccTurnSuspension };
+
 export interface BtccAgentLoop {
   run(input: {
     turn: TurnRecord;
     recoveryAttempt?: number;
     signal: AbortSignal;
     memoryAttribution?: RuntimeMemoryAttributionPort;
+    modelRoundObserver?: ModelRoundObserver;
     progress?: BtccTurnProgressObserver;
     onProviderResponseIdentity?: (identity: {
       provider: string;
@@ -116,6 +132,8 @@ export type BtccTextToolCallDisposition =
   | { status: "continue"; observation: string }
   | { status: "fail"; error?: unknown };
 
+export type BtccAfterToolBatchDisposition = "continue" | "final_report" | "wait";
+
 export interface BtccFinalSynthesisOptions {
   instructions: string;
   retryInstructions?: string;
@@ -141,7 +159,12 @@ export interface BtccFinalSynthesisOptions {
 }
 
 export interface BtccAgentLoopInput {
+  contextCompactor?: import("./context-compaction.ts").ContextCompactor;
   prompt: string;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
+  authorityDecision?: import("./loop-continuation.ts").AuthorityLoopDecision;
+  /** Records a denied/unstarted accepted call without invoking its executor. */
+  onUnexecutedToolCall?: (call: BtccAgentLoopToolCall, result: BtccAgentLoopToolResult) => void | Promise<void>;
   phaseContinuityPrivateDigester?: PhaseContinuityPrivateDigester;
   turnId?: string;
   recoveryAttempt?: number;
@@ -169,6 +192,8 @@ export interface BtccAgentLoopInput {
   progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];
+  /** A previously requested operation restored from the approved durable input. */
+  resumedToolCall?: BtccAgentLoopToolCall;
   resolveTools?: () => BtccRoundToolSurfaceSnapshot | Promise<BtccRoundToolSurfaceSnapshot>;
   resolveToolChoice?: () => "auto" | "required" | undefined;
   modelRound: ModelRoundPort;
@@ -181,24 +206,24 @@ export interface BtccAgentLoopInput {
     recordOutput(input: { roundId: string; outputBytes: number }): Promise<void>;
     recordToolRound(input: { roundId: string }): Promise<void>;
   };
+  /** Context selection only; never enables execution-budget termination. */
+  maxModelFacingBytes?: number;
+  /** Consume new steering before assigning item identities and selecting context. */
+  beforeModelRound?: () => Promise<readonly (string | {
+    content: string;
+    requestSegmentKind: "current_user_request" | "project_ledger_and_work_authority";
+  })[]>;
   resolveOperationResultCallId?: (providerCallId: string) => string | undefined;
-  /**
-   * The execution window is an internal scheduling boundary, not a semantic
-   * model/tool budget. A guided caller supplies this callback to reread
-   * durable Work and append one internal observation before the next window.
-   */
-  onExecutionWindowBoundary?: (input: {
-    windowIndex: number;
-    iteration: number;
-    messages: readonly BtccAgentLoopMessage[];
-    toolResults: readonly BtccAgentLoopToolResult[];
-  }) => Promise<string | undefined> | string | undefined;
-  maxIterations?: number;
   onAssistantTextBeforeTools?: (input: {
     text: string;
     toolCalls: BtccAgentLoopToolCall[];
     iteration: number;
   }) => Promise<void> | void;
+  afterToolBatch?: (input: {
+    toolCalls: readonly BtccAgentLoopToolCall[];
+    toolResults: readonly BtccAgentLoopToolResult[];
+    iteration: number;
+  }) => Promise<BtccAfterToolBatchDisposition> | BtccAfterToolBatchDisposition;
   executeTool: (call: {
     id: string;
     name: string;
@@ -212,26 +237,24 @@ export interface BtccAgentLoopInput {
     text: string;
     iteration: number;
   }) => Promise<BtccTextToolCallDisposition> | BtccTextToolCallDisposition;
-  finalTextFromToolResult?: (input: {
+  outcomeFromToolResult?: (input: {
     toolCall: BtccAgentLoopToolCall;
     toolResult: BtccAgentLoopToolResult;
-  }) => Promise<string | null | undefined> | string | null | undefined;
+  }) => Promise<BtccToolResultOutcome | null | undefined> |
+    BtccToolResultOutcome | null | undefined;
   reviewFinalCandidate?: (input: {
     text: string;
     iteration: number;
   }) => Promise<
     | { status: "accepted"; text?: string }
+    | { status: "wait" }
     | { status: "continue"; observation: string }
   > | (
     | { status: "accepted"; text?: string }
+    | { status: "wait" }
     | { status: "continue"; observation: string }
   );
   onEvent?: (event: BtccAgentLoopEvent) => void;
-  onLoopLimit?: (input: {
-    messages: BtccAgentLoopMessage[];
-    toolResults: BtccAgentLoopToolResult[];
-    maxIterations: number;
-  }) => Promise<string> | string;
   finalSynthesis?: BtccFinalSynthesisOptions;
 }
 
@@ -241,10 +264,8 @@ export interface BtccAgentLoopEvent {
     | "model_response"
     | "model_failure"
     | "tool_call"
-    | "tool_result"
-    | "execution_window_boundary";
+    | "tool_result";
   iteration: number;
-  windowIndex?: number;
   toolCall?: BtccAgentLoopToolCall;
   toolResult?: BtccAgentLoopToolResult;
   text?: string;
@@ -252,7 +273,8 @@ export interface BtccAgentLoopEvent {
 
 export interface BtccAgentLoopOutput {
   finalText: string;
+  suspension?: BtccTurnSuspension;
+  authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   messages: BtccAgentLoopMessage[];
   events: BtccAgentLoopEvent[];
-  stoppedByLimit: boolean;
 }

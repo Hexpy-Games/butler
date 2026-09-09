@@ -19,6 +19,10 @@ const WORK_CONTROL_TOOL_NAMES = new Set([
   "record_work_disposition",
 ]);
 
+export function isGuidedWorkControlToolName(toolName: string): boolean {
+  return WORK_CONTROL_TOOL_NAMES.has(toolName);
+}
+
 export class GuidedWorkToolResultWriter {
   constructor(private readonly db: Database) {}
 
@@ -39,7 +43,7 @@ export class GuidedWorkToolResultWriter {
         `Durable Work tool result is not eligible for attachment: ${input.toolCallId}`,
       );
     }
-    if (WORK_CONTROL_TOOL_NAMES.has(result.tool_name)) {
+    if (isGuidedWorkControlToolName(result.tool_name)) {
       throw new Error(`Durable Work control result cannot be attached: ${result.tool_name}`);
     }
     const existing = this.db.query<{

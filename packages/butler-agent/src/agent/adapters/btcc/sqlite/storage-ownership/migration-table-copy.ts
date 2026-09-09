@@ -14,6 +14,7 @@ type ReferenceRule = {
   fromColumn: string;
   toTable: string;
   toColumn: string;
+  sourceFilter?: string;
 };
 
 const DURABLE_REFERENCE_RULES: readonly ReferenceRule[] = [
@@ -41,7 +42,7 @@ const DURABLE_REFERENCE_RULES: readonly ReferenceRule[] = [
   { name: "acceptance_turn", fromTable: "btcc_model_round_acceptances", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
   { name: "work_head", fromTable: "btcc_guided_work_session_heads", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
   { name: "work_origin_turn", fromTable: "btcc_guided_works", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
-  { name: "work_current_plan", fromTable: "btcc_guided_works", fromColumn: "current_plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  { name: "work_current_plan", fromTable: "btcc_guided_works", fromColumn: "current_plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id", sourceFilter: "source.scope_kind != 'project'" },
   { name: "work_binding", fromTable: "btcc_guided_turn_work_bindings", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
   { name: "work_binding_turn", fromTable: "btcc_guided_turn_work_bindings", fromColumn: "turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
   { name: "work_plan", fromTable: "btcc_guided_work_plan_revisions", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
@@ -64,7 +65,17 @@ const DURABLE_REFERENCE_RULES: readonly ReferenceRule[] = [
   { name: "work_result_origin_turn", fromTable: "btcc_guided_work_results", fromColumn: "origin_turn_id", toTable: "btcc_turns", toColumn: "turn_id" },
   { name: "work_result_tool", fromTable: "btcc_guided_work_results", fromColumn: "tool_call_id", toTable: "btcc_guided_tool_calls", toColumn: "call_id" },
   { name: "effect_work", fromTable: "btcc_guided_effects", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
-  { name: "effect_plan", fromTable: "btcc_guided_effects", fromColumn: "plan_revision_id", toTable: "btcc_guided_work_plan_revisions", toColumn: "plan_revision_id" },
+  {
+    name: "effect_plan",
+    fromTable: "btcc_guided_effects",
+    fromColumn: "plan_revision_id",
+    toTable: "btcc_guided_work_plan_revisions",
+    toColumn: "plan_revision_id",
+    sourceFilter: `NOT EXISTS (
+      SELECT 1 FROM btcc_guided_works work
+      WHERE work.work_id = source.work_id AND work.scope_kind = 'project'
+    )`,
+  },
   { name: "effect_hint", fromTable: "btcc_guided_effect_recovery_hints", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
   { name: "effect_payload", fromTable: "btcc_guided_effect_recovery_payloads", fromColumn: "effect_id", toTable: "btcc_guided_effects", toColumn: "effect_id" },
   { name: "effect_blocker_work", fromTable: "btcc_guided_work_effect_blockers", fromColumn: "work_id", toTable: "btcc_guided_works", toColumn: "work_id" },
@@ -135,6 +146,7 @@ function validateReferenceRule(db: Database, rule: ReferenceRule): void {
     LEFT JOIN ${quoteIdentifier(rule.toTable)} AS target
       ON target.${quoteIdentifier(rule.toColumn)} = source.${quoteIdentifier(rule.fromColumn)}
     WHERE source.${quoteIdentifier(rule.fromColumn)} IS NOT NULL
+      ${rule.sourceFilter ? `AND ${rule.sourceFilter}` : ""}
       AND target.${quoteIdentifier(rule.toColumn)} IS NULL
     LIMIT 1
   `).get();

@@ -2,7 +2,6 @@ import type {
   BtccTurnProgressObserver,
   WorkProgressTask,
 } from "../contracts.ts";
-import { digest } from "../identity/index.ts";
 import type {
   DurableWorkContext,
   DurableWorkService,
@@ -13,14 +12,11 @@ import type { TurnRecord } from "../turn/index.ts";
 import type {
   PrincipalAuthority,
 } from "../authority/index.ts";
-import type { GuidedToolJournal } from "../ports/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import { publicWorkActionDisplay } from "../projection/index.ts";
 
 type GuidedWorkRuntimeInput = {
   durableWork: DurableWorkService;
-  toolJournal: GuidedToolJournal;
 };
 
 export function workScopeForTurn(
@@ -40,11 +36,7 @@ export async function safeLoadWorkContext(
   service: DurableWorkService,
   scope: WorkTurnScope,
 ): Promise<DurableWorkContext | null> {
-  try {
-    return await service.loadContext(scope);
-  } catch {
-    return null;
-  }
+  return await service.loadContext(scope);
 }
 
 export async function safeImportOpenLegacyWork(
@@ -62,11 +54,7 @@ export async function safeBoundWork(
   service: DurableWorkService,
   turnId: string,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.boundWorkForTurn(turnId);
-  } catch {
-    return null;
-  }
+  return await service.boundWorkForTurn(turnId);
 }
 
 export async function safeBindOpenWork(
@@ -74,11 +62,7 @@ export async function safeBindOpenWork(
   scope: WorkTurnScope,
   expectedWorkId?: string,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.bindOpenWork(scope, expectedWorkId);
-  } catch {
-    return null;
-  }
+  return await service.bindOpenWork(scope, expectedWorkId);
 }
 
 export async function loadInitialGuidedWork(
@@ -95,7 +79,6 @@ export async function loadInitialGuidedWork(
   if (bound?.workId !== context.work.workId) {
     return { context, bound: false };
   }
-  await backfillTurnToolResults(input, scope);
   return {
     context: await safeLoadWorkContext(input.durableWork, scope),
     bound: true,
@@ -104,12 +87,12 @@ export async function loadInitialGuidedWork(
 
 export async function loadGuidedTurnWork(input: {
   durableWork: DurableWorkService;
-  toolJournal: GuidedToolJournal;
   scope: WorkTurnScope;
   trackingMode: "ledger" | "local" | "none";
   authority?: PrincipalAuthority;
   authorityRequestRef?: string;
   authorityClientMessageId?: string;
+  authorityOwnerSessionId?: string;
   workspacePath: string;
 }): Promise<{
   context: DurableWorkContext | null;
@@ -118,7 +101,7 @@ export async function loadGuidedTurnWork(input: {
   const storedAuthority = input.authorityRequestRef && input.authority &&
     input.authorityClientMessageId
     ? input.authority.execution({
-        ownerSessionId: input.scope.sessionId,
+        ownerSessionId: input.authorityOwnerSessionId ?? input.scope.sessionId,
         requestRef: input.authorityRequestRef,
         sourceSessionId: input.scope.sessionId,
         clientMessageId: input.authorityClientMessageId,
@@ -130,15 +113,11 @@ export async function loadGuidedTurnWork(input: {
   }
   if (storedAuthority) {
     if (storedAuthority.sourceSessionId !== input.scope.sessionId ||
-        storedAuthority.sourceTurnId === input.scope.turnId ||
+        storedAuthority.sourceTurnId !== input.scope.turnId ||
         storedAuthority.workspacePath !== input.workspacePath) {
       throw new Error("authority_request_identity_mismatch");
     }
-    const bound = await safeBindOpenWork(
-      input.durableWork,
-      input.scope,
-      storedAuthority.sourceWorkId,
-    );
+    const bound = await safeBoundWork(input.durableWork, input.scope.turnId);
     if (!bound || bound.workId !== storedAuthority.sourceWorkId) {
       throw new Error("authority_source_work_unavailable");
     }
@@ -147,40 +126,12 @@ export async function loadGuidedTurnWork(input: {
     ? { context: null, bound: false }
     : await loadInitialGuidedWork({
         durableWork: input.durableWork,
-        toolJournal: input.toolJournal,
       }, input.scope);
   if (storedAuthority && (!initial.bound ||
       initial.context?.work.workId !== storedAuthority.sourceWorkId)) {
     throw new Error("authority_source_work_unavailable");
   }
   return initial;
-}
-
-export async function safeAttachToolResult(
-  input: GuidedWorkRuntimeInput,
-  scope: WorkTurnScope,
-  toolCallId: string,
-): Promise<void> {
-  if (!await safeBoundWork(input.durableWork, scope.turnId)) return;
-  try {
-    await input.durableWork.attachToolResult({
-      ...scope,
-      mutationCallId: digest(`btcc-guided-work-result-attach.v1\0${toolCallId}`),
-      toolCallId,
-    });
-  } catch {
-    // Work bookkeeping cannot veto an otherwise valid tool result.
-  }
-}
-
-export async function backfillTurnToolResults(
-  input: GuidedWorkRuntimeInput,
-  scope: WorkTurnScope,
-): Promise<void> {
-  for (const record of input.toolJournal.list(scope.turnId)) {
-    if (record.status !== "completed" || isDurableWorkTool(record.toolName)) continue;
-    await safeAttachToolResult(input, scope, record.callId);
-  }
 }
 
 export async function publishWorkProgress(

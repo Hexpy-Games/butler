@@ -7,6 +7,9 @@ export function guidedFinalTransition(
   turn: TurnRecord,
   result: BtccAgentLoopResult,
 ) {
+  if (result.suspension) {
+    throw new Error("Suspended BTCC Turn cannot be accepted as final");
+  }
   const content = result.terminalOutcome === "no_visible"
     ? ""
     : result.content.trim() || operationalFailureMessage(turn.originalMessage);
@@ -17,7 +20,11 @@ export function guidedFinalTransition(
     disposition: "completed" as const,
     content,
     ...(result.workStatus ? { workStatus: result.workStatus } : {}),
+    ...(result.acceptedWorkResult ? { acceptedWorkResult: result.acceptedWorkResult } : {}),
+    ...(result.runtimeFailure ? { runtimeFailure: result.runtimeFailure } : {}),
     ...(result.artifacts?.length ? { artifacts: result.artifacts } : {}),
+    ...(result.changedFiles?.length ? { changedFiles: result.changedFiles } : {}),
+    ...(result.plan ? { plan: result.plan } : {}),
     ...(result.modelIdentity ? { modelIdentity: result.modelIdentity } : {}),
   };
   const finalPayload = {

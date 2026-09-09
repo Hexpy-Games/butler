@@ -222,6 +222,10 @@ export class ConversationAdmissionTurn {
           sessionId: this.turn.session_id,
           turnId: this.turn.id,
           text: decision.operation.text,
+          ...(this.input.envelope.appTurnContext?.contentParts ? { parts: [
+            { kind: "text" as const, contentJson: { text: decision.operation.text } },
+            { kind: "message_content" as const, contentJson: this.input.envelope.appTurnContext.contentParts },
+          ] } : {}),
           visibility: decision.operation.visibility,
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
@@ -277,7 +281,9 @@ export class ConversationAdmissionTurn {
     message: ConversationMessageWithParts, role: ConversationMessageWithParts["role"], text: string,
   ): void {
     const matches = message.turn_id === this.turn.id &&
-      message.role === role && conversationMessageText(message) === text;
+      message.role === role && conversationMessageText(message) === text &&
+      (role !== "user" || JSON.stringify(message.parts.find(part => part.kind === "message_content")?.content_json) ===
+        JSON.stringify(this.input.envelope.appTurnContext?.contentParts));
     if (!matches) {
       throw new Error("conversation_source_ref_conflict");
     }

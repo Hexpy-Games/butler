@@ -1,9 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { readStewardObserverPlan } from "./steward-observer-plan-reader.ts";
 import type {
-  StewardObserverMessage,
   StewardObserverProgressEvent,
   StewardObserverReader,
+  StewardObserverDelegationPresentation,
   StewardObserverRelation,
   StewardObserverSnapshot,
   StewardObserverOperationOutputChunk,
@@ -11,27 +11,25 @@ import type {
 } from "../../../../gateways/app/domain/sessions/steward-observer.ts";
 import type { StewardResultView as StewardObserverResult } from
   "../../../../gateways/app/interface/protocol/app-protocol.ts";
-import { normalizeOperationOutputChunkPayload } from "../../../events/operation-output-event.ts";
+import type { WorkStatusView } from
+  "../../../../gateways/app/interface/protocol/app-protocol.ts";
 import { subsessionParentResultRefs } from "../../../btcc/subsessions/index.ts";
 import { publicStewardTerminalFields } from "./steward-observer-terminal-result.ts";
+import {
+  LocalProcessLiveness,
+  type ProcessLiveness,
+} from "./runtime-owner/index.ts";
+import {
+  projectStewardTurnRecovery,
+  readRecoverableStewardTurns,
+  type StewardRecoveryTurnRow,
+} from "./steward-recovery-reader.ts";
+import { readStewardOperationOutputChunks } from "./steward-operation-output-reader.ts";
+import { readStewardObserverMessages } from "./steward-observer-message-reader.ts";
+import type { ChangedFileDetail } from "../../../tools/file-tools/shared/changed-file-detail.ts";
+import { readWorkStatus } from "./steward-observer-work-status.ts";
 
 type RelationRow = StewardObserverRelation;
-
-type MessageRow = {
-  message_id: string;
-  session_id: string;
-  turn_id: string;
-  role: "user" | "assistant" | string;
-  content: string;
-  idempotency_key: string;
-  created_at: string;
-};
-
-type TurnRow = {
-  turn_id: string;
-  semantic_state: string;
-  created_at: string;
-};
 
 type ProgressRow = {
   event_id: string;
@@ -54,9 +52,15 @@ type ResultRow = {
   summary: string;
   acceptance_evidence_json: string;
   changed_artifacts_json: string;
+  changed_files_json: string;
   created_at: string;
   work_status: string | null;
   final_payload_json: string | null;
+};
+
+type DelegationPresentationRow = {
+  task_id: string;
+  packet_json: string;
 };
 
 /**
@@ -65,7 +69,28 @@ type ResultRow = {
  * identity, transcript, progress, and result state.
  */
 export class SqliteStewardObserverStore implements StewardObserverReader {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly processLiveness: ProcessLiveness = new LocalProcessLiveness(),
+    private readonly butlerData?: string,
+  ) {}
+
+  workStatus(): WorkStatusView {
+    return readWorkStatus(this.db);
+  }
+
+  hasUnfinishedExecution(sessionId: string): boolean {
+    return Boolean(this.db.query(`SELECT 1 FROM btcc_turns WHERE session_id=?
+      AND semantic_state NOT IN ('delivered','cancelled') LIMIT 1`).get(sessionId));
+  }
+
+  retainsApprovalClaim(turnId: string): boolean {
+    return Boolean(this.db.query(`
+      SELECT 1 FROM btcc_turns WHERE turn_id = ?
+        AND semantic_state IN ('admitted', 'delivery_committed')
+        AND authority_continuation_json IS NOT NULL
+    `).get(turnId));
+  }
 
   relationsForParent(sessionId: string): StewardObserverRelation[] {
     return this.db
@@ -87,6 +112,47 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     return this.relation("child_session_id", sessionId);
   }
 
+  delegationPresentation(
+    relationId: string,
+  ): StewardObserverDelegationPresentation | null {
+    const row = this.db.query<DelegationPresentationRow, [string]>(`
+      SELECT task_id, packet_json
+      FROM btcc_subsession_delegations
+      WHERE relation_id = ?
+    `).get(relationId);
+    if (!row) return null;
+    try {
+      const packet = JSON.parse(row.packet_json) as Record<string, unknown>;
+      if (typeof packet.objective !== "string") return null;
+      return {
+        task_id: row.task_id,
+        objective: packet.objective,
+        source_tool_call_id: typeof packet.source_tool_call_id === "string"
+          ? packet.source_tool_call_id
+          : this.legacyWorkerCallId(row.packet_json),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private legacyWorkerCallId(packetJson: string): string | undefined {
+    // Older packets predate explicit call correlation. Only an unambiguous
+    // exact invocation match can attach their capsule to a historical activity.
+    const matches = this.db.query<{ call_id: string }, [string]>(`
+      SELECT call_id FROM btcc_guided_tool_calls, json_each(?) AS packet
+      WHERE packet.key = 'parent_turn_id' AND turn_id = packet.value
+        AND tool_name = 'delegate_to_worker' AND status = 'completed'
+        AND json_extract(result_json, '$.status') = 'queued'
+        AND json_extract(arguments_json, '$.objective') = json_extract(packet.json, '$.objective')
+        AND json_extract(arguments_json, '$.action_key') = json_extract(packet.json, '$.plan_action.action_key')
+        AND json_extract(arguments_json, '$.implementation_brief') = json_extract(packet.json, '$.implementation_brief')
+        AND json_extract(arguments_json, '$.acceptance_criteria') = json_extract(packet.json, '$.acceptance_criteria')
+      LIMIT 2
+    `).all(packetJson);
+    return matches.length === 1 ? matches[0]!.call_id : undefined;
+  }
+
   isParentResultInput(sessionId: string, text: string): boolean {
     const refs = subsessionParentResultRefs(text);
     if (!refs) return false;
@@ -102,47 +168,47 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     `).get(sessionId, refs.relationId, refs.resultId));
   }
 
+  plan(sessionId: string) {
+    return readStewardObserverPlan(this.db, sessionId, this.butlerData);
+  }
+
   snapshot(sessionId: string): StewardObserverSnapshot | null {
     const relation = this.relationForChild(sessionId);
     if (!relation) return null;
-    const messages = this.db
-      .query<MessageRow, [string]>(`
-        SELECT message_id, session_id, turn_id, role, content, idempotency_key, created_at
-        FROM btcc_messages
-        WHERE session_id = ? AND role IN ('user', 'assistant')
-          -- Steward dispatch inputs are durable internal continuation context,
-          -- not user-facing transcript. Keep assistant/result messages public.
-          AND message_id NOT LIKE 'steward-message:%'
-          AND idempotency_key NOT LIKE 'inbound:%:steward:%'
-        ORDER BY created_at ASC, message_id ASC
-      `)
-      .all(sessionId)
-      .map<StewardObserverMessage>((message) => ({
-        id: message.message_id,
-        session_id: message.session_id,
-        turn_id: message.turn_id,
-        role: message.role === "user" ? "user" : "assistant",
-        text: message.content,
-        created_at: message.created_at,
-        updated_at: message.created_at,
-      }));
+    const messages = readStewardObserverMessages(this.db, relation);
     const turns = this.db
-      .query<TurnRow, [string, string]>(`
-        SELECT turn_id, semantic_state, COALESCE(
+      .query<StewardRecoveryTurnRow & { suspension_reason: string | null }, [string, string]>(`
+        SELECT t.turn_id, t.semantic_state, t.suspension_reason, t.trigger_key, t.original_message_id,
+          t.original_message, COALESCE(
           (SELECT created_at FROM btcc_progress_events p
             WHERE p.turn_id = t.turn_id ORDER BY p.turn_sequence ASC LIMIT 1),
           ?
-        ) AS created_at
+        ) AS created_at,
+          claim.claim_id, claim.status AS claim_status, claim.owner_id,
+          claim.owner_generation, claim.lease_generation,
+          owner.host_id AS owner_host_id, owner.process_id AS owner_process_id,
+          owner.process_started_at_ms AS owner_process_started_at_ms,
+          owner.status AS owner_status
         FROM btcc_turns t
-        WHERE session_id = ?
-        ORDER BY rowid ASC
+        LEFT JOIN btcc_checkpoints AS checkpoint
+          ON checkpoint.checkpoint_id = t.active_checkpoint_id
+         AND checkpoint.is_active = 1
+        LEFT JOIN btcc_state_claims AS claim
+          ON claim.claim_id = checkpoint.active_claim_id
+        LEFT JOIN btcc_runtime_owners AS owner
+          ON owner.owner_id = claim.owner_id
+        WHERE t.session_id = ?
+        ORDER BY t.rowid ASC
       `)
       .all(relation.created_at, sessionId)
       .map<StewardObserverTurn>((turn) => ({
         id: turn.turn_id,
-        state: turn.semantic_state,
+        state: turn.suspension_reason === "authority_pending" ? "waiting_for_form" : turn.semantic_state,
         created_at: turn.created_at,
         updated_at: turn.created_at,
+        ...(turn.semantic_state === "admitted" && !turn.suspension_reason
+          ? { recovery: projectStewardTurnRecovery(turn, this.processLiveness) }
+          : {}),
       }));
     const progressEvents = this.db
       .query<ProgressRow, [string]>(`
@@ -155,7 +221,15 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       .all(sessionId)
       .flatMap((row) => this.parseProgress(row));
     const result = this.resultForRelation(relation.relation_id);
-    const plan = readStewardObserverPlan(this.db, sessionId);
+    const plan = readStewardObserverPlan(this.db, sessionId, this.butlerData);
+    const waitingForChildren = Boolean(this.db.query<{ present: number }, [string]>(`
+      SELECT 1 AS present
+      FROM btcc_session_relations AS child
+      LEFT JOIN btcc_steward_results AS result
+        ON result.relation_id = child.relation_id
+      WHERE child.parent_session_id = ? AND result.result_id IS NULL
+      LIMIT 1
+    `).get(sessionId));
     const updatedAt = latestTimestamp([
       relation.created_at,
       ...messages.map((message) => message.updated_at),
@@ -170,8 +244,20 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       progress_events: progressEvents,
       plan,
       result,
+      waiting_for_children: waitingForChildren,
       updated_at: updatedAt,
     };
+  }
+
+  recoverableTurns(): Array<{
+    relation: StewardObserverRelation;
+    turn_id: string;
+    recovery_id: string;
+    original_event_id: string;
+    original_message_id: string;
+    original_message: string;
+  }> {
+    return readRecoverableStewardTurns(this.db, this.processLiveness);
   }
 
   readOperationOutputChunks(input: {
@@ -179,44 +265,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
     requestId: string;
     resultId: string;
   }): StewardObserverOperationOutputChunk[] {
-    const rows = this.db.query<{ event_json: string }, [string]>(`
-      SELECT progress.event_json
-      FROM btcc_progress_events AS progress
-      JOIN btcc_turns AS turn
-        ON turn.turn_id = progress.turn_id
-       AND turn.session_id = progress.session_id
-      JOIN btcc_session_relations AS relation
-        ON relation.child_session_id = turn.session_id
-      WHERE progress.turn_id = ?
-        AND progress.session_id = relation.child_session_id
-      ORDER BY progress.turn_sequence ASC, progress.event_id ASC
-    `).all(input.turnId);
-    const chunks: StewardObserverOperationOutputChunk[] = [];
-    for (const row of rows) {
-      const event = parseOutputEvent(row.event_json);
-      if (!event) continue;
-      try {
-        const payload = normalizeOperationOutputChunkPayload(event.payload);
-        if (payload.requestId !== input.requestId || payload.resultId !== input.resultId) {
-          continue;
-        }
-        chunks.push({
-          request_id: payload.requestId,
-          result_id: payload.resultId,
-          result_sha256: payload.resultSha256,
-          chunk_index: payload.chunkIndex,
-          chunk_count: payload.chunkCount,
-          byte_start: payload.byteStart,
-          byte_end: payload.byteEnd,
-          byte_length: payload.byteLength,
-          content_base64: payload.contentBase64,
-          content_sha256: payload.contentSha256,
-        });
-      } catch {
-        // Invalid or private output is not an observer result.
-      }
-    }
-    return chunks;
+    return readStewardOperationOutputChunks(this.db, input);
   }
 
   private relation(
@@ -242,7 +291,8 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
         SELECT result.result_id, result.relation_id, result.task_id,
           result.child_session_id, result.child_turn_id, result.status,
           result.code, result.summary, result.acceptance_evidence_json,
-          result.changed_artifacts_json, result.created_at,
+          result.changed_artifacts_json, result.changed_files_json,
+          result.created_at,
           work.status AS work_status, turn.final_payload_json
         FROM btcc_steward_results AS result
         LEFT JOIN btcc_guided_turn_work_bindings AS binding
@@ -268,6 +318,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       }),
       acceptance_evidence: parseStringList(row.acceptance_evidence_json),
       changed_artifacts: parseStringList(row.changed_artifacts_json),
+      changed_files: parseChangedFiles(row.changed_files_json),
       created_at: row.created_at,
     };
   }
@@ -296,25 +347,7 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
       return [];
     }
   }
-}
 
-function parseOutputEvent(value: string): {
-  kind: "operation.output.chunk";
-  visibility: "public";
-  payload: Record<string, unknown>;
-} | null {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!isRecord(parsed) || parsed.kind !== "operation.output.chunk" ||
-      parsed.visibility !== "public" || !isRecord(parsed.payload)) return null;
-    return {
-      kind: "operation.output.chunk",
-      visibility: "public",
-      payload: parsed.payload,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function parseStringList(value: string): string[] {
@@ -323,6 +356,15 @@ function parseStringList(value: string): string[] {
     return Array.isArray(parsed)
       ? parsed.filter((item): item is string => typeof item === "string")
       : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseChangedFiles(value: string): ChangedFileDetail[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed as ChangedFileDetail[] : [];
   } catch {
     return [];
   }

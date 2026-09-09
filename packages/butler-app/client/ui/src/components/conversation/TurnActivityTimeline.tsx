@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Button,
@@ -20,23 +21,25 @@ export function TurnActivityTimeline({
   live = false,
   turnId,
 }: {
-  activities: PhaseActivity[];
+  activities: Array<PhaseActivity & { turnId?: string }>;
   currentState?: string;
   live?: boolean;
   turnId?: string;
 }) {
+  useAppLocale();
   const [expanded, setExpanded] = useState(false);
   const workCopy = appCopy.conversation.work;
   const latest = activities.at(-1);
   if (!latest) return null;
   const currentPhase = phaseLabel(currentState ?? latest.phase);
-  const headerLabel = `${live ? "현재" : "활동"} · ${currentPhase} · ${activities.length}개 기록`;
+  const headerLabel = appCopy.interfaceTemplates.activityHistory(live, currentPhase, activities.length);
 
   return (
     <section
-      aria-label={live ? "현재 작업" : "이 턴의 활동"}
+      aria-label={live ? appCopy.interfaceDetails.currentWork : appCopy.interfaceDetails.turnActivities}
       data-test-class="turn-current-phase-activity"
       data-turn-id={turnId}
+      data-turn-ids={[...new Set(activities.map((activity) => activity.turnId ?? turnId).filter(Boolean))].join(" ")}
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
         <Stack cross="start">
@@ -54,18 +57,18 @@ export function TurnActivityTimeline({
           {expanded ? (
             <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {activities.map((activity, index) => (
-                <li key={activity.id}>
+                <li key={activity.id} data-turn-id={activity.turnId ?? turnId}>
                   <ActivityBlock
                     activity={activity}
                     connected={index < activities.length - 1}
-                    turnId={turnId}
+                    turnId={activity.turnId ?? turnId}
                   />
                 </li>
               ))}
             </Stack>
           ) : live ? (
             <RollingSwap itemKey={latest.id} motion={live}>
-              <ActivityBlock activity={latest} turnId={turnId} />
+              <ActivityBlock activity={latest} turnId={latest.turnId ?? turnId} />
             </RollingSwap>
           ) : null}
           {expanded ? (
@@ -96,6 +99,7 @@ function ActivityBlock({
   connected?: boolean;
   turnId?: string;
 }) {
+  useAppLocale();
   const meta = activity.createdAt
     ? `${phaseLabel(activity.phase)} · ${formatActivityTime(activity.createdAt)}`
     : phaseLabel(activity.phase);
@@ -109,13 +113,13 @@ function ActivityBlock({
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
           {sameActivityText(activity.title, activity.summary) ? null : (
-            <Typo.Caption as="span">내용: {activity.summary}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel}{activity.summary}</Typo.Caption>
           )}
           {activity.rationale ? (
-            <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel}{activity.rationale}</Typo.Caption>
           ) : null}
           {activity.nextStep ? (
-            <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel}{activity.nextStep}</Typo.Caption>
           ) : null}
         </Stack>
       }

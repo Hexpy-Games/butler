@@ -265,15 +265,50 @@ export function activeFeedbackEntries(butlerData: string, now: Date = new Date()
   });
 }
 
-export function renderFeedbackBufferContext(input: {
+type FeedbackContextInput = {
   butlerData: string;
   sessionId?: string;
   projectId?: string;
   maxEntries?: number;
-}): string {
-  const entries = activeFeedbackEntries(input.butlerData)
+};
+
+export function renderFeedbackBufferContext(input: FeedbackContextInput): string {
+  return renderFeedbackEntries(selectFeedbackContext(input));
+}
+
+export function renderScopedFeedbackBufferContexts(input: FeedbackContextInput): Array<{
+  scopeKind: "user" | "session" | "project";
+  content: string;
+}> {
+  const entries = selectFeedbackContext(input);
+  return (["user", "project", "session"] as const).map((scopeKind) => ({
+    scopeKind,
+    content: renderFeedbackEntries(entries.filter((entry) => {
+      const kind = entry.scope.startsWith("session:") ? "session"
+        : entry.scope.startsWith("project:") ? "project" : "user";
+      return kind === scopeKind;
+    })),
+  }));
+}
+
+function selectFeedbackContext(input: FeedbackContextInput): FeedbackEntry[] {
+  return activeFeedbackEntries(input.butlerData)
+    .filter((entry) => {
+      if (entry.scope === "session" || entry.scope.startsWith("session:")) {
+        return Boolean(input.sessionId) && entry.scope === `session:${input.sessionId}`;
+      }
+      if (entry.scope === "project" || entry.scope.startsWith("project:")) {
+        return Boolean(input.projectId) && entry.scope === `project:${input.projectId}`;
+      }
+      // Non-session/project scopes (including style/source/tool) are existing
+      // user-level corrections; scope labels are not a relevance classifier.
+      return true;
+    })
     .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))
     .slice(0, input.maxEntries ?? 12);
+}
+
+function renderFeedbackEntries(entries: FeedbackEntry[]): string {
   if (entries.length === 0) return "";
   const lines = [
     "## Active Feedback Buffer",

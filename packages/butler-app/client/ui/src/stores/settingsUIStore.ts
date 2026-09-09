@@ -49,16 +49,16 @@ interface SettingsUIStore {
 
   // UI state
   activeSection: SettingsSectionId;
-  setActiveSection: (section: SettingsSectionId) => boolean;
+  setActiveSection: (section: SettingsSectionId) => Promise<boolean>;
   modelRoute: SettingsModelRoute;
   modelRouteDirection: "forward" | "back";
-  modelRouteLeaveGuard: (() => boolean) | null;
+  modelRouteLeaveGuard: (() => boolean | Promise<boolean>) | null;
   openModelManagement: () => void;
   openModelAdd: () => void;
   openModelEdit: (modelRef: string) => void;
-  backModelRoute: () => void;
-  resetModelRoute: () => void;
-  setModelRouteLeaveGuard: (guard: (() => boolean) | null) => void;
+  backModelRoute: () => Promise<void>;
+  resetModelRoute: () => Promise<void>;
+  setModelRouteLeaveGuard: (guard: (() => boolean | Promise<boolean>) | null) => void;
   saving: boolean;
   localMessage: SettingsLocalMessage | null;
   setLocalMessage: (message: SettingsLocalMessage | null) => void;
@@ -129,12 +129,12 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
         },
       };
     }),
-  setActiveSection: (activeSection) => {
+  setActiveSection: async (activeSection) => {
     const state = get();
     if (
       activeSection !== "models" &&
       state.modelRoute.page !== "root" &&
-      !canLeaveModelRoute(state.modelRouteLeaveGuard)
+      !await canLeaveModelRoute(state.modelRouteLeaveGuard)
     ) {
       return false;
     }
@@ -164,26 +164,25 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
       modelRoute: { page: "edit", modelRef },
       modelRouteDirection: "forward",
     }),
-  backModelRoute: () =>
-    set((state) => {
-      if (!canLeaveModelRoute(state.modelRouteLeaveGuard)) return state;
-      return {
+  backModelRoute: async () => {
+    const state = get();
+    if (!await canLeaveModelRoute(state.modelRouteLeaveGuard)) return;
+    set({
         modelRoute:
           state.modelRoute.page === "add" || state.modelRoute.page === "edit"
             ? { page: "management" }
             : { page: "root" },
         modelRouteDirection: "back",
-      };
-    }),
-  resetModelRoute: () =>
-    set((state) => {
-      if (!canLeaveModelRoute(state.modelRouteLeaveGuard)) return state;
-      return {
+    });
+  },
+  resetModelRoute: async () => {
+    if (!await canLeaveModelRoute(get().modelRouteLeaveGuard)) return;
+    set({
         modelRoute: { page: "root" },
         modelRouteDirection: "back",
         modelRouteLeaveGuard: null,
-      };
-    }),
+    });
+  },
   setModelRouteLeaveGuard: (modelRouteLeaveGuard) =>
     set({ modelRouteLeaveGuard }),
   setLocalMessage: (localMessage) => set({ localMessage }),
@@ -606,7 +605,7 @@ export function editablePersonaText(text: string): string {
   return frontmatter ? text.slice(frontmatter[0].length) : text;
 }
 
-function canLeaveModelRoute(guard: (() => boolean) | null): boolean {
+function canLeaveModelRoute(guard: (() => boolean | Promise<boolean>) | null) {
   return guard ? guard() : true;
 }
 

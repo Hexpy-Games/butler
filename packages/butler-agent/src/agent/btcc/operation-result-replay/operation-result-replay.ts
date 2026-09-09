@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { digest, stableJson } from "../identity/index.ts";
+import { latestWorkAnchorResults } from "./work-result-anchors.ts";
 import type {
   ModelRoundMessage,
   ModelRoundResult,
@@ -7,6 +8,8 @@ import type {
 } from "../ports/model-round.ts";
 import { OPERATION_RESULT_EXACT_READ_MAX_BYTES } from
   "../../tools/monitoring/read_operation_results/index.ts";
+import type { ToolResultExactReadReference } from
+  "../../tools/tool-result-serialization.ts";
 import type {
   GuidedOperationResultReader,
   GuidedToolJournal,
@@ -16,6 +19,12 @@ import type {
 export const OPERATION_RESULT_REFERENCE_SCHEMA =
   "butler.operation-result-reference.v1" as const;
 const TRUE_FLAG_VALUES = new Set(["1", "true", "on", "yes"]);
+const BOUNDED_RESULT_READER_TOOLS = new Set([
+  "list_operation_results",
+  "read_operation_results",
+  "read_tool_output_artifact",
+  "read_tool_evidence_artifact",
+]);
 
 export function operationResultReplayEnabled(
   env: Record<string, string | undefined> = process.env,
@@ -36,6 +45,8 @@ export type OperationResultReplay = {
   accepted(roundId: string, response: ModelRoundResult): void;
   failed(roundId: string): void;
   referenceFor(record: GuidedToolJournalRecord): OperationResultReference;
+  referenceForCall(callId: string): OperationResultReference | null;
+  previewReferenceForCall(callId: string): ToolResultExactReadReference | null;
   readExact(input: ExactReadArguments): unknown;
 };
 
@@ -53,6 +64,7 @@ export function createOperationResultReplay(input: {
   journal: GuidedToolJournal;
   exactReader: GuidedOperationResultReader;
   exactReadCapability: boolean;
+  replaceDeliveredResults?: boolean;
   sessionId?: string;
   projectRef?: string;
 }): OperationResultReplay {
@@ -94,8 +106,10 @@ export function createOperationResultReplay(input: {
 
   return {
     prepareMessages(messages, roundId, economics) {
+      if (input.replaceDeliveredResults === false) return [...messages];
+      const anchors = latestWorkAnchorResults(messages);
       return messages.map((message) => {
-        if (message.role !== "tool" || !message.toolCallId) return message;
+        if (message.role !== "tool" || !message.toolCallId || anchors.has(message)) return message;
         let record = input.journal.findForTurn(
           input.turnId,
           message.operationResultCallId ?? message.toolCallId,
@@ -146,6 +160,7 @@ export function createOperationResultReplay(input: {
       });
     },
     accepted(roundId, response) {
+      if (input.replaceDeliveredResults === false) return;
       if (response.acceptedCheckpoint?.roundId !== roundId) {
         throw new Error("operation_result_route_acceptance_missing");
       }
@@ -163,9 +178,33 @@ export function createOperationResultReplay(input: {
       });
     },
     failed(roundId) {
+      if (input.replaceDeliveredResults === false) return;
       input.journal.releaseResultDeliveries({ turnId: input.turnId, roundId });
     },
     referenceFor,
+    referenceForCall(callId) {
+      const record = input.journal.findForTurn(input.turnId, callId);
+      return record && hasDurableReplayResult(record) ? referenceFor(record) : null;
+    },
+    previewReferenceForCall(callId) {
+      if (!input.exactReadCapability) return null;
+      const record = input.journal.findForTurn(input.turnId, callId);
+      if (!record || !hasDurableReplayResult(record)) return null;
+      const reference = referenceFor(record);
+      const totalBytes = Buffer.byteLength(JSON.stringify(record.result), "utf8");
+      return {
+        capability: "read_operation_results",
+        arguments: {
+          result_ref: reference.identity.result_ref,
+          sha256: reference.integrity.sha256,
+          revision: reference.integrity.revision,
+          work_id: reference.identity.work_id ?? null,
+          offset: 0,
+          length: Math.min(OPERATION_RESULT_EXACT_READ_MAX_BYTES, totalBytes),
+        },
+        total_bytes: totalBytes,
+      };
+    },
     readExact(read) {
       if (!input.exactReadCapability) {
         throw new Error("operation_result_exact_read_unavailable");
@@ -180,6 +219,7 @@ export function createOperationResultReplay(input: {
         revision: direct ? null : read.revision,
         sessionId: input.sessionId, projectRef: input.projectRef,
         workId: read.work_id ?? undefined, offset: read.offset, length: read.length,
+        source: read.source,
       });
     },
   };
@@ -202,6 +242,7 @@ function assertReplayDependencies(
 }
 
 export type ExactReadArguments = {
+  source?: "request" | "result";
   result_ref: string;
   sha256: string;
   revision: number | null;
@@ -211,6 +252,7 @@ export type ExactReadArguments = {
 };
 
 export function exactReadArguments(value: Record<string, unknown>): ExactReadArguments {
+  if (value.source !== undefined && value.source !== "request" && value.source !== "result") throw new Error("operation_result_source_invalid");
   const result_ref = typeof value.result_ref === "string" ? value.result_ref.trim() : "";
   const sha256 = typeof value.sha256 === "string" ? value.sha256.trim() : "";
   const revision = value.revision ?? null;
@@ -234,6 +276,7 @@ export function exactReadArguments(value: Record<string, unknown>): ExactReadArg
   }
   return {
     result_ref, sha256, revision: revision as number | null,
+    ...(value.source ? { source: value.source as "request" | "result" } : {}),
     work_id: typeof work_id === "string" ? work_id.trim() : null,
     offset: offset as number, length: length as number,
   };
@@ -260,7 +303,7 @@ function hasDurableReplayResult(record: GuidedToolJournalRecord): boolean {
   if (record.status !== "completed" || record.result === undefined || !record.resultSha256) {
     return false;
   }
-  return true;
+  return !BOUNDED_RESULT_READER_TOOLS.has(record.toolName);
 }
 
 function referenceSavesProviderMessageBytes(

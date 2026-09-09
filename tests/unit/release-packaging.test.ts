@@ -153,6 +153,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
   expect(manifest.requiredFiles).toContain("packages/butler-agent/scripts");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/resources");
   expect(manifest.requiredFiles).toContain("packages/butler-progress-projection");
+  expect(manifest.requiredFiles).toContain("packages/butler-i18n");
   expect(manifest.requiredFiles).toContain("packages/project-ledger");
   expect(manifest.requiredFiles).toContain("deploy/agent/templates");
   expect(manifest.agentArtifactLayout).toMatchObject({
@@ -833,6 +834,10 @@ test("agent release packager creates an installable artifact with app web client
       "./packages/butler-agent/src/foundation/complete-root-commit/adapters/windows.ts",
     );
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
+    expect(entries).toContain("./packages/butler-i18n/src/index.ts");
+    expect(entries).toContain("./packages/butler-i18n/src/locale.ts");
+    expect(entries).toContain("./packages/butler-i18n/src/locales/en.ts");
+    expect(entries).toContain("./packages/butler-i18n/src/locales/ko.ts");
     expect(entries).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);
     expect(entries.some((entry) => entry.startsWith(`./${SERVICE_APP_WEB_CLIENT_DIST}/assets/`))).toBe(true);
     expect(entries.some((entry) => entry.includes("packages/butler-app/"))).toBe(false);

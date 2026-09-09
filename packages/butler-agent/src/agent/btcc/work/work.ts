@@ -1,13 +1,21 @@
 import type {
-  DurableWorkService,
+  AttachToolResultInput,
+  ClaimWorkCloseoutCorrectionInput,
+  ContinueWorkInput,
+  DurableWorkContext,
   DurableWorkStore,
+  DurableWorkView,
+  LegacyOpenWorkImportResult,
+  RecordWorkCheckpointInput,
+  RecordWorkDispositionInput,
+  RecordWorkReviewInput,
+  ReplaceWorkPlanInput,
+  StartWorkInput,
   WorkTurnScope,
 } from "./contracts.ts";
 import {
   acceptedCurrentResultReview,
   applyWorkActionUpdates,
-  assertWorkPlanReplacementStage,
-  assertWorkStageTransition,
   progressForReplacementPlan,
   resolveWorkReviewTransition,
 } from "./work-progress-policy.ts";
@@ -25,9 +33,32 @@ import {
   workRequestFingerprint,
 } from "./work-input-validation.ts";
 
+export interface WorkLedgerOperation {
+  loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
+  importOpenLegacyWork(
+    scope: WorkTurnScope,
+  ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
+  startWork(input: StartWorkInput): Promise<DurableWorkView>;
+  continueWork(input: ContinueWorkInput): Promise<DurableWorkView>;
+  replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
+  recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
+  recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
+  recordDisposition(input: RecordWorkDispositionInput): Promise<DurableWorkView>;
+  claimCloseoutCorrection(input: ClaimWorkCloseoutCorrectionInput): Promise<boolean>;
+  attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
+  boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+  abandonBoundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;
+}
+
+export type DurableWorkService = WorkLedgerOperation;
+
 export function createDurableWorkService(
   store: DurableWorkStore,
-): DurableWorkService {
+): WorkLedgerOperation {
   return {
     loadContext(scope) {
       validateScope(scope);
@@ -65,15 +96,11 @@ export function createDurableWorkService(
       const startNew = input.startNew ?? false;
       const context = startNew ? null : await store.loadContext(input);
       const openingPlan = !context?.work.currentPlan;
-      if (context && !openingPlan) {
-        if (!context.work.currentStage) {
-          throw new Error("Durable Work Plan requires a current stage");
-        }
-        assertWorkPlanReplacementStage(context.work.currentStage);
-      } else {
-        assertWorkStageTransition(undefined, "conception");
-        assertWorkStageTransition("conception", "planning");
+      if (context && context.work.status !== "open" && context.work.status !== "blocked") {
+        throw new Error("Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn");
       }
+      // A revised Plan starts planning; it does not require a result review
+      // of the work being revised. The store retains completed action progress.
       return store.replacePlan({
         ...input,
         startNew,
@@ -86,6 +113,7 @@ export function createDurableWorkService(
           startNew,
           objective: input.objective,
           governingRefs: input.governingRefs ?? [],
+          ...(input.executionMode ? { executionMode: input.executionMode } : {}),
           actions: input.actions,
           checks: input.checks,
         }),

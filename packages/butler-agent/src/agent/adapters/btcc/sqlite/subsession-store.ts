@@ -9,6 +9,7 @@ import type {
   StewardDirection,
   CreateStewardDirectionInput,
   SubsessionDelegationStore,
+  SubsessionDispatchIntent,
 } from "../../../btcc/subsessions/index.ts";
 import {
   markParentInputDelivered as markOutboxInputDelivered,
@@ -18,13 +19,20 @@ import {
 } from "./subsession-outbox-store.ts";
 import {
   insertStewardResult,
+  collectSubsessionChangedFiles,
   readStewardResult,
   renderParentResult,
   safeStewardSummary,
 } from "./subsession-result-record.ts";
 import { createStewardDirection, consumePendingStewardDirection } from "./subsession-direction-store.ts";
+import {
+  createSubsessionDispatchRecord,
+  createWorkerDispatchAssignment,
+  listPendingSubsessionDispatchIntents,
+  markSubsessionDispatchEnqueued,
+  readSubsessionDispatchIntent,
+} from "./subsession-dispatch-store.ts";
 
-type RelationRow = SessionRelation;
 type DelegationRow = {
   delegation_id: string;
   relation_id: string;
@@ -42,45 +50,23 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     packet: DelegationPacket;
     childTurnId: string;
     rootWorkId: string;
+    dispatchIntent?: SubsessionDispatchIntent;
   }): void {
-    const tx = this.db.transaction(() => {
-      const existing = this.relationByDelegationId(input.packet.delegation_id);
-      if (existing) return;
-      this.db.query(`
-        INSERT INTO btcc_session_relations (
-          relation_id, parent_session_id, parent_turn_id, child_session_id,
-          anchor_message_id, ordinal, safe_title, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        input.relation.relation_id,
-        input.relation.parent_session_id,
-        input.relation.parent_turn_id,
-        input.relation.child_session_id,
-        input.relation.anchor_message_id,
-        input.relation.ordinal,
-        input.relation.safe_title,
-        input.relation.created_at,
-      );
-      this.db.query(`
-        INSERT INTO btcc_subsession_delegations (
-          delegation_id, relation_id, task_id, child_turn_id, root_work_id,
-          packet_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        input.packet.delegation_id,
-        input.relation.relation_id,
-        input.packet.task_id,
-        input.childTurnId,
-        input.rootWorkId,
-        stableJson(input.packet),
-        input.relation.created_at,
-      );
-    });
-    tx.immediate();
+    createSubsessionDispatchRecord(this.db, input);
+  }
+
+  createWorkerAssignment(input: {
+    relation: SessionRelation;
+    packet: DelegationPacket;
+    childTurnId: string;
+    rootWorkId: string;
+    dispatchIntent: SubsessionDispatchIntent;
+  }): SessionRelation {
+    return createWorkerDispatchAssignment(this.db, input);
   }
 
   relationById(relationId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE relation_id = ?
@@ -89,7 +75,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationByDelegationId(delegationId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations
@@ -101,7 +87,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationsByParentSessionId(parentSessionId: string): SessionRelation[] {
-    return this.db.query<RelationRow, [string]>(`
+    return this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE parent_session_id = ?
@@ -110,7 +96,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
   }
 
   relationByChildSessionId(childSessionId: string): SessionRelation | null {
-    const row = this.db.query<RelationRow, [string]>(`
+    const row = this.db.query<SessionRelation, [string]>(`
       SELECT relation_id, parent_session_id, parent_turn_id, child_session_id,
         anchor_message_id, ordinal, safe_title, created_at
       FROM btcc_session_relations WHERE child_session_id = ?
@@ -154,6 +140,21 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     `).get(relationId)?.child_turn_id ?? null;
   }
 
+  dispatchIntentByRelationId(relationId: string): SubsessionDispatchIntent | null {
+    return readSubsessionDispatchIntent(this.db, relationId);
+  }
+
+  pendingDispatchIntents(): Array<{
+    relationId: string;
+    intent: SubsessionDispatchIntent;
+  }> {
+    return listPendingSubsessionDispatchIntents(this.db);
+  }
+
+  markDispatchEnqueued(relationId: string): void {
+    markSubsessionDispatchEnqueued(this.db, relationId);
+  }
+
   createDirection(direction: CreateStewardDirectionInput): StewardDirection {
     return createStewardDirection(this.db, direction);
   }
@@ -187,6 +188,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     summary: string;
     acceptanceEvidence: string[];
     changedArtifacts: string[];
+    changedFiles: StewardResultEnvelope["changed_files"];
     commits: string[];
     tests: string[];
     remainingRisks: string[];
@@ -204,11 +206,17 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }; inserted: boolean } {
     const now = new Date().toISOString();
     const summary = safeStewardSummary(input.summary);
+    const accessMode = this.packetByRelationId(input.relation.relation_id)
+      ?.access_and_budget_policy.access_mode;
+    if (accessMode !== "full_access" && accessMode !== "ask_first" &&
+        accessMode !== "read_only") {
+      throw new Error("subsession_parent_access_mode_missing");
+    }
     const parentMessageId = `subsession-result:${input.relation.relation_id}:${input.resultId}`;
     const parentText = renderParentResult({
       result_id: input.resultId,
@@ -221,6 +229,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       summary,
       acceptance_evidence: input.acceptanceEvidence,
       changed_artifacts: input.changedArtifacts,
+      changed_files: input.changedFiles ?? [],
       commits: input.commits,
       tests: input.tests,
       remaining_risks: input.remainingRisks,
@@ -239,7 +248,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       text: parentText,
       model_ref: input.modelRef,
       reasoning_effort: input.reasoningEffort,
-      access_mode: "full_access" as const,
+      access_mode: accessMode,
       timestamp: now,
     };
     const transaction = this.db.transaction(() => {
@@ -258,6 +267,9 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
         summary,
         acceptance_evidence: input.acceptanceEvidence,
         changed_artifacts: input.changedArtifacts,
+        changed_files: collectSubsessionChangedFiles(
+          this.db, input.relation.child_session_id, input.changedFiles ?? [],
+        ),
         commits: input.commits,
         tests: input.tests,
         remaining_risks: input.remainingRisks,
@@ -301,7 +313,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   }> {
     return listPendingParentInputs(this.db);
@@ -318,7 +330,7 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     text: string;
     model_ref: string;
     reasoning_effort: string;
-    access_mode: "full_access";
+    access_mode: "full_access" | "ask_first" | "read_only";
     timestamp: string;
   } | null {
     return findPendingParentInput(this.db, resultId);

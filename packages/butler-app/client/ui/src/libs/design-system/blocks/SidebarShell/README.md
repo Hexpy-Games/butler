@@ -1,5 +1,25 @@
 # SidebarShell
 
+The shell accepts `--sidebar-region-gap` and `--sidebar-content-inset` CSS
+variables for token-based section spacing. Defaults preserve existing layouts.
+Set `--sidebar-footer-border-width: 0` for a spacing-only footer separation.
+Set `scrollFade={false}` when the scrolling content has opaque sticky headers
+that should not fade at the viewport edge. The default fade remains unchanged.
+For an all-menu scroll, put entry actions in `scrollHeader` and browse controls
+in `stickyHeader`. Both use the same scrollbar as children. The sticky slot sits
+below the fade and publishes its measured height as `--nav-sticky-offset` for
+nested tree headers. No wheel interception or second scrollbar is needed.
+The sticky header owns an 8px trailing gap; the all-menu scroll removes its
+legacy inter-section gap to avoid doubling that space. Sticky material accepts
+`--nav-sticky-surface` and `--nav-sticky-filter`. Transparent surfaces do not
+need extra blur: the shell clips the child paint/hit-test area below the sticky
+header, including nested CollapsibleNavGroup branches. One passive scroll/RAF
+measurement updates CSS variables, without React state or a second scrollbar.
+Resize/structural changes refresh the boundaries; keyboard focus reveals a
+clipped row through the same scrollbar. Native sticky owns branch push-off.
+Set `--sidebar-compact-titlebar-display: flex` when a compact sidebar needs its
+brand titlebar alongside fixed window chrome. The default remains hidden.
+
 ## What is this component
 
 `SidebarShell` is the responsive structural shell for Butler's left navigation.

@@ -11,6 +11,7 @@ import {
 import type { ProgressRow } from "@/app/types.ts";
 
 export function activityIcon(row: ProgressRow): ReactElement {
+  if (row.safe_tool_name === "delegate_to_worker") return <Rocket size={15} />;
   if (row.safe_tool_name === "read_file") return <FileText size={15} />;
   if (row.safe_tool_name === "edit_file" || row.safe_tool_name === "write_file") {
     return <Pencil size={15} />;

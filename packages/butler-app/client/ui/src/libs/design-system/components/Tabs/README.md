@@ -25,6 +25,10 @@ Prefer token-backed spacing and responsive composition. Validate the fixture in 
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
 ## Best practice
+- The outlined container and its triggers share `--radius-control` through one
+  CSS rule. Do not compensate for the inset by introducing a different radius.
+- Use `TabsList stretch` when peer tabs should equally divide the available
+  width. The default variant outlines the group; active tabs retain flat fill.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

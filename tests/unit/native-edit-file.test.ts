@@ -157,6 +157,33 @@ describe("edit_file execution", () => {
     expect(invalid.error).toBe("invalid_arguments");
   });
 
+  test("rejects unchanged single and batch edits without recording a mutation", async () => {
+    const single = await executeEditFileTool(call({
+      path: "same.txt",
+      old_text: "same",
+      new_text: "same",
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(single).toMatchObject({ ok: false, error: "no_change_requested", changed: false });
+
+    const batch = await executeEditFileTool(call({
+      edits: [
+        {
+          path: "one.txt",
+          old_text: "one",
+          new_text: "one",
+          expected_sha256: sha256Hex("one"),
+        },
+        {
+          path: "two.txt",
+          old_text: "two",
+          new_text: "changed",
+          expected_sha256: sha256Hex("two"),
+        },
+      ],
+    }), { workspacePath: workspace }) as { ok: false; error: string };
+    expect(batch).toMatchObject({ ok: false, error: "no_change_requested", changed: false });
+  });
+
   test("does not overwrite a target that appears after create preflight", async () => {
     const path = join(workspace, "appeared.txt");
     const snapshot = await observeWorkspaceFileMutation({
@@ -308,7 +335,7 @@ describe("edit_file execution", () => {
     expect(await readFile(b, "utf8")).toBe("BETA\n");
   });
 
-  test("rejects duplicate guarded actual targets before changing any file", async () => {
+  test("applies ordered edits to repeated guarded targets and commits each file once", async () => {
     await mkdir(join(workspace, "real"));
     await symlink("real", join(workspace, "alias"));
     const path = join(workspace, "real", "same.txt");
@@ -317,14 +344,13 @@ describe("edit_file execution", () => {
       workspace_root: workspace,
       edits: [
         { path: "real/same.txt", old_text: "same", new_text: "one", expected_sha256: sha256Hex("same\n") },
-        { path: "alias/same.txt", old_text: "same", new_text: "two", expected_sha256: sha256Hex("same\n") },
+        { path: "alias/same.txt", old_text: "one", new_text: "two", expected_sha256: sha256Hex("same\n") },
+        { path: "real/same.txt", old_text: "two", new_text: "final", expected_sha256: sha256Hex("same\n") },
       ],
     })) as any;
-    expect(result).toMatchObject({ ok: false, error: "batch_preflight_failed" });
-    expect(result.preflight_failures).toEqual([
-      expect.objectContaining({ error: "duplicate_target" }),
-    ]);
-    expect(await readFile(path, "utf8")).toBe("same\n");
+    expect(result).toMatchObject({ ok: true, metrics: { files_written: 1 } });
+    expect(result.applied).toHaveLength(1);
+    expect(await readFile(path, "utf8")).toBe("final\n");
   });
 
   test("applies nothing when one batch entry is stale or ambiguous", async () => {

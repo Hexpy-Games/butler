@@ -19,12 +19,13 @@ export function storedBindingFromTurnRecord(
   const executionPolicy = turn.context.executionPolicy;
   return {
     sessionId: turn.sessionId,
-    role: executionPolicy?.role === "steward" ? "steward" : "butler",
+    role: executionPolicy?.role === "steward" || executionPolicy?.role === "worker"
+      ? executionPolicy.role : "butler",
     ...(turn.context.projectRef ? { projectId: turn.context.projectRef } : {}),
     workspacePath: executionPolicy?.workspacePath ?? "",
     runtimeAdapterId: BTCC_TURN_RUNTIME_ADAPTER_ID,
     modelProviderId: turn.modelSelection.provider,
-    modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}`,
+    modelRef: `${turn.modelSelection.provider}/${turn.modelSelection.model}` as StoredSessionBinding["modelRef"],
     transportBindings: [],
     lifecycleState: "active",
     createdAt: observedAt,

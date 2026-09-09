@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useState } from "react";
 import { Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -23,6 +24,7 @@ export function ModelAddEditPage({
   allowedAuthMethods,
   modelRef,
 }: ModelAddEditPageProps) {
+  useAppLocale();
   const modelCatalog = useButlerStore((state) => state.modelCatalog);
   const route = useSettingsUIStore((state) => state.modelRoute);
   const copy = appCopy.settings.modelManagement;

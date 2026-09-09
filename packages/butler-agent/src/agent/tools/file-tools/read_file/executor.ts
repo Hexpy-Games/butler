@@ -24,6 +24,7 @@ import {
 import type { WorkspaceReference } from "../../../session-workspaces/index.ts";
 
 export interface FileToolExecutionContext {
+  butlerHome?: string;
   workspacePath?: string;
   workspaceReference?: WorkspaceReference;
   protectedProjectLedgerRoots?: string[];
@@ -37,6 +38,13 @@ const MAX_TOTAL_BYTES = 4_194_304;
 
 function invalidCursorResult(error: "invalid_cursor" | "cursor_stale", message: string, recoveryHint: string): ReadFileResult {
   return { ok: false, error, message, recovery_hint: recoveryHint };
+}
+
+function pendingRead(path: string): ReadFileResult {
+  return {
+    ok: true, path, skipped: true, pending: true, content: "", bytes: 0,
+    truncated: true, message: "This request has not been read on this page.",
+  };
 }
 
 export async function executeReadFileTool(
@@ -116,6 +124,7 @@ export async function executeReadFileTool(
   let filesRead = 0;
   let nextCursor: string | undefined;
   let aggregateTruncated = false;
+  let stoppedBy: "max_bytes" | "max_total_bytes" | undefined;
   for (let index = 0; index < normalizedRequests.length; index += 1) {
     const request = normalizedRequests[index]!;
     if (index < cursorIndex) {
@@ -140,21 +149,23 @@ export async function executeReadFileTool(
     }
     if (totalOutputBytes >= maxTotalBytes) {
       aggregateTruncated = true;
-      results.push({ ok: false, path: request.path, error: "max_total_bytes", message: "The aggregate read byte budget was reached before this file.", recovery_hint: "Continue with the returned next_cursor or lower the batch size." });
+      stoppedBy = "max_total_bytes";
+      results.push(pendingRead(request.path));
       nextCursor = encodeFileToolCursor({ tool: "read_file", query, request_index: index, offset_bytes: read.startOffset ?? continuationOffset ?? 0, ...(cursorSafePath(request.path) ? { file_path: cursorSafePath(request.path) } : {}), file_sha256: read.sha256 });
       for (let pending = index + 1; pending < normalizedRequests.length; pending += 1) {
-        results.push({ ok: false, path: normalizedRequests[pending]!.path, error: "max_total_bytes", message: "The aggregate read byte budget was reached before this file.", recovery_hint: "Continue with next_cursor to read the remaining requests." });
+        results.push(pendingRead(normalizedRequests[pending]!.path));
       }
       break;
     }
     const available = maxTotalBytes - totalOutputBytes;
     if (read.outputBytes > available) {
+      stoppedBy = "max_total_bytes";
       const clipped = utf8Slice(String(read.result.content ?? ""), available);
       if (clipped.bytes === 0 && read.outputBytes > 0) {
         aggregateTruncated = true;
         results.push({ ok: false, path: request.path, error: "max_total_bytes", message: "The aggregate read byte budget cannot include the next UTF-8 character without splitting it.", recovery_hint: "Increase max_total_bytes and retry this request." });
         for (let pending = index + 1; pending < normalizedRequests.length; pending += 1) {
-          results.push({ ok: false, path: normalizedRequests[pending]!.path, error: "max_total_bytes", message: "The aggregate read byte budget was reached before this file.", recovery_hint: "Increase max_total_bytes and retry the remaining requests." });
+          results.push(pendingRead(normalizedRequests[pending]!.path));
         }
         break;
       }
@@ -173,6 +184,7 @@ export async function executeReadFileTool(
       nextCursor = encodeFileToolCursor({ tool: "read_file", query, request_index: index, offset_bytes: startOffset + clipped.bytes, ...(cursorSafePath(request.path) ? { file_path: cursorSafePath(request.path) } : {}), file_sha256: read.sha256 });
     } else if (read.hasMore && read.nextOffset !== undefined) {
       aggregateTruncated = true;
+      stoppedBy = "max_bytes";
       nextCursor = encodeFileToolCursor({ tool: "read_file", query, request_index: index, offset_bytes: read.nextOffset, ...(cursorSafePath(request.path) ? { file_path: cursorSafePath(request.path) } : {}), file_sha256: read.sha256 });
     }
     totalOutputBytes += read.outputBytes;
@@ -180,7 +192,7 @@ export async function executeReadFileTool(
     results.push(read.result);
     if (nextCursor) {
       for (let pending = index + 1; pending < normalizedRequests.length; pending += 1) {
-        results.push({ ok: false, path: normalizedRequests[pending]!.path, error: "max_total_bytes", message: "The aggregate read byte budget was reached before this file.", recovery_hint: "Continue with next_cursor to read the remaining requests." });
+        results.push(pendingRead(normalizedRequests[pending]!.path));
       }
       break;
     }
@@ -213,6 +225,7 @@ export async function executeReadFileTool(
     bytes_read: totalInputBytes,
     output_bytes: totalOutputBytes,
     truncated: aggregateTruncated || Boolean(nextCursor),
+    ...(stoppedBy ? { stopped_by: stoppedBy } : {}),
     ...(nextCursor ? { next_cursor: nextCursor } : {}),
     metrics,
     evidence_receipts: fileToolEvidenceReceipt({

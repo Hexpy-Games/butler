@@ -20,6 +20,10 @@ type BtccTurnCommand = BtccRunCommand | BtccStopCommand;
 export type BtccTestHost = {
   progress: {
     hasCommittedEvent(turnId: string, kind: string): boolean;
+    connect(publisher: {
+      publish(event: BtccCommittedProgressEvent): Promise<void> | void;
+    }): void;
+    publishCommitted(event: BtccCommittedProgressEvent): Promise<void>;
     reconcile(publisher: {
       publish(event: BtccCommittedProgressEvent): Promise<void> | void;
     }): Promise<{ attempted: number; published: number; pending: number }>;
@@ -128,6 +132,8 @@ export function createBtccTestHost(
     progress: {
       hasCommittedEvent: (turnId, kind) => runtime.progressEvents.forTurn(turnId)
         .some((event) => event.event.kind === kind),
+      connect: () => {},
+      publishCommitted: async () => {},
       reconcile: async (publisher) => {
         const pending = runtime.progressEvents.pending();
         let published = 0;
@@ -253,6 +259,7 @@ export class InMemoryBtccProgressEventRepository implements BtccProgressEventRep
   append(input: Parameters<BtccProgressEventRepository["append"]>[0]): BtccCommittedProgressEvent {
     const event = {
       ...input.event,
+      createdAt: input.event.createdAt ?? new Date().toISOString(),
       visibility: input.event.visibility ?? "public",
     };
     const fingerprint = JSON.stringify({

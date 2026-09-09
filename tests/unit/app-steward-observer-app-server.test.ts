@@ -6,10 +6,16 @@ import { tmpdir } from "node:os";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { agentBtccStoragePaths } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/storage-ownership/index.ts";
+import { SqliteStewardObserverStore } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/steward-observer-store.ts";
+import { createProductionBtccComposition } from "../../packages/butler-agent/src/agent/composition/create-btcc-composition.ts";
+import { stewardResumeRequestId } from "../../packages/butler-agent/src/agent/btcc/subsessions/index.ts";
 import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import { createAppCancellationEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
+import {
+  createAppCancellationEnvelope,
+  createAppResumeEnvelope,
+} from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 
 test("createAppServer canonical navigation and SessionView feed the keyed frontend store", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-steward-route-"));
@@ -79,6 +85,9 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     const parentSessionViewResponse = await fetch(
       `${server.url}session-view?session_id=${parentSessionId}`,
     );
+    if (!parentSessionViewResponse.ok) {
+      throw new Error(await parentSessionViewResponse.text());
+    }
     expect(parentSessionViewResponse.ok).toBe(true);
     const parentSessionView = (await parentSessionViewResponse.json()).data;
     expect(parentSessionView.steward_children).toHaveLength(2);
@@ -102,6 +111,9 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     const projectParentSessionViewResponse = await fetch(
       `${server.url}session-view?session_id=project-parent-route`,
     );
+    if (!projectParentSessionViewResponse.ok) {
+      throw new Error(await projectParentSessionViewResponse.text());
+    }
     expect(projectParentSessionViewResponse.ok).toBe(true);
     const projectParentSessionView =
       (await projectParentSessionViewResponse.json()).data;
@@ -162,6 +174,149 @@ test("createAppServer canonical navigation and SessionView feed the keyed fronte
     });
   } finally {
     server.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each(["Steward", "Worker"])("an orphaned %s Turn is projected as recoverable and queues exact resume", async (role) => {
+  const root = mkdtempSync(join(tmpdir(), "butler-steward-resume-route-"));
+  const parentSessionId = role === "Worker" ? "steward-parent-resume" : "parent-resume";
+  const parentRuntimeSessionId = role === "Worker" ? parentSessionId : sessionHintForRow(parentSessionId);
+  const childSessionId = "steward-resume";
+  const childTurnId = "steward-resume-turn";
+  seedInterruptedObserverDatabase(
+    root,
+    parentRuntimeSessionId,
+    childSessionId,
+    childTurnId,
+  );
+  if (role === "Worker") {
+    const db = new Database(agentBtccStoragePaths(root).agentBtccDbPath);
+    db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("parent-relation", sessionHintForRow("root-parent"), "root-turn",
+        parentSessionId, "parent-anchor", 1, "Parent Steward", "2026-08-22T00:00:00.000Z");
+    db.close();
+  }
+  const server = createAppServer({
+    dbPath: join(root, "app.sqlite"),
+    butlerData: root,
+    port: 0,
+    automationSchedulerIntervalMs: false,
+  });
+  try {
+    server.store.db.query(
+      `INSERT INTO chats (id, title, kind, pinned, archived, created_at, updated_at)
+       VALUES (?, ?, 'chat', 0, 0, ?, ?)`,
+    ).run(
+      parentSessionId,
+      "Interrupted parent",
+      "2026-08-22T00:00:00.000Z",
+      "2026-08-22T00:00:00.000Z",
+    );
+
+    const childResponse = await fetch(
+      `${server.url}session-view?session_id=${childSessionId}`,
+    );
+    if (!childResponse.ok) throw new Error(await childResponse.text());
+    expect(childResponse.ok).toBe(true);
+    const childView = (await childResponse.json()).data;
+    expect(childView).toMatchObject({
+        session_id: childSessionId,
+        status: "failed",
+        active_turn: null,
+        latest_turn: expect.objectContaining({
+          id: childTurnId,
+          state: "runtime_fault",
+          retryable: true,
+          cancellable: false,
+        }),
+    });
+
+    const wrongParentResponse = await fetch(
+      `${server.url}steward-relations/relation-resume/resume`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parent_session_id: "unrelated-parent" }),
+      },
+    );
+    expect(wrongParentResponse.status).toBe(404);
+
+    const resumeResponse = await fetch(
+      `${server.url}steward-relations/relation-resume/resume`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parent_session_id: parentSessionId }),
+      },
+    );
+    expect(resumeResponse.status).toBe(202);
+    const resumeBody = (await resumeResponse.json()).data;
+    const queued = new NativeInboundQueue(root).findIdempotent(createAppResumeEnvelope({
+      chatId: childSessionId,
+      sessionId: childSessionId,
+      turnId: childTurnId,
+      requestId: resumeBody.request_id,
+      requestedAt: "ignored-by-identity",
+      originalEventId: "resume-trigger",
+      originalMessageId: "steward-message:resume",
+      originalMessage: "private delegated input",
+    }));
+    expect(queued?.envelope.control).toMatchObject({
+      kind: "resume_turn",
+      turnId: childTurnId,
+    });
+    expect(queued?.envelope.message).toMatchObject({
+      id: "resume-message",
+      text: "Resume the interrupted task",
+    });
+  } finally {
+    server.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("production BTCC startup queues one exact orphaned Steward resume", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-steward-startup-resume-"));
+  const childSessionId = "steward-startup-resume";
+  const childTurnId = "steward-startup-resume-turn";
+  seedInterruptedObserverDatabase(
+    root,
+    sessionHintForRow("parent-startup-resume"),
+    childSessionId,
+    childTurnId,
+  );
+  const composition = createProductionBtccComposition({
+    butlerHome: root,
+    butlerData: root,
+    ownerId: "startup-resume-owner",
+  });
+  try {
+    await composition.ready;
+    const db = new Database(agentBtccStoragePaths(root).agentBtccDbPath, { readonly: true });
+    const recovery = new SqliteStewardObserverStore(db).recoverableTurns()[0];
+    db.close();
+    expect(recovery?.turn_id).toBe(childTurnId);
+    const queued = new NativeInboundQueue(root).findIdempotent(createAppResumeEnvelope({
+      chatId: childSessionId,
+      sessionId: childSessionId,
+      turnId: childTurnId,
+      requestId: stewardResumeRequestId("relation-resume", recovery!.recovery_id),
+      requestedAt: "ignored-by-identity",
+      originalEventId: "resume-trigger",
+      originalMessageId: "resume-message",
+      originalMessage: "Resume the interrupted task",
+    }));
+    expect(queued?.metadata).toMatchObject({
+      source: "btcc-steward-startup-recovery",
+      relation_id: "relation-resume",
+    });
+    expect(queued?.envelope.message).toMatchObject({
+      id: "resume-message",
+      text: "Resume the interrupted task",
+    });
+  } finally {
+    await composition.host.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -237,7 +392,9 @@ function seedObserverDatabase(
       "route-message-key",
       "2026-08-19T00:01:00.000Z",
     );
-  db.query("INSERT INTO btcc_guided_works VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+  db.query(`INSERT INTO btcc_guided_works (work_id, session_id, scope_kind, scope_ref,
+    origin_turn_id, origin_message_id, objective, status, current_plan_revision_id,
+    created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       "route-work",
       childSessionId,
@@ -251,7 +408,11 @@ function seedObserverDatabase(
       "2026-08-19T00:01:00.000Z",
       "2026-08-19T00:02:00.000Z",
     );
-  db.query("INSERT INTO btcc_guided_work_plan_revisions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+  db.query("INSERT INTO btcc_guided_turn_work_bindings VALUES (?, ?, ?, ?, 1, 1, ?)")
+    .run("route-binding", childTurnId, childSessionId, "route-work", "2026-08-19T00:01:00.000Z");
+  db.query(`INSERT INTO btcc_guided_work_plan_revisions (plan_revision_id, work_id,
+    revision, objective, governing_refs_json, actions_json, checks_json, origin_turn_id,
+    created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       "route-plan",
       "route-work",
@@ -281,5 +442,74 @@ function seedObserverDatabase(
       childTurnId,
       "2026-08-19T00:01:45.000Z",
     );
+  db.close();
+}
+
+function seedInterruptedObserverDatabase(
+  butlerData: string,
+  parentSessionId: string,
+  childSessionId: string,
+  childTurnId: string,
+): void {
+  const dbPath = agentBtccStoragePaths(butlerData).agentBtccDbPath;
+  mkdirSync(dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  db.query("INSERT INTO btcc_session_relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(
+      "relation-resume",
+      parentSessionId,
+      "parent-turn-resume",
+      childSessionId,
+      "anchor-resume",
+      1,
+      "Resume interrupted child",
+      "2026-08-22T00:00:00.000Z",
+    );
+  db.query(`
+    INSERT INTO btcc_runtime_owners (
+      owner_id, host_id, process_id, process_started_at_ms,
+      owner_generation, status, registered_at, closed_at
+    ) VALUES (?, ?, ?, ?, 1, 'terminated', ?, ?)
+  `).run(
+    "dead-owner",
+    "local-test-host",
+    999999,
+    1,
+    "2026-08-22T00:00:00.000Z",
+    "2026-08-22T00:01:00.000Z",
+  );
+  db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, semantic_state, active_checkpoint_id, revision,
+      execution_fence
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, 1, 0)
+  `).run(
+    childTurnId,
+    childSessionId,
+    "resume-inbox",
+    "resume-trigger",
+    "resume-message",
+    "Resume the interrupted task",
+    "resume-snapshot",
+    "{}",
+    "{}",
+    "checkpoint-resume",
+  );
+  db.query(`
+    INSERT INTO btcc_checkpoints (
+      checkpoint_id, turn_id, turn_revision, semantic_state, kind,
+      checkpoint_revision, active_claim_id, is_active
+    ) VALUES (?, ?, 1, 'admitted', 'runtime', 1, ?, 1)
+  `).run("checkpoint-resume", childTurnId, "claim-resume");
+  db.query(`
+    INSERT INTO btcc_state_claims (
+      claim_id, turn_id, turn_revision, semantic_state, checkpoint_id,
+      checkpoint_revision, execution_fence, owner_id, owner_generation,
+      lease_generation, status
+    ) VALUES (?, ?, 1, 'admitted', ?, 1, 0, ?, 1, 1, 'active')
+  `).run("claim-resume", childTurnId, "checkpoint-resume", "dead-owner");
   db.close();
 }

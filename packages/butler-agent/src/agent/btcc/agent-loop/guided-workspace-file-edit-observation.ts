@@ -15,7 +15,7 @@ export type GuidedWorkspaceEditObservation = {
   bytes: number;
   bytesValue: Buffer;
   sha256: string;
-  /** Internal identity used only to reject aliases of one actual target. */
+  /** Runtime-owned identity for grouping edits to one actual target. */
   identityPath: string;
 };
 
@@ -37,6 +37,7 @@ export async function observeGuidedWorkspaceEditTarget(
       workspaceRoot: options.workspacePath,
       relativePath: path,
       rejectProtectedProjectLedgerWrites: true,
+      mutation: true,
       protectedProjectLedgerRoots,
     });
     if (!guard.ok || !guard.absolutePath) {
@@ -62,10 +63,11 @@ export async function observeGuidedWorkspaceEditTarget(
         identityPath: guard.realPath ?? guard.absolutePath!,
       },
     };
-  } catch {
+  } catch (error) {
+    const cause = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? ` (${error.code})` : "";
     return rejected(
       "workspace_target_observation_failed",
-      "The existing workspace file could not be observed for editing.",
+      `The existing workspace file could not be observed for editing${cause}.`,
     );
   }
 }

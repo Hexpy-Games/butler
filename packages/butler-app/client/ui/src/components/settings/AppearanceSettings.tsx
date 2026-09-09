@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -12,6 +13,7 @@ import type { SettingsView as SettingsData } from "@/app/types.ts";
 import { MainScreenThemeSettings } from "./MainScreenThemeSettings";
 
 export function AppearanceSettings() {
+  useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const saving = useSettingsUIStore((state) => state.saving);

@@ -24,6 +24,8 @@ const DYNAMIC_SECTION_IDS = new Set([
   "turn-personalization-profile",
   "first-chat-onboarding",
   "feedback-buffer",
+  "project-feedback-buffer",
+  "session-feedback-buffer",
   "profile-projection",
   "working-memory",
   "runtime-state",

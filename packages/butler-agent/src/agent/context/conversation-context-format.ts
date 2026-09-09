@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { isMessageContent } from "../../foundation/message-content.ts";
 import type {
   ConversationMessageWithParts,
   ConversationPart,
@@ -387,6 +388,10 @@ function textForParts(parts: ConversationContextPart[]): string {
 function textForPart(part: ConversationPart): string | null {
   const content = part.content_json;
   if (part.kind === "text") return objectString(content, "text");
+  if (part.kind === "message_content" && isMessageContent(content)) {
+    const references = content.parts.filter(part => part.type === "session_ref");
+    return references.length ? `[user session references: ${JSON.stringify(references)}]` : null;
+  }
   if (part.kind === "attachment_ref") {
     const fileName = objectString(content, "fileName") ?? objectString(content, "filename");
     const id = objectString(content, "id");

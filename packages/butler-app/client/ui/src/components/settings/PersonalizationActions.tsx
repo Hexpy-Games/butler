@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Button, ButtonContainer, Globe2 } from "@/butler-ds";
 import type { PersonalizationDraft } from "./settingsTypes";
@@ -21,6 +22,7 @@ export function PersonalizationActions({
   ) => void;
   onSave: () => Promise<void>;
 }) {
+  useAppLocale();
   const copy = appCopy.settings;
   return (
     <ButtonContainer size="default" justify="end">

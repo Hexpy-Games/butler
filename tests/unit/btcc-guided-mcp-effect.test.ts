@@ -92,7 +92,11 @@ test("reviewed MCP effect preserves uncertain dispatch without blind retry", asy
       status: "uncertain",
       error: {
         code: "effect_reconciliation_required",
-        sourceCode: "mcp_tool_reconciliation_unavailable",
+        sourceCode: "mcp_tool_dispatch_uncertain",
+      },
+      evidence: {
+        dispatchAttempt: 1,
+        errorCode: "effect_reconciliation_required",
       },
     });
     expect(dispatches).toBe(1);

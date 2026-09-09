@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import { appCopy } from "@/app/copy.ts";
@@ -27,6 +28,7 @@ export function WorkersPanel({
   workers: WorkerActivitySummary[];
   onWorkerControl: (workerId: string, control: string) => void;
 }) {
+  useAppLocale();
   const [expandedWorkerIds, setExpandedWorkerIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -104,13 +106,13 @@ export function WorkersPanel({
   ]);
   return (
     <InspectorPanel
-      title="Workers"
+      title={appCopy.inspector.tabs.workers}
       icon={<Activity size={15} />}
     >
       {workers.length > 0 ? (
         <WorkerActivityPanel items={items} />
       ) : (
-        <EmptyPanelLine label="No worker history yet" />
+        <EmptyPanelLine label={appCopy.interfacePanels.noWorkers} />
       )}
     </InspectorPanel>
   );

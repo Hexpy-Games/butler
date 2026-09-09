@@ -1,0 +1,42 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "resume-execution-owner",
+  "accessMode": "full_access",
+  "modelFallback": { "enabled": false, "models": [] },
+  "session": { "id": "resume-execution-owner", "title": "작업 재개와 실행 담당 확인" },
+  "fixtures": [
+    { "path": "marker.txt", "text": "READY\n" },
+    { "path": "notes/a.txt", "text": "A: 비용 10, 처리량 100, 설정 쉬움.\n" },
+    { "path": "notes/b.txt", "text": "B: 비용 20, 처리량 300, 설정 보통.\n" },
+    { "path": "notes/c.txt", "text": "C: 비용 30, 처리량 350, 설정 복잡함.\n" }
+  ],
+  "steps": [
+    {
+      "id": "small-direct",
+      "prompt": "작은 수정 하나만 직접 해주세요. marker.txt의 READY를 WAIT로 바꾸세요. 곧 같은 작업에 후속 요구를 보낼 예정이니 작업은 열어두고 지금 수정한 내용만 짧게 알려주세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [{ "path": "marker.txt", "contains": ["WAIT"] }],
+        "work": { "exists": true, "status": "open" }
+      }
+    },
+    {
+      "id": "resume-substantial",
+      "prompt": "앞선 작업을 이어서 진행해주세요. 이번 남은 비교 조사와 보고서 작성은 Steward에게 맡겨주세요. notes/a.txt, b.txt, c.txt의 비용·처리량·설정 난이도를 비교하고, 비용 대비 처리량을 계산한 comparison.csv와 운영 선택을 추천하는 comparison.md 보고서를 작성하는 작업입니다. 보고서는 비교표, 추천, 한계의 세 절로 구성하고 제공된 자료만 사용하세요. 기존 marker.txt는 변경하지 마세요. Steward의 완료 결과를 받은 뒤 결과를 한국어로 알려주세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "stewardDelivered": true,
+        "files": [
+          { "path": "marker.txt", "contains": ["WAIT"] },
+          { "path": "comparison.csv", "contains": ["A", "B", "C"] },
+          { "path": "comparison.md", "contains": ["비교", "추천", "한계"] }
+        ],
+        "work": { "exists": true, "status": "completed", "sameWorkAsStep": "small-direct" }
+      }
+    }
+  ]
+}

@@ -143,7 +143,7 @@ function renderViewSummary(
     ok,
     path,
     written,
-    ...(ok ? {} : { error: renderFailureSummary(result, written, path) }),
+    ...(ok ? {} : { error: renderFailureSummary(result, written, path, view) }),
   };
 }
 
@@ -151,6 +151,7 @@ function renderFailureSummary(
   result: Record<string, unknown>,
   written: boolean,
   path: string | null,
+  view: ProjectLedgerViewName,
 ): Record<string, unknown> {
   if (result.ok !== true) return projectLedgerErrorSummary(result);
   return {
@@ -161,7 +162,7 @@ function renderFailureSummary(
     next: [],
     native_next: [{
       tool: "project_ledger_render",
-      args: { write: true },
+      args: { view, write: true },
       reason: path
         ? "Rerun Project Ledger render with write enabled and verify the generated view path."
         : "Rerun Project Ledger render with write enabled so the generated view path is available.",

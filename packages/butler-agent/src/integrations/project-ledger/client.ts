@@ -2,7 +2,7 @@ import { spawnSync } from "child_process";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
 import { basename, join, resolve } from "path";
-import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
+import { butlerAgentResourcesPath, butlerDataPath } from "../../runtime/paths.ts";
 import { ActiveProjectLedgerResolver } from "./active-project-ledger-reference.ts";
 
 const activeProjectLedgerResolver = new ActiveProjectLedgerResolver();
@@ -40,14 +40,14 @@ export function projectLedgerProjectPath(
     throw new ProjectLedgerProjectScopeError();
   }
   const explicitRef = explicitRefs[0] ?? "";
-  if (!input.butlerData) return explicitRef || input.workspacePath || input.butlerHome;
+  if (!input.butlerData) return explicitRef || input.workspacePath || butlerDataPath();
   try {
     return activeProjectLedgerResolver.resolve({
       butlerData: input.butlerData,
       appProjectId: input.projectId,
       workspacePath: input.workspacePath,
       explicitRef: explicitRef || undefined,
-      fallbackWorkspacePath: input.projectId || input.workspacePath ? undefined : input.butlerHome,
+      fallbackWorkspacePath: input.projectId || input.workspacePath ? undefined : input.butlerData,
     }).ledger_root;
   } catch {
     throw new Error("project_ledger_project_resolution_failed: active project session has no resolvable Project Ledger reference");
@@ -59,7 +59,7 @@ export function runProjectLedgerTool(
   args: string[],
 ): Record<string, unknown> {
   const result = spawnSync(process.execPath, [projectLedgerPath(input), ...args, "--json"], {
-    cwd: input.butlerHome,
+    cwd: butlerDataPath(input.butlerData),
     encoding: "utf8",
     env: {
       ...process.env,

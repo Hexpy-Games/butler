@@ -15,19 +15,18 @@ export function renderStewardInput(
     `parent_session_id: ${packet.parent_session_id}`,
     `parent_turn_id: ${packet.parent_turn_id}`,
     `execution_mode: ${packet.execution_mode}`,
+    `inherited_composer_access_mode: ${packet.access_and_budget_policy.access_mode}`,
     `objective: ${packet.objective}`,
     `acceptance_criteria: ${packet.acceptance_criteria.join("; ")}`,
     `task_or_plan_refs: ${packet.task_or_plan_refs.join("; ") || "none"}`,
     `constraints: ${packet.constraints_and_non_goals.join("; ")}`,
-    `local_workspace_effect_guards: ${packet.allowed_tools_and_effects.join("; ")}`,
+    `delegated_task_effect_intent: ${packet.allowed_tools_and_effects.join("; ")}`,
     `mutation_scope: ${packet.mutation_scope.join("; ") || "none"}`,
     `workspace_and_worktree: ${stableJson(packet.workspace_and_worktree)}`,
     `expected_result_schema: ${stableJson(packet.expected_result_schema)}`,
     `work_creation_policy: ${packet.work_creation_policy}`,
     `access_and_budget_policy: ${stableJson(packet.access_and_budget_policy)}`,
-    ...(packet.parent_work_ref
-      ? [`parent_work_ref: ${stableJson(packet.parent_work_ref)}`]
-      : []),
+    `parent_work_ref: ${stableJson(packet.parent_work_ref)}`,
     ...(parentConversationContext ? [parentConversationContext] : []),
   ].join("\n");
 }

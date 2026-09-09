@@ -1,3 +1,5 @@
+import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef, SessionArtifactSummary } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { ArtifactList, FileText, Space } from "@/butler-ds";
@@ -27,6 +29,7 @@ export function MessageArtifacts({
   artifacts: SessionArtifactSummary[];
   attachments?: MessageFileRef[];
 }) {
+  useAppLocale();
   const openArtifact = useButlerStore((state) => state.openArtifact);
   const visibleArtifacts =
     artifacts.length > 0 ? artifacts : fallbackArtifacts(attachments);
@@ -35,7 +38,7 @@ export function MessageArtifacts({
     <>
       <Space size="md" />
       <ArtifactList
-        aria-label="Message artifacts"
+        aria-label={appCopy.interfacePanels.artifacts}
         data-test-class="message-artifact-list"
         items={visibleArtifacts.map((artifact) => ({
           id: artifact.id,

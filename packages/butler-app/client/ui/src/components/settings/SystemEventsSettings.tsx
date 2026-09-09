@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -9,6 +10,7 @@ import { SystemEventCard } from "./SystemEventCard";
 const PAGE_SIZE = 20;
 
 export function SystemEventsSettings() {
+  useAppLocale();
   const [view, setView] = useState<SystemEventListView | null>(null);
   const [loading, setLoading] = useState(false);
 

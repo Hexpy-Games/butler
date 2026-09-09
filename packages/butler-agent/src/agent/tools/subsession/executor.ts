@@ -1,7 +1,14 @@
 import type { SubsessionDelegationService } from "../../btcc/subsessions/index.ts";
 import type { ButlerToolHandler } from "../tool-execution-contracts.ts";
 import type { ButlerToolCall } from "../types.ts";
-import { cancelStewardToolDefinition, delegateToStewardToolDefinition, steerStewardToolDefinition } from "./definition.ts";
+import {
+  cancelStewardToolDefinition,
+  delegateToStewardToolDefinition,
+  delegateToWorkerToolDefinition,
+  steerStewardToolDefinition,
+  steerWorkerToolDefinition,
+  waitForWorkerToolDefinition,
+} from "./definition.ts";
 
 export function createSubsessionToolHandlers(input: {
   service?: SubsessionDelegationService;
@@ -10,9 +17,17 @@ export function createSubsessionToolHandlers(input: {
   anchorMessageId?: string;
   modelRef?: string;
   reasoningEffort?: string;
+  parentAccessMode?: "full_access" | "ask_first" | "read_only";
 }): Record<string, ButlerToolHandler> {
   if (!input.service) return {};
   return {
+    [waitForWorkerToolDefinition.name]: async () => {
+      const { parentSessionId, sourceParentTurnId } = requireParentIdentity(input);
+      const waiting = await input.service!.shouldWaitForWorker({
+        parentSessionId, parentTurnId: sourceParentTurnId,
+      });
+      return { ok: true, status: waiting ? "waiting" : "no_active_worker" };
+    },
     [delegateToStewardToolDefinition.name]: async (call: ButlerToolCall) => {
       if (!input.parentSessionId || !input.parentTurnId || !input.anchorMessageId) {
         throw new Error("subsession_parent_turn_identity_missing");
@@ -20,19 +35,18 @@ export function createSubsessionToolHandlers(input: {
       if (!input.modelRef || !input.reasoningEffort) {
         throw new Error("subsession_parent_model_snapshot_missing");
       }
-      const args = decodeDelegationArgs(call.args);
-      const created = await input.service!.delegate({
+      if (!input.parentAccessMode) {
+        throw new Error("subsession_parent_access_snapshot_missing");
+      }
+      const request = requiredString(call.args.request, "request");
+      const safeTitle = optionalSafeTitle(call.args.safe_title);
+      const created = await input.service!.delegateReviewed({
         parent_session_id: input.parentSessionId,
         parent_turn_id: input.parentTurnId,
         anchor_message_id: input.anchorMessageId,
-        execution_mode: args.execution_mode,
-        safe_title: args.safe_title,
-        objective: args.objective,
-        acceptance_criteria: args.acceptance_criteria,
-        task_or_plan_refs: args.task_or_plan_refs,
-        constraints_and_non_goals: args.constraints_and_non_goals,
-        allowed_tools_and_effects: args.allowed_tools_and_effects,
-        mutation_scope: args.mutation_scope,
+        parent_access_mode: input.parentAccessMode,
+        request,
+        ...(safeTitle ? { safe_title: safeTitle } : {}),
         model_ref: input.modelRef,
         reasoning_effort: input.reasoningEffort,
       });
@@ -44,7 +58,43 @@ export function createSubsessionToolHandlers(input: {
         status: "queued",
       };
     },
+    [delegateToWorkerToolDefinition.name]: async (call: ButlerToolCall, context) => {
+      const identity = requireDelegationIdentity(input);
+      const actionKey = requiredString(call.args.action_key, "action_key");
+      const objective = requiredString(call.args.objective, "objective");
+      const acceptanceCriteria = stringArray(call.args.acceptance_criteria, "acceptance_criteria");
+      const implementationBrief = requiredString(call.args.implementation_brief, "implementation_brief");
+      const safeTitle = optionalSafeTitle(call.args.safe_title);
+      const profileId = optionalString(call.args.profile_id);
+      await input.service!.delegateWorkerReviewed({
+        ...identity,
+        ...(context?.effectOccurrenceId ? { source_tool_call_id: context.effectOccurrenceId } : {}),
+        action_key: actionKey,
+        objective,
+        acceptance_criteria: acceptanceCriteria,
+        implementation_brief: implementationBrief,
+        ...(safeTitle ? { safe_title: safeTitle } : {}),
+        ...(profileId ? { profile_id: profileId } : {}),
+      });
+      return { ok: true, status: "queued" };
+    },
     [steerStewardToolDefinition.name]: async (call: ButlerToolCall) => {
+      const identity = requireParentIdentity(input);
+      const instruction = requiredString(call.args.instruction, "instruction");
+      const direction = await input.service!.steerSteward({
+        ...identity,
+        instruction,
+        ...optionalRelationSelector(call.args),
+      });
+      return {
+        ok: true,
+        relation_id: direction.relation_id,
+        instruction_id: direction.instruction_id,
+        revision: direction.revision,
+        status: direction.status,
+      };
+    },
+    [steerWorkerToolDefinition.name]: async (call: ButlerToolCall) => {
       const identity = requireParentIdentity(input);
       const instruction = requiredString(call.args.instruction, "instruction");
       const direction = await input.service!.steerSteward({
@@ -73,6 +123,41 @@ export function createSubsessionToolHandlers(input: {
       };
     },
   };
+}
+
+function requireDelegationIdentity(input: {
+  parentSessionId?: string;
+  parentTurnId?: string;
+  anchorMessageId?: string;
+  modelRef?: string;
+  reasoningEffort?: string;
+  parentAccessMode?: "full_access" | "ask_first" | "read_only";
+}) {
+  if (!input.parentSessionId || !input.parentTurnId || !input.anchorMessageId) {
+    throw new Error("subsession_parent_turn_identity_missing");
+  }
+  if (!input.modelRef || !input.reasoningEffort || !input.parentAccessMode) {
+    throw new Error("subsession_parent_model_snapshot_missing");
+  }
+  return {
+    parent_session_id: input.parentSessionId,
+    parent_turn_id: input.parentTurnId,
+    anchor_message_id: input.anchorMessageId,
+    parent_access_mode: input.parentAccessMode,
+    model_ref: input.modelRef,
+    reasoning_effort: input.reasoningEffort,
+  };
+}
+
+function stringArray(value: unknown, name: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`delegation_${name}_required`);
+  const values = value.map((item) => requiredString(item, name));
+  if (values.length > 8) throw new Error(`delegation_${name}_too_large`);
+  return values;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function requireParentIdentity(input: {
@@ -104,41 +189,12 @@ function optionalRelationSelector(args: Record<string, unknown>): {
   };
 }
 
-function decodeDelegationArgs(args: Record<string, unknown>): {
-  execution_mode: "read_only" | "mutation";
-  safe_title: string;
-  objective: string;
-  acceptance_criteria: string[];
-  task_or_plan_refs: string[];
-  constraints_and_non_goals: string[];
-  allowed_tools_and_effects: string[];
-  mutation_scope: string[];
-} {
-  return {
-    execution_mode: executionMode(args.execution_mode),
-    safe_title: requiredString(args.safe_title, "safe_title"),
-    objective: requiredString(args.objective, "objective"),
-    acceptance_criteria: stringArray(args.acceptance_criteria, "acceptance_criteria", true),
-    task_or_plan_refs: stringArray(args.task_or_plan_refs, "task_or_plan_refs", false),
-    constraints_and_non_goals: stringArray(args.constraints_and_non_goals, "constraints_and_non_goals", true),
-    allowed_tools_and_effects: stringArray(args.allowed_tools_and_effects, "allowed_tools_and_effects", true),
-    mutation_scope: stringArray(args.mutation_scope, "mutation_scope", false),
-  };
-}
-
-function executionMode(value: unknown): "read_only" | "mutation" {
-  if (value === "read_only" || value === "mutation") return value;
-  throw new Error("delegation_execution_mode_invalid");
+function optionalSafeTitle(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return requiredString(value, "safe_title").slice(0, 120);
 }
 
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`delegation_${name}_required`);
   return value.trim();
-}
-
-function stringArray(value: unknown, name: string, required: boolean): string[] {
-  if (!Array.isArray(value)) throw new Error(`delegation_${name}_array_required`);
-  const result = value.map((item) => requiredString(item, name));
-  if (required && result.length === 0) throw new Error(`delegation_${name}_required`);
-  return result;
 }

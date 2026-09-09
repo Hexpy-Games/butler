@@ -24,6 +24,9 @@ import {
 import { registeredHostedModelMetadata } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import { QWEN_MODELS } from "../../packages/butler-agent/src/integrations/providers/qwen/catalog.ts";
 import { runHostedOpenAICompatibleModelRound } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-tool-runtime.ts";
+import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
+import { resolveZaiMcpVisionCatalogEntry } from "../../packages/butler-agent/src/integrations/providers/zai/visual-capability.ts";
+import { createAnalyzeAttachedImageToolHandler } from "../../packages/butler-agent/src/agent/tools/image/analyze_attached_image/executor.ts";
 import type { HostedRuntimeConfig } from "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
 
 const PNG_1X1 = Uint8Array.from(
@@ -107,6 +110,39 @@ function manifest() {
     position: 0,
   });
 }
+
+test("actual image MCP adapter preserves full analysis and actionable reported failures", async () => {
+  const data = mkdtempSync(join(tmpdir(), "butler-image-mcp-result-"));
+  try {
+    upsertMcpServer(data, { id: "zai-vision", display_name: "Image result fixture", enabled: true,
+      transport: "stdio", command: process.execPath, cwd: process.cwd(), args: ["--eval", `
+        import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+        import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+        import { z } from "zod";
+        const server = new McpServer({ name: "image-fixture", version: "1" });
+        server.tool("analyze_image", "Analyze image", { image_source: z.string(), prompt: z.string() }, async ({ image_source, prompt }) => ({
+          isError: prompt === "fail", content: [{ type: "text", text: prompt === "fail"
+            ? "Image format could not be decoded: " + image_source
+            : "analysis ".repeat(3000) + "END_OF_ANALYSIS" }],
+        }));
+        await server.connect(new StdioServerTransport());
+      `] });
+    const entry = await resolveZaiMcpVisionCatalogEntry({ butlerData: data, modelRef: "zai/glm-5.2",
+      entry: catalogEntry({ provider_id: "zai", model_id: "glm-5.2", model_ref: "zai/glm-5.2", image_carrier_protocol: "zai_mcp_vision" }) });
+    const admission = imageAdmissionForCatalogEntry(entry!, [manifest()]);
+    const handler = createAnalyzeAttachedImageToolHandler({ butlerData: data, imageManifests: admission.manifests,
+      imageCarrier: admission.tuple, imageCapability: admission.capability,
+      verifiedImagePayloadPort: { async read() { return { bytes: PNG_1X1, mimeType: "image/png" }; } } });
+    const args = { file_id: admission.manifests[0]!.fileId, prompt: "analyze" };
+    const success = await handler({ args });
+    expect(success.analysis).toBe("analysis ".repeat(3000) + "END_OF_ANALYSIS");
+    const failure = await handler({ args: { ...args, prompt: "fail" } });
+    expect(failure).toMatchObject({ ok: false, error: { code: "mcp_tool_failed",
+      message: "Image format could not be decoded: [redacted-image-source]" } });
+    expect(failure.analysis).toContain("could not be decoded");
+    expect(JSON.stringify(failure)).not.toContain("butler-zai-vision-");
+  } finally { rmSync(data, { recursive: true, force: true }); }
+});
 
 test("admits documented image support without requiring a positive route probe", () => {
   for (const routeHealth of ["unchecked", "healthy", "transient_failure"] as const) {
@@ -497,6 +533,9 @@ test("carries a supported visual tuple from upload through both queues to the na
     },
     enqueueAppCancellation() {
       throw new Error("cancellation is not expected in this fixture");
+    },
+    enqueueAppResume() {
+      throw new Error("resume is not expected in this fixture");
     },
     enqueueAppTurn(input) {
       transportInputs.push({ attachments: input.attachments });

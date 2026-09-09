@@ -1,3 +1,4 @@
+import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { runtimeModels } from "@/app/utils.ts";
@@ -17,6 +18,7 @@ import { PersonalizationProfilingSettings } from "./PersonalizationProfilingSett
 import { PersonalizationTextFields } from "./PersonalizationTextFields";
 
 export function PersonalizationSettings() {
+  useAppLocale();
   const personalization = useSettingsUIStore((state) => state.personalization);
   const personalizationDraft = useSettingsUIStore(
     (state) => state.personalizationDraft,

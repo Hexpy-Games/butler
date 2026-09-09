@@ -42,12 +42,117 @@ function exactPage(
   return { result_ref, sha256, revision, work_id, offset: 0, length: 32 };
 }
 
+test("acknowledged replay preserves the current bridged Plan and Review before windowing", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-work-anchor-replay-"));
+  const stores = openBtccSqliteStores({ dbPath: join(root, "btcc.sqlite"), ownerId: "anchors" });
+  try {
+    const messages = ["replace_work_plan", "record_work_review", "read_file"].flatMap((name, index) => {
+      const id = `anchor-${index}`;
+      const args = { id: `native:${name}`, arguments: { actions: [{ action_key: "implement", checks: ["preserve exact plan"] }] } };
+      const result = { ok: true, output: { content: "accepted-detail ".repeat(2_000) } };
+      stores.guidedToolJournal.start({ turnId: "turn", callId: id, toolName: name,
+        rawArguments: JSON.stringify(args), arguments: args });
+      stores.guidedToolJournal.finish({ callId: id, status: "completed", result });
+      return [
+        { role: "assistant" as const, content: "", toolCalls: [{ id, name: "tool_call", arguments: args, rawArguments: JSON.stringify(args) }] },
+        { role: "tool" as const, name: "tool_call", toolCallId: id, content: JSON.stringify(result) },
+      ];
+    });
+    const replay = createOperationResultReplay({ turnId: "turn", turnRevision: 1,
+      journal: stores.guidedToolJournal, exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true });
+    replay.prepareMessages(messages, "first");
+    replay.accepted("first", routeAccepted("first", "continue"));
+    const projected = replay.prepareMessages(messages, "next");
+    expect(projected.slice(0, 4)).toEqual(messages.slice(0, 4));
+    expect(projected[5]?.content).not.toBe(messages[5]?.content);
+    expect(JSON.parse(projected[5]!.content).availability.capability).toBe("read_operation_results");
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("enabled replay fails composition when its exact journal dependency is incomplete", () => {
   expect(() => createOperationResultReplay({
     turnId: "turn", turnRevision: 1, exactReadCapability: true,
     journal: {} as GuidedToolJournal,
     exactReader: {} as GuidedOperationResultReader,
   })).toThrow("operation_result_replay_dependency_missing");
+});
+
+test("durable preview references are directly callable by the existing exact reader", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-result-preview-reference-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "preview-reference",
+  });
+  try {
+    const result = {
+      ok: false,
+      error: { code: "validation_failed", message: "one check failed" },
+      output: "failure detail ".repeat(1_000),
+    };
+    stores.guidedToolJournal.start({
+      turnId: "turn",
+      callId: "call",
+      toolName: "run_command",
+      rawArguments: "{}",
+      arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "call",
+      status: "completed",
+      result,
+      errorCode: "validation_failed",
+    });
+    const replay = createOperationResultReplay({
+      turnId: "turn",
+      turnRevision: 1,
+      journal: stores.guidedToolJournal,
+      exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true,
+    });
+
+    const reference = replay.previewReferenceForCall("call");
+    expect(reference).toMatchObject({
+      capability: "read_operation_results",
+      arguments: {
+        result_ref: "call",
+        revision: null,
+        work_id: null,
+        offset: 0,
+        length: 4_096,
+      },
+    });
+    expect(reference?.total_bytes).toBe(
+      Buffer.byteLength(JSON.stringify(result), "utf8"),
+    );
+    expect(replay.readExact(reference!.arguments)).toMatchObject({
+      offset: 0,
+      length: 4_096,
+      totalBytes: reference!.total_bytes,
+      nextOffset: 4_096,
+      complete: false,
+    });
+    stores.guidedToolJournal.start({
+      turnId: "turn",
+      callId: "reader-page",
+      toolName: "read_operation_results",
+      rawArguments: "{}",
+      arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "reader-page",
+      status: "completed",
+      result: { encoding: "base64", data: "e30=", offset: 0, length: 2 },
+    });
+    expect(replay.previewReferenceForCall("reader-page")).toBeNull();
+    expect(replay.referenceForCall("reader-page")).toBeNull();
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("accepted durable large result is raw once then a bounded reference in the actual Codex serializer", () => {
@@ -332,11 +437,24 @@ test("every durable delivery state resumes exactly across SQLite close and reope
   }
 });
 
-test("enabled replay stays raw through routed retry, acknowledges once, and resumes route checkpoints", async () => {
+test("enabled replay keeps the readable preview through routed retry, acknowledges once, and resumes route checkpoints", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-route-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({ dbPath, ownerId: "route-writer" });
-  const large = { content: "Q".repeat(12_000) };
+  const large = {
+    ok: true,
+    files_requested: 1,
+    files_read: 1,
+    truncated: false,
+    files: [{
+      ok: true,
+      path: "large.txt",
+      start_line: 1,
+      end_line: 1,
+      truncated: false,
+      content: "Q".repeat(70_000),
+    }],
+  };
   stores.guidedToolJournal.start({
     turnId: "turn", callId: "journal-large", toolName: "read_file",
     rawArguments: "{}", arguments: {},
@@ -421,6 +539,19 @@ test("enabled replay stays raw through routed retry, acknowledges once, and resu
     expect(stores.guidedToolJournal.list("turn")).toHaveLength(1);
     expect(physicalMessages[1]).toContain("Q".repeat(1024));
     expect(physicalMessages[2]).toContain("Q".repeat(1024));
+    for (const physical of physicalMessages.slice(1, 3)) {
+      const messages = JSON.parse(physical) as Array<{
+        role: string;
+        content: string;
+      }>;
+      const delivered = JSON.parse(
+        messages.find((message) => message.role === "tool")!.content,
+      ) as Record<string, any>;
+      expect(delivered.model_preview?.exact_read).toMatchObject({
+        capability: "read_operation_results",
+        arguments: { result_ref: "journal-large", offset: 0, length: 4_096 },
+      });
+    }
     expect(physicalMessages[3]).not.toContain("Q".repeat(1024));
     expect(physicalMessages[3]).toContain("private-analysis-");
     expect(physicalMessages[3]).toContain("butler.operation-result-reference.v1");
@@ -477,7 +608,7 @@ test("admission keeps small, failed, and non-durable terminal results raw", () =
   } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("Work result references use canonical identity and fail closed across scope and kind", () => {
+test("Session Work result references use canonical identity and fail closed across scope and kind", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-work-"));
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({ dbPath, ownerId: "work" });
@@ -488,8 +619,8 @@ test("Work result references use canonical identity and fail closed across scope
     db.query(`INSERT INTO btcc_guided_works (
       work_id, session_id, scope_kind, scope_ref, origin_turn_id, origin_message_id,
       objective, status, created_at, updated_at
-    ) VALUES (?, ?, 'project', ?, ?, 'message', 'objective', 'open', ?, ?)`)
-      .run("work", "session", "project", "turn", "now", "now");
+    ) VALUES (?, ?, 'session', ?, ?, 'message', 'objective', 'open', ?, ?)`)
+      .run("work", "session", "session", "turn", "now", "now");
     db.query(`INSERT INTO btcc_guided_work_results (
       result_ref, work_id, sequence, tool_call_id, origin_turn_id, attached_at
     ) VALUES (?, ?, 3, ?, ?, ?)`)
@@ -498,7 +629,7 @@ test("Work result references use canonical identity and fail closed across scope
     const replay = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     const reference = replay.referenceFor(stores.guidedToolJournal.findForTurn("turn", "call")!);
     expect(reference.identity).toMatchObject({ kind: "work", result_ref: "canonical-result", work_id: "work" });
@@ -506,29 +637,22 @@ test("Work result references use canonical identity and fail closed across scope
     const laterTurnReplay = createOperationResultReplay({
       turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     expect(laterTurnReplay.readExact(exactPage(
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toMatchObject({ encoding: "base64", offset: 0, length: 32 });
-    const wrongScope = createOperationResultReplay({
-      turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
-      exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "other",
-    });
-    expect(() => wrongScope.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
-      .toThrow("operation_result_scope_mismatch");
     const wrongSession = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "other", projectRef: "project",
+      exactReadCapability: true, sessionId: "other",
     });
     expect(() => wrongSession.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
       .toThrow("operation_result_session_mismatch");
     const wrongWork = createOperationResultReplay({
       turnId: "turn", turnRevision: 9, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader,
-      exactReadCapability: true, sessionId: "session", projectRef: "project",
+      exactReadCapability: true, sessionId: "session",
     });
     expect(() => wrongWork.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "other")))
       .toThrow("operation_result_work_mismatch");
@@ -538,10 +662,6 @@ test("Work result references use canonical identity and fail closed across scope
       .toThrow("operation_result_missing_or_scope_mismatch");
     expect(() => replay.readExact(exactPage("canonical-result", "0".repeat(64), 3, "work")))
       .toThrow("operation_result_integrity_mismatch");
-    const scoped = new Database(dbPath);
-    scoped.query("UPDATE btcc_guided_works SET scope_kind = 'session', scope_ref = ? WHERE work_id = ?")
-      .run("session", "work");
-    scoped.close();
     const sessionReplay = createOperationResultReplay({
       turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
       exactReader: stores.guidedOperationResultReader, exactReadCapability: true,
@@ -550,14 +670,6 @@ test("Work result references use canonical identity and fail closed across scope
     expect(sessionReplay.readExact(exactPage(
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toMatchObject({ encoding: "base64" });
-    const crossKind = createOperationResultReplay({
-      turnId: "later-turn", turnRevision: 1, journal: stores.guidedToolJournal,
-      exactReader: stores.guidedOperationResultReader, exactReadCapability: true,
-      sessionId: "session", projectRef: "project",
-    });
-    expect(() => crossKind.readExact(exactPage(
-      "canonical-result", reference.integrity.sha256, 3, "work",
-    ))).toThrow("operation_result_scope_mismatch");
     const corruptScope = new Database(dbPath);
     corruptScope.query("UPDATE btcc_guided_works SET scope_ref = ? WHERE work_id = ?")
       .run("other-session", "work");
@@ -566,14 +678,86 @@ test("Work result references use canonical identity and fail closed across scope
       "canonical-result", reference.integrity.sha256, 3, "work",
     ))).toThrow("operation_result_scope_mismatch");
     const corrupt = new Database(dbPath);
-    corrupt.query("UPDATE btcc_guided_works SET scope_kind = 'project', scope_ref = ? WHERE work_id = ?")
-      .run("project", "work");
+    corrupt.query("UPDATE btcc_guided_works SET scope_kind = 'session', scope_ref = ? WHERE work_id = ?")
+      .run("session", "work");
     corrupt.query("UPDATE btcc_guided_tool_calls SET result_json = ? WHERE call_id = ?")
       .run(JSON.stringify({ ok: true, content: "tampered" }), "call");
     corrupt.close();
     expect(() => replay.readExact(exactPage("canonical-result", reference.integrity.sha256, 3, "work")))
       .toThrow("operation_result_body_hash_mismatch");
   } finally { stores.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("legacy Project Work and project-scoped direct results replay before canonical selection", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-exact-replay-legacy-project-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({ dbPath, ownerId: "legacy-project" });
+  try {
+    stores.guidedToolJournal.start({
+      turnId: "project-turn", callId: "linked-call", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "linked-call", status: "completed",
+      result: { ok: true, content: "P".repeat(16_000) },
+    });
+    stores.guidedToolJournal.start({
+      turnId: "project-turn", callId: "direct-call", toolName: "read_file",
+      rawArguments: "{}", arguments: {},
+    });
+    stores.guidedToolJournal.finish({
+      callId: "direct-call", status: "completed",
+      result: { ok: true, content: "D".repeat(16_000) },
+    });
+    const db = new Database(dbPath);
+    db.query(`INSERT INTO btcc_guided_works (
+      work_id, session_id, scope_kind, scope_ref, origin_turn_id,
+      origin_message_id, objective, status, created_at, updated_at
+    ) VALUES ('legacy-project-work', 'session', 'project', 'app-project',
+      'project-turn', 'message', 'legacy', 'open', 'now', 'now')`).run();
+    db.query(`INSERT INTO btcc_guided_work_results (
+      result_ref, work_id, sequence, tool_call_id, origin_turn_id, attached_at
+    ) VALUES ('legacy-project-result', 'legacy-project-work', 1,
+      'linked-call', 'project-turn', 'now')`).run();
+    db.close();
+
+    const replay = createOperationResultReplay({
+      turnId: "project-turn", turnRevision: 1,
+      journal: stores.guidedToolJournal,
+      exactReader: stores.guidedOperationResultReader,
+      exactReadCapability: true,
+      sessionId: "session",
+      projectRef: "app-project",
+    });
+    const linked = replay.referenceFor(
+      stores.guidedToolJournal.findForTurn("project-turn", "linked-call")!,
+    );
+    expect(linked.identity).toMatchObject({
+      kind: "work", result_ref: "legacy-project-result",
+      work_id: "legacy-project-work",
+    });
+    expect(replay.readExact(exactPage(
+      linked.identity.result_ref,
+      linked.integrity.sha256,
+      1,
+      "legacy-project-work",
+    ))).toMatchObject({ encoding: "base64", length: 32 });
+
+    const direct = replay.referenceFor(
+      stores.guidedToolJournal.findForTurn("project-turn", "direct-call")!,
+    );
+    expect(direct.identity).toMatchObject({
+      kind: "direct", result_ref: "direct-call",
+    });
+    expect(replay.readExact(exactPage(
+      direct.identity.result_ref,
+      direct.integrity.sha256,
+      null,
+    ))).toMatchObject({ encoding: "base64", length: 32 });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("reference identity is stable and exact reads fail closed across restart and mismatches", () => {

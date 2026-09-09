@@ -1,0 +1,206 @@
+# #26 검증·완성도 리뷰
+
+## r12 목록 정리 Sonner 알림
+
+- 사이드바 footer의 정리 알림/되돌리기/오류 텍스트를 제거했다. 설정만 남는다.
+  중앙 notification API와 기존 AppToaster를 통해 ko/en 알림 및 undo action을 제공한다.
+- undo token과 revision으로 유효성을 확인하며 같은 알림을 navigation 갱신마다
+  재표시하지 않는다. workspace shell이 수명을 소유하므로 설정 진입에도 유지된다.
+- Sonner dismiss의 지연 이벤트가 다음 알림을 닫는 실제 브라우저 재현을 수정했다.
+  token별 ID로 이전 알림 닫기와 새 알림 표시를 분리한다.
+- hook 단위 검증: StrictMode 중복 방지, pending/무효 undo 차단, ko/en 문구.
+  실제 HTTP+SQLite+제품 UI smoke: 1440px/390px에서 footer 위치 불변, 화면 경계,
+  그룹 생성 후 Sonner action으로 실제 undo 복원 통과. 외부 모델 호출 없음.
+- `.tmp/space-notice/toast-1440.png`, `toast-390.png` 화면 직접 리뷰 완료.
+  UI build/lint/typecheck/diff 검사 통과. 운영 에이전트 재시작 없이 Vite HMR 반영.
+
+## r11 우측 패널 확장과 320px 대화창
+
+- 고정 520px 제한을 실제 shell 폭 기반 상한으로 교체했다. 열린 사이드바를
+  제외한 나머지에서 대화창 320px를 보장하고 저장 선호 폭은 별도로 유지한다.
+- 1440px/왼쪽 닫힘에서 우측 1120px까지 확장, 창 축소 후 복원 및 reload 통과.
+  pointer, Home/End, ARIA/실측 폭 일치, 모바일 drawer 유지 검증 완료.
+- 실제 패널 폭으로 시작 화면·컴포저가 반응하도록 컨테이너 쿼리 적용.
+  `.tmp/panel-resize/desktop-main-320.png`에서 좁은 실제 UI를 리뷰했다.
+- 단위 5개 및 기존 sidebar 4폭 smoke 통과. 광범위 DS 소스 테스트의 기존
+  11실패와 독립 Prompt fixture 시각 증거 제한은 r11-plan.md에 기록했다.
+
+## r10 프로젝트 액션과 최소 버튼 간격
+
+- 프로젝트 Briefcase / 대시보드 LayoutDashboard 구분. 상시 대시보드 버튼 다음에
+  메뉴/펼침 공용 슬롯 배치. 기존 대시보드 진입 경로 및 모바일 long-press 유지.
+- 최신 피드백 반영: 스페이스/프로젝트 모두 버튼 여백 2px, hit target 30px/44px.
+  두 버튼의 중심과 우측 끝을 실제 UI 4폭에서 비교 검증했다.
+- 더보기(n)는 text-secondary, 기존 제목 들여쓰기 유지. 4폭 sidebar smoke 및
+  DS Icons render all 통과. 상세 결과/기존 광범위 테스트 제한은 r10-plan.md.
+- UI 변경만 적용하며 운영 에이전트를 중단하거나 재시작하지 않는다.
+- 추가 탭 확인: 운영 UI 실측에서 외곽/세 탭 모두 radius-control=8px이었다.
+  단일 CSS 규칙으로 통합했으며 R값 자체를 변경했다고 주장하지 않는다.
+  DS Tabs render all 및 기준값 동일성 검증을 추가한 실제 UI 4폭 smoke 통과.
+
+## r9 원형 배경 추가 축소
+
+- 사용자 피드백에 따라 배경 지름만 데스크톱 20px/모바일 24px로 축소했다.
+- 빌드 및 실제 UI 1440/800/390/320px smoke 통과. 클릭 영역 30px/44px 유지,
+  중앙 원형 배경 크기 및 투명 측면 클릭으로 메뉴 열림 검증 완료.
+- 데스크톱 hover 스크린샷을 검토했다. 이벤트/아이콘/행 배치 변경 없음.
+
+## r8 작은 원형 버튼 배경
+
+- r7의 직사각형 paint를 중앙 원형 paint로 대체했다(24px, 모바일 28px).
+  버튼 hit target 30px/44px와 오른쪽 정렬, focus/접근성/long-press는 그대로다.
+- 실제 UI 1440/800/390/320px에서 배경 이미지/크기/위치와 버튼 rect를 검사하고
+  원 바깥의 투명 측면 클릭으로 실제 메뉴가 열리는 것까지 확인했다.
+  `.tmp/sidebar-r5/recent-*-hover.png`에서 작은 배경을 검토했다.
+- CSS lint/build 통과. 상세 검증 및 기존 design-source test 제한은 r8-plan.md.
+  UI-only 변경이므로 에이전트/스케줄러 재시작 없이 기존 renderer에 반영한다.
+
+## r7 행 정렬·중앙 다국어·응답 언어 분리 (2026-09-08)
+
+- 최신/진행중 행의 제목/오른쪽 버튼과 소속/오른쪽 메타데이터를 별도 트랙으로
+  분리했다. 버튼 hit target은 오른쪽 끝, 배경 radius는 부모 행과 동일하다.
+  자동 그룹의 별도 아이콘/해제, 최신·진행중 추가 버튼과 안내문을 제거했다.
+- 중앙 `packages/butler-i18n`으로 완전한 en/ko catalog와 타입 계약을 옮겼다.
+  UI는 기존 copy adapter를 통해 현재 locale을 구독하며, 캐시·메모된 화면도
+  입력 초안을 지우지 않고 갱신한다. 문서 메뉴/metadata와 시스템 compaction
+  안내도 렌더 시 현재 언어를 해석한다.
+- 실제 guided 도구·단계 이벤트부터 저장/재생/워커·스튜어드/사이드바까지
+  시스템 문구의 템플릿 참조를 보존한다. 공개 경로/매개변수만 전달한다.
+  모델 작성 문구로 교체하면 기존 참조도 함께 지워 번역이 원문을 덮지 않게 한다.
+  상세 감사·제외 범위: `r7-i18n-audit.md`.
+- 응답 언어 오류의 원인은 UI 설정이 responseLanguage를 암묵적으로 생성하고,
+  컨텍스트/결정적 응답도 UI 언어를 fallback으로 사용한 것이었다. 또한 기존
+  기본언어 강제 문장이 명시적 번역 요청과 충돌했다. 두 설정의 권위를 분리하고
+  모든 역할에서 명시적 사용자 언어 요청이 응답 기본값보다 우선하도록 통일했다.
+- 실제 격리 Electron + production native executor + `openai/gpt-6-astra`에서
+  UI=en/답변=ko, UI=ko/답변=en, 답변=en에서 한국어 재작성 요청의 3경로를
+  실제 composer로 확인했다(각 12/11/10초). 확률적 모델의 모든 응답을 보장한다는
+  주장이 아니라 보고된 충돌 경로의 실제 확인이다. 운영 이력은 수정하지 않았다.
+- 최종 빌드 browser smoke 1440/800/390/320px: 오른쪽 끝/메타 정렬/radius,
+  이전 transparent sticky·focus·drag·terminal spinner 회귀 통과. 실제 설정 UI
+  en→ko 전환에서 캐시/라벨 갱신, 사용자 제목/입력 초안/response preference 보존 통과.
+  스크린샷 `.tmp/sidebar-r5/recent-*.png`, `.tmp/sidebar-r7/locale-*.png`.
+- root 집중 회귀 21 tests/157 assertions, 워커·문서 locale 2/14, compaction 1/8,
+  워커 캡슐 배치 1/23, 연속 observer 이력 1/19 통과. 중앙 guided 및 packaging
+  수치는 audit에 기록했다. 타입 검사, 전체 lint(DS/CSS), UI build, diff 검사 통과.
+- 구조 audit의 3개 큰 파일은 중앙 타입과 두 언어의 순수 catalog다. 별도 실행
+  책임은 없으므로 기계적 분리하지 않았다. 새 polling/실행 루프는 추가하지 않았다.
+- 실기기 iOS/Windows는 검증하지 않았다. 기존 무표식 과거 이력, 외부 도구 원문,
+  알 수 없는 provider 오류는 임의 번역하지 않는다. 넓은 기존 테스트의 BTCC
+  admission fixture 12건, source-regex 1건, Linux packaging 의존성 2건은
+  통과로 계산하지 않았으며 이번 변경으로 수정하지 않았다.
+- 운영 반영: `64dbc5c9`를 main에 fast-forward 병합·push하고 09:52 KST
+  native supervisor 6개 online, `/health` 정상 확인했다. 독립 Electron driver
+  PID 383(PPID 1), Electron PID 421로 재실행했으며 실제 운영 창이 기존
+  세션·사이드바·한국어 UI와 gateway ready를 표시하는 것을 확인했다.
+- 실제 창 확인에서 발견한 토글/크기조절 접근성 라벨과 사용자 메시지 날짜의
+  OS-locale 고정을 중앙 UI locale로 추가 보정했다. 날짜/메시지 UI 4 tests,
+  27 assertions 통과. 과거의 무표식 Failed 라벨은 역사적 원문이라 변경하지 않았다.
+- 저장된 모델 답변 언어 설정은 임의로 변경하지 않았다. 현재 설정값이 영어이면
+  영어가 기본이며, 한국어 재작성 등 사용자의 명시적 요청이 우선한다.
+
+## r5 창 레이아웃·완료 상태 보정
+
+- 원인: scrollContent의 18px gap과 sticky padding 중복, 신호등 공간+스크롤 inset+brand padding 중복, 창 토글을 브랜드 옆으로 옮긴 이중 소유, SpaceSidebar의 불투명 덮개, 환경을 무시한 1023px overlay 분기, turn.state_changed/일반 session.updated의 navigation 갱신 누락이었다.
+- 단일 window chrome 토글을 복원했다. Electron 열림/닫힘 실제 화면에서 신호등 오른쪽 좌표를 유지했다. 약 800px 실제 Electron 창에서도 sidebar와 workspace가 함께 도킹되며, 검증 후 창 크기를 복원했다.
+- 실제 빌드 UI+격리 App HTTP/SQLite에서 1440/800/390/320px 검증 통과. 제목 영역→첫 아이템 간격 Favorites/Space 모두 8px; 더보기와 같은 깊이 세션 제목 x 차이 0px; sidebar/sticky surface에 불투명 덮개 없음; browser 800px부터 단일 push 및 세션 선택 시 닫힘. 스크린샷 `.tmp/sidebar-r5/browser-{width}.png`.
+- 실제 HTTP 메시지→live event→실제 sidebar에서 작업 상태 표시 후 delivered 응답에 따라 스피너 DOM이 제거됐다. 페이지 reload/수동 navigation 갱신 없이 통과했다. 모델 의미 E2E가 아니라 deterministic responder를 사용한 UI 이벤트 통합 검사다. 운영 Electron에서도 실제 사용자의 완료 응답과 일반 채널 스피너 없음 확인.
+- live-session hook/navigation 26 tests, 99 assertions 통과. 현재 일반 채널과 다른 활성 채널 두 경우를 검사했다. responsive 11 tests, 68 assertions 통과. 기존 main의 Lexical 전환 이후 남은 composer `const minRows = 1` 소스 문자열 검사 1개는 해당 없음으로 별도 기록하고 회귀 실행에서 제외했다. 전체 저장소 테스트 무오류를 주장하지 않는다.
+- typecheck, lint(DS/CSS), UI build, diff whitespace 검사 통과. DS AdaptiveShell/SidebarShell/CollapsibleNavGroup/NavSection/ChromeFrame을 5개 viewport에서 총 25개 렌더링했다. fixture의 fixed drawer가 viewer 바깥으로 튀어나오지 않도록 fixture만 paint/layout contain 처리했다.
+- 구조 리뷰: 창 토글 한 소유자, viewport 분류 공유, openSession에서 drawer 탐색 완료 처리, canonical navigation만 상태 권위로 유지했다. 새 polling/BTCC 상태/원본 데이터 보정은 없다. module audit의 기존 큰 테스트 파일 2개와 기존 SidebarShell barrel은 이번 런타임 경로 변경 대상이 아니며 별도 분리하지 않았다.
+- 실기기 iOS Safari와 Windows/macOS 외 네이티브 창은 이번 검증 범위가 아니다.
+- 운영 반영: 구현 `6282c650`을 main에 fast-forward 병합하고 origin/main으로 push했다. 2026-09-07 23:39 KST native supervisor 6개 서비스 online, `/health` 정상 확인. 초기 Electron 실행은 서버 준비 전 health 대기 제한에 걸려 종료됐으며 서버 준비 완료 후 재실행했다. 최종 독립 드라이버 PID 1700(PPID 1), Electron PID 1983. 재시작 후 실제 화면에서 원래 신호등 오른쪽 토글, 간격·재질·더보기 정렬, 일반 채널 완료/스피너 없음과 Gateway ready를 확인했다.
+
+## r6 투명 sticky 가림 보정 (2026-09-08)
+
+- 원인: transparent + backdrop blur는 아래 콘텐츠를 제거하지 않으므로 sticky 제목과
+  스크롤 텍스트가 같은 화면 영역에 그려졌다. 불투명 배경으로 돌아가지 않고 자식
+  영역을 헤더 bottom에서 clip한다. 원본 sticky와 단일 scrollbar를 유지했다.
+- SidebarShell의 한 passive scroll/RAF hook이 루트·그룹 경계를 측정한다. React
+  scroll state, 복제 헤더, wheel 전환, polling은 없다. DOM 읽기/쓰기를 분리하고
+  값이 바뀐 CSS 변수만 갱신한다. focus가 가려진 행에 도달하면 같은 scroll로 노출한다.
+- 실제 빌드 UI + 격리 HTTP/SQLite에서 1440/800/390/320px 통과: 루트/중첩 가지
+  pin·push-off·스크롤 복귀, 숨긴 영역 pointer hit-test 제외, focus 노출, 접기/펼치기,
+  높이 resize, 연속 wheel, native drag로 중첩 세션 순서 변경/복귀를 검사했다.
+  clip을 강제로 끈 negative control에서 기존 겹침 경계 위반을 감지했다.
+- 실제 실행 중 Electron에서도 자연스러운 스크롤로 butler→다음 프로젝트 구간을
+  확인했다. 배경 투명도를 유지하고 제목 뒤 텍스트 겹침이 사라졌다. renderer가
+  Vite를 통해 변경을 반영했으며 모델/서비스 코드와 사용자 이력은 변경하지 않았다.
+- typecheck, focused ESLint, lint:design, lint:css, UI build 통과. DS 두 block의
+  5 viewport 렌더 10개 생성. module audit은 기존 두 index.ts의 export-star만 지적;
+  새 hook은 SidebarShell 내부 전용이다. 실제 UI 증거는 `.tmp/sidebar-r5/clipped-*.png`.
+- app-client-design: 37 pass / 8 fail. 실패는 이전 chrome 소스 문자열·Electron CWD·
+  activityLabel·컴포넌트 구조/도메인 CSS 금지·toolDetailButton·NavSection Typo·문서
+  renderer 문자열 기대이며 이번 변경에서 해당 코드는 바꾸지 않았다. 전체 테스트
+  green으로 보고하지 않는다. 물리 iOS Safari/Windows, compositor의 모든 프레임에
+  대한 무결점 보장은 검증 범위 밖이다.
+- 완성도 리뷰: 실제 SpaceSidebar→DS shell→그룹→native scroll 경로에서 승인된
+  투명도/가림/단일 스크롤을 확인했다. source/runtime/데이터 정책 확장은 없다.
+- 반영: `ac898e16`을 main으로 fast-forward 병합하고 origin/main push 완료.
+  운영 gateway HTML에서 새 `index-CDr7aRVb.js`/`index-DV0BAZBQ.css` 제공 및 health
+  정상 확인. Electron은 기존 독립 실행 renderer에 Vite로 반영됐다. UI-only 수정이므로
+  에이전트 서비스나 진행 중인 작업을 재시작/중단하지 않았다.
+- DS render 명령은 완료됐지만 CollapsibleNavGroup fixture 캡처는 단독 재실행에서도
+  빈 배경으로 나왔다. 이 캡처를 시각적 통과 증거로 계산하지 않는다. 실제 제품의
+  중첩 그룹 DOM/스크린샷과 Electron 스크롤 검증을 이 수정의 수락 증거로 사용한다.
+
+## r4 추가 보정 검증
+
+- 고유 general 채널은 archive/PATCH/DELETE/permanent-delete 모두 409로 거절한다. 권한 종료 부수효과 이전에 같은 정책을 검사한다. 일반이라는 제목의 다른 대화는 보관 가능하다.
+- 재시작 시 보관된 general만 복구한다. 기존 메시지와 생성 시각, 대화 식별자 보존을 테스트했다.
+- 모바일 액션 세로 배치, 즐겨찾기 제목 아래 8px, 빈 설명의 아이콘 시작점 정렬, 단일 전체 스크롤, 탐색 헤더 sticky, 기존 fade를 적용했다. DS SidebarShell 슬롯과 CollapsibleNavGroup offset을 확장했다.
+- 집중 검사 16 tests / 263 assertions, 일반 대화 보관 중 transport 검사 1 test 통과. typecheck, lint, UI build 및 DS 5개 viewport render 통과. 기존 app-client-design 실패 7건은 그대로이며 전체 저장소 green을 의미하지 않는다.
+- 실제 제품 DOM에서 Chromium 320/390/430px 및 1440px의 배치와 스크롤 좌표를 검사했다. 최신 탭에서도 고정 동작을 확인했다. 트리 그룹 sticky top은 탐색 헤더 118px + fade 14px = 132px로 반영됐다.
+- /tmp/butler-r4-mobile-top.png, /tmp/butler-r4-mobile-sticky.png, /tmp/butler-r4-desktop-top.png, /tmp/butler-r4-desktop-sticky.png를 직접 확인했다. 격리 서버의 샘플 대화로 UI를 검사했으며 실제 모델 또는 물리 iOS Safari 검증으로 주장하지 않는다.
+- 완성도 리뷰: 여섯 요청은 동일 제품 경로에 반영됐다. 수동 스크롤 전환·별도 스크롤 컨테이너·모델 실행 변경은 없다. 운영 반영은 아래 추가 기록으로 확인한다.
+- 운영: 80d4470a를 main에 fast-forward 병합·origin/main 푸시 후 UI build와 운영 재시작을 마쳤다. 6개 서비스 online, app health 성공. general은 archived=1에서 0으로 복구됐으며 생성 시각과 메시지 174개는 유지됐다. Electron 드라이버 PID 29588은 PPID 1로 재실행했다.
+
+기준: UI-SIDEBAR-INFORMATION-ARCHITECTURE r3 및 2026-09-07 메시지 하단 아이콘 배치 추가 요청.
+구현/리뷰는 직접 수행했다. 서브에이전트는 사용하지 않았다.
+
+## 승인된 제품 경로
+
+| 범위 | 구현과 관찰 결과 |
+| --- | --- |
+| 혼합 트리·그룹 | 기존 App SQLite/navigation 경로 확장. 그룹 생성·세션 드롭 그룹화·이동·reload 후 동일 ID와 배치 보존 확인 |
+| 탐색·메뉴 | 전체/최신/진행중, 고정 즐겨찾기/일반/설정, 위치·시간·상태 슬롯, native sticky. 모바일 long-press 메뉴와 숨겨진 more 확인 |
+| 소속 이동 | 실제 Electron에서 일반→프로젝트→일반 이동 후 모델의 pwd가 목적지 프로젝트/Butler Data로 변경. 이전 합의와 메시지 유지 |
+| 인라인 참조 | 실제 native mouse drag로 문장 중간 삽입. Electron 전송 parts가 DB에 저장되고 링크 재표시. 실제 모델이 read_conversation_session으로 원문 표식을 조회 |
+| 주제 분리 | 일반의 실제 답변 버튼에서 주제/프로젝트 생성, seed 표시, 원문 복귀, 새 대화에서 합의 기억 확인 |
+| 스마트 그룹 | 실제 configured openai/gpt-6-astra가 두 보험 대화를 한 단어 보험 그룹으로 분류. 별도 3초 deadline/max-output cap 없음 |
+| 하단 액션 | 복사→새 주제대화→새 프로젝트→작업시간→메시지 시간. 아이콘/툴팁, 별도 텍스트 줄 없음 |
+
+## 실제 검증에서 발견해 닫은 누락
+
+- Electron api/preload가 send/queue/update-queue에서 content_parts를 버리던 연결을 수정했다.
+- native drag 시작 시 composer가 접히던 동작을 수정했다.
+- start_topic_conversation의 reviewed persistent effect adapter를 연결했다. 재확인은 같은 App 예약 키를 사용한다.
+- 대화 검색의 external/canonical ID와 App ID를 기존 binding으로 해석한다. canonical 답변은 같은 대화의 공개 TurnOutcome와 App turn_id로 연결한다. 무관한 최신 답변으로 대체하지 않는다.
+- 이동용 신규 Git 작업 폴더의 소유 기록을 생성 전에 저장하고, 중단 복구의 안전 정리가 대화 실행 gate를 점유하지 않도록 했다.
+
+## 검증
+
+- 집중 서버/저장/참조/이동/분류/bridge/effect 검사: 90 tests, 366 assertions 통과 (최종 코드 재실행).
+- 하단 메타데이터/아이콘 검사: 4 tests, 24 assertions 통과.
+- 행별 projection/인스턴스 marker 검사: 2 tests, 11 assertions 통과.
+- typecheck, lint(DS/CSS 포함), UI production build, git diff --check 통과.
+- Chromium 320/390/430px 및 데스크톱, 라이트/다크 화면 확인. 실제 iOS Safari 실기기 검증은 수행하지 않았다.
+- UI 테스트는 파일별 독립 실행했다. 전체를 한 프로세스로 합치면 기존 module mock 오염으로 결과가 왜곡된다.
+- 기존 main에서도 재현되는 UI behavior 3건과 app-client-design source assertion 7건은 별도 기존 실패로 기록했다. 기존 BTCC fast-suite fixture의 종료 불능/Project Work parity 실패도 main에서 확인했으며 이 기능을 위해 BTCC 계약을 바꾸지 않았다. 따라서 전체 저장소 테스트가 모두 초록이라는 주장은 하지 않는다.
+
+## 경로와 한계
+
+실제 모델 검사에는 기존 설정 자격으로 실행한 격리 Electron 제품을 사용했다. 가짜 모델/수동 결과 주입이 아니다.
+스마트 분류·주제/프로젝트·이동·참조 1차 실행: sidebar-organization-live-1788783498737-47d8cbea.
+자연어 도구 재검증: sidebar-organization-live-1788786919108-d3ffaa97. 실제 모델의 start_topic_conversation 호출이 성공했고, 새 대화 ‘별빛노트 다음 협의’와 원본 합의/출처가 저장됐다. effect applied receipt와 started=false를 확인했다.
+실행 자료는 운영 데이터와 분리된 임시 run 디렉터리에 보존했다. 종료된 이전 run의 재생성 가능한 설치 패키지만 공간 확보를 위해 삭제했다.
+
+## main·운영 반영 완료
+
+- 구현 커밋 `e2fbf03b32dbc6076574009fc83282b9ca79557b`를 main에 통합하고 origin/main으로 push했다. 커밋 훅의 lint/typecheck를 우회하지 않았다.
+- 2026-09-07 22:22 KST 기존 native-supervisor 운영 서비스를 재시작했다. app-gateway, butler-main, watchdog, scheduler, sync-consumer, embed-server online 및 `/health` 정상 응답을 확인했다.
+- Electron 개발 앱도 main checkout으로 재시작했다. 새 드라이버 PID 69659는 PPID 1이며 Electron PID 70025로 실행됐다. Codex 셸의 자식 수명에 종속되지 않는다.
+- 운영 Electron의 실제 접근성 트리와 화면에서 혼합 트리, 즐겨찾기, 전체보기/최신/진행중 탭, 하단 설정을 확인했다. 기존 general 채널은 archived=1이므로 사용자 보관 상태를 임의 변경하지 않았다.
+- 격리 E2E에서 새 주제 생성 후 원본 답변 복귀도 마지막으로 재확인했다. `/tmp/butler26-final-footer-success.png`, `/tmp/butler26-final-branch-success.png`에 화면 증거를 보존했다.
+- 계획 P1–P8과 최신 하단 아이콘 요청의 구현·검증·main 반영·운영 재시작을 완료했다. 남은 플랫폼 확인은 위에 명시한 물리 iOS Safari이며, #164는 변경하지 않았다.
+- 재시작 후 지연 점검에서 watchdog/scheduler 종료를 추가로 발견했다. watchdog 로그는 격리 E2E watchdog PID를 전역 singleton으로 간주해 스스로 종료했음을 보여준다. scheduler 종료 원인은 이 로그로 확정할 수 없다. 테스트 환경을 먼저 종료하고 기존 supervisor API로 두 서비스를 다시 시작했다(PID 99208/99206). 이 운영상 복구와 별개로 watchdog의 데이터 루트 간 singleton 격리 결함은 #26 기능 수정에 포함하지 않았다.

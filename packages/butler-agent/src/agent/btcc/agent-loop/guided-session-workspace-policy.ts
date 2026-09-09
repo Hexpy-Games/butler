@@ -4,6 +4,8 @@ import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "run_command",
+  "write_file",
+  "edit_file",
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",
@@ -11,6 +13,7 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "web_search",
   "web_read",
   "read_file",
+  "read_project_source",
   "grep_files",
   "list_files",
   "read_tool_evidence_artifact",
@@ -60,7 +63,12 @@ export function applyGuidedWorkspaceAuthorization(input: {
     if (hasProject) input.names.add("bind_session_git_worktree");
     return;
   }
-  if (input.policy.accessMode === "ask_first") input.names.add("run_command");
+  if (input.policy.accessMode === "ask_first") {
+    input.names.add("run_command");
+    input.names.add("write_file");
+    input.names.add("edit_file");
+    input.names.add("read_tool_output_artifact");
+  }
   for (const name of input.names) {
     if (
       !NON_FULL_ACCESS_TOOL_NAMES.has(name) ||
@@ -73,9 +81,12 @@ export function guidedWorkspaceVisibleToolNames(
   policy: WorkspacePolicy,
 ): string[] {
   if (policy.accessMode === "read_only") return [];
-  if (policy.accessMode === "ask_first") return ["run_command"];
+  if (policy.accessMode === "ask_first") {
+    return ["run_command", "read_tool_output_artifact", "write_file", "edit_file"];
+  }
   return [
     "run_command",
+    "read_tool_output_artifact",
     "write_file",
     "edit_file",
     ...(policy.projectId ? ["bind_session_git_worktree"] : []),

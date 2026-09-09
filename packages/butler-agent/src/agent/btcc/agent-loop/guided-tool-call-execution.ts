@@ -19,9 +19,7 @@ import {
   isWorkRelationshipTool,
 } from "../work/index.ts";
 import {
-  backfillTurnToolResults,
   publishWorkProgress,
-  safeAttachToolResult,
   safeBindOpenWork,
 } from "./guided-work-runtime.ts";
 import {
@@ -50,6 +48,10 @@ import {
   priorTurnResultCallIds,
   replayRecordedGuidedToolCall,
 } from "./guided-recorded-tool-replay.ts";
+import { changedFileDetailsFromToolResult } from "./guided-changed-files.ts";
+import { withoutChangedFileDetails } from "./tool-result-message.ts";
+import { pendingAuthority } from "./loop-continuation.ts";
+import type { BtccAgentLoopInput } from "./contracts.ts";
 
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -73,6 +75,7 @@ export function createGuidedToolCallExecutor(
 ): {
   executeTool: ButlerToolExecutor;
   usedTools: string[];
+  recordUnexecuted: NonNullable<BtccAgentLoopInput["onUnexecutedToolCall"]>;
   journalCallIdForProviderCall(providerCallId: string): string | undefined;
 } {
   let callIndex = 0;
@@ -144,10 +147,8 @@ export function createGuidedToolCallExecutor(
       effectiveToolName,
       signal: toolSignal,
       runtime: {
-        durableWork: input.durableWork,
         toolJournal: input.toolJournal,
       },
-      scope: input.workScope,
       executeFresh: (executionCall) =>
         executeFreshTool(input, executionCall, callId, toolSignal),
     });
@@ -163,6 +164,7 @@ export function createGuidedToolCallExecutor(
       return invalidSummary;
     }
     const activity = await activityProjection.observeTool({
+      callId,
       name: effectiveToolName,
       effectiveToolName,
       args: presentationArgs,
@@ -226,15 +228,22 @@ export function createGuidedToolCallExecutor(
           : undefined,
       );
       rememberDescribedTools(call.name, result, input.describedToolIds);
-      input.toolJournal.finish({ callId, status: "completed", result });
+      // Suspension commits the wait and this call together. No result exists yet.
+      if (pendingAuthority(result)) return result;
+      const changedFiles = changedFileDetailsFromToolResult(result, effectiveToolName);
+      const replayableResult = withoutChangedFileDetails(result, effectiveToolName);
+      input.toolJournal.finish({
+        callId,
+        status: "completed",
+        result: replayableResult,
+        ...(changedFiles.length ? { changedFiles } : {}),
+      });
       if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
         await safeBindOpenWork(input.durableWork, input.workScope);
-        await backfillTurnToolResults(input, input.workScope);
-      } else if (!isDurableWorkTool(call.name)) {
-        await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
-        await activityProjection.publishAccepted(activity);
+        await activityProjection.publishAccepted(activity,
+          await input.durableWork.boundWorkForTurn(input.turn.turnId));
         await publishWorkProgress(
           input.progress,
           input.turn.turnId,
@@ -250,7 +259,7 @@ export function createGuidedToolCallExecutor(
         toolName: effectiveToolName,
         args: presentationArgs,
         status: toolResultSucceeded(result) ? "completed" : "failed",
-        resultJson: safeJson(result),
+        resultJson: safeJson(replayableResult),
       });
       return result;
     } catch (error) {
@@ -269,6 +278,20 @@ export function createGuidedToolCallExecutor(
   return {
     executeTool,
     usedTools,
+    async recordUnexecuted(call, result) {
+      const { callId } = guidedToolOccurrence({ turnId: input.turn.turnId, callIndex: callIndex++,
+        providerCallId: call.id, name: call.name, args: call.arguments });
+      const normalized = normalizeGuidedToolCall({ toolName: effectiveToolNameForCall(call.name, call.arguments), args: call.arguments });
+      input.toolJournal.start({ turnId: input.turn.turnId, callId, toolName: normalized.name,
+        rawArguments: call.rawArguments, arguments: normalized.args });
+      input.toolJournal.finish({ callId, status: "cancelled", result });
+      journalCallIds.set(call.id, callId);
+      const activity = await activityProjection.observeTool({ callId, name: normalized.name,
+        effectiveToolName: normalized.name, args: normalized.args });
+      await publishOperation(input.progress, { turnId: input.turn.turnId,
+        activityId: activity.activityId, requestId: callId, toolName: normalized.name,
+        args: normalized.args, status: "cancelled", resultJson: safeJson(result) });
+    },
     journalCallIdForProviderCall: (providerCallId) => journalCallIds.get(providerCallId),
   };
 }
@@ -282,7 +305,6 @@ async function executeFreshTool(
 ): Promise<unknown> {
   return executeGuidedFreshTool({
     durableWork: input.durableWork,
-    toolJournal: input.toolJournal,
     workScope: input.workScope,
     call,
     callId,

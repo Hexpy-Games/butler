@@ -366,7 +366,7 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).toContain(".scrollFrame");
   expect(sidebarCss).toContain("--sidebar-scrollbar-offset: 10px");
   expect(sidebarCss).toContain("--sidebar-scroll-fade-size: 14px");
-  expect(sidebarCss).toContain("--sidebar-scroll-edge-padding: 16px");
+  expect(sidebarCss).toContain("--sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px)");
   expect(sidebarCss).toContain(
     "width: calc(100% + var(--sidebar-scrollbar-offset))",
   );
@@ -389,8 +389,8 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).toContain("var(--sidebar-scrollbar-offset) 100%");
   expect(sidebarCss).not.toContain("margin-right: -");
   expect(
-    read("packages/butler-app/client/ui/src/components/layout/Sidebar.tsx"),
-  ).toContain("header={");
+    read("packages/butler-app/client/ui/src/components/space/SpaceSidebar.tsx"),
+  ).toContain("scrollHeader={");
   expect(
     read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.tsx",
@@ -456,7 +456,7 @@ test("dedicated client keeps complete work history and session management contro
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Chrome.tsx"),
   ).toContain(
-    "leftOpen ? <PanelLeftOpen size={16} /> : <PanelLeft size={16} />",
+    "if (leftOpen) return null;",
   );
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Titlebar.tsx"),
@@ -712,6 +712,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("retryTurnWithCurrentControls:");
   expect(preload).toContain("/retry-current");
   expect(preload).toContain("cancelTurn:");
+  expect(preload).toContain("cancelSteward:");
+  expect(preload).toContain("/steward-relations/${encodeURIComponent(relationId)}/cancel");
   expect(preload).toContain("getOperationOutput:");
   expect(preload).toContain("/operations/${encodeURIComponent(requestId)}`");
   expect(preload).toContain("getSettings:");
@@ -738,6 +740,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(renderer).toContain("new EventSource(liveEventsUrl");
   expect(renderer).toContain("function bridgeRequest");
   expect(renderer).toContain('callBridge<T>(bridge, "getOperationOutput"');
+  expect(renderer).toContain('callBridge<T>(bridge, "cancelSteward"');
   expect(renderer).toContain("function canSelectProjectFolder");
   expect(renderer).toContain("project_folder_picker_unavailable");
 });
@@ -1380,7 +1383,8 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(conversation).not.toContain("large={showEmptyState}");
   expect(conversation).not.toContain("large={!hasMessages}");
   expect(composerTextArea).toContain("COMPOSER_MAX_AUTO_ROWS = 8");
-  expect(composerTextArea).toContain("resizeComposerTextArea");
+  expect(composerTextArea).toContain("<LexicalComposer");
+  expect(composerTextArea).toContain("<ContentEditable");
   expect(composerTextArea).toContain("data-max-auto-rows");
   expect(composerCardStyles).toContain("--composer-inner-padding-block");
   expect(composerCardStyles).toContain("--composer-inner-padding-inline");
@@ -1598,7 +1602,10 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("function MessageAttachments");
   expect(renderer).toContain("function MessageArtifacts");
   expect(renderer).toContain('data-test-class="message-artifact-list"');
-  expect(renderer).toContain("<ArtifactList");
+  expect(renderer).toContain("function MessageChangedFiles");
+  expect(renderer).toContain('data-test-class="message-changed-file-list"');
+  expect(renderer).toContain("message.changed_files");
+  expect(renderer).toContain("<MessageChangedFileRow");
   expect(renderer).toContain('data-test-class="artifact-viewer"');
   expect(renderer).toContain("message.artifacts");
   expect(renderer).toContain("openArtifact(artifact.id, artifact)");
@@ -1684,6 +1691,9 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
     "packages/butler-app/client/ui/src/components/conversation/MessageContent.tsx",
   );
   expect(messageContent.indexOf("<MessageArtifacts")).toBeLessThan(
+    messageContent.indexOf("<MessageChangedFiles"),
+  );
+  expect(messageContent.indexOf("<MessageChangedFiles")).toBeLessThan(
     messageContent.indexOf("<AssistantResponseFooter"),
   );
 });
@@ -2115,8 +2125,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("aria-describedby={descriptionId}");
   expect(renderer).toContain("settingsDescriptions.contextLimitClamped");
   expect(renderer).toContain("<SettingsShell");
-  expect(renderer).toContain("settingsCopy.panels.workerModelRules");
-  expect(renderer).toContain("worker_model_rules");
+  expect(renderer).toContain("settingsCopy.panels.workerProfiles");
+  expect(renderer).toContain("draft.worker_profiles");
   expect(renderer).toContain("appCopy.settings.localModels");
   expect(renderer).toContain("/model-catalog/local/discover");
   expect(renderer).toContain("api<LocalModelRegistrationResult>(");
@@ -2133,19 +2143,30 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain("<LocalModelApiSection");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/ModelsSettings.tsx",
     ),
-  ).toContain('data-test-class="worker-model-rule"');
+  ).toContain("<WorkerProfileEditor");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
     ),
-  ).not.toContain("<Grid");
+  ).toContain('from "@/butler-ds"');
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/WorkerModelRule.tsx",
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
     ),
-  ).not.toContain("actions=");
+  ).toContain('data-test-class="worker-profile"');
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/components/settings/WorkerProfileEditor.tsx",
+    ),
+  ).toContain("disabled={saving || isDefault}");
+  expect(
+    listUiSourceFiles(
+      "packages/butler-app/client/ui/src/components/settings",
+    ).some((filePath) => filePath.includes("WorkerModelRule")),
+  ).toBe(false);
+  expect(renderer).not.toContain("panels.workerModelRules");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/LocalModelRow.tsx",
@@ -3064,7 +3085,7 @@ test("conversation progress and composer workers use design-system blocks", () =
     normalizedComposerCardStyles.match(
       /padding: var\(--composer-inner-padding-block\) var\(--composer-inner-padding-inline\);/g,
     )?.length,
-  ).toBe(1);
+  ).toBe(2);
   expect(normalizedComposerCardStyles).toContain(
     ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); min-width: 0; border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
   );
@@ -3342,7 +3363,7 @@ describe("app-client design system foundation", () => {
     expect(componentMap).toContain("## Agent Quality Gates");
     expect(componentMap).toContain("NavRow` layout has two regions");
     expect(componentMap).toContain(
-      "Children in a collapsible navigation group",
+      "Children default to the same row size and alignment",
     );
     expect(componentMap).toContain("Do not introduce active outlines");
     expect(componentMap).toContain("Use `ButtonContainer` whenever");
@@ -3796,7 +3817,10 @@ describe("app-client design system foundation", () => {
     expect(dialogStyles).toContain("scrollbar-width: thin");
     expect(dialogStyles).toContain("var(--titlebar-safe-area-top)");
     expect(dialogStyles).toContain(".content::-webkit-scrollbar-thumb");
-    expect(commandPanelStyles).toContain("var(--titlebar-safe-area-top)");
+    expect(read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/CommandPanel/CommandPanel.tsx",
+    )).toContain("<DialogContent");
+    expect(commandPanelStyles).not.toContain("position: fixed");
     expect(conversationShellStyles).toContain("scrollbar-width: thin");
     expect(conversationShellStyles).toContain(
       ".scroll::-webkit-scrollbar-thumb",
@@ -4059,7 +4083,7 @@ describe("app-client design system foundation", () => {
     );
     expect(indexContent).not.toContain('from "./appComponentStyles"');
     expect(componentSources).not.toContain("@/styles/components");
-    expect(componentSources).not.toMatch(/\b[a-zA-Z]+Styles\b/u);
+    expect(componentSources).not.toMatch(/from ["'][^"']*appComponentStyles["']/u);
     expect(legacyProductStyles).toEqual([]);
   });
 
@@ -4346,7 +4370,7 @@ describe("app-client design system foundation", () => {
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ManagementPage/ManagementPage.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ManagementPage/ManagementPage.module.css",
-        "className={cn(styles.page, className)}",
+        "styles.page",
         "color: var(--text-primary)",
       ],
       [
@@ -4368,7 +4392,7 @@ describe("app-client design system foundation", () => {
         "color: var(--text-primary)",
       ],
       [
-        "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.tsx",
+        "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSectionHeading.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.module.css",
         "className={styles.title}",
         "color: var(--text-tertiary)",
@@ -4873,7 +4897,9 @@ test("message virtualization isolates virtual row updates from message content",
     "packages/butler-app/client/ui/src/libs/design-system/blocks/ConversationShell/ConversationShell.module.css",
   );
 
-  expect(messageList).not.toContain("ResizeObserver");
+  // The branch seed above the virtual rows has variable height. Only that
+  // header is measured here; message rows remain owned by the virtualizer.
+  expect(messageList.match(/new ResizeObserver/g)?.length).toBe(1);
   expect(messageList).not.toContain("useAnimationFrameWithResizeObserver");
   expect(messageList).not.toContain("contentVersion");
   expect(messageList).toContain("useMessageVirtualizer");

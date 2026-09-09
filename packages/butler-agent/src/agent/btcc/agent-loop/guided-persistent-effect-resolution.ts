@@ -5,7 +5,12 @@ import type {
   DurableWorkView,
   WorkTurnScope,
 } from "../work/index.ts";
-import { acceptedPlanEffectId } from "../effects/index.ts";
+import {
+  acceptedPlanEffectId,
+  resolveReviewedEffectActionKey,
+  stableEffectJson,
+  type EffectAdapter,
+} from "../effects/index.ts";
 import type { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { ensureActiveProjectLedger } from
@@ -26,6 +31,7 @@ import {
 } from "./guided-project-ledger-effect.ts";
 import { prepareGuidedCommandEffect } from "./guided-command-effect.ts";
 import { prepareGuidedMcpToolEffect } from "./guided-mcp-tool-effect.ts";
+import { prepareGuidedConversationBranchEffect } from "./guided-conversation-branch-effect.ts";
 import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
@@ -50,6 +56,7 @@ export function createGuidedPersistentEffectResolver(input: {
   workspacePath: string;
   workspaceReference?: WorkspaceReference;
   sessionId?: string;
+  appSessionId?: string;
   sessionBindingStore?: SessionWorkspaceBindingStore;
   projectId?: string;
   trackingMode: ButlerExecutionPolicy["trackingMode"];
@@ -70,6 +77,10 @@ export function createGuidedPersistentEffectResolver(input: {
     return input.workspacePath;
   };
   return async (call, executeRegistered, effectContext) => {
+    if (call.name === "start_topic_conversation") {
+      return prepareGuidedConversationBranchEffect({ args: call.args,
+        butlerData: input.butlerData, appSessionId: input.appSessionId });
+    }
     if (call.name === "bind_session_git_worktree") {
       if (!input.sessionId || !input.sessionBindingStore || !input.workspaceReference) {
         return {
@@ -221,45 +232,42 @@ export function createGuidedPersistentEffectResolver(input: {
 }
 
 export function sameGuidedEffectJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return stableEffectJson(left) === stableEffectJson(right);
 }
 
 export function acceptedGuidedPlanActionKey(
   work: DurableWorkView,
-  capability: string,
+  adapter: EffectAdapter,
   target: string,
 ):
   | { ok: true; value: string }
   | { ok: false; code: string; message: string } {
-  const actions = work.currentPlan?.actions.filter((action) =>
-    action.effect?.capability === capability && action.effect.target === target,
-  ) ?? [];
-  if (actions.length === 0) {
+  try {
+    const result = resolveReviewedEffectActionKey({
+      actions: work.currentPlan?.actions ?? [],
+      adapter,
+      normalizedTarget: adapter.normalizeTarget(target),
+    });
+    if (result.ok) return result;
     return {
       ok: false,
-      code: "effect_action_not_found",
-      message: "No accepted Plan action matches this effect capability and target.",
+      code: result.error.code,
+      message: result.error.message,
     };
-  }
-  if (actions.length !== 1) {
+  } catch (error) {
     return {
       ok: false,
-      code: "effect_action_ambiguous",
-      message: "More than one accepted Plan action matches this effect.",
+      code: "effect_request_invalid",
+      message: error instanceof Error ? error.message : "The effect request is invalid.",
     };
   }
-  return { ok: true, value: actions[0]!.actionKey };
 }
 
 export async function loadGuidedEffectWork(
   service: DurableWorkService,
   scope: WorkTurnScope,
 ): Promise<DurableWorkView | null> {
-  try {
-    return await service.boundWorkForTurn(scope.turnId);
-  } catch {
-    return null;
-  }
+  return await service.boundWorkForTurn(scope.turnId);
 }
 
 export function unavailableGuidedEffect(toolName: string): Record<string, unknown> {
@@ -279,19 +287,18 @@ export function ordinaryGuidedEffectError(
     error: {
       code,
       message,
-      recoverable: true,
-      next_action: "Amend or review the current Plan, choose a safe typed tool, or report the concrete limitation.",
       ...details,
     },
   };
 }
 
-export function deferredGuidedAuthorityResult(): Record<string, unknown> {
+export function deferredGuidedAuthorityResult(requestRef: string): Record<string, unknown> {
   return {
     ok: true,
     authority_pending: true,
+    request_ref: requestRef,
     status: "awaiting_allow",
-    message: "This reviewed command is waiting for Allow before dispatch.",
+    message: "This reviewed operation is waiting for Allow before dispatch.",
   };
 }
 

@@ -1,14 +1,18 @@
+import { appCopy } from "@/app/copy.ts";
 export function phaseLabel(phase?: string): string {
-  if (!phase) return "작업 중";
-  if (phase.startsWith("conception")) return "구상";
-  if (phase === "contract_review") return "구상 검토";
-  if (phase === "planning") return "계획";
-  if (phase === "planning_review") return "계획 검토";
-  if (phase === "task_execution" || phase === "execution") return "실행";
-  if (phase === "task_review" || phase === "review") return "작업 리뷰";
-  if (phase === "validation") return "완료 검토";
-  if (phase.startsWith("feedback_")) return "피드백 반영";
-  if (phase === "consolidation") return "통합 점검";
-  if (phase === "reporting") return "보고";
-  return "작업 중";
+  if (!phase) return appCopy.interfaceStatus.working;
+  if (phase === "delivered" || phase === "completed") return appCopy.interfaceStatus.completed;
+  if (phase === "failed" || phase === "runtime_fault") return appCopy.interfaceStatus.failed;
+  if (phase === "cancelled") return appCopy.interfaceStatus.stopped;
+  if (phase.startsWith("conception")) return appCopy.interfaceStatus.conception;
+  if (phase === "contract_review") return appCopy.interfaceStatus.conceptionReview;
+  if (phase === "planning") return appCopy.interfaceStatus.planning;
+  if (phase === "planning_review") return appCopy.interfaceStatus.planningReview;
+  if (phase === "task_execution" || phase === "execution") return appCopy.interfaceStatus.execution;
+  if (phase === "task_review" || phase === "review") return appCopy.interfaceStatus.taskReview;
+  if (phase === "validation") return appCopy.interfaceStatus.validation;
+  if (phase.startsWith("feedback_")) return appCopy.interfaceStatus.feedback;
+  if (phase === "consolidation") return appCopy.interfaceStatus.consolidation;
+  if (phase === "reporting") return appCopy.interfaceStatus.reporting;
+  return appCopy.interfaceStatus.working;
 }

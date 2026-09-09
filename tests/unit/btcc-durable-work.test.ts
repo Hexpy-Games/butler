@@ -18,10 +18,44 @@ import {
 } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
-import { backfillTurnToolResults } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { coordinateSharedSqliteWriter } from
   "../../packages/butler-agent/src/foundation/sqlite-writer-coordination.ts";
+import { SqlitePrincipalAuthorityRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/authority-repository.ts";
+import { createPrincipalAuthority } from
+  "../../packages/butler-agent/src/agent/btcc/authority/index.ts";
+import { renderDurableWorkContext } from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-context.ts";
+import { SqliteGuidedOperationResultReader } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/guided-operation-result-reader.ts";
+import { createGuidedOperationResultRuntime } from "../../packages/butler-agent/src/agent/btcc/operation-result-replay/guided-runtime.ts";
+
+test("current Work control does not reinsert history; a later Turn can rediscover its exact prior results", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn("prior", "session", "Finish the parser");
+    const work = await fixture.service.startWork({ ...scope, mutationCallId: "start", objective: "Finish the parser" });
+    fixture.tool("prior", "source", "read_file", { ok: true, text: "ORIGINAL-SOURCE ".repeat(20000) });
+    await fixture.service.attachToolResult({ ...scope, mutationCallId: "attach", toolCallId: "source" });
+    const context = await fixture.service.loadContext(scope);
+    const original = JSON.stringify(context);
+    const control = renderDurableWorkContext(context, { includeResultHistory: false })!;
+    expect(control).toContain("Finish the parser");
+    expect(control).toContain("list_operation_results");
+    expect(control).not.toContain("ORIGINAL-SOURCE");
+    expect(Buffer.byteLength(control)).toBeLessThan(5000);
+    expect(JSON.stringify(context)).toBe(original);
+    const next = fixture.turn("next", "session", "Continue the parser");
+    await fixture.service.continueWork({ ...next, mutationCallId: "continue", workId: work.workId });
+    fixture.tool("unrelated", "private", "read_file", { text: "UNRELATED" });
+    const runtime = createGuidedOperationResultRuntime({ mode: "disabled", exactReadCapability: true,
+      turnId: next.turnId, turnRevision: 1, sessionId: next.sessionId, workId: work.workId,
+      journal: new SqliteGuidedToolJournal(fixture.db), exactReader: new SqliteGuidedOperationResultReader(fixture.db) });
+    const page = runtime.read!({ __list: true, cursor: 0, through: null }) as any;
+    expect(page.entries).toHaveLength(1);
+    const result = runtime.read!({ ...page.entries[0].exact_read, source: "result" }) as any;
+    expect(Buffer.from(result.data, "base64").toString()).toContain("ORIGINAL-SOURCE");
+    expect(Buffer.from(result.data, "base64").toString()).not.toContain("UNRELATED");
+  } finally { fixture.close(); }
+});
 
 test("first Plan opens scoped Work without making Direct or Assisted Turns pay for it", async () => {
   const fixture = durableWorkFixture();
@@ -57,6 +91,50 @@ test("first Plan opens scoped Work without making Direct or Assisted Turns pay f
   } finally {
     fixture.close();
   }
+});
+
+test("resumed execution can revise ownership without a result review or losing completed work", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn("owner-revision", "owner-session", "Finish the report through a Steward");
+    const input = { ...planInput(scope, "direct-plan"), executionMode: "direct" as const };
+    const opened = await fixture.service.replacePlan(input);
+    await fixture.service.recordReview({
+      ...scope, mutationCallId: "accept-direct", subject: "plan", verdict: "accept",
+      summary: "The initial file change is small.", corrections: [],
+    });
+    fixture.tool(scope.turnId, "written-report", "write_file", { ok: true });
+    await fixture.service.attachToolResult({ ...scope, mutationCallId: "attach-report", toolCallId: "written-report" });
+    const before = await fixture.service.recordCheckpoint({
+      ...scope, mutationCallId: "written-checkpoint",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+    });
+    expect(before.currentStage).toBe("execution");
+    const revised = await fixture.service.replacePlan({
+      ...input, mutationCallId: "steward-plan", executionMode: "steward",
+      actions: [...input.actions, {
+        actionKey: "compare", description: "Compare the supplied sources", dependencyKeys: ["write-report"],
+      }],
+    });
+    expect(revised.workId).toBe(opened.workId);
+    expect(revised.currentPlan).toMatchObject({ revision: 2, executionMode: "steward" });
+    expect(revised.currentStage).toBe("planning");
+    expect(revised.actionProgress).toEqual([
+      { actionKey: "write-report", status: "done" },
+      { actionKey: "compare", status: "pending" },
+    ]);
+    expect(revised.resultRefs).toEqual(before.resultRefs);
+    expect(revised.latestResultReview).toBeUndefined();
+
+    await fixture.service.recordDisposition({
+      ...scope, mutationCallId: "completed", workId: opened.workId,
+      disposition: "completed", summary: "All requested work is complete.", remainingActions: [],
+      actionUpdates: [{ actionKey: "compare", status: "done" }],
+    });
+    await expect(fixture.service.replacePlan({
+      ...input, mutationCallId: "do-not-reopen",
+    })).rejects.toThrow("terminal Work");
+  } finally { fixture.close(); }
 });
 
 test("invalid semantic Reviews leave the current stage and action progress unchanged", async () => {
@@ -406,99 +484,6 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
   }
 });
 
-test("a committed Turn tool result backfills once after storage restart", async () => {
-  const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-backfill-"));
-  const dbPath = join(root, "butler.sqlite");
-  const scope = {
-    turnId: "turn-backfill",
-    sessionId: "session-backfill",
-  };
-  let db: Database | null = new Database(dbPath);
-  try {
-    db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const firstService = createDurableWorkService(new SqliteGuidedWorkStore(db));
-    const firstJournal = new SqliteGuidedToolJournal(db);
-    const origin = insertGuidedTurn(
-      db,
-      "turn-backfill-origin",
-      scope.sessionId,
-      "파일을 읽고 결과를 정리해 주세요.",
-    );
-    const opened = await firstService.replacePlan(
-      planInput(origin, "backfill-plan"),
-    );
-    insertGuidedTurn(
-      db,
-      scope.turnId,
-      scope.sessionId,
-      "열린 작업을 이어서 파일을 확인해 주세요.",
-    );
-    expect((await firstService.loadContext(scope))?.work.workId).toBe(opened.workId);
-    expect((await firstService.continueWork({
-      ...scope,
-      mutationCallId: "backfill-explicit-continue",
-      workId: opened.workId,
-    })).workId).toBe(opened.workId);
-    firstJournal.start({
-      turnId: scope.turnId,
-      callId: "backfill-read",
-      toolName: "read_file",
-      rawArguments: JSON.stringify({ path: "fact.txt" }),
-      arguments: { path: "fact.txt" },
-    });
-    firstJournal.finish({
-      callId: "backfill-read",
-      status: "completed",
-      result: { content: "observed before interruption" },
-    });
-    expect((await firstService.boundWorkForTurn(scope.turnId))?.resultRefs).toEqual([]);
-    db.close();
-    db = null;
-
-    db = new Database(dbPath);
-    db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumedService = createDurableWorkService(new SqliteGuidedWorkStore(db));
-    const resumedJournal = new SqliteGuidedToolJournal(db);
-    await backfillTurnToolResults({
-      durableWork: resumedService,
-      toolJournal: resumedJournal,
-    }, scope);
-    await backfillTurnToolResults({
-      durableWork: resumedService,
-      toolJournal: resumedJournal,
-    }, scope);
-
-    expect((await resumedService.boundWorkForTurn(scope.turnId))?.resultRefs)
-      .toEqual([expect.objectContaining({
-        toolCallId: "backfill-read",
-        toolName: "read_file",
-        status: "completed",
-      })]);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_work_results
-    `).get()?.count).toBe(1);
-    expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_guided_work_mutations
-      WHERE operation = 'attach_tool_result'
-    `).get()?.count).toBe(1);
-
-    const next = insertGuidedTurn(
-      db,
-      "turn-after-backfill",
-      scope.sessionId,
-      "직전 결과를 이어서 알려 주세요.",
-    );
-    expect((await resumedService.loadContext(next))?.resultFacts).toEqual([{
-      toolName: "read_file",
-      status: "completed",
-      resultJson: { content: "observed before interruption" },
-    }]);
-  } finally {
-    db?.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("continuation keeps every result ref but bounds prompt facts to the latest 50", async () => {
   const fixture = durableWorkFixture();
   try {
@@ -645,7 +630,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
       "session-disposition-restart",
       "재시작 후에도 닫아 주세요.",
     );
-    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const work = await first.replacePlan({
       ...planInput(scope, "disposition-restart-plan"),
       startNew: true,
@@ -663,7 +651,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
     db = null;
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const replay = await resumed.recordDisposition(input);
     expect(replay.workId).toBe(completed.workId);
     expect(replay.latestDisposition?.dispositionRevisionId)
@@ -1253,7 +1244,10 @@ test("Work disposition waits for a concurrent shared SQLite writer", async () =>
   const db = new Database(dbPath, { create: true });
   coordinateSharedSqliteWriter(db);
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  ));
   const scope = insertGuidedTurn(
     db,
     "turn-contention",
@@ -1502,7 +1496,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
       "session-disposition-restart",
       "재시작 후에도 닫아 주세요.",
     );
-    const first = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const first = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const work = await first.startWork({
       ...scope,
       mutationCallId: "disposition-restart-start",
@@ -1520,7 +1517,10 @@ test("disposition replay is idempotent across a SQLite restart", async () => {
     db = null;
     db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumed = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
     const replay = await resumed.recordDisposition(input);
     expect(replay.workId).toBe(completed.workId);
     expect(replay.latestDisposition?.dispositionRevisionId)
@@ -1958,6 +1958,112 @@ test("disposition evidence cannot cite an ordinary result from an earlier Turn",
   }
 });
 
+test("factual Work abandonment rolls back together with its exact-Work authority close", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const service = createDurableWorkService(new SqliteGuidedWorkStore(
+      db,
+      createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+    ));
+    const scope = insertGuidedTurn(
+      db,
+      "turn-abandon-authority-fault",
+      "session-abandon-authority-fault",
+      "작업을 중단하고 권한 요청도 닫아 주세요.",
+    );
+    const work = await service.replacePlan({
+      ...planInput(scope, "abandon-authority-plan"),
+      startNew: true,
+    });
+    const planRevisionId = db.query<
+      { current_plan_revision_id: string },
+      [string]
+    >("SELECT current_plan_revision_id FROM btcc_guided_works WHERE work_id = ?")
+      .get(work.workId)!.current_plan_revision_id;
+    db.query(`
+      INSERT INTO btcc_authority_requests (
+        request_id, request_ref, identity_sha256, owner_session_id,
+        source_session_id, source_turn_id, source_work_id, workspace_path,
+        plan_revision_id, action_key, authority_generation, capability,
+        normalized_target, normalized_input_json, model_ref, reasoning_effort,
+        category, reason, executable, command_count, decision,
+        schedule_client_message_id, schedule_input_text, outcome,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "request-abandon-authority-fault",
+      "authority-ref-abandon-fault",
+      `identity-${work.workId}`,
+      scope.sessionId,
+      scope.sessionId,
+      scope.turnId,
+      work.workId,
+      "workspace-command-abandoned",
+      planRevisionId,
+      "run-seeded-command",
+      1,
+      "run_command",
+      "workspace-command:.",
+      JSON.stringify({
+        command: "printf 'abandoned-private-value'",
+        cwd: ".",
+        state_effect: "mutation",
+      }),
+      "openai/gpt-5.5",
+      "low",
+      "command",
+      "Run one reviewed seeded command",
+      "printf",
+      1,
+      "pending",
+      "client-abandon-authority-fault-0000000000000000000",
+      "Continue the approved operation exactly once.",
+      "pending",
+      "2026-08-23T09:00:00.000Z",
+      "2026-08-23T09:00:00.000Z",
+    );
+    db.exec(`
+      CREATE TRIGGER fault_abandoned_work_authority_close
+      BEFORE UPDATE ON btcc_authority_requests
+      WHEN NEW.close_reason IS NOT NULL AND OLD.close_reason IS NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated abandoned Work authority close failure');
+      END
+    `);
+    await expect(service.abandonBoundWorkForTurn(scope.turnId))
+      .rejects.toThrow("simulated abandoned Work authority close failure");
+    expect((await service.boundWorkForTurn(scope.turnId))?.workId)
+      .toBe(work.workId);
+    expect(db.query<{ status: string }, [string]>(`
+      SELECT status FROM btcc_guided_works WHERE work_id = ?
+    `).get(work.workId)?.status).not.toBe("abandoned");
+    expect(db.query<{ count: number }, [string]>(`
+      SELECT COUNT(*) AS count FROM btcc_authority_requests
+      WHERE source_work_id = ? AND decision = 'pending'
+        AND close_reason IS NULL AND close_scope IS NULL AND closed_at IS NULL
+    `).get(work.workId)?.count).toBe(1);
+
+    db.exec("DROP TRIGGER fault_abandoned_work_authority_close");
+    const abandoned = await service.abandonBoundWorkForTurn(scope.turnId);
+    expect(abandoned).toMatchObject({
+      workId: work.workId,
+      status: "abandoned",
+    });
+    expect(db.query<{
+      count: number;
+    }, [string]>(`
+      SELECT COUNT(*) AS count FROM btcc_authority_requests
+      WHERE source_work_id = ? AND decision = 'pending'
+        AND close_reason = 'work_abandoned' AND close_scope = 'work'
+        AND closed_at IS NOT NULL
+    `).get(work.workId)?.count).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+
 function durableWorkFixture(): {
   db: Database;
   service: DurableWorkService;
@@ -1970,7 +2076,10 @@ function durableWorkFixture(): {
 } {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const store = new SqliteGuidedWorkStore(db);
+  const store = new SqliteGuidedWorkStore(
+    db,
+    createPrincipalAuthority(new SqlitePrincipalAuthorityRepository(db)),
+  );
   const service = createDurableWorkService(store);
   const journal = new SqliteGuidedToolJournal(db);
   return {
