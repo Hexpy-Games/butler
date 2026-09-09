@@ -29,6 +29,10 @@ import {
 import {
   isModelRouteDurabilityError,
 } from "../model-route/index.ts";
+import {
+  diagnosticDetails,
+  safeRuntimeFailure,
+} from "../../../integrations/providers/provider-errors.ts";
 import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
 import { isPhaseScopedMemoryProjectionError } from
   "../../context/context-projection.ts";
@@ -39,6 +43,10 @@ import {
   createNoopRuntimeMemoryAttributionPort,
   type RuntimeMemoryAttributionPort,
 } from "../../../operations/diagnostics/runtime-memory-attribution/index.ts";
+import {
+  createNoopTurnDeveloperLogCapturePort,
+  type TurnDeveloperLogCapturePort,
+} from "../../../operations/diagnostics/developer-log-turn-capture/index.ts";
 
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
@@ -46,6 +54,7 @@ export type TurnRuntimeDependencies = {
   messages: CanonicalMessageStore;
   agent: BtccAgentLoop;
   memoryAttribution?: RuntimeMemoryAttributionPort;
+  developerLogCapture?: TurnDeveloperLogCapturePort;
   progress?: BtccTurnProgressObserver;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
 };
@@ -61,10 +70,13 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
   private readonly supervisor = createTurnExecutionSupervisor();
   private readonly activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
   private readonly memoryAttribution: RuntimeMemoryAttributionPort;
+  private readonly developerLogCapture: TurnDeveloperLogCapturePort;
 
   constructor(private readonly dependencies: TurnRuntimeDependencies) {
     this.memoryAttribution = dependencies.memoryAttribution ??
       createNoopRuntimeMemoryAttributionPort();
+    this.developerLogCapture = dependencies.developerLogCapture ??
+      createNoopTurnDeveloperLogCapturePort();
   }
   runTurn(
     command: BtccRunCommand,
@@ -159,12 +171,14 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         permit,
       );
       let result: BtccAgentLoopResult;
+      const diagnostics = this.developerLogCapture.startExecution();
       try {
         result = await this.dependencies.agent.run({
           turn,
           recoveryAttempt,
           signal: permit.signal,
           memoryAttribution: this.memoryAttribution,
+          modelRoundObserver: diagnostics.modelRoundObserver,
           progress,
           ...createModelRouteRuntimeHooks({
             turn,
@@ -172,7 +186,22 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             turns: this.dependencies.turns,
           }),
         });
+        diagnostics.capture(result.runtimeFailure ? {
+          kind: "model_turn_error", turn,
+          failure: { ...result.runtimeFailure, message: result.runtimeFailure.code },
+          timestamp: new Date().toISOString(),
+        } : {
+          kind: "model_turn", turn, result,
+          timestamp: new Date().toISOString(),
+        });
       } catch (error) {
+        diagnostics.capture({
+          kind: "model_turn_error",
+          turn,
+          failure: safeRuntimeFailure(error),
+          diagnostics: diagnosticDetails(error),
+          timestamp: new Date().toISOString(),
+        });
         if (isModelRouteDurabilityError(error) ||
             isPhaseContinuityProjectionError(error) ||
             isPhaseScopedMemoryProjectionError(error) ||

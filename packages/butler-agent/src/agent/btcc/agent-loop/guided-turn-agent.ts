@@ -66,6 +66,7 @@ export function createProductionGuidedTurnAgent(
       turn, recoveryAttempt,
       signal,
       memoryAttribution,
+      modelRoundObserver,
       progress,
       recordModelRouteEvent,
       loadModelRouteAttemptHistory,
@@ -323,7 +324,18 @@ export function createProductionGuidedTurnAgent(
         turnId: turn.turnId,
         // A decision resumes the ordinary loop; it is not a replacement report.
       });
-      const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
+      const provider = input.modelRound ?? createProviderModelRoundPort();
+      const baseModelRound: ModelRoundPort = modelRoundObserver ? {
+        contextSizing: provider.contextSizing?.bind(provider),
+        initialRequestBytes: provider.initialRequestBytes?.bind(provider),
+        statelessMessageBytes: provider.statelessMessageBytes?.bind(provider),
+        async runRound(request) {
+          try { modelRoundObserver.request(request); } catch { /* Diagnostics are passive. */ }
+          const response = await provider.runRound(request);
+          try { modelRoundObserver.response(response); } catch { /* Diagnostics are passive. */ }
+          return response;
+        },
+      } : provider;
       const {
         modelRound,
         activeModelRef: resolveActiveModelRef,
