@@ -151,6 +151,17 @@ test("existing dashboard HTTP route resolves exact binding and exposes unavailab
     const blockedLane = await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=work&lane=blocked&limit=10`).then((response) => response.json());
     expect(blockedLane.data.items.map((item: { id: string }) => item.id)).toEqual(["W-1"]);
     expect(blockedLane.data.nextCursor).toBeNull();
+    for (const kind of ["work", "plan", "task"]) {
+      const all = (await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=${kind}&limit=100`)
+        .then((response) => response.json())).data;
+      for (const lane of ["planned", "active", "review", "blocked", "done", "other"]) {
+        const filtered = (await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=${kind}&lane=${lane}&limit=10`)
+          .then((response) => response.json())).data;
+        const expected = all.items.filter((item: { lane: string }) => item.lane === lane);
+        expect(filtered.items).toEqual(expected.slice(0, 10));
+        expect(filtered.total).toBe(expected.length);
+      }
+    }
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=work&lane=done&cursor=${board.data.nextCursor}`)).status).toBe(400);
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?lane=invalid`)).status).toBe(400);
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=task&cursor=${board.data.nextCursor}`)).status).toBe(400);
