@@ -142,6 +142,23 @@ export class ProjectDashboardSources {
     return row;
   }
 
+  /** Whole metadata inputs for statistics; never reuse a paginated UI history. */
+  async statistics(projectId: string) {
+    const row = this.requireProject(projectId);
+    if (!row.ledger_project_id) return null;
+    try {
+      const snapshot = await this.input.readLedger(projectId, row.ledger_project_id);
+      let history = null;
+      try {
+        const ledger = this.readHistory(resolve(this.input.butlerData, "project-ledger/projects", row.ledger_project_id));
+        if (ledger.revision === "absent") throw new Error("dashboard_history_unavailable");
+        const managed = await this.readWorkHistory(projectId, row.ledger_project_id, snapshot);
+        history = { ledger: ledger.events, managed };
+      } catch { /* A current snapshot remains useful when history is unavailable. */ }
+      return { snapshot, history };
+    } catch { return null; }
+  }
+
   async history(projectId: string, query: ProjectHistoryQuery): Promise<DashboardHistoryPage> {
     const row = this.requireProject(projectId);
     let events: Extract<DashboardHistoryPage, { status: "ready" }>["events"];

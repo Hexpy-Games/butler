@@ -25,9 +25,31 @@ export interface DashboardBriefingView {
 }
 export interface DashboardStatisticsView {
   timezone: string; period: 7 | 30 | 90; observedAt: string;
-  days: Array<{ date: string; start: string; end: string; partial: boolean; userMessages: number; activeConversations: number }>;
-  timeline: { status: "ready"; truncated: boolean; events: Array<{ id: string; at: string; action: string; title: string; kind: string; workId: string }> }
-    | { status: "unavailable" };
+  days: Array<{ date: string; start: string; end: string; partial: boolean }>;
+  sources: Record<string, DashboardStatisticSource>;
+  work: null | {
+    work: DashboardStatisticSeries; task: DashboardStatisticSeries;
+    cards: Record<"work" | "task", Array<DashboardBoardCard & { sourceKey: string; ageDays: number | null }>>;
+    excluded: number;
+    activity: Array<{ sourceKey: string; dates: string[]; changes: number }>;
+  };
+  activity: DashboardStatisticSeries;
+  materials: DashboardStatisticSeries;
+  materialTypes: DashboardStatisticSeries;
+  ledgerHistoryAvailable: boolean;
+  sessionHistoryAvailable: boolean;
+  execution: { outcomes: DashboardStatisticSeries; duration: DashboardStatisticSeries; excluded: number };
+  usage: { status: "unavailable"; reason: "project_usage_not_collected" };
+}
+export interface DashboardStatisticSource {
+  title: string; at: string;
+  source?: { id: string; kind: string; revision: string };
+  session?: { id: string; title: string };
+  durationMs?: number;
+}
+export interface DashboardStatisticSeries {
+  keys: string[];
+  buckets: Array<{ label: string; values: Record<string, string[]> }>;
 }
 
 export interface DashboardWorkCard {

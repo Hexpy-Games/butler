@@ -1,10 +1,38 @@
 import type { Database } from "bun:sqlite";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
-import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
+import type { DashboardStatisticsView } from "../../interface/protocol/session-dashboard-contract.ts";
+import type { ProjectDashboardSources } from "./project-dashboard-sources.ts";
+import { populateLedgerStatistics, statisticSeries } from "./project-statistics-ledger.ts";
+import { populateSessionStatistics } from "./project-statistics-sessions.ts";
 
-export interface ProjectActivityStatistics {
-  timezone: string; period: 7 | 30 | 90; observedAt: string;
-  days: Array<{ date: string; start: string; end: string; partial: boolean; userMessages: number; activeConversations: number }>;
+export function projectStatistics(db: Database, projectId: string, period: 7 | 30 | 90, timezone: string,
+  ledger: Awaited<ReturnType<ProjectDashboardSources["statistics"]>>, now = new Date()): DashboardStatisticsView {
+  const days = projectDayRanges(timezone, period, now);
+  const labels = days.map((day) => day.date);
+  const outcomes = ["delivered", "failed", "cancelled"];
+  const view: DashboardStatisticsView = { timezone, period, observedAt: now.toISOString(), days, sources: {}, work: null,
+    ledgerHistoryAvailable: false, sessionHistoryAvailable: false, activity: statisticSeries(labels, ["conversations", "work", "materials"]),
+    materials: statisticSeries(labels, ["created", "updated", "artifacts"]),
+    materialTypes: statisticSeries(labels, ["spec", "plan", "report", "artifacts"]),
+    execution: { outcomes: statisticSeries(labels, outcomes),
+      duration: statisticSeries(["under30s", "under2m", "under10m", "over10m"], outcomes), excluded: 0 },
+    usage: { status: "unavailable", reason: "project_usage_not_collected" } };
+  // Discard the entire session projection on a read/limit failure, including any
+  // rows read before the failure. Ledger metadata remains independently usable.
+  const sessionView = structuredClone(view);
+  try {
+    db.transaction(() => populateSessionStatistics(db, projectId, sessionView))();
+    if (Object.keys(sessionView.sources).length > 20_000) throw new Error("project_statistics_limit");
+    Object.assign(view, sessionView, { sessionHistoryAvailable: true });
+  } catch { /* Availability is explicit; partial counts must not look complete. */ }
+  populateLedgerStatistics(view, ledger);
+  view.activity.keys = view.activity.keys.filter((key) => key === "conversations" ? view.sessionHistoryAvailable
+    : key === "work" ? view.ledgerHistoryAvailable : view.sessionHistoryAvailable || view.ledgerHistoryAvailable);
+  for (const series of [view.materials, view.materialTypes]) {
+    series.keys = series.keys.filter((key) => key === "artifacts" ? view.sessionHistoryAvailable : view.ledgerHistoryAvailable);
+  }
+  if (Object.keys(view.sources).length > 20_000) throw new Error("project_statistics_limit");
+  return view;
 }
 
 /** Calendar labels are advanced as dates; UTC boundaries are independently resolved in the IANA zone. */
@@ -35,19 +63,4 @@ export function projectDayRanges(timezone: string, period: 7 | 30 | 90, now: Dat
   const boundaries = labels.map(boundary);
   return labels.slice(0, -1).map((date, index) => ({ date, start: new Date(boundaries[index]!).toISOString(),
     end: new Date(Math.min(boundaries[index + 1]!, now.getTime())).toISOString(), partial: date === today }));
-}
-
-export function readProjectActivityStatistics(db: Database, projectId: string, period: 7 | 30 | 90, timezone: string, now = new Date()): ProjectActivityStatistics {
-  const ranges = projectDayRanges(timezone, period, now);
-  const query = db.query<{ messages: number; conversations: number }, [string, string, string]>(`
-    SELECT COUNT(*) AS messages, COUNT(DISTINCT m.chat_id) AS conversations
-    FROM chats c JOIN messages m ON m.chat_id = c.id
-    WHERE c.project_id = ? AND m.role = 'user' AND m.created_at >= ? AND m.created_at < ?
-      AND ${visibleMessageSqlPredicate("m")}
-  `);
-  const days = db.transaction(() => ranges.map((range) => {
-    const counts = query.get(projectId, range.start, range.end)!;
-    return { ...range, userMessages: counts.messages, activeConversations: counts.conversations };
-  }))();
-  return { timezone, period, observedAt: now.toISOString(), days };
 }

@@ -18,6 +18,7 @@ export function createProjectDashboardHistoryReader() {
     let cursor: string | undefined;
     do {
       const page = readProjectDashboardHistory(root, cursor, 10000);
+      if (page.invalidLines) throw new Error("dashboard_history_incomplete");
       events.push(...page.events); cursor = page.nextCursor ?? undefined;
       if (events.length > 100000) throw new Error("dashboard_history_unavailable");
     } while (cursor);
@@ -32,7 +33,7 @@ export function createProjectDashboardHistoryReader() {
 
 /** Bounded, reverse byte cursor. Old pages remain stable when the log grows. */
 export function readProjectDashboardHistory(root: string, cursor: string | undefined, limit: number): {
-  events: DashboardLedgerEvent[]; nextCursor: string | null;
+  events: DashboardLedgerEvent[]; nextCursor: string | null; invalidLines: number;
 } {
   const path = join(root, "ledger.jsonl");
   if (lstatSync(path).isSymbolicLink()) throw new Error("dashboard_history_invalid");
@@ -54,6 +55,7 @@ export function readProjectDashboardHistory(root: string, cursor: string | undef
     const first = start ? buffer.indexOf(10) + 1 : 0;
     if (start && (first === 0 || first === buffer.length)) throw new Error("dashboard_history_record_too_large");
     const events: DashboardLedgerEvent[] = [];
+    let invalidLines = 0;
     let offset = buffer.length;
     while (offset > first && events.length < limit) {
       const lineEnd = buffer[offset - 1] === 10 ? offset - 1 : offset;
@@ -67,9 +69,9 @@ export function readProjectDashboardHistory(root: string, cursor: string | undef
         const type = String(event.type ?? "").match(/^(work|task|plan|spec|report)_(created|updated|completed)$/u);
         if (!type || typeof event.id !== "string" || typeof event.ts !== "string" || !Number.isFinite(Date.parse(event.ts))) continue;
         events.push({ id: `${stat.ino}:${start + lineStart}`, recordId: event.id, kind: type[1]!, action: type[2]!, at: event.ts });
-      } catch { /* A damaged/incomplete line is not a public event. */ }
+      } catch { if (raw.trim()) invalidLines++; }
     }
     const next = start + offset;
-    return { events, nextCursor: next > 0 ? Buffer.from(JSON.stringify({ ino: stat.ino, offset: next })).toString("base64url") : null };
+    return { events, invalidLines, nextCursor: next > 0 ? Buffer.from(JSON.stringify({ ino: stat.ino, offset: next })).toString("base64url") : null };
   } finally { closeSync(fd); }
 }
