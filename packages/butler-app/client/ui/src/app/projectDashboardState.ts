@@ -1,8 +1,8 @@
 import { create } from "zustand";
+import { browserRandomId } from "./id.ts";
 
 interface DashboardViewState {
   tab?: string;
-  targetSessionId?: string;
   refreshRevision?: number;
   boardKind?: "work" | "plan" | "task";
   boardParent?: string;
@@ -29,4 +29,14 @@ export function rememberDashboardLoadedCount(projectId: string, key: string, cou
   const state = useProjectDashboardState.getState();
   if (state.projects[projectId]?.loadedCounts?.[key] === count) return;
   state.update(projectId, { loadedCounts: { ...state.projects[projectId]?.loadedCounts, [key]: count } });
+}
+
+/** Only an identical, unaccepted send may reuse the newly created project session. */
+export function prepareDashboardSend(projectId: string, fingerprint: string) {
+  const state = useProjectDashboardState.getState();
+  const previous = state.projects[projectId]?.pendingSend;
+  const pending = previous?.fingerprint === fingerprint ? previous
+    : { fingerprint, clientMessageId: browserRandomId("client"), sessionId: undefined };
+  state.update(projectId, { pendingSend: pending });
+  return pending;
 }

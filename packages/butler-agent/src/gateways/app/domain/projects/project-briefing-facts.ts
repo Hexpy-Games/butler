@@ -10,7 +10,7 @@ import { appLocaleFromLanguage, getAppCopy } from "../../../../../../butler-i18n
 
 export const PROJECT_BRIEFING_INPUT_TOKENS = 8000;
 export const PROJECT_BRIEFING_OUTPUT_TOKENS = 1200;
-export const PROJECT_BRIEFING_GENERATOR_VERSION = "signpost-v2";
+export const PROJECT_BRIEFING_GENERATOR_VERSION = "signpost-v3-compact";
 export interface ProjectBriefingPack {
   projectId: string; binding: string | null; revision: string; language: string;
   model: string; facts: Array<Record<string, unknown>>; description: string;

@@ -11,6 +11,7 @@ export interface DashboardBriefingSource {
   id: string; revision: string; title: string; sessionId?: string;
 }
 export interface DashboardBriefingContent {
+  introduction: string;
   position: { title: string; body: string; sourceIds: string[] };
   suggestions: Array<{ candidateId: string; title: string; reason: string; sourceIds: string[] }>;
 }

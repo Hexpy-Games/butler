@@ -60,7 +60,7 @@ export function Titlebar() {
       ? sessionFromNavigation(storeNavigation, storeActiveChatId)
       : null;
   const branchInfo = useButlerStore((state) =>
-    state.summary?.session_id === storeActiveChatId
+    state.view.kind === "session" && state.summary?.session_id === storeActiveChatId
       ? state.summary.branch_info
       : undefined,
   );

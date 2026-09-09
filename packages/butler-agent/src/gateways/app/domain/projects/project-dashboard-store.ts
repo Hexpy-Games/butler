@@ -7,7 +7,7 @@ import type { ProjectDashboardView, SessionSummary } from "../../interface/proto
 import { createProjectDashboardLedgerReader } from "../../../../agent/adapters/btcc/project-ledger/index.ts";
 import type { DashboardLedgerRecord } from "../../../../agent/adapters/btcc/project-ledger/index.ts";
 import { projectDashboardFacts } from "./project-dashboard-facts.ts";
-import { projectDashboardBoard } from "./project-dashboard-board.ts";
+import { projectDashboardBoard, interleaveDashboardLanes } from "./project-dashboard-board.ts";
 import type { DashboardBoardCard, DashboardBoardPage } from "../../interface/protocol/session-dashboard-contract.ts";
 import { projectWorkSessionResolver } from "./project-dashboard-session-links.ts";
 import { ProjectDashboardSources } from "./project-dashboard-sources.ts";
@@ -171,9 +171,9 @@ export class AppProjectDashboardStore {
     let snapshot;
     try { snapshot = await this.readLedger(projectId, row.ledger_project_id); }
     catch { return { status: "unavailable", reason: "source_unavailable" }; }
-    const records = projectDashboardBoard(snapshot, input.kind, projectWorkSessionResolver(this.db, projectId, this.projectSessions(projectId)))
+    const records = interleaveDashboardLanes(projectDashboardBoard(snapshot, input.kind, projectWorkSessionResolver(this.db, projectId, this.projectSessions(projectId)))
       .filter((record) => !input.parent || record.parentId === input.parent)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)));
     let offset = 0;
     if (input.cursor) {
       let cursor: { revision: string; id: string; kind: string; parent: string | null };

@@ -5,6 +5,8 @@ import { Button, Section, Stack, Typo } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import { ProjectSourceLinks } from "./ProjectSourceLinks.tsx";
+import styles from "./ProjectInformation.module.css";
 
 export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated, section = "position" }: {
   projectId: string; briefing?: DashboardBriefingView; onSelect: (source: ProjectDashboardDocument) => void;
@@ -38,25 +40,19 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
   const documentFor = (item: DashboardBriefingSource): ProjectDashboardDocument => ({ id: item.id, project_id: projectId,
     revision: item.revision, kind: item.kind === "spec" ? "spec" : item.kind === "report" ? "report" : "plan",
     document_type: item.kind, title: item.title, markdown: "", safe_path_label: item.id, updated_at: "" });
-  const refs = (ids: string[]) => <Stack gap="xs">{ids.map((id) => {
-    const item = source(id);
-    return item && <Button key={id} variant="borderless" onClick={() => onSelect(documentFor(item))}>{item.title}</Button>;
-  })}</Stack>;
-  const coverage = briefing.coverage;
   return <Stack gap="xl">
     {section === "position" && <Section title={copy.position}>
       {status === "ready" && briefing.content ? <Stack gap="sm">
-        <Typo.H2>{briefing.content.position.title}</Typo.H2><Typo.Body>{briefing.content.position.body}</Typo.Body>
-        {refs(briefing.content.position.sourceIds)}
+        <Typo.H3>{briefing.content.position.title}</Typo.H3>
+        <Typo.Body className={styles.summary}>{briefing.content.position.body}</Typo.Body>
+        <ProjectSourceLinks ids={briefing.content.position.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} coverage />
       </Stack> : <Stack gap="sm"><Typo.Body role="status">{status === "unavailable" ? copy.briefingUnavailable : copy.briefingPending}</Typo.Body>
         {status === "unavailable" && briefing.sources.length > 0 && <Button variant="outline" onClick={() => void request(true)}>{appCopy.feedback.retry}</Button>}
       </Stack>}
-      <Typo.Caption>{copy.summarized}</Typo.Caption>
-      <Typo.Caption>{copy.briefingCoverage(coverage.includedWorks, coverage.totalWorks, coverage.includedDocuments, coverage.includedReports, coverage.excludedUnits)}</Typo.Caption>
     </Section>}
     {section === "suggestions" && status === "ready" && briefing.content && briefing.content.suggestions.length > 0 && <Section title={copy.suggestions}>
-      <Stack gap="lg">{briefing.content.suggestions.map((item) => <Stack key={item.candidateId} gap="sm">
-        <Typo.Body>{item.title}</Typo.Body><Typo.Caption>{item.reason}</Typo.Caption>
+      <Stack gap="lg">{briefing.content.suggestions.map((item) => <Stack key={item.candidateId} gap="sm" className={styles.suggestion}>
+        <Typo.Body>{item.title}</Typo.Body><Typo.Caption className={styles.summary}>{item.reason}</Typo.Caption>
         <Button variant="outline" onClick={() => {
           const candidate = briefing.candidates.find((candidate) => candidate.id === item.candidateId);
           const selected = candidate && source(candidate.sourceId);
@@ -65,7 +61,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
           if (!composer.text.trim()) composer.setText(`${item.title}\n${item.reason}\n`);
           void composer.addProjectDocument(documentFor(selected));
         }}>{copy.addToComposer}</Button>
-        {refs(item.sourceIds)}
+        <ProjectSourceLinks ids={item.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} />
       </Stack>)}</Stack>
     </Section>}
   </Stack>;

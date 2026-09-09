@@ -5,15 +5,16 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentBadgeLabel } from "@/app/projectDocuments.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import { Button, ChevronRight, DocumentTile, Grid, NavRow, Notice, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, ChevronRight, FileText, IconButton, Pin, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
+import styles from "./ProjectInformation.module.css";
 import type { DashboardMaterialsPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 
-export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpdated, limit = 50, onShowAll }: {
+export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpdated, limit = 8, onShowAll }: {
   projectId: string; onSelect: (document: ProjectDashboardDocument) => void;
   preferences?: { revision: number; pinnedSourceRefs: Array<{ kind: string; id: string; revision: string }> };
   onUpdated?: () => void; limit?: number; onShowAll?: () => void;
 }) {
-  useAppLocale();
+  const locale = useAppLocale();
   const [page, setPage] = useState<DashboardMaterialsPage | null>(null);
   const [error, setError] = useState(false);
   const [cursor, setCursor] = useState<string>();
@@ -62,15 +63,21 @@ export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpda
     onClick={() => { setCursor(undefined); setPage(null); setAttempt((value) => value + 1); }}>{appCopy.feedback.retry}</Button>} />;
   if (!page) return <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>;
   if (page.status === "unavailable") return <Typo.Body>{appCopy.projectSignpost.unavailable}</Typo.Body>;
-  return <Stack gap="lg">
-    {onShowAll ? <Stack gap="sm">{page.documents.map((document) => <NavRow key={`${document.kind}:${document.id}`} multiline
-      label={document.unavailable ? appCopy.projectSignpost.missingSource : document.title} meta={projectDocumentBadgeLabel(document)}
-      disabled={document.unavailable} actions={<ChevronRight size={16} />} onClick={() => onSelect(document)} />)}</Stack> : <Grid columns="auto-fit">
-      {page.documents.map((document) => <DocumentTile key={`${document.kind}:${document.id}`} title={document.unavailable ? appCopy.projectSignpost.missingSource : document.title}
-        badge={projectDocumentBadgeLabel(document)} clickTarget="tile" actionLabel={document.title} onOpen={document.unavailable ? undefined : () => onSelect(document)}
-        actions={preferences && !onShowAll ? [{ id: "pin", label: isPinned(document) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin,
-          onClick: () => void togglePin(document) }] : []} />)}
-    </Grid>}
+  const groups = onShowAll ? [{ title: "", documents: page.documents }] : [
+    { title: appCopy.projectSignpost.importantMaterials, documents: page.documents.filter(isPinned) },
+    { title: appCopy.projectSignpost.projectDocuments, documents: page.documents.filter((document) => !isPinned(document)) },
+  ];
+  return <Stack gap="xl">
+    {groups.filter((group) => group.documents.length > 0).map((group) => <Section key={group.title} title={group.title || undefined}>
+      <div className={styles.rows}>{group.documents.map((document) => <NavRow key={`${document.document_type}:${document.id}`} multiline icon={<FileText />}
+        label={<span className={styles.title}>{document.unavailable ? appCopy.projectSignpost.missingSource : document.title}</span>}
+        meta={<Typo.Caption className={styles.summary}>{[projectDocumentBadgeLabel(document), document.updated_at && new Date(document.updated_at).toLocaleDateString(locale)].filter(Boolean).join(" · ")}</Typo.Caption>}
+        disabled={document.unavailable} onClick={() => onSelect(document)} actions={<ButtonContainer size="sm">
+          {preferences && !onShowAll && <IconButton label={isPinned(document) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin}
+            onClick={(event) => { event.stopPropagation(); void togglePin(document); }}><Pin /></IconButton>}
+          <ChevronRight />
+        </ButtonContainer>} />)}</div>
+    </Section>)}
     {page.documents.length === 0 && <Typo.Body>{appCopy.interfaceDetails.noDocuments}</Typo.Body>}
     {page.nextCursor && <Button variant="borderless" disabled={loading} onClick={onShowAll ?? (() => setCursor(page.nextCursor!))}>{appCopy.projectSignpost.loadMore}</Button>}
   </Stack>;
