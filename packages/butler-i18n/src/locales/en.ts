@@ -132,6 +132,8 @@ function englishSkillFallbackSuggestions(projectName: string): NewChatBriefingSu
 
 export const enUsCopy: AppCopy = {
   projectSignpost: {
+    evidenceCount: (count) => `View ${count} source records`,
+    importantMaterials: "Important materials", projectDocuments: "Project documents", selectedDay: "Selected date", calculation: "How this is counted",
     importantMaterialsHelp: "Pinned materials and plans, specifications, and latest reports explicitly linked to remaining work.",
     sessionUnconfirmed: "Conversation link unconfirmed",
     reviewed: "Review recorded", disposition: "Disposition recorded", result: "Tool result registered",
@@ -156,7 +158,7 @@ export const enUsCopy: AppCopy = {
     created: "Created", updated: "Updated", recordedCompletion: "Completion recorded", noHistory: "No records yet.",
     description: "Project description", editDescription: "Edit description", pin: "Pin material", unpin: "Unpin material",
     overview: "Overview", work: "Work", materials: "Materials", history: "History", statistics: "Statistics",
-    position: "Current position", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
+    position: "Project status", remaining: "Remaining work", completed: "Execution completed", open: "Open work",
     blocked: "Blocked work", abandoned: "Abandoned work", unknown: "Unverified work", registered: "Registered work",
     noWork: "No work has been registered yet.", unbound: "No Ledger is linked to this project.",
     unavailable: "Ledger information is unavailable. Completion has not been inferred.",

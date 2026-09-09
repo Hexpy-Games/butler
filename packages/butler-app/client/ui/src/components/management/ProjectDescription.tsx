@@ -2,7 +2,8 @@ import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { Button, ButtonContainer, Dialog, DialogContent, DialogHeader, DialogTitle, Stack, Textarea, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, Dialog, DialogContent, DialogHeader, DialogTitle, Stack, Textarea, Typo, IconButton, Pencil } from "@/butler-ds";
+import styles from "./ProjectInformation.module.css";
 
 export function ProjectDescription({ projectId, description, revision, onUpdated }: {
   projectId: string; description: string | null; revision: number; onUpdated: () => void;
@@ -22,8 +23,10 @@ export function ProjectDescription({ projectId, description, revision, onUpdated
     finally { setSaving(false); }
   };
   return <Stack gap="sm">
-    {description && <Typo.Body>{description}</Typo.Body>}
-    <Button variant="borderless" onClick={() => { setDraft(description ?? ""); setOpen(true); }}>{appCopy.projectSignpost.editDescription}</Button>
+    <Stack align="row" cross="start" gap="sm">
+      <Typo.Body className={styles.summary}>{description || appCopy.projectSignpost.description}</Typo.Body>
+      <IconButton label={appCopy.projectSignpost.editDescription} onClick={() => { setDraft(description ?? ""); setOpen(true); }}><Pencil /></IconButton>
+    </Stack>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader><DialogTitle>{appCopy.projectSignpost.description}</DialogTitle></DialogHeader>

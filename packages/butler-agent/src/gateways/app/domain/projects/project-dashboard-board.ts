@@ -56,3 +56,14 @@ function recordLane(status: string): DashboardBoardCard["lane"] {
   if (["todo", "draft", "proposed", "scoped", "specified", "planned"].includes(status)) return "planned";
   return "other";
 }
+/** Fair global pages preserve recency within each lane without starving active work. */
+export function interleaveDashboardLanes(cards: DashboardBoardCard[]): DashboardBoardCard[] {
+  const lanes = ["planned", "active", "review", "blocked", "done", "other"] as const;
+  const buckets = lanes.map((lane) => cards.filter((card) => card.lane === lane));
+  const result: DashboardBoardCard[] = [];
+  const longest = Math.max(0, ...buckets.map((bucket) => bucket.length));
+  for (let index = 0; index < longest; index++) {
+    for (const bucket of buckets) if (bucket[index]) result.push(bucket[index]!);
+  }
+  return result;
+}

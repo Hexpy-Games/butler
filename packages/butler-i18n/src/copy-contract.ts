@@ -106,6 +106,8 @@ interface ConversationCopy {
 
 export interface AppCopy {
   projectSignpost: {
+    evidenceCount: (count: number) => string;
+    importantMaterials: string; projectDocuments: string; selectedDay: string; calculation: string;
     importantMaterialsHelp: string;
     sessionUnconfirmed: string;
     reviewed: string; disposition: string; result: string;

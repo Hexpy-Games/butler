@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useRef, useState } from "react";
 import { useButlerStore } from "@/app/store.ts";
 import { useProjectDashboard } from "@/hooks/useProjectDashboard.ts";
-import { Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section } from "@/butler-ds";
+import { Stack, Notice, Button, Tabs, TabsList, TabsTrigger, TabsContent, Section, LayoutDashboard, ListChecks, Folder, History, Activity } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { ManagementPage } from "@/butler-ds";
 import type {
@@ -88,8 +88,8 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} sessions={sessions} />}>
-      <Stack as="main" gap="xl">
+    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} />}>
+      <Stack as="main" gap="xl" className={tab === "work" ? styles.boardFrame : styles.frame}>
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
         <ProjectDashboardHeader
@@ -101,18 +101,18 @@ export function ProjectDashboardView({
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList variant="line">
-            <TabsTrigger value="overview">{appCopy.projectSignpost.overview}</TabsTrigger>
-            <TabsTrigger value="work">{appCopy.projectSignpost.work}</TabsTrigger>
-            <TabsTrigger value="materials">{appCopy.projectSignpost.materials}</TabsTrigger>
-            <TabsTrigger value="history">{appCopy.projectSignpost.history}</TabsTrigger>
-            <TabsTrigger value="statistics">{appCopy.projectSignpost.statistics}</TabsTrigger>
+          <TabsList>
+            <TabsTrigger className={styles.tab} value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
+            <TabsTrigger className={styles.tab} value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
+            <TabsTrigger className={styles.tab} value="materials"><Folder />{appCopy.projectSignpost.materials}</TabsTrigger>
+            <TabsTrigger className={styles.tab} value="history"><History />{appCopy.projectSignpost.history}</TabsTrigger>
+            <TabsTrigger className={styles.tab} value="statistics"><Activity />{appCopy.projectSignpost.statistics}</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview"><Stack gap="xl" className={styles.reading}>
+          <TabsContent value="overview"><Stack gap="xl" className={styles.overview}>
             {project && <ProjectBriefingPanel key={project.id} projectId={project.id} briefing={dashboard?.briefing}
               onSelect={selectDocument} onUpdated={retry} />}
             <ProjectOverviewPanel overview={dashboard?.overview} projectId={project?.id} onSelect={selectDocument} onShowAll={() => setTab("work")} />
-            {project && <Section title={appCopy.projectSignpost.materials} description={appCopy.projectSignpost.importantMaterialsHelp}>
+            {project && <Section title={appCopy.projectSignpost.importantMaterials} description={appCopy.projectSignpost.importantMaterialsHelp}>
               <ProjectMaterialsPanel key={`${project.id}:${ledgerRevision}:${dashboard?.preferences?.revision}`} projectId={project.id} onSelect={selectDocument} limit={5}
                 preferences={dashboard?.preferences} onShowAll={() => setTab("materials")} />
             </Section>}
