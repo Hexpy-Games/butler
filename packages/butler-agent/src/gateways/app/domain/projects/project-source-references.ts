@@ -44,6 +44,7 @@ export async function resolveProjectSourceReferences(input: {
     const excerpt = original.slice(0, Math.min(remaining, 1000));
     remaining -= excerpt.length;
     result.push({ projectId: chat.project_id, source: { ...part.source, revision }, title: page.title,
+      ...(part.topic ? { topic: part.topic } : {}),
       safeExcerpt: excerpt, excerptTruncated: excerpt.length < original.length,
       originalRef: { fileId: file.file_id, sha256: file.sha256, sizeBytes: file.size_bytes } });
   }
