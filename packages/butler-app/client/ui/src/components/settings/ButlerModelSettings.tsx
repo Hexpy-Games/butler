@@ -97,7 +97,7 @@ export function ButlerModelSettings() {
         draft={draft}
         onUpdate={updateSettings}
       />
-      {activeLocalModel && (
+      {activeLocalModel && !activeLocalModel.reasoning_efforts.includes("low") && (
         <SettingsPercentInput
           label={settingsFields.localReasoningBudget}
           value={ratioToPercent(activeLocalModel.local_reasoning_budget_ratio)}
