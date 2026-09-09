@@ -185,11 +185,15 @@
   opacity: 0;
 }
 @media (width > 640px) {
-  .rowShell [data-test-class="tree-row"]:focus-within .menuButton,
+  .rowShell
+    [data-test-class="tree-row"]:is(:focus-visible, :has(:focus-visible))
+    .menuButton,
   .menuAction[data-menu-open] .menuButton {
     opacity: 1;
   }
-  .rowShell [data-test-class="tree-row"]:focus-within .menuStatus,
+  .rowShell
+    [data-test-class="tree-row"]:is(:focus-visible, :has(:focus-visible))
+    .menuStatus,
   .menuAction[data-menu-open] .menuStatus {
     visibility: hidden;
   }
@@ -217,19 +221,29 @@
 .disclosureSlot > .menuAction {
   position: absolute;
   inset: 0;
-  visibility: hidden;
+  /* Keep the trigger in keyboard navigation; visibility:hidden would prevent focus from revealing it. */
+  opacity: 0;
+  pointer-events: none;
 }
 @media (width > 640px) {
   .rowShell
-    [data-test-class="tree-row"]:is(:hover, :focus-within)
+    [data-test-class="tree-row"]:is(
+      :hover,
+      :focus-visible,
+      :has(:focus-visible)
+    )
     .disclosureSlot
     > .menuAction,
   .disclosureSlot[data-menu-open] > .menuAction {
-    visibility: visible;
     opacity: 1;
+    pointer-events: auto;
   }
   .rowShell
-    [data-test-class="tree-row"]:is(:hover, :focus-within)
+    [data-test-class="tree-row"]:is(
+      :hover,
+      :focus-visible,
+      :has(:focus-visible)
+    )
     .disclosureSlot
     > .collapseButton,
   .disclosureSlot[data-menu-open] > .collapseButton {
@@ -241,7 +255,13 @@
     opacity: 0;
     transition: opacity 120ms ease;
   }
-  .rowShell [data-test-class="tree-row"]:is(:hover, :focus-within) .menuAction,
+  .rowShell
+    [data-test-class="tree-row"]:is(
+      :hover,
+      :focus-visible,
+      :has(:focus-visible)
+    )
+    .menuAction,
   .menuAction:has([aria-expanded="true"]) {
     opacity: 1;
   }

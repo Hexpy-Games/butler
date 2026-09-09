@@ -59,7 +59,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
           if (!selected) return;
           const composer = useComposerStore.getState();
           if (!composer.text.trim()) composer.setText(`${item.title}\n${item.reason}\n`);
-          void composer.addProjectDocument(documentFor(selected));
+          void composer.addProjectDocument(documentFor(selected), item.title);
         }}>{copy.addToComposer}</Button>
         <ProjectSourceLinks ids={item.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} />
       </Stack>)}</Stack>

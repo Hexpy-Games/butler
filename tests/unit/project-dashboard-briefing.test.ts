@@ -7,6 +7,7 @@ import { ProjectBriefingStore } from "../../packages/butler-agent/src/gateways/a
 import type { DashboardBriefingContent } from "../../packages/butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import type { DashboardLedgerSnapshot } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { initializeProjectIntroduction } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-introduction.ts";
+import { readProjectSourceFeedback } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-source-feedback.ts";
 
 function fixture() {
   const db = new Database(":memory:"); migrateAppStoreSchema(db);
@@ -27,6 +28,47 @@ async function settle(predicate: () => boolean) {
   for (let index = 0; index < 100 && !predicate(); index++) await new Promise((resolve) => setTimeout(resolve, 1));
   expect(predicate()).toBe(true);
 }
+
+test("source-linked user observations survive report selection and invalidate the derived briefing, not Work state", () => {
+  const { db, snapshot } = fixture();
+  const read = () => buildProjectBriefingPack({ db, projectId: "briefing-p", binding: "ledger-p", description: "P", snapshot,
+    model: "openai/gpt-4o", language: "ko", contextTokens: 128000, reasoningEffort: "medium" });
+  const ref = { type: "project_source_ref", projectId: "briefing-p", titleSnapshot: "Report", topic: "Long response delivery",
+    source: { kind: "message", id: "report", revision: "d".repeat(64) } };
+  const insert = (id: string, chat: string, role: string, text: string, parts: unknown, time: string) => db.query(
+    "INSERT INTO messages(id,chat_id,role,text,status,content_parts_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+  ).run(id, chat, role, text, role === "user" ? "sent" : "delivered", JSON.stringify(parts), time, time);
+  try {
+    db.query("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES ('reports','Reports','project','briefing-p','2026-09-09','2026-09-09'), ('followup','Follow-up','project','briefing-p','2026-09-09','2026-09-09'), ('outside','Outside','chat',NULL,'2026-09-09','2026-09-09')").run();
+    insert("report", "reports", "assistant", "Long response verification remains. OAuth verification is unrelated.", null, "2026-09-09T00:00:00Z");
+    const before = read();
+    insert("confirmation", "followup", "user", "@OAuth plan This feature works. You can mark it complete.",
+      { version: 1, parts: [ref, { type: "text", text: "This feature works. You can mark it complete." }] }, "2026-09-09T01:00:00Z");
+    // Unlinked claims and forged cross-project references cannot acquire a relation.
+    insert("assistant-claim", "followup", "assistant", "I marked it done.", { version: 1, parts: [ref] }, "2026-09-09T01:01:00Z");
+    insert("unlinked", "followup", "user", "Everything is complete.", null, "2026-09-09T01:02:00Z");
+    insert("outside", "outside", "user", "Unrelated confirmation", { version: 1, parts: [ref] }, "2026-09-09T01:03:00Z");
+    insert("wrong-project", "followup", "user", "Wrong project", { version: 1, parts: [{ ...ref, projectId: "other" }] }, "2026-09-09T01:04:00Z");
+    const after = read();
+    expect(after.revision).not.toBe(before.revision);
+    const feedback = after.facts.find(fact => fact.sourceId === "message:report")!.linkedUserFollowups as Array<Record<string, unknown>>;
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]!.messageId).toBe("confirmation");
+    expect(feedback[0]!.observation).toBe("This feature works. You can mark it complete.");
+    expect(feedback[0]!.references).toEqual([{ revision: "d".repeat(64), topic: ref.topic }]);
+    expect(after.facts.find(fact => fact.sourceId === "work:W-A")!.status).toBe("proposed");
+    // Retain chronological newer contradictions, with bounded excerpts; no keyword status parser.
+    for (let i = 2; i <= 5; i++) insert(`later-${i}`, "followup", "user", i === 5 ? "It now fails again." : "x".repeat(1300),
+      { version: 1, parts: [ref] }, `2026-09-09T0${i}:00:00Z`);
+    const latest = readProjectSourceFeedback(db, "briefing-p", "message:report");
+    expect(latest.map(item => item.messageId)).toEqual(["later-3", "later-4", "later-5"]);
+    expect(latest[0]!.observation).toHaveLength(1200);
+    expect(latest[0]!.excerptTruncated).toBe(true);
+    expect(latest[2]!.observation).toBe("It now fails again.");
+    // The observation is retained by its source, not by a global latest-assistant-report window.
+    expect(readProjectSourceFeedback(db, "briefing-p", "message:missing")).toEqual([]);
+  } finally { db.close(); }
+});
 
 test("briefing schema rejects invented sources/candidates and extra authority fields", () => {
   const { db, pack } = fixture();

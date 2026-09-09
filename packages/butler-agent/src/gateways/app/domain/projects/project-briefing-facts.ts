@@ -7,10 +7,11 @@ import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import type { DashboardBriefingSource, DashboardBriefingView } from "../../interface/protocol/session-dashboard-contract.ts";
 import { projectReportLocatorRevision } from "./project-report-source.ts";
 import { appLocaleFromLanguage, getAppCopy } from "../../../../../../butler-i18n/src/index.ts";
+import { readProjectSourceFeedback } from "./project-source-feedback.ts";
 
 export const PROJECT_BRIEFING_INPUT_TOKENS = 8000;
 export const PROJECT_BRIEFING_OUTPUT_TOKENS = 1200;
-export const PROJECT_BRIEFING_GENERATOR_VERSION = "signpost-v3-compact";
+export const PROJECT_BRIEFING_GENERATOR_VERSION = "signpost-v4-source-feedback";
 export interface ProjectBriefingPack {
   projectId: string; binding: string | null; revision: string; language: string;
   model: string; facts: Array<Record<string, unknown>>; description: string;
@@ -32,6 +33,8 @@ export function buildProjectBriefingPack(input: {
   const description = safe(input.description ?? "");
   const budget = Math.min(PROJECT_BRIEFING_INPUT_TOKENS, Math.floor(input.contextTokens * .25));
   const add = (source: DashboardBriefingSource, fact: Record<string, unknown>, proposed: string[], ceiling = budget) => {
+    const feedback = readProjectSourceFeedback(input.db, input.projectId, source.sourceId);
+    if (feedback.length) fact = { ...fact, linkedUserFollowups: feedback };
     const next = proposed.filter(Boolean).map((text, index) => ({ id: `${source.sourceId}:${index}`, sourceId: source.sourceId, text: safe(text) }));
     // Reserve 1000 tokens for instructions/envelope. Drop complete units, never sever their identity/status.
     if (estimateTokensForModel(JSON.stringify({ description, facts: [...facts, fact], sources: [...sources, source],
