@@ -1,72 +1,69 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { api } from "@/app/api.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, ChevronRight, ArrowLeft, DisclosureRow, IconButton, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { useButlerStore } from "@/app/store.ts";
+import { Button, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardStatisticsView } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import { ProjectStatisticsContext } from "./projectStatisticsContext.ts";
+import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
+import { ProjectWorkStatistics } from "./ProjectWorkStatistics.tsx";
+import { ProjectActivityStatistics } from "./ProjectActivityStatistics.tsx";
+import { ProjectMaterialStatistics } from "./ProjectMaterialStatistics.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
-import { ProjectWorkTimeline } from "./ProjectWorkTimeline.tsx";
 
-export function ProjectStatisticsPanel({ projectId, revision }: { projectId: string; revision?: string }) {
-  const locale = useAppLocale();
-  const copy = appCopy.projectSignpost;
+export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
+  projectId: string; revision?: string; onSelect: (document: ProjectDashboardDocument) => void;
+}) {
+  useAppLocale();
+  const copy = appCopy.projectStatistics;
+  const openSession = useButlerStore((state) => state.openSession);
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
   const [attempt, setAttempt] = useState(0);
-  const [keyboard, setKeyboard] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>();
-  const [methodOpen, setMethodOpen] = useState(false);
   const [result, setResult] = useState<{ key: string; data?: DashboardStatisticsView; error?: boolean } | null>(null);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const key = `${projectId}:${period}:${timezone}`;
+  const key = `${projectId}:${period}:${timezone}:${revision}:${attempt}`;
   useEffect(() => {
     let cancelled = false;
     api<DashboardStatisticsView>(`/projects/${encodeURIComponent(projectId)}/dashboard/statistics?days=${period}&timezone=${encodeURIComponent(timezone)}`)
-      .then((data) => { if (!cancelled) setResult({ key, data }); })
+      .then((data) => {
+        if (!data.activity?.buckets || !data.materialTypes?.buckets || !data.execution?.outcomes || !data.sources || typeof data.sessionHistoryAvailable !== "boolean") throw new Error("Statistics version unavailable");
+        if (!cancelled) setResult({ key, data });
+      })
       .catch(() => { if (!cancelled) setResult({ key, error: true }); });
     return () => { cancelled = true; };
-  }, [key, projectId, period, timezone, revision, attempt]);
+  }, [key, projectId, period, timezone]);
   const data = result?.key === key ? result.data : undefined;
-  const dateLabel = (value: string) => value.slice(5);
-  const selectedIndex = data ? Math.max(0, data.days.findIndex((day) => day.date === (selectedDate ?? data.days.at(-1)?.date))) : 0;
-  const selected = data?.days[selectedIndex];
-  const selectDay = (index: number) => { if (data?.days[index]) setSelectedDate(data.days[index]!.date); };
-  return <Stack gap="xl">
-    <Tabs value={String(period)} onValueChange={(value) => setPeriod(Number(value) as 7 | 30 | 90)}>
-      <TabsList>{[7, 30, 90].map((days) => <TabsTrigger key={days} value={String(days)}>{copy.periodDays(days)}</TabsTrigger>)}</TabsList>
-    </Tabs>
-    {result?.key === key && result.error && <Notice tone="error" message={appCopy.feedback.dashboardRetry}
+  const error = result?.key === key && result.error;
+  const openSource = (sourceKey: string) => {
+    const item = data?.sources[sourceKey];
+    if (!item) return;
+    if (!item.source) { if (item.session) openSession(item.session.id); return; }
+    onSelect({ id: item.source.id, project_id: projectId, revision: item.source.revision,
+      kind: item.source.kind === "spec" ? "spec" : item.source.kind === "report" ? "report" : "plan",
+      document_type: item.source.kind as ProjectDashboardDocument["document_type"], title: item.title,
+      markdown: "", safe_path_label: item.source.id, updated_at: item.at });
+  };
+  return <Stack gap="xl" data-test-class="project-statistics">
+    <Stack gap="sm">
+      <Tabs value={String(period)} onValueChange={(value) => setPeriod(Number(value) as 7 | 30 | 90)}>
+        <TabsList>{[7, 30, 90].map((days) => <TabsTrigger key={days} value={String(days)}>{appCopy.projectSignpost.periodDays(days)}</TabsTrigger>)}</TabsList>
+      </Tabs>
+      <Typo.Caption>{appCopy.projectSignpost.statisticsZone(timezone)} · {copy.partialDay}</Typo.Caption>
+    </Stack>
+    {error && <Notice tone="error" message={appCopy.feedback.dashboardRetry}
       action={<Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>{appCopy.feedback.retry}</Button>} />}
-    {!data && !result?.error && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
-    {data && <>
-      {selected && <Stack gap="sm" className={styles.selection}>
-        <Stack align="row" justify="between" cross="center" gap="md">
-          <Typo.Body>{new Date(`${selected.date}T12:00:00`).toLocaleDateString(locale, { month: "long", day: "numeric" })}</Typo.Body>
-          <ButtonContainer size="sm">
-            <IconButton label={`${copy.selectedDay} −1`} disabled={selectedIndex === 0} onClick={() => selectDay(selectedIndex - 1)}><ArrowLeft /></IconButton>
-            <IconButton label={`${copy.selectedDay} +1`} disabled={selectedIndex === data.days.length - 1} onClick={() => selectDay(selectedIndex + 1)}><ChevronRight /></IconButton>
-          </ButtonContainer>
-        </Stack>
-        <Typo.Caption aria-live="polite">{copy.userMessages} {selected.userMessages} · {copy.activeConversations} {selected.activeConversations}</Typo.Caption>
-      </Stack>}
-      {(["userMessages", "activeConversations"] as const).map((metric) => <Section key={metric} title={copy[metric]}>
-        <ChartContainer className={styles.chart} config={{ [metric]: { label: copy[metric], color: "var(--context-chart-1)" } }} aria-label={copy[metric]}
-          onKeyDownCapture={(event) => { setKeyboard(true); if (event.key === "ArrowLeft") selectDay(selectedIndex - 1); if (event.key === "ArrowRight") selectDay(selectedIndex + 1); }} onPointerDownCapture={() => setKeyboard(false)}>
-          <BarChart accessibilityLayer data={data.days} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}
-            onClick={(state) => { if (state.activeTooltipIndex == null) return; const index = Number(state.activeTooltipIndex); if (Number.isInteger(index)) selectDay(index); }}>
-            <CartesianGrid vertical={false} stroke="var(--line)" />
-            <XAxis dataKey="date" tickFormatter={dateLabel} minTickGap={24} tickLine={false} axisLine={false} />
-            <YAxis allowDecimals={false} width={36} domain={[0, "auto"]} tickLine={false} axisLine={false} />
-            <ChartTooltip trigger={keyboard ? "hover" : "click"} content={<ChartTooltipContent labelKey="date" />} />
-            <Bar dataKey={metric} maxBarSize={24} radius={[3, 3, 0, 0]} isAnimationActive={false}>
-              {data.days.map((day) => <Cell key={day.date} fill={day.date === selected?.date ? "var(--context-chart-1)" : "var(--text-tertiary)"} />)}
-            </Bar>
-          </BarChart>
-        </ChartContainer>
-      </Section>)}
-      <DisclosureRow surface="plain" title={copy.calculation} open={methodOpen} onToggle={() => setMethodOpen(!methodOpen)}>
-        <Typo.Caption>{copy.statisticsZone(data.timezone)} · {copy.statisticsHelp}</Typo.Caption>
-      </DisclosureRow>
-      <ProjectWorkTimeline data={data} />
-    </>}
+    {!data && !error && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
+    {data && <ProjectStatisticsContext.Provider key={`${projectId}:${period}`} value={{ data, openSource }}>
+      <ProjectWorkStatistics />
+      <ProjectActivityStatistics />
+      <ProjectMaterialStatistics />
+      {data.sessionHistoryAvailable ? <>
+      <ProjectStatisticChart title={copy.outcomes} description={copy.outcomesHelp} series={data.execution.outcomes} stacked />
+      <ProjectStatisticChart title={copy.duration} description={copy.durationHelp} series={data.execution.duration} stacked horizontal />
+      {data.execution.excluded > 0 && <Typo.Caption>{copy.excluded(data.execution.excluded)}</Typo.Caption>}
+      </> : <Section title={copy.outcomes}><Typo.Caption>{copy.sessionUnavailable}</Typo.Caption></Section>}
+      <Section title={copy.usage}><div className={styles.surface}><Typo.Caption>{copy.usageHelp}</Typo.Caption></div></Section>
+    </ProjectStatisticsContext.Provider>}
   </Stack>;
 }

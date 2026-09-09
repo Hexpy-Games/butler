@@ -122,7 +122,7 @@ export function ProjectDashboardView({
             {project && <ProjectBriefingPanel key={`${project.id}:suggestions`} section="suggestions" projectId={project.id} briefing={dashboard?.briefing}
               onSelect={selectDocument} onUpdated={retry} />}
           </Stack></TabsContent>
-          <TabsContent value="statistics">{project && <ProjectStatisticsPanel projectId={project.id} revision={publicRevision} />}</TabsContent>
+          <TabsContent value="statistics">{project && <ProjectStatisticsPanel projectId={project.id} revision={publicRevision} onSelect={selectDocument} />}</TabsContent>
         <TabsContent value="work">{project && <ProjectWorkBoard projectId={project.id}
           revision={publicRevision}
           onSelect={selectDocument} onOpenSession={onOpenSession ?? openSession} />}</TabsContent>
