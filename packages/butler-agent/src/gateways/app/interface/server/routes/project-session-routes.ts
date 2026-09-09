@@ -22,6 +22,7 @@ import {
   type WorkStatusView,
 } from "../../protocol/app-protocol.ts";
 import type { AppServerStore } from "../../../application/store/app-server-store.ts";
+import { attachProjectArtifact } from "../../../domain/projects/project-artifact-attachment.ts";
 import { paginationFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
 import { conversationSessionIdForDurableSession } from
@@ -55,7 +56,7 @@ export async function handleProjectSessionRoutes(
   if (input.request.method === "GET" && url.pathname === "/new-chat-briefing") {
     return json(
       apiEnvelope<NewChatBriefingView>(
-        input.store.getNewChatBriefing({
+        await input.store.getNewChatBriefing({
           date: url.searchParams.get("date"),
           projectId: url.searchParams.get("project_id"),
         }),
@@ -96,10 +97,107 @@ export async function handleProjectSessionRoutes(
     input.request.method === "GET"
       ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard$/u)
       : null;
+  const preferencesMatch = input.request.method === "PATCH" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/preferences$/u) : null;
+  const attachmentMatch = input.request.method === "POST" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/attachment$/u) : null;
+  if (attachmentMatch) {
+    const body = await parseJson(input.request) as Record<string, unknown> | null;
+    if (!body || typeof body.id !== "string" || body.id.length > 256 || typeof body.revision !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(body.revision) || Object.keys(body).some((key) => !["id", "revision"].includes(key))) {
+      throw new RequestError(400, "invalid_request", "Invalid artifact reference.");
+    }
+    return json(apiEnvelope(await attachProjectArtifact(input.store, decodeURIComponent(attachmentMatch[1]!), body.id, body.revision)), 201);
+  }
+  const statisticsMatch = input.request.method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/statistics$/u) : null;
+  if (statisticsMatch) {
+    const days = Number(url.searchParams.get("days") ?? 30);
+    if (![7, 30, 90].includes(days)) throw new RequestError(400, "invalid_statistics_query", "Invalid period.");
+    return json(apiEnvelope(await input.store.getProjectDashboardStatistics(decodeURIComponent(statisticsMatch[1]!),
+      days as 7 | 30 | 90, url.searchParams.get("timezone") ?? "")));
+  }
+  const briefingMatch = input.request.method === "POST" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/briefing$/u) : null;
+  if (briefingMatch) {
+    const body = await parseJson(input.request) as Record<string, unknown> | null;
+    if (!body || typeof body.sourceRevision !== "string" || !/^[a-f0-9]{64}$/u.test(body.sourceRevision) ||
+        (body.retry !== undefined && typeof body.retry !== "boolean") || Object.keys(body).some((key) => !["sourceRevision", "retry"].includes(key))) {
+      throw new RequestError(400, "invalid_request", "Invalid briefing request.");
+    }
+    return json(apiEnvelope(await input.store.requestProjectDashboardBriefing(decodeURIComponent(briefingMatch[1]!), body.sourceRevision, body.retry === true)), 202);
+  }
+  if (preferencesMatch) {
+    const projectId = decodeURIComponent(preferencesMatch[1]!);
+    const body = await parseJson(input.request) as Record<string, unknown> | null;
+    if (!body || !Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0 ||
+        Object.keys(body).some((key) => !["expectedRevision", "description", "pinnedSourceRefs"].includes(key)) ||
+        (body.description !== undefined && (typeof body.description !== "string" || body.description.length > 2000)) ||
+        (body.description === undefined && body.pinnedSourceRefs === undefined)) {
+      throw new RequestError(400, "invalid_request", "Invalid preferences patch.");
+    }
+    let pins: Array<{ kind: string; id: string; revision: string }> | undefined;
+    if (body.pinnedSourceRefs !== undefined) {
+      if (!Array.isArray(body.pinnedSourceRefs) || body.pinnedSourceRefs.length > 12) throw new RequestError(400, "invalid_request", "Invalid sources.");
+      pins = [];
+      const current = await input.store.getProjectDashboard(projectId);
+      if (!current.preferences || current.preferences.revision !== body.expectedRevision) throw new RequestError(409, "preferences_changed", "Preferences changed. Reload them.");
+      for (const ref of body.pinnedSourceRefs) {
+        if (!ref || typeof ref !== "object" || !["work", "task", "plan", "spec", "report", "artifact"].includes(ref.kind) ||
+            typeof ref.id !== "string" || !ref.id || ref.id.length > 256 || typeof ref.revision !== "string" ||
+            !/^[a-f0-9]{64}$/u.test(ref.revision) || pins.some((pin) => pin.kind === ref.kind && pin.id === ref.id)) {
+          throw new RequestError(400, "invalid_request", "Invalid source reference.");
+        }
+        const retained = current.preferences.pinnedSourceRefs.find((pin) => pin.kind === ref.kind && pin.id === ref.id && pin.revision === ref.revision);
+        const source = retained ? null : await input.store.getProjectDashboardSource(projectId, ref);
+        pins.push({ kind: ref.kind, id: ref.id, revision: source?.revision ?? ref.revision });
+      }
+    }
+    return json(apiEnvelope(input.store.updateProjectDashboardPreferences(projectId, {
+      expectedRevision: Number(body.expectedRevision), description: body.description as string | undefined, pinnedSourceRefs: pins,
+    })));
+  }
+  const boardMatch = input.request.method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/records$/u) : null;
+  if (boardMatch) {
+    const kind = url.searchParams.get("kind") ?? "work";
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    const cursor = url.searchParams.get("cursor") ?? undefined;
+    if (!["work", "plan", "task"].includes(kind) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        (cursor?.length ?? 0) > 2048) throw new RequestError(400, "invalid_request", "Invalid board query.");
+    return json(apiEnvelope(await input.store.getProjectDashboardBoard(decodeURIComponent(boardMatch[1]!), {
+      kind: kind as "work" | "plan" | "task", limit, cursor, parent: url.searchParams.get("parent") ?? undefined,
+    })));
+  }
+  const sourceMatch = input.request.method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/(materials|source|history|artifacts)$/u) : null;
+  if (sourceMatch) {
+    const projectId = decodeURIComponent(sourceMatch[1]!);
+    const cursor = url.searchParams.get("cursor") ?? undefined;
+    if ((cursor?.length ?? 0) > 2048) throw new RequestError(400, "invalid_request", "Invalid cursor.");
+    if (sourceMatch[2] === "artifacts") {
+      const limit = Number(url.searchParams.get("limit") ?? 50);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RequestError(400, "invalid_request", "Invalid limit.");
+      return json(apiEnvelope(input.store.getProjectDashboardArtifacts(projectId, { cursor, limit })));
+    }
+    if (sourceMatch[2] === "history") {
+      const limit = Number(url.searchParams.get("limit") ?? 50);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RequestError(400, "invalid_request", "Invalid limit.");
+      return json(apiEnvelope(await input.store.getProjectDashboardHistory(projectId, { cursor, limit })));
+    }
+    if (sourceMatch[2] === "materials") {
+      const limit = Number(url.searchParams.get("limit") ?? 50);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RequestError(400, "invalid_request", "Invalid limit.");
+      return json(apiEnvelope(await input.store.getProjectDashboardMaterials(projectId, {
+        cursor, limit, all: url.searchParams.get("all") === "true", important: url.searchParams.get("important") === "true",
+      })));
+    }
+    const kind = url.searchParams.get("kind") ?? "";
+    const id = url.searchParams.get("id") ?? "";
+    const revision = url.searchParams.get("revision") ?? "";
+    if (!["work", "task", "plan", "spec", "report", "message", "reference", "artifact"].includes(kind) || !id || id.length > 256 || !revision || revision.length > 256) {
+      throw new RequestError(400, "invalid_request", "Invalid source query.");
+    }
+    return json(apiEnvelope(await input.store.getProjectDashboardSource(projectId, { kind, id, revision, cursor })));
+  }
   if (projectDashboardMatch) {
     return json(
       apiEnvelope<ProjectDashboardView>(
-        input.store.getProjectDashboard(
+        await input.store.getProjectDashboard(
           decodeURIComponent(projectDashboardMatch[1]!),
         ),
       ),

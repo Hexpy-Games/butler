@@ -606,6 +606,17 @@ const butlerApp = Object.freeze({
     return requestJson(`/space/groups/${encodeURIComponent(groupId)}`, { method, body: JSON.stringify(body) });
   },
   getProjectDashboard: ({ projectId }) => requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard`),
+  getProjectDashboardResource: ({ projectId, resource, query = "" }) => {
+    if (!["records", "materials", "source", "history", "artifacts", "statistics"].includes(resource)) throw new Error("Invalid dashboard resource");
+    const params = new URLSearchParams(query);
+    return requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard/${resource}?${params.toString()}`);
+  },
+  updateProjectDashboardResource: ({ projectId, resource, body }) => {
+    if (!["preferences", "briefing", "attachment"].includes(resource)) throw new Error("Invalid dashboard operation");
+    return requestJson(`/projects/${encodeURIComponent(projectId)}/dashboard/${resource}`, {
+      method: resource === "preferences" ? "PATCH" : "POST", body: JSON.stringify(body),
+    });
+  },
   selectProjectFolder: () => ipcRenderer.invoke("butler:select-project-folder"),
   listSessions: ({ kind, projectId } = {}) => {
     const params = new URLSearchParams();

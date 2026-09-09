@@ -1675,12 +1675,26 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   sendMessage: async (text, controls = {}) => {
-    const clientMessageId = browserRandomId("client");
+    const dashboardTarget = controls.dashboardTarget;
+    if (dashboardTarget?.sessionId) {
+      try {
+        const targets = await api<{ sessions: SessionSummary[] }>(`/project-sessions?project_id=${encodeURIComponent(dashboardTarget.projectId)}`);
+        const target = targets.sessions.find((session) => session.id === dashboardTarget.sessionId);
+        if (!target || target.project_id !== dashboardTarget.projectId || target.archived) throw new Error("Project conversation is unavailable.");
+      } catch (error) { notifyError(error, appCopy.interfaceFeedback.sendFailed); return; }
+    }
+    const dashboardIsVisible = () => {
+      const view = get().view;
+      return view.kind === "project-dashboard" && view.projectId === dashboardTarget?.projectId;
+    };
+    if (dashboardTarget && !dashboardIsVisible()) return;
+    const clientMessageId = dashboardTarget?.clientMessageId ?? browserRandomId("client");
     const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
     const attachments = controls.attachments ?? [];
     const messageTitle = text.trim() || attachments[0]?.safe_name || appCopy.interfaceFeedback.newChat;
     const startedAt = new Date().toISOString();
-    const initialChatId = get().activeChatId;
+    const initialChatId = dashboardTarget ? dashboardTarget.sessionId ?? projectDraftId(dashboardTarget.projectId) : get().activeChatId;
+    if (dashboardTarget) set({ activeChatId: initialChatId, messages: [], summary: null, turnProgress: {}, sessionView: null, sessionQueue: [] });
     const sendOperationId = `send-${clientMessageId}`;
     const initialDraft = isDraftChatId(initialChatId)
       ? parseDraftChatId(initialChatId)
@@ -1707,7 +1721,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         tone: "muted",
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
-      view: optimisticStart ? { kind: "session" } : state.view,
+      view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
       selectedArtifactId: optimisticStart ? null : state.selectedArtifactId,
       selectedArtifact: optimisticStart ? null : state.selectedArtifact,
       navigation: optimisticStart
@@ -1787,6 +1801,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         });
         const previousChatId = targetChatId;
         targetChatId = session.session.id;
+        dashboardTarget?.onSessionCreated?.(targetChatId);
         set((state) => ({
           activeChatId:
             state.activeChatId === previousChatId
@@ -1800,7 +1815,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ...state.sendingOperations,
             [sendOperationId]: targetChatId,
           },
-          view: { kind: "session" },
+          view: dashboardTarget ? state.view : { kind: "session" },
           selectedArtifactId: null,
           selectedArtifact: null,
           navigation: navigationReplacingOptimisticSession(
@@ -1858,6 +1873,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         method: "POST",
         body: JSON.stringify({
           chat_id: targetChatId,
+          ...(dashboardTarget ? { expected_project_id: dashboardTarget.projectId } : {}),
           text,
           client_message_id: clientMessageId,
           content_parts: controls.contentParts,
@@ -1873,7 +1889,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       });
       if (result.queued && !result.accepted) {
         controls.onAccepted?.();
-        set((state) => ({
+        if (dashboardTarget && dashboardIsVisible() && get().activeChatId === targetChatId) set({ view: { kind: "session" } });
+        set((state) => state.activeChatId !== targetChatId ? state : ({
           messages: state.messages.filter(
             (message) => message.id !== clientMessageId,
           ),
@@ -1888,9 +1905,11 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       }
       const accepted = result.accepted;
       controls.onAccepted?.();
+      if (dashboardTarget && dashboardIsVisible() && get().activeChatId === targetChatId) set({ view: { kind: "session" } });
       const replies = result.replies ?? (result.reply ? [result.reply] : []);
       const hasImmediateAssistantReply = replies.length > 0;
       set((state) => {
+        if (state.activeChatId !== targetChatId) return state;
         const mergedMessages = mergeMessages(
           state.messages.filter((message) => message.id !== clientMessageId),
           [accepted, ...replies],

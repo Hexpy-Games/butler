@@ -38,7 +38,7 @@ export interface AppStoreNavigationProjectApi {
   getNewChatBriefing(options?: {
     date?: string | null;
     projectId?: string | null;
-  }): NewChatBriefingView;
+  }): Promise<NewChatBriefingView>;
   listProjects(options?: { includeSessions?: boolean }): ProjectListView;
   createProject(input: CreateProjectRequest): CreateProjectResult;
   updateProject(
@@ -52,7 +52,15 @@ export interface AppStoreNavigationProjectApi {
   pinProject(projectId: string, pinned?: boolean): ProjectActionResult;
   deleteProject(projectId: string): ProjectActionResult;
   deleteProjectPermanent(projectId: string): ProjectActionResult;
-  getProjectDashboard(projectId: string): ProjectDashboardView;
+  getProjectDashboard(projectId: string): Promise<ProjectDashboardView>;
+  getProjectDashboardBoard: AppStoreKernel["projectDashboard"]["getBoard"];
+  requestProjectDashboardBriefing: AppStoreKernel["projectDashboard"]["briefing"]["request"];
+  getProjectDashboardStatistics: AppStoreKernel["projectDashboard"]["getStatistics"];
+  getProjectDashboardMaterials: AppStoreKernel["projectDashboard"]["sources"]["list"];
+  getProjectDashboardSource: AppStoreKernel["projectDashboard"]["sources"]["read"];
+  getProjectDashboardHistory: AppStoreKernel["projectDashboard"]["sources"]["history"];
+  getProjectDashboardArtifacts: AppStoreKernel["sessionRecords"]["listProjectArtifacts"];
+  updateProjectDashboardPreferences: AppStoreKernel["projects"]["updateDashboardPreferences"];
   listSessions(options?: { kind?: ChatKind; projectId?: string }): SessionListView;
   listArchives(options?: { limit?: number; offset?: number }): ArchiveListView;
   listProjectSessions(projectId?: string): ProjectSessionListView;
@@ -144,6 +152,31 @@ export function createNavigationProjectStoreApi(
     },
     getProjectDashboard(projectId) {
       return kernel.projectDashboard.getProjectDashboard(projectId);
+    },
+    getProjectDashboardArtifacts(projectId, query) {
+      if (!kernel.getProjectRow(projectId)) throw new AppStoreOperationError(404, "project_not_found", "Project not found.");
+      return kernel.sessionRecords.listProjectArtifacts(projectId, query);
+    },
+    getProjectDashboardBoard(projectId, query) {
+      return kernel.projectDashboard.getBoard(projectId, query);
+    },
+    requestProjectDashboardBriefing(projectId, revision, retry) {
+      return kernel.projectDashboard.briefing.request(projectId, revision, retry);
+    },
+    getProjectDashboardStatistics(projectId, days, timezone) {
+      return kernel.projectDashboard.getStatistics(projectId, days, timezone);
+    },
+    getProjectDashboardMaterials(projectId, query) {
+      return kernel.projectDashboard.sources.list(projectId, query);
+    },
+    getProjectDashboardSource(projectId, query) {
+      return kernel.projectDashboard.sources.read(projectId, query);
+    },
+    getProjectDashboardHistory(projectId, query) {
+      return kernel.projectDashboard.sources.history(projectId, query);
+    },
+    updateProjectDashboardPreferences(projectId, patch) {
+      return kernel.projects.updateDashboardPreferences(projectId, patch);
     },
     listSessions(options = {}) {
       return kernel.sessionCatalog.listSessions(options);

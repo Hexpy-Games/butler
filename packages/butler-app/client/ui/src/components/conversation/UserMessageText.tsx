@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Button } from "@/butler-ds";
+import { Button, FileText, InlineReference } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import styles from "./UserMessageText.module.css";
 import type { MessageContent } from "@/app/messageContent";
@@ -36,8 +36,9 @@ export function UserMessageText({ text, contentParts }: { text: string; contentP
         className={expanded ? styles.text : styles.collapsed}
         data-test-class="user-message-text"
       >
-        {contentParts ? contentParts.parts.map((part, index) => part.type === "text" ? part.text :
-          <SessionReferenceText key={index} sessionId={part.sessionId} title={part.titleSnapshot} />) : text}
+        {contentParts ? contentParts.parts.map((part, index) => part.type === "text" ? part.text : part.type === "session_ref" ?
+          <SessionReferenceText key={index} sessionId={part.sessionId} title={part.titleSnapshot} /> :
+          <InlineReference key={index} icon={<FileText />}>{part.titleSnapshot}</InlineReference>) : text}
       </div>
       {overflowing && (
         <Button

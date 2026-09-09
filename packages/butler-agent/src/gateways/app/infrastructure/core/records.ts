@@ -7,6 +7,7 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 
 export interface ChatRow {
+  archived?: number;
   id: string;
   title: string;
   kind: ChatKind;
@@ -24,6 +25,9 @@ export interface ProjectRow {
   workspace_label: string;
   safe_path_label: string;
   ledger_project_id?: string | null;
+  description?: string | null;
+  dashboard_preferences_json?: string | null;
+  dashboard_preferences_revision?: number;
   pinned: number;
   archived: number;
   error_summary: string | null;

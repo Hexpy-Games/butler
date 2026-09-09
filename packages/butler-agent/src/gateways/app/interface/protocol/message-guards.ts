@@ -20,6 +20,7 @@ export function isMessageSendRequest(
 ): value is MessageSendRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<MessageSendRequest>;
+  if (input.expected_project_id !== undefined && (typeof input.expected_project_id !== "string" || !input.expected_project_id || input.expected_project_id.length > 256)) return false;
   if (input.content_parts !== undefined) {
     if (!isMessageContent(input.content_parts)) return false;
     return isMessageSendRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });
@@ -47,6 +48,7 @@ export function isQueueMessageRequest(
 ): value is QueueMessageRequest {
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<QueueMessageRequest>;
+  if (input.expected_project_id !== undefined && (typeof input.expected_project_id !== "string" || !input.expected_project_id || input.expected_project_id.length > 256)) return false;
   if (input.content_parts !== undefined) {
     if (!isMessageContent(input.content_parts)) return false;
     return isQueueMessageRequest({ ...input, content_parts: undefined, text: messageContentText(input.content_parts) });

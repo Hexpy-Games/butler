@@ -9,6 +9,7 @@ import { appCopy } from "@/app/copy";
 import { ComposerCardEditor, ComposerCardEditable, ComposerCardPlaceholder } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
 import { SessionReferenceNode } from "./editor/SessionReferenceNode";
+import { ProjectSourceNode } from "./editor/ProjectSourceNode";
 import { ComposerEditorPlugin } from "./editor/ComposerEditorPlugin";
 
 export const COMPOSER_MAX_AUTO_ROWS = 8;
@@ -26,7 +27,7 @@ export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
   return (
     <LexicalComposer key={sessionId} initialConfig={{
       namespace: "butler-composer",
-      nodes: [SessionReferenceNode],
+      nodes: [SessionReferenceNode, ProjectSourceNode],
       onError: error => { throw error; },
     }}>
       <ComposerCardEditor>
@@ -39,7 +40,7 @@ export function ComposerTextArea({ placeholder }: { placeholder?: string }) {
             onCompositionEnd={() => setIsComposing(false)}
             onKeyDown={handleKeyDown}
           /></ComposerCardEditable>}
-          placeholder={<ComposerCardPlaceholder>{placeholder ?? (large ? appCopy.composer.placeholder : appCopy.composer.placeholderFollowUp)}</ComposerCardPlaceholder>}
+          placeholder={<ComposerCardPlaceholder>{placeholder ?? (large || sessionId.startsWith("dashboard:") ? appCopy.composer.placeholder : appCopy.composer.placeholderFollowUp)}</ComposerCardPlaceholder>}
           ErrorBoundary={LexicalErrorBoundary}
         />
       </ComposerCardEditor>

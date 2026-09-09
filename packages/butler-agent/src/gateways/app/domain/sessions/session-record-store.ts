@@ -278,7 +278,7 @@ export class AppSessionRecordStore {
       this.db
         .query<ChatRow, [string]>(
           `
-      SELECT id, title, kind, project_id, conversation_session_id, created_at, updated_at
+      SELECT id, title, kind, project_id, conversation_session_id, archived, created_at, updated_at
       FROM chats
       WHERE id = ?
     `,
@@ -307,6 +307,10 @@ export class AppSessionRecordStore {
 
   listArtifactSummaries(chatId: string): SessionArtifactSummary[] {
     return this.messages.listArtifactSummaries(chatId);
+  }
+
+  listProjectArtifacts(projectId: string, query: { cursor?: string; limit: number }) {
+    return this.messages.listProjectArtifacts(projectId, query);
   }
 
   getMessageRow(messageId: string): MessageRow | null {

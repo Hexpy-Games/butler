@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, Ref } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./ScrollArea.module.css";
 
@@ -11,6 +11,7 @@ export interface ScrollAreaProps {
   fill?: boolean;
   style?: CSSProperties;
   contentStyle?: CSSProperties;
+  scrollRef?: Ref<HTMLDivElement>;
 }
 
 export function ScrollArea({
@@ -22,6 +23,7 @@ export function ScrollArea({
   fill = false,
   style,
   contentStyle,
+  scrollRef,
 }: ScrollAreaProps) {
   return (
     <div
@@ -29,6 +31,7 @@ export function ScrollArea({
       style={style}
     >
       <div
+        ref={scrollRef}
         className={styles.scroll}
         data-slot={dataSlot}
         data-test-class={dataTestClass}

@@ -130,6 +130,12 @@ function contextForRequest(
   if (request.appTurnContext) context = { ...context, appSessionId: request.appTurnContext.session.id };
   if (request.appTurnContext?.branchSeed) context = { ...context, branchSeed: request.appTurnContext.branchSeed };
   if (request.appTurnContext?.contentParts) context = { ...context, messageContent: request.appTurnContext.contentParts };
+  if (request.appTurnContext?.projectSources?.length) context = { ...context,
+    projectSources: request.appTurnContext.projectSources,
+    ...(context.executionPolicy ? { executionPolicy: { ...context.executionPolicy,
+      requiredNativeTools: [...new Set([...context.executionPolicy.requiredNativeTools, "read_project_source"])],
+    } } : {}),
+  };
   if (request.appTurnContext?.sessionReferences?.length) context = { ...context,
     sessionReferences: request.appTurnContext.sessionReferences,
     ...(context.executionPolicy ? { executionPolicy: { ...context.executionPolicy,

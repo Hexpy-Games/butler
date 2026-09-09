@@ -6,8 +6,8 @@ import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentPickerFilters } from "@/app/projectDocuments.ts";
 import type {
   ProjectDashboardDocument,
-  ProjectDashboardView,
 } from "@/app/types.ts";
+import type { DashboardMaterialsPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import {
   ChevronRight,
   FileText,
@@ -79,12 +79,20 @@ function ComposerProjectDocumentPicker({
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
-    api<ProjectDashboardView>(
-      `/projects/${encodeURIComponent(projectId)}/dashboard`,
-    )
-      .then((dashboard) => {
-        if (!cancelled) setDocuments(dashboard.documents);
-      })
+    setDocuments([]);
+    const load = async () => {
+      let cursor: string | null = null;
+      const documents: ProjectDashboardDocument[] = [];
+      do {
+        const query: URLSearchParams = new URLSearchParams({ all: "true", limit: "100", ...(cursor ? { cursor } : {}) });
+        const page: DashboardMaterialsPage = await api(`/projects/${encodeURIComponent(projectId)}/dashboard/materials?${query}`);
+        if (cancelled) return;
+        if (page.status !== "ready") break;
+        documents.push(...page.documents); cursor = page.nextCursor;
+      } while (cursor);
+      setDocuments(documents);
+    };
+    load()
       .catch((error) => {
         if (!cancelled) {
           notifyError(error, appCopy.interfacePanels.projectDocumentsFailed, {

@@ -32,6 +32,7 @@ export type ButlerContextInput = {
   appSessionId?: string;
   messageContent?: import("../../foundation/message-content.ts").MessageContent;
   sessionReferences?: import("../../foundation/message-content.ts").ResolvedSessionReference[];
+  projectSources?: import("../../foundation/message-content.ts").ResolvedProjectSource[];
   userRef: string;
   projectRef?: string;
   profileRefs: string[];

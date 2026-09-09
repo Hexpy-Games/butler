@@ -81,6 +81,8 @@ export const projectDocumentPickerFilters = () => [
   { id: "spec", label: appCopy.interfaceStatus.spec },
   { id: "roadmap", label: appCopy.projectDocumentMetadata.roadmap },
   { id: "work", label: appCopy.interfaceStatus.work },
+  { id: "plan", label: appCopy.composer.plan },
+  { id: "report", label: appCopy.interfaceStatus.report },
   { id: "task", label: appCopy.interfaceStatus.task },
 ] as const;
 
@@ -127,10 +129,13 @@ export function projectDocumentBadgeLabel(
   document: ProjectDashboardDocument,
 ): string {
   const type = projectDocumentType(document);
+  if (type === "artifact") return appCopy.projectSignpost.results;
   if (type === "task") return appCopy.interfaceStatus.task;
   if (type === "plan") return appCopy.composer.plan;
   if (type === "roadmap") return appCopy.projectDocumentMetadata.roadmap;
   if (type === "spec") return appCopy.interfaceStatus.spec;
+  if (type === "report" || type === "message") return appCopy.interfaceStatus.report;
+  if (type === "reference") return appCopy.projectSignpost.history;
   return appCopy.interfaceStatus.work;
 }
 

@@ -107,6 +107,13 @@ test("dashboard loading and request failure never become an empty success; retry
   await act(async () => pending[1]!.resolve(dashboard([])));
   expect(current.status).toBe("ready");
   expect(current.dashboard?.documents).toEqual([]);
+  const accepted = current.dashboard;
+  await act(async () => current.retry());
+  expect(current.status).toBe("ready");
+  await act(async () => pending[2]!.reject(new Error("refresh temporarily unavailable")));
+  expect(current.status).toBe("ready");
+  expect(current.dashboard).toBe(accepted);
+  expect(current.refreshFailed).toBe(true);
   const other = navigation();
   other.projects[0] = { ...other.projects[0]!, id: "another-project" };
   await act(async () => useButlerStore.setState({ navigation: other,
@@ -116,7 +123,7 @@ test("dashboard loading and request failure never become an empty success; retry
   await act(async () => useButlerStore.setState({ navigation: navigation([]),
     view: { kind: "project-dashboard", projectId: "removed-project" } }));
   expect(current.status).toBe("missing");
-  await act(async () => pending[2]!.resolve(dashboard([])));
+  await act(async () => pending[3]!.resolve(dashboard([])));
   expect(current.dashboard).toBeNull();
 });
 

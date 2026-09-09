@@ -19,6 +19,8 @@ const projectDocumentGroups = (): Array<{
   { id: "spec", title: appCopy.interfaceStatus.spec },
   { id: "roadmap", title: appCopy.projectDocumentMetadata.roadmap },
   { id: "work", title: appCopy.interfaceStatus.work },
+  { id: "plan", title: appCopy.composer.plan },
+  { id: "report", title: appCopy.interfaceStatus.report },
   { id: "task", title: appCopy.interfaceStatus.task },
 ];
 
@@ -60,6 +62,7 @@ function filterProjectDocuments(
 ): ProjectDashboardDocument[] {
   const query = searchValue.trim().toLocaleLowerCase();
   return documents.filter((document) => {
+    if (document.document_type === "artifact") return false;
     const type = normalizedProjectDocumentType(document);
     if (filter !== "all" && type !== filter) return false;
     return !query || document.title.toLocaleLowerCase().includes(query);
@@ -77,7 +80,7 @@ function normalizedProjectDocumentType(
   document: ProjectDashboardDocument,
 ): ProjectDocumentGroup {
   const type = projectDocumentType(document);
-  return type === "plan" ? "work" : type;
+  return type === "message" || type === "reference" || type === "artifact" ? "report" : type;
 }
 
 function documentIcon(document: ProjectDashboardDocument) {
