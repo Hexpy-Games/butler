@@ -364,6 +364,116 @@ test("feature Guided Turn restores the existing bounded Work closeout opportunit
   }
 });
 
+test("Butler verifies returned Steward evidence before explicitly closing the parent Work", async () => {
+  const fixture = createFixture("parent-result-verification");
+  try {
+    writeFileSync(join(fixture.root, "briefing.md"), "Verified briefing body.\n");
+    const origin = await admitTurn(localRunCommand(fixture.root, "parent-origin"), fixture.stores.admission, fixture.stores.turns);
+    const work = await fixture.stores.durableWork.replacePlan({
+      turnId: origin.turnId, sessionId: origin.sessionId, mutationCallId: "parent-plan", startNew: true,
+      objective: "Verify and deliver the briefing", actions: [{ actionKey: "verify-and-report", description: "Verify the artifact and prepare its report", dependencyKeys: [] }], checks: [],
+    });
+    const turn = await admitTurn(localRunCommand(fixture.root, "parent-result"), fixture.stores.admission, fixture.stores.turns);
+    const subsessionDelegation = {
+      async resolveParentResultEvidence() { return { outcome: "success", parentWorkId: work.workId,
+        synthesisEvidence: "Steward wrote briefing.md. Verify and report the requested briefing.", artifacts: [], changedFiles: [] }; },
+      async activeParentDelegations() { return []; },
+      async shouldWaitForWorker() { return false; },
+    } as unknown as SubsessionDelegationService;
+    let rounds = 0;
+    const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+      phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+      butlerHome: fixture.root, butlerData: fixture.root, contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal, operationResultReader: fixture.stores.guidedOperationResultReader,
+      effectJournal: fixture.stores.guidedEffectJournal, durableWork: fixture.stores.durableWork, subsessionDelegation,
+      modelRound: { async runRound(request) {
+        rounds += 1;
+        const bound = await fixture.stores.durableWork.boundWorkForTurn(turn.turnId);
+        expect(bound?.workId).toBe(work.workId);
+        if (rounds === 1) {
+          expect(bound?.status).toBe("open");
+          expect(bound?.latestDisposition).toBeFalsy();
+          const names = request.tools.map((tool) => tool.name);
+          expect(names).toContain("read_file");
+          expect(names).toContain("record_work_disposition");
+          expect(names).not.toContain("write_file");
+          expect(names).not.toContain("delegate_to_steward");
+          expect(request.messages[0]?.content).toContain("A no-tool answer is the final user report");
+          return toolResponse([toolCall("verify-file", "read_file", { requests: [{ path: "briefing.md" }] })]);
+        }
+        if (rounds === 2) {
+          expect(bound?.status).toBe("open");
+          expect(messagesWithToolResults(request).some((m) => m.content.includes("Verified briefing body."))).toBe(true);
+          return toolResponse([toolCall("close-parent", "record_work_disposition", {
+            work_id: work.workId, disposition: "completed", summary: "Verified briefing ready for delivery.",
+            action_updates: [{ action_key: "verify-and-report", status: "done" }],
+          })]);
+        }
+        expect(rounds).toBe(3);
+        expect(bound?.status).toBe("completed");
+        return { text: "Verified briefing body.", toolCalls: [] };
+      } },
+    }));
+    const result = await agent.run({ turn, signal: new AbortController().signal,
+      recordModelRoundAcceptance: async () => {}, loadModelRoundAcceptance: async () => undefined });
+    expect(result.content).toBe("Verified briefing body.");
+    expect(rounds).toBe(3);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId).map((call) => call.toolName))
+      .toEqual(["read_file", "record_work_disposition"]);
+  } finally { fixture.close(); }
+});
+
+test.skipIf(!process.env.BUTLER_PARENT_REPORT_SMOKE)("live Qwen efforts verify a returned artifact and report its contents", async () => {
+  const { readLocalModelConfigs } = await import("../../packages/butler-agent/src/integrations/providers/local/models.ts");
+  const { runLocalModelRound } = await import("../../packages/butler-agent/src/integrations/providers/local/model-round.ts");
+  const config = readLocalModelConfigs().find((model) => model.model_ref === process.env.BUTLER_PARENT_REPORT_SMOKE);
+  if (!config) throw new Error("Requested live model is not registered");
+  for (const effort of ["low", "medium", "xhigh"] as const) {
+    const fixture = createFixture(`parent-live-${effort}`);
+    const originalFetch = globalThis.fetch;
+    try {
+      const expected = "보고서 확인값: 739241. 완료 항목: 검색, 본문 확인. 미확인 항목: 해외 기사 1건.";
+      writeFileSync(join(fixture.root, "briefing.md"), expected);
+      const origin = await admitTurn(localRunCommand(fixture.root, "live-origin"), fixture.stores.admission, fixture.stores.turns);
+      const work = await fixture.stores.durableWork.replacePlan({ turnId: origin.turnId, sessionId: origin.sessionId,
+        mutationCallId: "live-parent-plan", startNew: true, objective: "briefing.md를 읽고 확인값과 완료·미확인 항목을 사용자에게 지금 보고한다",
+        actions: [{ actionKey: "verify-and-report", description: "Read the briefing and deliver its contents", dependencyKeys: [] }], checks: [] });
+      const turn = await admitTurn(localRunCommand(fixture.root, "live-result"), fixture.stores.admission, fixture.stores.turns);
+      const subsessionDelegation = { async resolveParentResultEvidence() { return { outcome: "success", parentWorkId: work.workId,
+        synthesisEvidence: "Steward wrote briefing.md in the current workspace. The user requests its verification code and completed/unverified items. Read it to obtain the unknown code, then report its contents in Korean now.", artifacts: [], changedFiles: [] }; },
+        async activeParentDelegations() { return []; }, async shouldWaitForWorker() { return false; },
+      } as unknown as SubsessionDelegationService;
+      globalThis.fetch = (async (url, init) => {
+        if (String(url).startsWith(config.api_base_url) && init?.body) {
+          const body = JSON.parse(String(init.body));
+          return originalFetch(url, { ...init, body: JSON.stringify({ ...body, reasoning_effort: effort }) });
+        }
+        return originalFetch(url, init);
+      }) as typeof fetch;
+      let rounds = 0;
+      const agent = fixture.admitEol(createProductionGuidedTurnAgent({
+        phaseContinuityPrivateDigester: TEST_PHASE_CONTINUITY_PRIVATE_DIGESTER,
+        butlerHome: fixture.root, butlerData: fixture.root, contextDocuments: fixture.stores.contextDocuments,
+        toolJournal: fixture.stores.guidedToolJournal, operationResultReader: fixture.stores.guidedOperationResultReader,
+        effectJournal: fixture.stores.guidedEffectJournal, durableWork: fixture.stores.durableWork, subsessionDelegation,
+        modelRound: { async runRound(request) {
+          if (++rounds > 8) throw new Error("Live probe exceeded eight rounds");
+          if (rounds === 1) expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))?.status).toBe("open");
+          const result = await runLocalModelRound(config, { ...request, model: config.model_ref });
+          console.log(JSON.stringify({ effort, round: rounds, tools: result.toolCalls?.map((call) => call.name), textChars: result.text?.length ?? 0 }));
+          return result;
+        } },
+      }));
+      const result = await agent.run({ turn, signal: AbortSignal.timeout(180000),
+        recordModelRoundAcceptance: async () => {}, loadModelRoundAcceptance: async () => undefined });
+      expect(result.content).toContain("739241");
+      expect(result.content).toContain("미확인");
+      expect((await fixture.stores.durableWork.boundWorkForTurn(turn.turnId))?.status).toBe("completed");
+      expect(fixture.stores.guidedToolJournal.list(turn.turnId).some((call) => call.toolName === "read_file" && call.status === "completed")).toBe(true);
+    } finally { globalThis.fetch = originalFetch; fixture.close(); }
+  }
+}, 600000);
+
 test("Worker result returns to the current Steward Work before reporting", async () => {
   const previousSurface = process.env.BUTLER_PHASE_TOOL_SURFACE;
   process.env.BUTLER_PHASE_TOOL_SURFACE = "on";

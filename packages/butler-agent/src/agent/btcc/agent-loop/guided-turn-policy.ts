@@ -173,10 +173,16 @@ export function hiddenNativeToolNamesForGuidedTurn(
   ];
 }
 
-export function directSynthesisToolDefinitions<T extends { name: string }>(
-  _tools: readonly T[],
+const PARENT_RESULT_TOOL_NAMES = new Set([
+  "read_file", "list_files", "list_operation_results", "read_operation_results",
+  "record_work_checkpoint", "record_work_review", "record_work_disposition",
+]);
+
+/** Verify returned evidence through the existing authorized readers and closeout. */
+export function parentResultToolDefinitions<T extends { name: string }>(
+  tools: readonly T[],
 ): T[] {
-  return [];
+  return tools.filter((tool) => PARENT_RESULT_TOOL_NAMES.has(tool.name));
 }
 
 export function visibleToolDefinitions(authorized: readonly FunctionToolDefinition[], policy: Pick<ButlerExecutionPolicy, "role" | "accessMode" | "trackingMode" | "projectId" | "subsession">, includeAttachedImageTool = false): FunctionToolDefinition[] {
