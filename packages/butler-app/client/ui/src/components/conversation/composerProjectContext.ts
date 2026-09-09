@@ -5,6 +5,7 @@ export function activeProjectId(
   navigation: NavigationView,
   activeChatId: string,
 ): string | null {
+  if (activeChatId.startsWith("dashboard:")) return activeChatId.slice("dashboard:".length);
   const draft = parseDraftChatId(activeChatId);
   if (draft.kind === "project") return draft.projectId ?? null;
   if (isDraftChatId(activeChatId)) return null;

@@ -1,0 +1,3 @@
+.reading {
+  max-width: var(--conversation-content-width, 760px);
+}

@@ -1,0 +1,21 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(15rem, 1fr));
+  gap: var(--space-md);
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: var(--space-md);
+}
+.spinner {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

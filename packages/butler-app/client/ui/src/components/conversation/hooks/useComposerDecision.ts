@@ -6,13 +6,15 @@ import { useComposerKeyboard } from "./useComposerKeyboard";
 import type { ComposerSubmit } from "./composerEventTypes";
 
 /** Keep the visible decision, form submission, and keyboard submission on the same owner. */
-export function useComposerDecision(isComposing: boolean) {
+export function useComposerDecision(isComposing: boolean, enabled = true) {
   const submit = useComposerStore((state) => state.submit);
   const setModelMenuOpen = useComposerStore((state) => state.setModelMenuOpen);
   const setAccessMenuOpen = useComposerStore((state) => state.setAccessMenuOpen);
   const multilineSendBehavior = useButlerStore((state) => state.settings.multiline_send_behavior);
-  const authority = useComposerAuthorityDecision();
-  const plan = useComposerPlanDecision();
+  const activeAuthority = useComposerAuthorityDecision();
+  const activePlan = useComposerPlanDecision();
+  const authority = enabled ? activeAuthority : undefined;
+  const plan = enabled ? activePlan : undefined;
   let onSubmit: ComposerSubmit = plan?.onSubmitInstruction ?? submit;
   if (authority) {
     onSubmit = authority.composingMessage ? submit : (event) => event.preventDefault();

@@ -49,6 +49,7 @@ export function createAppTransportModuleGraph(input: {
     <T>(callback: () => T) => host.db.transaction(callback)(),
     (input) => host.sessionQueue.fenceQueuedTurnClaim(input),
     sessionId => readSessionBranchSeed(db, sessionId),
+    (chatId, messageId) => host.sessionQueue.projectSourcesForMessage(chatId, messageId),
   );
   const transportProjection = new AppTransportProjectionStore({
     db,

@@ -32,6 +32,7 @@ import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkspaceToolHandlers } from "./workspace-tool-handlers.ts";
+import { readProjectSource } from "./project-source/executor.ts";
 import { createSubsessionToolHandlers } from "./subsession/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type {
@@ -255,6 +256,7 @@ export function createButlerToolExecutor(
       sessionBindingStore: input.sessionBindingStore,
       mutationScope: input.subsessionMutationScope,
     }),
+    read_project_source: (call) => readProjectSource(call, { butlerData: input.butlerData, sources: input.projectSources ?? [] }),
     ...createSubsessionToolHandlers({
       service: input.subsessionDelegation,
       parentSessionId: input.sessionId,

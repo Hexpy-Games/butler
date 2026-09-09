@@ -3986,6 +3986,52 @@ test("sendMessage keeps concurrent session sends scoped until each operation fin
   expect(useButlerStore.getState().sendingOperations).toEqual({});
 });
 
+test("dashboard send keeps its target and replay id, and cannot overwrite a conversation opened while awaiting acceptance", async () => {
+  let release: (() => void) | undefined;
+  let posted: Record<string, unknown> | undefined;
+  const session = { id: "dashboard-target", project_id: "project-a", archived: false, title: "Target" };
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const path = String(input);
+    if (path.startsWith("/project-sessions?")) return jsonResponse({ sessions: [session] });
+    if (path === "/messages" && init?.method === "POST") {
+      posted = JSON.parse(String(init.body));
+      await new Promise<void>((resolve) => { release = resolve; });
+      return jsonResponse({ accepted: messageRecord("accepted", session.id, "user", "question", 1),
+        replies: [messageRecord("reply", session.id, "assistant", "answer", 2)] });
+    }
+    if (path === "/navigation") return jsonResponse(EMPTY_NAVIGATION);
+    return jsonResponse({});
+  }) as typeof fetch;
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-a" }, activeChatId: "previous", messages: [] });
+  let accepted = false;
+  const send = useButlerStore.getState().sendMessage("question", {
+    dashboardTarget: { projectId: "project-a", sessionId: session.id, clientMessageId: "stable-retry-id" },
+    onAccepted: () => { accepted = true; },
+  });
+  await waitFor(() => Boolean(release));
+  expect(posted).toMatchObject({ expected_project_id: "project-a", chat_id: session.id, client_message_id: "stable-retry-id" });
+  expect(useButlerStore.getState().view.kind).toBe("project-dashboard");
+  const other = messageRecord("other-message", "other", "user", "keep this", 1);
+  useButlerStore.setState({ activeChatId: "other", view: { kind: "session" }, messages: [other] });
+  release!(); await send;
+  expect(accepted).toBe(true);
+  expect(useButlerStore.getState().activeChatId).toBe("other");
+  expect(useButlerStore.getState().messages).toEqual([other]);
+});
+
+test("dashboard target preflight cannot send to an archived or relocated conversation", async () => {
+  let sent = false;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    if (String(input).startsWith("/project-sessions?")) return jsonResponse({ sessions: [
+      { id: "target", project_id: "different", archived: false },
+    ] });
+    sent = true; return jsonResponse({});
+  }) as typeof fetch;
+  useButlerStore.setState({ view: { kind: "project-dashboard", projectId: "project-a" } });
+  await useButlerStore.getState().sendMessage("question", { dashboardTarget: { projectId: "project-a", sessionId: "target" } });
+  expect(sent).toBe(false);
+});
+
 test("draft first send includes the initial message in session creation", async () => {
   const userText = "오늘을 비가 올것 같아?";
   let createSessionBody: Record<string, unknown> | null = null;

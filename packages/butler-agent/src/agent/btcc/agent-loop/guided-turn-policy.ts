@@ -151,6 +151,8 @@ export function authorizedToolDefinitions(
   );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
   for (const name of guidedLedgerEffects) names.add(name);
+  if (turn.context.projectSources?.length) names.add("read_project_source");
+  else names.delete("read_project_source");
   return [
     ...guidedNativeToolDefinitions(exactResultReplayEnabled)
       .filter((tool) => names.has(tool.name)),
@@ -193,6 +195,7 @@ export function visibleToolDefinitions(authorized: readonly FunctionToolDefiniti
     "query_memory",
     "list_conversation_sessions",
     "read_conversation_session",
+    "read_project_source",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
     ...(includeAttachedImageTool ? ["analyze_attached_image"] : []),

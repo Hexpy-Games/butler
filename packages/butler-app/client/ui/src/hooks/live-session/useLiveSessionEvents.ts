@@ -1,4 +1,6 @@
 import { appCopy } from "@/app/copy.ts";
+import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
+import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useEffect, useRef } from "react";
 import { subscribeLiveEvents } from "@/app/api.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
@@ -69,6 +71,8 @@ export function useLiveSessionEvents(): void {
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       markStreamHealthy();
+      const dashboardState = useButlerStore.getState();
+      if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
       if (event.type === "stream.reconcile_required") {
         useButlerStore.getState().noteNavigationEvent();
         navigationReconciliation.noteLiveNavigationEvent();
@@ -152,6 +156,8 @@ export function useLiveSessionEvents(): void {
         consecutiveFailures = 0;
       }, LIVE_EVENT_STABLE_CONNECTION_MS);
       if (reconnect) {
+        const view = useButlerStore.getState().view;
+        if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
       }

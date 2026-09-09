@@ -87,6 +87,7 @@ export interface InboundEnvelope {
     contentParts?: import("../../foundation/message-content.ts").MessageContent;
     branchSeed?: import("../../foundation/session-branch.ts").SessionBranchSeed;
     sessionReferences?: import("../../foundation/message-content.ts").ResolvedSessionReference[];
+    projectSources?: import("../../foundation/message-content.ts").ResolvedProjectSource[];
     version: 1;
     session: { id: string; kind: "chat" | "project" };
     conversation: {

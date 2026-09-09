@@ -8,7 +8,7 @@ import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
 import { useComposerHandlers } from "./hooks/useComposerHandlers";
 import { useComposerQueue } from "./hooks/useComposerQueue";
-import { useComposerSession } from "./hooks/useComposerSession";
+import { useComposerSession, type ComposerDraftScope } from "./hooks/useComposerSession";
 import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
@@ -19,14 +19,15 @@ import { ComposerCard } from "@/butler-ds";
 import { ComposerNotices } from "./ComposerNotices.tsx";
 import { useComposerDecision } from "./hooks/useComposerDecision";
 interface ComposerProps {
+  scope?: ComposerDraftScope;
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
   large: boolean;
 }
-export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
-  const session = useComposerSession();
+export function Composer({ large, onOpenContext, onReserveChange, scope }: ComposerProps) {
+  const session = useComposerSession(scope);
   const referenceDragging = useSpaceDrag(state => state.source?.startsWith("s:") ?? false);
-  useComposerDraftSession(session.activeChatId);
+  useComposerDraftSession(scope?.draftKey ?? session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
@@ -42,12 +43,11 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     session.modelCatalogState,
     session.settings,
   );
-  const files = useFileAttachments(session.activeChatId);
+  const files = useFileAttachments(scope?.draftKey ?? session.activeChatId);
   const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
-    clearPendingProjectDocumentAttachment:
-      session.clearPendingProjectDocumentAttachment,
+    clearPendingProjectDocumentAttachment: session.clearPendingProjectDocumentAttachment,
     files,
     pendingProjectDocumentAttachment: session.pendingProjectDocumentAttachment,
   });
@@ -90,13 +90,14 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     onSend: session.sendMessage,
   });
   const queue = useComposerQueue({
+    enabled: !scope,
     activeChatId: session.activeChatId,
     files,
     setText,
     summary: session.summary,
     textAreaRef,
   });
-  const decision = useComposerDecision(isComposing);
+  const decision = useComposerDecision(isComposing, !scope);
   useReserveHeight(wrapRef, onReserveChange);
   useComposerStoreBridge({
     accessMenuOpen,
@@ -117,7 +118,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     state,
     textAreaRef,
   });
-  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length);
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
@@ -127,11 +127,11 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     <ComposerCard
       {...fileDrop}
       large={large}
-      expanded={Boolean(decision.plan || decision.authority) || presentation.expanded}
-      floating
+      expanded={Boolean(scope || decision.plan || decision.authority) || presentation.expanded}
+      floating={!scope}
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
-        showAdjunct ? (
+        composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length) ? (
           <ComposerAdjunctPanels
             queuedMessages={queue.sessionQueue}
             onEditQueued={queue.handleEditQueued}

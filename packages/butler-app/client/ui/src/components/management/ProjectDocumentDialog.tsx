@@ -12,6 +12,7 @@ import {
 import { projectDocumentDialogLayout } from "@/app/projectDocuments.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { ProjectDocumentMarkdownContent } from "./ProjectDocumentMarkdownContent.tsx";
+import { ArtifactViewer } from "@/components/artifacts/ArtifactViewer.tsx";
 
 const DIALOG_STYLE = {
   width: "min(880px, calc(100vw - 32px))",
@@ -21,10 +22,12 @@ export function ProjectDocumentDialog({
   document,
   onClose,
   onStartChatWithDocument,
+  onLoadMore,
 }: {
   document: ProjectDashboardDocument | null;
   onClose: () => void;
   onStartChatWithDocument?: (document: ProjectDashboardDocument) => void;
+  onLoadMore?: () => void;
 }) {
   useAppLocale();
   return (
@@ -35,16 +38,19 @@ export function ProjectDocumentDialog({
       <DialogContent data-project-ledger-modal="true" style={DIALOG_STYLE}>
         <DialogHeader>
           <DialogTitle>{document?.title}</DialogTitle>
-          <DialogDescription>{document?.safe_path_label}</DialogDescription>
+          <DialogDescription>{document?.artifact ? appCopy.projectSignpost.results : document?.safe_path_label}</DialogDescription>
         </DialogHeader>
         <div style={projectDocumentDialogLayout.body}>
           <ScrollArea
             style={projectDocumentDialogLayout.scroller}
             contentStyle={projectDocumentDialogLayout.markdownPadding}
           >
-            {document ? (
+            {document?.artifact ? <ArtifactViewer artifact={document.artifact} onBack={onClose} embedded /> : document ? (
               <ProjectDocumentMarkdownContent markdown={document.markdown} />
             ) : null}
+            {document?.truncated && <Button variant="outline" onClick={onLoadMore} disabled={!onLoadMore}>
+              {appCopy.projectSignpost.loadMore}
+            </Button>}
           </ScrollArea>
           {document && onStartChatWithDocument ? (
             <Button
@@ -53,7 +59,7 @@ export function ProjectDocumentDialog({
               variant="default"
               onClick={() => onStartChatWithDocument(document)}
             >
-              {appCopy.interfaceDetails.documentConversation}</Button>
+              {appCopy.projectSignpost.addToComposer}</Button>
           ) : null}
         </div>
       </DialogContent>

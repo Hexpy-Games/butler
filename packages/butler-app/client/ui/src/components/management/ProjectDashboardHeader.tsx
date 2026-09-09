@@ -11,7 +11,6 @@ import type {
 export function ProjectDashboardHeader({
   dashboard,
   project,
-  sessionsCount,
   onNewProjectChat,
 }: {
   dashboard: ProjectDashboardData | null;
@@ -23,7 +22,6 @@ export function ProjectDashboardHeader({
   return (
     <DashboardHeader
       title={dashboard?.project.display_name ?? project?.display_name ?? appCopy.briefing.projectMoment}
-      description={`${sessionsCount} project chats`}
       action={project ? (
         <Button
           type="button"

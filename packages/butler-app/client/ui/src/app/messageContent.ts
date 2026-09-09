@@ -1,2 +1,2 @@
-export { isMessageContent, messageContentText } from "../../../../../butler-agent/src/foundation/message-content.ts";
-export type { MessageContent, MessageContentPart } from "../../../../../butler-agent/src/foundation/message-content.ts";
+export { isMessageContent, isProjectSourceContentPart, messageContentText } from "../../../../../butler-agent/src/foundation/message-content.ts";
+export type { MessageContent, MessageContentPart, ProjectSourceContentPart } from "../../../../../butler-agent/src/foundation/message-content.ts";

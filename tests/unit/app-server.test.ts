@@ -960,8 +960,12 @@ test("product app server exposes no responder substitution", () => {
   );
 
   expect(serverSource).toContain("return createComposedAppServer(options, {});");
-  expect(serverTypes.match(/interface CreateAppServerOptions[\s\S]*?\n\}/u)?.[0])
-    .not.toContain("responder");
+  const baseOptions = serverTypes.match(/interface CreateAppServerBaseOptions[\s\S]*?\n\}/u)?.[0];
+  const publicOptions = serverTypes.match(/type CreateAppServerOptions[\s\S]*?\n\);/u)?.[0];
+  expect(baseOptions).toBeDefined();
+  expect(publicOptions).toBeDefined();
+  expect(baseOptions).not.toContain("responder");
+  expect(publicOptions).not.toContain("responder");
 });
 
 test("responder injection lives under explicit test support", () => {
@@ -1505,94 +1509,42 @@ test("navigation starts with no default projects and no workspace paths", async 
   }
 });
 
-test("project dashboard reads Project Ledger documents from Butler data home", async () => {
+test("project dashboard lists metadata and reads exact source details without full-body list payloads", async () => {
   const butlerData = join(tempDir, ".butler");
-  const workspaceRoot = join(tempDir, "project-workspace");
-
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    butlerData,
-    projectWorkspaceRoot: workspaceRoot,
-    port: 0,
+    dbPath: join(tempDir, "app.sqlite"), butlerData,
+    projectWorkspaceRoot: join(tempDir, "workspace"), port: 0,
   });
   try {
-    const created = await postJson(`${server.url}projects`, {
-      source: "scratch",
-      display_name: "Data home project",
-    });
+    const created = await postJson(`${server.url}projects`, { source: "scratch", display_name: "Data home project" });
     const projectId = created.data.project.id as string;
-    const specDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "specs",
-    );
-    const planDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "plans",
-    );
-    const workDir = join(
-      butlerData,
-      "project-ledger",
-      "projects",
-      projectId,
-      "work",
-      "dashboard-work",
-    );
-    const taskDir = join(workDir, "tasks");
-    mkdirSync(specDir, { recursive: true });
-    mkdirSync(planDir, { recursive: true });
-    mkdirSync(taskDir, { recursive: true });
-    writeFileSync(
-      join(specDir, "local-spec.md"),
-      "# Data home spec\n\nSpec body with [external](https://example.com).",
-      "utf8",
-    );
-    writeFileSync(
-      join(planDir, "local-plan.md"),
-      "# Data home plan\n\nPlan body.",
-      "utf8",
-    );
-    writeFileSync(
-      join(workDir, "work.md"),
-      '---\nstatus: "done"\n---\n\n# Data home work\n\nWork body.',
-      "utf8",
-    );
-    writeFileSync(
-      join(taskDir, "task.md"),
-      '---\nstatus: "done"\n---\n\n# Data home task\n\nTask body.',
-      "utf8",
-    );
-
-    const dashboard = await getJson(
-      `${server.url}projects/${encodeURIComponent(projectId)}/dashboard`,
-    );
+    const root = join(butlerData, "project-ledger", "projects", projectId);
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, "project.json"), JSON.stringify({ id: projectId, name: "Fixture", status: "active" }));
+    writeFileSync(join(root, "ledger.jsonl"), "");
+    const { loadProjectLedgerCore } = await import("../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-ledger-core.ts");
+    const core = await loadProjectLedgerCore();
+    core.createRecord(root, { kind: "spec", id: "SPEC-DASH", title: "Dashboard source", status: "active",
+      body: "# Dashboard source\n\n[external](https://example.com)\n" + butlerData });
+    core.createRecord(root, { kind: "plan", id: "PLAN-DASH", title: "Dashboard plan", status: "active", body: "# Plan" });
+    const dashboard = await getJson(`${server.url}projects/${projectId}/dashboard`);
     expect(dashboard.data.stats.specs).toBe(1);
     expect(dashboard.data.stats.plans).toBe(1);
-    expect(
-      dashboard.data.documents.map(
-        (document: { title: string }) => document.title,
-      ),
-    ).toContain("Data home spec");
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain(`project-ledger/projects/${projectId}/specs/local-spec.md`);
-    expect(JSON.stringify(dashboard)).not.toContain(
-      `${process.cwd()}/.project-ledger`,
-    );
+    expect(dashboard.data.documents).toEqual([]);
+    const materials = await getJson(`${server.url}projects/${projectId}/dashboard/materials`);
+    expect(materials.data.total).toBe(2);
+    const spec = materials.data.documents.find((item: { id: string }) => item.id === "SPEC-DASH");
+    expect(spec.markdown).toBe("");
+    const source = await getJson(`${server.url}projects/${projectId}/dashboard/source?kind=spec&id=SPEC-DASH&revision=${spec.revision}`);
+    expect(source.data.markdown).toContain("[external](https://example.com)");
+    expect(source.data.markdown).toContain("[local]");
+    expect(source.data.revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(source)).not.toContain(butlerData);
     expect(JSON.stringify(dashboard)).not.toContain("workspace_path");
-  } finally {
-    server.stop();
-  }
+  } finally { server.stop(); }
 });
 
-test("project dashboard resolves Butler data Project Ledger by workspace slug", async () => {
+test("project dashboard does not infer a Ledger from a matching workspace slug", async () => {
   const butlerData = join(tempDir, ".butler");
   const folderSelectionSecret = "dashboard-data-home-folder-secret";
   const selectedFolder = join(tempDir, "sandy-bot");
@@ -1659,20 +1611,10 @@ test("project dashboard resolves Butler data Project Ledger by workspace slug", 
     const dashboard = await getJson(
       `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
     );
-    expect(dashboard.data.stats.specs).toBe(1);
-    expect(dashboard.data.stats.plans).toBe(1);
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain("project-ledger/projects/sandy-bot/specs/sandy-spec.md");
-    expect(
-      dashboard.data.documents.map(
-        (document: { safe_path_label: string }) => document.safe_path_label,
-      ),
-    ).toContain(
-      "project-ledger/projects/sandy-bot/work/W-SANDY/tasks/T-SANDY-001/task.md",
-    );
+    expect(dashboard.data.stats.specs).toBe(0);
+    expect(dashboard.data.stats.plans).toBe(0);
+    expect(dashboard.data.documents).toEqual([]);
+    expect(dashboard.data.overview.status).toBe("unavailable");
     expect(JSON.stringify(dashboard)).not.toContain(
       `project-ledger/projects/${project.id}/`,
     );
@@ -1682,7 +1624,7 @@ test("project dashboard resolves Butler data Project Ledger by workspace slug", 
   }
 });
 
-test("project dashboard falls back to folder Project Ledger documents without leaking paths", async () => {
+test("project dashboard never falls back to folder Ledger documents without a binding", async () => {
   const folderSelectionSecret = "dashboard-folder-secret";
   const selectedFolder = join(tempDir, "selected-ledger-project");
   const specDir = join(selectedFolder, ".project-ledger", "specs");
@@ -1707,18 +1649,19 @@ test("project dashboard falls back to folder Project Ledger documents without le
     const dashboard = await getJson(
       `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
     );
-    expect(dashboard.data.stats.specs).toBeGreaterThan(0);
-    expect(dashboard.data.stats.plans).toBeGreaterThan(0);
+    expect(dashboard.data.stats.specs).toBe(0);
+    expect(dashboard.data.stats.plans).toBe(0);
+    expect(dashboard.data.overview.status).toBe("unavailable");
     expect(
       dashboard.data.documents.some((document: { safe_path_label: string }) =>
         document.safe_path_label.startsWith("workspace/.project-ledger/specs/"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       dashboard.data.documents.some((document: { safe_path_label: string }) =>
         document.safe_path_label.startsWith("workspace/.project-ledger/plans/"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(JSON.stringify(dashboard)).not.toContain(process.cwd());
     expect(JSON.stringify(dashboard)).not.toContain("workspace_path");
   } finally {
