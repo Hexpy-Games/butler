@@ -8,6 +8,7 @@ import type {
   SubsessionDelegationService,
 } from "./contracts.ts";
 import { activeParentDelegations } from "./active-parent-delegation.ts";
+import { resolveStewardFollowup } from "./steward-followup.ts";
 
 type ControlService = Pick<
   SubsessionDelegationService,
@@ -18,7 +19,7 @@ type ControlService = Pick<
 export function createSubsessionControlService(
   input: SubsessionDelegationDependencies,
   childQueue: NativeInboundQueue,
-): ControlService {
+): ControlService & { recoverPendingDirections(): Promise<void> } {
   const activeChildCancellationTarget: ControlService["activeChildCancellationTarget"] = async (childSessionId) => {
     const relation = input.store.relationByChildSessionId(childSessionId);
     if (!relation) return null;
@@ -30,13 +31,27 @@ export function createSubsessionControlService(
     return { relation, child_turn_id: latest?.turnId ?? active.child_turn_id };
   };
   return {
+    async recoverPendingDirections() {
+      const recovered = new Set<string>();
+      for (const direction of input.store.pendingDirections()) {
+        if (recovered.has(direction.relation_id)) continue;
+        recovered.add(direction.relation_id);
+        const relation = input.store.relationById(direction.relation_id);
+        if (!relation) throw new Error("subsession_direction_relation_missing");
+        const latest = await input.parentTurns.findLatestTurnForSession(relation.child_session_id);
+        if (!latest || latest.semanticState !== "admitted" || latest.suspension) {
+          await enqueueDirectionContinuation(input, childQueue, relation, direction);
+        }
+      }
+    },
     activeChildCancellationTarget,
     async activeParentDelegations(parentInput) {
       return activeParentDelegations(input, parentInput);
     },
     async steerSteward(directionInput) {
       const instruction = requiredBoundedDirection(directionInput.instruction);
-      const active = await resolveActiveRelation(input, directionInput);
+      const active = await resolveStewardFollowup(input, directionInput)
+        ?? await resolveActiveRelation(input, directionInput);
       const instructionId = `steward-direction-${digest(stableJson({
         relation_id: active.relation.relation_id,
         source_message_id: directionInput.sourceMessageId,
@@ -86,7 +101,7 @@ export function createSubsessionControlService(
     },
     async consumeStewardDirection(directionInput) {
       const relation = input.store.relationByChildSessionId(directionInput.childSessionId);
-      if (!relation || input.store.resultByRelationId(relation.relation_id)) return null;
+      if (!relation) return null;
       return input.store.consumePendingDirection({
         relationId: relation.relation_id,
         childTurnId: directionInput.childTurnId,
@@ -99,8 +114,13 @@ async function enqueueDirectionContinuation(
   input: SubsessionDelegationDependencies,
   childQueue: NativeInboundQueue,
   relation: SessionRelation,
-  direction: StewardDirection,
+  requestedDirection: StewardDirection,
 ): Promise<void> {
+  // Several directions arriving before admission share one queued continuation.
+  // Safe-boundary consumption still applies each durable revision in order.
+  const direction = input.store.pendingDirections().find((candidate) =>
+    candidate.relation_id === relation.relation_id,
+  ) ?? requestedDirection;
   const child = input.sessionBindings.getBySessionId(relation.child_session_id);
   if (!child || (child.role !== "steward" && child.role !== "worker")) {
     throw new Error("subsession_direction_child_binding_missing");
@@ -109,14 +129,8 @@ async function enqueueDirectionContinuation(
   if (child.role === "steward") {
     const rootWorkId = input.store.rootWorkIdByRelationId(relation.relation_id);
     if (!rootWorkId) throw new Error("subsession_direction_work_missing");
-    const work = await input.durableWork.bindOpenWork({
-      sessionId: relation.child_session_id,
-      turnId,
-      ...(child.projectId ? { projectRef: child.projectId } : {}),
-    }, rootWorkId);
-    if (!work || work.workId !== rootWorkId) {
-      throw new Error("subsession_direction_work_missing");
-    }
+    // ensureChildRootWork binds this exact root only after the Turn is admitted.
+    // A queued envelope is not yet a Turn and cannot own a durable Work binding.
   }
   childQueue.enqueueIdempotent({
     eventId: `subsession-direction:${direction.instruction_id}`,
@@ -129,7 +143,7 @@ async function enqueueDirectionContinuation(
     },
     message: {
       id: `subsession-direction-message:${direction.instruction_id}`,
-      text: direction.instruction,
+      text: `${direction.instruction}\n\nContinue the existing Work from its retained checkpoint. Review the new direction against the existing result; do not restart completed actions or create a replacement Work.`,
       timestamp: direction.created_at,
     },
     routingHints: { sessionId: relation.child_session_id, turnId },

@@ -100,6 +100,7 @@ export class AppSpaceOrganization {
               command.sourceKey,
               command.targetKey,
               command.position,
+              origin === "smart",
             ).map(node => node.key === command.sourceKey ? { ...node, manualPlacement: origin === "manual" } : node),
           );
           break;
@@ -251,8 +252,8 @@ export class AppSpaceOrganization {
     );
     this.saveNodes(siblings.map((node, position) => ({ ...node, position })));
     this.saveNodes([
-      { ...target, parentKey: group.key, position: 0, manualPlacement: origin === "manual" },
-      { ...source, parentKey: group.key, position: 1, manualPlacement: origin === "manual" },
+      { ...target, parentKey: group.key, position: origin === "smart" ? 1 : 0, manualPlacement: origin === "manual" },
+      { ...source, parentKey: group.key, position: origin === "smart" ? 0 : 1, manualPlacement: origin === "manual" },
     ]);
     if (source.parentKey !== target.parentKey) {
       this.saveNodes(

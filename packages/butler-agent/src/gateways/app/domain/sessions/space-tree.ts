@@ -64,6 +64,7 @@ export function moveSpaceNodes(
   sourceKey: string,
   targetKey: string | null,
   position: "before" | "after" | "inside",
+  prepend = false,
 ): SpaceNode[] {
   const source = requireSpaceNode(view, sourceKey);
   if (sourceKey === targetKey) return [];
@@ -79,7 +80,7 @@ export function moveSpaceNodes(
     source.parentKey === parentKey ? from : orderedChildren(view, parentKey);
   const index =
     position === "inside"
-      ? to.length
+      ? (prepend ? 0 : to.length)
       : to.findIndex((node) => node.key === targetKey) +
         (position === "after" ? 1 : 0);
   to.splice(index, 0, { ...source, parentKey, manualPlacement: true });

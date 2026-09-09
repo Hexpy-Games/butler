@@ -45,7 +45,8 @@ ON btcc_subsession_directions(relation_id, status, revision);
 
 CREATE TABLE IF NOT EXISTS btcc_steward_results (
   result_id TEXT PRIMARY KEY,
-  relation_id TEXT NOT NULL UNIQUE,
+  relation_id TEXT NOT NULL,
+  direction_revision INTEGER NOT NULL DEFAULT 0,
   task_id TEXT NOT NULL,
   child_session_id TEXT NOT NULL,
   child_turn_id TEXT NOT NULL,
@@ -70,7 +71,7 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
 
 CREATE TABLE IF NOT EXISTS btcc_subsession_outbox (
   outbox_id TEXT PRIMARY KEY,
-  relation_id TEXT NOT NULL UNIQUE,
+  relation_id TEXT NOT NULL,
   result_id TEXT NOT NULL UNIQUE,
   parent_session_id TEXT NOT NULL,
   parent_turn_id TEXT NOT NULL,

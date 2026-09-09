@@ -765,6 +765,7 @@ test("late Worker result is acknowledged without waking a terminal Steward", asy
     relationByChildSessionId: (sessionId: string) => sessionId === "steward-terminal"
       ? { relation_id: "relation-owning-steward" }
       : null,
+    latestDirection: () => null,
     resultByRelationId: (relationId: string) => relationId === "relation-owning-steward"
       ? { result_id: "result-owning-steward", status: "cancelled" }
       : null,

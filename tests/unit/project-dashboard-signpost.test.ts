@@ -148,6 +148,11 @@ test("existing dashboard HTTP route resolves exact binding and exposes unavailab
       .then((response) => response.json());
     expect(second.data.items[0].id).not.toBe(board.data.items[0].id);
     expect(second.data.nextCursor).toBeNull();
+    const blockedLane = await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=work&lane=blocked&limit=10`).then((response) => response.json());
+    expect(blockedLane.data.items.map((item: { id: string }) => item.id)).toEqual(["W-1"]);
+    expect(blockedLane.data.nextCursor).toBeNull();
+    expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=work&lane=done&cursor=${board.data.nextCursor}`)).status).toBe(400);
+    expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?lane=invalid`)).status).toBe(400);
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=task&cursor=${board.data.nextCursor}`)).status).toBe(400);
     const tasks = await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=task&parent=W-1`).then((response) => response.json());
     expect(tasks.data.items[0]).toMatchObject({ id: "T-1", kind: "task", parentId: "W-1", lane: "done", actionProgress: null });

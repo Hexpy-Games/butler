@@ -28,7 +28,7 @@ interface OrganizationUi {
   undoToken: string | null;
   undoRevision: number | null;
   revealPath: string[];
-  reveal(key: string): void;
+  reveal(key: string, openSidebar?: boolean): void;
   setTab(tab: OrganizationUi["tab"]): void;
   setDialog(dialog: SpaceDialog): void;
   toggle(key: string): void;
@@ -44,7 +44,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
   undoToken: null,
   undoRevision: null,
   revealPath: [],
-  reveal: (key) => {
+  reveal: (key, openSidebar = true) => {
     const nodes = new Map(
       useButlerStore
         .getState()
@@ -56,7 +56,7 @@ export const useOrganization = create<OrganizationUi>((set, get) => ({
       path.push(current.key);
       current = current.parentKey ? nodes.get(current.parentKey) : undefined;
     }
-    useButlerStore.getState().setLeftOpen(true);
+    if (openSidebar) useButlerStore.getState().setLeftOpen(true);
     set((s) => ({
       tab: "all",
       revealPath: path,

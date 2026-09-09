@@ -35,10 +35,11 @@ export function migrateSpaceSchema(db: Database): void {
         INSERT INTO app_space_nodes(node_key,project_id,parent_key,position)
         VALUES('p:'||NEW.id,NEW.id,NULL,(SELECT COALESCE(MAX(position),-1)+1 FROM app_space_nodes WHERE parent_key IS NULL));
       END;
-      CREATE TRIGGER IF NOT EXISTS space_session_created AFTER INSERT ON chats WHEN NEW.id!='general' BEGIN
+      DROP TRIGGER IF EXISTS space_session_created;
+      CREATE TRIGGER space_session_created AFTER INSERT ON chats WHEN NEW.id!='general' BEGIN
         INSERT INTO app_space_nodes(node_key,session_id,parent_key,position)
         VALUES('s:'||NEW.id,NEW.id,CASE WHEN NEW.project_id IS NULL THEN NULL ELSE 'p:'||NEW.project_id END,
-          (SELECT COALESCE(MAX(position),-1)+1 FROM app_space_nodes WHERE parent_key IS
+          (SELECT COALESCE(MIN(position),1)-1 FROM app_space_nodes WHERE parent_key IS
             CASE WHEN NEW.project_id IS NULL THEN NULL ELSE 'p:'||NEW.project_id END));
       END;
       CREATE TRIGGER IF NOT EXISTS space_node_inserted AFTER INSERT ON app_space_nodes BEGIN

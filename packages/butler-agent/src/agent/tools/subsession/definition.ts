@@ -120,13 +120,14 @@ export function withWorkerProfileChoices(
 export const steerStewardToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "steer_steward",
-  description: "Send a bounded correction or added instruction to one active Steward relation. Continue the same relation and Work; never create a replacement delegation. Provide relation_id when more than one Steward is active.",
+  description: "Send a bounded correction or user acceptance to the original Steward and Work. Use work_id from Project Ledger for an existing open/blocked Work, including after its Steward has reported or from another conversation in the same project. Completed/abandoned Work cannot be reopened. Use relation_id for an active relation or a reported relation owned by this conversation. The original Steward owns the mutation and reports back to its original Butler conversation; queued is not completed. Never create a replacement delegation just to close existing work.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       instruction: { type: "string", minLength: 1, maxLength: 1200 },
       relation_id: { type: "string", minLength: 1, maxLength: 160 },
+      work_id: { type: "string", minLength: 1, maxLength: 160 },
       safe_title: { type: "string", minLength: 1, maxLength: 120 },
     },
     required: ["instruction"],
@@ -140,13 +141,22 @@ export const steerStewardToolDefinition: ButlerToolDefinition = {
 export const steerStewardToolMetadata: ToolCapabilityMetadata = {
   category: "dispatch",
   tags: ["subsession", "steward", "direction"],
-  safetyNotes: ["Persists one addressed direction and applies it only at the active Steward's next safe model boundary."],
+  safetyNotes: ["Preserves Work ownership and prior reports. Cross-conversation routing requires the exact Work and matching app/Ledger project identities."],
 };
 
 export const steerWorkerToolDefinition: ButlerToolDefinition = {
   ...steerStewardToolDefinition,
   name: "steer_worker",
   description: "Send a bounded correction or added instruction to one active Worker relation while the Steward continues waiting for that Worker result. Continue the same Worker session and assigned work; never create a replacement Worker.",
+  parameters: {
+    type: "object", additionalProperties: false,
+    properties: {
+      instruction: { type: "string", minLength: 1, maxLength: 1200 },
+      relation_id: { type: "string", minLength: 1, maxLength: 160 },
+      safe_title: { type: "string", minLength: 1, maxLength: 120 },
+    },
+    required: ["instruction"],
+  },
 };
 
 export const steerWorkerToolMetadata: ToolCapabilityMetadata = {

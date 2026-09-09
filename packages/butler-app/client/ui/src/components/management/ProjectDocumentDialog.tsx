@@ -1,5 +1,5 @@
-import { useAppLocale } from "@/app/copy.ts";
-import { appCopy } from "@/app/copy.ts";
+import { useState } from "react";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import {
   Dialog,
   DialogContent,
@@ -7,16 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
   Button,
-  ScrollArea,
+  DocumentReader, DisclosureRow, KeyValueRow, Stack, Typo, MessageSquarePlus,
 } from "@/butler-ds";
-import { projectDocumentDialogLayout } from "@/app/projectDocuments.ts";
+import { projectDocumentReaderView } from "@/app/projectDocumentReader.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { ProjectDocumentMarkdownContent } from "./ProjectDocumentMarkdownContent.tsx";
 import { ArtifactViewer } from "@/components/artifacts/ArtifactViewer.tsx";
-
-const DIALOG_STYLE = {
-  width: "min(880px, calc(100vw - 32px))",
-};
 
 export function ProjectDocumentDialog({
   document,
@@ -30,38 +26,41 @@ export function ProjectDocumentDialog({
   onLoadMore?: () => void;
 }) {
   useAppLocale();
+  const [expandedDocument, setExpandedDocument] = useState<string | null>(null);
+  const view = document ? projectDocumentReaderView(document) : null;
+  const copy = appCopy.projectDocumentMetadata;
+  const close = () => { setExpandedDocument(null); onClose(); };
   return (
     <Dialog
       open={Boolean(document)}
-      onOpenChange={(open) => !open && onClose()}
+      onOpenChange={(open) => !open && close()}
     >
-      <DialogContent data-project-ledger-modal="true" style={DIALOG_STYLE}>
-        <DialogHeader>
-          <DialogTitle>{document?.title}</DialogTitle>
-          <DialogDescription>{document?.artifact ? appCopy.projectSignpost.results : document?.safe_path_label}</DialogDescription>
-        </DialogHeader>
-        <div style={projectDocumentDialogLayout.body}>
-          <ScrollArea
-            style={projectDocumentDialogLayout.scroller}
-            contentStyle={projectDocumentDialogLayout.markdownPadding}
-          >
-            {document?.artifact ? <ArtifactViewer artifact={document.artifact} onBack={onClose} embedded /> : document ? (
-              <ProjectDocumentMarkdownContent markdown={document.markdown} />
-            ) : null}
-            {document?.truncated && <Button variant="outline" onClick={onLoadMore} disabled={!onLoadMore}>
-              {appCopy.projectSignpost.loadMore}
-            </Button>}
-          </ScrollArea>
-          {document && onStartChatWithDocument ? (
-            <Button
-              style={projectDocumentDialogLayout.startAction}
-              type="button"
-              variant="default"
-              onClick={() => onStartChatWithDocument(document)}
-            >
-              {appCopy.projectSignpost.addToComposer}</Button>
-          ) : null}
-        </div>
+      <DialogContent style={{ width: "min(880px, calc(100vw - 32px))", overflow: "hidden" }}>
+        {document && view && <DocumentReader
+          header={<DialogHeader>
+            <DialogDescription>{view.facts[0]?.value}</DialogDescription>
+            <DialogTitle asChild><Typo.H2>{document.title}</Typo.H2></DialogTitle>
+          </DialogHeader>}
+          facts={view.facts}
+          hint={copy.readOnly}
+          action={onStartChatWithDocument && <Button type="button" variant="outline"
+            onClick={() => onStartChatWithDocument(document)}>
+            <MessageSquarePlus />{copy.referenceAction}
+          </Button>}
+          details={<DisclosureRow title={copy.sourceDetails} surface="plain"
+            open={expandedDocument === document.id}
+            onToggle={() => setExpandedDocument(expandedDocument === document.id ? null : document.id)}>
+            <Stack gap="xs">{view.details.map((entry) =>
+              <KeyValueRow key={entry.key} label={entry.label} value={entry.value} valueTextSize="caption" />,
+            )}</Stack>
+          </DisclosureRow>}
+        >
+          {document.artifact ? <ArtifactViewer artifact={document.artifact} onBack={close} embedded />
+            : <ProjectDocumentMarkdownContent markdown={view.body} />}
+          {document.truncated && <Button variant="outline" onClick={onLoadMore} disabled={!onLoadMore}>
+            {appCopy.projectSignpost.loadMore}
+          </Button>}
+        </DocumentReader>}
       </DialogContent>
     </Dialog>
   );

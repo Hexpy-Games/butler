@@ -10,7 +10,10 @@ export function commandForProjectLedgerNativeTool(
   const project = ["--project", projectPath];
   if (toolName === "project_ledger_index") return ["index", ...project];
   if (toolName === "project_ledger_status") return ["status", ...project];
-  if (toolName === "project_ledger_list") return ["query", ...project, "--kind", stringArg(args, "kind") || "all"];
+  if (toolName === "project_ledger_list") return ["query", ...project,
+    "--kind", stringArg(args, "kind") || "all",
+    ...stringFlag(args, "status", "status"), ...stringFlag(args, "query", "query"),
+    "--limit", String(typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : 50)];
   if (toolName === "project_ledger_show") return ["record", "show", ...project, ...recordIdentityArgs(args), ...booleanFlag(args, "include_body", "body")];
   if (toolName === "project_ledger_create") return createArgs(args, project);
   if (toolName === "project_ledger_update") return withBodyFile(args, ["record", "update", ...project, ...recordIdentityArgs(args), ...metadataArgs(args)]);

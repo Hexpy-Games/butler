@@ -93,6 +93,8 @@ export function readRecoverableStewardTurns(
       AND NOT EXISTS (
         SELECT 1 FROM btcc_steward_results AS result
         WHERE result.relation_id = relation.relation_id
+          AND result.direction_revision >= COALESCE((SELECT MAX(revision)
+            FROM btcc_subsession_directions WHERE relation_id = relation.relation_id), 0)
       )
     ORDER BY relation.created_at ASC, relation.relation_id ASC
   `).all().flatMap((row) => {

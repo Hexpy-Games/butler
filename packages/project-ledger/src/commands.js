@@ -125,7 +125,17 @@ export function handle(command, positionals, options) {
   if (command === "query") {
     const kind = requiredOption(options, "kind");
     assertSupportedQueryKind(kind);
-    return { kind, results: queryIndex(loadIndex(project), kind, options) };
+    const query = typeof options.query === "string" ? options.query.trim().toLocaleLowerCase("en-US") : "";
+    const results = queryIndex(loadIndex(project), kind, options)
+      .filter((record) => !options.status || record.status === options.status)
+      .filter((record) => !query || JSON.stringify(record).toLocaleLowerCase("en-US").includes(query));
+    if (options.limit === undefined) return { kind, results };
+    const limit = Number(options.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      throw new CliError("limit must be an integer between 1 and 1000", "invalid_arguments");
+    }
+    return { kind, results: results.slice(0, limit), limit, returned: Math.min(results.length, limit),
+      total: results.length, truncated: results.length > limit };
   }
   if (command === "render") {
     const viewName = positionals[0];

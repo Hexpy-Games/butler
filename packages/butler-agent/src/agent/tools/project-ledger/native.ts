@@ -100,7 +100,7 @@ const recordFields = {
   work_id: { type: "string" },
   task_id: { type: "string" },
   include_body: { type: "boolean" },
-  limit: { type: "number" },
+  limit: { type: "integer", minimum: 1, maximum: 1000, default: 50 },
   query: { type: "string" },
 } satisfies Record<string, Record<string, unknown>>;
 
@@ -344,9 +344,6 @@ function runProjectLedgerNativeToolInternal(
       }),
     };
   }
-  if (toolName === "project_ledger_list") {
-    return applyListBounds(resultWithPlanBody, normalizedArgs);
-  }
   if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(resultWithPlanBody);
   return resultWithPlanBody;
 }
@@ -531,20 +528,6 @@ function refreshedProjectLedgerIndexResult(
 
 function stringArg(args: Record<string, unknown>, key: string): string {
   return typeof args[key] === "string" ? args[key].trim() : "";
-}
-
-function applyListBounds(result: Record<string, unknown>, args: Record<string, unknown>): Record<string, unknown> {
-  if (result.ok === false) return result;
-  const data = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data as Record<string, unknown> : {};
-  const results = Array.isArray(data.results) ? data.results : [];
-  const status = stringArg(args, "status");
-  const query = stringArg(args, "query").toLocaleLowerCase("en-US");
-  const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : 50;
-  const bounded = results
-    .filter((item) => !status || (item && typeof item === "object" && (item as Record<string, unknown>).status === status))
-    .filter((item) => !query || JSON.stringify(item).toLocaleLowerCase("en-US").includes(query))
-    .slice(0, limit);
-  return { ...result, data: { ...data, results: bounded, limit, returned: bounded.length } };
 }
 
 function withRecoverableProjectLedgerError(

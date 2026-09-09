@@ -1839,6 +1839,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
               ? null
               : state.optimisticSessionStart,
         }));
+        // Publish the persisted placement before waiting for message admission.
+        await get().refreshNavigation();
       }
       if (!optimisticStart) {
         const optimisticCursor =

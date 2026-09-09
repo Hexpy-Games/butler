@@ -94,6 +94,7 @@ export * from "./blocks/PercentInputControl";
 export * from "./blocks/ManagementPage";
 export * from "./blocks/DashboardHeader";
 export * from "./blocks/DocumentTile";
+export { DocumentReader, type DocumentReaderProps } from "./blocks/DocumentReader";
 export * from "./blocks/SessionRow";
 export * from "./blocks/AutomationRow";
 export * from "./blocks/AutomationRunList";

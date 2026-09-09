@@ -12,6 +12,7 @@ import type {
 
 type ResultRow = {
   result_id: string;
+  direction_revision: number;
   relation_id: string;
   task_id: string;
   child_session_id: string;
@@ -34,19 +35,22 @@ type ResultRow = {
 export function readStewardResult(
   db: Database,
   relationId: string,
+  resultId?: string,
 ): StewardResultEnvelope | null {
-  const row = db.query<ResultRow, [string]>(`
-    SELECT result_id, relation_id, task_id, child_session_id, child_turn_id,
+  const row = db.query<ResultRow, [string, string | null, string | null]>(`
+    SELECT result_id, direction_revision, relation_id, task_id, child_session_id, child_turn_id,
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
       changed_files_json,
       commits_json, tests_json, remaining_risks_json,
       follow_up_recommendations_json, detail_refs_json, created_at,
       (SELECT final_payload_json FROM btcc_turns
         WHERE turn_id = btcc_steward_results.child_turn_id) AS final_payload_json
-    FROM btcc_steward_results WHERE relation_id = ?
-  `).get(relationId);
+    FROM btcc_steward_results WHERE relation_id = ? AND (? IS NULL OR result_id = ?)
+    ORDER BY rowid DESC LIMIT 1
+  `).get(relationId, resultId ?? null, resultId ?? null);
   return row ? {
     result_id: row.result_id,
+    direction_revision: row.direction_revision,
     relation_id: row.relation_id,
     task_id: row.task_id,
     child_session_id: row.child_session_id,
@@ -71,15 +75,15 @@ export function readStewardResult(
 export function insertStewardResult(db: Database, result: StewardResultEnvelope): void {
   db.query(`
     INSERT INTO btcc_steward_results (
-      result_id, relation_id, task_id, child_session_id, child_turn_id,
+      result_id, relation_id, task_id, child_session_id, child_turn_id, direction_revision,
       status, code, summary, acceptance_evidence_json, changed_artifacts_json,
       changed_files_json,
       commits_json, tests_json, remaining_risks_json,
       follow_up_recommendations_json, detail_refs_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     result.result_id, result.relation_id, result.task_id, result.child_session_id,
-    result.child_turn_id, result.status, result.code, result.summary,
+    result.child_turn_id, result.direction_revision ?? 0, result.status, result.code, result.summary,
     stableJson(result.acceptance_evidence), stableJson(result.changed_artifacts),
     stableJson(result.changed_files ?? []),
     stableJson(result.commits), stableJson(result.tests), stableJson(result.remaining_risks),
