@@ -48,7 +48,8 @@ export async function activeParentDelegations(
           result.result_id) {
         throw new Error("active_parent_delegation_result_mismatch");
       }
-      continue;
+      const direction = dependencies.store.latestDirection(relation.relation_id);
+      if (!direction || direction.revision <= (result.direction_revision ?? 0)) continue;
     }
     const childTurn = await dependencies.parentTurns.findTurn(childTurnId);
     if (childTurn && (childTurn.turnId !== childTurnId ||

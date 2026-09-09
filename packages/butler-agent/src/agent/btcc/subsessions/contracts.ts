@@ -112,6 +112,8 @@ export type StewardResultCode =
 
 export type StewardResultEnvelope = {
   result_id: string;
+  /** Last applied parent direction covered by this immutable report. */
+  direction_revision?: number;
   relation_id: string;
   task_id: string;
   child_session_id: string;
@@ -271,6 +273,7 @@ export interface SubsessionDelegationStore {
   relationByDelegationId(delegationId: string): SessionRelation | null;
   relationsByParentSessionId(parentSessionId: string): SessionRelation[];
   relationByChildSessionId(childSessionId: string): SessionRelation | null;
+  relationByRootWorkId(workId: string): SessionRelation | null;
   packetByRelationId(relationId: string): DelegationPacket | null;
   rootWorkIdByRelationId(relationId: string): string | null;
   taskIdByRelationId(relationId: string): string | null;
@@ -286,7 +289,10 @@ export interface SubsessionDelegationStore {
     relationId: string;
     childTurnId: string;
   }): StewardDirection | null;
-  resultByRelationId(relationId: string): StewardResultEnvelope | null;
+  latestDirection(relationId: string): StewardDirection | null;
+  pendingDirections(): StewardDirection[];
+  appliedDirectionRevision(relationId: string, childTurnId: string): number;
+  resultByRelationId(relationId: string, resultId?: string): StewardResultEnvelope | null;
   resultIdForRelation(relationId: string): string | null;
   commitResult(input: {
     relation: SessionRelation;
@@ -404,6 +410,7 @@ export type SubsessionDelegationService = {
     sourceMessageId: string;
     instruction: string;
     relationId?: string;
+    workId?: string;
     safeTitle?: string;
   }): Promise<StewardDirection>;
   cancelSteward(input: {

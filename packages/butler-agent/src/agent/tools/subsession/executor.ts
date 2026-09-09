@@ -84,6 +84,7 @@ export function createSubsessionToolHandlers(input: {
       const direction = await input.service!.steerSteward({
         ...identity,
         instruction,
+        ...(optionalString(call.args.work_id) ? { workId: optionalString(call.args.work_id) } : {}),
         ...optionalRelationSelector(call.args),
       });
       return {

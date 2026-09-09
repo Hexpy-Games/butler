@@ -68,6 +68,17 @@ export function runProjectLedgerTool(
     },
     timeout: 10_000,
   });
+  // A killed/truncated child process is not a malformed-JSON response.
+  if (result.error) return {
+    ok: false,
+    error: {
+      code: (result.error as NodeJS.ErrnoException).code === "ENOBUFS"
+        ? "project_ledger_output_limit" : "project_ledger_spawn_failed",
+      message: (result.error as NodeJS.ErrnoException).code === "ENOBUFS"
+        ? "Project Ledger output exceeded the transport limit. Narrow the query."
+        : "Project Ledger process could not finish.",
+    },
+  };
   if (result.stdout.trim()) {
     try {
       return normalizeProjectLedgerReadResult(
@@ -87,8 +98,8 @@ export function runProjectLedgerTool(
   return {
     ok: false,
     error: {
-      code: result.error ? "project_ledger_spawn_failed" : "project_ledger_failed",
-      message: result.error?.message ?? (result.stderr.trim() || `Project Ledger exited with ${result.status ?? 1}`),
+      code: "project_ledger_failed",
+      message: result.stderr.trim() || `Project Ledger exited with ${result.status ?? 1}`,
     },
   };
 }

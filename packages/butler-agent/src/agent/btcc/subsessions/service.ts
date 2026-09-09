@@ -41,6 +41,7 @@ export function createSubsessionDelegationService(
     replayDispatchIntent(input, childQueue, relationId, intent);
   }
   const parentInputSink: ParentInputSink = input.parentInputSink;
+  const controls = createSubsessionControlService(input, childQueue);
   const completeResult = (resultInput: Parameters<SubsessionDelegationService["completeStewardResult"]>[0]) =>
     completeStewardResultForDependencies(input, parentInputSink, resultInput);
   const ensureRootWork = async (child: Parameters<SubsessionDelegationService["ensureChildRootWork"]>[0]): Promise<string> => {
@@ -230,6 +231,7 @@ export function createSubsessionDelegationService(
       return completeWorkerResultForDependencies(input, childQueue, resultInput);
     },
     async recoverPendingParentInputs() {
+      await controls.recoverPendingDirections();
       return recoverPendingParentInputs({ store: input.store, sink: parentInputSink });
     },
     async resolveParentResultEvidence(parentInput) {
@@ -244,7 +246,7 @@ export function createSubsessionDelegationService(
     pendingParentInputCount() {
       return input.store.pendingParentInputCount();
     },
-    ...createSubsessionControlService(input, childQueue),
+    ...controls,
   };
   return service;
 }

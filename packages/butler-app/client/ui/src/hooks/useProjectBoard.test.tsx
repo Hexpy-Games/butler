@@ -43,3 +43,45 @@ test("board restores the previously loaded window through real page cursors inst
     dom.window.close();
   }
 });
+
+test("lane windows start at ten, expand independently and reset on kind change", async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true });
+  const calls: string[] = [];
+  dom.window.butlerApp = { getProjectDashboardResource: async ({ query }: { query: string }) => {
+    calls.push(query);
+    const params = new URLSearchParams(query);
+    expect(params.get("limit")).toBe("10");
+    const lane = params.get("lane");
+    const offset = Number(params.get("cursor") ?? 0);
+    return { status: "ready", sourceRevision: "r", total: 25, parents: [], laneCounts: {},
+      items: Array.from({ length: Math.min(10, 25 - offset) }, (_, n) => ({ id: `${lane}-${offset + n}`, lane })),
+      nextCursor: offset + 10 < 25 ? String(offset + 10) : null };
+  } } as any;
+  let active!: ReturnType<typeof useProjectBoard>;
+  let done!: ReturnType<typeof useProjectBoard>;
+  function Harness({ kind }: { kind: "work" | "task" }) {
+    active = useProjectBoard("p", kind, undefined, "r", "active");
+    done = useProjectBoard("p", kind, undefined, "r", "done");
+    return null;
+  }
+  const root = createRoot(dom.window.document.getElementById("root")!);
+  const count = (board: typeof active) => board.page?.status === "ready" ? board.page.items.length : 0;
+  try {
+    await act(async () => root.render(<Harness kind="work" />));
+    expect(count(active)).toBe(10); expect(count(done)).toBe(10);
+    await act(async () => active.loadMore());
+    expect(count(active)).toBe(20); expect(count(done)).toBe(10);
+    expect(calls).toHaveLength(3);
+    await act(async () => root.render(<Harness kind="task" />));
+    expect(count(active)).toBe(10); expect(count(done)).toBe(10);
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete (globalThis as any)[key]; else (globalThis as any)[key] = value;
+    }
+    dom.window.close();
+  }
+});

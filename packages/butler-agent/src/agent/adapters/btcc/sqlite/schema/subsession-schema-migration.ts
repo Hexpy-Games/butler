@@ -21,6 +21,7 @@ export function migrateSubsessionResultSchema(db: Database): void {
     !definition.includes("'task_needs_split'")
   ) {
     addDetailedResultColumns(db);
+    migrateFollowupResults(db);
     return;
   }
   const legacyColumns = new Set(db.query<{ name: string }, []>(
@@ -54,6 +55,7 @@ export function migrateSubsessionResultSchema(db: Database): void {
   `);
   db.exec(`DROP TABLE ${legacyTable}`);
   addDetailedResultColumns(db);
+  migrateFollowupResults(db);
 }
 
 function ensureDelegationDispatchIntent(db: Database): void {
@@ -94,9 +96,31 @@ function addDetailedResultColumns(db: Database): void {
     ["follow_up_recommendations_json", "TEXT NOT NULL DEFAULT '[]'"],
     ["detail_refs_json", "TEXT NOT NULL DEFAULT '[]'"],
     ["changed_files_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["direction_revision", "INTEGER NOT NULL DEFAULT 0"],
   ] as const) {
     if (!columns.has(name)) db.exec(`ALTER TABLE btcc_steward_results ADD COLUMN ${name} ${definition}`);
   }
+}
+
+/** Preserve every accepted report/outbox row; later directions append reports. */
+function migrateFollowupResults(db: Database): void {
+  db.transaction(() => {
+    for (const table of ["btcc_steward_results", "btcc_subsession_outbox"] as const) {
+      const sql = db.query<{ sql: string }, [string]>(
+        "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+      ).get(table)?.sql;
+      if (!sql?.includes("relation_id TEXT NOT NULL UNIQUE")) continue;
+      const columns = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`)
+        .all().map((column) => column.name).join(", ");
+      const start = BTCC_SUBSESSION_SCHEMA.indexOf(`CREATE TABLE IF NOT EXISTS ${table} (`);
+      const end = BTCC_SUBSESSION_SCHEMA.indexOf(";", start) + 1;
+      db.exec(`ALTER TABLE ${table} RENAME TO ${table}_before_followup`);
+      db.exec(BTCC_SUBSESSION_SCHEMA.slice(start, end));
+      db.exec(`INSERT INTO ${table} (${columns}) SELECT ${columns} FROM ${table}_before_followup ORDER BY rowid`);
+      db.exec(`DROP TABLE ${table}_before_followup`);
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS idx_steward_results_relation ON btcc_steward_results(relation_id)");
+  }).immediate();
 }
 
 function resultTableSchema(): string {

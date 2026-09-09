@@ -479,6 +479,9 @@ function delegationFixture() {
   let storedResultId: string | null = null;
   let taskId = packet.task_id;
   const store = {
+    relationById: (id: string) => id === relation.relation_id ? relation : null,
+    latestDirection: (): StewardDirection | null => null,
+    pendingDirections: (): StewardDirection[] => [],
     relationsByParentSessionId: () => [relation],
     relationByChildSessionId: (sessionId: string) =>
       sessionId === relation.child_session_id ? relation : null,

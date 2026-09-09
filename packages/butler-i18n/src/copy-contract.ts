@@ -138,7 +138,9 @@ export interface AppCopy {
     excluded: (count: number) => string; age: (days: number) => string; changes: (count: number) => string;
     sources: (count: number) => string; labels: Record<string, string>;
   };
-  projectDocumentMetadata: { active: string; other: string; roadmap: string; labels: Record<string, string> };
+  projectDocumentMetadata: { active: string; other: string; roadmap: string;
+    sourceDetails: string; readOnly: string; referenceAction: string;
+    labels: Record<string, string>; statuses: Record<string, string> };
   guided: {
     workerStatus: Record<string, string>;
     argumentLabels: Record<string, string>;

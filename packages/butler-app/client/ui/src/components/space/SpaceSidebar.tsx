@@ -1,5 +1,5 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SidebarShell,
   SidebarTrafficSpace,
@@ -25,6 +25,15 @@ export function SpaceSidebar() {
   const leftOpen = useButlerStore((s) => s.leftOpen);
   const tab = useOrganization((s) => s.tab);
   const revealPath = useOrganization((s) => s.revealPath);
+  const reveal = useOrganization((s) => s.reveal);
+  const activeChatId = useButlerStore((s) => s.activeChatId);
+  const previousNodes = useRef(navigation.space.nodes);
+  useEffect(() => {
+    const active = navigation.space.nodes.find((node) => node.entityId === activeChatId);
+    const before = previousNodes.current.find((node) => node.entityId === activeChatId);
+    if (active && (!before || active.parentKey !== before.parentKey)) reveal(active.key, false);
+    previousNodes.current = navigation.space.nodes;
+  }, [activeChatId, navigation.space.nodes, reveal]);
   const rows = useMemo(() => projectSpace(navigation), [navigation, locale]);
   const [visibleCount, setVisibleCount] = useState(30);
   const roots =

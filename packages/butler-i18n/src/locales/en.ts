@@ -185,7 +185,9 @@ export const enUsCopy: AppCopy = {
   },
   projectDocumentMetadata: {
     active: "Active", other: "Other", roadmap: "Roadmap",
-    labels: { id: "ID", kind: "Kind", status: "Status", updatedAt: "Updated", migratedFrom: "Migrated from", parent: "Parent", owner: "Owner", priority: "Priority", acceptance: "Acceptance", validation: "Validation", review: "Review", report: "Report", implementation: "Implementation" },
+    sourceDetails: "Source details", readOnly: "Read-only view of the original document.", referenceAction: "Reference in conversation",
+    statuses: { draft: "Draft", proposed: "Proposed", active: "Active", in_progress: "In progress", todo: "To do", planned: "Planned", review: "In review", blocked: "Blocked", done: "Done", completed: "Completed", cancelled: "Cancelled", archived: "Archived", superseded: "Superseded", deprecated: "Deprecated" },
+    labels: { id: "ID", kind: "Document type", status: "Document status", updatedAt: "Last updated", source: "Source location", revision: "Revision", migratedFrom: "Migrated from", parent: "Parent", owner: "Owner", priority: "Priority", acceptance: "Acceptance", validation: "Validation", review: "Review", report: "Report", implementation: "Implementation" },
   },
   guided: {
     workerStatus: {

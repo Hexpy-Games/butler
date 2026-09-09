@@ -208,7 +208,9 @@ export const koKrCopy: AppCopy = {
   },
   projectDocumentMetadata: {
     active: "진행 중", other: "기타", roadmap: "로드맵",
-    labels: { id: "ID", kind: "종류", status: "상태", updatedAt: "수정일", migratedFrom: "이전 위치", parent: "상위 항목", owner: "담당자", priority: "우선순위", acceptance: "수락 기준", validation: "검증", review: "리뷰", report: "보고", implementation: "구현" },
+    sourceDetails: "원본 식별 정보", readOnly: "원본 문서를 읽기 전용으로 보고 있습니다.", referenceAction: "대화에 참조하기",
+    statuses: { draft: "초안", proposed: "제안됨", active: "진행 중", in_progress: "진행 중", todo: "할 일", planned: "예정", review: "검토 중", blocked: "진행이 막힘", done: "완료", completed: "완료", cancelled: "취소됨", archived: "보관됨", superseded: "대체됨", deprecated: "사용 중단" },
+    labels: { id: "ID", kind: "문서 종류", status: "문서 상태", updatedAt: "최근 수정", source: "원본 위치", revision: "리비전", migratedFrom: "이전 위치", parent: "상위 항목", owner: "담당자", priority: "우선순위", acceptance: "수락 기준", validation: "검증", review: "리뷰", report: "보고", implementation: "구현" },
   },
   guided: {
     workerStatus: {

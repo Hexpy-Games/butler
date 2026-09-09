@@ -104,6 +104,13 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     return row ?? null;
   }
 
+  relationByRootWorkId(workId: string): SessionRelation | null {
+    const row = this.db.query<{ relation_id: string }, [string]>(
+      "SELECT relation_id FROM btcc_subsession_delegations WHERE root_work_id = ?",
+    ).get(workId);
+    return row ? this.relationById(row.relation_id) : null;
+  }
+
   packetByRelationId(relationId: string): DelegationPacket | null {
     const row = this.db.query<Pick<DelegationRow, "packet_json">, [string]>(`
       SELECT packet_json FROM btcc_subsession_delegations WHERE relation_id = ?
@@ -166,13 +173,32 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
     return consumePendingStewardDirection(this.db, input);
   }
 
-  resultByRelationId(relationId: string): StewardResultEnvelope | null {
-    return readStewardResult(this.db, relationId);
+  latestDirection(relationId: string): StewardDirection | null {
+    return this.db.query<StewardDirection, [string]>(
+      "SELECT * FROM btcc_subsession_directions WHERE relation_id = ? ORDER BY revision DESC LIMIT 1",
+    ).get(relationId) ?? null;
+  }
+
+  pendingDirections(): StewardDirection[] {
+    return this.db.query<StewardDirection, []>(
+      "SELECT * FROM btcc_subsession_directions WHERE status = 'pending' ORDER BY created_at, revision",
+    ).all();
+  }
+
+  appliedDirectionRevision(relationId: string, childTurnId: string): number {
+    return this.db.query<{ revision: number }, [string, string]>(`
+      SELECT COALESCE(MAX(revision), 0) AS revision FROM btcc_subsession_directions
+      WHERE relation_id = ? AND applied_child_turn_id = ? AND status = 'applied'
+    `).get(relationId, childTurnId)?.revision ?? 0;
+  }
+
+  resultByRelationId(relationId: string, resultId?: string): StewardResultEnvelope | null {
+    return readStewardResult(this.db, relationId, resultId);
   }
 
   resultIdForRelation(relationId: string): string | null {
     return this.db.query<{ result_id: string }, [string]>(`
-      SELECT result_id FROM btcc_steward_results WHERE relation_id = ?
+      SELECT result_id FROM btcc_steward_results WHERE relation_id = ? ORDER BY rowid DESC LIMIT 1
     `).get(relationId)?.result_id ?? null;
   }
 
@@ -252,12 +278,18 @@ export class SqliteSubsessionDelegationStore implements SubsessionDelegationStor
       timestamp: now,
     };
     const transaction = this.db.transaction(() => {
-      const existing = this.resultByRelationId(input.relation.relation_id);
+      const existing = this.resultByRelationId(input.relation.relation_id, input.resultId);
       if (existing) {
         return { result: existing, inserted: false };
       }
+      const previous = this.resultByRelationId(input.relation.relation_id);
+      const directionRevision = this.appliedDirectionRevision(input.relation.relation_id, input.childTurnId);
+      if (previous && directionRevision <= (previous.direction_revision ?? 0)) {
+        throw new Error("subsession_followup_direction_required");
+      }
       const result: StewardResultEnvelope = {
         result_id: input.resultId,
+        direction_revision: directionRevision,
         relation_id: input.relation.relation_id,
         task_id: input.taskId,
         child_session_id: input.relation.child_session_id,

@@ -156,7 +156,7 @@ export class AppProjectDashboardStore {
   }
 
   async getBoard(projectId: string, input: {
-    kind: DashboardBoardCard["kind"]; parent?: string; cursor?: string; limit: number;
+    kind: DashboardBoardCard["kind"]; parent?: string; cursor?: string; limit: number; lane?: DashboardBoardCard["lane"];
   }): Promise<DashboardBoardPage> {
     const row = this.getProjectRow(projectId);
     if (!row) throw new AppStoreOperationError(404, "project_not_found", "Project not found.");
@@ -164,16 +164,18 @@ export class AppProjectDashboardStore {
     let snapshot;
     try { snapshot = await this.readLedger(projectId, row.ledger_project_id); }
     catch { return { status: "unavailable", reason: "source_unavailable" }; }
-    const records = interleaveDashboardLanes(projectDashboardBoard(snapshot, input.kind, projectWorkSessionResolver(this.db, projectId, this.projectSessions(projectId)))
+    const allRecords = interleaveDashboardLanes(projectDashboardBoard(snapshot, input.kind, projectWorkSessionResolver(this.db, projectId, this.projectSessions(projectId)))
       .filter((record) => !input.parent || record.parentId === input.parent)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)));
+    const records = input.lane ? allRecords.filter((record) => record.lane === input.lane) : allRecords;
     let offset = 0;
     if (input.cursor) {
-      let cursor: { revision: string; id: string; kind: string; parent: string | null };
+      let cursor: { revision: string; id: string; kind: string; parent: string | null; lane?: string | null };
       try { cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString("utf8")); }
       catch { throw new AppStoreOperationError(400, "invalid_cursor", "Invalid cursor."); }
       if (cursor.revision !== snapshot.revision) throw new AppStoreOperationError(409, "source_changed", "Reload the board.");
       if (cursor.kind !== input.kind || cursor.parent !== (input.parent ?? null)) throw new AppStoreOperationError(400, "invalid_cursor", "Invalid cursor.");
+      if ((cursor.lane ?? null) !== (input.lane ?? null)) throw new AppStoreOperationError(400, "invalid_cursor", "Invalid cursor.");
       const index = records.findIndex((record) => record.id === cursor.id);
       if (index < 0) throw new AppStoreOperationError(400, "invalid_cursor", "Invalid cursor.");
       offset = index + 1;
@@ -181,11 +183,11 @@ export class AppProjectDashboardStore {
     const items = records.slice(offset, offset + input.limit);
     const last = items.at(-1);
     const laneCounts = { planned: 0, active: 0, review: 0, blocked: 0, done: 0, other: 0 };
-    for (const record of records) laneCounts[record.lane]++;
+    for (const record of allRecords) laneCounts[record.lane]++;
     return { status: "ready", sourceRevision: snapshot.revision, items, total: records.length,
       laneCounts,
       parents: snapshot.works.map((work) => ({ id: work.record.id, title: sanitizePublicText(work.managed?.objective ?? work.record.title, "") })),
       nextCursor: last && offset + items.length < records.length
-        ? Buffer.from(JSON.stringify({ revision: snapshot.revision, id: last.id, kind: input.kind, parent: input.parent ?? null })).toString("base64url") : null };
+        ? Buffer.from(JSON.stringify({ revision: snapshot.revision, id: last.id, kind: input.kind, parent: input.parent ?? null, lane: input.lane ?? null })).toString("base64url") : null };
   }
 }

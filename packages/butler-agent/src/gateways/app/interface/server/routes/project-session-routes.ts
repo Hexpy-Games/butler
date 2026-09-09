@@ -156,12 +156,17 @@ export async function handleProjectSessionRoutes(
   const boardMatch = input.request.method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/records$/u) : null;
   if (boardMatch) {
     const kind = url.searchParams.get("kind") ?? "work";
+    const lane = url.searchParams.get("lane") ?? undefined;
+    if (lane && !["planned", "active", "review", "blocked", "done", "other"].includes(lane)) {
+      throw new RequestError(400, "invalid_request", "Invalid board lane.");
+    }
     const limit = Number(url.searchParams.get("limit") ?? 50);
     const cursor = url.searchParams.get("cursor") ?? undefined;
     if (!["work", "plan", "task"].includes(kind) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
         (cursor?.length ?? 0) > 2048) throw new RequestError(400, "invalid_request", "Invalid board query.");
     return json(apiEnvelope(await input.store.getProjectDashboardBoard(decodeURIComponent(boardMatch[1]!), {
       kind: kind as "work" | "plan" | "task", limit, cursor, parent: url.searchParams.get("parent") ?? undefined,
+      lane: lane as "planned" | "active" | "review" | "blocked" | "done" | "other" | undefined,
     })));
   }
   const sourceMatch = input.request.method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/(materials|source|history|artifacts)$/u) : null;

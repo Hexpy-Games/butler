@@ -49,7 +49,7 @@ export async function completeStewardResultForDependencies(
     await input.durableWork.abandonBoundWorkForTurn(resultInput.childTurnId);
   }
 
-  const existing = input.store.resultByRelationId(relation.relation_id);
+  const existing = input.store.resultByRelationId(relation.relation_id, expectedResultId);
   if (existing) {
     const pending = input.store.pendingParentInputForResult(existing.result_id);
     if (pending) {

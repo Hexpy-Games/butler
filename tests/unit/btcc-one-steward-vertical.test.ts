@@ -1446,7 +1446,7 @@ test("reviewed Butler delegation preserves the exact model name through Steward 
   }
 });
 
-test("App child provider exhaustion delivers one failed result and releases parent waiting", async () => {
+test("App failure then user acceptance resumes the same Steward Work and delivers a second report", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-child-provider-failure-"));
   roots.push(root);
   initializeGitWorkspace(root);
@@ -1462,8 +1462,29 @@ test("App child provider exhaustion delivers one failed result and releases pare
   let parentRound = 0;
   let childRound = 0;
   let parentReports = 0;
+  let resuming = false;
+  let followupWorkId = "";
+  let followupRound = 0;
+  let steered = false;
+  let childCompleted = false;
   const modelRound: ModelRoundPort = { async runRound(request) {
     if (request.instructions?.includes("Steward role")) {
+      if (resuming) {
+        followupRound += 1;
+        if (followupRound === 1) return { toolCalls: [toolCall("resume-existing", "continue_work", { work_id: followupWorkId })] };
+        if (followupRound === 2) return { toolCalls: [toolCall("accept-result", "record_work_review", {
+          subject: "result", verdict: "accept", summary: "The retained README read and new user acceptance satisfy the requested inspection.",
+          action_updates: [{ action_key: "read", status: "done" }],
+        })] };
+        if (followupRound === 3) return { toolCalls: [toolCall("accept-completion", "record_work_review", {
+          subject: "completion", verdict: "accept", summary: "User confirmed the outcome; no implementation needs repeating.",
+        })] };
+        if (followupRound === 4) return { toolCalls: [toolCall("close-original", "record_work_disposition", {
+          work_id: followupWorkId, disposition: "completed", summary: "Existing inspection accepted by the user.",
+        })] };
+        childCompleted = true;
+        return { text: "The original Work is complete after user acceptance. The existing README inspection was not repeated.", toolCalls: [] };
+      }
       childRound += 1;
       if (childRound === 1) return { toolCalls: [toolCall("child-plan", "replace_work_plan", {
         objective: "Read README and summarize it.", execution_mode: "direct",
@@ -1477,16 +1498,24 @@ test("App child provider exhaustion delivers one failed result and releases pare
       throw new ModelProviderRequestError({ code: "provider_rate_limited", provider: "openai",
         message: "PRIVATE_PROVIDER_PAYLOAD", retryable: true });
     }
+    if (resuming && !steered) {
+      steered = true;
+      return { toolCalls: [toolCall("steer-existing", "steer_steward", {
+        work_id: followupWorkId, instruction: "The user confirms the README inspection outcome. Review that acceptance and mark the existing Work complete; do not repeat the read.",
+      })] };
+    }
+    if (resuming && !childCompleted) return { text: "Acceptance sent to the original Steward; completion has not yet been confirmed.", toolCalls: [] };
     if (request.messages.some((message) => message.content.includes("Canonical child result synthesis") ||
       message.content.includes("Subsession result"))) {
       parentReports += 1;
-      expect(JSON.stringify(request.messages)).toContain("rate limit");
+      if (!resuming) expect(JSON.stringify(request.messages)).toContain("rate limit");
+      if (resuming) return { text: "The original inspection Work is now complete.", toolCalls: [] };
       return { text: "The model provider rate limit stopped the delegated work. Its progress is saved.", toolCalls: [] };
     }
     parentRound += 1;
     if (parentRound === 1) return { toolCalls: [toolCall("parent-start", "start_work", { objective: "Read README and summarize it." })] };
     if (parentRound === 2) return { toolCalls: [toolCall("parent-plan", "replace_work_plan", {
-      objective: "Read README and summarize it.", execution_mode: "direct",
+      objective: "Read README and summarize it.", execution_mode: "steward",
       actions: [{ action_key: "delegate", description: "Delegate README reading to Steward", dependency_keys: [] }], checks: ["README summarized"],
     })] };
     if (parentRound === 3) return { toolCalls: [toolCall("parent-review", "record_work_review", {
@@ -1523,12 +1552,26 @@ test("App child provider exhaustion delivers one failed result and releases pare
       const payload = JSON.parse(turn!.final_payload_json);
       expect(payload.runtimeFailure).toEqual({ code: "provider_rate_limited", retryable: true });
       expect(payload.acceptedWorkResult).toEqual({ status: "failed" });
-      const work = db.query<{ status: string }, []>(
-        "SELECT w.status FROM btcc_guided_works w JOIN btcc_subsession_delegations d ON d.root_work_id = w.work_id").get();
+      const work = db.query<{ status: string; work_id: string }, []>(
+        "SELECT w.status,w.work_id FROM btcc_guided_works w JOIN btcc_subsession_delegations d ON d.root_work_id = w.work_id").get();
       expect(work?.status).toBe("open");
+      followupWorkId = work!.work_id;
     } finally { db.close(); }
     expect(await composition.subsessions!.activeParentDelegations({ parentSessionId })).toHaveLength(0);
     expect(parentReports).toBe(1);
+    resuming = true;
+    expect((await postAppMessage(app.url, authToken, { chat_id: "general", text: "I accept the existing README inspection. Mark that original Work complete without repeating it.",
+      model: "openai/gpt-5.5", reasoning_effort: "low", access_mode: "full_access",
+      client_message_id: "client-followup-aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" })).status).toBe(202);
+    await drain(inbound, queue, gateway, bindings, deliveryGuard, root);
+    const verification = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
+    try {
+      expect(verification.query("SELECT * FROM btcc_session_relations").all()).toHaveLength(1);
+      expect(verification.query<{ status: string }, [string]>("SELECT status FROM btcc_guided_works WHERE work_id = ?").get(followupWorkId)?.status).toBe("completed");
+      expect(verification.query("SELECT result_id FROM btcc_steward_results").all()).toHaveLength(2);
+      expect(verification.query("SELECT call_id FROM btcc_guided_tool_calls WHERE tool_name = 'read_file'").all()).toHaveLength(1);
+      expect(parentReports).toBe(2);
+    } finally { verification.close(); }
   } finally {
     await composition.host.close(); bindings.close(); app.stop();
   }

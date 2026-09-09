@@ -42,7 +42,7 @@ export async function resolveParentResultEvidence(input: {
 } | null> {
   const refs = subsessionParentResultRefs(input.parentInputText);
   if (!refs) return null;
-  const result = input.store.resultByRelationId(refs.relationId);
+  const result = input.store.resultByRelationId(refs.relationId, refs.resultId);
   if (!result || result.result_id !== refs.resultId) {
     throw new Error("subsession_parent_result_identity_mismatch");
   }

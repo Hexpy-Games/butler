@@ -29,7 +29,9 @@ export function parentSubsessionIsTerminal(
   parentSessionId: string,
 ): boolean {
   const parentRelation = store.relationByChildSessionId(parentSessionId);
-  return Boolean(
-    parentRelation && store.resultByRelationId(parentRelation.relation_id),
-  );
+  if (!parentRelation) return false;
+  const result = store.resultByRelationId(parentRelation.relation_id);
+  if (!result) return false;
+  const direction = store.latestDirection(parentRelation.relation_id);
+  return !direction || direction.revision <= (result.direction_revision ?? 0);
 }

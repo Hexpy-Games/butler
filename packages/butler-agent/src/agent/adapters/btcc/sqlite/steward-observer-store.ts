@@ -300,6 +300,9 @@ export class SqliteStewardObserverStore implements StewardObserverReader {
         LEFT JOIN btcc_guided_works AS work ON work.work_id = binding.work_id
         LEFT JOIN btcc_turns AS turn ON turn.turn_id = result.child_turn_id
         WHERE result.relation_id = ?
+          AND result.direction_revision >= COALESCE((SELECT MAX(revision)
+            FROM btcc_subsession_directions WHERE relation_id = result.relation_id), 0)
+        ORDER BY result.rowid DESC LIMIT 1
       `)
       .get(relationId);
     if (!row) return null;

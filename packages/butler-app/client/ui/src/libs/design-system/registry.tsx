@@ -108,6 +108,7 @@ import { PercentInputControlFixture } from "./blocks/PercentInputControl/Percent
 import { ManagementPageFixture } from "./blocks/ManagementPage/ManagementPage.fixtures";
 import { DashboardHeaderFixture } from "./blocks/DashboardHeader/DashboardHeader.fixtures";
 import { DocumentTileFixture } from "./blocks/DocumentTile/DocumentTile.fixtures";
+import { DocumentReaderFixture } from "./blocks/DocumentReader/DocumentReader.fixtures";
 import { SessionRowFixture } from "./blocks/SessionRow/SessionRow.fixtures";
 import { AutomationRowFixture } from "./blocks/AutomationRow/AutomationRow.fixtures";
 import { AutomationRunListFixture } from "./blocks/AutomationRunList/AutomationRunList.fixtures";
@@ -1203,6 +1204,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/DocumentTile",
     tags: ["document", "tile", "resource"],
     fixture: DocumentTileFixture,
+  },
+  {
+    name: "DocumentReader",
+    path: "blocks/DocumentReader",
+    tags: ["document", "reader", "metadata", "dialog"],
+    fixture: DocumentReaderFixture,
   },
   {
     name: "SessionRow",
