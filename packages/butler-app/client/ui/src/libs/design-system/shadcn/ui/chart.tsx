@@ -75,9 +75,13 @@ export function ChartContainer({
   children,
   config,
   initialDimension = INITIAL_DIMENSION,
+  onPointerDownCapture,
+  onKeyDownCapture,
+  onBlurCapture,
   ...props
 }: ChartContainerProps) {
   const uniqueId = React.useId();
+  const [pointerFocus, setPointerFocus] = React.useState(false);
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
 
   return (
@@ -86,7 +90,20 @@ export function ChartContainer({
         className={cn(styles.chart, className)}
         data-chart={chartId}
         data-slot="chart"
+        data-pointer-focus={pointerFocus}
         {...props}
+        onPointerDownCapture={(event) => {
+          setPointerFocus(true);
+          onPointerDownCapture?.(event);
+        }}
+        onKeyDownCapture={(event) => {
+          setPointerFocus(false);
+          onKeyDownCapture?.(event);
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPointerFocus(false);
+          onBlurCapture?.(event);
+        }}
       >
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer

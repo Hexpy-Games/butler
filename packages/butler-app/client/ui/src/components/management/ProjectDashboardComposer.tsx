@@ -4,10 +4,11 @@ import { useButlerStore } from "@/app/store.ts";
 import { prepareDashboardSend, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { projectDraftId } from "@/app/utils.ts";
 import type { ComposerControls } from "@/app/types.ts";
-import styles from "./ProjectDashboardComposer.module.css";
 
 const noop = () => {};
-export function ProjectDashboardComposer({ projectId }: { projectId: string }) {
+export function ProjectDashboardComposer({ projectId, onReserveChange }: {
+  projectId: string; onReserveChange: (height: number) => void;
+}) {
   const update = useProjectDashboardState((state) => state.update);
   const [sending, setSending] = useState(false);
   const inFlight = useRef(false);
@@ -26,9 +27,7 @@ export function ProjectDashboardComposer({ projectId }: { projectId: string }) {
       } });
     } finally { inFlight.current = false; setSending(false); }
   };
-  return <div className={styles.dock}>
-    <Composer large={false} onOpenContext={noop} onReserveChange={noop} scope={{
+  return <Composer large={false} onOpenContext={noop} onReserveChange={onReserveChange} scope={{
       draftKey: `dashboard:${projectId}`, targetChatId: projectDraftId(projectId), isSending: sending, onSend: send,
-    }} />
-  </div>;
+    }} />;
 }
