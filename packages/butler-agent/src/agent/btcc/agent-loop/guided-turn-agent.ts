@@ -7,7 +7,7 @@ import { createProviderModelRoundPort } from "../../../integrations/providers/ru
 import { safeRuntimeFailure } from "../../../integrations/providers/provider-errors.ts";
 import { createGuidedToolBatchTransition } from "./guided-tool-batch-transition.ts";
 import { guidedPlanModeInstructions, providerImageAttachments, renderGuidedResponseLanguage } from "./guided-turn-prompt.ts";
-import { directSynthesisToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
+import { parentResultToolDefinitions, GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES, guidedNativeToolDefinitions, hiddenNativeToolNamesForGuidedTurn } from "./guided-turn-policy.ts";
 import { selectGuidedTurnPhasePolicy } from "./guided-phase-policy.ts";
 import { createGuidedToolExecutionBoundary } from "./guided-tool-execution-boundary.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
@@ -42,7 +42,6 @@ import type { PrincipalAuthority } from "../authority/index.ts";
 import { ensureSubsessionChildRootWork, subsessionDirectionSafeBoundary, subsessionToolInput } from "../subsessions/index.ts";
 import { withWorkerProfileChoices } from "../../tools/subsession/index.ts";
 import { withStewardDirection } from "./guided-steward-direction.ts";
-import { digest } from "../identity/index.ts";
 import {
   projectLedgerPlanFromRecordResult,
   projectLedgerPlanFromToolRecords,
@@ -85,7 +84,7 @@ export function createProductionGuidedTurnAgent(
       const workerResultIntegration = policy.role === "steward" &&
         turn.turnId.startsWith("steward-worker-result-") &&
         Boolean(subsessionResultEvidence);
-      const terminalParentSynthesis = Boolean(subsessionResultEvidence) && !workerResultIntegration;
+      const parentResultContinuation = Boolean(subsessionResultEvidence) && !workerResultIntegration;
       const askFirstTurn = policy.accessMode === "ask_first";
       const authorityOwnerSessionId = askFirstTurn &&
           (policy.role === "steward" || policy.role === "worker")
@@ -129,31 +128,11 @@ export function createProductionGuidedTurnAgent(
         input.subsessionDelegation) {
         await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
       }
-      if (subsessionResultEvidence?.outcome === "success" && terminalParentSynthesis) {
-        const parentWork = await safeBindOpenWork(
-          input.durableWork,
-          workScope,
-          subsessionResultEvidence.parentWorkId,
-        );
-        if (parentWork) {
-          await input.durableWork.recordDisposition({
-            ...workScope,
-            mutationCallId: digest(
-              `btcc-parent-work-settlement.v2\0${turn.turnId}\0${parentWork.workId}`,
-            ),
-            workId: parentWork.workId,
-            disposition: "completed",
-            summary: "Delegated Work completed successfully.",
-            actionUpdates: (parentWork.currentPlan?.actions ?? []).map((action) => ({
-              actionKey: action.actionKey,
-              status: "done" as const,
-            })),
-            remainingActions: [],
-            evidenceRefs: [],
-            followups: [],
-          });
-        }
+      if (subsessionResultEvidence?.outcome === "success" && parentResultContinuation) {
+        // Reattach the verified Work; child success does not complete parent actions.
+        await safeBindOpenWork(input.durableWork, workScope, subsessionResultEvidence.parentWorkId);
       }
+
       const { context: initialWork, bound: initialWorkBound } = await loadGuidedTurnWork({
         durableWork: input.durableWork,
         scope: workScope,
@@ -174,8 +153,8 @@ export function createProductionGuidedTurnAgent(
         sessionId: turn.sessionId,
         projectRef: policy.projectId ?? turn.context.projectRef,
       });
-      const phaseAuthorizedTools = terminalParentSynthesis
-        ? directSynthesisToolDefinitions(phasePolicy.authorizedTools)
+      const phaseAuthorizedTools = parentResultContinuation
+        ? parentResultToolDefinitions(phasePolicy.authorizedTools)
         : phasePolicy.authorizedTools;
       const authorizedTools = planMode
         ? projectPlanModeTools({
@@ -187,8 +166,8 @@ export function createProductionGuidedTurnAgent(
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const baseVisibleTools = planMode
         ? authorizedTools
-        : terminalParentSynthesis
-        ? directSynthesisToolDefinitions(phasePolicy.providerTools)
+        : parentResultContinuation
+        ? parentResultToolDefinitions(phasePolicy.providerTools)
         : phasePolicy.providerTools;
       const workerProfiles = policy.role === "steward" &&
           baseVisibleTools.some((tool) => tool.name === "delegate_to_worker")
