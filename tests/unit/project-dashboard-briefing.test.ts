@@ -6,6 +6,7 @@ import { validateProjectBriefing } from "../../packages/butler-agent/src/gateway
 import { ProjectBriefingStore } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-briefing-store.ts";
 import type { DashboardBriefingContent } from "../../packages/butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import type { DashboardLedgerSnapshot } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
+import { initializeProjectIntroduction } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-introduction.ts";
 
 function fixture() {
   const db = new Database(":memory:"); migrateAppStoreSchema(db);
@@ -19,7 +20,7 @@ function fixture() {
   return { db, pack, snapshot };
 }
 function output(pack: ProjectBriefingPack): DashboardBriefingContent {
-  return { position: { title: "현재 위치", body: "등록된 작업은 아직 시작되지 않았습니다.", sourceIds: [pack.sources[0]!.sourceId] },
+  return { introduction: "출시를 준비하는 프로젝트입니다.", position: { title: "진행 상황", body: "등록된 작업은 아직 시작되지 않았습니다.", sourceIds: [pack.sources[0]!.sourceId] },
     suggestions: pack.candidates.slice(0, 1).map((candidate) => ({ candidateId: candidate.id, title: "범위 확인", reason: "기록된 계획을 살펴볼 수 있습니다.", sourceIds: [candidate.sourceId] })) };
 }
 async function settle(predicate: () => boolean) {
@@ -32,11 +33,26 @@ test("briefing schema rejects invented sources/candidates and extra authority fi
   try {
     expect(validateProjectBriefing(JSON.stringify(output(pack)), pack)).toEqual(output(pack));
     for (const invalid of [
+      { ...output(pack), introduction: "x".repeat(181) },
+      { ...output(pack), position: { ...output(pack).position, body: "x".repeat(241) } },
+      { ...output(pack), position: { ...output(pack).position, title: "x".repeat(81) } },
       { ...output(pack), status: "completed" },
       { ...output(pack), position: { ...output(pack).position, sourceIds: ["other-project"] } },
       { ...output(pack), suggestions: [{ ...output(pack).suggestions[0], candidateId: "invented" }] },
       { ...output(pack), suggestions: [{ ...output(pack).suggestions[0], sourceIds: [] }] },
     ]) expect(() => validateProjectBriefing(JSON.stringify(invalid), pack)).toThrow();
+  } finally { db.close(); }
+});
+
+test("automatic introduction is one-time and never overwrites a concurrent or explicitly empty edit", () => {
+  const { db, pack } = fixture();
+  try {
+    expect(initializeProjectIntroduction(db, pack.projectId, 0, "Grounded introduction")).toBe(true);
+    expect(initializeProjectIntroduction(db, pack.projectId, 0, "Overwrite")).toBe(false);
+    db.query("UPDATE projects SET description = '', dashboard_preferences_revision = 2 WHERE id = ?").run(pack.projectId);
+    expect(initializeProjectIntroduction(db, pack.projectId, 2, "Overwrite empty user edit")).toBe(false);
+    db.query("UPDATE projects SET description = NULL, dashboard_preferences_revision = 3 WHERE id = ?").run(pack.projectId);
+    expect(initializeProjectIntroduction(db, pack.projectId, 2, "Stale generation")).toBe(false);
   } finally { db.close(); }
 });
 
@@ -60,6 +76,30 @@ test("GET does not run a model; slow concurrent POSTs share one call and stale g
     expect((await service.read(pack.projectId)).status).toBe("ready");
     current = { ...current, revision: "d".repeat(64), language: "en" };
     expect((await service.read(pack.projectId)).status).toBe("needed");
+  } finally { service.close(); db.close(); }
+});
+
+test("one generated answer initializes an untouched introduction and survives its own revision change", async () => {
+  const { db, pack, snapshot } = fixture();
+  let calls = 0; let published = 0;
+  const readPack = async () => {
+    const row = db.query<{ description: string | null }, [string]>("SELECT description FROM projects WHERE id = ?").get(pack.projectId)!;
+    return { pack: buildProjectBriefingPack({ db, projectId: pack.projectId, binding: "ledger-p", description: row.description, snapshot,
+      model: "openai/gpt-4o", language: "ko", contextTokens: 128000, reasoningEffort: "medium" }), reasoningEffort: "medium" as const };
+  };
+  const service = new ProjectBriefingStore({ db, butlerData: "/unused", readPack, publish: () => { published++; },
+    generate: async ({ pack }) => { calls++; return output(pack); } });
+  try {
+    const before = await service.read(pack.projectId);
+    await service.request(pack.projectId, before.sourceRevision, false);
+    await settle(() => published === 1);
+    const after = await service.read(pack.projectId);
+    expect(after.status).toBe("ready");
+    expect(after.sourceRevision).not.toBe(before.sourceRevision);
+    expect(db.query("SELECT description, dashboard_preferences_revision FROM projects WHERE id = ?").get(pack.projectId))
+      .toEqual({ description: output(pack).introduction, dashboard_preferences_revision: 1 });
+    await service.request(pack.projectId, after.sourceRevision, false);
+    expect(calls).toBe(1);
   } finally { service.close(); db.close(); }
 });
 

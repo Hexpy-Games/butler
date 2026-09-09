@@ -4,7 +4,12 @@
   width: 100%;
 }
 .timelineRow {
-  height: 4rem;
+  height: max(22rem, calc(var(--timeline-rows, 8) * 2.5rem));
   min-width: 0;
   width: 100%;
+}
+.selection {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
 }
