@@ -4370,7 +4370,7 @@ describe("app-client design system foundation", () => {
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ManagementPage/ManagementPage.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ManagementPage/ManagementPage.module.css",
-        "styles.page, footer && styles.withFooter, className",
+        "styles.page",
         "color: var(--text-primary)",
       ],
       [

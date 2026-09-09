@@ -1,7 +1,0 @@
-.dock {
-  display: grid;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--adaptive-composer-inset)
-    max(var(--space-md), var(--safe-area-bottom));
-  min-width: 0;
-}

@@ -25,6 +25,9 @@ Prefer token-backed spacing and responsive composition. Validate the fixture in 
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
 ## Best practice
+- Keep Recharts `accessibilityLayer` enabled. Pointer selection paints the
+  selected data, not a browser SVG outline. Keyboard focus is shown around the
+  stable chart container; arrow-key navigation remains owned by Recharts.
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.

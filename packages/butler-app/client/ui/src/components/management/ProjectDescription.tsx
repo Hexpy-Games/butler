@@ -23,10 +23,10 @@ export function ProjectDescription({ projectId, description, revision, onUpdated
     finally { setSaving(false); }
   };
   return <Stack gap="sm">
-    <Stack align="row" cross="start" gap="sm">
+    <div className={styles.description}>
       <Typo.Body className={styles.summary}>{description || appCopy.projectSignpost.description}</Typo.Body>
       <IconButton label={appCopy.projectSignpost.editDescription} onClick={() => { setDraft(description ?? ""); setOpen(true); }}><Pencil /></IconButton>
-    </Stack>
+    </div>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader><DialogTitle>{appCopy.projectSignpost.description}</DialogTitle></DialogHeader>

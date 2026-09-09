@@ -52,6 +52,7 @@ export function ProjectDashboardView({
   });
   const [selectedDocument, setSelectedDocument] =
     useState<ProjectDashboardDocument | null>(null);
+  const [composerHeight, setComposerHeight] = useState(160);
   const tab = useProjectDashboardState((state) => project ? state.projects[project.id]?.tab ?? "overview" : "overview");
   const scrollRef = useProjectDashboardScroll(project?.id, tab);
   const updateDashboardState = useProjectDashboardState((state) => state.update);
@@ -88,8 +89,10 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} />}>
-      <Stack as="main" gap="xl" className={tab === "work" ? styles.boardFrame : styles.frame}>
+    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef}
+      footerPlacement="overlay" footerReserve={composerHeight}
+      footer={project && <ProjectDashboardComposer key={project.id} projectId={project.id} onReserveChange={setComposerHeight} />}>
+      <Stack as="main" gap="xl" className={styles.frame}>
         {refreshFailed && <Notice tone="error" title={appCopy.feedback.dashboardFailed} message={appCopy.feedback.dashboardRetry}
           action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
         <ProjectDashboardHeader
@@ -100,7 +103,7 @@ export function ProjectDashboardView({
         />
         {project && <ProjectDescription key={project.id} projectId={project.id} description={dashboard?.description ?? null}
           revision={dashboard?.preferences?.revision ?? 0} onUpdated={retry} />}
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={setTab} className={styles.tabs}>
           <TabsList>
             <TabsTrigger className={styles.tab} value="overview"><LayoutDashboard />{appCopy.projectSignpost.overview}</TabsTrigger>
             <TabsTrigger className={styles.tab} value="work"><ListChecks />{appCopy.projectSignpost.work}</TabsTrigger>
