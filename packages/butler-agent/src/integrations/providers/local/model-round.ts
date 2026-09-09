@@ -35,9 +35,11 @@ export async function runLocalModelRound(
     run: async (context) => await createLocalChatCompletion(config, {
       messages: localModelRoundMessages(request),
       ...(request.tools.length > 0
-        ? { tools: localChatTools(request.tools.map(modelRoundTool)) }
+        ? {
+            tools: localChatTools(request.tools.map(modelRoundTool)),
+            tool_choice: request.toolChoice ?? "auto",
+          }
         : {}),
-      tool_choice: request.toolChoice ?? "auto",
       ...localReasoningRequestParams(config),
       stream: false,
       ...(request.maxOutputTokens ? { max_tokens: request.maxOutputTokens } : {}),

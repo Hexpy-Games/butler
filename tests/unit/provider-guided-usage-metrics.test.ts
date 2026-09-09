@@ -157,6 +157,31 @@ test("Codex summary requests omit the unsupported official output limit", () => 
   expect(official.max_output_tokens).toBe(16384);
 });
 
+test("local model requests omit tool_choice without tools and preserve enabled choices", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    if ("tool_choice" in body && !body.tools) {
+      return Response.json({ error: { message: "When using tool_choice, tools must be set." } }, { status: 400 });
+    }
+    return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] });
+  }) as typeof fetch;
+  const config = localConfig();
+  const base = { ...modelRoundRequest(temporaryButlerData()), model: config.model_ref };
+  const tools = [{ name: "lookup", description: "Look up a value",
+    parameters: { type: "object", properties: {} } }];
+  for (const toolChoice of [undefined, "auto", "required"] as const) {
+    expect((await runLocalModelRound(config, { ...base, toolChoice, tools: [] })).text).toBe("ok");
+    const empty = bodies.at(-1)!;
+    expect(empty).not.toHaveProperty("tools");
+    expect(empty).not.toHaveProperty("tool_choice");
+    await runLocalModelRound(config, { ...base, toolChoice, tools });
+    expect(bodies.at(-1)).toMatchObject({ tool_choice: toolChoice ?? "auto",
+      tools: [{ type: "function", function: { name: "lookup" } }] });
+  }
+});
+
 function modelRoundRequest(
   butlerData: string,
   usageAttribution: ModelRoundRequest["usageAttribution"] = {},
