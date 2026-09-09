@@ -1268,11 +1268,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   clearPendingProjectDocumentAttachment: () =>
     set({ pendingProjectDocumentAttachment: null }),
   openProjectDashboard: (projectId) =>
-    set({
+    set((state) => ({
       view: { kind: "project-dashboard", projectId },
+      leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded" ? state.leftOpen : false,
       selectedArtifactId: null,
       selectedArtifact: null,
-    }),
+    })),
 
   refreshNavigation: async (options) => {
     const requestGeneration = get().navigationGeneration;
