@@ -24,6 +24,12 @@ adding product-owned CSS modules.
 Compose it with `DashboardHeader`, `Section`, `Grid`, and form primitives.
 Use `as="form"` when the whole page is a form surface.
 
+For a floating composer use `footerPlacement="overlay"`. The footer must own
+its positioning (for example `ComposerCard` with `floating`). Pass its measured
+height as `footerReserve`; the full-height page scrolls underneath it, with
+bottom content padding to keep the final item reachable. The default `flow`
+placement retains a separate footer for surfaces that require one.
+
 ## Who can use this component
 
 Domain containers can wrap their presenter content with this block.

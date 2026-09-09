@@ -128,7 +128,7 @@ export function Composer({ large, onOpenContext, onReserveChange, scope }: Compo
       {...fileDrop}
       large={large}
       expanded={Boolean(scope || decision.plan || decision.authority) || presentation.expanded}
-      floating={!scope}
+      floating
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
         composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length) ? (
