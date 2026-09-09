@@ -30,4 +30,4 @@ Plan review: parent result identity comes from resolveParentResultEvidence; tool
 
 ## Rollout
 
-Commit/restart pending.
+Source commit e251a4ee passed full pre-commit lint and backend/UI type checks. Applied through the existing native supervisor at 2026-09-10 07:18 KST: main launcher 30028, embed launcher 30462. App health returned ok and embed health ready. The production chat was not resent or its historical Work altered; live model verification used isolated temporary state.
