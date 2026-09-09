@@ -16,7 +16,7 @@ import { buildProjectBriefingPack } from "./project-briefing-facts.ts";
 import { resolveRuntimeMessageLanguage } from "../../../../agent/output/messages.ts";
 import { resolveRuntimeModelMetadata } from "../../../../integrations/providers/model-catalog.ts";
 import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
-import { readProjectActivityStatistics } from "./project-statistics.ts";
+import { projectStatistics } from "./project-statistics.ts";
 import type { DashboardStatisticsView } from "../../interface/protocol/session-dashboard-contract.ts";
 import { sanitizePublicText } from "../../../../agent/events/public-text.ts";
 
@@ -152,14 +152,7 @@ export class AppProjectDashboardStore {
 
   async getStatistics(projectId: string, period: 7 | 30 | 90, timezone: string): Promise<DashboardStatisticsView> {
     if (!this.getProjectRow(projectId)) throw new AppStoreOperationError(404, "project_not_found", "Project not found.");
-    const activity = readProjectActivityStatistics(this.db, projectId, period, timezone);
-    const history = await this.sources.history(projectId, { limit: 100,
-      workRange: { from: activity.days[0]!.start, to: activity.observedAt } });
-    const timeline: DashboardStatisticsView["timeline"] = history.status !== "ready" || history.ledgerUnavailable ? { status: "unavailable" } : {
-      status: "ready", truncated: Boolean(history.nextCursor), events: history.events
-        .map((event) => ({ id: event.id, at: event.at, action: event.action, title: event.title, kind: event.source.kind, workId: event.workId ?? event.source.id })),
-    };
-    return { ...activity, timeline };
+    return projectStatistics(this.db, projectId, period, timezone, await this.sources.statistics(projectId));
   }
 
   async getBoard(projectId: string, input: {

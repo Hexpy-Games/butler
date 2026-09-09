@@ -114,9 +114,7 @@ export interface AppCopy {
     reported: string; historyLedgerUnavailable: string; linkedResults: (count: number) => string;
     currentPlan: string; disconnected: string;
     reportQuestion: string;
-    timelineHelp: string;
     parentWork: string; allWork: string;
-    userMessages: string; activeConversations: string; workChanges: string; statisticsHelp: string; timelineLimited: string;
     periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
     briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
     briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
@@ -130,6 +128,15 @@ export interface AppCopy {
     unavailable: string; noRemaining: string; tasks: string; recorded: string; loadMore: string;
     description: string; editDescription: string; pin: string; unpin: string;
     created: string; updated: string; recordedCompletion: string; noHistory: string;
+  };
+  projectStatistics: {
+    flow: string; flowHelp: string; remaining: string; remainingHelp: string; aging: string; agingHelp: string;
+    calendar: string; calendarHelp: string; focus: string; focusHelp: string;
+    materials: string; materialsHelp: string; outcomes: string; outcomesHelp: string;
+    duration: string; durationHelp: string; usage: string; usageHelp: string;
+    empty: string; unavailable: string; historyUnavailable: string; sessionUnavailable: string; taskCompletionUnavailable: string; selected: string; all: string; partialDay: string;
+    excluded: (count: number) => string; age: (days: number) => string; changes: (count: number) => string;
+    sources: (count: number) => string; labels: Record<string, string>;
   };
   projectDocumentMetadata: { active: string; other: string; roadmap: string; labels: Record<string, string> };
   guided: {
