@@ -46,6 +46,7 @@ export type ButlerToolExecutionBoundary = (input: {
 }) => Promise<unknown>;
 
 export type ButlerToolExecutorInput = {
+  projectSources?: readonly import("../../foundation/message-content.ts").ResolvedProjectSource[];
   butlerHome: string;
   butlerData: string;
   workspacePath?: string;

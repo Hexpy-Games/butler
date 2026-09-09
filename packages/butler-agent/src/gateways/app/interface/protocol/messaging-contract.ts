@@ -51,6 +51,7 @@ export interface MessageRecord {
 }
 
 export interface MessageSendRequest {
+  expected_project_id?: string;
   content_parts?: MessageContent;
   chat_id?: string;
   text?: string;
@@ -102,6 +103,7 @@ export interface SessionQueueView {
 }
 
 export interface QueueMessageRequest {
+  expected_project_id?: string;
   content_parts?: MessageContent;
   chat_id?: string;
   text?: string;

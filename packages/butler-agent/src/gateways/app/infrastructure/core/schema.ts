@@ -44,6 +44,17 @@ export function migrateAppStoreSchema(
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS project_dashboard_briefing_cache (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      binding_revision TEXT,
+      source_digest TEXT NOT NULL,
+      response_language TEXT NOT NULL,
+      generator_version TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, response_language)
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -318,8 +329,12 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "plan_json", "TEXT");
   ensureColumn(db, "messages", "content_parts_json", "TEXT");
   ensureColumn(db, "session_queued_messages", "content_parts_json", "TEXT");
+  ensureColumn(db, "session_queued_messages", "project_source_refs_json", "TEXT");
   ensureColumn(db, "message_changed_files", "detail_json", "TEXT");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
+  ensureColumn(db, "projects", "description", "TEXT");
+  ensureColumn(db, "projects", "dashboard_preferences_json", "TEXT");
+  ensureColumn(db, "projects", "dashboard_preferences_revision", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
   ensureColumn(db, "turns", "safe_status_label_key", "TEXT");
   ensureColumn(db, "turns", "safe_status_label_parameters_json", "TEXT");

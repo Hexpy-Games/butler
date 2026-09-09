@@ -1,8 +1,8 @@
 import { buildNewChatBriefing } from "../new-chat-briefing/build-new-chat-briefing.ts";
-import { loadProjectDocumentCatalog } from "../projects/project-document-catalog.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import type { ProjectRow } from "../../infrastructure/core/records.ts";
 import type { NewChatBriefingView, SettingsView } from "../../interface/protocol/app-protocol.ts";
+import type { DashboardMaterialsPage } from "../../interface/protocol/session-dashboard-contract.ts";
 
 export class AppNewChatBriefingStore {
   constructor(
@@ -10,12 +10,13 @@ export class AppNewChatBriefingStore {
       butlerData: string;
       getSettings: () => SettingsView;
       getProjectRow: (projectId: string) => ProjectRow | null;
+      getProjectMaterials: (projectId: string) => Promise<DashboardMaterialsPage>;
     },
   ) {}
 
-  get(
+  async get(
     options: { date?: string | null; projectId?: string | null } = {},
-  ): NewChatBriefingView {
+  ): Promise<NewChatBriefingView> {
     const settings = this.input.getSettings();
     const projectId = options.projectId?.trim();
     const project = projectId ? this.input.getProjectRow(projectId) : null;
@@ -27,10 +28,7 @@ export class AppNewChatBriefingStore {
       );
     }
     const projectDocumentCatalog = project
-      ? loadProjectDocumentCatalog({
-          butlerDataRoot: this.input.butlerData,
-          project,
-        })
+      ? await this.input.getProjectMaterials(project.id)
       : null;
     return buildNewChatBriefing({
       butlerData: this.input.butlerData,
@@ -40,7 +38,9 @@ export class AppNewChatBriefingStore {
         ? {
             id: project.id,
             displayName: project.display_name,
-            documents: projectDocumentCatalog?.briefingDocuments,
+            documents: projectDocumentCatalog?.status === "ready" ? projectDocumentCatalog.documents.map((doc) => ({
+              title: doc.title, category: doc.kind, status: doc.status, safePathLabel: doc.safe_path_label, markdown: "",
+            })) : [],
           }
         : undefined,
     });

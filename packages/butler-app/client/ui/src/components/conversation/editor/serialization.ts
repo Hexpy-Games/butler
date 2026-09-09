@@ -1,6 +1,8 @@
 import { $createLineBreakNode, $createParagraphNode, $createTextNode, $getRoot, $isElementNode, $isLineBreakNode, $isTextNode, type LexicalNode, type SerializedLexicalNode } from "lexical";
 import type { MessageContent, MessageContentPart } from "@/app/messageContent";
 import { SessionReferenceNode, $createSessionReferenceNode } from "./SessionReferenceNode";
+import { ProjectSourceNode, $createProjectSourceNode } from "./ProjectSourceNode";
+import { isProjectSourceContentPart } from "@/app/messageContent.ts";
 
 function appendPart(parts: MessageContentPart[], part: MessageContentPart): void {
   const last = parts.at(-1);
@@ -12,6 +14,7 @@ export function $readComposerContent(): MessageContent {
   const parts: MessageContentPart[] = [];
   function visit(node: LexicalNode) {
     if (node instanceof SessionReferenceNode) appendPart(parts, { type: "session_ref", ...node.reference() });
+    else if (node instanceof ProjectSourceNode) appendPart(parts, node.reference());
     else if ($isTextNode(node)) appendPart(parts, { type: "text", text: node.getTextContent() });
     else if ($isLineBreakNode(node)) appendPart(parts, { type: "text", text: "\n" });
     else if ($isElementNode(node)) node.getChildren().forEach(visit);
@@ -26,6 +29,7 @@ export function $readComposerContent(): MessageContent {
 export function $nodesForContent(content: MessageContent): LexicalNode[] {
   return content.parts.flatMap<LexicalNode>(part => {
     if (part.type === "session_ref") return [$createSessionReferenceNode(part.sessionId, part.titleSnapshot)];
+    if (part.type === "project_source_ref") return [$createProjectSourceNode(part)];
     return part.text.split("\n").flatMap((text, index) => [
       ...(index ? [$createLineBreakNode()] : []), ...(text ? [$createTextNode(text)] : []),
     ]);
@@ -40,9 +44,10 @@ export function $replaceComposerContent(content: MessageContent): void {
 export function contentFromSerializedNodes(nodes: SerializedLexicalNode[]): MessageContent {
   const parts: MessageContentPart[] = [];
   function visit(raw: SerializedLexicalNode) {
-    const node = raw as SerializedLexicalNode & { text?: string; sessionId?: string; titleSnapshot?: string; children?: SerializedLexicalNode[] };
+    const node = raw as SerializedLexicalNode & { text?: string; sessionId?: string; titleSnapshot?: string; children?: SerializedLexicalNode[]; reference?: unknown };
     if (node.type === "session-reference" && typeof node.sessionId === "string" && typeof node.titleSnapshot === "string")
       appendPart(parts, { type: "session_ref", sessionId: node.sessionId, titleSnapshot: node.titleSnapshot });
+    else if (node.type === "project-source-reference" && isProjectSourceContentPart(node.reference)) appendPart(parts, node.reference);
     else if (node.type === "text" && typeof node.text === "string") appendPart(parts, { type: "text", text: node.text });
     else if (node.type === "linebreak") appendPart(parts, { type: "text", text: "\n" });
     else node.children?.forEach(visit);

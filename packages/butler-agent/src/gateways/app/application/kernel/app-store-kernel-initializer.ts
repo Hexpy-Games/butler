@@ -276,6 +276,7 @@ export function initializeAppStoreKernel(
     butlerData: kernel.butlerData,
     getSettings: () => kernel.preferences.getSettings(),
     getProjectRow: (projectId) => kernel.getProjectRow(projectId),
+    getProjectMaterials: (projectId) => kernel.projectDashboard.sources.list(projectId, { limit: 12 }),
   });
   kernel.projectDashboard = new AppProjectDashboardStore(
     kernel.db,
@@ -284,6 +285,8 @@ export function initializeAppStoreKernel(
     (projectId) =>
       kernel.sessionCatalog.listSessions({ kind: "project", projectId })
         .sessions,
+    () => kernel.preferences.getSettings(),
+    (projectId) => { kernel.appendEvent("project_dashboard_updated", { project_id: projectId }); },
   );
   kernel.sessionBranches = new AppSessionBranchStore({
     db: kernel.db,

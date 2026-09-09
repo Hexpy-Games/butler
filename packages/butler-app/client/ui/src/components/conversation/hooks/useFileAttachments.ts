@@ -4,6 +4,9 @@ import { browserRandomUUID } from "@/app/id.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { appCopy } from "@/app/copy.ts";
 import { projectDocumentFileName } from "@/app/projectDocuments.ts";
+import { completeProjectDocument, readProjectDocumentPage } from "@/app/projectDocumentSource.ts";
+import { isProjectSourceContentPart } from "@/app/messageContent.ts";
+import { useComposerStore } from "../composerStore.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import type { MessageFileRef, ProjectDashboardDocument } from "@/app/types.ts";
 import { ATTACHMENT_MAX_BYTES, formatFileSize } from "../conversationUtils";
@@ -86,15 +89,24 @@ export function useFileAttachments(activeChatId: string) {
 
   async function addProjectDocument(document: ProjectDashboardDocument) {
     const uploadEpoch = uploadEpochRef.current;
-    const file = new File(
-      [document.markdown],
-      projectDocumentFileName(document),
-      {
-        type: "text/markdown",
-      },
-    );
+    const fileName = projectDocumentFileName(document);
     setUploadingCount((count) => count + 1);
     try {
+      if (document.project_id && document.revision) {
+        const source = await readProjectDocumentPage(document);
+        if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch) return;
+        const part = { type: "project_source_ref", projectId: document.project_id, titleSnapshot: source.title,
+          source: { kind: source.document_type ?? source.kind, id: source.id, revision: source.revision } };
+        if (!isProjectSourceContentPart(part)) throw new Error("Invalid project source.");
+        const draft = useComposerStore.getState();
+        const parts = draft.contentParts?.parts ?? [{ type: "text" as const, text: draft.text }];
+        draft.setContentParts({ version: 1, parts: [...parts, part] });
+        return;
+      }
+      const complete = await completeProjectDocument(document);
+      if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch) return;
+      const file = new File([complete.markdown], fileName, { type: "text/markdown" });
+      if (file.size > ATTACHMENT_MAX_BYTES) throw new Error("Project source exceeds the attachment limit.");
       const uploaded = await uploadMessageFile(
         file,
         isServerBackedSessionId(activeChatId) ? activeChatId : undefined,
@@ -111,7 +123,7 @@ export function useFileAttachments(activeChatId: string) {
       ]);
     } catch {
       if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch) return;
-      notifyError(new Error(appCopy.feedback.attachmentRetry(file.name)), appCopy.feedback.attachmentFailed, {
+      notifyError(new Error(appCopy.feedback.attachmentRetry(fileName)), appCopy.feedback.attachmentFailed, {
         id: `project-document-attachment-${activeChatId}`,
       });
     } finally {

@@ -269,14 +269,15 @@ export class AppProjectStore {
       .query<ProjectRow, [string]>(
         `
       SELECT id, display_name, status, workspace_path, workspace_label, safe_path_label,
-        ledger_project_id, pinned, archived, error_summary, created_at, updated_at
+        ledger_project_id, description, dashboard_preferences_json, dashboard_preferences_revision,
+        pinned, archived, error_summary, created_at, updated_at
       FROM projects
       ${predicate}
     `,
       )
       .get(value) ?? null;
     if (
-      row &&
+      row && row.ledger_project_id != null &&
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(
         row.ledger_project_id ?? "",
       )
@@ -284,5 +285,27 @@ export class AppProjectStore {
       throw new Error("app_project_ledger_identity_invalid");
     }
     return row;
+  }
+
+  updateDashboardPreferences(projectId: string, patch: {
+    expectedRevision: number; description?: string; pinnedSourceRefs?: Array<{ kind: string; id: string; revision: string }>;
+  }): { revision: number } {
+    const revision = this.db.transaction(() => {
+      const row = this.getProjectRow(projectId);
+      if (!row) throw new AppStoreOperationError(404, "project_not_found", "Project not found.");
+      if ((row.dashboard_preferences_revision ?? 0) !== patch.expectedRevision) {
+        throw new AppStoreOperationError(409, "preferences_changed", "Preferences changed. Reload them.");
+      }
+      const preferences = row.dashboard_preferences_json ? JSON.parse(row.dashboard_preferences_json) : {};
+      if (patch.pinnedSourceRefs !== undefined) preferences.pinnedSourceRefs = patch.pinnedSourceRefs;
+      this.db.query(`UPDATE projects SET description = ?, dashboard_preferences_json = ?,
+        dashboard_preferences_revision = dashboard_preferences_revision + 1 WHERE id = ?`).run(
+        patch.description === undefined ? row.description ?? null : patch.description,
+        JSON.stringify(preferences), projectId,
+      );
+      return patch.expectedRevision + 1;
+    })();
+    this.appendEvent("project.updated", { project: projectFromRow(this.getProjectRow(projectId)!) });
+    return { revision };
   }
 }

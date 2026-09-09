@@ -1,6 +1,14 @@
 import { useButlerStore } from "@/app/store.ts";
+import type { ComposerControls } from "@/app/types.ts";
 
-export function useComposerSession() {
+export interface ComposerDraftScope {
+  draftKey: string;
+  targetChatId: string;
+  isSending: boolean;
+  onSend: (text: string, controls: ComposerControls) => Promise<void>;
+}
+
+export function useComposerSession(scope?: ComposerDraftScope) {
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const summary = useButlerStore((state) => state.summary);
   const turnProgress = useButlerStore((state) => state.turnProgress);
@@ -22,19 +30,19 @@ export function useComposerSession() {
   );
 
   return {
-    activeChatId,
+    activeChatId: scope?.targetChatId ?? activeChatId,
     cancelActiveTurn,
     clearPendingProjectDocumentAttachment,
-    isActiveChatSending:
+    isActiveChatSending: scope ? scope.isSending :
       isSending &&
       (sendingChatId === activeChatId ||
         Object.values(sendingOperations).includes(activeChatId)),
     modelCatalog,
     modelCatalogState,
-    pendingProjectDocumentAttachment,
-    sendMessage,
+    pendingProjectDocumentAttachment: scope ? null : pendingProjectDocumentAttachment,
+    sendMessage: scope?.onSend ?? sendMessage,
     settings,
-    summary,
-    turnProgress,
+    summary: scope ? null : summary,
+    turnProgress: scope ? {} : turnProgress,
   };
 }

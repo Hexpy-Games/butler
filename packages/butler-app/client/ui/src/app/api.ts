@@ -458,6 +458,17 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     );
   }
   const projectDashboardMatch = method === "GET" ? url.pathname.match(/^\/projects\/([^/]+)\/dashboard$/) : null;
+  const dashboardResource = url.pathname.match(/^\/projects\/([^/]+)\/dashboard\/(records|materials|source|history|artifacts|statistics|preferences|briefing|attachment)$/u);
+  if (dashboardResource) {
+    const projectId = decodeURIComponent(dashboardResource[1]!);
+    const resource = dashboardResource[2]!;
+    if (method === "GET" && !["preferences", "briefing", "attachment"].includes(resource)) {
+      return await callBridge<T>(bridge, "getProjectDashboardResource", { projectId, resource, query: url.searchParams.toString() });
+    }
+    if ((method === "PATCH" && resource === "preferences") || (method === "POST" && ["briefing", "attachment"].includes(resource))) {
+      return await callBridge<T>(bridge, "updateProjectDashboardResource", { projectId, resource, body: parseBody(options.body) });
+    }
+  }
   if (projectDashboardMatch) {
     return await callBridge<T>(bridge, "getProjectDashboard", { projectId: decodeURIComponent(projectDashboardMatch[1]!) });
   }

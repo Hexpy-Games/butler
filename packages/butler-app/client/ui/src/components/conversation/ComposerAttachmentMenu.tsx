@@ -22,7 +22,7 @@ import { ComposerProjectDocumentMenu } from "./ComposerProjectDocumentMenu";
 
 export function ComposerAttachmentMenu() {
   useAppLocale();
-  const activeChatId = useButlerStore((state) => state.activeChatId);
+  const activeChatId = useComposerStore((state) => state.draftSessionId);
   const navigation = useButlerStore((state) => state.navigation);
   const settings = useButlerStore((state) => state.settings);
   const projectId = activeProjectId(navigation, activeChatId);

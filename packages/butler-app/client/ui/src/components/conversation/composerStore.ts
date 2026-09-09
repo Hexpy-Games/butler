@@ -39,7 +39,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   setContentParts: (content) => {
     const state = get();
     const text = messageContentText(content);
-    const contentParts = content.parts.some(part => part.type === "session_ref") ? content : undefined;
+    const contentParts = content.parts.some(part => part.type !== "text") ? content : undefined;
     set({ draftRevision: state.draftRevision + 1, text, contentParts });
     writeCachedComposerDraft(state.draftSessionId, text, contentParts);
   },
