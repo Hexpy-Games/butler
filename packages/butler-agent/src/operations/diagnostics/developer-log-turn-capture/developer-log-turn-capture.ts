@@ -3,6 +3,7 @@ import { DeveloperLogStore, type DeveloperLogSection } from "../developer-log-st
 import { readDeveloperDiagnosticsEnabled } from "../developer-log-settings.ts";
 import type { ModelRoundRequest, ModelRoundResult } from "../../../agent/btcc/ports/model-round.ts";
 import type { TurnDeveloperLogCapturePort } from "./contracts.ts";
+import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../../integrations/providers/provider-errors.ts";
 import {
   inboundEnvelopeFromTurnRecord,
   storedBindingFromTurnRecord,
@@ -33,6 +34,7 @@ export function createTurnDeveloperLogCapturePort(input: {
     startExecution() {
       let request: ReturnType<typeof requestSnapshot> | undefined;
       let response: ModelRoundResult | undefined;
+      let failure: RuntimeFailureDiagnostic | undefined;
       let roundCount = 0;
       return {
         modelRoundObserver: {
@@ -40,12 +42,17 @@ export function createTurnDeveloperLogCapturePort(input: {
             roundCount += 1;
             request = undefined;
             response = undefined;
+            failure = undefined;
             if (!enabled()) return;
             try { request = requestSnapshot(value); } catch { /* Never affect the model request. */ }
           },
           response(value) {
             if (!request || !enabled()) return;
             try { response = structuredClone(value); } catch { /* Unavailable, not invented raw data. */ }
+          },
+          failure(error) {
+            if (!request || !enabled()) return;
+            try { failure = safeRuntimeFailure(error); } catch { /* Never affect recovery. */ }
           },
         },
         capture(capture) {
@@ -74,7 +81,7 @@ export function createTurnDeveloperLogCapturePort(input: {
               input.store.appendModelTurn({ ...shared, result: { text: capture.result.content, raw } });
             } else {
               input.store.appendModelTurnError({
-                ...shared, kind: "model_turn_error", failure: capture.failure,
+                ...shared, kind: "model_turn_error", failure: failure ?? capture.failure,
                 diagnostics: { ...capture.diagnostics, provider_response: raw },
               });
             }
@@ -83,6 +90,7 @@ export function createTurnDeveloperLogCapturePort(input: {
           } finally {
             request = undefined;
             response = undefined;
+            failure = undefined;
           }
         },
       };

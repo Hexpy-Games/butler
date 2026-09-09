@@ -17,7 +17,7 @@ export interface LocalModelConfig {
   server_url: string;
   api_base_url: string;
   context_window_tokens: number;
-  max_output_tokens: number;
+  max_output_tokens?: number;
   reasoning_budget_ratio?: number;
   token_estimator: "character_estimate";
   source: LocalModelSource;
@@ -46,7 +46,7 @@ export interface DiscoveredLocalModel {
   server_url: string;
   api_base_url: string;
   context_window_tokens: number;
-  max_output_tokens: number;
+  max_output_tokens?: number;
   reasoning_budget_ratio?: number;
   token_estimator: "character_estimate";
   source: "discovered";
@@ -90,7 +90,6 @@ interface ButlerConfig {
 
 const LOCAL_MODEL_SOURCE_URL = "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md";
 const DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS = 16_384;
-const DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 4_096;
 
 function defaultButlerData(): string {
   return process.env.BUTLER_DATA || join(homedir(), ".butler");
@@ -215,7 +214,7 @@ function normalizeLocalModelConfig(value: unknown): LocalModelConfig | null {
     server_url: server.serverUrl,
     api_base_url: server.apiBaseUrl,
     context_window_tokens: contextWindowTokens,
-    max_output_tokens: positiveInteger(input.max_output_tokens) ?? Math.min(DEFAULT_LOCAL_MAX_OUTPUT_TOKENS, contextWindowTokens),
+    max_output_tokens: positiveInteger(input.max_output_tokens) ?? undefined,
     reasoning_budget_ratio: normalizeReasoningBudgetRatio(input.reasoning_budget_ratio),
     token_estimator: "character_estimate",
     source: input.source === "manual" ? "manual" : "discovered",
@@ -266,7 +265,7 @@ function normalizeLocalModelInput(
     server_url: server.serverUrl,
     api_base_url: server.apiBaseUrl,
     context_window_tokens: contextWindowTokens,
-    max_output_tokens: positiveInteger(input.maxOutputTokens) ?? Math.min(DEFAULT_LOCAL_MAX_OUTPUT_TOKENS, contextWindowTokens),
+    max_output_tokens: positiveInteger(input.maxOutputTokens) ?? undefined,
     reasoning_budget_ratio: normalizeReasoningBudgetRatio(input.reasoningBudgetRatio),
     token_estimator: "character_estimate",
     source: input.source === "manual" ? "manual" : "discovered",
@@ -431,7 +430,6 @@ function discoveredModelFromApi(input: {
   const contextWindowTokens = contextFromProps(input.props) ??
     contextFromModel(input.model) ??
     DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS;
-  const maxOutputTokens = Math.min(DEFAULT_LOCAL_MAX_OUTPUT_TOKENS, contextWindowTokens);
   return {
     provider_id: "local",
     provider_label: "Local",
@@ -443,7 +441,6 @@ function discoveredModelFromApi(input: {
     server_url: input.serverUrl,
     api_base_url: input.apiBaseUrl,
     context_window_tokens: contextWindowTokens,
-    max_output_tokens: maxOutputTokens,
     reasoning_budget_ratio: undefined,
     token_estimator: "character_estimate",
     source: "discovered",

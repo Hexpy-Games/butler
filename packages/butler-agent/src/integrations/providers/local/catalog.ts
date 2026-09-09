@@ -39,7 +39,7 @@ function localReasoningBudgetTokens(model: LocalModelConfig): number | null {
   const ratio = model.reasoning_budget_ratio;
   if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0) return null;
   const maxOutputTokens = Number.isFinite(model.max_output_tokens)
-    ? Math.trunc(model.max_output_tokens)
+    ? Math.trunc(Number(model.max_output_tokens))
     : 0;
   if (maxOutputTokens <= 0) return null;
   const budget = Math.round(maxOutputTokens * Math.min(1, ratio));
