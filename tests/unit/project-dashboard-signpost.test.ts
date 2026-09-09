@@ -152,6 +152,13 @@ test("existing dashboard HTTP route resolves exact binding and exposes unavailab
     const tasks = await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=task&parent=W-1`).then((response) => response.json());
     expect(tasks.data.items[0]).toMatchObject({ id: "T-1", kind: "task", parentId: "W-1", lane: "done", actionProgress: null });
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?kind=invalid`)).status).toBe(400);
+    const statistics = await fetch(`${server.url}projects/${projectId}/dashboard/statistics?days=30&timezone=Asia%2FSeoul`).then((response) => response.json());
+    expect(statistics.data.work.cards.work.find((card: { id: string }) => card.id === "W-1").lane).toBe("blocked");
+    expect(statistics.data.ledgerHistoryAvailable).toBe(false); // Snapshot exists, full history does not.
+    expect(statistics.data.sessionHistoryAvailable).toBe(true);
+    expect(statistics.data.activity.keys).toEqual(["conversations", "materials"]);
+    expect(statistics.data.usage.status).toBe("unavailable");
+    expect(statistics.data.days).toHaveLength(30);
     expect((await fetch(`${server.url}projects/${projectId}/dashboard/records?limit=10000`)).status).toBe(400);
     const materials = await fetch(`${server.url}projects/${projectId}/dashboard/materials`).then((response) => response.json());
     const important = () => fetch(`${server.url}projects/${projectId}/dashboard/materials?important=true`).then((response) => response.json());
