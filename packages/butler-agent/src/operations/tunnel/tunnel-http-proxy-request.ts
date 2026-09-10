@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { handleTunnelLogin } from "./tunnel-one-time-login.ts";
 import {
   request as httpRequest,
   type ClientRequest,
@@ -69,20 +69,7 @@ export function handleTunnelProxyRequest(
   } = input;
   const requestUrl = new URL(clientRequest.url ?? "/", config.upstream);
   if (requestUrl.pathname === "/__butler_tunnel_login") {
-    const token = requestUrl.searchParams.get("token") ?? "";
-    if (!config.auth.loginToken?.trim() ||
-      !timingSafeTokenEqual(token, config.auth.loginToken.trim())) {
-      clientRequest.resume();
-      rejectTunnelUnauthorized(clientResponse);
-      return;
-    }
-    clientRequest.resume();
-    clientResponse.writeHead(302, setTunnelSessionCookie({
-      "cache-control": "no-store",
-      "content-type": "text/plain; charset=utf-8",
-      location: "/",
-    }, config.auth));
-    clientResponse.end("Logged in. Redirecting.\n");
+    handleTunnelLogin(clientRequest, clientResponse, config.auth);
     return;
   }
   if (!isTunnelRequestAuthorized(clientRequest, config.auth)) {
@@ -254,11 +241,4 @@ export function handleTunnelProxyRequest(
   });
   upstreamRequest.once("error", fail);
   clientRequest.pipe(upstreamRequest);
-}
-
-function timingSafeTokenEqual(actual: string, expected: string): boolean {
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(actualBuffer, expectedBuffer);
 }

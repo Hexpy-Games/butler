@@ -274,6 +274,7 @@ test("environment configuration injects secrets without reading private files", 
     basicPassword: "secret",
     sessionSecret: "session",
     loginToken: "login",
+    oneTimeLoginDirectory: undefined,
     upstreamBearerToken: "bearer",
   });
 });
@@ -290,6 +291,7 @@ test("typed service config persists bounded env contract with private file mode"
         BUTLER_TUNNEL_PROXY_USERNAME: "operator",
         BUTLER_TUNNEL_PROXY_PASSWORD: "secret",
         BUTLER_TUNNEL_PROXY_SESSION_SECRET: "session",
+        BUTLER_TUNNEL_PROXY_LOGIN_DIRECTORY: join(butlerData, "logins"),
         BUTLER_TUNNEL_PROXY_MAX_HTML_BYTES: "2048",
         BUTLER_TUNNEL_PROXY_MAX_BUFFERED_BYTES: "4096",
       },
@@ -301,6 +303,7 @@ test("typed service config persists bounded env contract with private file mode"
       BUTLER_TUNNEL_PROXY_HOST: "127.0.0.1",
       BUTLER_TUNNEL_PROXY_PORT: "19000",
       BUTLER_TUNNEL_PROXY_UPSTREAM: "http://127.0.0.1:18765/",
+      BUTLER_TUNNEL_PROXY_LOGIN_DIRECTORY: join(butlerData, "logins"),
       BUTLER_TUNNEL_PROXY_MAX_HTML_BYTES: "2048",
       BUTLER_TUNNEL_PROXY_MAX_BUFFERED_BYTES: "4096",
     });
