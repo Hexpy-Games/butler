@@ -4,10 +4,10 @@ import {
   Circle,
   CircleAlert,
   CircleX,
-  LoaderCircle,
   Minus,
 } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
+import { Spinner } from "../../components/Spinner";
 import type {
   TodoProgressPanelItem,
   TodoProgressPanelItemState,
@@ -54,6 +54,6 @@ function itemIcon(state: TodoProgressPanelItemState) {
   if (state === "correction-required" || state === "stopped")
     return <CircleX size={15} />;
   if (state === "running" || state === "reviewing")
-    return <LoaderCircle size={15} />;
+    return <Spinner size={15} />;
   return <Circle size={15} />;
 }

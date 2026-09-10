@@ -9,6 +9,7 @@ Butler Design System is the client UI foundation for reusable primitives, tokens
 - Domain components stay under `packages/butler-app/client/ui/src/components` and compose design-system components.
 - `tokens.css` is the source stylesheet for shared tokens and shadcn-compatible variables.
 - Raw shadcn files live under `shadcn/ui`; app code should not import that path directly.
+- Use `Spinner` for indeterminate loading. It owns the official traveling-gap geometry, motion, and reduced-motion behavior; do not animate separate loading icons in product CSS. See [Spinner](components/Spinner/README.md).
 
 ## Responsive Contract
 

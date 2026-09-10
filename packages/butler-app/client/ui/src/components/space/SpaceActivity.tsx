@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy, interfaceProgressLabel } from "@/app/copy.ts";
-import { Circle, CircleAlert } from "@/butler-ds";
+import { CircleAlert, Spinner } from "@/butler-ds";
 import { spaceActivity } from "@/app/space/activity";
 import type { SessionSummary } from "@/app/types";
 import styles from "./SpaceInteractions.module.css";
@@ -19,11 +19,7 @@ export function SpaceActivity({ session, overlay = true }: { session?: SessionSu
       }
     >
       {activity === "working" ? (
-        <Circle
-          strokeDasharray="44 19"
-          strokeLinecap="round"
-          className={styles.spinner}
-        />
+        <Spinner size={15} />
       ) : (
         <CircleAlert />
       )}

@@ -127,6 +127,7 @@ import { SliderFixture } from "./components/Slider/Slider.fixtures";
 import { CardFixture } from "./components/Card/Card.fixtures";
 import { TintedGlassFixture } from "./components/TintedGlass/TintedGlass.fixtures";
 import { SkeletonFixture } from "./components/Skeleton/Skeleton.fixtures";
+import { SpinnerFixture } from "./components/Spinner/Spinner.fixtures";
 
 export type DesignSystemComponentMeta = {
   name: string;
@@ -581,6 +582,12 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Skeleton",
     tags: ["loading", "placeholder", "shimmer"],
     fixture: SkeletonFixture,
+  },
+  {
+    name: "Spinner",
+    path: "components/Spinner",
+    tags: ["loading", "spinner", "busy", "indeterminate", "motion"],
+    fixture: SpinnerFixture,
   },
   {
     name: "IconButton",

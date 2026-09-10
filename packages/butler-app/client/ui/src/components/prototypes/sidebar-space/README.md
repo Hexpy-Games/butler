@@ -112,7 +112,7 @@ mock state is the only authority. No production rollout, data changes, new agent
 or replacement navigation framework.
 
 1. Complete: consolidate row visuals — one 20px identity-icon box, consistent stroke,
-   shared slot for favorite and ordinary icons; 16px open-arc spinner; separate
+   shared slot for favorite and ordinary icons; 16px DS `Spinner`; separate
    attention tone. Two-line maximum title, aligned title/status and location/time.
 2. Complete: quiet controls — desktop hover/focus reveal, always accessible touch menu,
    no shrinking buttons; project new-chat remains in menu, collapse uses row/header.
@@ -178,7 +178,7 @@ all removals can be undone inside the sidebar, including on mobile. The dashboar
 is an explicitly labeled sample preview, not a connection to the real Ledger.
 Recent rows are sorted by last activity, display relative age, and expose an
 absolute timestamp on hover. New/sent sample conversations update their timestamp.
-Working status uses the DS loading icon with rotation; attention uses a static
+Working status uses the official DS `Spinner`; attention uses a static
 alert icon. Reduced-motion preferences disable rotation.
 Verified straight before/after markers over expanded headers (2px, radius zero,
 above sticky stacking), plus instance-isolation/header-geometry regression tests.

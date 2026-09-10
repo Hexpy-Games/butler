@@ -6,9 +6,6 @@
   overflow-x: auto;
   padding-bottom: var(--space-md);
 }
-.spinner {
-  animation: spin 1s linear infinite;
-}
 .lane {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -40,14 +37,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation: none;
-  }
 }

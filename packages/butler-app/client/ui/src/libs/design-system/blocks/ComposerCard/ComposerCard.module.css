@@ -217,19 +217,6 @@
     opacity 120ms ease;
 }
 
-.busyIcon {
-  animation: connection-spin 1s linear infinite;
-}
-@keyframes connection-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .busyIcon {
-    animation: none;
-  }
-}
 .sendButton:disabled {
   background: var(--send-disabled-bg);
   cursor: not-allowed;

@@ -29,7 +29,6 @@ export const CheckCircle2 = createIcon("CheckmarkCircle02Icon");
 export const CircleAlert = createIcon("AlertCircleIcon");
 export const CircleX = createIcon("CancelCircleIcon");
 export const ListFilter = createIcon("FilterIcon");
-export const LoaderCircle = createIcon("Loading03Icon");
 export const ArrowLeft = createIcon("ArrowLeft01Icon");
 export const Blocks = createIcon("SquareLock02Icon");
 export const BookOpenText = createIcon("BookOpen01Icon");
