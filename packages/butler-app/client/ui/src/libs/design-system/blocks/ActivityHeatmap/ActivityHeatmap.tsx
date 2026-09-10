@@ -16,7 +16,7 @@ export interface ActivityHeatmapProps {
   weekdayLabels?: string[];
   selectedId?: string;
   onSelect?: (id: string) => void;
-  legend?: { title: string; labels: string[] };
+  legend?: { title?: string; labels: string[] };
 }
 
 export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabels,
@@ -58,7 +58,7 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
     </div>
   </div>
   {legend && <div className={styles.legend}>
-    <span className={styles.legendTitle}>{legend.title}</span>
+    {legend.title && <span className={styles.legendTitle}>{legend.title}</span>}
     <div className={styles.legendItems}>
       {legend.labels.map((label, index) => <span className={styles.legendItem} key={label}>
         <span className={styles.day} data-level={index === 5 ? "unknown" : index} aria-hidden="true" />{label}

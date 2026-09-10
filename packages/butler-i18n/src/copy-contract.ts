@@ -131,7 +131,7 @@ export interface AppCopy {
   };
   projectStatistics: {
     flow: string; flowHelp: string; remaining: string; remainingHelp: string; aging: string; agingHelp: string;
-    calendar: string; calendarHelp: string; densityLegend: string; densityLevels: string[]; calendarExample: string;
+    calendar: string; calendarHelp: string; densityLevels: string[];
     workOverview: string; loading: (days: number) => string; refreshing: string; loadFailed: string; focus: string; focusHelp: string;
     activeItems: (count: number) => string;
     materials: string; materialsHelp: string; outcomes: string; outcomesHelp: string;
