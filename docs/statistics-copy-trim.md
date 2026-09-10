@@ -28,3 +28,18 @@ responsive browser smoke passed again, including 7/30/90-day switching, five
 viewport widths and date selection. The rendered desktop view was inspected;
 section headings now lead directly into the data panels. Deployment remains out
 of this copy-only change.
+
+## Operational rollout (user approved)
+Build the current validated UI into a separate staging directory, preserve the
+existing static assets for open clients, and replace the entry HTML only after
+publishing its hashed assets. Verify the served entry/asset hashes and the actual
+public-domain statistics screen. The API/agent process must remain running; no
+database, authentication, Cloudflare policy or Electron restart is required.
+
+Rollout completed: built revision `6333655d`, published hashed assets before the
+entry HTML, and verified the public domain serves `index-oaVpAzJR.js` with SHA-256
+`f24de43c3cbd8a059b93cf1903d5ea2256d70cbba70779dffe7f53bc7c9578dc` matching the
+staged build. The actual sandy-bot statistics tab shows 30 selectable days, no
+legend, neither section subtitle and no counting example. Screenshot inspected.
+The API listener retained PID 10891; old static assets and prior entry HTML were
+preserved for open clients/rollback. Existing browser tabs need a refresh.
