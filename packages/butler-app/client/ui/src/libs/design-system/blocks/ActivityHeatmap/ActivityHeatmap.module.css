@@ -1,9 +1,49 @@
+.root {
+  min-width: 0;
+}
 .viewport {
-  display: flex;
-  gap: var(--space-xs);
   max-width: 100%;
   overflow-x: auto;
   padding-block: var(--space-xs);
+}
+.calendar {
+  display: grid;
+  grid-template-columns: auto max-content;
+  gap: var(--space-xs);
+  width: max-content;
+}
+.calendar:not(:has(.weekdays)) {
+  grid-template-columns: max-content;
+}
+.months {
+  display: grid;
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+}
+.months > span {
+  overflow: hidden;
+  white-space: nowrap;
+  padding-inline: var(--space-xs);
+}
+.legend {
+  margin-top: var(--space-md);
+  color: var(--text-secondary);
+  font-size: var(--typo-caption-size);
+}
+.legendTitle {
+  display: block;
+  margin-bottom: var(--space-xs);
+}
+.legendItems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
 }
 .heatmap {
   display: grid;

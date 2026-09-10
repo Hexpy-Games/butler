@@ -24,11 +24,11 @@ export function ProjectWorkStatistics() {
   const controls = <Tabs value={kind} onValueChange={(value) => { setKind(value as "work" | "task"); setLane(undefined); }}>
       <TabsList><TabsTrigger value="work">Work</TabsTrigger><TabsTrigger value="task">Task</TabsTrigger></TabsList>
     </Tabs>;
-  return <Stack gap="xl">
+  return <Section title={<Typo.PanelTitle>{copy.workOverview}</Typo.PanelTitle>} titleAs="h2" actions={controls} gap="xl" data-test-class="work-statistics-group">
     <div className={styles.weightedPair}>
     <Stack gap="sm">
-    {data.ledgerHistoryAvailable ? <ProjectStatisticChart key={kind} title={copy.flow} description={kind === "task" ? copy.taskCompletionUnavailable : copy.flowHelp} series={data.work[kind]} actions={controls} />
-      : <Section title={copy.flow} actions={controls}><Typo.Caption>{copy.historyUnavailable}</Typo.Caption></Section>}
+    {data.ledgerHistoryAvailable ? <ProjectStatisticChart key={kind} title={copy.flow} description={kind === "task" ? copy.taskCompletionUnavailable : copy.flowHelp} series={data.work[kind]} />
+      : <Section title={copy.flow}><Typo.Caption>{copy.historyUnavailable}</Typo.Caption></Section>}
     {data.work.excluded > 0 && <Typo.Caption>{copy.excluded(data.work.excluded)}</Typo.Caption>}
     </Stack>
     <Section title={copy.remaining} description={copy.remainingHelp}>
@@ -53,5 +53,5 @@ export function ProjectWorkStatistics() {
           </Stack>} />)}
       </div>
     </Section>
-  </Stack>;
+  </Section>;
 }

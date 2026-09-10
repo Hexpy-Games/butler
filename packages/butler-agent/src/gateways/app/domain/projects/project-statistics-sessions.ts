@@ -3,6 +3,7 @@ import type { DashboardStatisticsView } from "../../interface/protocol/session-d
 import { visibleMessageSqlPredicate } from "../sessions/visible-message-sql.ts";
 import { sanitizePublicText } from "../../../../agent/events/public-text.ts";
 import { addStatistic, statisticDay } from "./project-statistics-ledger.ts";
+import { eventTurnMatchSql } from "../../infrastructure/events/event-turn-query.ts";
 
 const MAX_STATISTIC_ROWS = 20_000;
 function bounded<T>(rows: T[]): T[] {
@@ -46,24 +47,23 @@ export function populateSessionStatistics(db: Database, projectId: string, view:
     addStatistic(view.materialTypes, day, "artifacts", key);
     addStatistic(view.activity, day, "materials", key);
   }
-  const turns = bounded(db.query<{ id: string; chat_id: string; title: string; state: string; created_at: string; terminal_at: string | null },
+  const turns = bounded(db.query<{ id: string; chat_id: string; title: string; state: string; created_at: string },
     [string, string, number]>(`
-    SELECT t.id,t.chat_id,c.title,t.state,t.created_at,
-      (SELECT json_extract(e.payload_json,'$.turn.updated_at') FROM events e
-       WHERE e.turn_id=t.id AND e.type='turn.state_changed' AND json_valid(e.payload_json)
-         AND json_extract(e.payload_json,'$.turn.state')=t.state ORDER BY e.id DESC LIMIT 1) AS terminal_at
+    SELECT t.id,t.chat_id,c.title,t.state,t.created_at
     FROM chats c JOIN turns t ON t.chat_id=c.id
     WHERE c.project_id=? AND t.updated_at>=? AND t.state IN ('delivered','failed','cancelled','runtime_fault')
     ORDER BY t.id LIMIT ?
   `).all(projectId, from, MAX_STATISTIC_ROWS + 1));
+  const terminalTimes = latestTerminalTimes(db, turns);
   for (const row of turns) {
-    if (!row.terminal_at || !Number.isFinite(Date.parse(row.terminal_at))) { view.execution.excluded++; continue; }
-    const day = statisticDay(view, row.terminal_at);
+    const terminalAt = terminalTimes.get(row.id);
+    if (!terminalAt || !Number.isFinite(Date.parse(terminalAt))) { view.execution.excluded++; continue; }
+    const day = statisticDay(view, terminalAt);
     if (day < 0) continue;
     const key = `turn:${row.id}`;
     const title = sanitizePublicText(row.title, "");
-    const duration = Date.parse(row.terminal_at) - Date.parse(row.created_at);
-    view.sources[key] = { title, at: row.terminal_at, session: { id: row.chat_id, title },
+    const duration = Date.parse(terminalAt) - Date.parse(row.created_at);
+    view.sources[key] = { title, at: terminalAt, session: { id: row.chat_id, title },
       ...(Number.isFinite(duration) && duration >= 0 ? { durationMs: duration } : {}) };
     const outcome = row.state === "delivered" ? "delivered" : row.state === "cancelled" ? "cancelled" : "failed";
     addStatistic(view.execution.outcomes, day, outcome, key);
@@ -71,4 +71,37 @@ export function populateSessionStatistics(db: Database, projectId: string, view:
     const bucket = duration < 30_000 ? 0 : duration < 120_000 ? 1 : duration < 600_000 ? 2 : 3;
     addStatistic(view.execution.duration, bucket, outcome, key);
   }
+}
+
+/** Existing databases intentionally retain their old indexes. Never do a
+ * project-wide event scan once per Turn, or assume old rows have column IDs. */
+function latestTerminalTimes(db: Database, turns: Array<{ id: string; state: string }>) {
+  const times = new Map<string, string>();
+  if (!turns.length) return times;
+  const indexed = db.query("SELECT name FROM sqlite_master WHERE type='index' AND name='events_turn_id_idx'").get();
+  if (indexed) {
+    const terminal = db.query<{ at: string }, [string, string]>(`
+      SELECT json_extract(payload_json,'$.turn.updated_at') AS at FROM events
+      WHERE type='turn.state_changed' AND ${eventTurnMatchSql(db)} AND json_valid(payload_json)
+        AND json_extract(payload_json,'$.turn.state')=? ORDER BY id DESC LIMIT 1
+    `);
+    for (const turn of turns) {
+      const row = terminal.get(turn.id, turn.state);
+      if (row) times.set(turn.id, row.at);
+    }
+    return times;
+  }
+  const pending = new Map(turns.map((turn) => [turn.id, turn.state]));
+  const events = db.query<{ turn_id: string; state: string; at: string }, []>(`
+    SELECT COALESCE(NULLIF(turn_id,''), json_extract(payload_json,'$.turn_id'), json_extract(payload_json,'$.turn.id')) AS turn_id,
+      json_extract(payload_json,'$.turn.state') AS state, json_extract(payload_json,'$.turn.updated_at') AS at
+    FROM events WHERE type='turn.state_changed' AND json_valid(payload_json) ORDER BY id DESC
+  `);
+  for (const event of events.iterate()) {
+    if (!pending.has(event.turn_id) || pending.get(event.turn_id) !== event.state) continue;
+    times.set(event.turn_id, event.at);
+    pending.delete(event.turn_id);
+    if (!pending.size) break;
+  }
+  return times;
 }

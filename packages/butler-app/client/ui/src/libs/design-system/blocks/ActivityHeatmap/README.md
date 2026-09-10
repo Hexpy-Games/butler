@@ -13,7 +13,7 @@ Use it inside dashboard and inspector panels that already provide the section ti
 It keeps activity color, spacing, and responsive grid behavior owned by the design system instead of product CSS.
 
 ## How to use this component
-Pass consecutive days with stable ids, localized labels and counts (`null` for unavailable). Supply `startWeekday` (Sunday = 0) and optionally seven localized `weekdayLabels`. Days run down seven rows, then into the next week. Fixed intensity bands: 0, 1, 2–4, 5–9, 10+. Pass `onSelect` and `selectedId` for date drilldown; the caller owns source lists and localized legends.
+Pass consecutive days with stable ids, localized labels and counts (`null` for unavailable). Supply `startWeekday` (Sunday = 0) and seven localized `weekdayLabels`. Days run down seven rows, then into the next week. Supply each day's `monthLabel` for the horizontal month axis and `countLabel` for a localized count with units. Fixed intensity bands: 0, 1, 2–4, 5–9, 10+. Pass `legend` with a title and six localized labels (five count bands then unavailable); the swatches share cell styling so colors cannot drift. Pass `onSelect` and `selectedId` for date drilldown; the caller owns source lists, explanatory copy and metric semantics.
 
 ## Who can use this component
 Any Butler client surface that needs activity density or date drilldown.
