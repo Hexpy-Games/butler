@@ -4325,13 +4325,28 @@ export async function runT4FullCliLifecycleChild(input: { root: string; acceptan
     const oldDescriptor = readActiveDescriptor(input.root);
     await runServingGenerationCatchup({ butlerData: input.root, limit: 256, signal: AbortSignal.timeout(30_000) });
     const oldGraphPath = join(input.root, "cognition/memory/generations", oldDescriptor.generation_id, "graph.sqlite");
-    for (let ordinal = 0; ordinal < 8 && !t4VectorUnitStates(oldGraphPath).some((unit) => unit.state === "pending"); ordinal += 1) {
+    const pendingSemanticLeaves = () => {
+      const db = new Database(oldGraphPath, { readonly: true });
+      try {
+        return db.query<{ window_ref: string; state: string }, []>(`
+          SELECT w.window_ref,w.state FROM memory_projection_windows w
+          WHERE w.state IN ('planned','pending','running')
+            AND NOT EXISTS(SELECT 1 FROM memory_projection_windows child WHERE child.parent_window_ref=w.window_ref)
+          ORDER BY w.rowid
+        `).all();
+      } finally { db.close(); }
+    };
+    const semanticPreparationDeadline = Date.now() + 10 * 60_000;
+    for (let ordinal = 0; ordinal < 16 && pendingSemanticLeaves().length; ordinal += 1) {
+      const remaining = semanticPreparationDeadline - Date.now();
+      if (remaining <= 0) break;
       await advanceNextMemoryProjection({ context: { butlerData: input.root,
         target: { kind: "active", expected_generation: oldDescriptor.generation_id },
-        signal: AbortSignal.timeout(30_000), deadlineAt: Date.now() + 30_000, waitClass: "background" } });
+        signal: AbortSignal.timeout(remaining), deadlineAt: semanticPreparationDeadline, waitClass: "background" } });
     }
+    if (pendingSemanticLeaves().length) throw new Error("T4 full CLI old generation retained runnable semantic work before vector barrier");
     const pendingUnit = t4VectorUnitStates(oldGraphPath).find((unit) => unit.state === "pending");
-    if (!pendingUnit) throw new Error("T4 full CLI old generation never reached a pending vector unit");
+    if (!pendingUnit) throw new Error("T4 full CLI semantic preparation consumed every pending vector unit");
     relay.arm();
     const lateDeadline = Date.now() + 30_000;
     let lateAdvance: Promise<{ progress: any; error: unknown }> | null = null;
