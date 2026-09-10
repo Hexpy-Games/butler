@@ -2727,6 +2727,7 @@ type T4VerifiedSource = {
   producer_call: T4ObservedCall;
   producer_operation_call_id: string;
   read_pages: T4ObservedCall[];
+  inline_returned_text?: string;
   scalar_ids: Array<{ part_id: string; pointer: string; text: string; hash: string }>;
   returned_message: Record<string, unknown> | null;
 };
@@ -2788,7 +2789,8 @@ function t4BoundSourceScalar(sourceRef: string, canonical: NonNullable<ReturnTyp
   const generationId = Buffer.from(handle[2]!, "base64url").toString("utf8");
   const sourceId = Buffer.from(handle[3]!, "base64url").toString("utf8");
   const row = graph.query<any, [string]>(`SELECT s.source_id,s.episode_id,s.revision,s.content_hash,
-    s.conversation_session_id,s.conversation_message_id,s.part_id,s.scalar_pointer,c.project_id,s.observed_at
+    s.conversation_session_id,s.conversation_message_id,s.part_id,s.scalar_pointer,s.byte_start,s.byte_end,
+    c.project_id,c.current_revision,c.status chunk_status,s.observed_at
     FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id WHERE s.source_id=?`).get(sourceId);
   const scalar = row && canonical.scalars.find((item) => item.part_id === row.part_id && item.pointer === row.scalar_pointer);
   return row && scalar?.hash === row.content_hash && row.conversation_message_id === canonical.message_id
@@ -3057,15 +3059,17 @@ function verifyT4ArabicEvidence(input: {
   try {
     const candidates = native.flatMap((producer) => {
       const rows = producer.name === "recall_memory"
-        ? (producer.output?.results ?? []).flatMap((result: any) => result.evidence ?? [])
-        : producer.name === "query_memory" ? (producer.output?.results ?? []) : [];
-      return rows.map((row: any) => ({ producer, row }));
+        ? (producer.output?.results ?? []).flatMap((result: any) =>
+          (result.evidence ?? []).map((row: any) => ({ row, result })))
+        : producer.name === "query_memory"
+          ? (producer.output?.results ?? []).map((row: any) => ({ row, result: row })) : [];
+      return rows.map(({ row, result }: any) => ({ producer, row, result }));
     });
-    for (const { producer, row } of candidates) {
-      if (!row.read_args || !row.source_ref || !row.conversation_session_id ||
+    for (const { producer, row, result } of candidates) {
+      if (!row.source_ref || !row.conversation_session_id ||
         !row.conversation_message_id) continue;
-      const full = t4ReadFullSource(native, producer, row.read_args, row.source_ref,
-        row.conversation_session_id, row.conversation_message_id);
+      const full = row.read_args ? t4ReadFullSource(native, producer, row.read_args, row.source_ref,
+        row.conversation_session_id, row.conversation_message_id) : null;
       const canonical = t4CanonicalMessage(input.root, row.conversation_message_id);
       const bound = canonical ? t4BoundSourceScalar(row.source_ref, canonical, graph) : null;
       const frozen = canonical && input.baseline.eligible_sources.some((item) =>
@@ -3073,13 +3077,33 @@ function verifyT4ArabicEvidence(input: {
         item.conversation_turn_id === canonical.turn_id && item.role === canonical.role &&
         item.created_at === canonical.created_at && item.content_sha256 === sha(canonical.text) &&
         item.content_bytes === Buffer.byteLength(canonical.text));
-      if (full && canonical?.eligible && frozen && bound?.scalar.text === S3 && full.text === S3 &&
-        bound.scalar.hash === full.sourceHash && Date.parse(canonical.created_at) < Date.parse(question.created_at)) {
+      const inlineText = producer.name === "recall_memory" && row.source_resolved === true &&
+        typeof row.excerpt === "string" ? row.excerpt : null;
+      const frozenSource = bound?.row && input.baseline.sources.some((source) =>
+        source.source_id === bound.row.source_id && source.episode_id === bound.row.episode_id &&
+        source.revision === bound.row.revision && source.content_hash === bound.row.content_hash &&
+        source.conversation_session_id === bound.row.conversation_session_id &&
+        source.conversation_message_id === bound.row.conversation_message_id &&
+        source.part_id === bound.row.part_id && source.scalar_pointer === bound.row.scalar_pointer &&
+        source.byte_start === bound.row.byte_start && source.byte_end === bound.row.byte_end);
+      const inlineFull = inlineText !== null && bound?.row && bound.generation_id === input.baseline.generation_id &&
+        frozenSource &&
+        bound.row.episode_id === result.episode_ref && bound.row.revision === result.revision &&
+        bound.row.conversation_session_id === row.conversation_session_id &&
+        canonical?.session_id === row.conversation_session_id &&
+        bound.row.current_revision === result.revision && bound.row.chunk_status === "active" &&
+        bound.row.byte_start === 0 && bound.row.byte_end === Buffer.byteLength(bound.scalar.text) &&
+        inlineText === bound.scalar.text && sha(inlineText) === bound.scalar.hash;
+      if ((full || inlineFull) && canonical?.eligible && frozen && bound?.scalar.text === S3 &&
+        (full?.text ?? inlineText) === S3 && bound.scalar.hash === (full?.sourceHash ?? sha(inlineText!)) &&
+        Date.parse(canonical.created_at) < Date.parse(question.created_at)) {
         s3 = { session_id: canonical.session_id, message_id: canonical.message_id,
-          source_ref: row.source_ref, source_hash: full.sourceHash, bytes: full.bytes,
+          source_ref: row.source_ref, source_hash: full?.sourceHash ?? bound.scalar.hash,
+          bytes: full?.bytes ?? Buffer.byteLength(inlineText!),
           created_at: canonical.created_at, producer: producer.name as "recall_memory" | "query_memory",
-          call_id: full.callId, producer_call: producer,
-          producer_operation_call_id: producer.operation_call_id!, read_pages: full.pages,
+          call_id: full?.callId ?? producer.id, producer_call: producer,
+          producer_operation_call_id: producer.operation_call_id!, read_pages: full?.pages ?? [],
+          ...(full ? {} : { inline_returned_text: inlineText! }),
           scalar_ids: [bound.scalar], returned_message: null };
         break;
       }
@@ -3879,7 +3903,7 @@ export async function finalizeT4Qualification(input: {
       throw new Error(`T4 ${phase} canonical source is absent from its phase inventory`);
     };
     for (const [ordinal, fact] of verified.entries()) {
-      const call = fact.source_ref ? fact.read_pages[0] : fact.producer_call;
+      const call = fact.source_ref ? fact.read_pages[0] ?? fact.producer_call : fact.producer_call;
       const delivery = { operation_call_id: call?.operation_call_id, output: call?.output };
       if (!call || !delivery.operation_call_id || !delivery.output) {
         throw new Error(`T4 ${phase} accepted source-read fact is incomplete`);
@@ -3891,11 +3915,17 @@ export async function finalizeT4Qualification(input: {
         handles = [fact.source_ref];
         observations = [{ kind: "source_ref", source_ref: fact.source_ref }];
         const pages = fact.read_pages;
-        const fullText = pages.map((page: any) => page.output.text).join("");
-        if (!pages.length || fullText !== fact.scalar_ids[0]?.text || sha(fullText) !== fact.source_hash) {
-          throw new Error(`T4 ${phase} accepted source pages changed`);
+        const fullText = pages.length
+          ? pages.map((page: any) => page.output.text).join("") : fact.inline_returned_text;
+        if (typeof fullText !== "string" || fullText !== fact.scalar_ids[0]?.text ||
+          Buffer.byteLength(fullText) !== fact.bytes || sha(fullText) !== fact.source_hash) {
+          throw new Error(`T4 ${phase} accepted full source return changed`);
         }
-        const pageFile = writeT4Evidence(input.outputDir, `cases/${phase.toLowerCase()}-${ordinal}-source-pages.json`, pages);
+        const pageFile = writeT4Evidence(input.outputDir,
+          `cases/${phase.toLowerCase()}-${ordinal}-${pages.length ? "source-pages" : "inline-source"}.json`,
+          pages.length ? pages : { producer_call_id: fact.producer_call.id,
+            operation_call_id: fact.producer_operation_call_id, output: fact.producer_call.output,
+            returned_text: fullText });
         if (fact.source_ref.startsWith("memory-source:v2:")) {
           bindingFiles = [await writeT4PerformanceSourceEvidence({ butlerData: dirname(input.tracePath), graphPath,
             generationId: stage.generation_id, artifactDir: input.outputDir, resultId: delivery.operation_call_id,
@@ -3977,7 +4007,8 @@ export async function finalizeT4Qualification(input: {
         `cases/${phase.toLowerCase()}-${ordinal}-extractor-attempts.json`, selectedAttempts) : null;
       const selectedReceiptFile = selectedReceipts.length ? writeT4Evidence(input.outputDir,
         `cases/${phase.toLowerCase()}-${ordinal}-embedding-receipts.json`, selectedReceipts) : null;
-      const usesEmbedding = false;
+      const usesEmbedding = call.name === "recall_memory" &&
+        ["ok", "partial"].includes(call.output?.coverage?.vectors?.state);
       const usesExtractor = phase === "ARABIC" && selectedAttempts.some((attempt: any) =>
         attempt.provider_invoked === 1 && attempt.outcome_known === 1 && attempt.state === "provider_result" && attempt.output_json);
       if (phase === "ARABIC" && !usesExtractor) {
