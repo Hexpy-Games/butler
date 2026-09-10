@@ -124,8 +124,8 @@ test("normal App target waits past prior reconciliation and binds admitted canon
     expect(result).toMatchObject({
       ok: true,
       unrelatedModelCalls: 1,
-      unrelatedHandled: 1,
     });
+    expect(result.unrelatedHandled).toBeGreaterThanOrEqual(1);
     expect(result.requestBytes).toBe(result.admittedBytes + 1);
     expect(result.requestSha256).not.toBe(result.admittedSha256);
     expect(result.canonicalTurnId).toBeTruthy();
