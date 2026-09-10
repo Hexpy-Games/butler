@@ -59,8 +59,10 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
       <ProjectActivityStatistics />
       <ProjectMaterialStatistics />
       {data.sessionHistoryAvailable ? <>
+      <div className={styles.pair}>
       <ProjectStatisticChart title={copy.outcomes} description={copy.outcomesHelp} series={data.execution.outcomes} stacked />
       <ProjectStatisticChart title={copy.duration} description={copy.durationHelp} series={data.execution.duration} stacked horizontal />
+      </div>
       {data.execution.excluded > 0 && <Typo.Caption>{copy.excluded(data.execution.excluded)}</Typo.Caption>}
       </> : <Section title={copy.outcomes}><Typo.Caption>{copy.sessionUnavailable}</Typo.Caption></Section>}
       <Section title={copy.usage}><div className={styles.surface}><Typo.Caption>{copy.usageHelp}</Typo.Caption></div></Section>

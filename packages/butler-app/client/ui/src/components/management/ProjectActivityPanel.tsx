@@ -19,7 +19,8 @@ export function ProjectActivityPanel({
     >
       {days.length > 0 ? (
         <ActivityHeatmap
-          ariaLabel="Recent 30 day project activity"
+          ariaLabel={appCopy.interfacePanels.recentActivity}
+          startWeekday={new Date(`${days[0]!.date}T12:00:00`).getDay()}
           days={days.map((day) => ({
             id: day.date,
             label: day.date,

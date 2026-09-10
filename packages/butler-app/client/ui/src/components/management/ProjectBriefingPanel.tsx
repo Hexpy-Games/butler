@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, Section, Stack, Typo } from "@/butler-ds";
+import { Button, Card, Section, Stack, Typo } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
@@ -51,7 +51,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
       </Stack>}
     </Section>}
     {section === "suggestions" && status === "ready" && briefing.content && briefing.content.suggestions.length > 0 && <Section title={copy.suggestions}>
-      <Stack gap="lg">{briefing.content.suggestions.map((item) => <Stack key={item.candidateId} gap="sm" className={styles.suggestion}>
+      <div className={styles.cards}>{briefing.content.suggestions.slice(0, 3).map((item) => <Card key={item.candidateId}><Stack gap="md">
         <Typo.Body>{item.title}</Typo.Body><Typo.Caption className={styles.summary}>{item.reason}</Typo.Caption>
         <Button variant="outline" onClick={() => {
           const candidate = briefing.candidates.find((candidate) => candidate.id === item.candidateId);
@@ -62,7 +62,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
           void composer.addProjectDocument(documentFor(selected), item.title);
         }}>{copy.addToComposer}</Button>
         <ProjectSourceLinks ids={item.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} />
-      </Stack>)}</Stack>
+      </Stack></Card>)}</div>
     </Section>}
   </Stack>;
 }

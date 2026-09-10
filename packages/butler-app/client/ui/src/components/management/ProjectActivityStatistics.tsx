@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ChevronRight, NavRow, Section, Stack, Typo } from "@/butler-ds";
+import { ActivityHeatmap, Button, ChevronRight, NavRow, Section, Stack, Typo } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
@@ -15,29 +15,25 @@ export function ProjectActivityStatistics() {
   const bucket = data.activity.buckets.find((day) => day.label === selected);
   const start = new Date(`${data.days[0]!.date}T12:00:00`).getDay();
   const activity = data.work?.activity ?? [];
-  return <Stack gap="xl">
+  return <div className={styles.pair}>
     <Section title={copy.calendar} description={copy.calendarHelp}>
       <Stack gap="md" className={styles.surface}>
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
         {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
-        <div className={styles.calendar}>
-          {Array.from({ length: 7 }, (_, index) => <Typo.Caption key={`weekday-${index}`} className={styles.weekday}>
-            {new Date(2026, 0, 4 + index).toLocaleDateString(locale, { weekday: "short" })}
-          </Typo.Caption>)}
-          {Array.from({ length: start }, (_, index) => <span key={`blank-${index}`} />)}
-          {data.activity.buckets.map((day) => {
-            const kinds = data.activity.keys.filter((key) => day.values[key]!.length > 0);
-            const description = data.activity.keys.map((key) => `${copy.labels[key]} ${day.values[key]!.length}`).join(" · ");
-            return <Button key={day.label} variant="borderless" className={styles.day} data-active={kinds.length > 0}
-              aria-pressed={selected === day.label} aria-label={`${dayLabel(day.label)} · ${description}`}
-              title={`${dayLabel(day.label)} · ${description}`} onClick={() => setSelected(day.label)}>
-              <span>{day.label.endsWith("-01") ? day.label.slice(5) : day.label.slice(8)}</span>
-              <span className={styles.dots}>{kinds.map((key) => <span key={key} data-kind={key} />)}</span>
-            </Button>;
-          })}
-        </div>
+        <ActivityHeatmap ariaLabel={copy.calendar} startWeekday={start}
+          weekdayLabels={Array.from({ length: 7 }, (_, index) =>
+            new Date(2026, 0, 4 + index).toLocaleDateString(locale, { weekday: "short" }))}
+          selectedId={selected} onSelect={setSelected}
+          days={data.activity.buckets.map((day) => ({
+            id: day.label,
+            label: `${dayLabel(day.label)} · ${!data.ledgerHistoryAvailable && !data.sessionHistoryAvailable ? copy.unavailable
+              : data.activity.keys.map((key) => `${copy.labels[key]} ${day.values[key]!.length}`).join(" · ")}`,
+            count: !data.ledgerHistoryAvailable && !data.sessionHistoryAvailable ? null
+              : Object.values(day.values).reduce((count, keys) => count + keys.length, 0),
+          }))} />
+        <Typo.Caption>{copy.densityLegend}</Typo.Caption>
         <div className={styles.legend}>{data.activity.keys.map((key) => <Typo.Caption key={key}>
-          <span className={styles.swatch} data-kind={key} />{copy.labels[key]}
+          {copy.labels[key]}
         </Typo.Caption>)}</div>
         <Typo.Caption>{dayLabel(data.days[0]!.date)} — {dayLabel(data.days.at(-1)!.date)}</Typo.Caption>
         {bucket && <>
@@ -61,5 +57,5 @@ export function ProjectActivityStatistics() {
         {activity.length > limit && <Button variant="inline" onClick={() => setLimit((value) => value + 10)}>{appCopy.projectSignpost.loadMore}</Button>}
       </Stack>
     </Section>
-  </Stack>;
+  </div>;
 }
