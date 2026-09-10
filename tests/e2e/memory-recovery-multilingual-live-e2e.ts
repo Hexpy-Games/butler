@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -76,6 +77,7 @@ type LiveRecoveryMode =
       maxIngressPollCalls: number;
       maxWallClockMs: number;
       performance?: T4PerformanceOptions;
+      resumeAfterQ1ReviewPath?: string;
     }
   | {
       kind: "preserved_failed_third";
@@ -595,8 +597,12 @@ export async function runMemoryRecoveryLiveHarness(
     throw new Error("accepted LIVE03 generation missing");
   const graphPath = `${butlerData}/cognition/memory/generations/${descriptor.generation_id}/graph.sqlite`;
   const accepted = readAcceptedCorpusState(graphPath);
+  const t4Remainder = recovery.kind === "t4_actual_phase" && recovery.resumeAfterQ1ReviewPath
+    ? readT4ResumeAfterQ1(recovery.baselinePath, recovery.resumeAfterQ1ReviewPath,
+      butlerData, descriptor.generation_id, graphPath)
+    : null;
   const t4Baseline = recovery.kind === "t4_actual_phase"
-    ? readT4ClosedBaseline(recovery.baselinePath, butlerData, descriptor.generation_id, graphPath)
+    ? t4Remainder?.baseline ?? readT4ClosedBaseline(recovery.baselinePath, butlerData, descriptor.generation_id, graphPath)
     : null;
   const preservedFailure =
     recovery.kind === "preserved_failed_third"
@@ -1033,20 +1039,22 @@ export async function runMemoryRecoveryLiveHarness(
     await composition.ready;
     assertLiveWallBudget(pollBudget);
     if (t4Baseline && t4Observer) {
-      const terminalReplays = await drainT4PreservedTerminalReplays({
-        root: butlerData,
-        baseline: t4Baseline,
-        dispatcher,
-        dependencies: { queue, server: gateway, store: bindings, deliveryGuard },
-        syncProjection: syncAppProjection,
-        budget: ingressBudget,
-      });
+      const terminalReplays = t4Remainder ? Number(t4Remainder.q1.trace.terminal_replays ?? 0)
+        : await drainT4PreservedTerminalReplays({
+          root: butlerData,
+          baseline: t4Baseline,
+          dispatcher,
+          dependencies: { queue, server: gateway, store: bindings, deliveryGuard },
+          syncProjection: syncAppProjection,
+          budget: ingressBudget,
+        });
       return await runT4ActualPhaseBranch({
         butlerData, graphPath, generationId: descriptor.generation_id,
         appUrl: app.url, baseline: t4Baseline, observer: t4Observer,
         dispatch: (text, admission, budgets) => dispatchTarget(text, undefined, admission, budgets),
         pollBudget, ingressBudget, terminalReplays,
         performance: recovery.kind === "t4_actual_phase" ? recovery.performance : undefined,
+        q1Resume: t4Remainder?.q1,
       });
     }
     const bTargets: DeliveredTarget[] = [];
@@ -1857,6 +1865,18 @@ type T4ClosedBaseline = T4PreservedPins & {
     };
   };
 };
+type T4Q1Resume = {
+  reviewPath: string;
+  reviewSha256: string;
+  tracePath: string;
+  traceSha256: string;
+  observationPath: string;
+  observationSha256: string;
+  stageEvidenceRoot: string;
+  implementationCommit: string;
+  trace: Record<string, any>;
+  observation: Record<string, any>;
+};
 const T4_AD1 = "오늘 잠실에서 도자기 수업을 들었어요. 처음 만든 찻잔에 노란 유약을 칠했는데 마음에 들었어요.";
 const T4_Q1 = "한국 시간 기준으로 지난주 월요일부터 일요일까지, 프로젝트 얘기 말고 기억에 남는 일상 대화들을 찾아 주세요. 지난주 기록이 없다면 그 사실을 밝혀 주시고, 대신 이번 주 월요일부터 지금까지의 일상 대화들을 찾아 주세요. 서로 다른 대화에서 나온 내용을 날짜와 함께 정리하고, 근거가 되는 원문도 확인해 주세요.";
 
@@ -2077,16 +2097,122 @@ function readT4ClosedBaseline(path: string, root: string, generation: string, gr
   } finally { graph.close(); }
 }
 
-function assertT4OldPins(graphPath: string, baseline: T4ClosedBaseline) {
+function readT4ResumeAfterQ1(
+  baselinePath: string,
+  reviewPath: string,
+  root: string,
+  generation: string,
+  graphPath: string,
+): { baseline: T4ClosedBaseline; q1: T4Q1Resume } {
+  const frozen = JSON.parse(readFileSync(baselinePath, "utf8")) as Omit<T4ClosedBaseline, "resume">;
+  if (frozen.schema !== "butler.memory.t4-final-checkpoint.v1" || resolve(frozen.butler_data) !== root ||
+    frozen.generation_id !== generation || !frozen.general_session_id || !Array.isArray(frozen.jobs) ||
+    !Array.isArray(frozen.sources) || !Array.isArray(frozen.windows) || !Array.isArray(frozen.completed) ||
+    !Array.isArray(frozen.attempts) || !Array.isArray(frozen.eligible_sources) || !frozen.eligible_sources.length) {
+    throw new Error("T4 Q1 remainder requires the current frozen checkpoint");
+  }
+  const week = t4KstWeek(Date.now());
+  for (const key of ["date_kst", "last_week_from", "last_week_to", "this_week_from"] as const) {
+    if (frozen[key] !== week[key]) throw new Error("T4 Q1 remainder date binding changed");
+  }
+  if (t4Json(readT4PreservedPins(graphPath)) !== t4Json({ jobs: frozen.jobs, sources: frozen.sources,
+    windows: frozen.windows, completed: frozen.completed, attempts: frozen.attempts }) ||
+    t4Json(readT4EligibleSources(root)) !== t4Json(frozen.eligible_sources)) {
+    throw new Error("T4 Q1 remainder checkpoint does not match current canonical state");
+  }
+  if (readT4PendingInbound(root).length) throw new Error("T4 Q1 remainder requires an empty inbound queue");
+
+  const reviewBytes = readFileSync(reviewPath, "utf8");
+  const review = JSON.parse(reviewBytes) as any;
+  const tracePath = resolve(review.trace_path ?? "");
+  const observationPath = resolve(review.observation_path ?? "");
+  const stageEvidenceRoot = resolve(review.stage_evidence_root ?? "");
+  const traceBytes = readFileSync(tracePath, "utf8");
+  const observationBytes = readFileSync(observationPath, "utf8");
+  const trace = JSON.parse(traceBytes) as Record<string, any>;
+  const observation = JSON.parse(observationBytes) as Record<string, any>;
+  if (review.schema !== "butler.memory.phase-semantic-review.v1" || review.scope !== "Q1_only" ||
+    review.outcome !== "accepted" || !/^[0-9a-f]{40,64}$/u.test(review.implementation_commit ?? "") ||
+    review.trace_sha256 !== createHash("sha256").update(traceBytes).digest("hex") ||
+    review.observation_sha256 !== createHash("sha256").update(observationBytes).digest("hex") ||
+    trace.schema !== "butler.memory.t4-resume-trace.v1" || trace.status !== "failed" ||
+    trace.generation_id !== generation || trace.question_sha256 !== sha(T4_Q1) ||
+    observation.schema !== "butler.memory.t4-resume-observation.v1" || !trace.question ||
+    !trace.native_journal || !trace.recall_observation || !trace.q1_stage_inventory) {
+    throw new Error("T4 accepted Q1 phase evidence is invalid or incomplete");
+  }
+  for (const item of t4StageEvidenceRefs(trace.q1_stage_inventory as Record<string, any>)) {
+    const source = join(stageEvidenceRoot, item.ref);
+    if (sha(readFileSync(source, "utf8")) !== item.sha256) throw new Error("T4 accepted Q1 stage evidence changed");
+  }
+  const question = (trace.question.originalDelivery ?? trace.question) as DeliveredTarget;
+  const lineage = t4LineageTurnIds(root, question.turnId);
+  const journal = readT4NativeJournal(root, lineage);
+  if (t4Json(journal) !== t4Json(trace.native_journal) ||
+    t4Json([...lineage].sort()) !== t4Json([...(trace.question_lineage_turns ?? [])].sort())) {
+    throw new Error("T4 accepted Q1 persisted native identity changed");
+  }
+  const ad1 = trace.ad1 as DeliveredTarget;
+  if (!ad1 || ad1.requestSha256 !== sha(T4_AD1)) throw new Error("T4 accepted Q1 AD1 provenance is missing");
+  const graph = new Database(graphPath, { readonly: true });
+  let ad1Job: any;
+  try {
+    ad1Job = graph.query<any, [string, string, string]>(`SELECT j.job_id,w.window_ref FROM memory_projection_jobs j
+      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+      JOIN memory_chunk_sources s ON s.episode_id=j.episode_id AND s.revision=j.revision
+      JOIN memory_projection_windows w ON w.job_id=j.job_id
+      WHERE s.conversation_session_id=? AND s.conversation_message_id=? AND s.content_hash=? LIMIT 1`)
+      .get(ad1.conversationSessionId, ad1.conversationRequestMessageId, sha(T4_AD1));
+  } finally { graph.close(); }
+  if (!ad1Job) throw new Error("T4 accepted Q1 AD1 projection lineage is missing");
+  const baseline = { ...frozen, resume: { ad1, ad1_job_id: ad1Job.job_id, ad1_window_ref: ad1Job.window_ref,
+    preserved_observation: trace.preserved_ad1_observation ?? {},
+    preserved_failure: trace.preserved_actual01_failure ?? {},
+    preserved_queue: { pending: [], processing_count: 0 } } } as T4ClosedBaseline;
+  const verified = verifyT4ObservedRecall({ calls: (observation.q1_calls ?? []).filter((call: any) => call.phase === "Q1"),
+    journal, observations: observation.observations ?? [], baseline, ad1, question,
+    graphPath, generationId: generation, lineageTurnIds: lineage });
+  if (t4Json(verified) !== t4Json(trace.recall_observation)) throw new Error("T4 accepted Q1 verifier facts changed");
+  return { baseline, q1: { reviewPath: resolve(reviewPath), reviewSha256: createHash("sha256").update(reviewBytes).digest("hex"),
+    tracePath, traceSha256: review.trace_sha256, observationPath, observationSha256: review.observation_sha256,
+    stageEvidenceRoot, implementationCommit: review.implementation_commit, trace, observation } };
+}
+
+function assertT4OldPins(graphPath: string, baseline: T4ClosedBaseline, allowPendingProgress = false) {
   const current = readT4PreservedPins(graphPath);
   const oldJobs = new Set(baseline.jobs.map((row) => row.job_id));
   const oldSources = new Set(baseline.sources.map((row) => row.source_id));
   const oldAllWindows = new Set(baseline.windows.map((row) => row.window_ref));
   const oldWindows = new Set(baseline.completed.map((row) => row.window_ref));
   const oldAttempts = new Set(baseline.attempts.map((row) => row.attempt_ref));
-  if (t4Json(current.jobs.filter((row) => oldJobs.has(row.job_id))) !== t4Json(baseline.jobs) ||
+  const currentJobs = current.jobs.filter((row) => oldJobs.has(row.job_id));
+  const currentWindows = current.windows.filter((row) => oldAllWindows.has(row.window_ref));
+  const pendingJobIds = new Set(baseline.windows.filter((row) => row.state === "pending").map((row) => row.job_id));
+  const immutableJob = (row: Record<string, unknown>) => Object.fromEntries(Object.entries(row).filter(([key]) =>
+    !["observed_completion_job_ids", ...(pendingJobIds.has(row.job_id) ? ["source_state", "semantic_graph_state",
+      "episode_vectors_state", "node_vectors_state", "hot_cache_state", "next_stage", "identity_decisions_json"] : [])]
+      .includes(key)));
+  const completionIdsPreserved = baseline.jobs.every((job) => {
+    const currentJob = currentJobs.find((row) => row.job_id === job.job_id);
+    const oldIds = JSON.parse(String(job.observed_completion_job_ids ?? "[]")) as unknown[];
+    const newIds = JSON.parse(String(currentJob?.observed_completion_job_ids ?? "[]")) as unknown[];
+    return oldIds.every((id) => newIds.includes(id));
+  });
+  const jobsPreserved = allowPendingProgress
+    ? currentJobs.length === baseline.jobs.length && completionIdsPreserved &&
+      t4Json(currentJobs.map(immutableJob)) === t4Json(baseline.jobs.map(immutableJob))
+    : t4Json(currentJobs) === t4Json(baseline.jobs);
+  const windowsPreserved = allowPendingProgress
+    ? baseline.windows.every((window) => {
+      const row = currentWindows.find((candidate) => candidate.window_ref === window.window_ref);
+      return window.state === "pending"
+        ? row?.job_id === window.job_id
+        : t4Json(row) === t4Json(window);
+    })
+    : t4Json(currentWindows) === t4Json(baseline.windows);
+  if (!jobsPreserved ||
     t4Json(current.sources.filter((row) => oldSources.has(row.source_id))) !== t4Json(baseline.sources) ||
-    t4Json(current.windows.filter((row) => oldAllWindows.has(row.window_ref))) !== t4Json(baseline.windows) ||
+    !windowsPreserved ||
     t4Json(current.completed.filter((row) => oldWindows.has(row.window_ref))) !== t4Json(baseline.completed) ||
     t4Json(current.attempts.filter((row) => oldAttempts.has(row.attempt_ref))) !== t4Json(baseline.attempts)) {
     throw new Error("T4 changed frozen source, plan, window, or attempt history");
@@ -2105,6 +2231,36 @@ function readT4PendingInbound(root: string): Array<{ file: string; record: any }
     file,
     record: JSON.parse(readFileSync(join(pending, file), "utf8")),
   }));
+}
+
+function readT4HotCacheStates(graphPath: string): Array<Record<string, unknown>> {
+  const graph = new Database(graphPath, { readonly: true });
+  try {
+    return graph.query<Record<string, unknown>, []>(
+      "SELECT job_id,hot_cache_state,next_stage,observed_completion_job_ids FROM memory_projection_jobs ORDER BY rowid",
+    ).all();
+  } finally { graph.close(); }
+}
+
+function assertT4ColdArabicPromptOmission(input: {
+  observations: Array<Record<string, unknown>>;
+  journal: ReturnType<typeof readT4NativeJournal>;
+  lineageTurnIds: ReadonlySet<string>;
+}) {
+  const accepted = input.observations.find((observation) => {
+    if (observation.phase !== "ARABIC" || !input.lineageTurnIds.has(String(observation.turn_id))) return false;
+    const route = observation.route_context as ModelRoundRequest["routeContext"];
+    return !!route && input.journal.rounds.some((row) => row.turn_id === observation.turn_id &&
+      row.round_id === observation.round_id && row.route_digest === route.routeDigest &&
+      row.candidate_index === route.cursor && row.model_ref === route.modelRef);
+  });
+  const prompt = JSON.stringify(accepted?.messages ?? []);
+  if (!accepted || prompt.includes("## Hot Cache\\n\\n")) {
+    throw new Error("T4 cold Arabic accepted provider input still contained the optional cache");
+  }
+  return { accepted_turn_id: accepted.turn_id, accepted_round_id: accepted.round_id,
+    route_digest: (accepted.route_context as ModelRoundRequest["routeContext"])?.routeDigest,
+    hot_cache_section_present: false };
 }
 
 function readT4InboundRecords(root: string): Array<{ state: string; file: string; record: any }> {
@@ -2987,6 +3143,12 @@ function copyT4Evidence(root: string, source: string, ref: string) {
   return { path: destination, ref, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
+function t4StageEvidenceRefs(stage: Record<string, any>): Array<{ ref: string; sha256: string }> {
+  return [stage, ...(stage.extractor_attempt_refs ?? []), ...(stage.embedding_receipt_refs ?? [])]
+    .filter((item): item is { ref: string; sha256: string } =>
+      !!item && typeof item.ref === "string" && typeof item.sha256 === "string");
+}
+
 async function writeT4PublicStageInventory(butlerData: string, artifactDir: string, phase: "q1" | "arabic") {
   const [{ canonicalConversationProjectionInventory, memorySourceInventoryHash }, { listTypedMemoryRecordsSnapshot }] = await Promise.all([
     import("../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts"),
@@ -3688,7 +3850,10 @@ export async function finalizeT4Qualification(input: {
     const phaseExecutionBase = { ...execution, generation_id: stage.generation_id,
       stage_source_inventory_hash: stage.inventory_hash, source_inventory_ref: stage.ref,
       source_inventory_sha256: stage.sha256 };
-    const calls = (observation.q1_calls ?? []).filter((call: any) => call.phase === phase);
+    const phaseObservation = phase === "Q1" && publicTrace.q1_provenance?.mode === "accepted_phase_reuse"
+      ? JSON.parse(readFileSync(join(input.outputDir, "historical-q1/memory-t4-resume-observation.json"), "utf8"))
+      : observation;
+    const calls = (phaseObservation.q1_calls ?? []).filter((call: any) => call.phase === phase);
     const callsFile = writeT4Evidence(input.outputDir, `cases/${phase.toLowerCase()}-tool-observations.json`, calls);
     const verified = phase === "Q1" ? publicTrace.recall_observation?.this_week_sources ?? []
       : publicTrace.arabic_evidence?.verified_sources ?? [];
@@ -3846,8 +4011,10 @@ export async function finalizeT4Qualification(input: {
         }, { extractor: usesExtractor, embedding: usesEmbedding });
     }
   };
-  await projectPublicPhase("Q1", T4_Q1, ["MR-01", "MR-06"]);
-  await projectPublicPhase("ARABIC", T4_ARABIC_Q, ["MR-03", "MR-05", "MR-07"]);
+  if (publicTrace.q1_provenance?.mode !== "accepted_phase_reuse") {
+    await projectPublicPhase("Q1", T4_Q1, ["MR-01", "MR-06"]);
+  }
+  await projectPublicPhase("ARABIC", T4_ARABIC_Q, ["MR-01", "MR-03", "MR-05", "MR-07"]);
   const native = report.samples.find((sample) => sample.mode === "hybrid" && sample.query_id === "Q03" && sample.repetition === 1);
   if (!native) throw new Error("T4 native hybrid Q03 measured result is missing");
   const nativeResult = JSON.parse(readFileSync(join(input.outputDir, native.result_ref), "utf8")) as MemoryQueryResultEvidence;
@@ -3877,6 +4044,29 @@ export async function finalizeT4Qualification(input: {
       extractor_attempt_refs: [], embedding_receipt_refs: [], expected_source_handles: oldNative.expected_source_groups.flat(),
       expected_source_groups: oldNative.expected_source_groups, observed_source_handles: oldNative.observed_source_handles,
       supporting_execution_refs: supportRefs.filter((ref) => ref.ref.includes("actual11-") || ref.ref.includes("actual12-")),
+    }, { extractor: false, embedding: false });
+  const savedPlanNative = report.samples.find((sample) =>
+    sample.mode === "graph" && sample.query_id === "Q09" && sample.repetition === 1);
+  if (!savedPlanNative) throw new Error("T4 native graph Q09 measured result is missing");
+  const savedPlanResult = JSON.parse(
+    readFileSync(join(input.outputDir, savedPlanNative.result_ref), "utf8"),
+  ) as MemoryQueryResultEvidence;
+  addCase("native-long-source-preservation", ["MR-06"], "native_tool", savedPlanNative.query_hash,
+    { schema: "butler.memory-recovery-case-trace.v1", execution: { ...execution,
+        embedding: { status: "not_executed", reason: "not_required" } },
+      query: { sha256: savedPlanNative.query_hash, request_id: savedPlanResult.request_id,
+        result_refs: [{ result_id: savedPlanNative.result_id, ref: savedPlanNative.result_ref,
+          sha256: savedPlanNative.result_sha256 }] },
+      qualification_source_inventory_hash: inventoryHash, qualification_source_inventory_ref: inventoryRef,
+      qualification_source_inventory_sha256: inventorySha,
+      source_observations: sourceObservations(savedPlanNative.source_binding_refs),
+      completion_ids: [], projection_job_ids: [], native_result_ids: [savedPlanNative.result_id],
+      extractor_attempt_refs: [], embedding_receipt_refs: [],
+      expected_source_handles: savedPlanNative.expected_source_groups.flat(),
+      expected_source_groups: savedPlanNative.expected_source_groups,
+      observed_source_handles: savedPlanNative.observed_source_handles,
+      supporting_execution_refs: [{ ref: copiedTrace.ref, sha256: copiedTrace.sha256 },
+        ...supportRefs.filter((ref) => ref.ref.includes("t3-correction") || ref.ref.includes("saved-plan"))],
     }, { extractor: false, embedding: false });
   const { memorySourceInventoryHash } = await import(
     "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts"
@@ -4213,6 +4403,7 @@ async function runT4ActualPhaseBranch(input: {
   pollBudget: LivePollBudget; ingressBudget: IngressPollBudget;
   terminalReplays: number;
   performance?: T4PerformanceOptions;
+  q1Resume?: T4Q1Resume;
 }) {
   const startedAt = new Date().toISOString();
   const tracePath = `${input.butlerData}/memory-t4-resume-trace.json`;
@@ -4263,43 +4454,100 @@ async function runT4ActualPhaseBranch(input: {
     } finally { projected.close(); }
     if (ad1.conversationSessionId === input.baseline.general_session_id) throw new Error("T4 AD1 did not create a distinct canonical session");
     if (t4KstWeek(Date.now()).date_kst !== input.baseline.date_kst) throw new Error("T4 date changed before question ingress");
-    const questionChat = await createT4EmptyChat(input.appUrl);
-    if (questionChat === ad1.chatId) throw new Error("T4 question reused the source chat");
-    input.observer.begin("Q1");
-    const question = await input.dispatch(T4_Q1, { chatId: questionChat, model: "openai/gpt-5.5",
-      reasoningEffort: "medium", awaitT4FinalSynthesis: true });
-    input.observer.end();
-    trace.question = question;
-    if (question.delegatedTerminalStatus && question.delegatedTerminalStatus !== "success") {
-      throw new Error(`T4 delegated Q1 ended with ${question.delegatedTerminalStatus}`);
+    let question: DeliveredTarget;
+    let questionIngress: DeliveredTarget;
+    if (input.q1Resume) {
+      question = input.q1Resume.trace.question as DeliveredTarget;
+      questionIngress = (question.originalDelivery ?? question) as DeliveredTarget;
+      trace.question = question;
+      trace.native_journal = input.q1Resume.trace.native_journal;
+      trace.question_lineage_turns = input.q1Resume.trace.question_lineage_turns;
+      trace.recall_observation = input.q1Resume.trace.recall_observation;
+      trace.q1_stage_inventory = input.q1Resume.trace.q1_stage_inventory;
+      trace.q1_provenance = { mode: "accepted_phase_reuse", implementation_commit: input.q1Resume.implementationCommit,
+        prior_trace_status: input.q1Resume.trace.status, review_ref: input.q1Resume.reviewPath,
+        review_sha256: input.q1Resume.reviewSha256, trace_ref: input.q1Resume.tracePath,
+        trace_sha256: input.q1Resume.traceSha256, observation_ref: input.q1Resume.observationPath,
+        observation_sha256: input.q1Resume.observationSha256 };
+      if (input.performance) {
+        for (const item of t4StageEvidenceRefs(input.q1Resume.trace.q1_stage_inventory as Record<string, any>)) {
+          const copied = copyT4Evidence(input.performance.artifactDir, join(input.q1Resume.stageEvidenceRoot, item.ref), item.ref);
+          if (copied.sha256 !== item.sha256) throw new Error("T4 accepted Q1 stage copy changed");
+        }
+        copyT4Evidence(input.performance.artifactDir, input.q1Resume.tracePath, "historical-q1/memory-t4-resume-trace.json");
+        copyT4Evidence(input.performance.artifactDir, input.q1Resume.observationPath, "historical-q1/memory-t4-resume-observation.json");
+        copyT4Evidence(input.performance.artifactDir, input.q1Resume.reviewPath, "historical-q1/root-q1-semantic-review.json");
+      }
+      save();
+    } else {
+      const questionChat = await createT4EmptyChat(input.appUrl);
+      if (questionChat === ad1.chatId) throw new Error("T4 question reused the source chat");
+      input.observer.begin("Q1");
+      question = await input.dispatch(T4_Q1, { chatId: questionChat, model: "openai/gpt-5.5",
+        reasoningEffort: "medium", awaitT4FinalSynthesis: true });
+      input.observer.end();
+      trace.question = question;
+      if (question.delegatedTerminalStatus && question.delegatedTerminalStatus !== "success") {
+        throw new Error(`T4 delegated Q1 ended with ${question.delegatedTerminalStatus}`);
+      }
+      questionIngress = question.originalDelivery ?? question;
+      const lineageTurnIds = t4LineageTurnIds(input.butlerData, questionIngress.turnId);
+      const journal = readT4NativeJournal(input.butlerData, lineageTurnIds);
+      trace.native_journal = journal;
+      trace.question_lineage_turns = [...lineageTurnIds];
+      save();
+      if ([ad1.conversationSessionId, input.baseline.general_session_id].includes(question.conversationSessionId)) {
+        throw new Error("T4 question canonical session is not distinct from both past sessions");
+      }
+      for (const name of ["recall_memory", "query_memory", "list_conversation_sessions", "read_conversation_session"]) {
+        const tool = input.observer.seenTools.get(name) as { toolContractVersion?: number } | undefined;
+        if (!tool || tool.toolContractVersion !== 2) throw new Error("T4 actual model did not receive the four v2 memory tools");
+      }
+      trace.recall_observation = verifyT4ObservedRecall({ calls: input.observer.q1Calls.filter((call) => call.phase === "Q1"), journal, observations: input.observer.observations,
+        baseline: input.baseline, ad1, question: questionIngress, graphPath: input.graphPath, generationId: input.generationId,
+        lineageTurnIds });
+      if (input.performance) trace.q1_stage_inventory = await writeT4PublicStageInventory(
+        input.butlerData, input.performance.artifactDir, "q1",
+      );
     }
-    const questionIngress = question.originalDelivery ?? question;
-    const originalQuestionTurnId = questionIngress.turnId;
-    const lineageTurnIds = t4LineageTurnIds(input.butlerData, originalQuestionTurnId);
-    const journal = readT4NativeJournal(input.butlerData, lineageTurnIds);
-    trace.native_journal = journal;
-    trace.question_lineage_turns = [...lineageTurnIds];
-    save();
-    if ([ad1.conversationSessionId, input.baseline.general_session_id].includes(question.conversationSessionId)) {
-      throw new Error("T4 question canonical session is not distinct from both past sessions");
-    }
-    for (const name of ["recall_memory", "query_memory", "list_conversation_sessions", "read_conversation_session"]) {
-      const tool = input.observer.seenTools.get(name) as { toolContractVersion?: number } | undefined;
-      if (!tool || tool.toolContractVersion !== 2) throw new Error("T4 actual model did not receive the four v2 memory tools");
-    }
-    trace.recall_observation = verifyT4ObservedRecall({ calls: input.observer.q1Calls.filter((call) => call.phase === "Q1"), journal, observations: input.observer.observations,
-      baseline: input.baseline, ad1, question: questionIngress, graphPath: input.graphPath, generationId: input.generationId,
-      lineageTurnIds });
-    if (input.performance) trace.q1_stage_inventory = await writeT4PublicStageInventory(
-      input.butlerData, input.performance.artifactDir, "q1",
-    );
 
     const arabicChat = await createT4EmptyChat(input.appUrl);
-    if ([questionChat, ad1.chatId].includes(arabicChat)) throw new Error("T4 Arabic question reused an earlier chat");
-    input.observer.begin("ARABIC");
-    const arabic = await input.dispatch(T4_ARABIC_Q, { chatId: arabicChat, model: "openai/gpt-5.5",
-      reasoningEffort: "medium", awaitT4FinalSynthesis: true });
-    input.observer.end();
+    if ([question.chatId, ad1.chatId].includes(arabicChat)) throw new Error("T4 Arabic question reused an earlier chat");
+    let restoreCache: (() => Record<string, unknown>) | null = null;
+    let arabic: DeliveredTarget;
+    try {
+      if (input.q1Resume) {
+        if (!input.performance) throw new Error("T4 Q1 remainder requires an isolated evidence directory");
+        const cachePath = join(dirname(input.graphPath), "hot", "cache.md");
+        const cacheBytes = readFileSync(cachePath);
+        const evidence = join(input.performance.artifactDir, "cold-cache", "original-cache.md");
+        const withheld = join(input.performance.artifactDir, "cold-cache", "withheld-live-cache.md");
+        if (existsSync(evidence) || existsSync(withheld)) throw new Error("T4 cold-cache evidence destination already exists");
+        mkdirSync(dirname(evidence), { recursive: true, mode: 0o700 });
+        writeFileSync(evidence, cacheBytes, { mode: 0o600 });
+        const before = readT4HotCacheStates(input.graphPath);
+        renameSync(cachePath, withheld);
+        restoreCache = () => {
+          if (existsSync(cachePath)) throw new Error("T4 cache changed while the original was isolated");
+          renameSync(withheld, cachePath);
+          const restored = readFileSync(cachePath);
+          if (!restored.equals(cacheBytes)) throw new Error("T4 isolated cache was not restored byte-for-byte");
+          const after = readT4HotCacheStates(input.graphPath);
+          if (t4Json(after) !== t4Json(before)) throw new Error("T4 cache owner state changed during Arabic isolation");
+          return { restored: true, sha256: createHash("sha256").update(restored).digest("hex"), after };
+        };
+        trace.arabic_cache_isolation = { cache_path: cachePath, evidence_ref: "cold-cache/original-cache.md",
+          sha256: createHash("sha256").update(cacheBytes).digest("hex"), bytes: cacheBytes.byteLength, before };
+        save();
+      }
+      input.observer.begin("ARABIC");
+      arabic = await input.dispatch(T4_ARABIC_Q, { chatId: arabicChat, model: "openai/gpt-5.5",
+        reasoningEffort: "medium", awaitT4FinalSynthesis: true });
+    } finally {
+      input.observer.end();
+      if (restoreCache) trace.arabic_cache_restore = restoreCache();
+      save();
+    }
     trace.arabic_question = arabic;
     if (arabic.delegatedTerminalStatus && arabic.delegatedTerminalStatus !== "success") {
       throw new Error(`T4 delegated Arabic question ended with ${arabic.delegatedTerminalStatus}`);
@@ -4314,6 +4562,10 @@ async function runT4ActualPhaseBranch(input: {
     const arabicJournal = readT4NativeJournal(input.butlerData, arabicLineageTurnIds);
     trace.arabic_native_journal = arabicJournal;
     trace.arabic_question_lineage_turns = [...arabicLineageTurnIds];
+    if (input.q1Resume) trace.arabic_cold_prompt = assertT4ColdArabicPromptOmission({
+      observations: input.observer.observations, journal: arabicJournal,
+      lineageTurnIds: arabicLineageTurnIds,
+    });
     save();
     trace.arabic_evidence = verifyT4ArabicEvidence({
       calls: input.observer.q1Calls.filter((call) => call.phase === "ARABIC"),
@@ -4331,7 +4583,7 @@ async function runT4ActualPhaseBranch(input: {
         pollBudget: input.pollBudget, ingressBudget: input.ingressBudget });
       save();
     }
-    trace.preservation = assertT4OldPins(input.graphPath, input.baseline);
+    trace.preservation = assertT4OldPins(input.graphPath, input.baseline, Boolean(input.performance));
     trace.final_source_state = readAcceptedCorpusState(input.graphPath);
     trace.projection_polls = input.pollBudget.calls;
     trace.ingress_polls = input.ingressBudget.calls;
@@ -6620,6 +6872,7 @@ if (import.meta.main) {
     "--preserved-complete-baseline",
   );
   const t4BaselineIndex = process.argv.indexOf("--t4-actual-baseline");
+  const t4ResumeAfterQ1Index = process.argv.indexOf("--t4-resume-after-q1");
   const maxPollIndex = process.argv.indexOf("--max-recovery-polls");
   const maxIngressIndex = process.argv.indexOf("--max-ingress-polls");
   const maxWallIndex = process.argv.indexOf("--max-recovery-wall-ms");
@@ -6646,6 +6899,8 @@ if (import.meta.main) {
           maxIngressPollCalls: Number(process.argv[maxIngressIndex + 1] ?? 0),
           maxWallClockMs: Number(process.argv[maxWallIndex + 1] ?? 0),
           performance,
+          resumeAfterQ1ReviewPath: t4ResumeAfterQ1Index >= 0
+            ? process.argv[t4ResumeAfterQ1Index + 1] ?? "" : undefined,
         }
       : completeBaselineIndex >= 0
       ? {
