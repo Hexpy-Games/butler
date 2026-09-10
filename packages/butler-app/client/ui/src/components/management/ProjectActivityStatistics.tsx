@@ -21,20 +21,20 @@ export function ProjectActivityStatistics() {
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
         {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
         <ActivityHeatmap ariaLabel={copy.calendar} startWeekday={start}
+          legend={{ title: copy.densityLegend, labels: copy.densityLevels }}
           weekdayLabels={Array.from({ length: 7 }, (_, index) =>
             new Date(2026, 0, 4 + index).toLocaleDateString(locale, { weekday: "short" }))}
           selectedId={selected} onSelect={setSelected}
           days={data.activity.buckets.map((day) => ({
             id: day.label,
+            monthLabel: new Date(`${day.label}T12:00:00`).toLocaleDateString(locale, { month: "short" }),
+            countLabel: copy.activeItems(Object.values(day.values).reduce((count, keys) => count + keys.length, 0)),
             label: `${dayLabel(day.label)} · ${!data.ledgerHistoryAvailable && !data.sessionHistoryAvailable ? copy.unavailable
               : data.activity.keys.map((key) => `${copy.labels[key]} ${day.values[key]!.length}`).join(" · ")}`,
             count: !data.ledgerHistoryAvailable && !data.sessionHistoryAvailable ? null
               : Object.values(day.values).reduce((count, keys) => count + keys.length, 0),
           }))} />
-        <Typo.Caption>{copy.densityLegend}</Typo.Caption>
-        <div className={styles.legend}>{data.activity.keys.map((key) => <Typo.Caption key={key}>
-          {copy.labels[key]}
-        </Typo.Caption>)}</div>
+        <Typo.Caption>{copy.calendarExample}</Typo.Caption>
         <Typo.Caption>{dayLabel(data.days[0]!.date)} — {dayLabel(data.days.at(-1)!.date)}</Typo.Caption>
         {bucket && <>
           <Typo.SectionTitle>{dayLabel(bucket.label)}</Typo.SectionTitle>

@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { api } from "@/app/api.ts";
+import { useState } from "react";
+import { useProjectStatistics } from "@/hooks/useProjectStatistics.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { Button, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardStatisticsView } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { ProjectStatisticsContext } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
 import { ProjectWorkStatistics } from "./ProjectWorkStatistics.tsx";
@@ -19,22 +18,8 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
   const copy = appCopy.projectStatistics;
   const openSession = useButlerStore((state) => state.openSession);
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
-  const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ key: string; data?: DashboardStatisticsView; error?: boolean } | null>(null);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const key = `${projectId}:${period}:${timezone}:${revision}:${attempt}`;
-  useEffect(() => {
-    let cancelled = false;
-    api<DashboardStatisticsView>(`/projects/${encodeURIComponent(projectId)}/dashboard/statistics?days=${period}&timezone=${encodeURIComponent(timezone)}`)
-      .then((data) => {
-        if (!data.activity?.buckets || !data.materialTypes?.buckets || !data.execution?.outcomes || !data.sources || typeof data.sessionHistoryAvailable !== "boolean") throw new Error("Statistics version unavailable");
-        if (!cancelled) setResult({ key, data });
-      })
-      .catch(() => { if (!cancelled) setResult({ key, error: true }); });
-    return () => { cancelled = true; };
-  }, [key, projectId, period, timezone]);
-  const data = result?.key === key ? result.data : undefined;
-  const error = result?.key === key && result.error;
+  const { data, error, loading, retry } = useProjectStatistics(projectId, period, timezone, revision);
   const openSource = (sourceKey: string) => {
     const item = data?.sources[sourceKey];
     if (!item) return;
@@ -51,9 +36,9 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
       </Tabs>
       <Typo.Caption>{appCopy.projectSignpost.statisticsZone(timezone)} · {copy.partialDay}</Typo.Caption>
     </Stack>
-    {error && <Notice tone="error" message={appCopy.feedback.dashboardRetry}
-      action={<Button variant="outline" onClick={() => setAttempt((value) => value + 1)}>{appCopy.feedback.retry}</Button>} />}
-    {!data && !error && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
+    {error && <Notice tone="error" message={copy.loadFailed}
+      action={<Button variant="outline" onClick={retry}>{appCopy.feedback.retry}</Button>} />}
+    {loading && <Typo.Caption role="status">{data ? copy.refreshing : copy.loading(period)}</Typo.Caption>}
     {data && <ProjectStatisticsContext.Provider key={`${projectId}:${period}`} value={{ data, openSource }}>
       <ProjectWorkStatistics />
       <ProjectActivityStatistics />

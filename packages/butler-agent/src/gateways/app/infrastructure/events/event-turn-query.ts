@@ -14,7 +14,7 @@ export function eventTurnMatchSql(
   const directParameter = options.parameterIndex
     ? `?${options.parameterIndex}`
     : "?";
-  if (indexed) return `turn_id = ${directParameter}`;
+  if (indexed) return `turn_id <> '' AND turn_id = ${directParameter}`;
   if (options.legacyPayload !== "all") {
     return `json_extract(payload_json, '$.turn_id') = ${directParameter}`;
   }

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { migrateAppStoreSchema } from "../../packages/butler-agent/src/gateways/app/infrastructure/core/schema.ts";
 import { projectDayRanges, projectStatistics } from "../../packages/butler-agent/src/gateways/app/domain/projects/project-statistics.ts";
+import { eventTurnMatchSql } from "../../packages/butler-agent/src/gateways/app/infrastructure/events/event-turn-query.ts";
 import type { DashboardLedgerSnapshot } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { createProjectDashboardHistoryReader } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -59,6 +60,7 @@ test("an incomplete session read discards partial counts without hiding availabl
   try {
     db.query("INSERT INTO chats(id,title,kind,project_id,archived,created_at,updated_at) VALUES ('s','Conversation','project','p',0,?,?)").run(at, at);
     db.query("INSERT INTO messages(id,chat_id,role,text,status,created_at,updated_at) VALUES ('m','s','user','hello','sent',?,?)").run(at, at);
+    db.query("INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at) VALUES ('missing-event','s','delivered','',?,?)").run(at, at);
     db.exec("DROP TABLE events"); // Fail after the conversation and attachment queries have run.
     const view = projectStatistics(db, "p", 7, "UTC", { snapshot, history: { managed: [],
       ledger: [{ id: "e", recordId: "S", kind: "spec", action: "created", at }] } }, new Date("2026-09-09T12:00:00Z"));
@@ -108,8 +110,11 @@ test("whole period exceeds 100 events, deduplicates completion and separates man
   } finally { db.close(); }
 });
 
-test("request timing requires matching persisted terminal event, excludes other projects and does not infer from updatedAt", () => {
+for (const layout of ["column", "legacy"] as const) test(`request timing supports ${layout} identity layout and exact terminal events`, () => {
   const db = new Database(":memory:"); migrateAppStoreSchema(db);
+  if (layout === "legacy") db.exec("DROP INDEX events_turn_id_idx; CREATE INDEX events_type_turn_id_idx ON events(type, json_extract(payload_json, '$.turn_id'), id DESC)");
+  const plan = db.query(`EXPLAIN QUERY PLAN SELECT id FROM events WHERE type='turn.state_changed' AND ${eventTurnMatchSql(db)} ORDER BY id DESC LIMIT 1`).all("done");
+  expect(JSON.stringify(plan)).toContain(layout === "column" ? "events_turn_id_idx" : "events_type_turn_id_idx");
   const now = new Date("2026-09-09T12:00:00Z");
   const started = "2026-09-09T01:00:00.000Z";
   const ended = "2026-09-09T01:01:00.000Z";
@@ -117,7 +122,7 @@ test("request timing requires matching persisted terminal event, excludes other 
     for (const [id, project] of [["s", "p"], ["other", "other"]]) db.query("INSERT INTO chats(id,title,kind,project_id,created_at,updated_at) VALUES (?,?,'project',?,?,?)").run(id!, id!, project!, started, ended);
     for (const [id, chat, state, event] of [["done", "s", "delivered", true], ["fault", "s", "runtime_fault", true], ["missing", "s", "delivered", false], ["other", "other", "delivered", true]] as const) {
       db.query("INSERT INTO turns(id,chat_id,state,safe_status_label,created_at,updated_at) VALUES (?,?,?,'',?,?)").run(id, chat, state, started, now.toISOString());
-      if (event) db.query("INSERT INTO events(type,turn_id,payload_json,created_at) VALUES ('turn.state_changed',?,?,?)").run(id, JSON.stringify({ turn: { state, updated_at: ended } }), ended);
+      if (event) db.query("INSERT INTO events(type,turn_id,payload_json,created_at) VALUES ('turn.state_changed',?,?,?)").run(layout === "column" ? id : "", JSON.stringify({ turn: { id, state, updated_at: ended } }), ended);
     }
     const data = projectStatistics(db, "p", 7, "UTC", null, now);
     expect(data.sources["turn:done"]!.durationMs).toBe(60000);
