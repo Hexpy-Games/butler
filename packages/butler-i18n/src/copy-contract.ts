@@ -131,7 +131,7 @@ export interface AppCopy {
   };
   projectStatistics: {
     flow: string; flowHelp: string; remaining: string; remainingHelp: string; aging: string; agingHelp: string;
-    calendar: string; calendarHelp: string; focus: string; focusHelp: string;
+    calendar: string; calendarHelp: string; densityLegend: string; focus: string; focusHelp: string;
     materials: string; materialsHelp: string; outcomes: string; outcomesHelp: string;
     duration: string; durationHelp: string; usage: string; usageHelp: string;
     empty: string; unavailable: string; historyUnavailable: string; sessionUnavailable: string; taskCompletionUnavailable: string; selected: string; all: string; partialDay: string;

@@ -114,11 +114,11 @@ export function ProjectDashboardView({
           <TabsContent value="overview"><Stack gap="xl" className={styles.overview}>
             {project && <ProjectBriefingPanel key={project.id} projectId={project.id} briefing={dashboard?.briefing}
               onSelect={selectDocument} onUpdated={retry} />}
-            <ProjectOverviewPanel overview={dashboard?.overview} projectId={project?.id} onSelect={selectDocument} onShowAll={() => setTab("work")} />
-            {project && <Section title={appCopy.projectSignpost.importantMaterials} description={appCopy.projectSignpost.importantMaterialsHelp}>
-              <ProjectMaterialsPanel key={`${project.id}:${ledgerRevision}:${dashboard?.preferences?.revision}`} projectId={project.id} onSelect={selectDocument} limit={5}
+            <ProjectOverviewPanel overview={dashboard?.overview} projectId={project?.id} onSelect={selectDocument} onShowAll={() => setTab("work")}
+              aside={project && <Section title={appCopy.projectSignpost.importantMaterials} description={appCopy.projectSignpost.importantMaterialsHelp}>
+              <ProjectMaterialsPanel key={`${project.id}:${ledgerRevision}:${dashboard?.preferences?.revision}`} projectId={project.id} onSelect={selectDocument} limit={4}
                 preferences={dashboard?.preferences} onShowAll={() => setTab("materials")} />
-            </Section>}
+            </Section>} />
             {project && <ProjectBriefingPanel key={`${project.id}:suggestions`} section="suggestions" projectId={project.id} briefing={dashboard?.briefing}
               onSelect={selectDocument} onUpdated={retry} />}
           </Stack></TabsContent>

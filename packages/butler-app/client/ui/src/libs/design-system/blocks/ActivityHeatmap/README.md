@@ -13,16 +13,16 @@ Use it inside dashboard and inspector panels that already provide the section ti
 It keeps activity color, spacing, and responsive grid behavior owned by the design system instead of product CSS.
 
 ## How to use this component
-Pass normalized day items with stable ids, labels, and counts. Let the component calculate relative intensity.
+Pass consecutive days with stable ids, localized labels and counts (`null` for unavailable). Supply `startWeekday` (Sunday = 0) and optionally seven localized `weekdayLabels`. Days run down seven rows, then into the next week. Fixed intensity bands: 0, 1, 2–4, 5–9, 10+. Pass `onSelect` and `selectedId` for date drilldown; the caller owns source lists and localized legends.
 
 ## Who can use this component
-Any Butler client surface that needs a non-interactive activity density preview.
+Any Butler client surface that needs activity density or date drilldown.
 
 ## Best practice
 Keep labels date-specific and pair the heatmap with a nearby section title.
 
 ## Wrong use cases
-Do not use it for interactive calendars or timelines. Use a table, chart, or list when exact comparison is required.
+Do not use it for scheduling calendar events. Use a table, chart, or list when exact comparison is required. Cells retain 24px targets and 16px visual squares; long periods scroll within the component. Unknown days have a dashed border, distinct from zero activity.
 
 ## Tags
 dashboard, activity, density, heatmap, responsive

@@ -6,9 +6,45 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
-.suggestion {
-  border-left: 2px solid var(--line);
-  padding-left: var(--space-lg);
+.overviewPair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-xl);
+  align-items: start;
+}
+.overviewPair > * {
+  min-width: 0;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-md);
+  align-items: start;
+}
+.workCard.workCard {
+  display: block;
+  white-space: normal;
+  height: auto;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-md);
+  color: var(--text-primary);
+}
+.workMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  color: var(--text-secondary);
+}
+.workMeta svg {
+  width: 16px;
+  height: 16px;
+}
+@container project-dashboard (min-width: 48rem) {
+  .overviewPair {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
 }
 .rows {
   display: grid;
