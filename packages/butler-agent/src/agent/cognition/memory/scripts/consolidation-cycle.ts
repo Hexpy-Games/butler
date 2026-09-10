@@ -359,7 +359,19 @@ export async function runMemoryRebuildCommand(input: {
   }
   if (!generationId) throw new Error("memory_rebuild_invalid_request");
   let manifest = inspectMemoryGeneration({ butlerData: input.butlerData, generationId }).manifest;
-  const deadlineAt = Date.now() + 10 * 60_000;
+  const buildWallMs = 10 * 60_000;
+  // The extractor owner has a 180 second local timeout. Keep another 30 seconds
+  // for settlement and 60 seconds for finalization in this serial pass. Those are
+  // operational margins, not hard I/O bounds: each background lease acquisition
+  // can wait up to 30 seconds, and final source reads consume the supplied command
+  // deadline rather than owning an independent 60 second timer.
+  const semanticQuantumMaxMs = 180_000;
+  const quantumSettlementGraceMs = 30_000;
+  const finalizationReserveMs = 60_000;
+  const deadlineAt = Date.now() + buildWallMs;
+  const projectionDeadlineAt = deadlineAt - finalizationReserveMs;
+  const quantumAdmissionDeadlineAt = projectionDeadlineAt -
+    semanticQuantumMaxMs - quantumSettlementGraceMs;
   let context: MemoryExecutionContext = {
     butlerData: input.butlerData,
     target: { kind: "rebuild" as const, generation_id: generationId, canonical_snapshot_id: manifest.canonical_snapshot_id },
@@ -379,12 +391,14 @@ export async function runMemoryRebuildCommand(input: {
         canonical_snapshot_id: next.canonicalSnapshotId } };
     }
     const catchup = await runRebuildGenerationCatchup({ butlerData: input.butlerData, generationId,
-      canonicalSnapshotId: manifest.canonical_snapshot_id, limit: 256, signal: input.signal, deadlineAt });
+      canonicalSnapshotId: manifest.canonical_snapshot_id, limit: 256, signal: input.signal,
+      deadlineAt: projectionDeadlineAt });
+    const projectionContext = { ...context, deadlineAt: projectionDeadlineAt };
     const snapshotRoot = resolveMemoryGeneration(context).sourceRoot;
     const typed = listTypedMemoryRecordsSnapshot(snapshotRoot);
     for (const { record } of typed) {
       await import("../projection/ingestion.ts").then((module) => module.ingestConversationMemory({
-        context,
+        context: projectionContext,
         source: record.source_kind === "task_report"
           ? { kind: "task_report" as const, record_id: record.record_id, revision: record.revision, operation_id: record.operation_id }
           : { kind: "explicit_record" as const, record_kind: record.record_kind as "rule" | "feedback", record_id: record.record_id, revision: record.revision, operation_id: record.operation_id },
@@ -393,12 +407,15 @@ export async function runMemoryRebuildCommand(input: {
     const quanta = { semantic_windows: 0, vector_units: 0, cache_jobs: 0, other: 0 };
     let operations = 0;
     let lastProgress: Record<string, unknown> | null = null;
+    let admissionClosed = false;
     while (quanta.semantic_windows < 100 && operations < 400 && !input.signal.aborted) {
-      const before = readRebuildQuantumCounters(context);
-      const progress = await import("../projection/ingestion.ts").then((module) => module.advanceNextMemoryProjection({ context }));
+      if (Date.now() >= quantumAdmissionDeadlineAt) { admissionClosed = true; break; }
+      const before = readRebuildQuantumCounters(projectionContext);
+      const progress = await import("../projection/ingestion.ts").then((module) =>
+        module.advanceNextMemoryProjection({ context: projectionContext }));
       if (!progress) break;
       lastProgress = progress as unknown as Record<string, unknown>;
-      const after = readRebuildQuantumCounters(context);
+      const after = readRebuildQuantumCounters(projectionContext);
       quanta.semantic_windows += Math.max(0,
         after.semanticAttempts - before.semanticAttempts,
         after.semanticSettled - before.semanticSettled);
@@ -447,7 +464,7 @@ export async function runMemoryRebuildCommand(input: {
       }));
     } finally { candidateWitness.close(); stableLive.witness.close(); }
     return { operation, catchup, quanta, operations, last_progress: lastProgress,
-      deadline_reached: Date.now() >= deadlineAt, pending: {
+      deadline_reached: admissionClosed || Date.now() >= deadlineAt, pending: {
         semantic: readiness.semantic.pending, vectors: readiness.vectors.pending, cache: readiness.cache.pending,
       }, readiness };
   }
