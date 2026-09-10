@@ -17,6 +17,7 @@ interface LiveEventHandlers {
   onEvent(event: Record<string, unknown>): void;
   onError(error: unknown): void;
   onOpen?: () => void;
+  onHeartbeat?: () => void;
 }
 
 const subscriptions: LiveEventHandlers[] = [];
@@ -86,6 +87,7 @@ const refreshSnapshots: Array<{ context: string; skills: string[] }> = [];
 let latestContext = "";
 let latestSkills: string[] = [];
 const storeState = {
+  view: { kind: "session" as const },
   liveConnectionLost: false,
   activeChatId: "session-live-events",
   navigation: initialNavigation(),
@@ -151,9 +153,10 @@ mock.module("@/app/api.ts", () => ({
     onEvent: LiveEventHandlers["onEvent"],
     onError: LiveEventHandlers["onError"],
     onOpen: LiveEventHandlers["onOpen"],
+    onHeartbeat: LiveEventHandlers["onHeartbeat"],
   ) {
     subscriptionCursors.push(cursor);
-    subscriptions.push({ onEvent, onError, onOpen });
+    subscriptions.push({ onEvent, onError, onOpen, onHeartbeat });
     let active = true;
     return () => {
       if (!active) return;
@@ -396,6 +399,8 @@ test("reconnect and reconcile-required events refresh canonical navigation throu
   await renderHarness();
   subscriptions[0]?.onError(new Error("temporary disconnect"));
   await fakeClock?.advanceBy(1_000);
+  expect(navigationRefreshCalls).toBe(0);
+  subscriptions[1]?.onOpen?.();
   await flushMicrotasks();
   expect(subscriptions).toHaveLength(2);
   expect(navigationRefreshCalls).toBe(1);
@@ -408,6 +413,87 @@ test("reconnect and reconcile-required events refresh canonical navigation throu
   });
   await flushMicrotasks();
   expect(navigationRefreshCalls).toBe(2);
+  expect(subscriptions).toHaveLength(2);
+});
+
+test("replaced connections cannot overwrite recovered state or apply stale events", async () => {
+  await renderHarness();
+  const old = subscriptions[0]!;
+  old.onError(new Error("lost"));
+  await fakeClock?.advanceBy(1000);
+  subscriptions[1]!.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
+  old.onError(new Error("late failure"));
+  old.onEvent({ id: 999, type: "message.created", payload: {} });
+  expect(storeState.liveConnectionLost).toBe(false);
+  expect(appliedEvents).toEqual([]);
+  subscriptions[1]!.onError(new Error("new loss"));
+  old.onOpen?.();
+  old.onHeartbeat?.();
+  expect(storeState.liveConnectionLost).toBe(true);
+});
+
+test("observable heartbeat keeps idle connections healthy and silence reconnects", async () => {
+  await renderHarness();
+  subscriptions[0]!.onOpen?.();
+  subscriptions[0]!.onHeartbeat?.();
+  for (let i = 0; i < 5; i++) {
+    await fakeClock?.advanceBy(15000);
+    subscriptions[0]!.onHeartbeat?.();
+  }
+  expect(subscriptions).toHaveLength(1);
+  expect(storeState.liveConnectionLost).toBe(false);
+  await fakeClock?.advanceBy(45000);
+  expect(storeState.liveConnectionLost).toBe(true);
+  await fakeClock?.advanceBy(1000);
+  expect(subscriptions).toHaveLength(2);
+  subscriptions[1]!.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
+});
+
+test("opening deadline retries without pretending to recover; online wakes backoff", async () => {
+  await renderHarness();
+  await fakeClock?.advanceBy(30000);
+  expect(storeState.liveConnectionLost).toBe(true);
+  expect(unsubscribeCalls).toBe(1);
+  window.dispatchEvent(new window.Event("online"));
+  expect(subscriptions).toHaveLength(2);
+  subscriptions[1]!.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
+  await fakeClock?.advanceBy(1000);
+  expect(subscriptions).toHaveLength(2);
+});
+
+test("legacy streams stay healthy without observable heartbeat; stale visible resume reconnects", async () => {
+  await renderHarness();
+  subscriptions[0]!.onOpen?.();
+  await fakeClock?.advanceBy(60000);
+  expect(subscriptions).toHaveLength(1);
+  expect(storeState.liveConnectionLost).toBe(false);
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  document.dispatchEvent(new window.Event("visibilitychange"));
+  expect(subscriptions).toHaveLength(2);
+  expect(storeState.liveConnectionLost).toBe(true);
+  subscriptions[1]!.onOpen?.();
+  expect(storeState.liveConnectionLost).toBe(false);
+});
+
+test("offline closes the connection until online; teardown fences every callback", async () => {
+  await renderHarness();
+  subscriptions[0]!.onOpen?.();
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  window.dispatchEvent(new window.Event("offline"));
+  await fakeClock?.advanceBy(60000);
+  expect(subscriptions).toHaveLength(1);
+  expect(storeState.liveConnectionLost).toBe(true);
+  Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+  window.dispatchEvent(new window.Event("online"));
+  expect(subscriptions).toHaveLength(2);
+  await act(async () => renderedRoot?.unmount());
+  renderedRoot = undefined;
+  subscriptions[1]!.onError(new Error("after teardown"));
+  await fakeClock?.advanceBy(60000);
+  expect(storeState.liveConnectionLost).toBe(false);
   expect(subscriptions).toHaveLength(2);
 });
 

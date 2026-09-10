@@ -217,10 +217,27 @@
     opacity 120ms ease;
 }
 
+.busyIcon {
+  animation: connection-spin 1s linear infinite;
+}
+@keyframes connection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .busyIcon {
+    animation: none;
+  }
+}
 .sendButton:disabled {
   background: var(--send-disabled-bg);
   cursor: not-allowed;
   opacity: 0.56;
+}
+.sendButton[aria-busy="true"] {
+  color: var(--text-secondary);
+  opacity: 1;
 }
 
 .stop {
@@ -277,6 +294,10 @@
   .sendButton {
     width: var(--control-hit-target);
     height: var(--control-hit-target);
+  }
+  .busyIcon {
+    width: 20px;
+    height: 20px;
   }
 }
 

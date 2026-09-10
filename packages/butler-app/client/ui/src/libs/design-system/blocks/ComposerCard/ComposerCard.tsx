@@ -6,7 +6,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { forwardRef } from "react";
-import { SendHorizontal, Square } from "../../components/Icons";
+import { LoaderCircle, SendHorizontal, Square } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
@@ -127,10 +127,13 @@ export function ComposerCardToolbarSpacer() {
 export interface ComposerSendButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   mode?: "send" | "stop";
+  busy?: boolean;
 }
 
 export function ComposerSendButton({
   mode = "send",
+  busy = false,
+  disabled,
   className,
   children,
   ...props
@@ -139,10 +142,12 @@ export function ComposerSendButton({
     <button
       className={cn(styles.sendButton, mode === "stop" && styles.stop, className)}
       data-test-class="composer-send-button"
-      type={mode === "send" ? "submit" : "button"}
+      type={!busy && mode === "send" ? "submit" : "button"}
       {...props}
+      disabled={busy || disabled}
+      aria-busy={busy || undefined}
     >
-      {children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
+      {busy ? <LoaderCircle size={16} aria-hidden="true" className={styles.busyIcon} /> : children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
     </button>
   );
 }

@@ -1538,6 +1538,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     attachmentTooLarge: "파일이 첨부 가능한 크기를 초과했습니다.",
     attachmentSizeLimit: (names, limit) => `${names} — 파일당 ${limit} 이하로 줄이거나 다른 파일을 선택해 주세요.`,
     reconnecting: "실시간 연결이 끊겨 다시 연결하고 있습니다. 표시된 작업 상태는 최신이 아닐 수 있습니다.",
+    reconnectingShort: "실시간 연결 복구 중",
     dashboardLoading: "프로젝트 정보를 불러오는 중입니다.",
     dashboardFailed: "프로젝트 정보를 불러오지 못했습니다.",
     dashboardRetry: "연결을 확인한 뒤 다시 시도해 주세요.",

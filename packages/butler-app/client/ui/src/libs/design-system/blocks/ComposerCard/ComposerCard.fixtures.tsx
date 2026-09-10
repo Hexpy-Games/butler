@@ -41,7 +41,7 @@ export function ComposerCardFixture() {
             label="Plan"
             onCheckedChange={() => undefined}
           />
-          <ComposerSendButton aria-label="Send" />
+          <ComposerSendButton busy aria-label="Connecting" title="Connecting" />
         </ComposerCardToolbar>
       </ComposerCard>
     </>

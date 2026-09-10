@@ -1301,6 +1301,7 @@ export interface AppCopy {
     attachmentTooLarge: string;
     attachmentSizeLimit: (names: string, limit: string) => string;
     reconnecting: string;
+    reconnectingShort: string;
     dashboardLoading: string;
     dashboardFailed: string;
     dashboardRetry: string;

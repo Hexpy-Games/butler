@@ -212,7 +212,7 @@ function parseSseRecord(record) {
   return JSON.parse(dataLines.join("\n"));
 }
 
-function drainSseRecords(buffer, onEvent) {
+function drainSseRecords(buffer, onEvent, onHeartbeat) {
   let remaining = buffer;
   while (true) {
     const match = /(?:\r\n\r\n|\n\n|\r\r)/u.exec(remaining);
@@ -220,6 +220,10 @@ function drainSseRecords(buffer, onEvent) {
     const record = remaining.slice(0, match.index);
     remaining = remaining.slice(match.index + match[0].length);
     if (!record.trim()) continue;
+    if (/^event:\s*heartbeat\s*$/mu.test(record) || /^: heartbeat\s*$/mu.test(record)) {
+      onHeartbeat?.();
+      continue;
+    }
     const event = parseSseRecord(record);
     if (event) onEvent(event);
   }
@@ -275,9 +279,10 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
         buffer = drainSseRecords(
           buffer + decoder.decode(value, { stream: true }),
           onEvent,
+          handlers.onHeartbeat,
         );
       }
-      buffer = drainSseRecords(buffer + decoder.decode(), onEvent);
+      buffer = drainSseRecords(buffer + decoder.decode(), onEvent, handlers.onHeartbeat);
       if (!closed) {
         throw new Error("Live event stream ended before it was cancelled.");
       }

@@ -7,6 +7,7 @@ import {
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
+import { useButlerStore } from "@/app/store.ts";
 import { AccessModeMenu } from "./AccessModeMenu";
 import { ComposerAttachmentMenu } from "./ComposerAttachmentMenu";
 import { ComposerContextControl } from "./ComposerContextControl";
@@ -21,6 +22,7 @@ export function ComposerToolbar() {
   const canSend = useComposerStore((store) => store.canSend);
   const canStop = useComposerStore((store) => store.canStop);
   const onStop = useComposerStore((store) => store.onStop);
+  const reconnecting = useButlerStore((store) => store.liveConnectionLost);
 
   return (
     <ComposerCardToolbar>
@@ -33,7 +35,10 @@ export function ComposerToolbar() {
         <ComposerContextControl />
         <ModelMenu />
       </ComposerCardExpandedControls>
-      {(isSending || activeTurn) && canStop && !canSend ? (
+      {reconnecting ? (
+        <ComposerSendButton busy aria-label={appCopy.feedback.reconnectingShort}
+          title={appCopy.feedback.reconnectingShort} />
+      ) : (isSending || activeTurn) && canStop && !canSend ? (
         <ComposerSendButton
           mode="stop"
           aria-label={appCopy.composer.stop}
