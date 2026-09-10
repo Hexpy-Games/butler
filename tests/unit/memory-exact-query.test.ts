@@ -6,6 +6,7 @@ import { join } from "path";
 import {
   indexTranscriptLinesForQuery,
   queryMemory,
+  queryMemoryV2,
   transcriptQueryDbPath,
 } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
 import { ensureAppMessageQuerySchema } from
@@ -443,4 +444,27 @@ test("transcript query index date queries use indexes instead of scanning jsonl"
   expect(plan).toContain("USING");
   expect(plan).toContain("conversation_messages_role_created_idx");
   expect(plan).not.toContain("SCAN conversation_messages");
+});
+
+test("queryMemoryV2 matches one canonical scalar, pages by binary key, and invalidates on public mutation", () => {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  const turn = store.beginTurn({ gateway: "test", externalSessionId: "v2", sessionId: "cs_v2", actor: "user", now: "2026-09-01T00:00:00.000Z" });
+  store.appendUserMessage({ sessionId: "cs_v2", turnId: turn.id, messageId: "m1", text: "", originKind: "user_input", now: "2026-09-01T00:00:01.000Z", parts: [{ kind: "message_content", contentJson: [{ text: "Alpha" }, { text: "Beta" }] }] });
+  store.appendUserMessage({ sessionId: "cs_v2", turnId: turn.id, messageId: "m2", text: "Cafe\u0301 Alpha Straße", originKind: "user_input", now: "2026-09-01T00:00:02.000Z" });
+
+  const split = queryMemoryV2({ butlerData: tempDir, currentSessionId: "cs_v2", currentProjectId: null, terms: ["Alpha", "Beta"], matchMode: "all", scope: "all_user_sessions" });
+  expect(split).toMatchObject({ ok: true, returned: 0, total_matches: 0 });
+
+  const first = queryMemoryV2({ butlerData: tempDir, currentSessionId: "cs_v2", currentProjectId: null, query: "CAFÉ", caseSensitive: false, scope: "all_user_sessions", limit: 1 });
+  expect(first).toMatchObject({ ok: true, returned: 1, total_matches: 1, next_cursor: null });
+  if (!first.ok) throw new Error("expected v2 query");
+  expect(first.results[0]?.source_ref).toMatch(/^conversation-source:v2:/u);
+  expect(queryMemoryV2({ butlerData: tempDir, currentSessionId: "cs_v2", currentProjectId: null, query: "STRASSE", caseSensitive: false, scope: "all_user_sessions" })).toMatchObject({ ok: true, returned: 1, total_matches: 1 });
+
+  const page = queryMemoryV2({ butlerData: tempDir, currentSessionId: "cs_v2", currentProjectId: null, query: "Alpha", scope: "all_user_sessions", limit: 1 });
+  expect(page).toMatchObject({ ok: true, status: "partial", total_matches: null });
+  if (!page.ok || !page.next_cursor) throw new Error("expected cursor");
+  store.appendUserMessage({ sessionId: "cs_v2", turnId: turn.id, text: "Alpha later", originKind: "user_input", now: "2026-09-01T00:00:03.000Z" });
+  expect(queryMemoryV2({ butlerData: tempDir, currentSessionId: "cs_v2", currentProjectId: null, query: "Alpha", scope: "all_user_sessions", limit: 1, cursor: page.next_cursor })).toEqual({ ok: false, code: "stale_cursor", diagnostics: [] });
+  store.close();
 });

@@ -20,6 +20,8 @@ import {
 } from "./lib/sessions.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
+import { activeMemoryDescriptorPath, readActiveDescriptor } from "../projection/generation.ts";
+import { runServingGenerationCatchup } from "./phases/catchup.ts";
 
 const BUTLER_HOME = process.env.BUTLER_HOME || process.cwd();
 const BUTLER_DATA = process.env.BUTLER_DATA || join(homedir(), ".butler");
@@ -172,7 +174,15 @@ function syncTranscript(input: {
   return next;
 }
 
-export async function runSessionSync() {
+export async function runSessionSync(input: { butlerData?: string } = {}) {
+  const dataRoot = input.butlerData ?? BUTLER_DATA;
+  if (existsSync(activeMemoryDescriptorPath(dataRoot))) {
+    readActiveDescriptor(dataRoot);
+    const result = await runServingGenerationCatchup({ butlerData: dataRoot, limit: 256 });
+    log(JSON.stringify({ phase: "canonical_catchup", available: result.available, reason: result.reason,
+      scanned: result.scanned, registered: result.ingested, wrapped: result.wrapped }));
+    return result;
+  }
   mkdirSync(dirname(OFFSET_FILE), { recursive: true });
   const offsets = loadOffsets(OFFSET_FILE);
   const sessions = findLocalLiveSessions({ butlerData: BUTLER_DATA });

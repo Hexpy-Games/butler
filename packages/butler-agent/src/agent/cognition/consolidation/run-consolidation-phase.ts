@@ -1,10 +1,10 @@
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { recordOperationalMetric } from "../../../operations/metrics/operational-metrics.ts";
 import {
   captureProfileCandidatesFromFeedback,
   captureProfileCandidatesFromTranscriptsWithModel,
-  consolidateProfileCandidates,
+  consolidateProfileCandidatesAsync,
   isProfilingEnabled,
 } from "../../../personalization/profiling.ts";
 import { boxItemRoot, listBoxManifests, rebuildBoxIndex, writeBoxManifest, type BoxManifest } from "../box/store.ts";
@@ -89,31 +89,29 @@ async function consolidateProfile(
     };
   }
 
-  const transcriptSince = input.profileTranscriptSince ?? latestProfileRun(butlerData, input.runId);
+  const transcriptSince = input.profileTranscriptSince ?? null;
   const capture = await captureProfileCandidatesFromTranscriptsWithModel(butlerData, {
     modelRunner: input.profileExtractorModelRunner,
     since: transcriptSince,
     cacheScope: `cognition:${input.runId ?? "cr_unknown"}:profile_consolidation:profile-extractor`,
+    signal: input.signal,
   });
   let capturedCandidates = 0;
   let appliedFeedback = 0;
   for (const entry of feedback) {
     const records = captureProfileCandidatesFromFeedback(butlerData, {
-      feedback_id: entry.feedback_id,
-      category: entry.category,
-      promotion_target: entry.promotion_target,
-      target_ref: entry.target_ref,
-      text: entry.text,
-      created_at: entry.created_at,
-      privacy_class: entry.privacy_class,
+      feedback_id: entry.feedback_id, category: entry.category,
+      promotion_target: entry.promotion_target, target_ref: entry.target_ref,
+      text: entry.text, created_at: entry.created_at, privacy_class: entry.privacy_class,
     });
     if (records.length === 0) continue;
     capturedCandidates += records.length;
     resolveFeedbackEntry(butlerData, entry.feedback_id, "applied");
     appliedFeedback += 1;
   }
-  return {
-    ...consolidateProfileCandidates(butlerData),
+  const consolidated = await consolidateProfileCandidatesAsync(butlerData, input.signal);
+  const metrics = {
+    ...consolidated,
     profile_feedback_count: feedback.length,
     transcript_since: normalizeSince(transcriptSince),
     semantic_scanned_session_count: capture.semantic_scanned_session_count,
@@ -129,11 +127,28 @@ async function consolidateProfile(
     transcript_extractor_model_called: capture.model_called,
     transcript_extractor_fallback_used: capture.fallback_used,
     transcript_extractor_error: capture.model_error ? "profile extractor model failed" : undefined,
+    coverage_pending_count: capture.coverage_pending_count ?? 0,
+    coverage_failed_count: capture.coverage_failed_count ?? 0,
+    coverage_complete_count: capture.coverage_complete_count ?? 0,
+    coverage_discovery_incomplete_count: capture.coverage_discovery_incomplete_count ?? 0,
     model_usage: capture.model_usage,
     captured_candidate_count: capturedCandidates,
     applied_feedback_count: appliedFeedback,
     raw_text_included: false,
   };
+  if (capture.model_error) {
+    throw new ProfileConsolidationPhaseError("profile consolidation has unfinished source coverage", metrics);
+  }
+  return metrics;
+}
+
+class ProfileConsolidationPhaseError extends Error {
+  readonly metrics: Record<string, unknown>;
+
+  constructor(message: string, metrics: Record<string, unknown>) {
+    super(message);
+    this.metrics = metrics;
+  }
 }
 
 function reviseKnowHow(butlerData: string): Record<string, unknown> {
@@ -224,38 +239,6 @@ function forgottenManifest(manifest: BoxManifest): BoxManifest {
     updated_at: iso(),
     quality: { ...manifest.quality, signals: [...manifest.quality.signals, "retention_pruned"] },
   };
-}
-
-function latestProfileRun(butlerData: string, currentRunId?: string): string | null {
-  const root = join(butlerData, "cognition", "consolidation", "runs");
-  if (!existsSync(root)) return null;
-  let latest: { completedAt: string; ms: number } | null = null;
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    const summary = readJson(join(root, entry.name));
-    if (!summary || summary.run_id === currentRunId ||
-      (summary.status !== "completed" && summary.status !== "completed_with_errors")) continue;
-    const completedAt = typeof summary.completed_at === "string" ? summary.completed_at : null;
-    const phases = Array.isArray(summary.phases) ? summary.phases : [];
-    if (!completedAt || !phases.some((phase) =>
-      phase && typeof phase === "object" &&
-      (phase as { phase?: unknown }).phase === "profile_consolidation" &&
-      (phase as { status?: unknown }).status === "ok")) continue;
-    const ms = Date.parse(completedAt);
-    if (Number.isFinite(ms) && (!latest || ms > latest.ms)) latest = { completedAt, ms };
-  }
-  return latest?.completedAt ?? null;
-}
-
-function readJson(path: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function normalizeSince(value: string | Date | null | undefined): string | null {

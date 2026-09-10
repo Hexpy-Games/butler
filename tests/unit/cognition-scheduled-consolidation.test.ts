@@ -70,7 +70,7 @@ test("scheduled cognition consolidation works on a fresh data home", async () =>
     expect(result.status).toBe("completed");
     expect(result.generic.status).toBe("completed");
     expect(result.legacy_memory.ok).toBe(true);
-    expect(existsSync(join(butlerData, "cognition", "memory", "db", "graph.sqlite"))).toBe(true);
+    expect(existsSync(join(butlerData, "cognition", "memory", "db", "graph.sqlite"))).toBe(false);
     expect(existsSync(result.generic.summary_path)).toBe(true);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });

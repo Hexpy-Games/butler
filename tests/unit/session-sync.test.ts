@@ -1,11 +1,16 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
 import {
   appendSessionSyncDiagnostic,
   prepareTempIndexInputPath,
+  runSessionSync,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/session-sync.ts";
+import { activeMemoryDescriptorPath, initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { readMemoryHealth } from "../../packages/butler-agent/src/agent/cognition/memory/quality.ts";
+import { runCanonicalMemoryCatchup } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/phases/catchup.ts";
+import { Database } from "bun:sqlite";
 import {
   buildMemoryConversationObservationPayload,
   buildMemoryTranscriptPayload,
@@ -139,4 +144,49 @@ test("session sync records diagnostics for non-indexable transcript lines", () =
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
+});
+
+test("scheduled session sync uses canonical catchup before legacy transcript side effects", async () => {
+  const butlerData = join(tmpdir(), `butler-session-sync-v2-${Date.now()}-${Math.random()}`);
+  try {
+    const descriptor = initializeEmptyMemoryGeneration(butlerData);
+    const store = new AgentConversationStore({ butlerData });
+    try {
+      store.beginTurn({ gateway: "app", externalSessionId: "scheduled", sessionId: "cs_scheduled", actor: "user", turnId: "turn_scheduled" });
+      const request = store.appendUserMessage({ sessionId: "cs_scheduled", turnId: "turn_scheduled", text: "remember the canonical source", originKind: "user_input", originRef: "test" });
+      const assistant = store.appendAssistantMessage({ sessionId: "cs_scheduled", turnId: "turn_scheduled", text: "canonical acknowledgement", originKind: "assistant_public", originRef: "test" });
+      store.finalizeTurn({ turnId: "turn_scheduled", status: "complete", outcomeCapsule: {
+        sessionId: "cs_scheduled", turnId: "turn_scheduled", generation: 1, outcome: "delivered", requestMessageId: request.id, publicAssistantMessageId: assistant.id,
+      } });
+    } finally { store.close(); }
+    const before = readMemoryHealth({ butlerData }).serving;
+    expect(before.sources).toMatchObject({ eligible: null, known_eligible: 2, registered_current: 0,
+      inventory_complete: false, inventory_reason: "typed_inventory_unavailable", known_coverage_percent: 0 });
+    const result = await runSessionSync({ butlerData });
+    expect(result).toMatchObject({ available: true, scanned: 1, ingested: 1 });
+    const graph = new Database(join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite"), { readonly: true });
+    expect(graph.query<{ count: number }, []>("SELECT COUNT(*) count FROM memory_chunk_sources").get()?.count).toBeGreaterThan(0);
+    expect(graph.query<{ value: string }, []>("SELECT value FROM memory_state WHERE key='canonical_catchup_outcome_cursor'").get()?.value).toBeTruthy();
+    graph.close();
+    expect(existsSync(join(butlerData, "cognition", "memory", "db", "session-sync-offset.json"))).toBe(false);
+  } finally { rmSync(butlerData, { recursive: true, force: true }); }
+});
+
+test("scheduled session sync never falls back to legacy writes for an existing invalid v2 descriptor", async () => {
+  const butlerData = join(tmpdir(), `butler-session-sync-invalid-v2-${Date.now()}-${Math.random()}`);
+  try {
+    initializeEmptyMemoryGeneration(butlerData);
+    writeFileSync(activeMemoryDescriptorPath(butlerData), "{}\n", "utf8");
+    await expect(runSessionSync({ butlerData })).rejects.toThrow("memory_generation_unavailable");
+    expect(existsSync(join(butlerData, "cognition", "memory", "db", "session-sync-offset.json"))).toBe(false);
+  } finally { rmSync(butlerData, { recursive: true, force: true }); }
+});
+
+test("canonical catchup reports unavailable source owner distinctly from empty", async () => {
+  const butlerData = join(tmpdir(), `butler-session-sync-unavailable-${Date.now()}-${Math.random()}`);
+  try {
+    const result = await runCanonicalMemoryCatchup({ butlerData, state: { outcomeCursor: null, recoveredMessageCursor: null },
+      ingest: async () => { throw new Error("must not ingest"); } });
+    expect(result).toMatchObject({ available: false, reason: "canonical_reader_unavailable", scanned: 0, ingested: 0 });
+  } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });

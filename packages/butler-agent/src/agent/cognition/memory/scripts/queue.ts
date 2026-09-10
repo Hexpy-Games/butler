@@ -13,13 +13,12 @@ import {
   existsSync,
   mkdirSync,
   renameSync,
-  unlinkSync,
   openSync,
   closeSync,
   fsyncSync,
-  constants as fsConstants,
 } from "fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { Database } from "bun:sqlite";
 import { BUTLER_DIR } from "./constants.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 
@@ -79,13 +78,12 @@ export function appendToQueue(entry: SyncRequest, butlerData?: string): void {
     mkdirSync(queueDir, { recursive: true });
   }
   withQueueLock(queueFile, () => {
-    if (
-      entry.job_id &&
-      readQueueFile(queueFile).some((queued) => queued.job_id === entry.job_id)
-    )
-      return;
-    appendFileSync(queueFile, JSON.stringify(entry) + "\n");
+    const durable = withStableObservationId(entry);
+    if (readQueueFile(queueFile).some((queued) => queueEntryId(queued) === queueEntryId(durable))) return;
+    const existed = existsSync(queueFile);
+    appendFileSync(queueFile, JSON.stringify(durable) + "\n", { mode: 0o600 });
     fsyncPath(queueFile);
+    if (!existed) fsyncDirectory(dirname(queueFile));
   });
 }
 
@@ -96,10 +94,11 @@ export function ack(
   const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
   return withQueueLock(queueFile, () => {
     const entries = readQueueFile(queueFile);
-    const first = entries[0];
-    if (!first || first.job_id !== expectedJobId) return null;
-    replaceQueue(queueFile, entries.slice(1));
-    return first;
+    const index = entries.findIndex((entry) => queueEntryId(entry) === expectedJobId);
+    if (index < 0) return null;
+    const [removed] = entries.splice(index, 1);
+    replaceQueue(queueFile, entries);
+    return removed ?? null;
   });
 }
 
@@ -111,24 +110,12 @@ export function readQueue(): SyncRequest[] {
 /** Remove and return the first entry (FIFO). Atomic via temp-file + rename. */
 export function dequeue(butlerData?: string): SyncRequest | null {
   const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
-  if (!existsSync(queueFile)) return null;
-  const content = readFileSync(queueFile, "utf-8");
-  const lines = content.split("\n").filter((l) => l.length > 0);
-  if (lines.length === 0) return null;
-
-  const first = JSON.parse(lines[0]) as SyncRequest;
-  const remaining = lines.slice(1);
-
-  if (remaining.length === 0) {
-    // Queue is now empty -- remove the file
-    unlinkSync(queueFile);
-  } else {
-    const tmp = queueFile + ".tmp";
-    writeFileSync(tmp, remaining.join("\n") + "\n");
-    renameSync(tmp, queueFile);
-  }
-
-  return first;
+  return withQueueLock(queueFile, () => {
+    const entries = readQueueFile(queueFile);
+    const first = entries.shift() ?? null;
+    if (first) replaceQueue(queueFile, entries);
+    return first;
+  });
 }
 
 /** Return the first entry without removing it. */
@@ -238,6 +225,24 @@ function readQueueFile(path: string): SyncRequest[] {
   return content.split("\n").map((line) => JSON.parse(line) as SyncRequest);
 }
 
+export function queueEntryId(entry: SyncRequest): string {
+  if (entry.job_id) return entry.job_id;
+  const legacy = entry as LegacySyncRequest;
+  return `legacy_${createHash("sha256").update(canonicalJson({
+    project: legacy.project,
+    topic: legacy.topic,
+    source: legacy.source,
+    session_id: legacy.session_id,
+    timestamp: legacy.timestamp,
+    trigger: legacy.trigger,
+  })).digest("hex").slice(0, 32)}`;
+}
+
+function withStableObservationId(entry: SyncRequest): SyncRequest {
+  if (entry.job_id) return entry;
+  return { ...entry, job_id: queueEntryId(entry) };
+}
+
 function replaceQueue(path: string, entries: SyncRequest[]): void {
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.${randomUUID()}.tmp`;
@@ -248,38 +253,66 @@ function replaceQueue(path: string, entries: SyncRequest[]): void {
   );
   fsyncPath(temp);
   renameSync(temp, path);
-  const directory = openSync(dirname(path), "r");
-  try {
-    fsyncSync(directory);
-  } finally {
-    closeSync(directory);
-  }
+  fsyncDirectory(dirname(path));
 }
 
 function withQueueLock<T>(queueFile: string, run: () => T): T {
   mkdirSync(dirname(queueFile), { recursive: true });
-  const lockPath = `${queueFile}.lock`;
-  let descriptor: number;
+  const lockDb = new Database(`${queueFile}.coord.sqlite`, { create: true, readwrite: true });
+  let transactionStarted = false;
+  let committed = false;
   try {
-    descriptor = openSync(
-      lockPath,
-      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
-      0o600,
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    throw new Error("memory_queue_busy", { cause: error });
-  }
-  try {
-    writeFileSync(
-      descriptor,
-      JSON.stringify({ pid: process.pid, nonce: randomUUID() }),
-    );
-    return run();
+    lockDb.exec("PRAGMA busy_timeout = 0");
+    try {
+      lockDb.exec("BEGIN EXCLUSIVE");
+      transactionStarted = true;
+    } catch (error) {
+      if (sqliteBusy(error)) throw new Error("memory_queue_busy", { cause: error });
+      throw error;
+    }
+    lockDb.exec(`
+      CREATE TABLE IF NOT EXISTS queue_lock_owner(
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+        pid INTEGER NOT NULL,
+        nonce TEXT NOT NULL,
+        acquired_at TEXT NOT NULL
+      )
+    `);
+    lockDb.query(`
+      INSERT INTO queue_lock_owner(singleton,pid,nonce,acquired_at)
+      VALUES(1,?,?,?)
+      ON CONFLICT(singleton) DO UPDATE SET
+        pid=excluded.pid,
+        nonce=excluded.nonce,
+        acquired_at=excluded.acquired_at
+    `).run(process.pid, randomUUID(), new Date().toISOString());
+    const result = run();
+    lockDb.exec("COMMIT");
+    committed = true;
+    return result;
   } finally {
-    closeSync(descriptor);
-    unlinkSync(lockPath);
+    if (transactionStarted && !committed) {
+      try { lockDb.exec("ROLLBACK"); } catch {}
+    }
+    lockDb.close();
   }
+}
+
+function sqliteBusy(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as Error & { code?: string }).code;
+  return code === "SQLITE_BUSY" || /database is locked|SQLITE_BUSY/iu.test(error.message);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function fsyncDirectory(path: string): void {
+  const descriptor = openSync(path, "r");
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
 }
 
 function fsyncPath(path: string): void {

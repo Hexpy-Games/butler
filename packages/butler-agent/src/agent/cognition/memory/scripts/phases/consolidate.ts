@@ -8,6 +8,8 @@
 //   entities.activation REAL NULL
 //   entity_conflicts(id,entity_id,attribute_key,losing_value,losing_ts,winning_ts,reason,created_at)
 import type { Database } from "bun:sqlite";
+import type { MemoryExecutionContext } from "../../projection/contracts.ts";
+import { withMemoryWriteGateAsync } from "../../projection/ingestion.ts";
 import {
   planMerges,
   type EntityRow,
@@ -251,6 +253,47 @@ function buildCoMentionCounts(db: Database, cutoffMs: number): Map<string, numbe
 }
 
 export function runConsolidate(opts: ConsolidateOptions): ConsolidateMetrics {
+  const v2 = opts.db.query<{ found: number }, []>("SELECT 1 found FROM pragma_table_info('edges') WHERE name='edge_id'").get();
+  if (v2) {
+    let recomputed = 0;
+    const readRows = () => opts.db.query<{ edge_id: string; qualifiers: string; support_count: number; latest_observed_at: string | null }, []>(`
+      SELECT e.edge_id,e.qualifiers,COUNT(DISTINCT CASE WHEN c.current_revision=s.revision AND c.status='active' THEN s.episode_id END) support_count,
+        MAX(CASE WHEN c.current_revision=s.revision AND c.status='active' THEN s.observed_at END) latest_observed_at
+      FROM edges e LEFT JOIN edge_evidence ee ON ee.edge_id=e.edge_id
+      LEFT JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
+      LEFT JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id
+      GROUP BY e.edge_id,e.qualifiers ORDER BY e.edge_id
+    `).all();
+    const rows = readRows();
+    const prepared = rows.map((row) => {
+      const qualifiers = JSON.parse(row.qualifiers || "{}") as Record<string, unknown>;
+      const ageDays = row.latest_observed_at
+        ? Math.max(0, opts.nowMs - Date.parse(row.latest_observed_at)) / 86_400_000
+        : Number.POSITIVE_INFINITY;
+      const supportCount = Number(row.support_count);
+      const decayedSupport = Number.isFinite(ageDays) ? supportCount * Math.pow(1 + ageDays, -opts.decayD) : 0;
+      return { ...row, next: JSON.stringify({ ...qualifiers, active_support_episodes: supportCount, decayed_support: decayedSupport }) };
+    });
+    opts.db.transaction(() => {
+      const current = new Map(readRows().map((row) => [row.edge_id, row]));
+      for (const row of prepared) {
+        const now = current.get(row.edge_id);
+        if (!now || now.qualifiers !== row.qualifiers || Number(now.support_count) !== Number(row.support_count) ||
+          now.latest_observed_at !== row.latest_observed_at) throw new Error("memory_source_changed");
+        if (row.next !== row.qualifiers) {
+          opts.db.query("UPDATE edges SET qualifiers=? WHERE edge_id=?").run(row.next, row.edge_id);
+          recomputed += 1;
+        }
+      }
+    })();
+    return {
+      candidates_considered: rows.length,
+      merges_applied: 0,
+      edges_boosted: recomputed,
+      conflicts_archived: 0,
+      activations_written: 0,
+    };
+  }
   ensureConsolidateSchema(opts.db);
   return opts.db.transaction(() => {
     const nowSec = Math.floor(opts.nowMs / 1000);
@@ -277,4 +320,46 @@ export function runConsolidate(opts: ConsolidateOptions): ConsolidateMetrics {
       activations_written,
     };
   })();
+}
+
+export async function runConsolidateWithMemoryGate(
+  opts: ConsolidateOptions,
+  context: MemoryExecutionContext,
+): Promise<ConsolidateMetrics> {
+  const v2 = opts.db.query<{ found: number }, []>("SELECT 1 found FROM pragma_table_info('edges') WHERE name='edge_id'").get();
+  if (!v2) return await withMemoryWriteGateAsync(context, () => runConsolidate(opts));
+  const readRows = () => opts.db.query<{ edge_id: string; qualifiers: string; support_count: number; latest_observed_at: string | null }, []>(`
+    SELECT e.edge_id,e.qualifiers,COUNT(DISTINCT CASE WHEN c.current_revision=s.revision AND c.status='active' THEN s.episode_id END) support_count,
+      MAX(CASE WHEN c.current_revision=s.revision AND c.status='active' THEN s.observed_at END) latest_observed_at
+    FROM edges e LEFT JOIN edge_evidence ee ON ee.edge_id=e.edge_id
+    LEFT JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
+    LEFT JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id
+    GROUP BY e.edge_id,e.qualifiers ORDER BY e.edge_id
+  `).all();
+  const rows = readRows();
+  const prepared = rows.map((row) => {
+    const qualifiers = JSON.parse(row.qualifiers || "{}") as Record<string, unknown>;
+    const ageDays = row.latest_observed_at
+      ? Math.max(0, opts.nowMs - Date.parse(row.latest_observed_at)) / 86_400_000
+      : Number.POSITIVE_INFINITY;
+    const supportCount = Number(row.support_count);
+    const decayedSupport = Number.isFinite(ageDays) ? supportCount * Math.pow(1 + ageDays, -opts.decayD) : 0;
+    return { ...row, next: JSON.stringify({ ...qualifiers, active_support_episodes: supportCount, decayed_support: decayedSupport }) };
+  });
+  return await withMemoryWriteGateAsync(context, () => {
+    let recomputed = 0;
+    opts.db.transaction(() => {
+      const current = new Map(readRows().map((row) => [row.edge_id, row]));
+      for (const row of prepared) {
+        const now = current.get(row.edge_id);
+        if (!now || now.qualifiers !== row.qualifiers || Number(now.support_count) !== Number(row.support_count) ||
+          now.latest_observed_at !== row.latest_observed_at) throw new Error("memory_source_changed");
+        if (row.next !== row.qualifiers) {
+          opts.db.query("UPDATE edges SET qualifiers=? WHERE edge_id=?").run(row.next, row.edge_id);
+          recomputed += 1;
+        }
+      }
+    })();
+    return { candidates_considered: rows.length, merges_applied: 0, edges_boosted: recomputed, conflicts_archived: 0, activations_written: 0 };
+  });
 }

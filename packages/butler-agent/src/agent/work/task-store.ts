@@ -11,6 +11,9 @@ import {
 import {
   plannedModeSafety,
   readPlannedTaskRecord,
+  readPlannedTaskMemoryReport,
+  type PlannedTaskMemoryReport,
+  type PlannedTaskReadOptions,
   type PlannedTaskRecord,
   type PlannedTaskStatus,
   type PlannedReviewVerdict,
@@ -1070,6 +1073,16 @@ export class TaskStore {
       planned,
       completionEvidence,
     };
+  }
+
+  readMemoryReport(
+    taskId: string,
+    options: PlannedTaskReadOptions = {},
+  ): PlannedTaskMemoryReport | null {
+    const taskDir = this.taskDir(taskId);
+    if (!existsSync(taskDir)) return null;
+    const report = readPlannedTaskMemoryReport(taskDir, options);
+    return report?.task_id === taskId ? report : null;
   }
 
   list(limit = 10): TaskRecord[] {

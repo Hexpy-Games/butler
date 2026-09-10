@@ -1,16 +1,16 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  rmSync,
-} from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   addFeedbackEntry,
   resolveFeedbackEntry,
 } from "../feedback/buffer.ts";
 import { cognitionMemoryRoot } from "../paths.ts";
-import { updateExplicitMemory } from "../memory/quality.ts";
+import {
+  forgetExplicitMemory,
+  updateExplicitMemory,
+} from "../memory/quality.ts";
 import type {
   ContinuityKind,
   ContinuityOperation,
@@ -340,6 +340,8 @@ export class ContinuityStore {
       operation: input.update.operation,
       summary: input.update.summary,
       mutationId,
+      conversationSessionId: input.provenance.conversation_session_id,
+      inboundMessageId: input.provenance.inbound_message_id,
     });
     this.db.query("UPDATE continuity_entries SET destination_ref = ? WHERE continuity_id = ?")
       .run(destinationRef, continuityId);
@@ -416,6 +418,8 @@ export class ContinuityStore {
     operation: ContinuityOperation;
     summary: string;
     mutationId: string;
+    conversationSessionId: string;
+    inboundMessageId: string;
   }): string | null {
     if (input.destination === "project_hot_cache") {
       const projectId = input.projectId;
@@ -451,16 +455,34 @@ export class ContinuityStore {
           : input.scope === "project" ? `project:${input.projectId}` : input.scope,
         promotionTarget: "review",
         priority: "high",
+        sourceBinding: {
+          conversation_session_id: input.conversationSessionId,
+          conversation_message_id: input.inboundMessageId,
+          operation_id: input.mutationId,
+        },
       });
       return `feedback:${entry.feedback_id}`;
     }
     if (input.destination === "explicit_global_rule") {
-      if (input.target?.destination_ref && input.operation !== "upsert") {
-        rmSync(input.target.destination_ref, { force: true });
+      const priorRecordId = input.target?.destination_ref
+        ? input.target.destination_ref.split("/").at(-1)?.replace(/\.md$/u, "")
+        : undefined;
+      if (input.operation === "forget") {
+        if (!priorRecordId) throw new Error("continuity_rule_target_missing");
+        forgetExplicitMemory({
+          butlerData: this.butlerData,
+          recordId: priorRecordId,
+          operationId: input.mutationId,
+        });
+        return null;
       }
-      if (input.operation === "forget") return null;
       return updateExplicitMemory({
         butlerData: this.butlerData,
+        operationId: input.mutationId,
+        projectId: input.projectId,
+        conversationSessionId: input.conversationSessionId,
+        conversationMessageId: input.inboundMessageId,
+        recordId: priorRecordId,
         update: { kind: "rule", text: input.summary, source: `continuity:${input.mutationId}` },
       }).path;
     }

@@ -3,32 +3,32 @@ import { join } from "node:path";
 import { AgentConversationStore } from "../conversation/store.ts";
 import { conversationSessionIdForDurableSession } from "../conversation/session-admission.ts";
 import type {
-  ConversationMessageWithParts,
   ConversationContextStoreReader,
+  ConversationMessageWithParts,
 } from "../conversation/types.ts";
 import {
+  compilePromptMaterialContextPlan,
+  type ConversationContextMessage,
+  type ConversationContextPart,
+  type ConversationContextSummary,
+  type ConversationPromptContextPlan,
+  emptyConversationPromptContextPlan,
+  type PromptMaterialRenderOptions,
+  renderPromptMaterial,
   textForMessage,
   toContextMessage,
   toContextSummary,
-  compilePromptMaterialContextPlan,
-  emptyConversationPromptContextPlan,
-  renderPromptMaterial,
-  type ConversationContextMessage,
-  type ConversationContextPart,
-  type ConversationContextSummary,
-  type ConversationPromptContextPlan,
-  type PromptMaterialRenderOptions,
 } from "./conversation-context-format.ts";
 
 export {
-  renderPromptMaterial,
   compilePromptMaterialContextPlan,
-  emptyConversationPromptContextPlan,
   type ConversationContextMessage,
   type ConversationContextPart,
   type ConversationContextSummary,
   type ConversationPromptContextPlan,
+  emptyConversationPromptContextPlan,
   type PromptMaterialRenderOptions,
+  renderPromptMaterial,
 };
 
 export type ConversationContextDirection = "before" | "after" | "around";
@@ -45,6 +45,9 @@ export interface ReadConversationContextInput {
   limit?: number;
   maxChars?: number;
   includeTools?: boolean;
+  /** V2 session reads supply their validated range without changing legacy defaults. */
+  validatedLimits?: { limit: number; maxChars: number };
+  includeInternal?: boolean;
 }
 
 export interface ConversationContextResult {
@@ -72,7 +75,12 @@ function defaultButlerData(explicit?: string): string {
   return explicit || process.env.BUTLER_DATA || join(homedir(), ".butler");
 }
 
-function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+function clampInteger(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
@@ -83,11 +91,16 @@ export function canonicalConversationSessionId(input: {
   gateway?: string | null;
 }): string {
   const runtimeSessionId = input.runtimeSessionId.trim();
-  if (!runtimeSessionId) return conversationSessionIdForDurableSession("butler/main");
+  if (!runtimeSessionId) {
+    return conversationSessionIdForDurableSession("butler/main");
+  }
   if (input.reader.getSession(runtimeSessionId)) return runtimeSessionId;
   const gateway = input.gateway?.trim();
   if (gateway) {
-    const bound = input.reader.getSessionByGatewayBinding(gateway, runtimeSessionId);
+    const bound = input.reader.getSessionByGatewayBinding(
+      gateway,
+      runtimeSessionId,
+    );
     if (bound) return bound.id;
   }
   return conversationSessionIdForDurableSession(runtimeSessionId);
@@ -99,7 +112,9 @@ export function withConversationReader<T>(input: {
   fn: (reader: ConversationContextReader) => T;
 }): T {
   if (input.reader) return input.fn(input.reader);
-  const store = new AgentConversationStore({ butlerData: defaultButlerData(input.butlerData) });
+  const store = new AgentConversationStore({
+    butlerData: defaultButlerData(input.butlerData),
+  });
   try {
     return input.fn(store);
   } finally {
@@ -107,7 +122,9 @@ export function withConversationReader<T>(input: {
   }
 }
 
-export function readConversationContext(input: ReadConversationContextInput): ConversationContextResult {
+export function readConversationContext(
+  input: ReadConversationContextInput,
+): ConversationContextResult {
   return withConversationReader({
     butlerData: input.butlerData,
     reader: input.reader,
@@ -119,8 +136,10 @@ function readConversationContextWithReader(
   reader: ConversationContextReader,
   input: ReadConversationContextInput,
 ): ConversationContextResult {
-  const limit = clampInteger(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
-  const maxChars = clampInteger(input.maxChars, DEFAULT_MAX_CHARS, 200, MAX_CHARS);
+  const limit = input.validatedLimits?.limit ??
+    clampInteger(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+  const maxChars = input.validatedLimits?.maxChars ??
+    clampInteger(input.maxChars, DEFAULT_MAX_CHARS, 200, MAX_CHARS);
   const direction = input.direction ?? "around";
   const query = input.query?.trim() || "";
   const canonicalSessionId = canonicalConversationSessionId({
@@ -129,7 +148,7 @@ function readConversationContextWithReader(
     gateway: input.gateway,
   });
   const anchorMessage = resolveAnchorMessage(reader, canonicalSessionId, input);
-  const messages = selectMessages({
+  const selectedMessages = selectMessages({
     reader,
     sessionId: canonicalSessionId,
     anchorMessageId: anchorMessage?.id ?? null,
@@ -137,9 +156,20 @@ function readConversationContextWithReader(
     direction,
     limit,
   });
+  const messages = input.validatedLimits
+    ? selectedMessages.filter((message) =>
+      input.includeInternal === true ||
+      message.origin_kind === "user_input" ||
+      message.origin_kind === "assistant_public",
+    )
+    : selectedMessages;
   const summaries = reader.readSummaries(canonicalSessionId)
-    .filter((summary) => summary.covers_to_seq < (messages[0]?.seq ?? Number.POSITIVE_INFINITY));
-  const rendered = messages.map((message) => toContextMessage(message, input.includeTools === true));
+    .filter((summary) =>
+      summary.covers_to_seq < (messages[0]?.seq ?? Number.POSITIVE_INFINITY),
+    );
+  const rendered = messages.map((message) =>
+    toContextMessage(message, input.includeTools === true),
+  );
   const budgeted = applyCharBudget(rendered, maxChars);
   const requestedAnchorMessageId = input.anchorMessageId?.trim() || null;
   return {
@@ -168,7 +198,9 @@ function resolveAnchorMessage(
     if (message?.session_id === sessionId) return message;
   }
   const anchorEventId = input.anchorEventId?.trim();
-  if (anchorEventId) return reader.readMessageBySourceRef(sessionId, anchorEventId);
+  if (anchorEventId) {
+    return reader.readMessageBySourceRef(sessionId, anchorEventId);
+  }
   return null;
 }
 
@@ -203,7 +235,14 @@ function selectMessages(input: {
   const matches = matchingIndices(all, input.query);
   const selected = new Map<string, ConversationMessageWithParts>();
   for (const index of matches) {
-    for (const selectedIndex of indicesAround(index, all.length, input.direction, input.limit)) {
+    for (
+      const selectedIndex of indicesAround(
+        index,
+        all.length,
+        input.direction,
+        input.limit,
+      )
+    ) {
       const message = all[selectedIndex];
       if (message) selected.set(message.id, message);
       if (selected.size >= input.limit) break;
@@ -234,7 +273,10 @@ function queryTerms(query: string): string[] {
   return [...new Set([normalized, ...terms])];
 }
 
-function matchingIndices(messages: ConversationMessageWithParts[], query: string): number[] {
+function matchingIndices(
+  messages: ConversationMessageWithParts[],
+  query: string,
+): number[] {
   const terms = queryTerms(query);
   if (terms.length === 0) return [];
   const matches: number[] = [];
@@ -245,38 +287,58 @@ function matchingIndices(messages: ConversationMessageWithParts[], query: string
   return matches;
 }
 
-function indicesAround(anchor: number, length: number, direction: ConversationContextDirection, limit: number): number[] {
+function indicesAround(
+  anchor: number,
+  length: number,
+  direction: ConversationContextDirection,
+  limit: number,
+): number[] {
   if (length <= 0) return [];
   if (direction === "before") {
     const start = Math.max(0, anchor - limit + 1);
-    return Array.from({ length: anchor - start + 1 }, (_, offset) => start + offset);
+    return Array.from(
+      { length: anchor - start + 1 },
+      (_, offset) => start + offset,
+    );
   }
   if (direction === "after") {
     const end = Math.min(length - 1, anchor + limit - 1);
-    return Array.from({ length: end - anchor + 1 }, (_, offset) => anchor + offset);
+    return Array.from(
+      { length: end - anchor + 1 },
+      (_, offset) => anchor + offset,
+    );
   }
   const before = Math.floor((limit - 1) / 2);
   const start = Math.max(0, anchor - before);
   const end = Math.min(length - 1, start + limit - 1);
   const adjustedStart = Math.max(0, end - limit + 1);
-  return Array.from({ length: end - adjustedStart + 1 }, (_, offset) => adjustedStart + offset);
+  return Array.from(
+    { length: end - adjustedStart + 1 },
+    (_, offset) => adjustedStart + offset,
+  );
 }
 
-function applyCharBudget(messages: ConversationContextMessage[], maxChars: number): {
+function applyCharBudget(
+  messages: ConversationContextMessage[],
+  maxChars: number,
+): {
   messages: ConversationContextMessage[];
   truncated: boolean;
 } {
   const selected: ConversationContextMessage[] = [];
   let used = 0;
   for (const message of messages) {
-    const cost = message.text.length + message.created_at.length + message.conversation_message_id.length + 32;
+    const cost = message.text.length + message.created_at.length +
+      message.conversation_message_id.length + 32;
     if (selected.length > 0 && used + cost > maxChars) {
       return { messages: selected, truncated: true };
     }
     if (cost > maxChars) {
       selected.push({
         ...message,
-        text: `${message.text.slice(0, Math.max(0, maxChars - 32)).trimEnd()}...`,
+        text: `${
+          message.text.slice(0, Math.max(0, maxChars - 32)).trimEnd()
+        }...`,
       });
       return { messages: selected, truncated: true };
     }

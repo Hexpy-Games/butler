@@ -1,18 +1,24 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import {
-  readConversationObservations,
   type ConversationObservationRole,
+  readConversationObservations,
 } from "./scripts/lib/conversation-sources.ts";
 import { conversationStorePath } from "../../conversation/store.ts";
+import { createLazyConversationProjectionReader } from "../../conversation/projection-reader-store.ts";
+import { decodeMessageScalars } from "./projection/source.ts";
+import { unicodeCaseFold } from "./projection/unicode.ts";
 
 export type MemoryQueryScope = "all_sessions" | "session";
 export type MemoryQuerySpeaker = "any" | "user" | "butler";
 export type MemoryQueryEventKind = "any" | "inbound" | "outbound";
 export type MemoryQueryOrder = "earliest" | "latest";
 export type MemoryQueryMatchMode = "any" | "all" | "phrase";
-export type ExactQuerySource = "conversation-store" | "transcript-recovery-index";
+export type ExactQuerySource =
+  | "conversation-store"
+  | "transcript-recovery-index";
 
 export interface QueryMemoryInput {
   butlerData: string;
@@ -63,6 +69,60 @@ export interface QueryMemoryResult {
   diagnostics: string[];
 }
 
+export type MemoryToolFailure = {
+  ok: false;
+  code:
+    | "invalid_arguments"
+    | "invalid_scope"
+    | "stale_cursor"
+    | "cursor_expired"
+    | "backend_unavailable";
+  diagnostics: string[];
+};
+
+export interface QueryMemoryV2Input {
+  butlerData: string;
+  currentSessionId: string;
+  currentProjectId: string | null;
+  query?: string;
+  terms?: string[];
+  matchMode?: MemoryQueryMatchMode;
+  caseSensitive?: boolean;
+  speaker?: MemoryQuerySpeaker;
+  eventKind?: MemoryQueryEventKind;
+  order?: MemoryQueryOrder;
+  time?: { from: string; to: string; basis: "conversation" };
+  limit?: number;
+  cursor?: string;
+  scope?: "current_session" | "current_project" | "all_user_sessions";
+  sessionIds?: string[];
+  projectFilter?: "any" | "unassigned" | "selected";
+  projectIds?: string[];
+  includeInternal?: boolean;
+  /** Compatibility-only: v1 omitted query means chronological canonical rows. */
+  allowEmptyMatch?: boolean;
+}
+
+export type QueryMemoryV2Result = MemoryToolFailure | {
+  ok: true;
+  status: "complete" | "partial";
+  results: Array<{
+    conversation_session_id: string;
+    conversation_message_id: string;
+    source_ref: string;
+    read_args: Record<string, unknown>;
+    created_at: string;
+    speaker: "user" | "butler";
+    excerpt: string;
+    source: "conversation-store";
+  }>;
+  returned: number;
+  total_matches: number | null;
+  count_status: "complete" | "partial";
+  next_cursor: string | null;
+  diagnostics: string[];
+};
+
 export interface TranscriptQueryIndexMessage {
   sourceId: string;
   sourceEventId: string;
@@ -99,7 +159,12 @@ const MAX_LIMIT = 50;
 const MAX_TEXT_CHARS = 900;
 const CONVERSATION_STORE_SCAN_PAGE_SIZE = 1000;
 const MAX_CONVERSATION_STORE_SCAN_MESSAGES = 50000;
-const TRANSCRIPT_QUERY_DB_RELATIVE = ["cognition", "memory", "query", "messages.sqlite"];
+const TRANSCRIPT_QUERY_DB_RELATIVE = [
+  "cognition",
+  "memory",
+  "query",
+  "messages.sqlite",
+];
 
 export function transcriptQueryDbPath(butlerData: string): string {
   return join(butlerData, ...TRANSCRIPT_QUERY_DB_RELATIVE);
@@ -164,8 +229,12 @@ export function upsertTranscriptQueryIndexMessages(
     const rowidQuery = db.query<{ rowid: number }, [string]>(
       "SELECT rowid FROM conversation_messages WHERE source_id = ?",
     );
-    const deleteFts = db.query("DELETE FROM conversation_messages_fts WHERE rowid = ?");
-    const insertFts = db.query("INSERT INTO conversation_messages_fts(rowid, text) VALUES (?, ?)");
+    const deleteFts = db.query(
+      "DELETE FROM conversation_messages_fts WHERE rowid = ?",
+    );
+    const insertFts = db.query(
+      "INSERT INTO conversation_messages_fts(rowid, text) VALUES (?, ?)",
+    );
     const now = new Date().toISOString();
     const tx = db.transaction((items: TranscriptQueryIndexMessage[]) => {
       for (const message of items) {
@@ -236,7 +305,12 @@ export function indexTranscriptLinesForQuery(input: {
   );
 }
 
-function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
+function clampInteger(
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
@@ -269,7 +343,9 @@ function parseDateLowerBoundary(value: string | undefined): string | null {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
-function parseDateUpperExclusiveBoundary(value: string | undefined): string | null {
+function parseDateUpperExclusiveBoundary(
+  value: string | undefined,
+): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   const parsed = Date.parse(trimmed);
@@ -284,7 +360,9 @@ function compactText(text: string): string {
   return `${compacted.slice(0, MAX_TEXT_CHARS - 3).trimEnd()}...`;
 }
 
-function localTimestamp(timestamp: string): { value: string | null; timezone: string | null } {
+function localTimestamp(
+  timestamp: string,
+): { value: string | null; timezone: string | null } {
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime())) return { value: null, timezone: null };
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -325,24 +403,35 @@ function ftsQuery(query: string, mode: MemoryQueryMatchMode): string | null {
   const phrase = query.trim().replace(/"/gu, '""');
   if (!phrase) return null;
   if (mode === "phrase") return `"${phrase}"`;
-  const terms = searchTerms(query).map((term) => `"${term.replace(/"/gu, '""')}"`);
+  const terms = searchTerms(query).map((term) =>
+    `"${term.replace(/"/gu, '""')}"`,
+  );
   if (terms.length === 0) return null;
   return terms.join(mode === "all" ? " AND " : " OR ");
 }
 
-function matchedTerms(text: string, query: string, mode: MemoryQueryMatchMode): string[] {
+function matchedTerms(
+  text: string,
+  query: string,
+  mode: MemoryQueryMatchMode,
+): string[] {
   const normalizedText = normalizeForSearch(text);
   const terms = searchTerms(query);
   if (terms.length === 0) return [];
   if (mode === "phrase") {
     const normalized = normalizeForSearch(query).trim();
-    return normalized && normalizedText.includes(normalized) ? [normalized] : [];
+    return normalized && normalizedText.includes(normalized)
+      ? [normalized]
+      : [];
   }
   const matched = terms.filter((term) => normalizedText.includes(term));
   return mode === "all" && matched.length !== terms.length ? [] : matched;
 }
 
-function roleFilter(speaker: MemoryQuerySpeaker, eventKind: MemoryQueryEventKind): string[] {
+function roleFilter(
+  speaker: MemoryQuerySpeaker,
+  eventKind: MemoryQueryEventKind,
+): string[] {
   if (speaker === "user" || eventKind === "inbound") return ["user"];
   if (speaker === "butler" || eventKind === "outbound") return ["assistant"];
   return ["user", "assistant"];
@@ -373,7 +462,9 @@ function hasIndex(db: Database, table: string, index: string): boolean {
 }
 
 function placeholders(count: number): string {
-  return Array.from({ length: count }, (_, index) => `$role${index}`).join(", ");
+  return Array.from({ length: count }, (_, index) => `$role${index}`).join(
+    ", ",
+  );
 }
 
 function queryConversationStore(input: {
@@ -390,7 +481,13 @@ function queryConversationStore(input: {
   dateTo: string | null;
 }): SourceQueryResult {
   if (!existsSync(conversationStorePath(input.butlerData))) {
-    return { source: "conversation-store", skipped: "conversation store missing", total: 0, rows: [], diagnostics: [] };
+    return {
+      source: "conversation-store",
+      skipped: "conversation store missing",
+      total: 0,
+      rows: [],
+      diagnostics: [],
+    };
   }
   const observations: ReturnType<typeof readConversationObservations> = [];
   const diagnostics: string[] = [];
@@ -409,7 +506,10 @@ function queryConversationStore(input: {
     scanned += page.length;
     for (const observation of page) {
       if (input.dateTo && observation.created_at >= input.dateTo) continue;
-      if (!input.query || matchedTerms(observation.text, input.query, input.matchMode).length > 0) {
+      if (
+        !input.query ||
+        matchedTerms(observation.text, input.query, input.matchMode).length > 0
+      ) {
         observations.push(observation);
       }
     }
@@ -454,12 +554,24 @@ function queryTranscriptIndex(input: {
   excludeAppSessions: boolean;
 }): SourceQueryResult {
   if (!existsSync(input.dbPath)) {
-    return { source: "transcript-recovery-index", skipped: "transcript query index missing", total: 0, rows: [], diagnostics: [] };
+    return {
+      source: "transcript-recovery-index",
+      skipped: "transcript query index missing",
+      total: 0,
+      rows: [],
+      diagnostics: [],
+    };
   }
   const db = new Database(input.dbPath, { readonly: true });
   try {
     if (!hasTable(db, "conversation_messages")) {
-      return { source: "transcript-recovery-index", skipped: "conversation_messages table missing", total: 0, rows: [], diagnostics: [] };
+      return {
+        source: "transcript-recovery-index",
+        skipped: "conversation_messages table missing",
+        total: 0,
+        rows: [],
+        diagnostics: [],
+      };
     }
     const needsSessionIndex = input.scope === "session";
     const requiredIndex = needsSessionIndex
@@ -468,13 +580,17 @@ function queryTranscriptIndex(input: {
     if (!hasIndex(db, "conversation_messages", requiredIndex)) {
       return {
         source: "transcript-recovery-index",
-        skipped: `${requiredIndex} missing; refusing full transcript index scan`,
+        skipped:
+          `${requiredIndex} missing; refusing full transcript index scan`,
         total: 0,
         rows: [],
         diagnostics: [],
       };
     }
-    if (input.excludeAppSessions && input.scope === "session" && isAppSessionId(input.sessionId)) {
+    if (
+      input.excludeAppSessions && input.scope === "session" &&
+      isAppSessionId(input.sessionId)
+    ) {
       return {
         source: "transcript-recovery-index",
         skipped: "app session covered by app message db",
@@ -518,7 +634,9 @@ function queryTranscriptIndex(input: {
     if (!input.includeInternal) clauses.push("m.internal = 0");
     if (!input.includePlaceholders) clauses.push("m.placeholder = 0");
     if (fts) {
-      clauses.push("m.rowid IN (SELECT rowid FROM conversation_messages_fts WHERE conversation_messages_fts MATCH $fts)");
+      clauses.push(
+        "m.rowid IN (SELECT rowid FROM conversation_messages_fts WHERE conversation_messages_fts MATCH $fts)",
+      );
       params.$fts = fts;
     }
     const where = clauses.join(" AND ");
@@ -564,8 +682,12 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
   const dateFrom = parseDateLowerBoundary(input.dateFrom);
   const dateTo = parseDateUpperExclusiveBoundary(input.dateTo);
   const diagnostics: string[] = [];
-  if (input.dateFrom && dateFrom === null) diagnostics.push("date_from was ignored because it could not be parsed");
-  if (input.dateTo && dateTo === null) diagnostics.push("date_to was ignored because it could not be parsed");
+  if (input.dateFrom && dateFrom === null) {
+    diagnostics.push("date_from was ignored because it could not be parsed");
+  }
+  if (input.dateTo && dateTo === null) {
+    diagnostics.push("date_to was ignored because it could not be parsed");
+  }
   if (scope === "session" && !sessionId) {
     diagnostics.push("session scope requested without session_id");
     return {
@@ -604,32 +726,36 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
   });
   const transcript = input.includeTranscriptRecovery
     ? queryTranscriptIndex({
-        dbPath: transcriptQueryDbPath(input.butlerData),
-        query,
-        scope,
-        sessionId,
-        speaker,
-        eventKind,
-        order,
-        matchMode,
-        limit,
-        dateFrom,
-        dateTo,
-        includeInternal: input.includeInternal === true,
-        includePlaceholders: input.includePlaceholders === true,
-        excludeAppSessions: false,
-      })
+      dbPath: transcriptQueryDbPath(input.butlerData),
+      query,
+      scope,
+      sessionId,
+      speaker,
+      eventKind,
+      order,
+      matchMode,
+      limit,
+      dateFrom,
+      dateTo,
+      includeInternal: input.includeInternal === true,
+      includePlaceholders: input.includePlaceholders === true,
+      excludeAppSessions: false,
+    })
     : {
-        source: "transcript-recovery-index",
-        skipped: "transcript recovery source not requested",
-        total: 0,
-        rows: [],
-        diagnostics: [],
-      };
+      source: "transcript-recovery-index",
+      skipped: "transcript recovery source not requested",
+      total: 0,
+      rows: [],
+      diagnostics: [],
+    };
 
   const sourceResults = [conversation, transcript];
-  const inspectedSources = sourceResults.filter((item) => !item.skipped).map((item) => item.source);
-  const skippedSources = sourceResults.flatMap((item) => item.skipped ? [`${item.source}: ${item.skipped}`] : []);
+  const inspectedSources = sourceResults.filter((item) => !item.skipped).map((
+    item,
+  ) => item.source);
+  const skippedSources = sourceResults.flatMap((item) =>
+    item.skipped ? [`${item.source}: ${item.skipped}`] : [],
+  );
   diagnostics.push(...sourceResults.flatMap((item) => item.diagnostics));
   diagnostics.push(...skippedSources);
   const allRows = sourceResults.flatMap((item) => item.rows);
@@ -719,11 +845,425 @@ function isInternalTranscriptEvent(event: TranscriptEventLike): boolean {
   return event.sessionId.startsWith("steward/") || role === "steward";
 }
 
-function isPlaceholderTranscriptEvent(event: TranscriptEventLike, timestampMs: number): boolean {
+function isPlaceholderTranscriptEvent(
+  event: TranscriptEventLike,
+  timestampMs: number,
+): boolean {
   const payloadEventId = event.payload.eventId;
   const messageTimestamp = event.payload.message?.timestamp;
   return timestampMs <= 0 ||
     (event.transport === "mock" && timestampMs < Date.UTC(2000, 0, 1)) ||
-    (typeof payloadEventId === "string" && payloadEventId.startsWith("mock:")) ||
+    (typeof payloadEventId === "string" &&
+      payloadEventId.startsWith("mock:")) ||
     (typeof messageTimestamp === "string" && Date.parse(messageTimestamp) <= 0);
+}
+
+const V2_SCAN_DEADLINE_MS = 5_000;
+
+export function queryMemoryV2(input: QueryMemoryV2Input): QueryMemoryV2Result {
+  try {
+    const args = validateV2Query(input);
+    const reader = createLazyConversationProjectionReader({
+      butlerData: input.butlerData,
+    });
+    try {
+      const snapshot = reader.withPublicSourceSnapshot<QueryMemoryV2Result>(
+        (snapshot) => {
+          const revision = snapshot.revision();
+          const filterHash = createHash("sha256").update(
+            JSON.stringify(args.filterIdentity),
+          ).digest("hex");
+          const cursor = input.cursor ? decodeV2Cursor(input.cursor) : null;
+          if (
+            cursor &&
+            (cursor.filter_hash !== filterHash || cursor.revision !== revision)
+          ) {
+            return { ok: false, code: "stale_cursor", diagnostics: [] };
+          }
+          if (!snapshot.validateScope(args)) {
+            return { ok: false, code: "invalid_scope", diagnostics: [] };
+          }
+          const started = Date.now();
+          let inspected = 0;
+          let matches = cursor?.match_count ?? 0;
+          let last = cursor
+            ? { created_at: cursor.created_at, id: cursor.message_id }
+            : null;
+          const results: Extract<QueryMemoryV2Result, { ok: true }>["results"] =
+            [];
+          const resultKeys: Array<
+            { created_at: string; id: string; match_count: number }
+          > = [];
+          let complete = false;
+          while (
+            inspected < MAX_CONVERSATION_STORE_SCAN_MESSAGES &&
+            Date.now() - started < V2_SCAN_DEADLINE_MS
+          ) {
+            const rows = snapshot.readMessagePage(
+              args,
+              last,
+              CONVERSATION_STORE_SCAN_PAGE_SIZE,
+            );
+            if (rows.length === 0) {
+              complete = true;
+              break;
+            }
+            let pageFullyInspected = true;
+            for (const row of rows) {
+              inspected += 1;
+              last = { created_at: row.created_at, id: row.id };
+              const message = row;
+              const scalar = decodeMessageScalars(message).find((candidate) =>
+                v2ScalarMatches(candidate.text, args),
+              );
+              if (scalar) {
+                matches += 1;
+                if (results.length < args.limit) {
+                  const sourceRef = conversationSourceRef(
+                    message.id,
+                    scalar.part.id,
+                    scalar.pointer,
+                    scalar.hash,
+                  );
+                  results.push({
+                    conversation_session_id: message.session_id,
+                    conversation_message_id: message.id,
+                    source_ref: sourceRef,
+                    read_args: {
+                      scope: args.scope,
+                      source_ref: sourceRef,
+                      max_chars: 4_000,
+                      ...(args.sessionIds.length
+                        ? { session_ids: args.sessionIds }
+                        : {}),
+                      ...(args.projectFilter !== "any"
+                        ? { project_filter: args.projectFilter }
+                        : {}),
+                      ...(args.projectIds.length
+                        ? { project_ids: args.projectIds }
+                        : {}),
+                      ...(args.includeInternal
+                        ? { include_internal: true }
+                        : {}),
+                    },
+                    created_at: message.created_at,
+                    speaker: message.role === "user" ? "user" : "butler",
+                    excerpt: truncateV2Graphemes(scalar.text, 240),
+                    source: "conversation-store",
+                  });
+                  resultKeys.push({
+                    created_at: row.created_at,
+                    id: row.id,
+                    match_count: matches,
+                  });
+                }
+              }
+              if (results.length >= args.limit) {
+                complete = snapshot.readMessagePage(args, last, 1).length === 0;
+                break;
+              }
+              if (
+                inspected >= MAX_CONVERSATION_STORE_SCAN_MESSAGES ||
+                Date.now() - started >= V2_SCAN_DEADLINE_MS
+              ) {
+                pageFullyInspected = false;
+                break;
+              }
+            }
+            if (results.length >= args.limit) break;
+            if (
+              pageFullyInspected &&
+              rows.length < CONVERSATION_STORE_SCAN_PAGE_SIZE
+            ) {
+              complete = true;
+              break;
+            }
+          }
+          const nextCursor = complete || !last ? null : encodeV2Cursor({
+            schema: "butler.query-memory-cursor.v2",
+            filter_hash: filterHash,
+            revision,
+            created_at: last.created_at,
+            message_id: last.id,
+            match_count: matches,
+          });
+          const response: Extract<QueryMemoryV2Result, { ok: true }> = {
+            ok: true,
+            status: nextCursor ? "partial" : "complete",
+            results,
+            returned: results.length,
+            total_matches: nextCursor ? null : matches,
+            count_status: nextCursor ? "partial" : "complete",
+            next_cursor: nextCursor,
+            diagnostics: nextCursor
+              ? [
+                Date.now() - started >= V2_SCAN_DEADLINE_MS
+                  ? "operation_deadline"
+                  : "scan_continues",
+              ]
+              : [],
+          };
+          while (
+            results.length > 0 &&
+            memoryNativeEnvelopeBytes(response) > 24 * 1024
+          ) {
+            results.pop();
+            resultKeys.pop();
+            const checkpoint = resultKeys.at(-1);
+            response.status = "partial";
+            response.total_matches = null;
+            response.count_status = "partial";
+            response.next_cursor = checkpoint
+              ? encodeV2Cursor({
+                schema: "butler.query-memory-cursor.v2",
+                filter_hash: filterHash,
+                revision,
+                created_at: checkpoint.created_at,
+                message_id: checkpoint.id,
+                match_count: checkpoint.match_count,
+              })
+              : cursor?.message_id
+              ? input.cursor ?? null
+              : null;
+            response.diagnostics = [
+              ...new Set([...response.diagnostics, "serialization_budget"]),
+            ];
+            response.returned = results.length;
+          }
+          return response;
+        },
+      );
+      return snapshot ??
+        {
+          ok: false as const,
+          code: "backend_unavailable" as const,
+          diagnostics: ["conversation_store_unavailable"],
+        };
+    } finally {
+      reader.close();
+    }
+  } catch (error) {
+    const diagnostic = safeV2Diagnostic(error);
+    return V2_ARGUMENT_DIAGNOSTICS.has(diagnostic)
+      ? { ok: false, code: "invalid_arguments", diagnostics: [diagnostic] }
+      : {
+        ok: false,
+        code: "backend_unavailable",
+        diagnostics: ["conversation_store_unavailable"],
+      };
+  }
+}
+
+const V2_ARGUMENT_DIAGNOSTICS = new Set([
+  "invalid_string",
+  "invalid_array",
+  "invalid_match_mode",
+  "query_terms_conflict",
+  "terms_required",
+  "terms_not_allowed",
+  "invalid_role_filter",
+  "contradictory_role_filter",
+  "invalid_order",
+  "invalid_limit",
+  "invalid_scope_value",
+  "invalid_project_filter",
+  "invalid_time",
+  "invalid_cursor",
+]);
+function memoryNativeEnvelopeBytes(output: unknown): number {
+  return Buffer.byteLength(JSON.stringify({ ok: true, output }), "utf8");
+}
+
+type V2ValidatedQuery = {
+  query: string | null;
+  terms: string[];
+  matchMode: MemoryQueryMatchMode;
+  caseSensitive: boolean;
+  speaker: MemoryQuerySpeaker;
+  eventKind: MemoryQueryEventKind;
+  order: MemoryQueryOrder;
+  time?: { from: string; to: string; basis: "conversation" };
+  limit: number;
+  scope: "current_session" | "current_project" | "all_user_sessions";
+  currentSessionId: string;
+  currentProjectId: string | null;
+  sessionIds: string[];
+  projectFilter: "any" | "unassigned" | "selected";
+  projectIds: string[];
+  includeInternal: boolean;
+  filterIdentity: unknown;
+};
+
+function validateV2Query(input: QueryMemoryV2Input): V2ValidatedQuery {
+  const query = input.query === undefined
+    ? null
+    : boundedV2String(input.query, 2_048, true);
+  const terms = input.terms === undefined
+    ? []
+    : boundedV2Array(input.terms, 16, 256);
+  const matchMode = input.matchMode ?? "phrase";
+  if (!(["phrase", "any", "all"] as unknown[]).includes(matchMode)) {
+    throw new Error("invalid_match_mode");
+  }
+  if (query !== null && (terms.length || matchMode === "any" || matchMode === "all")) {
+    throw new Error("query_terms_conflict");
+  }
+  if (
+    (matchMode === "any" || matchMode === "all") &&
+    !terms.length && !input.allowEmptyMatch
+  ) throw new Error("terms_required");
+  if (matchMode === "phrase" && terms.length) {
+    throw new Error("terms_not_allowed");
+  }
+  const speaker = input.speaker ?? "any";
+  const eventKind = input.eventKind ?? "any";
+  if (
+    !(["any", "user", "butler"] as unknown[]).includes(speaker) ||
+    !(["any", "inbound", "outbound"] as unknown[]).includes(eventKind)
+  ) throw new Error("invalid_role_filter");
+  if (
+    (speaker === "user" && eventKind === "outbound") ||
+    (speaker === "butler" && eventKind === "inbound")
+  ) throw new Error("contradictory_role_filter");
+  const order = input.order ?? "earliest";
+  if (order !== "earliest" && order !== "latest") {
+    throw new Error("invalid_order");
+  }
+  const limit = input.limit ?? 10;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw new Error("invalid_limit");
+  }
+  const scope = input.scope ??
+    (input.currentProjectId ? "current_project" : "all_user_sessions");
+  if (
+    !(["current_session", "current_project", "all_user_sessions"] as unknown[])
+      .includes(scope)
+  ) throw new Error("invalid_scope_value");
+  const sessionIds = boundedV2Array(input.sessionIds ?? [], 32, 512);
+  const projectFilter = input.projectFilter ?? "any";
+  const projectIds = boundedV2Array(input.projectIds ?? [], 16, 512);
+  if (
+    !(["any", "unassigned", "selected"] as unknown[]).includes(projectFilter) ||
+    (projectFilter === "selected") !== (projectIds.length > 0)
+  ) throw new Error("invalid_project_filter");
+  let time = input.time;
+  if (time) {
+    if (
+      time.basis !== "conversation" || !strictOffsetTimestamp(time.from) ||
+      !strictOffsetTimestamp(time.to) ||
+      Date.parse(time.from) >= Date.parse(time.to)
+    ) throw new Error("invalid_time");
+    time = {
+      ...time,
+      from: new Date(time.from).toISOString(),
+      to: new Date(time.to).toISOString(),
+    };
+  }
+  const result = {
+    query,
+    terms,
+    matchMode,
+    caseSensitive: input.caseSensitive ?? true,
+    speaker,
+    eventKind,
+    order,
+    time,
+    limit,
+    scope,
+    currentSessionId: input.currentSessionId.trim(),
+    currentProjectId: input.currentProjectId?.trim() || null,
+    sessionIds,
+    projectFilter,
+    projectIds,
+    includeInternal: input.includeInternal === true,
+  };
+  return { ...result, filterIdentity: result };
+}
+
+function v2ScalarMatches(text: string, input: V2ValidatedQuery): boolean {
+  const haystack = input.caseSensitive
+    ? text.normalize("NFC")
+    : unicodeCaseFold(text.normalize("NFC"));
+  const normalize = (value: string) =>
+    input.caseSensitive
+      ? value.normalize("NFC")
+      : unicodeCaseFold(value.normalize("NFC"));
+  if (input.matchMode === "phrase") {
+    return input.query === null || haystack.includes(normalize(input.query));
+  }
+  const hits = input.terms.map((term) => haystack.includes(normalize(term)));
+  return input.matchMode === "all" ? hits.every(Boolean) : hits.some(Boolean);
+}
+
+function conversationSourceRef(
+  messageId: string,
+  partId: string,
+  pointer: string,
+  hash: string,
+): string {
+  return `conversation-source:v2:${base64url(messageId)}:${base64url(partId)}:${
+    base64url(pointer)
+  }:${hash}`;
+}
+
+function boundedV2String(
+  value: unknown,
+  max: number,
+  allowEmpty = false,
+): string {
+  if (
+    typeof value !== "string" || (!allowEmpty && !value.trim()) ||
+    graphemeLength(value) > max
+  ) throw new Error("invalid_string");
+  return value;
+}
+function boundedV2Array(
+  value: unknown,
+  maxItems: number,
+  maxGraphemes: number,
+): string[] {
+  if (!Array.isArray(value) || value.length > maxItems) {
+    throw new Error("invalid_array");
+  }
+  return value.map((item) => boundedV2String(item, maxGraphemes));
+}
+function strictOffsetTimestamp(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/u.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+function graphemeLength(value: string): number {
+  return [
+    ...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value),
+  ].length;
+}
+function truncateV2Graphemes(value: string, max: number): string {
+  return [
+    ...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value),
+  ].slice(0, max).map((x) => x.segment).join("");
+}
+function base64url(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+type V2QueryCursor = {
+  schema: "butler.query-memory-cursor.v2";
+  filter_hash: string;
+  revision: number;
+  created_at: string;
+  message_id: string;
+  match_count: number;
+};
+function encodeV2Cursor(value: V2QueryCursor): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+function decodeV2Cursor(value: string): V2QueryCursor {
+  const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  if (parsed?.schema !== "butler.query-memory-cursor.v2") {
+    throw new Error("invalid_cursor");
+  }
+  return parsed;
+}
+function safeV2Diagnostic(error: unknown): string {
+  return error instanceof Error && /^[a-z_]+$/u.test(error.message)
+    ? error.message
+    : "invalid_arguments";
 }

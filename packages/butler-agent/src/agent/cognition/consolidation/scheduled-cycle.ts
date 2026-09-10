@@ -1,7 +1,6 @@
-import { spawnSync } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
-import { butlerAgentSourcePath } from "../../../runtime/paths.ts";
+import { runConfiguredMemoryConsolidation } from "../memory/scripts/consolidation-cycle.ts";
 import {
   runCognitionConsolidationCycle,
   type ConsolidationCycleResult,
@@ -33,12 +32,8 @@ export type RunScheduledCognitionConsolidationInput = {
   butlerHome?: string;
   butlerData?: string;
   runId?: string;
-  runLegacyMemoryCycle?: () => LegacyMemoryCycleResult;
+  runLegacyMemoryCycle?: () => LegacyMemoryCycleResult | Promise<LegacyMemoryCycleResult>;
 };
-
-function butlerHome(input?: string): string {
-  return input || process.env.BUTLER_HOME || process.cwd();
-}
 
 function butlerData(input?: string): string {
   return input || process.env.BUTLER_DATA || join(homedir(), ".butler");
@@ -49,39 +44,29 @@ function scheduledRunId(): string {
   return `cr_scheduled_${stamp}`;
 }
 
-function defaultLegacyMemoryCycle(home: string, data: string): LegacyMemoryCycleResult {
-  const bun = process.env.BUTLER_BUN || process.execPath;
-  const result = spawnSync(
-    bun,
-    ["run", butlerAgentSourcePath(home, "agent", "cognition", "memory", "scripts", "consolidation-cycle.ts")],
-    {
-      cwd: data,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        BUTLER_HOME: home,
-        BUTLER_DATA: data,
-      },
-    },
-  );
-  return {
-    status: result.status,
-    stderr: result.stderr,
-  };
+async function defaultLegacyMemoryCycle(data: string): Promise<LegacyMemoryCycleResult> {
+  try {
+    const result = await runConfiguredMemoryConsolidation({ butlerData: data });
+    return { status: result.exitCode, stderr: null };
+  } catch (error) {
+    return {
+      status: 1,
+      stderr: error instanceof Error ? error.message : "memory_consolidation_failed",
+    };
+  }
 }
 
 export async function runScheduledCognitionConsolidation(
   input: RunScheduledCognitionConsolidationInput = {},
 ): Promise<ScheduledCognitionConsolidationResult> {
-  const home = butlerHome(input.butlerHome);
   const data = butlerData(input.butlerData);
   const generic = await runCognitionConsolidationCycle({
     butlerData: data,
     runId: input.runId ?? scheduledRunId(),
   });
-  const legacy = input.runLegacyMemoryCycle
+  const legacy = await (input.runLegacyMemoryCycle
     ? input.runLegacyMemoryCycle()
-    : defaultLegacyMemoryCycle(home, data);
+    : defaultLegacyMemoryCycle(data));
   const legacyOk = legacy.status === 0;
   const genericOk = generic.status === "completed" || generic.status === "deferred_rate_limited" || generic.status === "lock_held";
   return {

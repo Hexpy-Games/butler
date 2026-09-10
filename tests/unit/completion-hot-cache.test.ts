@@ -27,7 +27,7 @@ import {
   resetPauseState,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/sync-consumer.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
-import { ConversationAdmissionTurn } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
+import { classifyConversationOrigin, ConversationAdmissionTurn } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 import { readOperationalMetricEvents } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 
@@ -290,7 +290,38 @@ test("shared writer recovers stale locks, compacts old entries, and preserves th
   expect(existsSync(lock)).toBe(false);
 });
 
-test("canonical completion jobs bypass project debounce so adjacent turns are not dropped", async () => {
+test("source-backed hot cache admits whole entries by salience before legacy audit bytes", () => {
+  const { data } = fixture();
+  const generationRoot = join(data, "generation");
+  const path = join(generationRoot, "hot", "cache.md");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `SOURCE_FREE_AUDIT ${"z".repeat(900)}\n`, "utf8");
+  const write = (id: string, salience: "high" | "normal", summary: string) => writeSemanticHotCacheEntry({
+    butlerData: data, generationRoot,
+    scope: "global", projectId: null, sessionId: "session", sourceId: id,
+    body: summary, createdAt: "2026-09-09T00:00:00.000Z", maxBytes: 20 * 1024,
+    episodeId: `episode-${id}`, sourceRevision: `revision-${id}`,
+    entry: {
+      entry_id: id, episode_id: `episode-${id}`, window_ref: `window-${id}`,
+      node_refs: [], source_revision: `revision-${id}`, source_time: "2026-09-09T00:00:00.000Z",
+      valid_until: null, kind: "window_summary", summary, basis: ["user_statement"],
+      salience, scope: "global", project_id: null, session_id: "session", graph_revision: 1,
+      source_refs: [`source-${id}`],
+    },
+  });
+  write("normal-entry", "normal", `NORMAL_WHOLE_${"n".repeat(7_000)}_NORMAL_END`);
+  const receipt = write("high-entry", "high", `HIGH_WHOLE_${"h".repeat(7_000)}_HIGH_END`);
+  const body = readFileSync(path, "utf8");
+  expect(Buffer.byteLength(body, "utf8")).toBeLessThanOrEqual(20 * 1024);
+  expect(body).toContain("HIGH_WHOLE_");
+  expect(body).toContain("_HIGH_END");
+  expect(body).not.toContain("NORMAL_WHOLE_");
+  expect(body).not.toContain("SOURCE_FREE_AUDIT");
+  expect(readFileSync(`${path}.audit.md`, "utf8")).toContain("SOURCE_FREE_AUDIT");
+  expect(receipt.excluded_entry_ids).toContain("normal-entry");
+});
+
+test("canonical completion jobs drain in one bounded poll so adjacent turns are not dropped", async () => {
   const { root } = fixture();
   resetPauseState();
   const entries = ["job-a", "job-b"].map((jobId) => ({
@@ -311,21 +342,18 @@ test("canonical completion jobs bypass project debounce so adjacent turns are no
   const deps = {
     lockPath: join(root, "no-consolidation.lock"),
     peek: () => entries[index] ?? null,
-    dequeue: () => {
-      dequeued += 1;
-      return entries[index++] ?? null;
-    },
     process: () => {
       processed += 1;
       return { dequeue: true, failCount: 0 };
     },
-    ack: () => {
+    ack: (expectedJobId: string) => {
+      expect(expectedJobId).toBe(entries[index]?.job_id);
       dequeued += 1;
       return entries[index++] ?? null;
     },
   };
   expect((await pollIteration(deps)).action).toBe("processed");
-  expect((await pollIteration(deps)).action).toBe("processed");
+  expect((await pollIteration(deps)).action).toBe("idle");
   expect(processed).toBe(2);
   expect(dequeued).toBe(2);
 });
@@ -363,7 +391,13 @@ test("completion observation publication failure never downgrades an already com
     turnId: "turn-completion-publish-failure",
     timestamp: "2026-07-14T02:40:00.000Z",
     butlerData: data,
-    origin: { kind: "user_input", ref: "app:user" },
+    origin: {
+      ...classifyConversationOrigin({
+        ref: "app:user", publicIngress: true, internalControl: false,
+        evidenceAvailable: true, evidence: [],
+      }),
+      kind: "user_input", ref: "app:user",
+    },
   });
   turn.admitInbound();
   turn.admitFinalAssistant(

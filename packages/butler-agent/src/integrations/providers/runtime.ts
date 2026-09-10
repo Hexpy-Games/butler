@@ -30,10 +30,17 @@ import { resolveProviderVisualCapability } from "./registry.ts";
 
 export async function runPromptTextWithUsage(
   options: PromptCacheAwarePromptOptions,
+  lifecycle: {
+    onInvocationIntent?: () => Promise<void>;
+    onAdapterEntry?: () => void;
+  } = {},
 ): Promise<PromptTextResult> {
   throwIfAborted(options.signal);
   const model = resolveEffectiveModelRef(options.model);
   const adapter = resolveProviderAdapterDefinition(model);
+  await lifecycle.onInvocationIntent?.();
+  throwIfAborted(options.signal);
+  lifecycle.onAdapterEntry?.();
   return await adapter.runPrompt({ ...options, model });
 }
 export async function runPromptText(options: PromptCacheAwarePromptOptions): Promise<string> {

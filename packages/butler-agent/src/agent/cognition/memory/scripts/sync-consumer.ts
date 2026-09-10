@@ -7,8 +7,8 @@
 
 import {
   ack,
-  dequeue,
   peek,
+  queueEntryId,
   type LegacySyncRequest,
   type SyncRequest,
 } from "./queue.ts";
@@ -45,6 +45,8 @@ import {
   ingestConversationMemory,
   readActiveDescriptor,
 } from "../index.ts";
+import { runCanonicalMemoryCatchup, runServingGenerationCatchup, type CanonicalMemoryCatchupState } from "./phases/catchup.ts";
+import { applyFeedbackQualityOperation } from "../../feedback/buffer.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -340,7 +342,7 @@ export async function processEntry(
     completion && completion !== "invalid"
       ? completion.runtime_session_id
       : entry.schema_version === "butler.memory-sync-request.v3"
-        ? entry.source.session_id
+        ? ("session_id" in entry.source ? entry.source.session_id : entry.source.record_id)
         : entry.session_id;
   log(`Processing: ${logProject} (session: ${logSession})`);
   if (completion === "invalid") {
@@ -412,7 +414,49 @@ export async function processEntry(
     }
   }
   if (entry.schema_version === "butler.memory-sync-request.v3") {
-    throw new Error("memory_sync_request_v3_unresolved");
+    if (entry.source.kind === "explicit_record" && entry.source.record_kind === "feedback") {
+      try {
+        const operation = await applyFeedbackQualityOperation(butlerData, {
+          feedbackId: entry.source.record_id,
+          operationId: entry.source.operation_id,
+          sourceRevision: entry.source.revision,
+        });
+        return {
+          dequeue: operation.status === "applied" || operation.status === "stale",
+          failCount: readFailCounter(counterFile),
+          reason: operation.status === "stale" ? "memory_quality_operation_stale" : undefined,
+        };
+      } catch (error) {
+        return {
+          dequeue: false,
+          failCount: readFailCounter(counterFile),
+          reason: safeIngestionFailure(error),
+        };
+      }
+    }
+    try {
+      const descriptor = readActiveDescriptor(butlerData);
+      const projection = await (deps.ingest ?? ingestConversationMemory)({
+        context: {
+          butlerData,
+          target: { kind: "active", expected_generation: descriptor.generation_id },
+          signal: new AbortController().signal,
+        },
+        source: entry.source,
+        completionJobId: entry.job_id,
+      });
+      return {
+        dequeue: projection.source.state === "complete",
+        failCount: readFailCounter(counterFile),
+        generationId: descriptor.generation_id,
+      };
+    } catch (error) {
+      return {
+        dequeue: false,
+        failCount: readFailCounter(counterFile),
+        reason: safeIngestionFailure(error),
+      };
+    }
   }
   if (!isSafeProvenanceValue(entry.source)) {
     const reason = "unsafe_source_provenance";
@@ -700,6 +744,8 @@ function canonicalCompletionObservation(
   )
     return null;
   if (!entry.job_id) return "invalid";
+  if (entry.schema_version === "butler.memory-sync-request.v3" &&
+    entry.source.kind !== "conversation_turn") return null;
   const observation = readConversationCompletionObservation(
     butlerData,
     entry.job_id,
@@ -736,12 +782,12 @@ const PROCESS_DELAY_MS = 1500;
 export interface PollDeps {
   lockPath?: string;
   peek?: () => SyncRequest | null;
-  dequeue?: () => SyncRequest | null;
   process?: (entry: SyncRequest) => ProcessResult | Promise<ProcessResult>;
   ack?: (expectedJobId: string) => SyncRequest | null;
   advance?: typeof advanceNextMemoryProjection;
   butlerData?: string;
   now?: () => number;
+  catchup?: typeof runCanonicalMemoryCatchup;
 }
 
 export interface PollResult {
@@ -752,9 +798,13 @@ export interface PollResult {
 // Transition state is held at module scope so tests that invoke the poll
 // function in sequence observe the same logging contract as main().
 let pausedState = false;
+let lastCanonicalCatchupAt: number | null = null;
+let canonicalCatchupState: CanonicalMemoryCatchupState = { outcomeCursor: null, recoveredMessageCursor: null };
 
 export function resetPauseState(): void {
   pausedState = false;
+  lastCanonicalCatchupAt = null;
+  canonicalCatchupState = { outcomeCursor: null, recoveredMessageCursor: null };
 }
 
 /**
@@ -762,21 +812,38 @@ export function resetPauseState(): void {
  * timers. Returns a structured result describing what happened.
  *
  * Contract: when the consolidation lock is present, the consumer must not
- * touch peek()/dequeue(). Debounce map state is preserved across pauses.
+ * touch peek()/ack(). Debounce map state is preserved across pauses.
  */
 export async function pollIteration(deps: PollDeps = {}): Promise<PollResult> {
   const dataRoot = deps.butlerData ?? BUTLER_DATA;
   const lockPath = deps.lockPath ?? consolidationLockPath(dataRoot);
   const p = deps.peek ?? (() => peek(dataRoot));
-  const d = deps.dequeue ?? (() => dequeue(dataRoot));
+  const acknowledge = deps.ack ?? ((jobId: string) => ack(jobId, dataRoot));
   const proc =
     deps.process ?? ((entry) => processEntry(entry, { butlerData: dataRoot }));
+  const catchupIfDue = async (): Promise<{ generationId?: string; ingested: number }> => {
+    const currentNow = (deps.now ?? Date.now)();
+    if (lastCanonicalCatchupAt !== null && currentNow - lastCanonicalCatchupAt < 60_000) return { ingested: 0 };
+    lastCanonicalCatchupAt = currentNow;
+    try {
+      const descriptor = readActiveDescriptor(dataRoot);
+      const injected = Boolean(deps.catchup);
+      const catchup = deps.catchup ? await deps.catchup({ butlerData: dataRoot, state: canonicalCatchupState, limit: 256,
+        ingest: async (source, observationId) => { await ingestConversationMemory({ context: { butlerData: dataRoot, target: { kind: "active", expected_generation: descriptor.generation_id }, signal: new AbortController().signal }, source, completionJobId: observationId }); } })
+        : await runServingGenerationCatchup({ butlerData: dataRoot, limit: 256 });
+      canonicalCatchupState = catchup.state;
+      return { generationId: injected ? descriptor.generation_id : (catchup as Awaited<ReturnType<typeof runServingGenerationCatchup>>).generationId, ingested: catchup.ingested };
+    } catch (error) {
+      if (error instanceof Error && error.message === "memory_generation_unavailable") return { ingested: 0 };
+      throw error;
+    }
+  };
 
   // Use inspectConsolidationLock (which goes through node:module's createRequire)
   // rather than the top-level existsSync so bun:test mock.module("fs") leakage
   // from unrelated test files cannot falsely pause us.
-  const lockHeld =
-    existsSync(lockPath) || inspectConsolidationLock(lockPath) !== null;
+  const gate = inspectConsolidationLock(lockPath);
+  const lockHeld = ["held", "busy", "legacy_blocked", "unavailable"].includes(gate.state);
   if (lockHeld) {
     let transitioned: "paused" | undefined;
     if (!pausedState) {
@@ -797,7 +864,8 @@ export async function pollIteration(deps: PollDeps = {}): Promise<PollResult> {
   const entry = p();
   if (!entry) {
     try {
-      const descriptor = readActiveDescriptor(dataRoot);
+      const catchup = await catchupIfDue();
+      const descriptor = catchup.generationId ? { generation_id: catchup.generationId } : readActiveDescriptor(dataRoot);
       const progress = await (deps.advance ?? advanceNextMemoryProjection)({
         context: {
           butlerData: dataRoot,
@@ -808,7 +876,7 @@ export async function pollIteration(deps: PollDeps = {}): Promise<PollResult> {
           signal: new AbortController().signal,
         },
       });
-      return { action: progress ? "processed" : "idle", transitioned };
+      return { action: progress || catchup.ingested > 0 ? "processed" : "idle", transitioned };
     } catch (error) {
       if (
         error instanceof Error &&
@@ -820,54 +888,55 @@ export async function pollIteration(deps: PollDeps = {}): Promise<PollResult> {
     }
   }
 
-  const topicKey =
+  if (
+    entry.schema_version === "butler.memory-sync-request.v2" ||
     entry.schema_version === "butler.memory-sync-request.v3"
-      ? "_"
-      : (entry.topic ?? "_");
-  const debounceKey =
-    entry.schema_version === "butler.memory-sync-request.v3"
-      ? entry.job_id
-      : `${entry.project}:${topicKey}`;
+  ) {
+    let current: SyncRequest | null = entry;
+    let registered = 0;
+    let generationId: string | undefined;
+    while (current && registered < 64) {
+      if (
+        current.schema_version !== "butler.memory-sync-request.v2" &&
+        current.schema_version !== "butler.memory-sync-request.v3"
+      ) break;
+      const result = await proc(current);
+      if (!result.dequeue || !current.job_id) break;
+      const removed = acknowledge(current.job_id);
+      if (!removed) break;
+      registered += 1;
+      generationId = result.generationId ?? generationId;
+      current = p();
+    }
+    const catchup = await catchupIfDue();
+    generationId = generationId ?? catchup.generationId;
+    if (generationId) {
+      await (deps.advance ?? advanceNextMemoryProjection)({
+        context: {
+          butlerData: dataRoot,
+          target: { kind: "active", expected_generation: generationId },
+          signal: new AbortController().signal,
+        },
+      });
+    }
+    return { action: registered > 0 || catchup.ingested > 0 ? "processed" : "idle", transitioned };
+  }
+
+  const topicKey = entry.topic ?? "_";
+  const debounceKey = `${entry.project}:${topicKey}`;
   const prevLast = lastSync.get(debounceKey);
 
-  if (
-    entry.schema_version !== "butler.memory-sync-request.v2" &&
-    entry.schema_version !== "butler.memory-sync-request.v3" &&
-    !shouldSync(entry.project, entry.topic)
-  ) {
+  if (!shouldSync(entry.project, entry.topic)) {
     log(`Debounced: ${debounceKey} (synced <5min ago)`);
-    d();
+    acknowledge(queueEntryId(entry));
     return { action: "dequeued_debounced", transitioned };
   }
 
   const result = await proc(entry);
   if (result.dequeue) {
-    if (
-      (entry.schema_version === "butler.memory-sync-request.v2" ||
-        entry.schema_version === "butler.memory-sync-request.v3") &&
-      entry.job_id
-    ) {
-      const removed = (deps.ack ?? ((jobId: string) => ack(jobId, dataRoot)))(
-        entry.job_id,
-      );
-      if (!removed) return { action: "idle", transitioned };
-      if (result.generationId) {
-        await (deps.advance ?? advanceNextMemoryProjection)({
-          context: {
-            butlerData: dataRoot,
-            target: {
-              kind: "active",
-              expected_generation: result.generationId,
-            },
-            signal: new AbortController().signal,
-          },
-        });
-      }
-    } else d();
+    acknowledge(queueEntryId(entry));
   } else {
-    if (entry.schema_version !== "butler.memory-sync-request.v3") {
-      rollbackDebounce(entry.project, entry.topic, prevLast);
-    }
+    rollbackDebounce(entry.project, entry.topic, prevLast);
   }
   return { action: "processed", transitioned };
 }

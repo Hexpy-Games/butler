@@ -7,7 +7,8 @@ import {
 } from "./contracts.ts";
 import { openProjectionDb, refreshSemanticState, sourceRows } from "./store.ts";
 import { graphemeCount, unicodeCaseFold, unicodeNfc } from "./unicode.ts";
-import { projectionHash } from "./source.ts";
+import { assertCanonicalProjectionSourcesCurrent, projectionHash } from "./source.ts";
+import { resolveIdentityForProjectionInput } from "./identity.ts";
 
 export type NormalizedPlan = {
   refs: Record<string, string>;
@@ -20,14 +21,23 @@ export type NormalizedPlan = {
       quote: string;
     }>
   >;
+  candidate_bindings: Record<string, {
+    node_ref: string;
+    type: string;
+    scope: "user" | "project";
+    project_id: string | null;
+    evidence: Array<{ source_ref: string; episode_ref: string; revision: string; content_hash: string }>;
+  }>;
 };
 export function normalizeAndValidatePlan(
   db: ReturnType<typeof openProjectionDb>,
   input: ExtractInput,
   output: ExtractOutput,
 ): NormalizedPlan {
-  if (output.disposition === "unsupported") return { refs: {}, evidence: {} };
+  if (output.disposition === "unsupported") return { refs: {}, evidence: {}, candidate_bindings: {} };
   const refs: Record<string, string> = {};
+  const candidate_bindings: NormalizedPlan["candidate_bindings"] = {};
+  const bindingCandidates = new Map<string, ExtractInput["candidates"][number]>();
   const candidates = new Map(input.candidates.map((c) => [c.ref, c]));
   for (const item of output.nodes) {
     if (graphemeCount(item.label) > 256)
@@ -43,6 +53,7 @@ export function normalizeAndValidatePlan(
         throw new Error("memory_extract_invalid_identity_reuse");
       validateReuseEvidence(input, candidate, item.resolution.evidence);
       refs[item.local_ref] = candidate.ref;
+      bindingCandidates.set(item.local_ref, candidate);
     } else {
       if (
         item.resolution.identity_scope === "project" &&
@@ -66,6 +77,7 @@ export function normalizeAndValidatePlan(
       }
       validateReuseEvidence(input, candidate, claim.resolution.evidence);
       refs[claim.local_ref] = candidate.ref;
+      bindingCandidates.set(claim.local_ref, candidate);
     } else {
       // Claim scope is deliberately ignored here. Runtime derives it from the canonical source binding.
       refs[claim.local_ref] = randomUUID();
@@ -116,16 +128,40 @@ export function normalizeAndValidatePlan(
       throw new Error("memory_extract_invalid_ref");
     }
     validateQuotes(input, correction.evidence, true);
-  }
-  if (output.corrections.length > 0) {
-    throw new Error("memory_extract_corrections_unsupported");
+    bindingCandidates.set(`correction:${correction.previous_claim_ref}`, previousClaim);
+    const replacement = claims.get(correction.replacement_claim_ref)!;
+    const previousSubject = db.query<{ target_node_id: string }, [string]>("SELECT target_node_id FROM edges WHERE source_node_id=? AND rel_type='has_subject' ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.target_node_id ?? null;
+    const replacementSubject = replacement.subject_ref ? refs[replacement.subject_ref] ?? null : null;
+    const previousRelation = db.query<{ rel_type: string }, [string]>("SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts') ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.rel_type ?? null;
+    const replacementRelation = output.relations.find((relation) => relation.claim_ref === replacement.local_ref)?.relation ?? null;
+    const previousProperties = db.query<{ properties: string; type: string }, [string]>("SELECT properties,type FROM entities WHERE id=?").get(previousClaim.ref);
+    const previousCondition = previousProperties ? (JSON.parse(previousProperties.properties) as { condition?: string | null }).condition ?? null : null;
+    if (!previousProperties || previousProperties.type !== replacement.type || previousSubject !== replacementSubject || previousRelation !== replacementRelation || previousCondition !== replacement.condition)
+      throw new Error("memory_extract_invalid_correction");
   }
   if (output.summary) {
     if (graphemeCount(output.summary.text) > 480)
       throw new Error("memory_extract_invalid_output");
     validateQuotes(input, output.summary.evidence, true);
   }
-  return { refs, evidence };
+  for (const [key, candidate] of bindingCandidates) candidate_bindings[key] = candidateBinding(db, candidate);
+  return { refs, evidence, candidate_bindings };
+}
+
+function candidateBinding(
+  db: ReturnType<typeof openProjectionDb>,
+  candidate: ExtractInput["candidates"][number],
+): NormalizedPlan["candidate_bindings"][string] {
+  const rows = sourceRows(db, candidate.evidence.map((item) => item.ref));
+  if (rows.length !== candidate.evidence.length) throw new Error("memory_extract_candidate_changed");
+  return {
+    node_ref: candidate.ref,
+    type: candidate.type,
+    scope: candidate.scope,
+    project_id: candidate.project_id,
+    evidence: rows.map((row) => ({ source_ref: row.source_id, episode_ref: row.episode_id, revision: row.revision, content_hash: row.content_hash }))
+      .sort((a, b) => a.source_ref.localeCompare(b.source_ref)),
+  };
 }
 
 function claimCandidateAllowed(
@@ -155,16 +191,24 @@ export function applyPlan(
   input: ExtractInput,
   output: ExtractOutput,
   plan: NormalizedPlan,
+  candidateResolutions: Record<string, string>,
 ): void {
   db.transaction(() => {
     if (output.disposition === "unsupported") {
       db.query(
-        "UPDATE memory_projection_windows SET state='unsupported',error_code='semantic_unsupported' WHERE window_ref=?",
+        "UPDATE memory_projection_windows SET state='unsupported',error_code='semantic_unsupported',owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?",
       ).run(windowRef);
       refreshSemanticState(db, jobId);
       return;
     }
     const now = new Date().toISOString();
+    const refs = { ...plan.refs };
+    for (const node of output.nodes) {
+      if (node.resolution.kind !== "reuse") continue;
+      const resolved = candidateResolutions[refs[node.local_ref]!];
+      if (!resolved) throw new Error("memory_extract_candidate_changed");
+      refs[node.local_ref] = resolved;
+    }
     const sourceByRef = new Map(
       sourceRows(
         db,
@@ -177,7 +221,7 @@ export function applyPlan(
       label: string,
       resolution: { kind: string; identity_scope?: string },
     ) => {
-      const id = plan.refs[localRef];
+      const id = refs[localRef];
       if (resolution.kind === "create") {
         if (!resolution.identity_scope)
           throw new Error("memory_extract_invalid_scope");
@@ -214,7 +258,7 @@ export function applyPlan(
           db.query(
             "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
           ).run(
-            plan.refs[node.local_ref],
+            refs[node.local_ref],
             alias.text,
             unicodeNfc(alias.text),
             unicodeCaseFold(alias.text),
@@ -239,24 +283,26 @@ export function applyPlan(
         claim.statement,
         runtimeResolution,
       );
-      db.query("UPDATE entities SET properties=? WHERE id=?").run(
-        JSON.stringify({
-          statement: claim.statement,
-          speech_act: claim.speech_act,
-          basis: claim.basis,
-          polarity: claim.polarity,
-          condition: claim.condition,
-          valid_from: claim.valid_from,
-          valid_to: claim.valid_to,
-          salience: claim.salience,
-        }),
-        plan.refs[claim.local_ref],
-      );
+      if (claim.resolution.kind === "create") {
+        db.query("UPDATE entities SET properties=? WHERE id=?").run(
+          JSON.stringify({
+            statement: claim.statement,
+            speech_act: claim.speech_act,
+            basis: claim.basis,
+            polarity: claim.polarity,
+            condition: claim.condition,
+            valid_from: claim.valid_from,
+            valid_to: claim.valid_to,
+            salience: claim.salience,
+          }),
+          refs[claim.local_ref],
+        );
+      }
       for (const ev of plan.evidence[claim.local_ref] ?? []) {
         db.query(
           "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
         ).run(
-          plan.refs[claim.local_ref],
+          refs[claim.local_ref],
           claim.statement,
           unicodeNfc(claim.statement),
           unicodeCaseFold(claim.statement),
@@ -296,13 +342,44 @@ export function applyPlan(
         claim.basis,
       );
     }
-    if (output.summary)
-      db.query(
-        "UPDATE memory_chunks SET summary=?,summary_status='complete' WHERE memory_chunk_id=?",
-      ).run(output.summary.text, input.episode_ref);
+    for (const correction of output.corrections) {
+      const replacement = output.claims.find((claim) => claim.local_ref === correction.replacement_claim_ref);
+      const replacementId = refs[correction.replacement_claim_ref];
+      if (!replacement || !replacementId) throw new Error("memory_extract_invalid_correction");
+      const edgeId = projectionHash(["memory-edge", replacementId, correction.previous_claim_ref, correction.relation, replacementId]);
+      db.query("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers,valid_from) VALUES(?,?,?,?,?,?,?)")
+        .run(edgeId, replacementId, correction.previous_claim_ref, correction.relation, replacementId,
+          JSON.stringify({ effective_at: correction.effective_at }), correction.effective_at);
+      for (const ev of validateQuotes(input, correction.evidence, true))
+        db.query("INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)")
+          .run(edgeId, ev.sourceId, replacement.basis, MEMORY_EXTRACTION_VERSION);
+    }
+    if (output.summary) {
+      const summaries = db.query<{ window_ref: string; state: string; output_json: string | null }, [string]>(
+        "SELECT window_ref,state,output_json FROM memory_projection_windows WHERE job_id=? ORDER BY ordinal",
+      ).all(jobId).flatMap((row) => {
+        if (row.window_ref !== windowRef && row.state !== "complete") return [];
+        try {
+          const text = (JSON.parse(row.output_json ?? "null") as ExtractOutput | null)?.summary?.text;
+          return text ? [text] : [];
+        } catch { return []; }
+      });
+      const summary = summaries.join("\n\n");
+      const previous = db.query<{ summary: string }, [string]>("SELECT summary FROM memory_chunks WHERE memory_chunk_id=?").get(input.episode_ref)?.summary ?? "";
+      db.query("UPDATE memory_chunks SET summary=?,summary_status='complete' WHERE memory_chunk_id=?").run(summary, input.episode_ref);
+      if (summary !== previous) db.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_receipt_json=NULL,hot_cache_next_attempt_at=NULL WHERE job_id=?")
+        .run(JSON.stringify({ state: "pending", blocked_by: null }), jobId);
+    }
     db.query(
-      "UPDATE memory_projection_windows SET state='complete',error_code=NULL WHERE window_ref=?",
+      "UPDATE memory_projection_windows SET state='complete',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?",
     ).run(windowRef);
+    const attempt = db.query<{ attempt_count: number; recovery_revision: string | null; input_sha256: string | null; output_json: string | null; provider_evidence_json: string | null }, [string]>(
+      "SELECT attempt_count,recovery_revision,input_sha256,output_json,provider_evidence_json FROM memory_projection_windows WHERE window_ref=?",
+    ).get(windowRef);
+    if (attempt) db.query(`INSERT OR REPLACE INTO memory_projection_attempts
+      (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(`${windowRef}:attempt:${attempt.attempt_count}:complete`, windowRef, jobId,
+        attempt.attempt_count, "complete", null, attempt.input_sha256, null, null, new Date().toISOString(), "apply", 0, 1, attempt.recovery_revision);
     db.query(
       "UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'",
     ).run();
@@ -315,9 +392,9 @@ export function applyPlan(
       evidence: QuoteRef[],
       basis: string,
     ) {
-      const fromId = plan.refs[from],
-        toId = plan.refs[to],
-        claimId = plan.refs[claim];
+      const fromId = refs[from],
+        toId = refs[to],
+        claimId = refs[claim];
       if (!fromId || !toId || !claimId)
         throw new Error("memory_extract_invalid_ref");
       const edgeId = projectionHash([
@@ -419,8 +496,11 @@ function assertBasis(
     const unit = units.get(q.unit_ref);
     if (!unit) continue;
     if (
-      (basis === "user_statement" && unit.role !== "user") ||
-      (basis === "assistant_statement" && unit.role !== "assistant")
+      (basis === "user_statement" &&
+        unit.role !== "user" && unit.role !== "explicit") ||
+      (basis === "assistant_statement" && unit.role !== "assistant") ||
+      (basis === "reviewed_task" && unit.role !== "task") ||
+      (unit.role === "explicit" && basis !== "user_statement")
     )
       throw new Error("memory_extract_invalid_basis");
   }
@@ -462,8 +542,50 @@ export function assertPlanSourceCurrent(
   }
 }
 
+export function assertPlanCandidatesCurrent(
+  db: ReturnType<typeof openProjectionDb>,
+  butlerData: string,
+  input: ExtractInput,
+  plan: NormalizedPlan,
+): Record<string, string> {
+  const resolutions: Record<string, string> = {};
+  for (const binding of Object.values(plan.candidate_bindings ?? {})) {
+    const entity = db.query<{ type: string; identity_scope: string; project_id: string | null; canonical_node_id: string | null }, [string]>(
+      "SELECT type,identity_scope,project_id,canonical_node_id FROM entities WHERE id=?",
+    ).get(binding.node_ref);
+    if (!entity || entity.type !== binding.type || entity.identity_scope !== binding.scope || entity.project_id !== binding.project_id)
+      throw new Error("memory_extract_candidate_changed");
+    const resolved = resolveIdentityForProjectionInput(db, butlerData, input, binding.node_ref);
+    if (resolved.partial) throw new Error("memory_extract_candidate_changed");
+    const current = db.query<{ type: string; identity_scope: string; project_id: string | null }, [string]>(
+      "SELECT type,identity_scope,project_id FROM entities WHERE id=?",
+    ).get(resolved.nodeId);
+    if (!current || current.type !== binding.type || current.identity_scope !== binding.scope || current.project_id !== binding.project_id)
+      throw new Error("memory_extract_candidate_changed");
+    const rows = sourceRows(db, binding.evidence.map((item) => item.source_ref));
+    if (rows.length !== binding.evidence.length) throw new Error("memory_extract_candidate_changed");
+    for (const evidence of binding.evidence) {
+      const row = rows.find((item) => item.source_id === evidence.source_ref);
+      if (!row || row.episode_id !== evidence.episode_ref || row.revision !== evidence.revision || row.content_hash !== evidence.content_hash)
+        throw new Error("memory_extract_candidate_changed");
+      const eligible = db.query<{ found: number }, [string, string, string | null, string, string | null]>(`
+        SELECT 1 found FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+        WHERE s.source_id=? AND c.status='active'
+          AND ((?='project' AND c.project_id IS ?) OR (?='user' AND (c.project_id IS NULL OR c.project_id IS ?))) LIMIT 1
+      `).get(evidence.source_ref, binding.scope, binding.project_id, binding.scope, input.bound_project_id);
+      if (!eligible) throw new Error("memory_extract_candidate_changed");
+    }
+    try { assertCanonicalProjectionSourcesCurrent(butlerData, db, rows); }
+    catch { throw new Error("memory_extract_candidate_changed"); }
+    resolutions[binding.node_ref] = resolved.nodeId;
+  }
+  return resolutions;
+}
+
 export function safeProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
+  if (message.includes("memory_write_busy")) return "memory_write_busy";
+  if (["memory_extract_input_exceeds_budget", "memory_extract_source_window_exceeds_budget", "memory_extract_output_exceeds_budget"].includes(message)) return message;
   if (message.startsWith("memory_extract_invalid_")) return message;
   if (
     message === "memory_source_changed" ||
