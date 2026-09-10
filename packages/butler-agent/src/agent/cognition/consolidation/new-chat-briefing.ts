@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { cognitionConsolidationRoot } from "../paths.ts";
 import {
@@ -21,16 +21,15 @@ import {
   type PromptUsageReport,
 } from "../../../integrations/providers/provider.ts";
 import {
-  listStableProfileEntries,
   readRuntimeProfileProjection,
   type RuntimeProfileProjection,
-  type StableProfileEntry,
 } from "../../../personalization/profiling.ts";
 import {
   emptyModelUsageSummary,
   usageFromPromptUsageReports,
   type ConsolidationModelUsageSummary,
 } from "./usage.ts";
+import { acquireConsolidationLockAsync, consolidationLockPath, releaseConsolidationLock } from "../memory/scripts/lib/lock.ts";
 
 export type NewChatBriefingLocale = "ko" | "en";
 export type NewChatBriefingScope = "general" | "project";
@@ -170,7 +169,6 @@ interface ParsedModelOutput {
 const ARTIFACT_SCHEMA = "butler.cognition.new-chat-briefing.v1" as const;
 const TITLE_BUCKETS = ["morning", "afternoon", "evening", "night"] as const;
 const MAX_PERSONA_CHARS = 2_400;
-const MAX_PROFILE_ITEMS = 18;
 const MAX_PROJECTS_PER_RUN = 12;
 const ALLOWED_SOURCE_KINDS = new Set<NewChatBriefingSuggestionSourceKind>([
   "unfinished_topic",
@@ -245,7 +243,7 @@ export async function generateNewChatBriefings(
   const locale = settings.locale;
   const persona = readActivePersona(input.butlerData);
   const projection = safeReadRuntimeProjection(input.butlerData);
-  const stableEntries = safeListStableEntries(input.butlerData);
+  const projects = listActiveProjectSignals(input.butlerData).slice(0, MAX_PROJECTS_PER_RUN);
   const modelReports: Array<{ model: string; usage?: PromptUsageReport | null }> = [];
   const runner = input.modelRunner ?? defaultNewChatBriefingModelRunner;
   const generatedAt = now.toISOString();
@@ -268,7 +266,6 @@ export async function generateNewChatBriefings(
       runId: input.runId,
       persona,
       projection,
-      stableEntries,
       project: scopeInput.project,
     });
     const raw = normalizeRunnerOutput(await runner({
@@ -303,14 +300,13 @@ export async function generateNewChatBriefings(
   try {
     const artifact = await runOne({ scope: "general" });
     if (artifact) {
-      generalArtifactPath = writeNewChatBriefingArtifact(input.butlerData, date, artifact);
+      generalArtifactPath = await writeNewChatBriefingArtifact(input.butlerData, date, artifact, { settings, persona, projection, project: null }, input.signal);
       generatedCount += 1;
     }
   } catch {
     failedCount += 1;
   }
 
-  const projects = listActiveProjectSignals(input.butlerData).slice(0, MAX_PROJECTS_PER_RUN);
   for (const project of projects) {
     if (project.recentSessionTitles.length === 0 && project.ledgerEventSummary.length === 0) {
       skippedProjectCount += 1;
@@ -319,7 +315,7 @@ export async function generateNewChatBriefings(
     try {
       const artifact = await runOne({ scope: "project", project });
       if (artifact) {
-        projectArtifactPaths.push(writeNewChatBriefingArtifact(input.butlerData, date, artifact));
+        projectArtifactPaths.push(await writeNewChatBriefingArtifact(input.butlerData, date, artifact, { settings, persona, projection, project }, input.signal));
         generatedCount += 1;
       }
     } catch {
@@ -344,22 +340,48 @@ export async function generateNewChatBriefings(
   };
 }
 
-function writeNewChatBriefingArtifact(
+async function writeNewChatBriefingArtifact(
   butlerData: string,
   date: string,
   artifact: NewChatBriefingArtifact,
-): string {
+  prepared: {
+    settings: BriefingSettings;
+    persona: { id: string | null; text: string | null };
+    projection: RuntimeProfileProjection | null;
+    project: AppProjectSignal | null;
+  },
+  signal?: AbortSignal,
+): Promise<string> {
   const path = newChatBriefingArtifactPath({
     butlerData,
     date,
     scope: artifact.scope,
     projectId: artifact.project_id,
   });
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp-${randomUUID()}`;
-  writeFileSync(tmp, `${JSON.stringify(artifact, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  renameSync(tmp, path);
-  return path;
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = await acquireConsolidationLockAsync(lockPath, { purpose: "consolidation", waitClass: "background", signal });
+  if (!lease) throw new Error("memory_write_busy");
+  let commit = false;
+  try {
+    const current = readRuntimeProfileProjection(butlerData);
+    const currentSettings = readBriefingSettings(butlerData);
+    const currentPersona = readActivePersona(butlerData);
+    const currentProject = prepared.project
+      ? listActiveProjectSignals(butlerData).find((project) => project.id === prepared.project!.id) ?? null
+      : null;
+    if (JSON.stringify({ settings: currentSettings, persona: currentPersona, projection: current, project: currentProject }) !==
+      JSON.stringify(prepared)) throw new Error("memory_source_changed");
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.tmp-${randomUUID()}`;
+    writeFileSync(tmp, `${JSON.stringify(artifact, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    const file = openSync(tmp, "r");
+    try { fsyncSync(file); } finally { closeSync(file); }
+    renameSync(tmp, path);
+    const directory = openSync(dirname(path), "r");
+    try { fsyncSync(directory); } finally { closeSync(directory); }
+    commit = true;
+    return path;
+  } finally { releaseConsolidationLock(lockPath, lease, commit); }
 }
 
 function artifactFromModelOutput(input: {
@@ -443,23 +465,9 @@ function buildBriefingPrompt(input: {
   runId: string;
   persona: { id: string | null; text: string | null };
   projection: RuntimeProfileProjection | null;
-  stableEntries: StableProfileEntry[];
   project?: AppProjectSignal;
 }): string {
   const isProjectBriefing = Boolean(input.project);
-  const profileHints = isProjectBriefing
-    ? []
-    : input.stableEntries
-        .slice()
-        .sort((left, right) => Date.parse(right.updated_at) - Date.parse(left.updated_at))
-        .slice(0, MAX_PROFILE_ITEMS)
-        .map((entry) => ({
-          category: entry.category,
-          facet: entry.facet,
-          summary: entry.summary,
-          should: entry.butler_should.slice(0, 3),
-          should_not: entry.butler_should_not.slice(0, 3),
-        }));
   const payload = {
     task: input.project ? "project_new_chat_briefing" : "general_new_chat_briefing",
     locale: input.locale,
@@ -485,7 +493,7 @@ function buildBriefingPrompt(input: {
           likely_failure_modes: input.projection.likely_failure_modes.slice(0, 6),
         }
       : null,
-    profile_summaries: profileHints,
+    profile_summaries: [],
     project: input.project
       ? {
           id: input.project.id,
@@ -761,14 +769,6 @@ function safeReadRuntimeProjection(butlerData: string): RuntimeProfileProjection
     return readRuntimeProfileProjection(butlerData);
   } catch {
     return null;
-  }
-}
-
-function safeListStableEntries(butlerData: string): StableProfileEntry[] {
-  try {
-    return listStableProfileEntries(butlerData);
-  } catch {
-    return [];
   }
 }
 

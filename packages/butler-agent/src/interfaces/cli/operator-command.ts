@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "child_process";
 import {
   closeSync,
@@ -33,8 +34,11 @@ import {
 import {
   addFeedbackEntry,
   clearResolvedFeedbackEntries,
+  feedbackOwnerRevision,
   listFeedbackEntries,
+  listFeedbackQualityOperations,
   readFeedbackEntry,
+  recordFeedbackQualityExclusion,
   resolveFeedbackEntry,
   type FeedbackEntry,
   type FeedbackResolveStatus,
@@ -58,6 +62,13 @@ import {
   repairMemoryMetadataIntegrity,
 } from "../../agent/cognition/memory/metadata.ts";
 import { readMemoryHealth } from "../../agent/cognition/memory/quality.ts";
+import {
+  readActiveDescriptor,
+  resolveMemoryGeneration,
+} from "../../agent/cognition/memory/projection/generation.ts";
+import { resolveMemorySource } from "../../agent/cognition/memory/projection/ingestion.ts";
+import { openProjectionDb } from "../../agent/cognition/memory/projection/store.ts";
+import { appendToQueue } from "../../agent/cognition/memory/scripts/queue.ts";
 import { recallMemory } from "../../agent/cognition/memory/recall/engine.ts";
 import {
   applyContinuityRecovery,
@@ -1482,8 +1493,78 @@ function cognitionFeedback(parsed: ParsedCommonOptions, args: string[], commandB
     if (!isFeedbackResolveStatus(status)) {
       fail(parsed, "invalid_arguments", "feedback resolve --status must be applied, discarded, superseded, or needs_clarification");
     }
+    const intent = optionValue(args, "--intent");
+    let qualityOperation;
+    if (intent) {
+      if (intent !== "exclude" || optionValue(args, "--actor") !== "operator")
+        fail(parsed, "invalid_arguments", "feedback quality intent requires --intent exclude --actor operator");
+      const operationId = optionValue(args, "--operation-id");
+      const sourceRef = optionValue(args, "--source-ref");
+      const requestScope = optionValue(args, "--scope");
+      if (!operationId || !sourceRef || !requestScope)
+        fail(parsed, "invalid_arguments", "feedback exclude requires --operation-id, --source-ref, and --scope");
+      if (requestScope !== "all_user_sessions" ||
+        !sourceRef.startsWith("memory-source:v2:")) {
+        fail(parsed, "invalid_arguments", "feedback exclude requires an authorized all_user_sessions memory-source:v2 locator");
+      }
+      const priorOperation = listFeedbackQualityOperations(parsed.options.data)
+        .find((item) => item.operation_id === operationId);
+      const feedback = readFeedbackEntry(parsed.options.data, feedbackId);
+      if (!feedback && !priorOperation) {
+        fail(parsed, "not_found", `feedback not found: ${feedbackId}`, 1);
+      }
+      const descriptor = readActiveDescriptor(parsed.options.data);
+      const context = {
+        butlerData: parsed.options.data,
+        target: { kind: "active" as const, expected_generation: descriptor.generation_id },
+        signal: new AbortController().signal,
+      };
+      const source = resolveMemorySource({
+        context,
+        sourceRef,
+        authorize: (candidate) => candidate.source_kind === "task_report" ||
+          candidate.source_kind === "explicit_record" ||
+          candidate.origin_kind === "user_input" ||
+          candidate.origin_kind === "assistant_public",
+      });
+      const db = openProjectionDb(resolveMemoryGeneration(context).graphPath, true);
+      const target = db.query<{ episode_id: string; revision: string }, [string]>(
+        "SELECT episode_id,revision FROM memory_chunk_sources WHERE source_id=?",
+      ).get(source.source_ref);
+      db.close();
+      if (!target) fail(parsed, "not_found", "feedback source target is unavailable", 1);
+      qualityOperation = recordFeedbackQualityExclusion(parsed.options.data, {
+        feedback_id: feedbackId,
+        operation_id: operationId,
+        intent: "exclude",
+        actor: "operator",
+        source_ref: source.source_ref,
+        source_revision: target.revision,
+        source_hash: source.source_hash,
+        generation_id: descriptor.generation_id,
+        episode_id: target.episode_id,
+        target_revision: target.revision,
+        feedback_owner_revision: priorOperation?.feedback_owner_revision ??
+          feedbackOwnerRevision(feedback!),
+        scope: requestScope,
+      });
+      if (!qualityOperation.replayed) {
+        appendToQueue({
+          schema_version: "butler.memory-sync-request.v3",
+          job_id: createHash("sha256").update(`feedback-quality:${operationId}`).digest("hex"),
+          source: {
+            kind: "explicit_record",
+            record_kind: "feedback",
+            record_id: feedbackId,
+            revision: qualityOperation.source_revision,
+            operation_id: operationId,
+          },
+          created_at: new Date().toISOString(),
+        }, parsed.options.data);
+      }
+    }
     const entry = resolveFeedbackEntry(parsed.options.data, feedbackId, status);
-    print(parsed, `${commandBase} resolve`, { entry }, `Feedback ${entry.status}: ${entry.feedback_id}`);
+    print(parsed, `${commandBase} resolve`, { entry, quality_operation: qualityOperation }, `Feedback ${entry.status}: ${entry.feedback_id}`);
     return;
   }
   if (subcommand === "clear" && hasFlag(args, "--applied")) {

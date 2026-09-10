@@ -459,14 +459,58 @@ test("App Turn delegates one iterative mutation Work to one Steward and synthesi
       expect(await Bun.file(join(child!.workspacePath, "fixtures", "verification-target.txt")).text()).toBe("verified\n");
       expect(await Bun.file(join(root, "fixtures", "discovery-target.txt")).text()).toBe("discover me\n");
       expect(await Bun.file(join(root, "fixtures", "verification-target.txt")).text()).toBe("verify me\n");
-      const newest = btccDb.query<{ content: string; session_id: string }, [string]>(
-        "SELECT content, session_id FROM btcc_messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC LIMIT 1",
+      const newest = btccDb.query<{
+        content: string;
+        session_id: string;
+        turn_id: string;
+      }, [string]>(
+        "SELECT content, session_id, turn_id FROM btcc_messages WHERE session_id = ? ORDER BY created_at DESC, message_id DESC LIMIT 1",
       ).get(parentSessionId);
       expect(newest?.content).toBe(CONTEXT_PRESERVING_SYNTHESIS);
       expect(newest?.content).toContain("household-noise requirements must remain");
       expect(newest?.content).toContain("construction-noise requirements must remain");
       expect(newest?.content).toContain("newly requested bounded fixture correction");
       expect(newest?.session_id).toBe(parentSessionId);
+      const canonicalDb = new Database(
+        join(root, "runtime", "conversation-store.sqlite"),
+        { readonly: true },
+      );
+      try {
+        const canonicalRows = canonicalDb.query<{
+          turn_id: string;
+          role: string;
+          origin_kind: string;
+        }, []>(`
+          SELECT turn_id, role, origin_kind
+          FROM conversation_messages
+          WHERE role IN ('user', 'assistant')
+          ORDER BY rowid ASC
+        `).all();
+        const originalParentRows = canonicalRows.filter(
+          (row) => row.turn_id === relation?.parent_turn_id,
+        );
+        expect(originalParentRows.find((row) => row.role === "user")?.origin_kind)
+          .toBe("user_input");
+        expect(originalParentRows.find((row) => row.role === "assistant")?.origin_kind)
+          .toBe("assistant_public");
+        const childRows = canonicalRows.filter(
+          (row) => row.turn_id === result?.child_turn_id,
+        );
+        expect(childRows.length).toBeGreaterThan(0);
+        expect(childRows.every((row) => row.origin_kind === "internal_control")).toBe(true);
+        const synthesisAssistant = canonicalRows.find((row) =>
+          row.turn_id === newest?.turn_id && row.role === "assistant"
+        );
+        expect(synthesisAssistant?.origin_kind).toBe("internal_control");
+        const synthesisRows = canonicalRows.filter(
+          (row) => row.turn_id === newest?.turn_id,
+        );
+        expect(synthesisRows.some((row) => row.role === "user")).toBe(true);
+        expect(synthesisRows.every((row) => row.origin_kind === "internal_control"))
+          .toBe(true);
+      } finally {
+        canonicalDb.close();
+      }
       parentMessageCount = btccDb.query<{ count: number }, [string]>(
         "SELECT COUNT(*) AS count FROM btcc_messages WHERE session_id = ?",
       ).get(parentSessionId)?.count ?? 0;
@@ -1739,14 +1783,17 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
         parentRounds.set(key, round);
         if (key === "delegation") {
           if (round === 1) {
-            expect(request.tools.map((tool) => tool.name)).not.toContain("delegate_to_steward");
+            expect(request.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+              "start_work",
+              "delegate_to_steward",
+            ]));
             return { toolCalls: [toolCall("start-parent-work", "start_work", {
               objective: "Inspect, correct, and validate two bounded Steward fixture files.",
             })] };
           }
           if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
             objective: "Inspect, correct, and validate two bounded Steward fixture files.",
-            execution_mode: "direct",
+            execution_mode: "steward",
             governing_refs: [],
             actions: [{
               action_key: "delegate-reviewed-fixture-work",
@@ -1763,8 +1810,8 @@ function oneStewardRound(childRequests: ModelRoundRequest[]): ModelRoundPort {
             action_updates: [{ action_key: "delegate-reviewed-fixture-work", status: "active" }],
           })] };
           if (round > 4) return { text: "Delegation accepted.", toolCalls: [] };
-          expect(request.tools.map((tool) => tool.name)).toEqual(["delegate_to_steward"]);
-          const delegationTool = request.tools[0];
+          expect(request.tools.map((tool) => tool.name)).toContain("delegate_to_steward");
+          const delegationTool = request.tools.find((tool) => tool.name === "delegate_to_steward");
           expect(delegationTool?.parameters).toMatchObject({
             type: "object",
             additionalProperties: false,

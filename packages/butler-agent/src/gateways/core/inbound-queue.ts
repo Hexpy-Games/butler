@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "crypto";
-import { existsSync, mkdirSync, readdirSync, renameSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync } from "fs";
 import { join } from "path";
 import type { InboundEnvelope } from "./contracts.ts";
+import { verifyTurnExecutionControls } from "./turn-execution-controls.ts";
 import { settleCancelledDeadOwner } from "./inbound-queue-cancellation.ts";
 import {
   parkQueueItemForProcessReplacement,
@@ -52,6 +53,14 @@ export interface RecoverRuntimeInterruptionsSummary {
   requeued: number;
   skipped: number;
 }
+
+export type PersistedOriginLocator = {
+  eventId: string; runtimeSessionId: string; turnId: string | null;
+};
+
+export type PersistedOriginEvidence = {
+  matched: boolean; internalControl: boolean; ref: string | null; sha256: string | null;
+};
 
 export interface DeadOwnerCancellationSettlementOptions {
   turnId: string;
@@ -199,6 +208,66 @@ export class NativeInboundQueue {
       return null;
     }
     return canonical;
+  }
+
+  readPersistedOriginEvidence(locator: {
+    eventId: string; runtimeSessionId: string; turnId: string;
+  }): { available: boolean; matched: boolean; internalControl: boolean; ref: string | null; sha256: string | null } {
+    let cursor: string | null = null;
+    while (true) {
+      const page = this.readPersistedOriginEvidenceBatch([locator], { cursor });
+      if (!page.available) return { available: false, matched: false, internalControl: false, ref: null, sha256: null };
+      const matched = page.matches.get(locator.eventId);
+      if (matched) return { available: true, ...matched };
+      if (page.complete) return { available: true, matched: false, internalControl: false, ref: null, sha256: null };
+      cursor = page.cursor;
+    }
+  }
+
+  readPersistedOriginEvidenceBatch(
+    locators: PersistedOriginLocator[],
+    options: { cursor?: string | null; limit?: number; signal?: AbortSignal; deadlineAt?: number } = {},
+  ): { available: boolean; complete: boolean; cursor: string | null; matches: Map<string, PersistedOriginEvidence> } {
+    const wanted = new Map(locators.map((locator) => [locator.eventId, locator]));
+    const matches = new Map<string, PersistedOriginEvidence>();
+    const limit = Math.max(1, Math.min(500, Math.trunc(options.limit ?? 500)));
+    try {
+      const paths = (["pending", "processing", "processed", "failed"] as const).flatMap((state) => {
+        const directory = this.dir(state);
+        return existsSync(directory)
+          ? readdirSync(directory).filter((name) => name.endsWith(".json")).sort().map((name) => ({ key: `${state}/${name}`, path: join(directory, name) }))
+          : [];
+      }).sort((a, b) => a.key.localeCompare(b.key));
+      const remaining = paths.filter((item) => !options.cursor || item.key > options.cursor);
+      let cursor: string | null = options.cursor ?? null;
+      let scanned = 0;
+      for (const item of remaining) {
+        if (scanned >= limit) break;
+        if (options.signal?.aborted || Date.now() >= (options.deadlineAt ?? Number.POSITIVE_INFINITY))
+          return { available: true, complete: false, cursor, matches };
+        const record = JSON.parse(readFileSync(item.path, "utf8")) as QueuedInboundEvent;
+        if (record?.version !== 1 || typeof record.queueId !== "string" || typeof record.envelope?.eventId !== "string")
+          throw new Error("inbound_queue_record_invalid");
+        cursor = item.key;
+        scanned += 1;
+        const locator = wanted.get(record.envelope.eventId);
+        if (!locator) continue;
+        const matched = record.envelope.routingHints?.sessionId === locator.runtimeSessionId &&
+          (locator.turnId === null || record.envelope.routingHints?.turnId === locator.turnId);
+        let subsessionResult = false;
+        if (record.envelope.executionControls) {
+          subsessionResult = Boolean(verifyTurnExecutionControls(record.envelope.executionControls).subsession_result);
+        }
+        const internalControl = Boolean(record.envelope.nativeStewardContext || record.envelope.control ||
+          record.envelope.appTurnContext?.authorityRequestRef ||
+          record.envelope.routingHints?.authorityRequestRef || subsessionResult);
+        matches.set(locator.eventId, { matched, internalControl, ref: record.queueId,
+          sha256: createHash("sha256").update(JSON.stringify(record.envelope)).digest("hex") });
+      }
+      return { available: true, complete: remaining.length <= scanned, cursor, matches };
+    } catch {
+      return { available: false, complete: false, cursor: options.cursor ?? null, matches };
+    }
   }
 
   hasPendingOrProcessingEvent(eventId: string): boolean {

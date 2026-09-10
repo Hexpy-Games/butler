@@ -11,30 +11,101 @@ import { join } from "node:path";
 import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
-} from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-effect.ts";
-import { createButlerToolExecutor } from
-  "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
-import { createGuidedToolExecutionBoundary } from
-  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
-import { writeFileToolDefinition } from
-  "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
+} from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-effect.ts";
+import {
+  createButlerToolExecutor,
+} from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import {
+  createGuidedToolExecutionBoundary,
+} from "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
+import {
+  writeFileToolDefinition,
+} from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
 import type {
   DurableWorkService,
 } from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
-import type { GuidedEffectService } from
-  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
-import { sha256Hex } from
-  "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
+import type {
+  GuidedEffectService,
+} from "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
+import {
+  sha256Hex,
+} from "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
 import { reviewedWork } from "./support/guided-effect-test-fixture.ts";
+import { toolResultToMessage } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-result-message.ts";
+import { createToolResultModelPreviewContext } from "../../packages/butler-agent/src/agent/tools/tool-result-serialization.ts";
+import { readOperationalMetricEvents } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { queryMemoryV2 } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
 
 const roots: string[] = [];
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 describe("Butler actual tool execution boundary", () => {
+  test("memory tool provider serialization records actual final bytes", () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-memory-serialization-"));
+    roots.push(root);
+    const previous = process.env.BUTLER_DATA;
+    process.env.BUTLER_DATA = root;
+    try {
+      const store = new AgentConversationStore({ butlerData: root });
+      const turn = store.beginTurn({
+        gateway: "test",
+        externalSessionId: "serialization",
+        sessionId: "serialization",
+        actor: "user",
+      });
+      for (let index = 0; index < 30; index += 1) {
+        store.appendUserMessage({
+          sessionId: "serialization",
+          turnId: turn.id,
+          text: `needle-${index} ${"길이가 긴 결과 ".repeat(80)}`,
+          originKind: "user_input",
+          now: new Date(Date.UTC(2026, 8, 1, 0, 0, index)).toISOString(),
+        });
+      }
+      store.close();
+      const output = queryMemoryV2({
+        butlerData: root,
+        currentSessionId: "serialization",
+        currentProjectId: null,
+        query: "needle",
+        scope: "all_user_sessions",
+        limit: 50,
+      });
+      expect(output.ok).toBe(true);
+      const message = toolResultToMessage({
+        result: {
+          name: "query_memory",
+          toolCallId: "call-memory",
+          ok: true,
+          output,
+        },
+        modelPreviewContext: createToolResultModelPreviewContext(),
+      });
+      const event = readOperationalMetricEvents({ butlerData: root }).find((
+        item,
+      ) => item.name === "memory_tool_result_serialization");
+      expect(event).toMatchObject({
+        category: "memory",
+        status: "ok",
+        unit: "bytes",
+        dimensions: { tool_name: "query_memory" },
+      });
+      expect(event?.value).toBe(Buffer.byteLength(message.content, "utf8"));
+      expect(Buffer.byteLength(message.content, "utf8")).toBeLessThanOrEqual(
+        24 * 1024,
+      );
+      expect(JSON.parse(message.content).output.next_cursor).toBeString();
+    } finally {
+      if (previous === undefined) delete process.env.BUTLER_DATA;
+      else process.env.BUTLER_DATA = previous;
+    }
+  });
   test("effect receipts preserve fresh and replayed journal outcomes", async () => {
     const work = reviewedWork();
     let replayed = false;
@@ -86,16 +157,17 @@ describe("Butler actual tool execution boundary", () => {
         },
       }),
     });
-    const execute = () => boundary({
-      call: {
-        name: "write_file",
-        args: { path: "result.txt", content: "result" },
-        rawArguments: "{}",
-      },
-      context: { effectOccurrenceId: "occurrence" },
-      definition: writeFileToolDefinition,
-      execute: async () => ({ ok: true }),
-    });
+    const execute = () =>
+      boundary({
+        call: {
+          name: "write_file",
+          args: { path: "result.txt", content: "result" },
+          rawArguments: "{}",
+        },
+        context: { effectOccurrenceId: "occurrence" },
+        definition: writeFileToolDefinition,
+        execute: async () => ({ ok: true }),
+      });
 
     expect(await execute()).toMatchObject({
       effect_receipt: { replayed: false },

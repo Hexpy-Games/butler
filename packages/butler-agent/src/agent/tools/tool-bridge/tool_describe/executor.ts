@@ -12,7 +12,11 @@ import type {
   NativeToolAvailabilityOverrides,
 } from "../../types.ts";
 import { disabledExternalToolDescription } from "../external-description.ts";
-import { mcpBridgeAvailability, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
+import {
+  mcpBridgeAvailability,
+  nativeBridgeAvailability,
+  scopedOutDisabledReason,
+} from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type PluginToolCatalog =
@@ -23,6 +27,11 @@ type PluginToolDescriber = (input: {
   namespace: string;
   name: string;
 }) => Promise<ExternalToolCatalogInput | null | undefined>;
+
+export type ResolvedToolDescription = {
+  description: Record<string, unknown>;
+  nativeToolContractVersion?: 1 | 2;
+};
 
 export function createToolDescribeToolHandler(input: {
   butlerData: string;
@@ -42,21 +51,24 @@ export function createToolDescribeToolHandler(input: {
         ok: false,
         descriptions: [],
         missing: [],
-        error: { code: "invalid_tool_catalog_ids", message: "tool_describe requires at least one catalog id." },
+        error: {
+          code: "invalid_tool_catalog_ids",
+          message: "tool_describe requires at least one catalog id.",
+        },
       };
     }
     const descriptions = [];
     const missing = [];
     for (const id of ids) {
-      const description = await describeToolId(id, input);
-      if (description) descriptions.push(description);
+      const resolved = await resolveToolDescription(id, input);
+      if (resolved) descriptions.push(resolved.description);
       else missing.push({ id, error: "unknown_tool_catalog_id" });
     }
     return { ok: missing.length === 0, descriptions, missing };
   };
 }
 
-async function describeToolId(
+export async function resolveToolDescription(
   id: string,
   input: {
     butlerData: string;
@@ -69,15 +81,28 @@ async function describeToolId(
     hiddenNativeToolNames?: readonly string[];
     nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
-) {
+): Promise<ResolvedToolDescription | null> {
   const parsed = parseToolCatalogId(id);
   if (!parsed) return null;
-  if (parsed.provider === "native") return describeNativeTool(id, parsed.name, input);
+  if (parsed.provider === "native")
+    return describeNativeTool(id, parsed.name, input);
   if (parsed.provider === "mcp" && parsed.namespace) {
-    return await describeMcpTool(id, parsed.namespace, parsed.name, input);
+    const description = await describeMcpTool(
+      id,
+      parsed.namespace,
+      parsed.name,
+      input,
+    );
+    return description ? { description } : null;
   }
   if (parsed.provider === "plugin" && parsed.namespace) {
-    return await describePluginTool(id, parsed.namespace, parsed.name, input);
+    const description = await describePluginTool(
+      id,
+      parsed.namespace,
+      parsed.name,
+      input,
+    );
+    return description ? { description } : null;
   }
   return null;
 }
@@ -93,10 +118,11 @@ function describeNativeTool(
     hiddenNativeToolNames?: readonly string[];
     nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
-) {
+): ResolvedToolDescription | null {
   if (input.hiddenNativeToolNames?.includes(name)) return null;
-  const tool = (input.nativeToolDefinitions ?? BUTLER_TOOLS)
-    .find((candidate) => candidate.name === name);
+  const tool = (input.nativeToolDefinitions ?? BUTLER_TOOLS).find(
+    (candidate) => candidate.name === name,
+  );
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];
   if (!metadata) return null;
@@ -106,12 +132,15 @@ function describeNativeTool(
     currentToolNames: input.currentToolNames,
     nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
   });
-  const availability: { enabled: boolean; disabledReason: string | null; recoveryHint?: string | null } =
-    bridgeAvailability.enabled
-      ? nativeToolAvailability(tool, input)
-      : bridgeAvailability;
+  const availability: {
+    enabled: boolean;
+    disabledReason: string | null;
+    recoveryHint?: string | null;
+  } = bridgeAvailability.enabled
+    ? nativeToolAvailability(tool, input)
+    : bridgeAvailability;
   const schema = sanitizeSchemaForModel(tool.parameters);
-  return {
+  const description = {
     id,
     name: tool.name,
     namespace: null,
@@ -126,6 +155,12 @@ function describeNativeTool(
     call_affordance: availability.enabled
       ? { type: "native_tool", tool_name: tool.name }
       : { type: "disabled", reason: availability.disabledReason },
+  };
+  return {
+    description,
+    ...("toolContractVersion" in tool && tool.toolContractVersion !== undefined
+      ? { nativeToolContractVersion: tool.toolContractVersion }
+      : {}),
   };
 }
 
@@ -142,8 +177,8 @@ async function describeMcpTool(
 ) {
   const bridgeAvailability = mcpBridgeAvailability(input);
   if (!bridgeAvailability.enabled) {
-    const disabledReason = bridgeAvailability.disabledReason ??
-      scopedOutDisabledReason("mcp");
+    const disabledReason =
+      bridgeAvailability.disabledReason ?? scopedOutDisabledReason("mcp");
     return disabledExternalToolDescription({
       id,
       name: toolName,
@@ -151,9 +186,12 @@ async function describeMcpTool(
       provider: "mcp",
       category: "mcp",
       disabledReason,
-      recoveryHint: bridgeAvailability.recoveryHint ??
+      recoveryHint:
+        bridgeAvailability.recoveryHint ??
         "Choose an enabled native tool from tool_search.",
-      safetyNotes: ["MCP tools require explicit current-session MCP capability."],
+      safetyNotes: [
+        "MCP tools require explicit current-session MCP capability.",
+      ],
     });
   }
   const tool = await describeMcpToolSchema({
@@ -174,8 +212,11 @@ async function describeMcpTool(
       category: "mcp",
       enabled: false,
       disabled_reason: disabledReason,
-      recovery_hint: "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.",
-      safety_notes: ["Inspect the MCP schema and user intent before invoking external tools."],
+      recovery_hint:
+        "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.",
+      safety_notes: [
+        "Inspect the MCP schema and user intent before invoking external tools.",
+      ],
       schema: {},
       schema_digest: schemaDigest({}),
       call_affordance: { type: "disabled", reason: disabledReason },
@@ -190,10 +231,16 @@ async function describeMcpTool(
     category: "mcp",
     enabled: true,
     disabled_reason: null,
-    safety_notes: ["Calls a configured MCP server tool; inspect schema and user intent first."],
+    safety_notes: [
+      "Calls a configured MCP server tool; inspect schema and user intent first.",
+    ],
     schema,
     schema_digest: schemaDigest(schema),
-    call_affordance: { type: "mcp_tool", server_id: tool.server_id, tool_name: tool.tool_name },
+    call_affordance: {
+      type: "mcp_tool",
+      server_id: tool.server_id,
+      tool_name: tool.tool_name,
+    },
   };
 }
 
@@ -218,15 +265,19 @@ async function describePluginTool(
       provider: "plugin",
       category: "automation",
       disabledReason: reason,
-      safetyNotes: ["Plugin schema loading failed; treat this as recoverable model feedback, not an app failure."],
-      recoveryHint: "Retry tool_describe later, choose another catalog result, or continue with enabled native/MCP tools.",
+      safetyNotes: [
+        "Plugin schema loading failed; treat this as recoverable model feedback, not an app failure.",
+      ],
+      recoveryHint:
+        "Retry tool_describe later, choose another catalog result, or continue with enabled native/MCP tools.",
     });
   }
   if (!tool) return null;
   const schema = sanitizeSchemaForModel(tool.schema ?? {});
-  const disabledReason = typeof tool.disabledReason === "string" && tool.disabledReason.trim()
-    ? tool.disabledReason.trim()
-    : scopedOutDisabledReason("plugin");
+  const disabledReason =
+    typeof tool.disabledReason === "string" && tool.disabledReason.trim()
+      ? tool.disabledReason.trim()
+      : scopedOutDisabledReason("plugin");
   return {
     id,
     name: tool.name.trim(),
@@ -235,16 +286,22 @@ async function describePluginTool(
     category: tool.category,
     enabled: false,
     disabled_reason: disabledReason,
-    recovery_hint: tool.recoveryHint?.trim() ||
+    recovery_hint:
+      tool.recoveryHint?.trim() ||
       "Choose an enabled native/MCP tool, or retry after a guarded plugin dispatcher is available.",
-    safety_notes: ["Plugin tools are external extensions; inspect schema and user intent first."],
+    safety_notes: [
+      "Plugin tools are external extensions; inspect schema and user intent first.",
+    ],
     schema,
     schema_digest: schemaDigest(schema),
     call_affordance: { type: "disabled", reason: disabledReason },
   };
 }
 
-function mcpDescribeDisabledReason(tool: { reason: string; error: string }): string {
+function mcpDescribeDisabledReason(tool: {
+  reason: string;
+  error: string;
+}): string {
   if (tool.reason === "server_unavailable") return "MCP server unavailable.";
   return tool.error;
 }
@@ -257,21 +314,30 @@ function resolvePluginTool(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
   },
-): ExternalToolCatalogInput | Promise<ExternalToolCatalogInput | null | undefined> | null {
-  if (input.pluginToolDescriber) return input.pluginToolDescriber({ id, namespace, name });
+):
+  | ExternalToolCatalogInput
+  | Promise<ExternalToolCatalogInput | null | undefined>
+  | null {
+  if (input.pluginToolDescriber)
+    return input.pluginToolDescriber({ id, namespace, name });
   if (!Array.isArray(input.pluginCatalog)) return null;
-  return input.pluginCatalog.find((candidate) =>
-    candidate.provider === "plugin" &&
-    candidate.namespace === namespace &&
-    candidate.name.trim() === name,
-  ) ?? null;
+  return (
+    input.pluginCatalog.find(
+      (candidate) =>
+        candidate.provider === "plugin" &&
+        candidate.namespace === namespace &&
+        candidate.name.trim() === name,
+    ) ?? null
+  );
 }
 
 function sanitizeSchemaForModel(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeSchemaForModel);
   if (!value || typeof value !== "object") return value;
   const next: Record<string, unknown> = {};
-  for (const [key, rawValue] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, rawValue] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
     if (isSensitiveSchemaKey(key)) {
       next[key] = "[redacted]";
       continue;
@@ -282,7 +348,9 @@ function sanitizeSchemaForModel(value: unknown): unknown {
 }
 
 function isSensitiveSchemaKey(key: string): boolean {
-  const normalized = key.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/gu, "_");
+  const normalized = key
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/gu, "_");
   return [
     "default",
     "example",
@@ -298,8 +366,12 @@ function isSensitiveSchemaKey(key: string): boolean {
 
 function parseIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
 }

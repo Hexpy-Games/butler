@@ -65,6 +65,9 @@ export async function executePreparedBtccToolCall(
     name: prepared.call.name,
     arguments: prepared.call.arguments,
     rawArguments: prepared.call.rawArguments,
+    ...(prepared.tool?.toolContractVersion === undefined
+      ? {}
+      : { toolContractVersion: prepared.tool.toolContractVersion }),
     signal,
   }).then(
     (output): BtccAgentLoopToolResult => {
