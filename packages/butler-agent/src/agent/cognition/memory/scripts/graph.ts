@@ -1,7 +1,7 @@
 // SQLite graph layer for butler memory system
 // DB: $BUTLER_DATA/memory/db/graph.sqlite
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { createHash } from "crypto";
 import { BUTLER_DIR } from "./constants.ts";
@@ -13,6 +13,19 @@ let _db: Database | null = null;
 
 function getDb(): Database {
   if (_db) return _db;
+
+  const descriptorPath = join(BUTLER_DIR.MEMORY, "active-generation.json");
+  if (existsSync(descriptorPath)) {
+    let descriptor: Record<string, unknown>;
+    try {
+      descriptor = JSON.parse(readFileSync(descriptorPath, "utf8"));
+    } catch (error) {
+      throw new Error("memory_generation_unavailable", { cause: error });
+    }
+    if (descriptor.schema === "butler.memory-active-generation.v2") {
+      throw new Error("legacy_memory_writer_disabled_for_v2");
+    }
+  }
 
   mkdirSync(DB_DIR, { recursive: true });
   _db = new Database(DB_PATH);

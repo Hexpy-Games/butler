@@ -48,25 +48,13 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 
 
 
-export function stripNestedDescriptions(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripNestedDescriptions);
-  if (!value || typeof value !== "object") return value;
-  const output: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value)) {
-    if (key === "description") continue;
-    output[key] = stripNestedDescriptions(nested);
-  }
-  return output;
-}
-
-
-
 export function modelFacingFunctionTools(tools: readonly ModelRoundTool[]): FunctionToolDefinition[] {
   return tools.map((tool) => ({
     type: "function",
     name: tool.name,
     description: tool.description,
-    parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
+    parameters: tool.parameters,
+    strict: false,
   }));
 }
 export function finalNoToolInstructions(instructions?: string): string {

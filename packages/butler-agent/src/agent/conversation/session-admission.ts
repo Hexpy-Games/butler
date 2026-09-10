@@ -15,6 +15,49 @@ import type {
 import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 import { conversationMessageText } from "./message-text.ts";
+import {
+  CONVERSATION_ORIGIN_CLASSIFICATION_VERSION,
+  type ConversationOriginDecision,
+  type ConversationOriginEvidence,
+} from "./types.ts";
+
+export type ConversationOriginFacts = {
+  ref: string | null;
+  publicIngress: boolean;
+  internalControl: boolean;
+  evidenceAvailable: boolean;
+  evidence: ConversationOriginEvidence[];
+};
+
+export function classifyConversationOrigin(
+  facts: ConversationOriginFacts,
+): ConversationOriginDecision {
+  const common = {
+    ref: facts.ref,
+    version: CONVERSATION_ORIGIN_CLASSIFICATION_VERSION,
+    evidence: [...facts.evidence].sort((a, b) =>
+      `${a.kind}\0${a.ref}`.localeCompare(`${b.kind}\0${b.ref}`)
+    ),
+  };
+  if (facts.internalControl) return {
+    ...common,
+    kind: "internal_control",
+    reason: "verified_internal_control",
+    complete: true,
+  };
+  if (facts.publicIngress) return {
+    ...common,
+    kind: "user_input",
+    reason: "verified_public_ingress",
+    complete: true,
+  };
+  return {
+    ...common,
+    kind: "unknown",
+    reason: facts.evidenceAvailable ? "historical_origin_unresolved" : "historical_origin_evidence_unavailable",
+    complete: facts.evidenceAvailable,
+  };
+}
 
 export interface ConversationAdmissionTurnInput {
   writer: ConversationWriter;
@@ -23,6 +66,7 @@ export interface ConversationAdmissionTurnInput {
   turnId: string;
   timestamp: string;
   butlerData?: string;
+  origin: ConversationOriginDecision & { kind: "user_input" | "internal_control"; ref: string };
 }
 
 export interface ConversationAdmissionProvenance {
@@ -229,6 +273,11 @@ export class ConversationAdmissionTurn {
           visibility: decision.operation.visibility,
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
+          originKind: this.input.origin.kind,
+          originRef: this.input.origin.ref,
+          originReason: this.input.origin.reason,
+          originVersion: this.input.origin.version,
+          originEvidence: this.input.origin.evidence,
         });
         this.requestMessageId ??= message.id;
         return;
@@ -241,6 +290,15 @@ export class ConversationAdmissionTurn {
           visibility: decision.operation.visibility,
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
+          originKind: this.input.origin.kind === "internal_control"
+            ? "internal_control"
+            : "assistant_public",
+          originRef: this.input.origin.ref,
+          originReason: this.input.origin.kind === "internal_control"
+            ? "verified_internal_control"
+            : "verified_public_ingress",
+          originVersion: this.input.origin.version,
+          originEvidence: this.input.origin.evidence,
         });
         if (decision.operation.visibility === "user" || event.kind === "outbound.final") {
           this.publicAssistantMessageId = message.id;

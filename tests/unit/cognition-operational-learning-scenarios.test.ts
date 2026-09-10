@@ -12,7 +12,12 @@ import {
   recordSourceQualityEvent,
   retrieveKnowHow,
 } from "../../packages/butler-agent/src/agent/cognition/know-how/store.ts";
-import { runCognitionConsolidationCycle } from "../../packages/butler-agent/src/agent/cognition/consolidation/cycle.ts";
+import {
+  readConsolidationCheckpoint,
+  runCognitionConsolidationCycle,
+} from "../../packages/butler-agent/src/agent/cognition/consolidation/cycle.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { writeProfilingConsentSnapshot } from "../../packages/butler-agent/src/personalization/profiling.ts";
 import {
   checkMemoryMetadataIntegrity,
   createMemoryChunk,
@@ -150,6 +155,60 @@ test("non-weather operational learning demotes a docs-source know-how from real 
     expect(aggregateSourceQuality(butlerData)[0]).toMatchObject({
       source_id: "docs.example.com",
       tool_name: "docs-search",
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("normal cycle resume revisits only failed profile coverage after later phases completed", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-cognition-profile-resume-"));
+  try {
+    writeProfilingConsentSnapshot(butlerData, { mode: "deep" });
+    const store = new AgentConversationStore({ butlerData });
+    try {
+      const turn = store.beginTurn({
+        gateway: "app", externalSessionId: "profile-resume", sessionId: "cs_profile_resume",
+        actor: "user", now: new Date().toISOString(),
+      });
+      store.appendUserMessage({
+        sessionId: "cs_profile_resume", turnId: turn.id, messageId: "cm_profile_resume",
+        text: "Prefer verified normal-cycle recovery.", originKind: "user_input", now: new Date().toISOString(),
+      });
+    } finally {
+      store.close();
+    }
+    let calls = 0;
+    const runner = async (input: { prompt: string }) => {
+      calls += 1;
+      if (calls === 1) return "not-json";
+      const prompt = JSON.parse(input.prompt) as { observations: Array<{ ref: string }> };
+      return JSON.stringify({ candidates: [{
+        category: "epistemic_style",
+        facet: "evidence_preference",
+        summary: "Prefers verified normal-cycle recovery.",
+        source_type: "explicit",
+        confidence: "high",
+        evidence_refs: [prompt.observations[0]!.ref],
+      }] });
+    };
+    const first = await runCognitionConsolidationCycle({
+      butlerData, runId: "cr_profile_normal_resume", profileExtractorModelRunner: runner,
+    });
+    expect(first.status).toBe("completed_with_errors");
+    expect(readConsolidationCheckpoint(butlerData, first.run_id)).toMatchObject({
+      next_phase_index: 11,
+      completed_phases: expect.not.arrayContaining(["profile_consolidation"]),
+    });
+
+    const second = await runCognitionConsolidationCycle({
+      butlerData, runId: first.run_id, resume: true, profileExtractorModelRunner: runner,
+    });
+    expect(second.status).toBe("completed");
+    expect(second.phases.map((phase) => phase.phase)).toEqual(["profile_consolidation"]);
+    expect(readConsolidationCheckpoint(butlerData, first.run_id)).toMatchObject({
+      completed_phases: expect.arrayContaining(["profile_consolidation"]),
+      errors: [expect.objectContaining({ phase: "profile_consolidation", resolved_at: expect.any(String) })],
     });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });

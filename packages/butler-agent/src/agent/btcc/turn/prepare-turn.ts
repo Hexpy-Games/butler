@@ -4,6 +4,7 @@ import {
   type ConversationContextStoreReader,
   type ConversationWriter,
 } from "../../conversation/index.ts";
+import { classifyConversationOrigin } from "../../conversation/session-admission.ts";
 import type { ContextAssembly, PromptAssembler } from "../../prompt/prompt-assembler.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
@@ -142,6 +143,7 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       turnId: request.turnId,
       timestamp: request.message.timestamp,
       butlerData: this.dependencies.butlerData,
+      origin: resolvedConversationOrigin(binding, request),
     });
     conversation.admitInbound();
 
@@ -167,6 +169,44 @@ export class DefaultBtccTurnPreparation implements BtccTurnPreparationPort {
       },
     };
   }
+}
+
+function resolvedConversationOrigin(
+  binding: StoredSessionBinding,
+  request: BtccTurnRequest,
+): ReturnType<typeof classifyConversationOrigin> & { kind: "user_input" | "internal_control"; ref: string } {
+  const metadata = binding.metadata ?? {};
+  const subsessionResult = request.executionControls
+    ? verifyTurnExecutionControls(request.executionControls).subsession_result
+    : undefined;
+  const internal = (binding.role === "worker" || binding.role === "steward") ||
+    isSubsessionBinding(binding) ||
+    Boolean(metadata.nativeStewardContext) ||
+    Boolean(subsessionResult) ||
+    Boolean(request.appTurnContext?.authorityRequestRef ?? request.authorityRequestRef) ||
+    request.trigger.kind === "authorized_wake";
+  const ref = `btcc:${request.turnId}:${request.message.id}`;
+  const evidence = [
+    ...(!internal ? [{ kind: "btcc_admission" as const, ref, sha256: null }] : []),
+    ...(binding.role === "worker" || binding.role === "steward" || isSubsessionBinding(binding) ||
+      Boolean(metadata.nativeStewardContext) || Boolean(subsessionResult)
+      ? [{ kind: "subsession" as const, ref, sha256: null }]
+      : []),
+    ...(request.trigger.kind === "authorized_wake"
+      ? [{ kind: "authorized_wake" as const, ref: request.trigger.triggerId, sha256: null }]
+      : []),
+    ...(request.appTurnContext?.authorityRequestRef ?? request.authorityRequestRef
+      ? [{ kind: "authority_continuation" as const, ref: request.appTurnContext?.authorityRequestRef ?? request.authorityRequestRef!, sha256: null }]
+      : []),
+  ];
+  const decision = classifyConversationOrigin({
+    ref,
+    publicIngress: !internal,
+    internalControl: internal,
+    evidenceAvailable: true,
+    evidence,
+  });
+  return { ...decision, kind: decision.kind === "internal_control" ? "internal_control" : "user_input", ref };
 }
 export function snapshotTurnContext(input: {
   binding: StoredSessionBinding;

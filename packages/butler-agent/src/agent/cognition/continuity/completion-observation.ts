@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { cognitionMemoryRoot } from "../paths.ts";
 import { appendToQueue, type SyncRequest } from "../memory/scripts/queue.ts";
+import { completionProjectionProcessed } from "../memory/index.ts";
 
-export const COMPLETION_OBSERVATION_SCHEMA = "butler.conversation-completion-observation.v1" as const;
+export const COMPLETION_OBSERVATION_SCHEMA =
+  "butler.conversation-completion-observation.v1" as const;
 
 export interface ConversationCompletionObservation {
   schema_version: typeof COMPLETION_OBSERVATION_SCHEMA;
@@ -40,8 +49,13 @@ export function publishConversationCompletionObservation(input: {
   outcomeGeneration: number;
   completedAt: string;
 }): ConversationCompletionObservation {
-  const scope = input.projectId?.trim() ? "project" as const : "global" as const;
-  const jobId = completionJobId(input.conversationTurnId, input.outcomeGeneration);
+  const scope = input.projectId?.trim()
+    ? ("project" as const)
+    : ("global" as const);
+  const jobId = completionJobId(
+    input.conversationTurnId,
+    input.outcomeGeneration,
+  );
   const base = {
     schema_version: COMPLETION_OBSERVATION_SCHEMA,
     job_id: jobId,
@@ -61,7 +75,10 @@ export function publishConversationCompletionObservation(input: {
   };
   const path = completionObservationPath(input.butlerData, jobId);
   if (existsSync(path)) {
-    const existing = readConversationCompletionObservation(input.butlerData, jobId);
+    const existing = readConversationCompletionObservation(
+      input.butlerData,
+      jobId,
+    );
     if (!existing || canonicalJson(existing) !== canonicalJson(observation)) {
       throw new Error("completion_observation_conflict");
     }
@@ -69,20 +86,15 @@ export function publishConversationCompletionObservation(input: {
     writeJsonAtomic(path, observation);
   }
   const request: SyncRequest = {
-    schema_version: "butler.memory-sync-request.v2",
+    schema_version: "butler.memory-sync-request.v3",
     job_id: jobId,
-    scope,
-    project_id: observation.project_id,
-    conversation_session_id: observation.conversation_session_id,
-    conversation_turn_id: observation.conversation_turn_id,
-    inbound_message_id: observation.inbound_message_id,
-    outbound_message_id: observation.outbound_message_id,
-    project: observation.project_id ?? "global",
-    topic: null,
-    source: "conversation_completion",
-    session_id: observation.runtime_session_id,
-    timestamp: observation.completed_at,
-    trigger: "turn_completed",
+    source: {
+      kind: "conversation_turn",
+      session_id: observation.conversation_session_id,
+      turn_id: observation.conversation_turn_id,
+      outcome_generation: observation.outcome_generation,
+    },
+    created_at: observation.completed_at,
   };
   appendToQueue(request, input.butlerData);
   return observation;
@@ -93,8 +105,14 @@ export function readConversationCompletionObservation(
   jobId: string,
 ): ConversationCompletionObservation | null {
   try {
-    const value = JSON.parse(readFileSync(completionObservationPath(butlerData, jobId), "utf8")) as ConversationCompletionObservation;
-    if (value.schema_version !== COMPLETION_OBSERVATION_SCHEMA || value.job_id !== jobId) return null;
+    const value = JSON.parse(
+      readFileSync(completionObservationPath(butlerData, jobId), "utf8"),
+    ) as ConversationCompletionObservation;
+    if (
+      value.schema_version !== COMPLETION_OBSERVATION_SCHEMA ||
+      value.job_id !== jobId
+    )
+      return null;
     const { integrity_sha256, ...base } = value;
     return integrity(base) === integrity_sha256 ? value : null;
   } catch {
@@ -102,8 +120,14 @@ export function readConversationCompletionObservation(
   }
 }
 
-export function completionJobProcessed(butlerData: string, jobId: string): boolean {
-  return existsSync(completionReceiptPath(butlerData, jobId));
+export function completionJobProcessed(
+  butlerData: string,
+  jobId: string,
+): boolean {
+  return completionProjectionProcessed({
+    butlerData,
+    completionJobId: jobId,
+  });
 }
 
 export function writeCompletionJobReceipt(
@@ -113,12 +137,28 @@ export function writeCompletionJobReceipt(
   writeJsonAtomic(completionReceiptPath(butlerData, receipt.job_id), receipt);
 }
 
-export function completionObservationPath(butlerData: string, jobId: string): string {
-  return join(cognitionMemoryRoot(butlerData), "queue", "completion-observations", `${safeId(jobId)}.json`);
+export function completionObservationPath(
+  butlerData: string,
+  jobId: string,
+): string {
+  return join(
+    cognitionMemoryRoot(butlerData),
+    "queue",
+    "completion-observations",
+    `${safeId(jobId)}.json`,
+  );
 }
 
-export function completionReceiptPath(butlerData: string, jobId: string): string {
-  return join(cognitionMemoryRoot(butlerData), "queue", "completion-receipts", `${safeId(jobId)}.json`);
+export function completionReceiptPath(
+  butlerData: string,
+  jobId: string,
+): string {
+  return join(
+    cognitionMemoryRoot(butlerData),
+    "queue",
+    "completion-receipts",
+    `${safeId(jobId)}.json`,
+  );
 }
 
 function completionJobId(turnId: string, generation: number): string {
@@ -154,7 +194,10 @@ function writeJsonAtomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
   try {
-    writeFileSync(temp, `${JSON.stringify(value)}\n`, { encoding: "utf8", mode: 0o600 });
+    writeFileSync(temp, `${JSON.stringify(value)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     renameSync(temp, path);
   } finally {
     rmSync(temp, { force: true });

@@ -72,13 +72,34 @@ export class ConversationStoreInternals {
 
   ensureSchema(): void {
     this.db.exec(CONVERSATION_STORE_SCHEMA_SQL);
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'unknown'"); } catch {}
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_ref TEXT"); } catch {}
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_reason TEXT"); } catch {}
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_version TEXT"); } catch {}
+    try { this.db.exec("ALTER TABLE conversation_messages ADD COLUMN origin_evidence_json TEXT"); } catch {}
     this.db.query(`
       INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at)
       VALUES (?, ?)
     `).run(CONVERSATION_STORE_SCHEMA_VERSION, isoNow());
   }
 
+  publicSourceRevision(): number {
+    return Number(this.db.query<{ revision: number }, []>(
+      "SELECT revision FROM conversation_public_source_state WHERE singleton = 1",
+    ).get()?.revision ?? 0);
+  }
+
+  bumpPublicSourceRevision(): number {
+    this.db.query(
+      "UPDATE conversation_public_source_state SET revision = revision + 1 WHERE singleton = 1",
+    ).run();
+    return this.publicSourceRevision();
+  }
+
   upsertSession(session: ConversationSession): void {
+    const before = this.db.query<{ project_id: string | null; status: string }, [string]>(
+      "SELECT project_id, status FROM conversation_sessions WHERE id = ?",
+    ).get(session.id);
     this.db.query(`
       INSERT INTO conversation_sessions (
         id, workspace_id, project_id, gateway_origin, created_at, updated_at, status, schema_version
@@ -100,6 +121,9 @@ export class ConversationStoreInternals {
       session.status,
       session.schema_version,
     );
+    if (before && (before.project_id !== session.project_id || before.status !== session.status)) {
+      this.bumpPublicSourceRevision();
+    }
   }
 
   upsertBinding(gateway: string, externalSessionId: string, sessionId: string, createdAt: string): ConversationBinding {
@@ -125,8 +149,9 @@ export class ConversationStoreInternals {
     this.db.query(`
       INSERT INTO conversation_messages (
         id, session_id, turn_id, seq, role, status, visibility, provenance,
-        created_at, compacted_by_summary_id, source_gateway, source_ref
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, compacted_by_summary_id, source_gateway, source_ref, origin_kind, origin_ref,
+        origin_reason, origin_version, origin_evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       message.id,
       message.session_id,
@@ -140,6 +165,11 @@ export class ConversationStoreInternals {
       message.compacted_by_summary_id,
       message.source_gateway,
       message.source_ref,
+      message.origin_kind ?? "unknown",
+      message.origin_ref ?? null,
+      message.origin_reason ?? null,
+      message.origin_version ?? null,
+      message.origin_evidence_json ?? null,
     );
     return message;
   }

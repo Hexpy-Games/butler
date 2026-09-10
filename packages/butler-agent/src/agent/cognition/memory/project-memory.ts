@@ -1,7 +1,10 @@
 import {
   appendFileSync,
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -12,6 +15,14 @@ import {
 import { dirname, join } from "path";
 import { Database } from "bun:sqlite";
 import { cognitionMemoryRoot } from "../paths.ts";
+import {
+  acquireConsolidationLock,
+  acquireConsolidationLockAsync,
+  assertConsolidationLease,
+  consolidationLockPath,
+  releaseConsolidationLock,
+  type ConsolidationLease,
+} from "./scripts/lib/lock.ts";
 
 export function sanitizeProjectMemoryId(projectId: string): string {
   return projectId.replace(/[/\\\0]/g, "_");
@@ -24,6 +35,20 @@ export function projectMemoryPath(input: {
   const projectId = input.projectId?.trim();
   if (!projectId) return null;
   return join(cognitionMemoryRoot(input.butlerData), "projects", `${sanitizeProjectMemoryId(projectId)}.md`);
+}
+
+export function readProjectCapsuleForPrompt(input: {
+  butlerData: string;
+  projectId?: string | null;
+}): string | null {
+  const path = projectMemoryPath(input);
+  if (!path) return null;
+  const body = readText(path);
+  if (!body) return null;
+  const filtered = body.split(/\r?\n/u).filter((line) =>
+    !line.includes("generation-hot-cache:") && !line.includes("project-hot-cache:"),
+  ).join("\n").trim();
+  return filtered || null;
 }
 
 export interface ProjectCapsuleRefreshResult {
@@ -84,9 +109,11 @@ interface ProjectConfigEntry {
 
 interface TaskSummary {
   id: string;
+  project: string;
   status: string;
   request: string;
   result: string;
+  sourcePath: string;
 }
 
 type PromotionCategory = "conventions" | "decisions" | "feedback" | "risks";
@@ -180,9 +207,11 @@ function listRecentProjectTasks(input: {
     .slice(0, input.limit)
     .map((task) => ({
       id: task.id,
+      project: task.project,
       status: task.status || "UNKNOWN",
       request: task.request,
       result: task.result,
+      sourcePath: join(tasksDir, task.id),
     }));
 }
 
@@ -190,15 +219,19 @@ function listProjectMemoryEvidence(input: {
   butlerData: string;
   projectId: string;
   limit: number;
-}): string[] {
+}): Array<{ path: string; text: string }> {
   const taskMemoryDir = join(cognitionMemoryRoot(input.butlerData), "tasks");
   if (!existsSync(taskMemoryDir)) return [];
   return readdirSync(taskMemoryDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-    .map((entry) => join(taskMemoryDir, entry.name))
-    .filter((path) => textMentionsProject(readText(path), input.projectId))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
-    .slice(0, input.limit);
+    .map((entry) => {
+      const path = join(taskMemoryDir, entry.name);
+      return { path, text: readText(path), mtimeMs: statSync(path).mtimeMs };
+    })
+    .filter((item) => textMentionsProject(item.text, input.projectId))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, input.limit)
+    .map(({ path, text }) => ({ path, text }));
 }
 
 function listExplicitProjectFeedback(input: {
@@ -224,18 +257,26 @@ function listExplicitProjectFeedback(input: {
     .slice(0, input.limit);
 }
 
+type ProjectGraphEvidence = {
+  sourceId: number;
+  mentionProject: string | null;
+  entityProject: string | null;
+  provenance: string;
+  text: string;
+};
+
 function listProjectGraphEvidence(input: {
   butlerData: string;
   projectId: string;
   limit: number;
-}): Array<{ provenance: string; text: string }> {
+}): ProjectGraphEvidence[] {
   const dbPath = join(cognitionMemoryRoot(input.butlerData), "db", "graph.sqlite");
   if (!existsSync(dbPath)) return [];
   try {
     const db = new Database(dbPath, { readonly: true });
     try {
       const rows = db.prepare(`
-        SELECT m.id, m.session_id, m.snippet, e.name
+        SELECT m.id, m.session_id, m.project mention_project, m.snippet, e.project entity_project, e.name
         FROM entity_mentions m
         JOIN entities e ON e.id = m.entity_id
         WHERE m.snippet IS NOT NULL
@@ -246,10 +287,15 @@ function listProjectGraphEvidence(input: {
       `).all(input.projectId, input.projectId, input.limit) as Array<{
         id: number;
         session_id: string;
+        mention_project: string | null;
         snippet: string;
+        entity_project: string | null;
         name: string;
       }>;
       return rows.map((row) => ({
+        sourceId: row.id,
+        mentionProject: row.mention_project,
+        entityProject: row.entity_project,
         provenance: `graph:${row.session_id || row.id}`,
         text: row.snippet || row.name,
       }));
@@ -490,14 +536,103 @@ function acquireProjectCapsuleLock(path: string, staleAfterMs: number): void {
   }
 }
 
-export function refreshProjectCapsule(input: {
+type ProjectCapsuleRefreshInput = {
   butlerData: string;
   projectId: string;
   workspacePath?: string;
   now?: string;
   maxBytes?: number;
   lockStaleAfterMs?: number;
-}): ProjectCapsuleRefreshResult {
+  signal?: AbortSignal;
+  deadlineAt?: number;
+};
+
+type ProjectCapsuleSourceSnapshot = {
+  registry: ProjectConfigEntry | null;
+  workspacePath?: string;
+  tasks: TaskSummary[];
+  evidence: Array<{ path: string; text: string }>;
+  feedback: Array<{ path: string; text: string }>;
+  graph: ProjectGraphEvidence[];
+};
+
+type PreparedProjectCapsule = ProjectCapsuleRefreshResult & {
+  body: string;
+  sourceRevision: string;
+  sourceSnapshot: ProjectCapsuleSourceSnapshot;
+};
+
+function readProjectCapsuleSourceSnapshot(
+  input: ProjectCapsuleRefreshInput,
+  projectId: string,
+): ProjectCapsuleSourceSnapshot {
+  const registry = readProjectRegistry({ butlerData: input.butlerData, projectId });
+  const workspacePath = input.workspacePath ?? registry?.path;
+  return {
+    registry,
+    tasks: listRecentProjectTasks({ butlerData: input.butlerData, projectId, workspacePath, limit: 5 }),
+    evidence: listProjectMemoryEvidence({ butlerData: input.butlerData, projectId, limit: 5 }),
+    feedback: listExplicitProjectFeedback({ butlerData: input.butlerData, projectId, limit: 5 }),
+    graph: listProjectGraphEvidence({ butlerData: input.butlerData, projectId, limit: 12 }),
+    workspacePath,
+  };
+}
+
+function capsuleSourceRevision(snapshot: ProjectCapsuleSourceSnapshot): string {
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
+function selectedProjectCapsuleSourcesAreCurrent(
+  input: ProjectCapsuleRefreshInput,
+  projectId: string,
+  snapshot: ProjectCapsuleSourceSnapshot,
+): boolean {
+  if (JSON.stringify(readProjectRegistry({ butlerData: input.butlerData, projectId })) !==
+    JSON.stringify(snapshot.registry)) return false;
+  for (const task of snapshot.tasks) {
+    const current: TaskSummary = {
+      id: task.id,
+      project: readText(join(task.sourcePath, "project")),
+      status: readText(join(task.sourcePath, "status")) || "UNKNOWN",
+      request: readText(join(task.sourcePath, "request.md")),
+      result: readText(join(task.sourcePath, "result.md")) || readText(join(task.sourcePath, "observed_result.md")),
+      sourcePath: task.sourcePath,
+    };
+    if (JSON.stringify(current) !== JSON.stringify(task)) return false;
+  }
+  for (const item of [...snapshot.evidence, ...snapshot.feedback]) {
+    if (readText(item.path) !== item.text) return false;
+  }
+  if (snapshot.graph.length === 0) return true;
+  const dbPath = join(cognitionMemoryRoot(input.butlerData), "db", "graph.sqlite");
+  if (!existsSync(dbPath)) return false;
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const read = db.prepare("SELECT m.id,m.session_id,m.project mention_project,m.snippet,e.project entity_project,e.name FROM entity_mentions m JOIN entities e ON e.id=m.entity_id WHERE m.id=?");
+    for (const expected of snapshot.graph) {
+      const row = read.get(expected.sourceId) as {
+        id: number;
+        session_id: string;
+        mention_project: string | null;
+        snippet: string;
+        entity_project: string | null;
+        name: string;
+      } | null;
+      const current: ProjectGraphEvidence | null = row ? {
+        sourceId: row.id,
+        mentionProject: row.mention_project,
+        entityProject: row.entity_project,
+        provenance: `graph:${row.session_id || row.id}`,
+        text: row.snippet || row.name,
+      } : null;
+      if (!current || JSON.stringify(current) !== JSON.stringify(expected) ||
+        (current.mentionProject !== projectId && current.entityProject !== projectId)) return false;
+    }
+    return true;
+  } finally { db.close(); }
+}
+
+function prepareProjectCapsule(input: ProjectCapsuleRefreshInput): PreparedProjectCapsule {
   const projectId = input.projectId.trim();
   if (!projectId) throw new Error("project capsule refresh requires projectId");
 
@@ -528,45 +663,17 @@ export function refreshProjectCapsule(input: {
   }
 
   try {
+    const sourceSnapshot = readProjectCapsuleSourceSnapshot(input, projectId);
+    const sourceRevision = capsuleSourceRevision(sourceSnapshot);
     const now = input.now ?? new Date().toISOString();
-    const registry = readProjectRegistry({
-      butlerData: input.butlerData,
-      projectId,
-    });
-    const workspacePath = input.workspacePath ?? registry?.path;
-    const projectHotCache = workspacePath
-      ? readText(join(workspacePath, ".butler", "hot-cache.md"))
-      : "";
-    const tasks = listRecentProjectTasks({
-      butlerData: input.butlerData,
-      projectId,
-      workspacePath,
-      limit: 5,
-    });
-    const evidence = listProjectMemoryEvidence({
-      butlerData: input.butlerData,
-      projectId,
-      limit: 5,
-    });
-    const explicitFeedback = listExplicitProjectFeedback({
-      butlerData: input.butlerData,
-      projectId,
-      limit: 5,
-    });
-    const graphEvidence = listProjectGraphEvidence({
-      butlerData: input.butlerData,
-      projectId,
-      limit: 12,
-    });
+    const { registry, workspacePath, tasks, evidence, feedback: explicitFeedback, graph: graphEvidence } = sourceSnapshot;
+    const projectHotCache = "";
     const promotionSources = [
       ...tasks.flatMap((task) => [
         task.request ? { text: task.request, provenance: `task:${task.id}` } : null,
         task.result ? { text: task.result, provenance: `task:${task.id}` } : null,
       ]),
-      ...evidence.map((item) => ({ text: readText(item), provenance: `memory-evidence:${item}` })),
-      ...(projectHotCache && workspacePath
-        ? [{ text: projectHotCache, provenance: `project-hot-cache:${workspacePath}/.butler/hot-cache.md` }]
-        : []),
+      ...evidence.map((item) => ({ text: item.text, provenance: `memory-evidence:${item.path}` })),
       ...graphEvidence,
     ].filter((item): item is { text: string; provenance: string } => Boolean(item?.text.trim()));
     const promotions = collectPromotions({
@@ -616,7 +723,7 @@ export function refreshProjectCapsule(input: {
         promotions.decisions.length > 0
           ? renderPromotions("decisions", promotions.decisions)
           : evidence.length > 0
-          ? evidence.map((item) => `- Review memory evidence ${item} before promoting durable decisions. (provenance: memory-evidence:${item})`)
+          ? evidence.map((item) => `- Review memory evidence ${item.path} before promoting durable decisions. (provenance: memory-evidence:${item.path})`)
           : ["- No durable project decisions have been promoted yet."]
       ),
       "",
@@ -628,9 +735,7 @@ export function refreshProjectCapsule(input: {
             )
           : []
       ),
-      projectHotCache
-        ? `- Recent project-local notes: ${compact(projectHotCache, 500)} (provenance: project-hot-cache:${workspacePath}/.butler/hot-cache.md)`
-        : explicitFeedback.length > 0 ? "" : "- No project-local hot cache was found.",
+      explicitFeedback.length > 0 ? "" : "- No project-local hot cache was found.",
       ...renderPromotions("feedback", promotions.feedback),
       "",
       "## Risks",
@@ -646,15 +751,15 @@ export function refreshProjectCapsule(input: {
       "- confidence: partial; refresh uses bounded registry, task, hot-cache, memory-evidence, and graph inputs.",
     ].filter(Boolean);
     const body = boundedMarkdown(lines, input.maxBytes ?? 12_000);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, body, "utf8");
-
     return {
       ok: true,
       projectId,
       path,
       bytes: Buffer.byteLength(body, "utf8"),
       sourceCounts,
+      body,
+      sourceRevision,
+      sourceSnapshot,
     };
   } catch (error) {
     recordProjectRefreshFailure({
@@ -668,6 +773,54 @@ export function refreshProjectCapsule(input: {
   } finally {
     rmSync(lockPath, { force: true });
   }
+}
+
+function commitPreparedProjectCapsule(
+  input: ProjectCapsuleRefreshInput,
+  prepared: PreparedProjectCapsule,
+  lease: ConsolidationLease,
+): ProjectCapsuleRefreshResult {
+  const gatePath = consolidationLockPath(input.butlerData);
+  assertConsolidationLease(gatePath, lease);
+  if (!selectedProjectCapsuleSourcesAreCurrent(input, prepared.projectId, prepared.sourceSnapshot) ||
+    capsuleSourceRevision(prepared.sourceSnapshot) !== prepared.sourceRevision) {
+    throw new Error("memory_source_changed");
+  }
+  mkdirSync(dirname(prepared.path), { recursive: true });
+  const tmp = `${prepared.path}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, prepared.body, { encoding: "utf8", mode: 0o600 });
+  const descriptor = openSync(tmp, "r");
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+  renameSync(tmp, prepared.path);
+  const directory = openSync(dirname(prepared.path), "r");
+  try { fsyncSync(directory); } finally { closeSync(directory); }
+  const { body: _body, sourceRevision: _sourceRevision, sourceSnapshot: _sourceSnapshot, ...result } = prepared;
+  return result;
+}
+
+export function refreshProjectCapsule(input: ProjectCapsuleRefreshInput): ProjectCapsuleRefreshResult {
+  const prepared = prepareProjectCapsule(input);
+  const path = consolidationLockPath(input.butlerData);
+  const lease = acquireConsolidationLock(path, { purpose: "consolidation" });
+  if (!lease) throw new Error("memory_write_busy");
+  let commit = false;
+  try { const result = commitPreparedProjectCapsule(input, prepared, lease); commit = true; return result; }
+  finally { releaseConsolidationLock(path, lease, commit); }
+}
+
+export async function refreshProjectCapsuleAsync(input: ProjectCapsuleRefreshInput): Promise<ProjectCapsuleRefreshResult> {
+  const prepared = prepareProjectCapsule(input);
+  const path = consolidationLockPath(input.butlerData);
+  const lease = await acquireConsolidationLockAsync(path, {
+    purpose: "consolidation",
+    waitClass: "background",
+    signal: input.signal,
+    deadlineAt: input.deadlineAt,
+  });
+  if (!lease) throw new Error("memory_write_busy");
+  let commit = false;
+  try { const result = commitPreparedProjectCapsule(input, prepared, lease); commit = true; return result; }
+  finally { releaseConsolidationLock(path, lease, commit); }
 }
 
 function parseSourceCounts(body: string): ProjectCapsuleRefreshResult["sourceCounts"] | null {
@@ -744,25 +897,33 @@ export function inspectProjectCapsule(input: {
   };
 }
 
-export function refreshRegisteredProjectCapsules(input: {
+export async function refreshRegisteredProjectCapsules(input: {
   butlerData: string;
   now?: string;
   maxProjects?: number;
-}): ProjectCapsuleMaintenanceResult {
+  signal?: AbortSignal;
+  deadlineAt?: number;
+}): Promise<ProjectCapsuleMaintenanceResult> {
   const projects = readProjectRegistryEntries(input.butlerData)
     .slice(0, Math.max(0, input.maxProjects ?? 20));
   const failed: Array<{ projectId: string; message: string }> = [];
   let refreshed = 0;
 
   for (const project of projects) {
+    if (input.signal?.aborted) throw input.signal.reason ?? new Error("memory_operation_aborted");
+    if (input.deadlineAt !== undefined && Date.now() >= input.deadlineAt) {
+      throw new Error("memory_write_timeout");
+    }
     const projectId = project.name?.trim();
     if (!projectId) continue;
     try {
-      refreshProjectCapsule({
+      await refreshProjectCapsuleAsync({
         butlerData: input.butlerData,
         projectId,
         workspacePath: project.path,
         now: input.now,
+        signal: input.signal,
+        deadlineAt: input.deadlineAt,
       });
       refreshed += 1;
     } catch (error) {

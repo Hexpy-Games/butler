@@ -37,7 +37,7 @@ function writeNativeTranscript(path: string): void {
   ].join("\n"), "utf8");
 }
 
-test("sync consumer uses normalized transcript payload for hot cache and index", () => {
+test("sync consumer uses normalized transcript payload for hot cache and index", async () => {
   const transcriptPath = join(tempDir, "transcripts", "butler_main.jsonl");
   const saveHotPath = join(tempDir, "save_hot.ts");
   const indexPath = join(tempDir, "index.ts");
@@ -48,7 +48,7 @@ test("sync consumer uses normalized transcript payload for hot cache and index",
   let hotInput = "";
   let indexInputPath = "";
   let indexSessionId = "";
-  const result = processEntry(
+  const result = await processEntry(
     {
       project: "butler",
       topic: null,
@@ -82,7 +82,7 @@ test("sync consumer uses normalized transcript payload for hot cache and index",
   expect(indexInputPath).toContain(join(tempDir, "cognition", "memory", "queue", "normalized", "butler_main.jsonl"));
 });
 
-test("sync consumer prefers canonical conversation payload with source message ids", () => {
+test("sync consumer prefers canonical conversation payload with source message ids", async () => {
   const saveHotPath = join(tempDir, "save_hot.ts");
   const indexPath = join(tempDir, "index.ts");
   writeFileSync(saveHotPath, "", "utf8");
@@ -115,7 +115,7 @@ test("sync consumer prefers canonical conversation payload with source message i
   let hotInput = "";
   let indexInput = "";
   let resolvedTranscript = false;
-  const result = processEntry(
+  const result = await processEntry(
     {
       project: "butler",
       topic: null,
@@ -151,12 +151,12 @@ test("sync consumer prefers canonical conversation payload with source message i
   expect(indexInput).toContain("\"source_message_ids\":[\"cm_sync_consumer_user\"]");
 });
 
-test("sync consumer rejects unsafe source provenance before indexing", () => {
+test("sync consumer rejects unsafe source provenance before indexing", async () => {
   const transcriptPath = join(tempDir, "transcripts", "butler_main.jsonl");
   writeNativeTranscript(transcriptPath);
   const dlqFile = join(tempDir, "cognition", "memory", "queue", "dead-letter.jsonl");
 
-  const result = processEntry(
+  const result = await processEntry(
     {
       project: "butler",
       topic: null,

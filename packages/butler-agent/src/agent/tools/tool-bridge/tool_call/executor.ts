@@ -10,7 +10,7 @@ import type { NativeToolAvailabilityOverrides } from "../../types.ts";
 import { validateJsonObjectSchema } from "../../../tools/tool-support.ts";
 import { disabledToolRecovery } from "../audit.ts";
 import { currentToolNamesFromInput } from "../scope.ts";
-import { createToolDescribeToolHandler } from "../tool_describe/executor.ts";
+import { resolveToolDescription } from "../tool_describe/executor.ts";
 
 type ToolCall = { args: Record<string, unknown>; rawArguments?: string };
 type PluginToolCatalog =
@@ -23,14 +23,14 @@ type PluginToolDescriber = (input: {
 }) => Promise<ExternalToolCatalogInput | null | undefined>;
 export type ToolCallResolveResult =
   | {
-    ok: true;
-    targetCall: ButlerToolCall;
-    bridgeInvocation: Record<string, unknown>;
-  }
+      ok: true;
+      targetCall: ButlerToolCall;
+      bridgeInvocation: Record<string, unknown>;
+    }
   | {
-    ok: false;
-    result: ReturnType<typeof bridgeError>;
-  };
+      ok: false;
+      result: ReturnType<typeof bridgeError>;
+    };
 
 type ToolDescription = {
   id: string;
@@ -44,7 +44,16 @@ type ToolDescription = {
   call_affordance: Record<string, unknown>;
 };
 
-const BRIDGE_TOOL_NAMES = new Set(["tool_search", "tool_describe", "tool_call"]);
+type ResolvedDescription = {
+  description: ToolDescription;
+  nativeToolContractVersion?: 1 | 2;
+};
+
+const BRIDGE_TOOL_NAMES = new Set([
+  "tool_search",
+  "tool_describe",
+  "tool_call",
+]);
 
 export function createToolCallToolHandler(input: {
   butlerData: string;
@@ -59,10 +68,7 @@ export function createToolCallToolHandler(input: {
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
 }) {
-  return async (
-    call: ToolCall,
-    context?: ButlerToolRuntimeContext,
-  ) => {
+  return async (call: ToolCall, context?: ButlerToolRuntimeContext) => {
     const resolved = await resolveToolCallTarget(call, input);
     if (!resolved.ok) {
       return resolved.result;
@@ -79,7 +85,8 @@ export function createToolCallToolHandler(input: {
       return bridgeError("underlying_tool_error", errorMessage(error), {
         id: resolved.bridgeInvocation.id,
         recoverable: false,
-        next_action: "Treat this as an operational tool failure, not an app failure. Choose another enabled tool, adjust the request if applicable, or continue with available evidence.",
+        next_action:
+          "Treat this as an operational tool failure, not an app failure. Choose another enabled tool, adjust the request if applicable, or continue with available evidence.",
       });
     }
   };
@@ -105,20 +112,37 @@ export async function resolveToolCallTarget(
   if (!id) {
     return {
       ok: false,
-      result: bridgeError("invalid_tool_catalog_id", "tool_call requires a non-empty catalog id."),
+      result: bridgeError(
+        "invalid_tool_catalog_id",
+        "tool_call requires a non-empty catalog id.",
+      ),
     };
   }
   if (!args) {
     return {
       ok: false,
-      result: bridgeError("invalid_tool_arguments", "tool_call arguments must be an object."),
+      result: bridgeError(
+        "invalid_tool_arguments",
+        "tool_call arguments must be an object.",
+      ),
     };
   }
 
-  const description = await describeOneTool(createToolDescribeToolHandler(input), id);
-  if (!description) {
-    return { ok: false, result: bridgeError("unknown_tool_catalog_id", `Unknown tool catalog id: ${id}`, { id }) };
+  const resolvedDescription = (await resolveToolDescription(
+    id,
+    input,
+  )) as ResolvedDescription | null;
+  if (!resolvedDescription) {
+    return {
+      ok: false,
+      result: bridgeError(
+        "unknown_tool_catalog_id",
+        `Unknown tool catalog id: ${id}`,
+        { id },
+      ),
+    };
   }
+  const description = resolvedDescription.description;
   if (!description.enabled) {
     const recovery = disabledToolRecovery({
       id,
@@ -140,23 +164,38 @@ export async function resolveToolCallTarget(
   if (!isToolCallAllowedByTurnDescription(description, input)) {
     return {
       ok: false,
-      result: bridgeError("tool_not_described", `Tool must be described before invocation: ${id}`, {
-        id,
-        next_action: "Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.",
-      }),
+      result: bridgeError(
+        "tool_not_described",
+        `Tool must be described before invocation: ${id}`,
+        {
+          id,
+          next_action:
+            "Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.",
+        },
+      ),
     };
   }
 
   const normalizedArgs = normalizeBridgeArgumentsForTarget(id, args);
-  const validation = validateJsonObjectSchema(normalizedArgs, description.schema);
+  const validation = validateJsonObjectSchema(
+    normalizedArgs,
+    description.schema,
+  );
   if (!validation.ok) {
     return {
       ok: false,
-      result: bridgeError("invalid_tool_arguments", validation.message, { id, path: validation.path }),
+      result: bridgeError("invalid_tool_arguments", validation.message, {
+        id,
+        path: validation.path,
+      }),
     };
   }
 
-  const targetCall = describedToolCall(description, normalizedArgs);
+  const targetCall = describedToolCall(
+    description,
+    normalizedArgs,
+    resolvedDescription.nativeToolContractVersion,
+  );
   if (!targetCall.ok) {
     return { ok: false, result: targetCall.result };
   }
@@ -174,7 +213,10 @@ function normalizeBridgeArgumentsForTarget(
   if (!id.startsWith("native:project_ledger_")) return args;
   if (!("project_path" in args)) return args;
   const normalized = { ...args };
-  if (!("project_ref" in normalized) && typeof normalized.project_path === "string") {
+  if (
+    !("project_ref" in normalized) &&
+    typeof normalized.project_path === "string"
+  ) {
     normalized.project_ref = normalized.project_path;
   }
   delete normalized.project_path;
@@ -188,63 +230,94 @@ function isToolCallAllowedByTurnDescription(
     describedToolIds?: readonly string[] | (() => readonly string[]);
   },
 ): boolean {
-  const visibleToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
+  const visibleToolNames = new Set(
+    currentToolNamesFromInput(input.currentToolNames),
+  );
   if (visibleToolNames.has(description.name)) {
     return true;
   }
   if (input.describedToolIds === undefined) {
     return true;
   }
-  const describedToolIds = new Set(currentToolNamesFromInput(input.describedToolIds));
+  const describedToolIds = new Set(
+    currentToolNamesFromInput(input.describedToolIds),
+  );
   return describedToolIds.has(description.id);
-}
-
-async function describeOneTool(
-  describe: ReturnType<typeof createToolDescribeToolHandler>,
-  id: string,
-): Promise<ToolDescription | null> {
-  const result = await describe({ args: { ids: [id] } }) as {
-    ok?: boolean;
-    descriptions?: ToolDescription[];
-  };
-  return result.descriptions?.[0] ?? null;
 }
 
 function describedToolCall(
   description: ToolDescription,
   args: Record<string, unknown>,
-): { ok: true; call: ButlerToolCall } | { ok: false; result: ReturnType<typeof bridgeError> } {
+  nativeToolContractVersion?: 1 | 2,
+):
+  | { ok: true; call: ButlerToolCall }
+  | { ok: false; result: ReturnType<typeof bridgeError> } {
   const affordance = description.call_affordance;
   if (affordance.type === "native_tool") {
     const toolName = stringArg(affordance.tool_name);
     if (!toolName || BRIDGE_TOOL_NAMES.has(toolName)) {
-      return { ok: false, result: bridgeError("forbidden_bridge_target", "Bridge tools cannot recursively invoke bridge tools.") };
+      return {
+        ok: false,
+        result: bridgeError(
+          "forbidden_bridge_target",
+          "Bridge tools cannot recursively invoke bridge tools.",
+        ),
+      };
     }
-    return { ok: true, call: toolCall(toolName, args) };
+    return {
+      ok: true,
+      call: toolCall(toolName, args, nativeToolContractVersion),
+    };
   }
   if (affordance.type === "mcp_tool") {
     const serverId = stringArg(affordance.server_id);
     const toolName = stringArg(affordance.tool_name);
     if (!serverId || !toolName) {
-      return { ok: false, result: bridgeError("invalid_mcp_affordance", "MCP tool affordance is incomplete.") };
+      return {
+        ok: false,
+        result: bridgeError(
+          "invalid_mcp_affordance",
+          "MCP tool affordance is incomplete.",
+        ),
+      };
     }
-    return { ok: true, call: toolCall("call_mcp_tool", {
-      server_id: serverId,
-      tool_name: toolName,
-      arguments: args,
-    }) };
+    return {
+      ok: true,
+      call: toolCall("call_mcp_tool", {
+        server_id: serverId,
+        tool_name: toolName,
+        arguments: args,
+      }),
+    };
   }
   if (affordance.type === "plugin_tool") {
-    return { ok: false, result: bridgeError("plugin_invoker_unavailable", "Plugin invocation requires a guarded plugin dispatcher.") };
+    return {
+      ok: false,
+      result: bridgeError(
+        "plugin_invoker_unavailable",
+        "Plugin invocation requires a guarded plugin dispatcher.",
+      ),
+    };
   }
-  return { ok: false, result: bridgeError("unsupported_tool_affordance", "Tool cannot be invoked through tool_call.") };
+  return {
+    ok: false,
+    result: bridgeError(
+      "unsupported_tool_affordance",
+      "Tool cannot be invoked through tool_call.",
+    ),
+  };
 }
 
-function toolCall(name: string, args: Record<string, unknown>): ButlerToolCall {
+function toolCall(
+  name: string,
+  args: Record<string, unknown>,
+  toolContractVersion?: 1 | 2,
+): ButlerToolCall {
   return {
     name,
     args,
     rawArguments: JSON.stringify(args),
+    ...(toolContractVersion === undefined ? {} : { toolContractVersion }),
   };
 }
 
@@ -256,10 +329,13 @@ function bridgeInvocationMetadata(description: ToolDescription) {
   };
 }
 
-function withBridgeInvocation(result: unknown, bridgeInvocation: Record<string, unknown>) {
+function withBridgeInvocation(
+  result: unknown,
+  bridgeInvocation: Record<string, unknown>,
+) {
   if (result && typeof result === "object" && !Array.isArray(result)) {
     return {
-      ...result as Record<string, unknown>,
+      ...(result as Record<string, unknown>),
       bridge_invocation: bridgeInvocation,
     };
   }
@@ -281,7 +357,8 @@ function bridgeError(
       code,
       message,
       recoverable: true,
-      next_action: "Treat this bridge result as recoverable model feedback. Choose another enabled tool or adjust arguments before retrying.",
+      next_action:
+        "Treat this bridge result as recoverable model feedback. Choose another enabled tool or adjust arguments before retrying.",
       ...extra,
     },
   };
@@ -289,7 +366,7 @@ function bridgeError(
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
