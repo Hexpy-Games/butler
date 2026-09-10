@@ -863,7 +863,11 @@ function classifyHistoricalConversationOrigins(butlerData: string, options: { si
           const publicResult = row.outcome_public_assistant_message_id === row.message_id && request?.origin_kind === "user_input";
           const internal = request?.origin_kind === "internal_control";
           let decision = classifyConversationOrigin({ ref: row.source_ref, publicIngress: publicResult,
-            internalControl: internal, evidenceAvailable: !row.outcome_id || row.turn_id === null || Boolean(request?.origin_version), evidence: row.outcome_id
+            internalControl: internal,
+            // A durable outcome with no request reference proves absence, while a
+            // non-null reference still requires the exact classified request.
+            evidenceAvailable: !row.outcome_id || row.turn_id === null ||
+              row.outcome_request_message_id === null || Boolean(request?.origin_version), evidence: row.outcome_id
               ? [{ kind: "turn_outcome", ref: row.outcome_id, sha256: null }] : [] });
           if (decision.kind === "user_input") decision = { ...decision, kind: "assistant_public" as const, reason: "verified_public_outcome" };
           record(row, decision);
