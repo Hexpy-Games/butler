@@ -4177,9 +4177,11 @@ test("rebuild target writes its validated cache without exposing it through the 
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-rebuild-cache-"));
   roots.push(butlerData);
   const active = initializeEmptyMemoryGeneration(butlerData);
+  const longUnicodeSource =
+    "REBUILD_CACHE_ONLY_SENTINEL 고양이🐈 ".repeat(280).trim();
   const source = seedTurn(
     butlerData, "rebuild-cache-session", "rebuild-cache-turn",
-    "REBUILD_CACHE_ONLY_SENTINEL", "Noted.", 1,
+    longUnicodeSource, "Noted.", 1,
     {
       user: "user_input", assistant: "assistant_public",
       publicAdmission: { eventId: "rebuild-cache-public-source" },
@@ -4266,12 +4268,13 @@ test("rebuild target writes its validated cache without exposing it through the 
   };
   transformExtractionOutput = (output, input) => {
     const unit = input.source_units.find((item: any) => item.role === "user") ?? input.source_units[0];
+    const summaryText = [...unit.text].slice(0, 480).join("");
     for (const key of Object.keys(output)) delete output[key];
     Object.assign(output, {
       schema: "butler.memory-extract-output.v2", window_ref: input.window_ref,
       disposition: "processed", covered_unit_refs: input.source_units.map((item: any) => item.ref),
       nodes: [], claims: [], relations: [], corrections: [],
-      summary: { text: unit.text, evidence: [{ unit_ref: unit.ref, quote: unit.text, occurrence: 0 }] },
+      summary: { text: summaryText, evidence: [{ unit_ref: unit.ref, quote: summaryText, occurrence: 0 }] },
     });
   };
   const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
@@ -4315,6 +4318,26 @@ test("rebuild target writes its validated cache without exposing it through the 
   readyActiveGraph.close();
   const registered = await memory.ingestConversationMemory({ context, source });
   const secondRegistered = await memory.ingestConversationMemory({ context, source: secondSource });
+  const registeredGraph = new Database(join(stagedDestinationRoot, "graph.sqlite"), { readonly: true });
+  const registeredEpisodeId = registeredGraph.query<{ episode_id: string }, [string]>(
+    "SELECT episode_id FROM memory_projection_jobs WHERE job_id=?",
+  ).get(registered.job_id)!.episode_id;
+  const registeredSourceIds = registeredGraph.query<{ source_id: string }, [string]>(
+    "SELECT source_id FROM memory_chunk_sources WHERE episode_id=? ORDER BY source_id",
+  ).all(registeredEpisodeId).map((row) => row.source_id);
+  const registeredLongSourceIds = registeredGraph.query<{ source_id: string }, [string, string]>(
+    "SELECT source_id FROM memory_chunk_sources WHERE episode_id=? AND conversation_message_id=? ORDER BY source_id",
+  ).all(registeredEpisodeId, sourceMessageId!).map((row) => row.source_id);
+  registeredGraph.close();
+  const snapshotInventory = JSON.parse(readFileSync(
+    join(snapshotRoot, "memory-source-inventory.json"), "utf8",
+  )) as { entries: Array<{ episodeId: string; sourceUnitCount: number; sourceIds: string[] }> };
+  const registeredInventoryEntry = snapshotInventory.entries.find(
+    (entry) => entry.episodeId === registeredEpisodeId,
+  )!;
+  expect(registeredLongSourceIds.length).toBeGreaterThan(1);
+  expect(registeredInventoryEntry.sourceUnitCount).toBe(registeredSourceIds.length);
+  expect(registeredInventoryEntry.sourceIds).toEqual(registeredSourceIds);
   const typedJobs: Array<{ job_id: string }> = [];
   for (const { record } of snapshotRecords) {
     typedJobs.push(await memory.ingestConversationMemory({
@@ -4616,7 +4639,7 @@ test("rebuild target writes its validated cache without exposing it through the 
     stage_inventory: stageInventory,
   });
   await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
-});
+}, 15_000);
 
 test("project recall excludes global evidence and reads project evidence unchanged", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-global-read-"));

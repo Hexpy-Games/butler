@@ -8,7 +8,10 @@ import type {
   ConversationProjectionReader,
 } from "../../../conversation/types.ts";
 import type { ExtractInput, ResolvedMemorySource } from "./contracts.ts";
-import { splitGraphemeUtf8Spans } from "./windows.ts";
+import {
+  MEMORY_SOURCE_WINDOW_BYTES,
+  splitGraphemeUtf8Spans,
+} from "./windows.ts";
 import {
   sourceRows,
   type ProjectionSourceRow,
@@ -277,10 +280,11 @@ function inventorySourceIds(
   revision: string,
   scalars: ReturnType<typeof decodeMessageScalars>,
 ): string[] {
-  return scalars.flatMap((scalar) => splitUtf8Spans(scalar.text, 32 * 1024).map((span) => projectionHash([
-    "memory-source", episodeId, revision, "conversation", scalar.message.id,
-    scalar.part.id, scalar.pointer, span.start, span.end, scalar.hash,
-  ]))).sort();
+  return scalars.flatMap((scalar) =>
+    splitUtf8Spans(scalar.text, MEMORY_SOURCE_WINDOW_BYTES).map((span) => projectionHash([
+      "memory-source", episodeId, revision, "conversation", scalar.message.id,
+      scalar.part.id, scalar.pointer, span.start, span.end, scalar.hash,
+    ]))).sort();
 }
 
 function sessionInInventoryScope(
