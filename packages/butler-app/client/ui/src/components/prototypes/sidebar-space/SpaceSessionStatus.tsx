@@ -1,4 +1,4 @@
-import { CircleAlert, Circle } from "@/butler-ds";
+import { CircleAlert, Spinner } from "@/butler-ds";
 import { useMock } from "@/app/prototypes/sidebar-space/mock-store";
 import styles from "./SidebarInteractions.module.css";
 
@@ -14,12 +14,7 @@ export function SpaceSessionStatus({ id }: { id: string }) {
       aria-label={item.status}
     >
       {item.activity === "working" ? (
-        <Circle
-          size={16}
-          strokeDasharray="44 19"
-          strokeLinecap="round"
-          className={styles.spinner}
-        />
+        <Spinner size={16} />
       ) : (
         <CircleAlert size={16} />
       )}

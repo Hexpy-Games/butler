@@ -24,7 +24,7 @@ Read this before adding primitives, blocks, product containers, or CSS.
 | Navigation           | `Tabs`, `Breadcrumb`, `Separator`                                | Sidebar/list navigation is needed, such as `NavRow`, `NavSection`, `CollapsibleNavGroup`, `SettingsNav` | Active outlines, shadows, or indented collapsible children |
 | Overlays             | `Dialog`, `Popover`, `Tooltip`, menus                            | Modal form composition is needed, such as `DialogForm` or `CommandPanel`                                | Long workflows in popovers                                 |
 | Surfaces             | `Card`, `TintedGlass`                                            | Repeated panel or overlay treatment is needed, such as `SurfacePanel`                                   | Local glass gradients or Radix wrapper DOM                 |
-| Status and feedback  | `Icons`, `Typo`, `ProgressMeter`                                 | Empty, notice, activity, or worker rows repeat                                                          | Decorative charts or status hard-coded in CSS              |
+| Status and feedback  | `Spinner`, `Skeleton`, `Icons`, `Typo`, `ProgressMeter`          | Empty, notice, activity, or worker rows repeat                                                          | Feature-local loading icons or spinner keyframes           |
 | App shell            | `Stack`, `Grid`, `Typo`                                          | Window/titlebar/frame pattern repeats, such as `ChromeFrame`, `TitlebarShell`                           | Decorative cards that imitate shell chrome                 |
 
 ## Layout

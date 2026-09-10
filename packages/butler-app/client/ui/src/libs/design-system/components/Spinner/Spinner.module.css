@@ -1,0 +1,29 @@
+.spinner {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+.orbit {
+  transform-box: view-box;
+  transform-origin: center;
+  transform: rotate(-90deg);
+  animation: spinner-orbit var(--spinner-duration) var(--spinner-easing)
+    infinite;
+}
+
+@keyframes spinner-orbit {
+  from {
+    transform: rotate(-90deg);
+  }
+
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit {
+    animation: none;
+  }
+}

@@ -32,7 +32,7 @@ Product containers provide draft state, submit handlers, attachment actions,
 and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 `ComposerPlanToggle`, and `ComposerSendButton`.
 Set `ComposerSendButton busy` for temporary unavailability: it becomes a disabled
-non-submit control with an indeterminate spinner. Supply a localized accessible
+non-submit control with the official DS `Spinner`. Supply a localized accessible
 label and title; keep it visible even in compact mode. Reduced motion stops rotation.
 
 For inline references, use `ComposerCardEditor` with `ComposerCardEditable`

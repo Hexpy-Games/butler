@@ -24,7 +24,7 @@ const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(request) {
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 try {
-  await page.goto("http://127.0.0.1:5173/?visual=design-system");
+  await page.goto(`${process.env.BUTLER_UI_SMOKE_URL ?? "http://127.0.0.1:5173"}/?visual=design-system`);
   await page.getByRole("tab", { name: "Blocks", exact: true }).waitFor();
   await page.evaluate(async serverUrl => {
     const load = (path: string) => import(path);
@@ -84,7 +84,9 @@ try {
   for (const width of [1280, 430, 390, 375, 320]) {
     await page.setViewportSize({ width, height: 600 });
     await send.scrollIntoViewIfNeeded();
-    assert.match(await send.locator("svg").evaluate(el => getComputedStyle(el).animationName), /connection-spin/);
+    const orbit = send.locator('[data-slot="spinner-orbit"]');
+    assert.match(await orbit.evaluate(el => getComputedStyle(el).animationName), /spinner-orbit/);
+    assert.equal(await orbit.evaluate(el => getComputedStyle(el).animationDuration), "1.32s");
     const notice = page.locator('[data-test-class="live-connection-notice"]');
     assert.equal(await notice.evaluate(el => getComputedStyle(el).position), "absolute");
     await page.screenshot({ path: `${output}/${width}-reconnecting.png` });

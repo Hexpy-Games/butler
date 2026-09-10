@@ -1,5 +1,5 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, Clickable, LoaderCircle, MessageSquare, Stack, Typo } from "@/butler-ds";
+import { Button, Clickable, MessageSquare, Spinner, Stack, Typo } from "@/butler-ds";
 import type { DashboardBoardCard } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import styles from "./ProjectWorkBoard.module.css";
 
@@ -17,7 +17,7 @@ export function ProjectBoardCard({ card, running, onOpen, onOpenSession }: {
       </Typo.Caption>}
       {card.session && <Button variant="borderless" size="xs" className={styles.session}
         onClick={(event) => { event.stopPropagation(); onOpenSession(); }}>
-        {running ? <LoaderCircle className={styles.spinner} /> : <MessageSquare />}
+        {running ? <Spinner size={15} /> : <MessageSquare />}
         <span className={styles.sessionTitle}>{card.session.title}</span>
       </Button>}
     </Stack>

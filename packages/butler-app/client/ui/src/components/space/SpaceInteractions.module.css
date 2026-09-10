@@ -292,16 +292,3 @@
 .activity[data-attention="true"] {
   color: var(--text-primary);
 }
-.spinner {
-  animation: spin 1.2s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation: none;
-  }
-}

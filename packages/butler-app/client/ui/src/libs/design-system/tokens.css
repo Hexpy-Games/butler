@@ -18,6 +18,26 @@
   --adaptive-composer-radius: 30px;
   --adaptive-panel-duration: 220ms;
   --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spinner-duration: 1320ms;
+  --spinner-easing: linear(
+    0,
+    0.0363,
+    0.0766,
+    0.1243,
+    0.1816,
+    0.2493,
+    0.3266,
+    0.4113,
+    0.5,
+    0.5887,
+    0.6734,
+    0.7507,
+    0.8184,
+    0.8757,
+    0.9234,
+    0.9637,
+    1
+  );
   --adaptive-drawer-width: min(88vw, 320px);
   --adaptive-inspector-width: min(100vw, 430px);
   --adaptive-panel-bg: var(--neutral-white);

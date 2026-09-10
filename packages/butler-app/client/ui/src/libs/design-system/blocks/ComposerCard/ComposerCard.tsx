@@ -6,7 +6,8 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { forwardRef } from "react";
-import { LoaderCircle, SendHorizontal, Square } from "../../components/Icons";
+import { SendHorizontal, Square } from "../../components/Icons";
+import { Spinner } from "../../components/Spinner";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
@@ -147,7 +148,7 @@ export function ComposerSendButton({
       disabled={busy || disabled}
       aria-busy={busy || undefined}
     >
-      {busy ? <LoaderCircle size={16} aria-hidden="true" className={styles.busyIcon} /> : children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
+      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
     </button>
   );
 }

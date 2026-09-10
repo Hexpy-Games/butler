@@ -108,6 +108,9 @@ try {
         body: JSON.stringify({ chat_id: "general", text: "완료 상태 검증", client_message_id: "r5-completion" }) })
         .then(async response => { assert(response.ok, await response.clone().text()); return response; });
       await generalRow.locator('[role="status"]').waitFor({ state: "attached" });
+      const orbit = generalRow.locator('[data-slot="spinner-orbit"]');
+      assert.equal(await orbit.getAttribute("stroke-dasharray"), "79 21");
+      assert.equal(await orbit.evaluate(el => getComputedStyle(el).animationName), "none");
       finishReply!();
       assert((await result).ok);
       await page.getByText("사이드바 완료 상태 검증 응답", { exact: true }).waitFor();

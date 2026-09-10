@@ -9,7 +9,7 @@ import {
   CircleX,
   InspectorPanel,
   KeyValueRow,
-  LoaderCircle,
+  Spinner,
 } from "@/butler-ds";
 import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
 import { contextTooltip } from "@/app/utils.ts";
@@ -150,6 +150,6 @@ function progressStateIcon(state?: string): ReactElement {
   if (tone === "complete") return <CheckCircle2 size={18} />;
   if (tone === "failed") return <CircleAlert size={18} />;
   if (tone === "cancelled") return <CircleX size={18} />;
-  if (tone === "running") return <LoaderCircle size={18} />;
+  if (tone === "running") return <Spinner size={18} />;
   return <Circle size={18} />;
 }
