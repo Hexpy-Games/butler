@@ -181,6 +181,7 @@ export class ConversationSessionTurnRecords {
       capsule.safe_code,
       capsule.created_at,
     );
+    this.dependencies.internals.bumpPublicSourceRevision();
     this.dependencies.internals.enqueueProjection(
       capsule.session_id,
       turn.seq,

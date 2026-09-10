@@ -5,6 +5,8 @@
 import type { Database } from "bun:sqlite";
 import { createRequire } from "node:module";
 import { join } from "path";
+import type { MemoryExecutionContext } from "../../projection/contracts.ts";
+import { withMemoryWriteGateAsync } from "../../projection/ingestion.ts";
 
 const fs: typeof import("fs") = createRequire(import.meta.url)("fs");
 
@@ -129,4 +131,67 @@ export async function runOptimize(opts: OptimizeOptions): Promise<OptimizeMetric
   }
 
   return metrics;
+}
+
+export async function runRevisionAwareOptimize(input: { db: Database; table: OptimizeTable; context: MemoryExecutionContext }): Promise<OptimizeMetrics> {
+  const eligibleRows = () => input.db.query<{ receipt_json: string }, []>(`
+    SELECT u.receipt_json FROM memory_vector_units u
+    JOIN memory_projection_jobs j ON j.job_id=u.job_id
+    JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id
+    WHERE j.revision<>c.current_revision AND u.state='complete' AND u.receipt_json IS NOT NULL
+      AND json_extract(j.semantic_graph_state,'$.state')='complete'
+      AND EXISTS (
+        SELECT 1 FROM memory_projection_jobs current_job
+        WHERE current_job.episode_id=j.episode_id AND current_job.revision=c.current_revision
+          AND json_extract(current_job.semantic_graph_state,'$.state')='complete'
+          AND CASE u.record_kind
+            WHEN 'episode' THEN json_extract(current_job.episode_vectors_state,'$.state')
+            WHEN 'node' THEN json_extract(current_job.node_vectors_state,'$.state')
+          END='complete'
+          AND NOT EXISTS (
+            SELECT 1 FROM memory_vector_units current_unit
+            WHERE current_unit.job_id=current_job.job_id AND current_unit.record_kind=u.record_kind
+              AND current_unit.state NOT IN ('complete','superseded')
+          )
+      )
+  `).all();
+  const liveRowsNow = () => input.db.query<{ receipt_json: string }, []>(`
+    SELECT u.receipt_json FROM memory_vector_units u
+    JOIN memory_projection_jobs j ON j.job_id=u.job_id
+    JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+    WHERE u.receipt_json IS NOT NULL AND u.state!='superseded'
+  `).all();
+  const rows = eligibleRows();
+  const liveRows = liveRowsNow();
+  const receiptKeys = (receiptJson: string): string[] => {
+    try {
+      const receipt = JSON.parse(receiptJson) as { vector_keys?: unknown };
+      return Array.isArray(receipt.vector_keys)
+        ? receipt.vector_keys.filter((key): key is string => typeof key === "string" && Boolean(key))
+        : [];
+    } catch { return []; }
+  };
+  const liveKeys = new Set(liveRows.flatMap((row) => receiptKeys(row.receipt_json)));
+  const keys = new Set<string>();
+  for (const row of rows) {
+    for (const key of receiptKeys(row.receipt_json)) if (!liveKeys.has(key)) keys.add(key);
+  }
+  let vectorsPruned = 0;
+  let compacted = false;
+  const commit = async () => {
+    const currentLiveRows = liveRowsNow();
+    const currentLiveKeys = new Set(currentLiveRows.flatMap((row) => receiptKeys(row.receipt_json)));
+    const currentEligibleKeys = new Set(eligibleRows().flatMap((row) => receiptKeys(row.receipt_json)));
+    const ordered = [...keys].filter((key) => currentEligibleKeys.has(key) && !currentLiveKeys.has(key)).sort();
+    for (let index = 0; index < ordered.length; index += 100) {
+      const batch = ordered.slice(index, index + 100);
+      await input.table.delete(`vector_key IN (${batch.map((key) => `'${key.replace(/'/gu, "''")}'`).join(",")})`);
+      vectorsPruned += batch.length;
+    }
+    if (ordered.length && input.table.optimize) {
+      try { await input.table.optimize(); compacted = true; } catch {}
+    }
+  };
+  await withMemoryWriteGateAsync(input.context, commit);
+  return { caches_compacted: 0, summaries_re_embedded: 0, vectors_pruned: vectorsPruned, lancedb_compacted: compacted };
 }

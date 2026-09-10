@@ -226,6 +226,7 @@ export function createButlerToolExecutor(
       turnId: input.turnId,
       sessionId: input.sessionId,
       projectId: input.projectId,
+      currentUserMessage: input.turnContext,
       memoryVectorBackend: input.memoryVectorBackend,
       memoryVectorTimeoutMs: input.memoryVectorTimeoutMs,
     }),

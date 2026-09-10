@@ -22,6 +22,8 @@ export function createMemoryToolHandlers(input: {
   turnId?: string;
   sessionId?: string;
   projectId?: string;
+  currentUserMessage?: string;
+  canonicalUserMessageId?: string;
   memoryVectorBackend?: VectorEpisodeBackend;
   memoryVectorTimeoutMs?: number;
 }) {
@@ -110,17 +112,24 @@ export function createMemoryToolHandlers(input: {
         includeTools: call.args.include_tools === true,
       });
     },
-    "update_explicit_memory": async (call: ToolCall) => {
+    "update_explicit_memory": async (
+      call: ToolCall,
+      runtimeContext?: { effectOccurrenceId?: string },
+    ) => {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (kind !== "rule") {
         throw new Error("update_explicit_memory requires kind rule");
       }
-      const text = typeof call.args.text === "string" ? call.args.text.trim() : "";
+      const text = typeof call.args.text === "string" ? call.args.text : "";
       const source = typeof call.args.source === "string" ? call.args.source.trim() : "";
-      if (!text) throw new Error("update_explicit_memory requires text");
+      if (!text.trim()) throw new Error("update_explicit_memory requires text");
       if (!source) throw new Error("update_explicit_memory requires source");
       return updateExplicitMemory({
         butlerData: input.butlerData,
+        operationId: runtimeContext?.effectOccurrenceId,
+        projectId: input.projectId ?? null,
+        conversationSessionId: input.turnId ? (input.sessionId ?? null) : null,
+        conversationMessageId: input.canonicalUserMessageId ?? null,
         update: {
           kind,
           text,

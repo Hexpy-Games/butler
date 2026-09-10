@@ -12,6 +12,17 @@ import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognitio
 import { createKnowHowEntry, readKnowHowEntry, recordSourceQualityEvent } from "../../packages/butler-agent/src/agent/cognition/know-how/store.ts";
 import { createMemoryChunk } from "../../packages/butler-agent/src/agent/cognition/memory/metadata.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { Database } from "bun:sqlite";
+import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { updateExplicitMemory } from "../../packages/butler-agent/src/agent/cognition/memory/quality.ts";
+import { ingestConversationMemory, resolveMemorySource } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
+import { processEntry } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/sync-consumer.ts";
+import type { SyncRequest } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts";
+import {
+  acquireConsolidationLock,
+  consolidationLockPath,
+  releaseConsolidationLock,
+} from "../../packages/butler-agent/src/agent/cognition/memory/scripts/lib/lock.ts";
 
 const root = process.cwd();
 const cli = join(root, "bin", "butler.js");
@@ -633,9 +644,31 @@ test("operator continuity recovery requires plan, explicit approval, apply, and 
   }
 }, 15_000);
 
-test("operator cognition feedback commands manage short-term feedback buffer", () => {
+test("operator cognition feedback commands manage short-term feedback buffer", async () => {
   const butlerData = tempRoot();
   try {
+    const descriptor = initializeEmptyMemoryGeneration(butlerData);
+    const sourceOwner = updateExplicitMemory({
+      butlerData, operationId: "feedback-source-owner",
+      update: { kind: "rule", text: "bad-weather source claim", source: "native" },
+    });
+    await ingestConversationMemory({
+      context: {
+        butlerData,
+        target: { kind: "active", expected_generation: descriptor.generation_id },
+        signal: new AbortController().signal,
+      },
+      source: {
+        kind: "explicit_record", record_kind: "rule", record_id: sourceOwner.record_id,
+        revision: sourceOwner.revision, operation_id: sourceOwner.operation_id,
+      },
+    });
+    const graph = new Database(join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite"), { readonly: true });
+    const sourceId = graph.query<{ source_id: string }, []>("SELECT source_id FROM memory_chunk_sources WHERE source_kind='explicit_record'").get()!.source_id;
+    graph.close();
+    const sourceHandle = `memory-source:v2:${
+      Buffer.from(descriptor.generation_id).toString("base64url")
+    }:${Buffer.from(sourceId).toString("base64url")}`;
     const add = runCli([
       "cognition",
       "feedback",
@@ -668,15 +701,80 @@ test("operator cognition feedback commands manage short-term feedback buffer", (
     parsed = JSON.parse(stdoutText(show));
     expect(parsed.data.entry.text).toBe("이제 bad-weather에서는 검색하지 마세요.");
 
-    const resolve = runCli(["cognition", "feedback", "resolve", feedbackId, "--status", "applied", "--json"], butlerData);
+    const resolve = runCli([
+      "cognition", "feedback", "resolve", feedbackId, "--status", "applied",
+      "--intent", "exclude", "--actor", "operator", "--operation-id", "operator-exclude-1",
+      "--source-ref", sourceHandle, "--scope", "all_user_sessions", "--json",
+    ], butlerData);
     expect(resolve.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(resolve));
     expect(parsed.data.entry.status).toBe("applied");
+    expect(parsed.data.quality_operation).toMatchObject({
+      intent: "exclude", actor: "operator", source_ref: sourceId, status: "pending",
+      generation_id: descriptor.generation_id,
+    });
+    expect(parsed.data.quality_operation.source_revision).toBe(sourceOwner.revision);
+    const queueEntries = readFileSync(join(butlerData, "cognition", "memory", "queue", "sync.jsonl"), "utf8")
+      .trim().split("\n").map((line) => JSON.parse(line) as SyncRequest);
+    const qualityNotice = queueEntries.find((entry) =>
+      entry.schema_version === "butler.memory-sync-request.v3" &&
+      entry.source.kind === "explicit_record" && entry.source.record_kind === "feedback");
+    expect(qualityNotice).toBeTruthy();
+    const gate = acquireConsolidationLock(consolidationLockPath(butlerData), {
+      purpose: "quality-test-contention",
+    });
+    expect(gate).toBeTruthy();
+    try {
+      expect(await processEntry(qualityNotice!, { butlerData })).toMatchObject({
+        dequeue: false,
+        reason: "memory_write_busy",
+      });
+    } finally {
+      releaseConsolidationLock(consolidationLockPath(butlerData), gate!);
+    }
+    expect(readFileSync(
+      join(butlerData, "cognition", "feedback", "quality-operations.jsonl"),
+      "utf8",
+    )).toContain('"status":"pending"');
+    expect(await processEntry(qualityNotice!, { butlerData })).toMatchObject({ dequeue: true });
+    const appliedGraph = new Database(join(
+      butlerData,
+      "cognition",
+      "memory",
+      "generations",
+      descriptor.generation_id,
+      "graph.sqlite",
+    ), { readonly: true });
+    expect(appliedGraph.query<{ value: string }, [string]>(
+      "SELECT value FROM memory_state WHERE key=?",
+    ).get("quality_operation:operator-exclude-1")?.value).toContain(
+      `"source_ref":"${sourceId}"`,
+    );
+    appliedGraph.close();
+    const replay = runCli([
+      "cognition", "feedback", "resolve", feedbackId, "--status", "applied",
+      "--intent", "exclude", "--actor", "operator", "--operation-id", "operator-exclude-1",
+      "--source-ref", sourceHandle, "--scope", "all_user_sessions", "--json",
+    ], butlerData);
+    expect(replay.exitCode).toBe(0);
+    expect(JSON.parse(stdoutText(replay)).data.quality_operation.replayed).toBe(true);
+    expect(resolveMemorySource({
+      context: {
+        butlerData,
+        target: { kind: "active", expected_generation: descriptor.generation_id },
+        signal: new AbortController().signal,
+      },
+      sourceRef: sourceId,
+    }).text).toBe("bad-weather source claim");
 
     const clear = runCli(["cognition", "feedback", "clear", "--applied", "--yes", "--json"], butlerData);
     expect(clear.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(clear));
     expect(parsed.data).toEqual({ removed: 1, remaining: 0 });
+    expect(await processEntry(qualityNotice!, { butlerData })).toMatchObject({ dequeue: true });
+    const qualityLog = readFileSync(join(butlerData, "cognition", "feedback", "quality-operations.jsonl"), "utf8");
+    expect(qualityLog).toContain("operator-exclude-1");
+    expect(qualityLog).toContain('"status":"applied"');
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

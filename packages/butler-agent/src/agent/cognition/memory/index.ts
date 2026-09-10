@@ -4,7 +4,7 @@ export {
   resolveMemorySource,
   completionProjectionProcessed,
 } from "./projection/ingestion.ts";
-export { recallMemory } from "./projection/recall.ts";
+export { recallSourceBackedMemory as recallMemory } from "./recall/engine.ts";
 export { readActiveDescriptor } from "./projection/generation.ts";
 export type {
   MemoryExecutionContext,

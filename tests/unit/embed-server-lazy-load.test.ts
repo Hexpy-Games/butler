@@ -11,10 +11,69 @@ import {
   healthPortDiscoveryPath,
   parseHealthPort,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/embed-server.ts";
+import { bindLoadedEmbeddingAssetIdentity } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/embed-lifecycle.ts";
 import {
+  CheckedEmbeddingError,
   EmbedServerUnavailableError,
+  embedCheckedViaSocket,
   embedViaSocket,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/embed.ts";
+import { bindObservedGenerationEmbeddingUnderWriteGate, initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { recallSourceBackedMemory } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
+
+test("checked v2 embedding uses the loaded tokenizer, rejects overflow before inference, and pins CLS metadata", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-embed-checked-"));
+  const socketPath = join(tempDir, "embed.sock");
+  let inferenceCalls = 0;
+  let observedOptions: unknown;
+  const tokenizer = Object.assign(
+    (text: string) => ({ input_ids: { dims: [1, [...text].length + 2] } }),
+    { model_max_length: 5 },
+  );
+  const pipeline = Object.assign(
+    async (_input: string | string[], options?: { pooling?: string; normalize?: boolean }) => {
+      inferenceCalls += 1;
+      observedOptions = options;
+      return { data: new Float32Array([0.25, 0.75]) };
+    },
+    { tokenizer, model: { config: { max_position_embeddings: 5 } } },
+  ) as unknown as FeatureExtractionPipeline;
+  bindLoadedEmbeddingAssetIdentity(pipeline, {
+    tokenizer_asset_sha256: "a".repeat(64),
+    model_asset_sha256: "b".repeat(64),
+  });
+  const embedding = createLazyEmbeddingFunctions({ loadPipeline: async () => pipeline, log: () => {} });
+  const server = createServer(embedding.embedText, socketPath, embedding.embedTexts, { embedChecked: embedding.embedChecked });
+  try {
+    await server.ready;
+    await expect(embedCheckedViaSocket({ texts: ["abcd"], socketPath })).rejects.toMatchObject({ code: "embed_input_too_long" });
+    expect(inferenceCalls).toBe(0);
+    const checked = await embedCheckedViaSocket({ texts: ["abc"], socketPath });
+    expect(checked.metadata).toMatchObject({
+      model: "Xenova/bge-m3",
+      dimension: 2,
+      pooling: "cls",
+      normalize: true,
+      max_tokens: 5,
+      tokenizer_asset_sha256: "a".repeat(64),
+      model_asset_sha256: "b".repeat(64),
+    });
+    expect(checked.metadata.version).toMatch(/^[0-9a-f]{64}$/u);
+    expect(checked.token_counts).toEqual([5]);
+    expect(inferenceCalls).toBe(1);
+    expect(observedOptions).toEqual({ pooling: "cls", normalize: true });
+    const limited = await embedCheckedViaSocket({ texts: ["abcdef"], socketPath, resplit: true, maxEmbeddings: 1 });
+    expect(limited.embedded_texts).toEqual(["abc"]);
+    expect(limited.omitted_count).toBe(1);
+    expect(limited.token_counts).toEqual([5]);
+    expect(limited.embeddings).toHaveLength(1);
+    expect(inferenceCalls).toBe(2);
+    let mismatch: unknown;
+    try { await embedCheckedViaSocket({ texts: ["abc"], socketPath, expected: { ...checked.metadata, version: "b".repeat(64) } }); }
+    catch (error) { mismatch = error; }
+    expect(mismatch).toBeInstanceOf(CheckedEmbeddingError);
+  } finally { server.stop(); embedding.stop(); rmSync(tempDir, { recursive: true, force: true }); }
+});
 
 async function rawEmbedRequest(socketPath: string, payload: unknown): Promise<Record<string, unknown>> {
   return await new Promise((resolve, reject) => {
@@ -336,6 +395,73 @@ test("embed queue rejects excess work and reports bounded queue health", async (
     healthEmbedding.stop();
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test("checked socket queue enforces fairness, waiting cancellation, and deadlines", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-embed-scheduling-"));
+  const socketPath = join(tempDir, "embed.sock");
+  const starts: string[] = [];
+  let releaseFirst!: () => void;
+  let firstStarted!: () => void;
+  const firstStartedPromise = new Promise<void>((resolve) => { firstStarted = resolve; });
+  const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const metadata = { model: "test/bge-m3", dimension: 1, pooling: "cls" as const, normalize: true as const,
+    version: "a".repeat(64), max_tokens: 8192, transformers_version: "test", node_runtime_version: process.version,
+    bun_runtime_version: Bun.version, tokenizer_asset_sha256: "b".repeat(64), model_asset_sha256: "c".repeat(64) };
+  const server = createServer(async () => [1], socketPath, undefined, { embedChecked: async (texts) => {
+    starts.push(texts[0]!); if (texts[0] === "first") { firstStarted(); await firstBlocked; }
+    return { embeddings: texts.map(() => [1]), token_counts: texts.map(() => 1), embedded_texts: texts, omitted_count: 0, metadata };
+  } });
+  const cleanup = new AbortController();
+  try {
+    await server.ready;
+    const call = (name: string, requestClass: "interactive" | "background", options: { signal?: AbortSignal; deadlineAt?: number } = {}) => embedCheckedViaSocket({
+      texts: [name], socketPath, requestClass, timeoutMs: 2_000, signal: options.signal ?? cleanup.signal, deadlineAt: options.deadlineAt,
+    });
+    const first = call("first", "interactive"); await firstStartedPromise;
+    const background = call("background", "background");
+    const interactive = Array.from({ length: 9 }, (_, index) => call(`interactive-${index + 1}`, "interactive"));
+    const cancelledController = new AbortController();
+    const cancelled = call("cancelled", "background", { signal: cancelledController.signal }).then(() => null, (error) => error as { code?: string });
+    const expired = call("expired", "background", { deadlineAt: Date.now() + 100 }).then(() => null, (error) => error as { code?: string });
+    await Bun.sleep(110); cancelledController.abort(); await Bun.sleep(20); releaseFirst();
+    const values = await Promise.all([first, background, ...interactive, cancelled, expired]);
+    expect(starts[0]).toBe("first");
+    expect(starts.indexOf("background")).toBeGreaterThan(0); expect(starts.indexOf("background")).toBeLessThanOrEqual(8);
+    expect(starts.filter((value) => value.startsWith("interactive-"))).toHaveLength(9);
+    expect(starts).not.toContain("cancelled"); expect(starts).not.toContain("expired");
+    expect(values.at(-2)).toMatchObject({ code: "embed_request_cancelled" }); expect(values.at(-1)).toMatchObject({ code: "embed_request_deadline" });
+  } finally { releaseFirst(); cleanup.abort(); server.stop(); rmSync(tempDir, { recursive: true, force: true }); }
+});
+
+test("native v2 recall forwards caller cancellation to the checked vector socket", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-recall-cancel-"));
+  const socketPath = process.env.EMBED_SOCKET!;
+  const metadata = { model: "test/bge-m3", dimension: 1, pooling: "cls" as const, normalize: true as const,
+    version: "a".repeat(64), max_tokens: 8192, transformers_version: "test", node_runtime_version: process.version,
+    bun_runtime_version: Bun.version, tokenizer_asset_sha256: "b".repeat(64), model_asset_sha256: "c".repeat(64) };
+  const descriptor = initializeEmptyMemoryGeneration(butlerData);
+  const controller = new AbortController();
+  const server = createServer(async () => [1], socketPath, undefined, { embedChecked: async (texts) => {
+    await Bun.sleep(50);
+    return { embeddings: texts.map(() => [1]), token_counts: texts.map(() => 1), embedded_texts: texts, omitted_count: 0, metadata };
+  } });
+  try {
+    bindObservedGenerationEmbeddingUnderWriteGate({ butlerData,
+      target: { kind: "active", expected_generation: descriptor.generation_id }, signal: controller.signal }, metadata);
+    await server.ready;
+    const pending = recallSourceBackedMemory({
+      context: { butlerData, target: { kind: "active", expected_generation: descriptor.generation_id }, signal: controller.signal },
+      cue: "cancel this recall", includeVector: true, includeInternal: false, limit: 6,
+      scope: "all_user_sessions", projectFilter: "unassigned", projectIds: [], sessionIds: [],
+      asOf: new Date().toISOString(),
+      runtime: { sessionId: "session", turnId: "turn", currentUserMessage: "cancel this recall", nativeOperationId: "operation", projectId: null },
+    });
+    await Bun.sleep(10);
+    controller.abort();
+    const result = await pending;
+    expect(result.coverage.vectors).toMatchObject({ state: "unavailable", codes: ["embed_request_cancelled"] });
+  } finally { server.stop(); rmSync(butlerData, { recursive: true, force: true }); }
 });
 
 test("configured health bind failure rejects server readiness instead of silently disappearing", async () => {

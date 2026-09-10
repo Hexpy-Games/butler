@@ -10,8 +10,16 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
   listConversationSessions,
+  listConversationSessionsV2,
   readConversationSession,
 } from "../../packages/butler-agent/src/agent/context/conversation-session-reference.ts";
+import { queryMemoryV2 } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
+import { toolResultToMessage } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-result-message.ts";
+import { createToolResultModelPreviewContext } from "../../packages/butler-agent/src/agent/tools/tool-result-serialization.ts";
+import {
+  executePreparedBtccToolCall,
+  prepareBtccToolCall,
+} from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
 
 let root = "";
 let appDbPath = "";
@@ -155,6 +163,44 @@ test("all-session discovery can find another project but project-scoped reading 
   ]);
 });
 
+test("v2 session discovery keeps canonical rows when App catalog labels conflict", () => {
+  const store = new AgentConversationStore({ butlerData: root });
+  try {
+    seedSession(store, {
+      sessionId: "cs_current",
+      externalSessionId: "chat-current",
+      projectId: "project-butler",
+      user: "현재",
+      assistant: "현재 답변",
+      now: "2026-08-06T01:00:00.000Z",
+    });
+  } finally {
+    store.close();
+  }
+  seedAppCatalog(appDbPath, [
+    ["chat-a", "제목 A", "project-butler", "cs_current"],
+    ["chat-b", "제목 B", "project-butler", "cs_current"],
+  ]);
+
+  const result = listConversationSessionsV2({
+    butlerData: root,
+    currentSessionId: "cs_current",
+    currentProjectId: "project-butler",
+    scope: "current_project",
+  });
+
+  expect(result).toMatchObject({
+    ok: true,
+    diagnostics: ["catalog_conflict"],
+    sessions: [{
+      conversation_session_id: "cs_current",
+      title: null,
+      catalog_source: null,
+      session_kind: "unknown",
+    }],
+  });
+});
+
 test("cross-session reading rejects unknown canonical ids", () => {
   const result = readConversationSession({
     butlerData: root,
@@ -179,11 +225,22 @@ test("native session-reference tools expose bounded schemas and execute the cano
     (tool) => tool.name === "read_conversation_session",
   );
   expect(listTool?.parameters.required).toEqual([]);
+  expect(
+    (listTool as { toolContractVersion?: number } | undefined)
+      ?.toolContractVersion,
+  ).toBe(2);
   expect(Object.keys(listTool?.parameters.properties ?? {})).toEqual([
     "scope",
     "limit",
     "include_archived",
     "preview_messages",
+    "session_ids",
+    "project_filter",
+    "project_ids",
+    "include_internal",
+    "session_kind",
+    "time",
+    "cursor",
   ]);
   expect(readTool?.parameters.required).toEqual([]);
   expect(
@@ -193,12 +250,17 @@ test("native session-reference tools expose bounded schemas and execute the cano
   expect(Object.keys(readTool?.parameters.properties ?? {})).toEqual([
     "conversation_session_id",
     "scope",
+    "session_ids",
+    "project_filter",
+    "project_ids",
+    "include_internal",
     "source_ref",
     "anchor_message_id",
     "direction",
     "limit",
     "max_chars",
     "include_tools",
+    "cursor",
   ]);
 
   const store = new AgentConversationStore({ butlerData: root });
@@ -226,6 +288,8 @@ test("native session-reference tools expose bounded schemas and execute the cano
     butlerHome: root,
     butlerData: root,
     sessionId: "cs_current",
+    turnId: "turn-current",
+    turnContext: "이전 대화를 찾아줘",
     projectId: "project-butler",
   });
 
@@ -251,6 +315,140 @@ test("native session-reference tools expose bounded schemas and execute the cano
   ]);
 });
 
+test("query source read_args page the complete canonical scalar without changing bytes", async () => {
+  const text = `${"가나다🙂".repeat(1_500)}끝`;
+  const store = new AgentConversationStore({ butlerData: root });
+  const turn = store.beginTurn({
+    gateway: "test",
+    externalSessionId: "source",
+    sessionId: "cs_source",
+    actor: "user",
+  });
+  store.appendUserMessage({
+    sessionId: "cs_source",
+    turnId: turn.id,
+    messageId: "cm_source",
+    text,
+    originKind: "user_input",
+  });
+  store.close();
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: root,
+    sessionId: "source",
+    turnId: turn.id,
+    turnContext: "가나다",
+  });
+  const native = async (name: "query_memory" | "read_conversation_session", args: Record<string, unknown>) => {
+    const tool = BUTLER_TOOLS.find((item) => item.name === name);
+    if (!tool) throw new Error(`missing ${name} definition`);
+    const prepared = prepareBtccToolCall({ tools: [tool] }, {
+      id: `native-${name}`,
+      name,
+      arguments: args,
+      rawArguments: JSON.stringify(args),
+    });
+    expect(prepared.validationError).toBeNull();
+    return executePreparedBtccToolCall({
+      executeTool: (call) => execute({
+        name: call.name,
+        args: call.arguments,
+        rawArguments: call.rawArguments,
+        ...(call.toolContractVersion === undefined
+          ? {} : { toolContractVersion: call.toolContractVersion }),
+        ...(call.signal ? { signal: call.signal } : {}),
+      }),
+    }, prepared);
+  };
+  const queryResult = await native("query_memory", {
+    query: "가나다", scope: "all_user_sessions", limit: 1,
+  });
+  expect(queryResult.ok).toBe(true);
+  const query = queryResult.output as ReturnType<typeof queryMemoryV2>;
+  if (!query.ok) throw new Error("expected source query");
+  const readArgs = query.results[0]!.read_args;
+  let cursor: string | undefined;
+  let joined = "";
+  do {
+    const pageResult = await native("read_conversation_session", {
+      ...readArgs, ...(cursor ? { cursor } : {}),
+    });
+    expect(pageResult.ok).toBe(true);
+    const page = pageResult.output as ReturnType<typeof readConversationSession>;
+    if (!page.ok || !("mode" in page) || page.mode !== "source") {
+      throw new Error("expected source page");
+    }
+    const sourcePage = page as unknown as {
+      text: string;
+      next_cursor: string | null;
+    };
+    const serialized = toolResultToMessage({
+      result: {
+        name: "read_conversation_session",
+        toolCallId: "source-page",
+        ok: true,
+        output: page,
+      },
+      modelPreviewContext: createToolResultModelPreviewContext(),
+    });
+    expect(Buffer.byteLength(serialized.content, "utf8")).toBeLessThanOrEqual(
+      24 * 1024,
+    );
+    expect(JSON.parse(serialized.content).output).toMatchObject(page);
+    joined += sourcePage.text;
+    cursor = sourcePage.next_cursor ?? undefined;
+  } while (cursor);
+  expect(Buffer.from(joined, "utf8")).toEqual(Buffer.from(text, "utf8"));
+
+  const allMessages = await native("query_memory", {
+    scope: "all_user_sessions", limit: 10,
+  });
+  expect(allMessages.ok).toBe(true);
+  const allOutput = allMessages.output as ReturnType<typeof queryMemoryV2>;
+  if (!allOutput.ok) throw new Error("expected omitted query/terms scan");
+  expect(allOutput.results.length).toBe(1);
+  const anyTerms = await native("query_memory", {
+    terms: ["가나다", "없는 말"], match_mode: "any", scope: "all_user_sessions",
+  });
+  expect(anyTerms.ok).toBe(true);
+  const anyOutput = anyTerms.output as ReturnType<typeof queryMemoryV2>;
+  if (!anyOutput.ok) throw new Error("expected any terms query");
+  expect(anyOutput.results).toHaveLength(1);
+  const sessionRead = await native("read_conversation_session", {
+    conversation_session_id: "cs_source", scope: "all_user_sessions",
+  });
+  expect(sessionRead.ok).toBe(true);
+  expect(sessionRead.output).toMatchObject({ ok: true });
+  expect((await native("query_memory", {
+    match_mode: "any", scope: "all_user_sessions",
+  })).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["terms_required"],
+  });
+  expect((await native("query_memory", {
+    query: "가나다", terms: ["끝"], match_mode: "any", scope: "all_user_sessions",
+  })).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["query_terms_conflict"],
+  });
+  expect((await native("read_conversation_session", {})).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["source_locator_required"],
+  });
+  expect((await native("read_conversation_session", {
+    ...readArgs, conversation_session_id: "cs_source",
+  })).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["source_locator_conflict"],
+  });
+  expect((await native("read_conversation_session", {
+    ...readArgs, limit: 1,
+  })).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["source_mode_options_not_allowed"],
+  });
+  expect((await native("read_conversation_session", {
+    conversation_session_id: "cs_source", cursor: "not-a-source-cursor",
+  })).output).toMatchObject({
+    ok: false, code: "invalid_arguments", diagnostics: ["session_cursor_not_allowed"],
+  });
+});
+
 function seedSession(
   store: AgentConversationStore,
   input: {
@@ -274,12 +472,14 @@ function seedSession(
     sessionId: input.sessionId,
     turnId: turn.id,
     text: input.user,
+    originKind: "user_input",
     now: input.now,
   });
   store.appendAssistantMessage({
     sessionId: input.sessionId,
     turnId: turn.id,
     text: input.assistant,
+    originKind: "assistant_public",
     now: input.now,
   });
   store.finalizeTurn({ turnId: turn.id, completedAt: input.now });

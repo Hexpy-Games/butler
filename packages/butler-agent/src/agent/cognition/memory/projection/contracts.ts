@@ -19,12 +19,32 @@ export type MemoryOriginKind =
   | "internal_control"
   | "unknown";
 
-export type MemorySourceNotice = {
-  kind: "conversation_turn";
-  session_id: string;
-  turn_id: string;
-  outcome_generation: number;
-};
+export type MemorySourceNotice =
+  | {
+      kind: "conversation_turn";
+      session_id: string;
+      turn_id: string;
+      outcome_generation: number;
+    }
+  | {
+      kind: "conversation_message";
+      session_id: string;
+      message_id: string;
+      source_hash: string;
+    }
+  | {
+      kind: "task_report";
+      record_id: string;
+      revision: string;
+      operation_id: string;
+    }
+  | {
+      kind: "explicit_record";
+      record_kind: "rule" | "feedback";
+      record_id: string;
+      revision: string;
+      operation_id: string;
+    };
 
 export type MemoryExecutionContext = {
   butlerData: string;
@@ -32,10 +52,13 @@ export type MemoryExecutionContext = {
     | { kind: "active"; expected_generation: string }
     | { kind: "rebuild"; generation_id: string; canonical_snapshot_id: string };
   signal: AbortSignal;
+  deadlineAt?: number;
+  waitClass?: "interactive" | "background";
 };
 
 export type StageState =
   | { state: "pending"; blocked_by: string | null }
+  | { state: "running"; attempt: number; owner_pid: number; started_at: string }
   | { state: "complete"; completed_units: number; total_units: number }
   | {
       state: "partial";
@@ -110,6 +133,14 @@ export type ExtractInput = {
     aliases: string[];
     scope: "user" | "project";
     project_id: string | null;
+    // Older pinned inputs omit this field and remain immutable.
+    claim?: {
+      subject_ref: string | null;
+      object_ref: string | null;
+      relation: ExtractOutput["relations"][number]["relation"] | null;
+      polarity: "positive" | "negative" | "unspecified" | null;
+      condition: string | null;
+    } | null;
     evidence: Array<{
       ref: string;
       text: string;
@@ -178,7 +209,12 @@ export type ResolvedMemorySource = {
   byte_start: number;
   byte_end: number;
   source_hash: string;
-  conversation_session_id: string;
-  conversation_message_id: string;
+  source_kind: "conversation" | "task_report" | "explicit_record";
+  conversation_session_id: string | null;
+  conversation_message_id: string | null;
+  project_id?: string | null;
   basis: MemoryBasis;
+  origin_kind: MemoryOriginKind;
+  /** Canonical scalar retained inside the memory domain for v2 source pagination. */
+  scalar_text?: string;
 };

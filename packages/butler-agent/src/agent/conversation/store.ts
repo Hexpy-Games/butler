@@ -27,6 +27,7 @@ import type {
   ReadAroundInput,
   ReadCognitionMessagesInput,
   ReadMessagesInput,
+  RecordOriginClassificationInput,
   TurnOutcomeCapsule,
   TurnOutcomeCapsuleInput,
 } from "./types.ts";
@@ -104,11 +105,23 @@ export class AgentConversationStore {
       if (!session) throw new Error("conversation_session_not_found");
       const current = db.query<{ revision: string }, [string]>("SELECT revision FROM conversation_session_context WHERE session_id=?").get(input.sessionId);
       if (current?.revision === input.revision) return;
+      const previous = db.query<{ project_id: string | null }, [string]>(
+        "SELECT project_id FROM conversation_sessions WHERE id=?",
+      ).get(input.sessionId);
       db.query("UPDATE conversation_sessions SET project_id=?,workspace_id=NULL,updated_at=? WHERE id=?")
         .run(input.projectId, new Date().toISOString(), input.sessionId);
       db.query(`INSERT INTO conversation_session_context VALUES(?,?) ON CONFLICT(session_id)
         DO UPDATE SET revision=excluded.revision`).run(input.sessionId, input.revision);
+      if (previous?.project_id !== input.projectId) {
+        db.query("UPDATE conversation_public_source_state SET revision=revision+1 WHERE singleton=1").run();
+      }
     })();
+  }
+
+  readPublicSourceRevision(): number {
+    return Number(this.connection.database.query<{ revision: number }, []>(
+      "SELECT revision FROM conversation_public_source_state WHERE singleton=1",
+    ).get()?.revision ?? 0);
   }
 
   beginTurn(input: BeginTurnInput): ConversationTurn {
@@ -133,6 +146,10 @@ export class AgentConversationStore {
 
   readTurnOutcomes(afterOutcomeId: string | null, limit = 100): TurnOutcomeCapsule[] {
     return this.projections.readTurnOutcomes(afterOutcomeId, limit);
+  }
+
+  readRecoveredSourceMessages(afterMessageId: string | null, limit = 100): ConversationMessageWithParts[] {
+    return this.projections.readRecoveredSourceMessages(afterMessageId, limit);
   }
 
   writeTurnOutcome(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
@@ -212,6 +229,14 @@ export class AgentConversationStore {
 
   countSourceBearingMessages(): number {
     return this.messages.countSourceBearingMessages();
+  }
+
+  readOriginCandidatesPage(afterMessageId: string | null, limit = 100) {
+    return this.messages.readOriginCandidatesPage(afterMessageId, limit);
+  }
+
+  recordOriginClassification(input: RecordOriginClassificationInput) {
+    return this.messages.recordOriginClassification(input);
   }
 
   readProjectionMessages(

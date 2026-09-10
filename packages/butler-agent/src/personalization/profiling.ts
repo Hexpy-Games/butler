@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   DEFAULT_MODEL_REF,
@@ -12,7 +12,12 @@ import {
   runPromptTextWithUsage,
   type PromptUsageReport,
 } from "../integrations/providers/provider.ts";
-import { readConversationObservations } from "../agent/cognition/memory/scripts/lib/conversation-sources.ts";
+import { AgentConversationStore } from "../agent/conversation/store.ts";
+import { createLazyConversationProjectionReader } from "../agent/conversation/projection-reader-store.ts";
+import type { ConversationMessageWithParts } from "../agent/conversation/types.ts";
+import { decodeMessageScalars } from "../agent/cognition/memory/projection/source.ts";
+import { splitGraphemeUtf8Spans } from "../agent/cognition/memory/projection/windows.ts";
+import { acquireConsolidationLock, acquireConsolidationLockAsync, consolidationLockPath, releaseConsolidationLock } from "../agent/cognition/memory/scripts/lib/lock.ts";
 
 export type ProfilingMode = "off" | "basic" | "deep";
 export type ProfileCandidateCategory =
@@ -91,6 +96,8 @@ export interface RuntimeProfileProjection {
   likely_failure_modes: string[];
   ask_before: string[];
   caution_hints: string[];
+  writer_kind?: "manual" | "generated";
+  source_entry_ids?: string[];
 }
 
 export interface ProfilingConsentSnapshot {
@@ -115,6 +122,7 @@ export interface ProfileCandidateInput {
   source_type: ProfileSourceType;
   confidence: ProfileConfidence;
   evidence_ref?: string | null;
+  evidence_observed_at?: string | null;
   sensitive_domain?: boolean;
   expires_or_decay?: "expires" | "decay" | null;
   now?: Date;
@@ -134,6 +142,7 @@ export interface ProfileCandidateRecord {
   contradiction_refs: string[];
   sensitivity: ProfileSensitivity;
   evidence_refs: string[];
+  evidence_observed_at: Record<string, string | null>;
   evidence_count: number;
   source_type: ProfileSourceType;
   confidence: ProfileConfidence;
@@ -160,6 +169,7 @@ export interface StableProfileEntry {
   contradiction_refs: string[];
   sensitivity: ProfileSensitivity;
   evidence_refs: string[];
+  evidence_observed_at: Record<string, string | null>;
   evidence_count: number;
   source_type: ProfileSourceType;
   confidence: ProfileConfidence;
@@ -299,6 +309,10 @@ export interface ProfileModelTranscriptCaptureResult extends ProfileTranscriptCa
   fallback_used: boolean;
   model_usage: ProfileModelUsageSummary;
   model_error?: string;
+  coverage_pending_count?: number;
+  coverage_failed_count?: number;
+  coverage_complete_count?: number;
+  coverage_discovery_incomplete_count?: number;
 }
 
 export interface ProfileModelUsageSummary {
@@ -374,15 +388,14 @@ export interface ProfilingExtractorModelSnapshot {
 const MAX_HINTS_PER_GROUP = 6;
 const MAX_HINT_CHARS = 240;
 const MAX_SUMMARY_CHARS = 320;
-const DEFAULT_PROFILE_TRANSCRIPT_MAX_FILES = 200;
 const DEFAULT_PROFILE_TRANSCRIPT_MAX_USER_MESSAGES = 1_200;
 const DEFAULT_PROFILE_EXTRACTION_BATCHES = 8;
-const MAX_PROFILE_TRANSCRIPT_FILES = 1_000;
 const MAX_PROFILE_TRANSCRIPT_USER_MESSAGES = 20_000;
 const MAX_PROFILE_EXTRACTION_BATCHES = 120;
 const MAX_MODEL_OBSERVATIONS = 160;
-const MAX_MODEL_OBSERVATION_CHARS = 900;
-const MAX_PROFILE_EXTRACTION_PROMPT_CHARS = 28_000;
+const MAX_PROFILE_EXTRACTION_PROMPT_BYTES = 24 * 1024;
+const PROFILE_SOURCE_WINDOW_BYTES = 8 * 1024;
+const PROFILE_EXTRACTOR_VERSION = "profile-scalar-v1";
 const MAX_PROFILE_IMPORT_TEXT_CHARS = 60_000;
 const MAX_PROFILE_IMPORT_PROMPT_TEXT_CHARS = 18_000;
 const BASIC_PROFILE_CATEGORIES = new Set<ProfileCandidateCategory>([
@@ -506,7 +519,7 @@ export function readProfilingConsentSnapshot(
   } catch {
     return defaultProfilingConsentSnapshot();
   } finally {
-    db.close();
+    db?.close();
   }
 }
 
@@ -526,8 +539,9 @@ export function writeProfilingConsentSnapshot(
     consented_at: mode === "off" ? null : input.consented_at ?? now,
     raw_profile_browser_visible: false,
   };
-  const db = openProfileDb(butlerData, true);
+  let db: Database | null = null;
   try {
+    db = openProfileDb(butlerData, true);
     const stmt = db.prepare(`
       INSERT INTO profile_meta (key, value_json, updated_at)
       VALUES ($key, $value_json, $updated_at)
@@ -544,7 +558,7 @@ export function writeProfilingConsentSnapshot(
     }
     if (mode === "off") deleteRuntimeProfileProjectionInDb(db);
   } finally {
-    db.close();
+    db?.close();
   }
   return snapshot;
 }
@@ -570,6 +584,8 @@ export function clearProfilingData(butlerData: string): {
       DELETE FROM profile_candidates;
       DELETE FROM stable_profile_entries;
       DELETE FROM runtime_projection;
+      DELETE FROM profile_source_coverage;
+      DELETE FROM profile_meta WHERE key = 'source_scan_offset';
     `);
     return {
       removed_candidates: candidateCount,
@@ -773,13 +789,13 @@ export async function importProfileCandidatesFromThirdPartyDumpWithModel(
       source_type: candidate.source_type,
       confidence: candidate.confidence,
       evidence_ref: importId,
+      evidence_observed_at: null,
       sensitive_domain: candidate.sensitive_domain,
       expires_or_decay: candidate.expires_or_decay,
       now: options.now,
     });
     if (record) capturedCandidateIds.add(record.id);
   }
-  const consolidation = consolidateProfileCandidates(butlerData);
   writeProfileImportManifest(butlerData, {
     import_id: importId,
     source,
@@ -789,6 +805,7 @@ export async function importProfileCandidatesFromThirdPartyDumpWithModel(
     candidate_ids: [...capturedCandidateIds].sort(),
     raw_text_included: false,
   });
+  const consolidation = consolidateProfileCandidates(butlerData);
   return {
     profiling_enabled: true,
     mode: consent.mode,
@@ -813,14 +830,24 @@ export function upsertProfileCandidate(
   const consent = readProfilingConsentSnapshot(butlerData);
   if (consent.mode === "off") return null;
   if (!categoryAllowedInMode(input.category, consent.mode)) return null;
+  const db = openProfileDb(butlerData, true);
+  try {
+    return upsertProfileCandidateInDb(db, input);
+  } finally {
+    db.close();
+  }
+}
+
+function upsertProfileCandidateInDb(
+  db: Database,
+  input: ProfileCandidateInput,
+): ProfileCandidateRecord | null {
   const now = iso(input.now);
   const summary = normalizeSummary(input.summary);
   if (!summary) return null;
   const facet = normalizeProfileFacet(input.facet);
   const evidenceRef = normalizeEvidenceRef(input.evidence_ref);
   const id = profileCandidateId(input.category, facet, summary);
-  const db = openProfileDb(butlerData, true);
-  try {
     const existing = readProfileCandidateFromDb(db, id);
     const evidenceRefs = uniqueStrings([
       ...(existing?.evidence_refs ?? []),
@@ -843,23 +870,33 @@ export function upsertProfileCandidate(
       facet: facet ?? existing?.facet ?? null,
       summary,
       evidence_refs: evidenceRefs,
+      evidence_observed_at: {
+        ...(existing?.evidence_observed_at ?? {}),
+        ...(evidenceRef && !(evidenceRef in (existing?.evidence_observed_at ?? {}))
+          ? { [evidenceRef]: normalizeObservedAt(input.evidence_observed_at) }
+          : {}),
+      },
       evidence_count: Math.max(evidenceRefs.length, existing?.evidence_count ?? 0, evidenceRef ? 1 : 0),
       source_type: strongerSourceType(existing?.source_type, input.source_type),
       confidence: strongerConfidence(existing?.confidence, input.confidence),
       sensitive_domain: sensitiveDomain,
       status: existing?.status === "promoted" ? "promoted" : "candidate",
       created_at: existing?.created_at ?? now,
-      updated_at: now,
-      last_seen_at: now,
+      updated_at: evidenceRef && existing?.evidence_refs.includes(evidenceRef)
+        ? existing.updated_at
+        : now,
+      last_seen_at: evidenceRef && existing?.evidence_refs.includes(evidenceRef)
+        ? existing.last_seen_at
+        : laterObservedAt(existing?.last_seen_at, normalizeObservedAt(input.evidence_observed_at) ?? now),
       expires_or_decay: input.expires_or_decay ?? existing?.expires_or_decay ?? null,
       promoted_at: existing?.promoted_at ?? null,
       ...mergeProfileUnderstandingFields(existing, normalizedInput),
     };
     writeProfileCandidateInDb(db, record);
+    if (record.status === "promoted") {
+      writeStableEntryInDb(db, stableEntryFromCandidate(record, now));
+    }
     return record;
-  } finally {
-    db.close();
-  }
 }
 
 export function listProfileCandidates(
@@ -934,7 +971,7 @@ export function captureProfileCandidatesFromTranscripts(
     };
   }
 
-  const transcriptRead = readProfileConversationObservations(butlerData, consent, options);
+  const transcriptRead = readProfileSourceWindows(butlerData, options);
 
   return {
     profiling_enabled: true,
@@ -975,8 +1012,11 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
     };
   }
 
-  const transcriptRead = readProfileConversationObservations(butlerData, consent, options);
-  if (transcriptRead.observations.length === 0) {
+  const transcriptRead = readProfileSourceWindows(butlerData, options, false);
+  await persistProfileSourceDiscovery(butlerData, transcriptRead, options.signal);
+  if (transcriptRead.windows.length === 0) {
+    const coverage = profileCoverageCounts(butlerData, new Set());
+    const unfinished = transcriptRead.discovery_incomplete || transcriptRead.current_obligation_count > 0;
     return {
       profiling_enabled: true,
       mode: consent.mode,
@@ -992,6 +1032,9 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
       model_called: false,
       fallback_used: false,
       model_usage: emptyProfileModelUsage(),
+      ...(unfinished ? { model_error: "profile source discovery remains unfinished" } : {}),
+      ...coverage,
+      coverage_discovery_incomplete_count: unfinished ? 1 : 0,
     };
   }
 
@@ -999,34 +1042,794 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
     ? parseModelRef(options.model).canonicalRef
     : extractorModel.effective_model;
   const runner = options.modelRunner ?? defaultProfileExtractorModelRunner;
-  try {
-    const maxBatches = Math.max(
-      1,
-      Math.min(options.maxModelBatches ?? DEFAULT_PROFILE_EXTRACTION_BATCHES, MAX_PROFILE_EXTRACTION_BATCHES),
-    );
-    const batches = profileExtractionObservationBatches(transcriptRead.observations, maxBatches);
-    const capturedCandidateIds = new Set<string>();
-    const modelUsage = emptyProfileModelUsage();
-    for (const batch of batches) {
+  const maxBatches = Math.max(
+    1,
+    Math.min(options.maxModelBatches ?? DEFAULT_PROFILE_EXTRACTION_BATCHES, MAX_PROFILE_EXTRACTION_BATCHES),
+  );
+  const capturedCandidateIds = new Set<string>();
+  const trackedCoverageKeys = new Set(transcriptRead.windows.map((window) => window.coverage_key));
+  const modelUsage = emptyProfileModelUsage();
+  let modelCalled = false;
+  let modelError: string | undefined;
+  const pending = [...transcriptRead.windows];
+  let batchCount = 0;
+  while (pending.length > 0 && batchCount < maxBatches) {
+    const targets = profileCorrectionTargets(butlerData, consent.mode, pending[0]!.evidence_ref);
+    const prepared = prepareProfilePromptBatch(butlerData, pending, consent.mode, targets.publicTargets, false);
+    if (prepared.windows.length === 0) {
+      await markProfileWindowFailedAsync(butlerData, pending[0]!, "profile source grapheme exceeds prompt budget", null, options.signal);
+      modelError = "profile source grapheme exceeds prompt budget";
+      break;
+    }
+    const windows = prepared.windows;
+    if (prepared.replacedParent) {
+      const replaced = await replaceProfileWindowAsync(
+        butlerData,
+        prepared.replacedParent,
+        [...windows, ...prepared.remainders],
+        options.signal,
+      );
+      if (!replaced) {
+        modelError = "profile source coverage changed";
+        break;
+      }
+    }
+    if (prepared.remainders.length > 0) {
+      trackedCoverageKeys.delete(pending[0]!.coverage_key);
+      for (const window of [...windows, ...prepared.remainders]) trackedCoverageKeys.add(window.coverage_key);
+      pending.splice(0, 1, ...prepared.remainders);
+    }
+    else pending.splice(0, prepared.consumed);
+    const prompt = prepared.prompt;
+    batchCount += 1;
+    const ownerNonce = await claimProfileWindows(butlerData, windows, options.signal);
+    if (!ownerNonce) {
+      modelError = "profile source is already being processed";
+      break;
+    }
+    try {
+      modelCalled = true;
       const raw = normalizeProfileExtractorOutput(await runner({
         model,
         reasoningEffort: extractorModel.reasoning_effort,
         instructions: profileExtractorInstructions(consent.mode),
-        prompt: profileExtractorPrompt(batch, consent.mode),
+        prompt,
         cacheScope: options.cacheScope ?? "profile-extractor",
         butlerData,
         signal: options.signal,
       }));
       addProfileModelUsage(modelUsage, { model, usage: raw.usage });
-      const candidates = parseProfileExtractorResponse(
+      const candidates = parseProfileExtractorResponseStrict(
         raw.text,
-        new Set(batch.map((item) => item.evidence_ref)),
+        new Set(windows.map((window) => window.evidence_ref)),
         consent.mode,
+        targets.privateTargets,
       );
+      const committed = await commitProfileWindows(
+        butlerData, consent, windows, candidates, raw.usage ?? null, targets.privateTargets,
+        options.signal, ownerNonce,
+      );
+      for (const id of committed) capturedCandidateIds.add(id);
+    } catch (error) {
+      const commitCode = profileCommitInterruptionCode(error);
+      modelError = safeProfileExtractorError(error);
+      if (!commitCode &&
+        readProfilingConsentSnapshot(butlerData).mode !== "off") {
+        for (const window of windows) {
+          await markProfileWindowFailedAsync(butlerData, window, modelError, modelUsage, options.signal, ownerNonce);
+        }
+      }
+      break;
+    } finally {
+      await releaseProfileWindows(butlerData, windows, ownerNonce);
+    }
+  }
+  const coverage = profileCoverageCounts(butlerData, trackedCoverageKeys);
+  if (!modelError && (coverage.coverage_pending_count > 0 || coverage.coverage_failed_count > 0)) {
+    modelError = "profile source coverage remains unfinished";
+  }
+  if (!modelError && (transcriptRead.discovery_incomplete || pending.length > 0)) {
+    modelError = "profile source discovery remains unfinished";
+  }
+  return {
+    profiling_enabled: true,
+    mode: consent.mode,
+    scanned_file_count: transcriptRead.scanned_file_count,
+    scanned_event_count: transcriptRead.scanned_event_count,
+    semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
+    semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
+    audit_transcript_scanned_file_count: 0,
+    audit_transcript_scanned_event_count: 0,
+    captured_candidate_count: capturedCandidateIds.size,
+    raw_text_included: false,
+    extractor_model: { ...extractorModel, effective_model: model },
+    model_called: modelCalled,
+    fallback_used: false,
+    model_usage: modelUsage,
+    ...(modelError ? { model_error: modelError } : {}),
+    ...coverage,
+    coverage_discovery_incomplete_count: transcriptRead.discovery_incomplete || pending.length > 0 ? 1 : 0,
+  };
+}
+
+function prepareProfilePromptBatch(
+  butlerData: string,
+  source: ProfileSourceWindow[],
+  mode: Exclude<ProfilingMode, "off">,
+  targets: Parameters<typeof profileExtractorPrompt>[2],
+  persist = true,
+): { windows: ProfileSourceWindow[]; prompt: string; consumed: number; remainders: ProfileSourceWindow[]; replacedParent: ProfileSourceWindow | null } {
+  const windows: ProfileSourceWindow[] = [];
+  let consumed = 0;
+  let remainders: ProfileSourceWindow[] = [];
+  while (consumed < source.length && windows.length < MAX_MODEL_OBSERVATIONS) {
+    let candidate = source[consumed]!;
+    const prompt = profileExtractorPrompt([...windows, candidate], mode, targets);
+    if (Buffer.byteLength(prompt) > MAX_PROFILE_EXTRACTION_PROMPT_BYTES) {
+      if (windows.length > 0) break;
+      const split = splitProfileWindowForPrompt(candidate, mode, targets);
+      if (!split) return { windows: [], prompt: "", consumed: 0, remainders: [], replacedParent: null };
+      if (persist) replacePendingProfileWindow(butlerData, candidate, split);
+      candidate = split[0]!;
+      remainders = split.slice(1);
+      windows.push(candidate);
+      consumed = 1;
+      break;
+    }
+    windows.push(candidate);
+    consumed += 1;
+  }
+  if (persist) registerPendingProfileWindows(butlerData, [...windows, ...remainders]);
+  return {
+    windows,
+    prompt: profileExtractorPrompt(windows, mode, targets),
+    consumed,
+    remainders,
+    replacedParent: remainders.length > 0 ? source[consumed - 1] ?? null : null,
+  };
+}
+
+function splitProfileWindowForPrompt(
+  window: ProfileSourceWindow,
+  mode: Exclude<ProfilingMode, "off">,
+  targets: Parameters<typeof profileExtractorPrompt>[2],
+): ProfileSourceWindow[] | null {
+  const spans = splitGraphemeUtf8Spans(window.text, Math.max(1, Math.floor(Buffer.byteLength(window.text) / 2)));
+  if (spans.length <= 1) return null;
+  const children = spans.map((span) => profileWindowSlice(window, span.start, span.end));
+  const output: ProfileSourceWindow[] = [];
+  for (const child of children) {
+    if (Buffer.byteLength(profileExtractorPrompt([child], mode, targets)) <= MAX_PROFILE_EXTRACTION_PROMPT_BYTES) {
+      output.push(child);
+      continue;
+    }
+    const nested = splitProfileWindowForPrompt(child, mode, targets);
+    if (!nested) return null;
+    output.push(...nested);
+  }
+  return output;
+}
+
+function profileWindowSlice(window: ProfileSourceWindow, start: number, end: number): ProfileSourceWindow {
+  const byteStart = window.byte_start + start;
+  const byteEnd = window.byte_start + end;
+  const identity = [window.message_id, window.source_hash, window.part_id, window.scalar_pointer,
+    byteStart, byteEnd, PROFILE_EXTRACTOR_VERSION].join("\u0000");
+  const coverageKey = createHash("sha256").update(identity).digest("hex");
+  return {
+    ...window,
+    text: Buffer.from(window.text).subarray(start, end).toString("utf8"),
+    byte_start: byteStart,
+    byte_end: byteEnd,
+    coverage_key: coverageKey,
+    evidence_ref: `profile_window:${coverageKey.slice(0, 24)}`,
+  };
+}
+
+function replacePendingProfileWindow(
+  butlerData: string,
+  parent: ProfileSourceWindow,
+  children: ProfileSourceWindow[],
+): void {
+  const db = openProfileDb(butlerData, true);
+  try {
+    db.prepare("DELETE FROM profile_source_coverage WHERE coverage_key=? AND disposition!='complete'")
+      .run(parent.coverage_key);
+  } finally {
+    db.close();
+  }
+  registerPendingProfileWindows(butlerData, children);
+}
+
+interface ProfileSourceWindow extends TranscriptTextObservation {
+  message_id: string;
+  part_id: string;
+  part_index: number;
+  scalar_pointer: string;
+  source_hash: string;
+  byte_start: number;
+  byte_end: number;
+  coverage_key: string;
+}
+
+interface ProfileCorrectionTarget {
+  stable_id: string;
+  category: ProfileCandidateCategory;
+  facet: ProfileFacet | null;
+  applies_when: string[];
+  revision: string;
+}
+
+interface ProfileSourceWindowRead extends TranscriptTextObservationRead {
+  windows: ProfileSourceWindow[];
+  discovery_incomplete: boolean;
+  current_obligation_count: number;
+  stale_coverage_keys: string[];
+  persistent_scan_offset: number | null;
+}
+
+const activeProfileWindowOperations = new Set<string>();
+
+function profileWindowOperationKey(butlerData: string, coverageKey: string, nonce: string): string {
+  return JSON.stringify([butlerData, coverageKey, nonce]);
+}
+
+function profileOwnerIsLive(butlerData: string, coverageKey: string, pid: number, nonce: string): boolean {
+  if (pid === process.pid) return activeProfileWindowOperations.has(
+    profileWindowOperationKey(butlerData, coverageKey, nonce),
+  );
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+function readProfileSourceWindows(
+  butlerData: string,
+  options: ProfileTranscriptCaptureOptions,
+  persist = true,
+): ProfileSourceWindowRead {
+  const maxPendingMessages = Math.max(
+    1,
+    Math.min(options.maxUserMessages ?? DEFAULT_PROFILE_TRANSCRIPT_MAX_USER_MESSAGES, MAX_PROFILE_TRANSCRIPT_USER_MESSAGES),
+  );
+  const sinceMs = profileTranscriptSinceMs(options.since, null);
+  const since = Number.isFinite(sinceMs) && sinceMs > 0 ? new Date(sinceMs).toISOString() : null;
+  const store = new AgentConversationStore({ butlerData });
+  const incomplete = currentIncompleteProfileWindows(butlerData, store, sinceMs, maxPendingMessages, persist);
+  const windows = incomplete.windows;
+  const seenKeys = new Set(windows.map((window) => window.coverage_key));
+  const sessions = new Set<string>();
+  let sourceRowsRead = 0;
+  let canonicalScanned = 0;
+  const usePersistentCursor = since === null;
+  let offset = usePersistentCursor ? readProfileSourceScanOffset(butlerData) : 0;
+  let reachedEnd = false;
+  let stoppedForWindowLimit = false;
+  try {
+    while (sourceRowsRead < MAX_PROFILE_TRANSCRIPT_USER_MESSAGES && windows.length < maxPendingMessages) {
+      const page = store.readCognitionMessages({
+        roles: ["user"],
+        since,
+        limit: Math.min(1000, MAX_PROFILE_TRANSCRIPT_USER_MESSAGES - sourceRowsRead),
+        offset,
+        includeCompacted: true,
+        order: "asc",
+      });
+      if (page.length === 0) {
+        reachedEnd = true;
+        break;
+      }
+      sourceRowsRead += page.length;
+      const pageOffset = offset;
+      for (const [pageIndex, message] of page.entries()) {
+        offset = pageOffset + pageIndex;
+        if (message.origin_kind !== "user_input") {
+          offset = pageOffset + pageIndex + 1;
+          continue;
+        }
+        canonicalScanned += 1;
+        sessions.add(message.session_id);
+        for (const scalar of decodeMessageScalars(message)) {
+          const spans = sourceWindowSpans(scalar.text);
+          let scalarComplete = true;
+          for (const span of spans) {
+            if (windows.length >= maxPendingMessages) {
+              scalarComplete = false;
+              stoppedForWindowLimit = true;
+              break;
+            }
+            const identity = [
+              message.id,
+              scalar.hash,
+              scalar.part.id,
+              scalar.pointer,
+              span.start,
+              span.end,
+              PROFILE_EXTRACTOR_VERSION,
+            ].join("\u0000");
+            const coverageKey = createHash("sha256").update(identity).digest("hex");
+            if (profileCoverageSpanIsRegistered(butlerData, {
+              coverageKey,
+              messageId: message.id,
+              sourceHash: scalar.hash,
+              partId: scalar.part.id,
+              scalarPointer: scalar.pointer,
+              byteStart: span.start,
+              byteEnd: span.end,
+            }) || seenKeys.has(coverageKey)) continue;
+            const evidenceRef = `profile_window:${coverageKey.slice(0, 24)}`;
+            windows.push({
+              text: Buffer.from(scalar.text).subarray(span.start, span.end).toString("utf8"),
+              evidence_ref: evidenceRef,
+              timestamp: message.created_at,
+              now: new Date(message.created_at),
+              message_id: message.id,
+              part_id: scalar.part.id,
+              part_index: scalar.part.part_index,
+              scalar_pointer: scalar.pointer,
+              source_hash: scalar.hash,
+              byte_start: span.start,
+              byte_end: span.end,
+              coverage_key: coverageKey,
+            });
+            seenKeys.add(coverageKey);
+          }
+          if (!scalarComplete) break;
+        }
+        if (windows.length >= maxPendingMessages) {
+          stoppedForWindowLimit = true;
+          break;
+        }
+        offset = pageOffset + pageIndex + 1;
+      }
+      if (!stoppedForWindowLimit && page.length < 1000) {
+        reachedEnd = true;
+        break;
+      }
+    }
+  } finally {
+    store.close();
+  }
+  const persistentScanOffset = usePersistentCursor ? (reachedEnd ? 0 : offset) : null;
+  if (persist && persistentScanOffset !== null) writeProfileSourceScanOffset(butlerData, persistentScanOffset);
+  if (persist) registerPendingProfileWindows(butlerData, windows);
+  return {
+    scanned_file_count: sessions.size,
+    scanned_event_count: canonicalScanned,
+    semantic_scanned_session_count: sessions.size,
+    semantic_scanned_message_count: canonicalScanned,
+    audit_transcript_scanned_file_count: 0,
+    audit_transcript_scanned_event_count: 0,
+    observations: windows,
+    windows,
+    discovery_incomplete: incomplete.has_more || !reachedEnd || stoppedForWindowLimit,
+    current_obligation_count: windows.length + (incomplete.has_more ? 1 : 0),
+    stale_coverage_keys: incomplete.stale_keys,
+    persistent_scan_offset: persistentScanOffset,
+  };
+}
+
+function currentIncompleteProfileWindows(
+  butlerData: string,
+  store: AgentConversationStore,
+  sinceMs: number,
+  limit: number,
+  persistStale = true,
+): { windows: ProfileSourceWindow[]; has_more: boolean; stale_keys: string[] } {
+  if (!existsSync(profileBlackBoxPath(butlerData))) return { windows: [], has_more: false, stale_keys: [] };
+  const queryLimit = Math.min(MAX_PROFILE_TRANSCRIPT_USER_MESSAGES, limit * 4 + 1);
+  const since = Number.isFinite(sinceMs) && sinceMs > 0 ? new Date(sinceMs).toISOString() : null;
+  const readDb = openProfileDb(butlerData, false);
+  let rows: Array<{
+    coverage_key: string; message_id: string; source_hash: string; part_id: string; part_index: number;
+    scalar_pointer: string; byte_start: number; byte_end: number; observed_at: string; evidence_ref: string;
+  }>;
+  try {
+    rows = readDb.query(`
+      SELECT coverage_key, message_id, source_hash, part_id, part_index, scalar_pointer,
+             byte_start, byte_end, observed_at, evidence_ref
+      FROM profile_source_coverage
+      WHERE disposition IN ('pending', 'failed') AND COALESCE(failure_code, '') != 'source_stale'
+        AND (? IS NULL OR observed_at >= ?)
+      ORDER BY observed_at, message_id, part_index, scalar_pointer, byte_start LIMIT ?
+    `).all(since, since, queryLimit) as typeof rows;
+  } catch { return { windows: [], has_more: false, stale_keys: [] }; }
+  finally { readDb.close(); }
+  const staleKeys: string[] = [];
+  const current = rows.flatMap((row) => {
+    const message = store.readMessageById(row.message_id);
+    const scalar = message?.role === "user" && message.origin_kind === "user_input"
+      ? decodeMessageScalars(message).find((item) => item.part.id === row.part_id && item.pointer === row.scalar_pointer && item.hash === row.source_hash)
+      : null;
+    const text = scalar ? Buffer.from(scalar.text).subarray(row.byte_start, row.byte_end).toString("utf8") : "";
+    if (!message || !scalar || !text) { staleKeys.push(row.coverage_key); return []; }
+    return [{ text, evidence_ref: row.evidence_ref, timestamp: row.observed_at, now: new Date(row.observed_at),
+      message_id: row.message_id, part_id: row.part_id, part_index: row.part_index,
+      scalar_pointer: row.scalar_pointer, source_hash: row.source_hash, byte_start: row.byte_start,
+      byte_end: row.byte_end, coverage_key: row.coverage_key }];
+  });
+  if (persistStale && staleKeys.length > 0) markProfileWindowsStale(butlerData, staleKeys);
+  return {
+    windows: current.slice(0, limit),
+    has_more: current.length > limit || rows.length === queryLimit,
+    stale_keys: staleKeys,
+  };
+}
+
+function markProfileWindowsStale(butlerData: string, coverageKeys: string[]): void {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "projection" });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  try {
+    db = openProfileDb(butlerData, true);
+    const mark = db.prepare("UPDATE profile_source_coverage SET failure_code='source_stale',updated_at=? WHERE coverage_key=?");
+    db.transaction(() => { const now = iso(); for (const key of coverageKeys) mark.run(now, key); })();
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+function readProfileSourceScanOffset(butlerData: string): number {
+  if (!existsSync(profileBlackBoxPath(butlerData))) return 0;
+  const db = openProfileDb(butlerData, false);
+  try {
+    const row = db.query("SELECT value_json FROM profile_meta WHERE key='source_scan_offset'")
+      .get() as { value_json?: string } | null;
+    const value = row?.value_json ? JSON.parse(row.value_json) : 0;
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  } catch {
+    return 0;
+  } finally {
+    db.close();
+  }
+}
+
+function writeProfileSourceScanOffset(butlerData: string, offset: number): void {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "projection" });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  try {
+    db = openProfileDb(butlerData, true);
+    db.prepare(`
+      INSERT INTO profile_meta (key, value_json, updated_at)
+      VALUES ('source_scan_offset', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at
+    `).run(JSON.stringify(offset), iso());
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+function sourceWindowSpans(text: string): Array<{ start: number; end: number }> {
+  let maxBytes = PROFILE_SOURCE_WINDOW_BYTES;
+  while (maxBytes >= 256) {
+    const spans = splitGraphemeUtf8Spans(text, maxBytes);
+    if (spans.every((span) => !span.oversized)) return spans;
+    maxBytes = Math.floor(maxBytes / 2);
+  }
+  return splitGraphemeUtf8Spans(text, 256).map(({ start, end }) => ({ start, end }));
+}
+
+function profileCoverageSpanIsRegistered(butlerData: string, input: {
+  coverageKey: string;
+  messageId: string;
+  sourceHash: string;
+  partId: string;
+  scalarPointer: string;
+  byteStart: number;
+  byteEnd: number;
+}): boolean {
+  if (!existsSync(profileBlackBoxPath(butlerData))) return false;
+  const db = openProfileDb(butlerData, false);
+  try {
+    const direct = db.query("SELECT 1 FROM profile_source_coverage WHERE coverage_key = ? LIMIT 1")
+      .get(input.coverageKey);
+    if (direct) return true;
+    const rows = db.query(`
+      SELECT byte_start, byte_end
+      FROM profile_source_coverage
+      WHERE message_id=? AND source_hash=? AND part_id=? AND scalar_pointer=?
+        AND byte_start>=? AND byte_end<=? AND COALESCE(failure_code, '')!='source_stale'
+      ORDER BY byte_start, byte_end
+      LIMIT 512
+    `).all(
+      input.messageId, input.sourceHash, input.partId, input.scalarPointer, input.byteStart, input.byteEnd,
+    ) as Array<{ byte_start: number; byte_end: number }>;
+    let cursor = input.byteStart;
+    for (const row of rows) {
+      if (row.byte_start !== cursor || row.byte_end <= cursor) return false;
+      cursor = row.byte_end;
+      if (cursor === input.byteEnd) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    db.close();
+  }
+}
+
+function registerPendingProfileWindows(butlerData: string, windows: ProfileSourceWindow[]): void {
+  if (windows.length === 0) return;
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "projection" });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  try {
+    db = openProfileDb(butlerData, true);
+    db.transaction(() => registerPendingProfileWindowsInDb(db!, windows))();
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+async function withProfileWriteGateAsync<T>(
+  butlerData: string,
+  signal: AbortSignal | undefined,
+  write: (db: Database) => T,
+): Promise<T> {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = await acquireConsolidationLockAsync(lockPath, {
+    purpose: "projection",
+    waitClass: "background",
+    signal,
+  });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  let commit = false;
+  try {
+    db = openProfileDb(butlerData, true);
+    const result = write(db);
+    commit = true;
+    return result;
+  } finally {
+    try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease, commit); }
+  }
+}
+
+function registerPendingProfileWindowsInDb(db: Database, windows: ProfileSourceWindow[]): void {
+  if (windows.length === 0) return;
+  const write = db.prepare(`
+    INSERT INTO profile_source_coverage (
+      coverage_key, message_id, source_hash, part_id, part_index, scalar_pointer,
+      byte_start, byte_end, extractor_version, observed_at, evidence_ref,
+      disposition, failure_code, usage_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?)
+    ON CONFLICT(coverage_key) DO NOTHING
+  `);
+  const now = iso();
+  for (const window of windows) {
+    write.run(
+      window.coverage_key, window.message_id, window.source_hash, window.part_id, window.part_index,
+      window.scalar_pointer, window.byte_start, window.byte_end,
+      PROFILE_EXTRACTOR_VERSION, window.timestamp, window.evidence_ref, now,
+    );
+  }
+}
+
+async function persistProfileSourceDiscovery(
+  butlerData: string,
+  transcriptRead: ProfileSourceWindowRead,
+  signal?: AbortSignal,
+): Promise<void> {
+  await withProfileWriteGateAsync(butlerData, signal, (db) => {
+    const tx = db.transaction(() => {
+      if (transcriptRead.stale_coverage_keys.length > 0) {
+        const mark = db.prepare("UPDATE profile_source_coverage SET failure_code='source_stale',updated_at=? WHERE coverage_key=? AND owner_nonce IS NULL");
+        const now = iso();
+        for (const key of transcriptRead.stale_coverage_keys) mark.run(now, key);
+      }
+      if (transcriptRead.persistent_scan_offset !== null) {
+        db.prepare(`
+          INSERT INTO profile_meta (key, value_json, updated_at)
+          VALUES ('source_scan_offset', ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at
+        `).run(JSON.stringify(transcriptRead.persistent_scan_offset), iso());
+      }
+      registerPendingProfileWindowsInDb(db, transcriptRead.windows);
+    });
+    tx();
+  });
+}
+
+async function claimProfileWindows(
+  butlerData: string,
+  windows: ProfileSourceWindow[],
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const nonce = randomUUID();
+  let claimed: boolean;
+  try {
+    claimed = await withProfileWriteGateAsync(butlerData, signal, (db) => {
+    const rows = windows.map((window) => db.query<{
+      coverage_key: string; disposition: string; owner_pid: number | null; owner_nonce: string | null;
+    }, [string]>("SELECT coverage_key,disposition,owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?")
+      .get(window.coverage_key));
+    if (rows.some((row) => !row || row.disposition === "complete")) return false;
+    for (const row of rows) {
+      if (row?.owner_pid !== null && row?.owner_nonce &&
+        profileOwnerIsLive(butlerData, row.coverage_key, row.owner_pid, row.owner_nonce)) return false;
+    }
+    const update = db.prepare(`UPDATE profile_source_coverage
+      SET owner_pid=?,owner_nonce=?,claimed_at=?,updated_at=?
+      WHERE coverage_key=? AND disposition IN ('pending','failed')`);
+    const now = iso();
+    db.transaction(() => {
+      for (const window of windows) update.run(process.pid, nonce, now, now, window.coverage_key);
+    })();
+    for (const window of windows) {
+      activeProfileWindowOperations.add(profileWindowOperationKey(butlerData, window.coverage_key, nonce));
+    }
+      return true;
+    });
+  } catch (error) {
+    for (const window of windows) {
+      activeProfileWindowOperations.delete(profileWindowOperationKey(butlerData, window.coverage_key, nonce));
+    }
+    throw error;
+  }
+  if (!claimed) return null;
+  return nonce;
+}
+
+async function releaseProfileWindows(
+  butlerData: string,
+  windows: ProfileSourceWindow[],
+  nonce: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await withProfileWriteGateAsync(butlerData, signal, (db) => {
+      const release = db.prepare(`UPDATE profile_source_coverage
+        SET owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?
+        WHERE coverage_key=? AND owner_pid=? AND owner_nonce=? AND disposition!='complete'`);
+      const now = iso();
+      db.transaction(() => {
+        for (const window of windows) release.run(now, window.coverage_key, process.pid, nonce);
+      })();
+    });
+  } finally {
+    for (const window of windows) {
+      activeProfileWindowOperations.delete(profileWindowOperationKey(butlerData, window.coverage_key, nonce));
+    }
+  }
+}
+
+async function replaceProfileWindowAsync(
+  butlerData: string,
+  parent: ProfileSourceWindow,
+  children: ProfileSourceWindow[],
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return await withProfileWriteGateAsync(butlerData, signal, (db) => db.transaction(() => {
+    const row = db.query<{
+      message_id: string; source_hash: string; part_id: string; scalar_pointer: string;
+      byte_start: number; byte_end: number; extractor_version: string; disposition: string;
+      owner_pid: number | null; owner_nonce: string | null;
+    }, [string]>(`SELECT message_id,source_hash,part_id,scalar_pointer,byte_start,byte_end,
+        extractor_version,disposition,owner_pid,owner_nonce
+      FROM profile_source_coverage WHERE coverage_key=?`).get(parent.coverage_key);
+    if (!row || !["pending", "failed"].includes(row.disposition) ||
+      row.message_id !== parent.message_id || row.source_hash !== parent.source_hash ||
+      row.part_id !== parent.part_id || row.scalar_pointer !== parent.scalar_pointer ||
+      row.byte_start !== parent.byte_start || row.byte_end !== parent.byte_end ||
+      row.extractor_version !== PROFILE_EXTRACTOR_VERSION) return false;
+    if (row.owner_pid !== null && row.owner_nonce &&
+      profileOwnerIsLive(butlerData, parent.coverage_key, row.owner_pid, row.owner_nonce)) return false;
+    const removed = db.prepare(`DELETE FROM profile_source_coverage
+      WHERE coverage_key=? AND message_id=? AND source_hash=? AND part_id=? AND scalar_pointer=?
+        AND byte_start=? AND byte_end=? AND extractor_version=? AND disposition IN ('pending','failed')
+        AND COALESCE(owner_pid,-1)=COALESCE(?,-1) AND COALESCE(owner_nonce,'')=COALESCE(?,'')`)
+      .run(parent.coverage_key, parent.message_id, parent.source_hash, parent.part_id,
+        parent.scalar_pointer, parent.byte_start, parent.byte_end, PROFILE_EXTRACTOR_VERSION,
+        row.owner_pid, row.owner_nonce);
+    if (removed.changes !== 1) return false;
+    registerPendingProfileWindowsInDb(db, children);
+    return true;
+  })());
+}
+
+function profileCorrectionTargets(
+  butlerData: string,
+  mode: Exclude<ProfilingMode, "off">,
+  salt: string,
+): {
+  publicTargets: Array<{ target_ref: string; instruction: string; category: string; facet: string | null; applies_when: string[] }>;
+  privateTargets: Map<string, ProfileCorrectionTarget>;
+} {
+  const entries = eligibleStableProfileEntries(butlerData, mode, new Date());
+  const privateTargets = new Map<string, ProfileCorrectionTarget>();
+  const publicTargets = entries.slice(0, 4).map((entry, index) => {
+    const targetRef = `profile_target:${createHash("sha256").update(`${salt}\u0000${entry.id}`).digest("hex").slice(0, 16)}:${index}`;
+    privateTargets.set(targetRef, {
+      stable_id: entry.id,
+      category: entry.category,
+      facet: entry.facet,
+      applies_when: normalizedConditions(entry.applies_when),
+      revision: profileStableRevision(entry),
+    });
+    return {
+      target_ref: targetRef,
+      instruction: entry.butler_should[0] ?? entry.summary,
+      category: entry.category,
+      facet: entry.facet,
+      applies_when: normalizedConditions(entry.applies_when),
+    };
+  });
+  return { publicTargets, privateTargets };
+}
+
+function profileStableRevision(entry: StableProfileEntry): string {
+  return createHash("sha256").update(JSON.stringify({
+    id: entry.id,
+    category: entry.category,
+    facet: entry.facet,
+    summary: entry.summary,
+    applies_when: normalizedConditions(entry.applies_when),
+    butler_should: entry.butler_should,
+    butler_should_not: entry.butler_should_not,
+    evidence_refs: entry.evidence_refs,
+    evidence_observed_at: entry.evidence_observed_at,
+    updated_at: entry.updated_at,
+  })).digest("hex");
+}
+
+async function commitProfileWindows(
+  butlerData: string,
+  expectedConsent: ProfilingConsentSnapshot,
+  windows: ProfileSourceWindow[],
+  candidates: ExtractedProfileCandidate[],
+  usage: PromptUsageReport | null,
+  offeredTargets: Map<string, ProfileCorrectionTarget>,
+  signal?: AbortSignal,
+  ownerNonce?: string,
+): Promise<string[]> {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = await acquireConsolidationLockAsync(lockPath, {
+    purpose: "projection",
+    waitClass: "background",
+    signal,
+  });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  try {
+    const openedDb = openProfileDb(butlerData, true);
+    db = openedDb;
+    const ids: string[] = [];
+    const tx = openedDb.transaction(() => {
+      const currentConsent = readProfilingConsentSnapshotFromDb(openedDb);
+      if (currentConsent.mode === "off" || currentConsent.mode !== expectedConsent.mode ||
+        currentConsent.consent_version !== expectedConsent.consent_version) {
+        throw new Error("profiling consent changed");
+      }
+      for (const window of windows) {
+        if (ownerNonce) {
+          const owner = openedDb.query<{ owner_pid: number | null; owner_nonce: string | null }, [string]>(
+            "SELECT owner_pid,owner_nonce FROM profile_source_coverage WHERE coverage_key=?",
+          ).get(window.coverage_key);
+          if (owner?.owner_pid !== process.pid || owner.owner_nonce !== ownerNonce) {
+            throw new Error("memory_write_busy");
+          }
+        }
+        if (!profileWindowIsCurrent(butlerData, window)) throw new Error("profile source changed");
+      }
+      const eligibleTargets = new Map(eligibleStableEntriesFromDb(
+        butlerData, openedDb, listStableProfileEntriesFromDb(openedDb), currentConsent.mode, new Date(),
+      ).map((entry) => [entry.id, entry]));
       for (const candidate of candidates) {
-        const refs = candidate.evidence_refs.length > 0 ? candidate.evidence_refs : [null];
-        for (const evidenceRef of refs) {
-          const record = upsertProfileCandidate(butlerData, {
+        for (const targetId of candidate.contradiction_refs) {
+          const offered = [...offeredTargets.values()].find((target) => target.stable_id === targetId);
+          const current = eligibleTargets.get(targetId);
+          if (!offered || !current || profileStableRevision(current) !== offered.revision ||
+            candidate.source_type !== "explicit" || current.category !== candidate.category ||
+            current.facet !== candidate.facet || !sameConditions(current.applies_when, candidate.applies_when)) {
+            throw new Error("profile correction target changed");
+          }
+        }
+      }
+      const observedByRef = new Map(windows.map((window) => [window.evidence_ref, window.timestamp]));
+      for (const candidate of candidates) {
+        for (const evidenceRef of candidate.evidence_refs) {
+          const record = upsertProfileCandidateInDb(openedDb, {
             layer: candidate.layer,
             category: candidate.category,
             facet: candidate.facet,
@@ -1041,56 +1844,203 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
             source_type: candidate.source_type,
             confidence: candidate.confidence,
             evidence_ref: evidenceRef,
+            evidence_observed_at: observedByRef.get(evidenceRef) ?? null,
             sensitive_domain: candidate.sensitive_domain,
             expires_or_decay: candidate.expires_or_decay,
           });
-          if (record) capturedCandidateIds.add(record.id);
+          if (record) ids.push(record.id);
         }
       }
-    }
-    return {
-      profiling_enabled: true,
-      mode: consent.mode,
-      scanned_file_count: transcriptRead.scanned_file_count,
-      scanned_event_count: transcriptRead.scanned_event_count,
-      semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
-      semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
-      audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
-      audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
-      captured_candidate_count: capturedCandidateIds.size,
-      raw_text_included: false,
-      extractor_model: { ...extractorModel, effective_model: model },
-      model_called: true,
-      fallback_used: false,
-      model_usage: modelUsage,
-    };
-  } catch (error) {
-    return {
-      profiling_enabled: true,
-      mode: consent.mode,
-      scanned_file_count: transcriptRead.scanned_file_count,
-      scanned_event_count: transcriptRead.scanned_event_count,
-      semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
-      semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
-      audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
-      audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
-      captured_candidate_count: 0,
-      raw_text_included: false,
-      extractor_model: { ...extractorModel, effective_model: model },
-      model_called: true,
-      fallback_used: false,
-      model_usage: emptyProfileModelUsage(),
-      model_error: error instanceof Error ? error.message : String(error),
-    };
+      const complete = openedDb.prepare(`
+        UPDATE profile_source_coverage
+        SET disposition='complete', failure_code=NULL, usage_json=?,
+            owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?
+        WHERE coverage_key=? AND (? IS NULL OR (owner_pid=? AND owner_nonce=?))
+      `);
+      for (const window of windows) {
+        complete.run(JSON.stringify(usage ?? null), iso(), window.coverage_key,
+          ownerNonce ?? null, process.pid, ownerNonce ?? null);
+      }
+    });
+    tx();
+    return [...new Set(ids)];
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+function readProfilingConsentSnapshotFromDb(db: Database): ProfilingConsentSnapshot {
+  const rows = db.query("SELECT key, value_json FROM profile_meta WHERE key IN ('mode','consent_version','consented_at')")
+    .all() as Array<{ key: string; value_json: string }>;
+  const values = new Map(rows.map((row) => {
+    try { return [row.key, JSON.parse(row.value_json)] as const; } catch { return [row.key, null] as const; }
+  }));
+  const mode = normalizeProfilingMode(values.get("mode"));
+  return {
+    mode,
+    consent_version: typeof values.get("consent_version") === "string"
+      ? values.get("consent_version") as string : PROFILE_CONSENT_VERSION,
+    consented_at: mode !== "off" && typeof values.get("consented_at") === "string"
+      ? values.get("consented_at") as string : null,
+    raw_profile_browser_visible: false,
+  };
+}
+
+function profileWindowIsCurrent(butlerData: string, window: ProfileSourceWindow): boolean {
+  const store = new AgentConversationStore({ butlerData });
+  try {
+    const message = store.readMessageById(window.message_id);
+    if (!message || message.role !== "user" || message.origin_kind !== "user_input") return false;
+    const scalar = decodeMessageScalars(message).find((item) =>
+      item.part.id === window.part_id && item.pointer === window.scalar_pointer && item.hash === window.source_hash,
+    );
+    if (!scalar) return false;
+    return Buffer.from(scalar.text).subarray(window.byte_start, window.byte_end).toString("utf8") === window.text;
+  } finally {
+    store.close();
   }
 }
 
-function safeFileMtimeMs(path: string): number {
+function markProfileWindowFailed(
+  butlerData: string,
+  window: ProfileSourceWindow,
+  failure: string,
+  usage: ProfileModelUsageSummary | null,
+): void {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "projection" });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
   try {
-    return statSync(path).mtimeMs;
+    db = openProfileDb(butlerData, true);
+    db.prepare(`
+      UPDATE profile_source_coverage
+      SET disposition='failed', failure_code=?, usage_json=?, updated_at=?
+      WHERE coverage_key=?
+    `).run(failure.slice(0, 120), JSON.stringify(usage), iso(), window.coverage_key);
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+async function markProfileWindowFailedAsync(
+  butlerData: string,
+  window: ProfileSourceWindow,
+  failure: string,
+  usage: ProfileModelUsageSummary | null,
+  signal?: AbortSignal,
+  ownerNonce?: string,
+): Promise<void> {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = await acquireConsolidationLockAsync(lockPath, { purpose: "projection", waitClass: "background", signal });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
+  try {
+    db = openProfileDb(butlerData, true);
+    db.prepare(`UPDATE profile_source_coverage
+      SET disposition='failed',failure_code=?,usage_json=?,owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?
+      WHERE coverage_key=? AND (? IS NULL OR (owner_pid=? AND owner_nonce=?))`)
+      .run(failure.slice(0, 120), JSON.stringify(usage), iso(), window.coverage_key,
+        ownerNonce ?? null, process.pid, ownerNonce ?? null);
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
+}
+
+function profileCoverageCounts(butlerData: string, keys?: Set<string>): {
+  coverage_pending_count: number;
+  coverage_failed_count: number;
+  coverage_complete_count: number;
+} {
+  const counts = { coverage_pending_count: 0, coverage_failed_count: 0, coverage_complete_count: 0 };
+  if (!existsSync(profileBlackBoxPath(butlerData))) return counts;
+  const db = openProfileDb(butlerData, false);
+  try {
+    const selected = keys ? [...keys] : [];
+    if (keys && selected.length === 0) return counts;
+    const rows = db.query(`
+      SELECT disposition, COUNT(*) AS count
+      FROM profile_source_coverage
+      ${keys ? `WHERE coverage_key IN (${selected.map(() => "?").join(",")})` : ""}
+      GROUP BY disposition
+    `).all(...selected) as Array<{ disposition: string; count: number }>;
+    for (const row of rows) {
+      if (row.disposition === "pending") counts.coverage_pending_count = Number(row.count);
+      if (row.disposition === "failed") counts.coverage_failed_count = Number(row.count);
+      if (row.disposition === "complete") counts.coverage_complete_count = Number(row.count);
+    }
   } catch {
-    return 0;
+    // Pre-coverage databases have no work ledger yet.
+  } finally {
+    db.close();
   }
+  return counts;
+}
+
+export type ProfileCoverageHealth = {
+  available: boolean;
+  reason: "profile_store_unavailable" | "profile_coverage_unavailable" | null;
+  consent_mode: ProfilingMode;
+  processed_windows: number;
+  pending_windows: number;
+  failed_windows: number;
+  stale_history_windows: number;
+  historical_processed_windows: number;
+  discovery_incomplete: boolean | null;
+  discovery_reason: "discovery_not_observed" | null;
+};
+
+export function readProfileCoverageHealth(butlerData: string): ProfileCoverageHealth {
+  if (!existsSync(profileBlackBoxPath(butlerData))) return {
+    available: false, reason: "profile_store_unavailable", consent_mode: "off",
+    processed_windows: 0, pending_windows: 0, failed_windows: 0, stale_history_windows: 0,
+    historical_processed_windows: 0, discovery_incomplete: null, discovery_reason: "discovery_not_observed",
+  };
+  let db: Database | null = null;
+  try {
+    db = openProfileDb(butlerData, false);
+    const consent = readProfilingConsentSnapshotFromDb(db);
+    const rows = db.query<{ disposition: string; failure_code: string | null; message_id: string; part_id: string; scalar_pointer: string; source_hash: string; byte_start: number; byte_end: number }, []>(`
+      SELECT disposition,failure_code,message_id,part_id,scalar_pointer,source_hash,byte_start,byte_end
+      FROM profile_source_coverage
+    `).all();
+    const store = createLazyConversationProjectionReader({ butlerData });
+    if (!store.isAvailable()) throw new Error("profile source inventory unavailable");
+    let processed = 0; let pending = 0; let failed = 0; let stale = 0; let historicalProcessed = 0;
+    try {
+    for (const row of rows) {
+      if (row.disposition === "complete") historicalProcessed += 1;
+      const message = store.readMessageById(row.message_id);
+      const scalar = message?.role === "user" && message.origin_kind === "user_input"
+        ? decodeMessageScalars(message).find((item) => item.part.id === row.part_id && item.pointer === row.scalar_pointer && item.hash === row.source_hash)
+        : undefined;
+      const current = Boolean(scalar && row.byte_start >= 0 && row.byte_end > row.byte_start && row.byte_end <= Buffer.byteLength(scalar.text));
+      if (row.failure_code === "source_stale" || !current) { stale += 1; continue; }
+      if (row.disposition === "complete") {
+        if (consent.mode !== "off") processed += 1;
+      } else if (consent.mode !== "off" && row.disposition === "pending") pending += 1;
+      else if (consent.mode !== "off" && row.disposition === "failed") failed += 1;
+    }
+    } finally { store.close(); }
+    const scan = db.query<{ value_json: string }, []>("SELECT value_json FROM profile_meta WHERE key='source_scan_offset'").get();
+    const scanOffset = scan ? JSON.parse(scan.value_json) as unknown : null;
+    const discoveryIncomplete = typeof scanOffset === "number" && Number.isSafeInteger(scanOffset) && scanOffset > 0
+      ? true
+      : null;
+    return { available: true, reason: null, consent_mode: consent.mode,
+      processed_windows: processed, pending_windows: pending, failed_windows: failed, stale_history_windows: stale,
+      historical_processed_windows: historicalProcessed, discovery_incomplete: discoveryIncomplete,
+      discovery_reason: discoveryIncomplete === null ? "discovery_not_observed" : null };
+  } catch {
+    return { available: false, reason: "profile_coverage_unavailable", consent_mode: "off",
+      processed_windows: 0, pending_windows: 0, failed_windows: 0, stale_history_windows: 0,
+      historical_processed_windows: 0, discovery_incomplete: null, discovery_reason: "discovery_not_observed" };
+  } finally { db?.close(); }
+}
+
+function safeProfileExtractorError(error: unknown): string {
+  if (error instanceof Error && error.message.startsWith("profile ")) return error.message.slice(0, 120);
+  return "profile extractor response failed validation";
+}
+
+function profileCommitInterruptionCode(error: unknown): string | null {
+  const code = error instanceof Error ? error.message : String(error);
+  return ["memory_write_busy", "profile source changed", "profile correction target changed", "profiling consent changed"].includes(code)
+    ? code : null;
 }
 
 interface TranscriptTextObservation {
@@ -1129,120 +2079,6 @@ interface ExtractedProfileCandidate {
   expires_or_decay: "expires" | "decay" | null;
 }
 
-function readProfileConversationObservations(
-  butlerData: string,
-  consent: ProfilingConsentSnapshot,
-  options: ProfileTranscriptCaptureOptions,
-): TranscriptTextObservationRead {
-  const maxUserMessages = Math.max(
-    1,
-    Math.min(options.maxUserMessages ?? DEFAULT_PROFILE_TRANSCRIPT_MAX_USER_MESSAGES, MAX_PROFILE_TRANSCRIPT_USER_MESSAGES),
-  );
-  const sinceMs = profileTranscriptSinceMs(options.since, consent.consented_at);
-  const since = Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null;
-  const observations = readConversationObservations({
-    butlerData,
-    roles: ["user"],
-    since,
-    includeCompacted: true,
-    maxMessages: maxUserMessages,
-    order: "desc",
-  });
-  const sessions = new Set(observations.map((observation) => observation.conversation_session_id));
-  return {
-    scanned_file_count: sessions.size,
-    scanned_event_count: observations.length,
-    semantic_scanned_session_count: sessions.size,
-    semantic_scanned_message_count: observations.length,
-    audit_transcript_scanned_file_count: 0,
-    audit_transcript_scanned_event_count: 0,
-    observations: observations.map((observation) => ({
-      text: observation.text,
-      evidence_ref: `conversation:${observation.conversation_message_id}`,
-      timestamp: observation.created_at,
-      now: new Date(observation.created_at),
-    })),
-  };
-}
-
-function _readTranscriptTextObservations(
-  butlerData: string,
-  consent: ProfilingConsentSnapshot,
-  options: ProfileTranscriptCaptureOptions,
-): TranscriptTextObservationRead {
-  const transcriptDir = join(butlerData, "transcripts");
-  if (!existsSync(transcriptDir)) {
-    return {
-      scanned_file_count: 0,
-      scanned_event_count: 0,
-      semantic_scanned_session_count: 0,
-      semantic_scanned_message_count: 0,
-      audit_transcript_scanned_file_count: 0,
-      audit_transcript_scanned_event_count: 0,
-      observations: [],
-    };
-  }
-
-  const maxFiles = Math.max(
-    1,
-    Math.min(options.maxFiles ?? DEFAULT_PROFILE_TRANSCRIPT_MAX_FILES, MAX_PROFILE_TRANSCRIPT_FILES),
-  );
-  const maxUserMessages = Math.max(
-    1,
-    Math.min(options.maxUserMessages ?? DEFAULT_PROFILE_TRANSCRIPT_MAX_USER_MESSAGES, MAX_PROFILE_TRANSCRIPT_USER_MESSAGES),
-  );
-  const sinceMs = profileTranscriptSinceMs(options.since, consent.consented_at);
-  const files = readdirSync(transcriptDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
-    .map((entry) => {
-      const path = join(transcriptDir, entry.name);
-      const mtimeMs = safeFileMtimeMs(path);
-      return { path, mtimeMs };
-    })
-    .filter((entry) => entry.mtimeMs >= sinceMs)
-    .sort((left, right) => right.mtimeMs - left.mtimeMs)
-    .slice(0, maxFiles);
-
-  let scannedEvents = 0;
-  const observations: TranscriptTextObservation[] = [];
-
-  for (const file of files) {
-    let raw: string;
-    try {
-      raw = readFileSync(file.path, "utf8");
-    } catch {
-      continue;
-    }
-    for (const line of raw.split("\n")) {
-      const event = parseTranscriptEventLine(line);
-      if (!event || event.kind !== "inbound") continue;
-      const eventMs = Date.parse(event.timestamp);
-      if (Number.isFinite(eventMs) && eventMs < sinceMs) continue;
-      scannedEvents += 1;
-      const text = transcriptMessageText(event.payload);
-      if (!text) continue;
-      observations.push({
-        text,
-        evidence_ref: `transcript:${event.sessionId}:${event.eventId}`,
-        timestamp: event.timestamp,
-        now: Number.isFinite(eventMs) ? new Date(eventMs) : undefined,
-      });
-    }
-  }
-
-  return {
-    scanned_file_count: files.length,
-    scanned_event_count: scannedEvents,
-    semantic_scanned_session_count: 0,
-    semantic_scanned_message_count: 0,
-    audit_transcript_scanned_file_count: files.length,
-    audit_transcript_scanned_event_count: scannedEvents,
-    observations: observations
-      .sort((left, right) => timestampSortValue(right.timestamp) - timestampSortValue(left.timestamp))
-      .slice(0, maxUserMessages),
-  };
-}
-
 async function defaultProfileExtractorModelRunner(
   input: ProfileExtractorModelRunnerInput,
 ): Promise<string | ProfileExtractorModelRunnerResult> {
@@ -1250,17 +2086,6 @@ async function defaultProfileExtractorModelRunner(
     throw new Error("Profile extractor model runner is not configured");
   }
   return await configuredProfileExtractorModelRunner(input);
-}
-
-function profileExtractionObservationBatches(
-  observations: TranscriptTextObservation[],
-  maxBatches: number,
-): TranscriptTextObservation[][] {
-  const batches: TranscriptTextObservation[][] = [];
-  for (let index = 0; index < observations.length && batches.length < maxBatches; index += MAX_MODEL_OBSERVATIONS) {
-    batches.push(observations.slice(index, index + MAX_MODEL_OBSERVATIONS));
-  }
-  return batches;
 }
 
 function profileExtractorInstructions(mode: Exclude<ProfilingMode, "off">): string {
@@ -1354,27 +2179,28 @@ function profileExtractorInstructions(mode: Exclude<ProfilingMode, "off">): stri
 function profileExtractorPrompt(
   observations: TranscriptTextObservation[],
   mode: Exclude<ProfilingMode, "off">,
+  correctionTargets: Array<{
+    target_ref: string;
+    instruction: string;
+    category: string;
+    facet: string | null;
+    applies_when: string[];
+  }> = [],
 ): string {
-  const lines = [
-    `Profiling mode: ${mode}`,
-    "Analyze the observations below and return profile candidates as JSON.",
-    "Evidence refs must come from the provided ref values.",
-    "",
-    "Observations:",
-  ];
-  let totalChars = lines.join("\n").length;
-  for (const [index, observation] of observations.slice(0, MAX_MODEL_OBSERVATIONS).entries()) {
-    const text = observation.text.replace(/\s+/gu, " ").trim().slice(0, MAX_MODEL_OBSERVATION_CHARS);
-    const block = [
-      `${index + 1}. ref=${observation.evidence_ref} at=${observation.timestamp}`,
-      `text=${JSON.stringify(text)}`,
-    ];
-    const blockText = block.join("\n");
-    if (totalChars + blockText.length > MAX_PROFILE_EXTRACTION_PROMPT_CHARS) break;
-    lines.push(blockText);
-    totalChars += blockText.length;
-  }
-  return lines.join("\n");
+  return JSON.stringify({
+    task: "extract_profile_candidates",
+    mode,
+    rules: [
+      "Evidence refs must be non-empty and come only from delivered observations.",
+      "For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly.",
+    ],
+    correction_targets: correctionTargets,
+    observations: observations.slice(0, MAX_MODEL_OBSERVATIONS).map((observation) => ({
+      ref: observation.evidence_ref,
+      observed_at: observation.timestamp,
+      text: observation.text,
+    })),
+  });
 }
 
 function profileThirdPartyImportExtractorPrompt(input: {
@@ -1505,6 +2331,80 @@ function parseProfileExtractorResponse(
   return parsed.slice(0, 40);
 }
 
+function parseProfileExtractorResponseStrict(
+  raw: string,
+  allowedEvidenceRefs: Set<string>,
+  mode: Exclude<ProfilingMode, "off">,
+  correctionTargets: Map<string, ProfileCorrectionTarget>,
+): ExtractedProfileCandidate[] {
+  const payload = parseJsonObjectStrict(raw);
+  if (!("candidates" in payload) || !Array.isArray(payload.candidates)) {
+    throw new Error("profile extractor response missing candidates");
+  }
+  const output: ExtractedProfileCandidate[] = [];
+  for (const item of payload.candidates) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("profile extractor candidate has invalid shape");
+    }
+    const rawItem = item as Record<string, unknown>;
+    if (!Array.isArray(rawItem.evidence_refs) || rawItem.evidence_refs.length === 0 ||
+      rawItem.evidence_refs.some((ref) => typeof ref !== "string" || !allowedEvidenceRefs.has(ref.trim()))) {
+      throw new Error("profile extractor candidate has invalid evidence refs");
+    }
+    const parsed = parseProfileExtractorResponse(
+      JSON.stringify({ candidates: [rawItem] }),
+      allowedEvidenceRefs,
+      mode,
+    );
+    if (parsed.length !== 1 || parsed[0]!.evidence_refs.length === 0) {
+      throw new Error("profile extractor candidate failed validation");
+    }
+    const candidate = parsed[0]!;
+    if (rawItem.contradiction_refs !== undefined && !Array.isArray(rawItem.contradiction_refs)) {
+      throw new Error("profile extractor correction refs have invalid shape");
+    }
+    const rawCorrections = Array.isArray(rawItem.contradiction_refs) ? rawItem.contradiction_refs : [];
+    if (rawCorrections.some((ref) => typeof ref !== "string" || !ref.trim())) {
+      throw new Error("profile extractor correction refs have invalid shape");
+    }
+    const requestedCorrections = [...new Set((rawCorrections as string[]).map((ref) => ref.trim()))];
+    const resolvedCorrections: string[] = [];
+    for (const targetRef of requestedCorrections) {
+      const target = correctionTargets.get(targetRef);
+      if (!target || candidate.source_type !== "explicit" ||
+        candidate.category !== target.category || candidate.facet !== target.facet ||
+        !sameConditions(candidate.applies_when, target.applies_when)) {
+        throw new Error("profile extractor correction target failed validation");
+      }
+      resolvedCorrections.push(target.stable_id);
+    }
+    output.push({ ...candidate, contradiction_refs: resolvedCorrections.slice(0, 6) });
+  }
+  return output;
+}
+
+function parseJsonObjectStrict(text: string): Record<string, unknown> {
+  const trimmed = text.trim().replace(/^```(?:json)?/iu, "").replace(/```$/u, "").trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("profile extractor response is invalid JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("profile extractor response is not an object");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function normalizedConditions(value: string[]): string[] {
+  return [...new Set(value.map((item) => item.trim()).filter(Boolean))].sort();
+}
+
+function sameConditions(left: string[], right: string[]): boolean {
+  return JSON.stringify(normalizedConditions(left)) === JSON.stringify(normalizedConditions(right));
+}
+
 function parseJsonObjectFromText(text: string): Record<string, unknown> {
   const trimmed = text.trim().replace(/^```(?:json)?/iu, "").replace(/```$/u, "").trim();
   try {
@@ -1530,6 +2430,27 @@ function parseJsonObjectFromText(text: string): Record<string, unknown> {
 export function consolidateProfileCandidates(
   butlerData: string,
 ): ProfileConsolidationResult {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "consolidation" });
+  if (!lease) throw new Error("memory_write_busy");
+  let commit = false;
+  try { const result = consolidateProfileCandidatesOwned(butlerData); commit = true; return result; }
+  finally { releaseConsolidationLock(lockPath, lease, commit); }
+}
+
+export async function consolidateProfileCandidatesAsync(
+  butlerData: string,
+  signal?: AbortSignal,
+): Promise<ProfileConsolidationResult> {
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = await acquireConsolidationLockAsync(lockPath, { purpose: "consolidation", waitClass: "background", signal });
+  if (!lease) throw new Error("memory_write_busy");
+  let commit = false;
+  try { const result = consolidateProfileCandidatesOwned(butlerData); commit = true; return result; }
+  finally { releaseConsolidationLock(lockPath, lease, commit); }
+}
+
+function consolidateProfileCandidatesOwned(butlerData: string): ProfileConsolidationResult {
   const consent = readProfilingConsentSnapshot(butlerData);
   if (consent.mode === "off") {
     if (existsSync(profileBlackBoxPath(butlerData))) {
@@ -1599,7 +2520,10 @@ export function consolidateProfileCandidates(
     }
     rejectedCount = expireOldLowConfidenceCandidates(db);
     const stableEntries = listStableProfileEntriesFromDb(db);
-    const projection = buildRuntimeProjection(stableEntries, consent.mode);
+    const projectionEntries = eligibleStableEntriesFromDb(
+      butlerData, db, stableEntries, consent.mode, new Date(),
+    );
+    const projection = buildRuntimeProjection(projectionEntries, consent.mode, { writerKind: "generated" });
     const projectionWritten = projection.response_hints.length > 0 ||
       projection.current_attention.length > 0 ||
       projection.caution_hints.length > 0;
@@ -1616,23 +2540,23 @@ export function consolidateProfileCandidates(
       projection_written: projectionWritten,
       raw_text_included: false,
     };
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
 }
 
 export function writeRuntimeProfileProjection(
   butlerData: string,
   projection: RuntimeProfileProjection,
 ): RuntimeProfileProjection {
-  const normalized = normalizeRuntimeProfileProjection(projection);
-  const db = openProfileDb(butlerData, true);
+  const lockPath = consolidationLockPath(butlerData);
+  const lease = acquireConsolidationLock(lockPath, { purpose: "projection" });
+  if (!lease) throw new Error("memory_write_busy");
+  let db: Database | null = null;
   try {
+    const normalized = normalizeRuntimeProfileProjection({ ...projection, writer_kind: "manual" });
+    db = openProfileDb(butlerData, true);
     writeRuntimeProfileProjectionInDb(db, normalized);
-  } finally {
-    db.close();
-  }
-  return normalized;
+    return normalized;
+  } finally { try { db?.close(); } finally { releaseConsolidationLock(lockPath, lease); } }
 }
 
 export function readRuntimeProfileProjection(
@@ -1640,6 +2564,8 @@ export function readRuntimeProfileProjection(
 ): RuntimeProfileProjection | null {
   const path = profileBlackBoxPath(butlerData);
   if (!existsSync(path)) return null;
+  const consent = readProfilingConsentSnapshot(butlerData);
+  if (consent.mode === "off") return null;
   const db = openProfileDb(butlerData, false);
   try {
     const row = db.query(`
@@ -1649,7 +2575,18 @@ export function readRuntimeProfileProjection(
       LIMIT 1
     `).get() as { payload_json?: string } | null;
     if (!row?.payload_json) return null;
-    return normalizeRuntimeProfileProjection(JSON.parse(row.payload_json));
+    const stored = normalizeRuntimeProfileProjection(JSON.parse(row.payload_json));
+    if (stored.mode !== consent.mode || !stored.writer_kind) return null;
+    if (stored.writer_kind === "manual") return stored;
+    const eligible = eligibleStableEntriesFromDb(
+      butlerData, db, listStableProfileEntriesFromDb(db), consent.mode, new Date(),
+    );
+    if (eligible.length === 0) return null;
+    return buildRuntimeProjection(eligible, consent.mode, {
+      writerKind: "generated",
+      version: stored.version,
+      updatedAt: stored.updated_at,
+    });
   } catch {
     return null;
   } finally {
@@ -1774,6 +2711,28 @@ function openProfileDb(butlerData: string, create: boolean): Database {
         payload_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS profile_source_coverage (
+        coverage_key TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        part_id TEXT NOT NULL,
+        part_index INTEGER NOT NULL,
+        scalar_pointer TEXT NOT NULL,
+        byte_start INTEGER NOT NULL,
+        byte_end INTEGER NOT NULL,
+        extractor_version TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        evidence_ref TEXT NOT NULL UNIQUE,
+        disposition TEXT NOT NULL CHECK(disposition IN ('pending', 'failed', 'complete')),
+        failure_code TEXT,
+        usage_json TEXT,
+        owner_pid INTEGER,
+        owner_nonce TEXT,
+        claimed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS profile_source_coverage_disposition_idx
+        ON profile_source_coverage(disposition, observed_at, coverage_key);
     `);
     ensureProfileCandidateColumns(db);
     try {
@@ -1788,6 +2747,9 @@ function openProfileDb(butlerData: string, create: boolean): Database {
 function ensureProfileCandidateColumns(db: Database): void {
   ensureColumn(db, "profile_candidates", "status", "status TEXT NOT NULL DEFAULT 'candidate'");
   ensureColumn(db, "profile_candidates", "promoted_at", "promoted_at TEXT");
+  ensureColumn(db, "profile_source_coverage", "owner_pid", "owner_pid INTEGER");
+  ensureColumn(db, "profile_source_coverage", "owner_nonce", "owner_nonce TEXT");
+  ensureColumn(db, "profile_source_coverage", "claimed_at", "claimed_at TEXT");
 }
 
 function ensureColumn(
@@ -1900,6 +2862,12 @@ function normalizeRuntimeProfileProjection(value: unknown): RuntimeProfileProjec
     likely_failure_modes: likelyFailureModes,
     ask_before: askBefore,
     caution_hints: cautionHints,
+    ...(raw.writer_kind === "manual" || raw.writer_kind === "generated"
+      ? { writer_kind: raw.writer_kind }
+      : {}),
+    ...(Array.isArray(raw.source_entry_ids)
+      ? { source_entry_ids: uniqueStrings(raw.source_entry_ids.filter((item): item is string => typeof item === "string")) }
+      : {}),
   };
 }
 
@@ -1937,6 +2905,18 @@ function normalizeEvidenceRef(value: string | null | undefined): string | null {
   const normalized = value?.replace(/\s+/gu, " ").trim();
   if (!normalized) return null;
   return normalized.slice(0, 160);
+}
+
+function normalizeObservedAt(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+function laterObservedAt(left: string | undefined, right: string): string {
+  const leftMs = left ? Date.parse(left) : Number.NEGATIVE_INFINITY;
+  const rightMs = Date.parse(right);
+  return Number.isFinite(leftMs) && leftMs > rightMs ? left! : right;
 }
 
 function categoryAllowedInMode(
@@ -2175,6 +3155,7 @@ function writeStableEntryInDb(db: Database, entry: StableProfileEntry): void {
     ? {
       ...entry,
       evidence_refs: uniqueStrings([...existing.evidence_refs, ...entry.evidence_refs]),
+      evidence_observed_at: { ...existing.evidence_observed_at, ...entry.evidence_observed_at },
       evidence_count: Math.max(existing.evidence_count, entry.evidence_count),
       applies_when: uniqueStrings([...existing.applies_when, ...entry.applies_when]).slice(0, 6),
       butler_should: uniqueStrings([...existing.butler_should, ...entry.butler_should]).slice(0, 6),
@@ -2259,7 +3240,7 @@ function deleteRuntimeProfileProjectionInDb(db: Database): void {
   db.exec("DELETE FROM runtime_projection");
 }
 
-function stableEntryFromCandidate(candidate: ProfileCandidateRecord): StableProfileEntry {
+function stableEntryFromCandidate(candidate: ProfileCandidateRecord, now = iso()): StableProfileEntry {
   return {
     id: stableProfileEntryId(candidate.category, candidate.facet, candidate.summary),
     layer: candidate.layer,
@@ -2274,12 +3255,13 @@ function stableEntryFromCandidate(candidate: ProfileCandidateRecord): StableProf
     contradiction_refs: candidate.contradiction_refs,
     sensitivity: candidate.sensitivity,
     evidence_refs: candidate.evidence_refs,
+    evidence_observed_at: candidate.evidence_observed_at,
     evidence_count: candidate.evidence_count,
     source_type: candidate.source_type,
     confidence: candidate.confidence,
     sensitive_domain: candidate.sensitive_domain,
-    created_at: iso(),
-    updated_at: iso(),
+    created_at: now,
+    updated_at: now,
   };
 }
 
@@ -2364,6 +3346,11 @@ function expireOldLowConfidenceCandidates(db: Database): number {
 function buildRuntimeProjection(
   entries: StableProfileEntry[],
   mode: Exclude<ProfilingMode, "off">,
+  options: {
+    writerKind?: "generated";
+    version?: number;
+    updatedAt?: string;
+  } = {},
 ): RuntimeProfileProjection {
   const answer: string[] = [];
   const collaborate: string[] = [];
@@ -2406,9 +3393,9 @@ function buildRuntimeProjection(
   const normalizedFailures = normalizeHints(failureModes);
   const normalizedAskBefore = normalizeHints(askBefore);
   return {
-    version: Date.now(),
+    version: options.version ?? Date.now(),
     mode,
-    updated_at: iso(),
+    updated_at: options.updatedAt ?? iso(),
     how_to_answer: normalizedAnswer,
     how_to_collaborate: normalizeHints(collaborate),
     response_hints: normalizedAnswer,
@@ -2421,12 +3408,137 @@ function buildRuntimeProjection(
       ...normalizedFailures,
       ...normalizedAskBefore,
     ]),
+    ...(options.writerKind ? { writer_kind: options.writerKind } : {}),
+    ...(options.writerKind ? { source_entry_ids: entries.map((entry) => entry.id) } : {}),
   };
 }
 
-function timestampSortValue(timestamp: string): number {
-  const ms = Date.parse(timestamp);
-  return Number.isFinite(ms) ? ms : 0;
+function eligibleStableProfileEntries(
+  butlerData: string,
+  mode: Exclude<ProfilingMode, "off">,
+  now: Date,
+): StableProfileEntry[] {
+  if (!existsSync(profileBlackBoxPath(butlerData))) return [];
+  const db = openProfileDb(butlerData, false);
+  try {
+    return eligibleStableEntriesFromDb(
+      butlerData, db, listStableProfileEntriesFromDb(db), mode, now,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function eligibleStableEntriesFromDb(
+  butlerData: string,
+  db: Database,
+  entries: StableProfileEntry[],
+  mode: Exclude<ProfilingMode, "off">,
+  now: Date,
+): StableProfileEntry[] {
+  const relevantRefs = [...new Set(entries.flatMap((entry) => entry.evidence_refs).filter(Boolean))];
+  const coverageRows: Array<{
+    evidence_ref: string;
+    message_id: string;
+    source_hash: string;
+    part_id: string;
+    scalar_pointer: string;
+    byte_start: number;
+    byte_end: number;
+  }> = [];
+  for (let start = 0; start < relevantRefs.length; start += 200) {
+    const refs = relevantRefs.slice(start, start + 200);
+    if (refs.length === 0) continue;
+    coverageRows.push(...db.query(`
+      SELECT evidence_ref, message_id, source_hash, part_id, scalar_pointer, byte_start, byte_end
+      FROM profile_source_coverage
+      WHERE disposition='complete' AND evidence_ref IN (${refs.map(() => "?").join(",")})
+    `).all(...refs) as typeof coverageRows);
+  }
+  const store = new AgentConversationStore({ butlerData });
+  const currentRefs = new Set<string>();
+  try {
+    const messageCache = new Map<string, ConversationMessageWithParts | null>();
+    for (const row of coverageRows) {
+      let message = messageCache.get(row.message_id);
+      if (message === undefined) {
+        message = store.readMessageById(row.message_id);
+        messageCache.set(row.message_id, message);
+      }
+      if (!message || message.role !== "user" || message.origin_kind !== "user_input") continue;
+      const scalar = decodeMessageScalars(message).find((item) =>
+        item.part.id === row.part_id && item.pointer === row.scalar_pointer && item.hash === row.source_hash,
+      );
+      if (!scalar || row.byte_start < 0 || row.byte_end > Buffer.byteLength(scalar.text)) continue;
+      currentRefs.add(row.evidence_ref);
+    }
+  } finally {
+    store.close();
+  }
+  const qualified = entries.flatMap((entry) => {
+    const refs = entry.evidence_refs.filter((ref) =>
+      currentRefs.has(ref) || verifiedProfileImportEvidence(butlerData, ref, entry.id),
+    );
+    if (refs.length === 0) return [];
+    return [{
+      ...entry,
+      evidence_refs: refs,
+      evidence_observed_at: Object.fromEntries(refs.map((ref) => [ref, entry.evidence_observed_at[ref] ?? null])),
+    }];
+  });
+  return eligibleStableEntries(qualified, mode, now);
+}
+
+function verifiedProfileImportEvidence(butlerData: string, evidenceRef: string, candidateId: string): boolean {
+  const match = /^third_party_profile_import:([a-z0-9_-]+):([a-f0-9]{16})$/u.exec(evidenceRef);
+  if (!match) return false;
+  const path = join(butlerData, "personalization", "profile-imports", `${match[2]}.json`);
+  if (!existsSync(path)) return false;
+  try {
+    const manifest = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return manifest.import_id === evidenceRef && manifest.source === match[1] &&
+      manifest.text_sha256 === match[2] && manifest.raw_text_included === false &&
+      Array.isArray(manifest.candidate_ids) &&
+      (manifest.candidate_ids.includes(candidateId) ||
+        (candidateId.startsWith("sp_") && manifest.candidate_ids.includes(`pc_${candidateId.slice(3)}`)));
+  } catch {
+    return false;
+  }
+}
+
+function eligibleStableEntries(
+  entries: StableProfileEntry[],
+  mode: Exclude<ProfilingMode, "off">,
+  now: Date,
+): StableProfileEntry[] {
+  const sourceEligible = entries.filter((entry) => {
+    if (!categoryAllowedInMode(entry.category, mode)) return false;
+    if (mode === "basic" && entry.sensitive_domain) return false;
+    const observed = Object.values(entry.evidence_observed_at)
+      .flatMap((value) => value ? [Date.parse(value)] : [])
+      .filter(Number.isFinite);
+    if (observed.length === 0) {
+      return entry.temporal_scope === "durable" &&
+        (entry.decay_policy === "reinforce_or_decay" || entry.decay_policy === "never_without_consent");
+    }
+    const latest = Math.max(...observed);
+    const ageMs = now.getTime() - latest;
+    if (entry.decay_policy === "days_7") return ageMs <= 7 * 86_400_000;
+    if (entry.decay_policy === "days_30") return ageMs <= 30 * 86_400_000;
+    return true;
+  });
+  const byId = new Map(sourceEligible.map((entry) => [entry.id, entry]));
+  const contradicted = new Set<string>();
+  for (const correction of sourceEligible) {
+    if (correction.source_type !== "explicit" && correction.source_type !== "user_confirmed") continue;
+    for (const targetId of correction.contradiction_refs) {
+      const target = byId.get(targetId);
+      if (!target || target.category !== correction.category || target.facet !== correction.facet ||
+        !sameConditions(target.applies_when, correction.applies_when)) continue;
+      contradicted.add(targetId);
+    }
+  }
+  return sourceEligible.filter((entry) => !contradicted.has(entry.id));
 }
 
 function profileTranscriptSinceMs(
@@ -2437,43 +3549,6 @@ function profileTranscriptSinceMs(
   if (!source) return 0;
   const ms = source instanceof Date ? source.getTime() : Date.parse(source);
   return Number.isFinite(ms) ? ms : 0;
-}
-
-interface ParsedTranscriptEvent {
-  eventId: string;
-  sessionId: string;
-  kind: string;
-  timestamp: string;
-  payload: Record<string, unknown>;
-}
-
-function parseTranscriptEventLine(line: string): ParsedTranscriptEvent | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-  try {
-    const parsed = JSON.parse(trimmed) as Partial<ParsedTranscriptEvent>;
-    if (
-      typeof parsed.eventId === "string" &&
-      typeof parsed.sessionId === "string" &&
-      typeof parsed.kind === "string" &&
-      typeof parsed.timestamp === "string" &&
-      parsed.payload &&
-      typeof parsed.payload === "object" &&
-      !Array.isArray(parsed.payload)
-    ) {
-      return parsed as ParsedTranscriptEvent;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function transcriptMessageText(payload: Record<string, unknown>): string {
-  const message = payload.message;
-  if (!message || typeof message !== "object" || Array.isArray(message)) return "";
-  const text = (message as { text?: unknown }).text;
-  return typeof text === "string" ? text.trim() : "";
 }
 
 function normalizeProfileSensitiveDomain(input: {
@@ -2610,6 +3685,7 @@ function candidatePayload(record: ProfileCandidateRecord): Record<string, unknow
     contradiction_refs: record.contradiction_refs,
     sensitivity: record.sensitivity,
     evidence_refs: record.evidence_refs,
+    evidence_observed_at: record.evidence_observed_at,
     evidence_count: record.evidence_count,
   };
 }
@@ -2627,6 +3703,7 @@ function stablePayload(record: StableProfileEntry): Record<string, unknown> {
     contradiction_refs: record.contradiction_refs,
     sensitivity: record.sensitivity,
     evidence_refs: record.evidence_refs,
+    evidence_observed_at: record.evidence_observed_at,
     evidence_count: record.evidence_count,
     sensitive_domain: record.sensitive_domain,
   };
@@ -2686,6 +3763,7 @@ function recordFromCandidateRow(row: ProfileCandidateRow): ProfileCandidateRecor
     contradiction_refs: normalizeShortStringList(payload.contradiction_refs),
     sensitivity: normalizeProfileSensitivity(payload.sensitivity) ?? defaults.sensitivity,
     evidence_refs: evidenceRefs,
+    evidence_observed_at: normalizeEvidenceObservedAt(payload.evidence_observed_at),
     evidence_count: typeof payload.evidence_count === "number"
       ? Math.max(payload.evidence_count, evidenceRefs.length)
       : evidenceRefs.length,
@@ -2732,6 +3810,7 @@ function recordFromStableRow(row: StableProfileRow): StableProfileEntry | null {
     contradiction_refs: normalizeShortStringList(payload.contradiction_refs),
     sensitivity: normalizeProfileSensitivity(payload.sensitivity) ?? defaults.sensitivity,
     evidence_refs: evidenceRefs,
+    evidence_observed_at: normalizeEvidenceObservedAt(payload.evidence_observed_at),
     evidence_count: typeof payload.evidence_count === "number"
       ? Math.max(payload.evidence_count, evidenceRefs.length)
       : evidenceRefs.length,
@@ -2880,6 +3959,18 @@ function normalizeEvidenceRefs(value: unknown): string[] {
       .filter(Boolean)
       .map((item) => item.slice(0, 160)),
   );
+}
+
+function normalizeEvidenceObservedAt(value: unknown): Record<string, string | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output: Record<string, string | null> = {};
+  for (const [ref, observedAt] of Object.entries(value)) {
+    const normalizedRef = normalizeEvidenceRef(ref);
+    if (normalizedRef) output[normalizedRef] = normalizeObservedAt(
+      typeof observedAt === "string" ? observedAt : null,
+    );
+  }
+  return output;
 }
 
 function uniqueStrings(values: string[]): string[] {

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
@@ -75,4 +75,50 @@ test("consumer binds idle, queue, error, and due state to one selected data root
     ),
   ).toBe(true);
   expect(existsSync(join(sentinel, "cognition"))).toBe(false);
+});
+
+test("queue SQLite coordination releases a killed holder and never steals a live replacement", async () => {
+  const selected = mkdtempSync(join(tmpdir(), "butler-memory-queue-owner-"));
+  roots.push(selected);
+  const queueFile = memorySyncQueueFile(selected);
+  mkdirSync(join(queueFile, ".."), { recursive: true });
+  const queueModule = join(import.meta.dir, "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts");
+  const runAppend = (jobId: string) => Bun.spawn([
+    "bun", "-e",
+    `import { appendToQueue } from ${JSON.stringify(queueModule)}; appendToQueue({schema_version:"butler.memory-sync-request.v3",job_id:${JSON.stringify(jobId)},source:{kind:"conversation_message",session_id:"s",message_id:${JSON.stringify(jobId)},source_hash:"h"},created_at:"2026-09-08T00:00:00Z"},${JSON.stringify(selected)});`,
+  ], { cwd: join(import.meta.dir, "../.."), env: { ...process.env, BUTLER_DATA: selected }, stdout: "pipe", stderr: "pipe" });
+  const runAck = (jobId: string) => Bun.spawn([
+    "bun", "-e",
+    `import { ack } from ${JSON.stringify(queueModule)}; if (!ack(${JSON.stringify(jobId)},${JSON.stringify(selected)})) process.exit(2);`,
+  ], { cwd: join(import.meta.dir, "../.."), env: { ...process.env, BUTLER_DATA: selected }, stdout: "pipe", stderr: "pipe" });
+  const startHolder = (readyPath: string) => Bun.spawn([
+    "bun", "-e",
+    `import { Database } from "bun:sqlite"; import { writeFileSync } from "node:fs"; const db=new Database(${JSON.stringify(`${queueFile}.coord.sqlite`)},{create:true,readwrite:true}); db.exec("PRAGMA busy_timeout=0"); db.exec("BEGIN EXCLUSIVE"); writeFileSync(${JSON.stringify(readyPath)},"ready"); await new Promise(()=>{});`,
+  ], { cwd: join(import.meta.dir, "../.."), env: { ...process.env, BUTLER_DATA: selected }, stdout: "pipe", stderr: "pipe" });
+  const waitReady = async (readyPath: string): Promise<void> => {
+    for (let i = 0; i < 100 && !existsSync(readyPath); i++) await Bun.sleep(10);
+    expect(existsSync(readyPath)).toBe(true);
+  };
+
+  const firstReady = join(selected, "first-ready");
+  const killedHolder = startHolder(firstReady);
+  await waitReady(firstReady);
+  expect(await runAppend("must-not-steal-dead-holder").exited).not.toBe(0);
+  killedHolder.kill();
+  await killedHolder.exited;
+  expect(await runAppend("after-killed-holder").exited).toBe(0);
+
+  const replacementReady = join(selected, "replacement-ready");
+  const replacementHolder = startHolder(replacementReady);
+  await waitReady(replacementReady);
+  expect(await runAppend("must-not-steal-live-replacement").exited).not.toBe(0);
+  expect(await runAck("after-killed-holder").exited).not.toBe(0);
+  expect(readFileSync(queueFile, "utf8")).toContain("after-killed-holder");
+  replacementHolder.kill();
+  await replacementHolder.exited;
+  expect(await runAppend("after-live-release").exited).toBe(0);
+  expect(await runAck("after-killed-holder").exited).toBe(0);
+  expect(readFileSync(queueFile, "utf8").trim().split("\n").map((line) => JSON.parse(line).job_id)).toEqual([
+    "after-live-release",
+  ]);
 });

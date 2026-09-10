@@ -1,6 +1,8 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import type { Database } from "bun:sqlite";
+import type { ProjectionSourceRow } from "../memory/projection/store.ts";
 import { cognitionFeedbackRoot } from "../paths.ts";
 
 export const FEEDBACK_BUFFER_SCHEMA = "butler.cognition.feedback-buffer.v1";
@@ -37,9 +39,43 @@ export type AddFeedbackEntryInput = {
   priority?: FeedbackPriority;
   privacyClass?: FeedbackPrivacyClass;
   now?: Date;
+  sourceBinding?: {
+    conversation_session_id: string;
+    conversation_message_id: string;
+    operation_id: string;
+  };
 };
 
 export type FeedbackResolveStatus = Extract<FeedbackStatus, "applied" | "discarded" | "superseded" | "needs_clarification">;
+
+export type FeedbackQualityOperation = {
+  schema: "butler.memory-source-quality-operation.v1";
+  feedback_id: string;
+  operation_id: string;
+  intent: "exclude";
+  actor: "operator";
+  source_ref: string;
+  source_revision: string;
+  source_hash: string;
+  generation_id: string;
+  episode_id: string;
+  target_revision: string;
+  feedback_owner_revision: string;
+  scope: string;
+  status: "pending" | "applied" | "stale";
+  created_at: string;
+};
+
+export function feedbackOwnerRevision(entry: FeedbackEntry): string {
+  return createHash("sha256").update(JSON.stringify({
+    feedback_id: entry.feedback_id,
+    created_at: entry.created_at,
+    scope: entry.scope,
+    category: entry.category,
+    target_ref: entry.target_ref,
+    text: entry.text,
+  })).digest("hex");
+}
 
 const VALID_STATUSES = new Set<FeedbackStatus>([
   "active",
@@ -62,6 +98,222 @@ function ensureDir(path: string): void {
 
 export function feedbackBufferPath(butlerData: string): string {
   return join(cognitionFeedbackRoot(butlerData), "feedback.md");
+}
+
+function feedbackQualityPath(butlerData: string): string {
+  return join(cognitionFeedbackRoot(butlerData), "quality-operations.jsonl");
+}
+
+export function listFeedbackQualityOperations(butlerData: string): FeedbackQualityOperation[] {
+  const raw = existsSync(feedbackQualityPath(butlerData))
+    ? readFileSync(feedbackQualityPath(butlerData), "utf8").trim()
+    : "";
+  if (!raw) return [];
+  return raw.split("\n").flatMap((line) => {
+    try {
+      const value = JSON.parse(line) as FeedbackQualityOperation;
+      return value.schema === "butler.memory-source-quality-operation.v1" ? [value] : [];
+    } catch { return []; }
+  });
+}
+
+export function recordFeedbackQualityExclusion(
+  butlerData: string,
+  input: Omit<FeedbackQualityOperation, "schema" | "status" | "created_at">,
+): FeedbackQualityOperation & { replayed: boolean } {
+  const operations = listFeedbackQualityOperations(butlerData);
+  const prior = operations.find((item) => item.operation_id === input.operation_id);
+  if (prior) {
+    if (prior.feedback_id !== input.feedback_id || prior.intent !== input.intent ||
+      prior.actor !== input.actor || prior.source_ref !== input.source_ref ||
+      prior.source_revision !== input.source_revision || prior.source_hash !== input.source_hash ||
+      prior.generation_id !== input.generation_id || prior.episode_id !== input.episode_id ||
+      prior.target_revision !== input.target_revision ||
+      prior.feedback_owner_revision !== input.feedback_owner_revision ||
+      prior.scope !== input.scope)
+      throw new Error("memory_quality_operation_conflict");
+    return { ...prior, replayed: true };
+  }
+  const operation: FeedbackQualityOperation = {
+    schema: "butler.memory-source-quality-operation.v1",
+    ...input,
+    status: "pending",
+    created_at: iso(),
+  };
+  ensureDir(cognitionFeedbackRoot(butlerData));
+  const path = feedbackQualityPath(butlerData);
+  writeFileSync(path, `${operations.map((item) => JSON.stringify(item)).concat(JSON.stringify(operation)).join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+  return { ...operation, replayed: false };
+}
+
+type QualityReceipt = {
+  status: "applied";
+  source_ref: string;
+  source_hash: string;
+  episode_id: string;
+  revision: string;
+  feedback_owner_revision: string;
+};
+
+function readQualityReceipt(db: Database, operationId: string): QualityReceipt | null {
+  const raw = db.query<{ value: string }, [string]>(
+    "SELECT value FROM memory_state WHERE key=?",
+  ).get(`quality_operation:${operationId}`)?.value;
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as QualityReceipt;
+    return value.status === "applied" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function receiptMatches(operation: FeedbackQualityOperation, receipt: QualityReceipt | null): boolean {
+  return Boolean(receipt && receipt.source_ref === operation.source_ref &&
+    receipt.source_hash === operation.source_hash &&
+    receipt.episode_id === operation.episode_id &&
+    receipt.revision === operation.target_revision &&
+    receipt.feedback_owner_revision === operation.feedback_owner_revision);
+}
+
+export function excludedMemorySourceIds(
+  butlerData: string,
+  input: {
+    db: Database;
+    generationId: string;
+    sources: ProjectionSourceRow[];
+  },
+): Set<string> {
+  return createMemoryQualityExclusionReader(butlerData, {
+    db: input.db,
+    generationId: input.generationId,
+  })(input.sources);
+}
+
+export function createMemoryQualityExclusionReader(
+  butlerData: string,
+  input: { db: Database; generationId: string },
+): (sources: ProjectionSourceRow[]) => Set<string> {
+  const operations = listFeedbackQualityOperations(butlerData);
+  const owners = new Map(listFeedbackEntries(butlerData).map((entry) => [entry.feedback_id, entry]));
+  return (sourceRows: ProjectionSourceRow[]) => {
+    const sources = new Map(sourceRows.map((source) => [source.source_id, source]));
+    const excluded = new Set<string>();
+    for (const operation of operations) {
+      if (operation.intent !== "exclude" || operation.status === "stale") continue;
+      const source = sources.get(operation.source_ref);
+      if (!source || source.episode_id !== operation.episode_id ||
+        source.revision !== operation.target_revision ||
+        source.revision !== operation.source_revision ||
+        source.content_hash !== operation.source_hash) continue;
+      const receipt = readQualityReceipt(input.db, operation.operation_id);
+      if (receiptMatches(operation, receipt)) {
+        excluded.add(operation.source_ref);
+        continue;
+      }
+      if (operation.status === "applied") {
+        excluded.add(operation.source_ref);
+        continue;
+      }
+      const owner = owners.get(operation.feedback_id);
+      if (operation.status === "pending" && owner &&
+        feedbackOwnerRevision(owner) === operation.feedback_owner_revision) {
+        excluded.add(operation.source_ref);
+      }
+    }
+    return excluded;
+  };
+}
+
+export async function applyFeedbackQualityOperation(
+  butlerData: string,
+  input: { feedbackId: string; operationId: string; sourceRevision: string; signal?: AbortSignal },
+): Promise<FeedbackQualityOperation> {
+  const operations = listFeedbackQualityOperations(butlerData);
+  const operation = operations.find((item) => item.operation_id === input.operationId);
+  if (!operation || operation.feedback_id !== input.feedbackId || operation.source_revision !== input.sourceRevision)
+    throw new Error("memory_quality_operation_changed");
+  if (operation.status === "applied") return operation;
+  const { readActiveDescriptor, resolveMemoryGeneration } = await import("../memory/projection/generation.ts");
+  const { resolveMemorySource, withMemoryWriteGateAsync } = await import("../memory/projection/ingestion.ts");
+  const { openProjectionDb } = await import("../memory/projection/store.ts");
+  try {
+    const descriptor = readActiveDescriptor(butlerData);
+    const context = {
+      butlerData,
+      target: { kind: "active" as const, expected_generation: descriptor.generation_id },
+      signal: input.signal ?? new AbortController().signal,
+    };
+    const db = openProjectionDb(resolveMemoryGeneration(context).graphPath);
+    try {
+      await withMemoryWriteGateAsync(context, () => db.transaction(() => {
+        const current = listFeedbackQualityOperations(butlerData).find(
+          (item) => item.operation_id === input.operationId,
+        );
+        if (!current || current.feedback_id !== input.feedbackId ||
+          current.source_revision !== input.sourceRevision) {
+          throw new Error("memory_quality_operation_changed");
+        }
+        const existingReceipt = readQualityReceipt(db, current.operation_id);
+        if (receiptMatches(current, existingReceipt)) return;
+        const active = readActiveDescriptor(butlerData);
+        if (active.generation_id !== descriptor.generation_id)
+          throw new Error("memory_generation_changed");
+        const owner = readFeedbackEntry(butlerData, current.feedback_id);
+        const source = resolveMemorySource({ context, sourceRef: current.source_ref });
+        if (!owner || feedbackOwnerRevision(owner) !== current.feedback_owner_revision ||
+          source.source_hash !== current.source_hash) {
+          throw new Error("memory_quality_target_changed");
+        }
+        const target = db.query<{
+          episode_id: string;
+          revision: string;
+          content_hash: string;
+        }, [string]>(
+          "SELECT episode_id,revision,content_hash FROM memory_chunk_sources WHERE source_id=?",
+        ).get(current.source_ref);
+        if (!target || target.episode_id !== current.episode_id ||
+          target.revision !== current.target_revision ||
+          target.content_hash !== current.source_hash) {
+          throw new Error("memory_quality_target_changed");
+        }
+        db.query("INSERT OR REPLACE INTO memory_state(key,value) VALUES(?,?)").run(
+          `quality_operation:${current.operation_id}`,
+          JSON.stringify({
+            status: "applied",
+            source_ref: current.source_ref,
+            source_hash: current.source_hash,
+            episode_id: current.episode_id,
+            revision: current.target_revision,
+            feedback_owner_revision: current.feedback_owner_revision,
+          }),
+        );
+      })());
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "memory_generation_changed") throw error;
+    if (!["memory_quality_target_changed", "memory_quality_operation_changed",
+      "memory_source_changed", "memory_source_not_found"].includes(message)) {
+      throw error;
+    }
+    const latest = listFeedbackQualityOperations(butlerData);
+    const index = latest.findIndex((item) => item.operation_id === input.operationId);
+    if (index < 0) throw error;
+    const updated = { ...latest[index]!, status: "stale" as const };
+    latest[index] = updated;
+    writeFileSync(feedbackQualityPath(butlerData), `${latest.map((item) => JSON.stringify(item)).join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+    return updated;
+  }
+  const latest = listFeedbackQualityOperations(butlerData);
+  const index = latest.findIndex((item) => item.operation_id === input.operationId);
+  if (index < 0) throw new Error("memory_quality_operation_changed");
+  const updated = { ...latest[index]!, status: "applied" as const };
+  latest[index] = updated;
+  writeFileSync(feedbackQualityPath(butlerData), `${latest.map((item) => JSON.stringify(item)).join("\n")}\n`, { encoding: "utf8", mode: 0o600 });
+  return updated;
 }
 
 function parseList(value: string | undefined): string[] {
@@ -218,6 +470,17 @@ export function addFeedbackEntry(
     conflicts_with: [],
     privacy_class: input.privacyClass ?? "private",
     text: input.text,
+    ...(input.sourceBinding
+      ? {
+        extra_fields: {
+          source_conversation_session_id:
+            input.sourceBinding.conversation_session_id,
+          source_conversation_message_id:
+            input.sourceBinding.conversation_message_id,
+          source_operation_id: input.sourceBinding.operation_id,
+        },
+      }
+      : {}),
   };
   writeFeedbackEntries(butlerData, [...listFeedbackEntries(butlerData), entry]);
   return entry;

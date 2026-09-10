@@ -616,7 +616,7 @@ test("active work state is scoped to the current project", () => {
   }
 });
 
-test("project memory and project hot cache are dynamic turn context", () => {
+test("project memory stays dynamic while source-free legacy hot cache is audit-only", () => {
   const root = join(tmpdir(), `butler-project-memory-${Date.now()}`);
   const butlerHome = join(root, "home");
   const butlerData = join(root, "data");
@@ -630,7 +630,7 @@ test("project memory and project hot cache are dynamic turn context", () => {
   writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT_STABLE", "utf8");
   writeFileSync(join(butlerHome, "resources", "prompts", "steward.md"), "STEWARD_STABLE", "utf8");
   writeFileSync(join(butlerData, "cognition", "memory", "hot", "cache.md"), "GLOBAL_HOT_SENTINEL", "utf8");
-  writeFileSync(join(butlerData, "cognition", "memory", "projects", "butler.md"), "PROJECT_MEMORY_SENTINEL", "utf8");
+  writeFileSync(join(butlerData, "cognition", "memory", "projects", "butler.md"), "PROJECT_MEMORY_SENTINEL\n- STALE_CACHE_SENTINEL (provenance: generation-hot-cache:current)", "utf8");
   writeFileSync(join(workspacePath, ".butler", "hot-cache.md"), "PROJECT_HOT_SENTINEL", "utf8");
 
   try {
@@ -665,8 +665,8 @@ test("project memory and project hot cache are dynamic turn context", () => {
     expect(turnContext).toContain("Project Memory Status: present");
     expect(turnContext).toContain(`Workspace Path: ${workspacePath}`);
     expect(turnContext).toContain("PROJECT_MEMORY_SENTINEL");
-    expect(turnContext).toContain("PROJECT_HOT_SENTINEL");
-    expect(turnContext.indexOf("## Project Memory")).toBeLessThan(turnContext.indexOf("## Project Hot Cache"));
+    expect(turnContext).not.toContain("STALE_CACHE_SENTINEL");
+    expect(turnContext).not.toContain("PROJECT_HOT_SENTINEL");
     expect(classifyPromptSection("project-memory")).toBe("dynamic-suffix");
     expect(classifyPromptSection("project-hot-cache")).toBe("dynamic-suffix");
 
@@ -678,7 +678,7 @@ test("project memory and project hot cache are dynamic turn context", () => {
   }
 });
 
-test("project hot cache follows the canonical project when the session uses a worktree", () => {
+test("source-free canonical project hot cache is excluded from prompt injection", () => {
   const root = join(tmpdir(), `butler-project-worktree-memory-${Date.now()}`);
   const butlerHome = join(root, "home");
   const butlerData = join(root, "data");
@@ -703,7 +703,7 @@ test("project hot cache follows the canonical project when the session uses a wo
       new PromptAssembler({ butlerHome, butlerData }),
       binding(worktreePath, { projectId: "sandy" }),
     );
-    expect(context).toContain("SANDY_CANONICAL_DEPLOYMENT_MEMORY");
+    expect(context).not.toContain("SANDY_CANONICAL_DEPLOYMENT_MEMORY");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

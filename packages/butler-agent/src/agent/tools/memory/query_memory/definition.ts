@@ -3,27 +3,24 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const queryMemoryToolDefinition = {
   type: "function",
   name: "query_memory",
-  description: "Query durable Butler conversation history for exact memory/history evidence such as dates, counts, first/last, earliest/latest, speaker-specific, or text-filtered conversation facts. Uses canonical conversation messages by default. Returns conversational inbound/outbound text only, never tool payloads.",
+  toolContractVersion: 2,
+  description: "Search canonical conversation scalars exactly. Phrase mode uses the literal query; any/all modes require terms and omit query. Omitting both inspects all messages allowed by the scope, time, and role filters. Use returned read_args unchanged with read_conversation_session for the complete source scalar.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       query: {
         type: "string",
-        description: "Optional exact text or terms to match in canonical conversation text. Omit to inspect all matching conversation events.",
+        description: "Literal text for phrase mode. Omit in any/all mode. Omit both query and terms to inspect all messages allowed by the other filters.",
       },
       scope: {
         type: "string",
-        enum: [
-          "all_sessions",
-          "session",
-        ],
-        description: "Search all durable Butler sessions, or only the active/requested session.",
+        enum: ["current_session", "current_project", "all_user_sessions"],
+        description: "Canonical read scope. Explicit session/project filters only narrow this scope and never grant additional access.",
       },
-      session_id: {
-        type: "string",
-        description: "Session id to search when scope is session. Defaults to the current session when available.",
-      },
+      session_ids: { type: "array", items: { type: "string" } },
+      project_filter: { type: "string", enum: ["any", "unassigned", "selected"], description: "Use selected only with non-empty project_ids; omit project_ids for any or unassigned." },
+      project_ids: { type: "array", items: { type: "string" }, description: "Canonical project IDs that narrow selected project scope; they do not grant access." },
       speaker: {
         type: "string",
         enum: [
@@ -31,7 +28,7 @@ export const queryMemoryToolDefinition = {
           "user",
           "butler",
         ],
-        description: "Filter to user inbound messages, Butler outbound messages, or both.",
+        description: "Filter to user inbound messages, Butler outbound messages, or both. Defaults to any.",
       },
       event_kind: {
         type: "string",
@@ -40,7 +37,7 @@ export const queryMemoryToolDefinition = {
           "inbound",
           "outbound",
         ],
-        description: "Filter by transcript event kind.",
+        description: "Filter by transcript event kind. Defaults to any.",
       },
       order: {
         type: "string",
@@ -48,7 +45,7 @@ export const queryMemoryToolDefinition = {
           "earliest",
           "latest",
         ],
-        description: "Return chronological earliest or latest matching conversation events first.",
+        description: "Return chronological earliest or latest matching conversation events first. Defaults to earliest.",
       },
       match_mode: {
         type: "string",
@@ -57,31 +54,23 @@ export const queryMemoryToolDefinition = {
           "all",
           "phrase",
         ],
-        description: "How query terms should match conversation text.",
+        description: "Defaults to phrase. Phrase uses query literally; any/all use the supplied terms without tokenizing query.",
       },
+      terms: { type: "array", items: { type: "string" }, description: "Required non-empty literal terms for any/all mode. Omit in phrase mode." },
+      case_sensitive: { type: "boolean", description: "Defaults to true. False applies Unicode default case folding without changing returned text." },
       limit: {
         type: "integer",
-        description: "Maximum number of exact conversation matches to return.",
+        description: "Maximum number of exact conversation matches to return, 1 through 50. Defaults to 10.",
       },
-      date_from: {
-        type: "string",
-        description: "Optional inclusive lower timestamp/date bound parseable by Date.parse.",
+      time: {
+        type: "object", additionalProperties: false,
+        properties: { from: { type: "string" }, to: { type: "string" }, basis: { type: "string", enum: ["conversation"] } },
+        required: ["from", "to", "basis"],
       },
-      date_to: {
-        type: "string",
-        description: "Optional inclusive upper timestamp/date bound parseable by Date.parse.",
-      },
+      cursor: { type: "string" },
       include_internal: {
         type: "boolean",
         description: "Include internal recovered events when transcript recovery is explicitly requested. Defaults to false.",
-      },
-      include_placeholders: {
-        type: "boolean",
-        description: "Include mock or epoch placeholder recovery events when transcript recovery is explicitly requested. Defaults to false.",
-      },
-      include_transcript_recovery: {
-        type: "boolean",
-        description: "Explicitly include the migration-only transcript recovery index after canonical and app compatibility sources.",
       },
     },
     required: [],
