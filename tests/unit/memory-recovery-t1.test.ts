@@ -141,6 +141,30 @@ test("normal App target waits past prior reconciliation and binds admitted canon
       WHERE id IN (?,?)`).run(result.canonicalRequestMessageId, assistant!.id);
     canonical.close();
 
+    const legacyStore = new AgentConversationStore({ butlerData: dataRoot });
+    const legacyTurn = legacyStore.beginTurn({
+      gateway: "app", externalSessionId: "legacy-null-request-session",
+      sessionId: "legacy-null-request-session", actor: "assistant",
+      turnId: "legacy-null-request-turn",
+    });
+    const legacyAssistant = legacyStore.appendAssistantMessage({
+      sessionId: legacyTurn.session_id, turnId: legacyTurn.id,
+      text: "Legacy assistant without a request reference.", originKind: "unknown",
+    });
+    const designatedPublicAssistant = legacyStore.appendAssistantMessage({
+      sessionId: legacyTurn.session_id, turnId: legacyTurn.id,
+      text: "Different designated public assistant.", originKind: "unknown",
+    });
+    legacyStore.finalizeTurn({
+      turnId: legacyTurn.id, status: "complete",
+      outcomeCapsule: {
+        sessionId: legacyTurn.session_id, turnId: legacyTurn.id, generation: 1,
+        outcome: "delivered", requestMessageId: null,
+        publicAssistantMessageId: designatedPublicAssistant.id,
+      },
+    });
+    legacyStore.close();
+
     const { runMemoryRebuildCommand } = await import(
       "../../packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts"
     );
@@ -167,6 +191,17 @@ test("normal App target waits past prior reconciliation and binds admitted canon
       origin_kind: "assistant_public", origin_version: "conversation-origin-v1",
     });
     expect(JSON.parse(publicAssistant!.origin_evidence_json ?? "[]").length).toBeGreaterThan(0);
+    const legacyClassified = new Database(canonicalPath, { readonly: true });
+    const legacyRow = legacyClassified.query<{
+      origin_kind: string; origin_reason: string | null; origin_version: string | null;
+    }, [string]>(`SELECT origin_kind,origin_reason,origin_version FROM conversation_messages WHERE id=?`)
+      .get(legacyAssistant.id);
+    legacyClassified.close();
+    expect(legacyRow).toEqual({
+      origin_kind: "unknown",
+      origin_reason: "historical_origin_unresolved",
+      origin_version: "conversation-origin-v1",
+    });
     const descriptor = JSON.parse(readFileSync(join(dataRoot, "cognition", "memory", "active-generation.json"), "utf8"));
     const { createLazyConversationProjectionReader } = await import(
       "../../packages/butler-agent/src/agent/conversation/projection-reader-store.ts"
