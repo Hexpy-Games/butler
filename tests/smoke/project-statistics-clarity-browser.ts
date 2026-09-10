@@ -81,7 +81,9 @@ try {
     await calendar.scrollIntoViewIfNeeded();
     await calendar.locator("button[data-level]").last().click();
     assert.equal(await calendar.locator('button[aria-pressed="true"]').count(), 1);
-    assert(await calendar.getByText("색상별 하루 활동 항목 수", { exact: true }).isVisible());
+    assert.equal(await calendar.getByText("색상별 하루 활동 항목 수", { exact: true }).count(), 0);
+    assert.equal(await panel.getByText(/^예: 대화/).count(), 0);
+    assert.equal(await panel.getByText(/개별 도구 호출은/).count(), 0);
     assert.equal(await calendar.locator('[class*="legendItem"]').count(), 7); // wrapper plus six items
     assert(!await page.evaluate(() => document.documentElement.scrollWidth > innerWidth));
     await page.screenshot({ path: `${output}/${width}-activity.png`, animations: "disabled" });

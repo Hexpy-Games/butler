@@ -32,3 +32,11 @@ test("calendar provides month and weekday axes and labels tied to the same swatc
   expect(html).toContain('aria-label="Sep 8: 4 items"');
   expect([...html.matchAll(/data-level="([^"]+)"/g)].map(match => match[1])).toEqual(["2", "0", "1", "2", "3", "4", "unknown"]);
 });
+
+test("legend without a heading keeps its swatches without an empty heading element", () => {
+  const html = renderToStaticMarkup(<ActivityHeatmap days={[]}
+    legend={{ labels: ["0", "1", "2–4", "5–9", "10+", "Unavailable"] }} />);
+  expect(html).not.toContain("legendTitle");
+  expect([...html.matchAll(/data-level="([^"]+)"/g)].map(match => match[1])).toEqual(["0", "1", "2", "3", "4", "unknown"]);
+  expect(html).toContain("Unavailable");
+});

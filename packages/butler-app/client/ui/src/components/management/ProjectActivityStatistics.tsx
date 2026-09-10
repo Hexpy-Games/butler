@@ -21,7 +21,7 @@ export function ProjectActivityStatistics() {
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
         {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
         <ActivityHeatmap ariaLabel={copy.calendar} startWeekday={start}
-          legend={{ title: copy.densityLegend, labels: copy.densityLevels }}
+          legend={{ labels: copy.densityLevels }}
           weekdayLabels={Array.from({ length: 7 }, (_, index) =>
             new Date(2026, 0, 4 + index).toLocaleDateString(locale, { weekday: "short" }))}
           selectedId={selected} onSelect={setSelected}
@@ -34,7 +34,6 @@ export function ProjectActivityStatistics() {
             count: !data.ledgerHistoryAvailable && !data.sessionHistoryAvailable ? null
               : Object.values(day.values).reduce((count, keys) => count + keys.length, 0),
           }))} />
-        <Typo.Caption>{copy.calendarExample}</Typo.Caption>
         <Typo.Caption>{dayLabel(data.days[0]!.date)} — {dayLabel(data.days.at(-1)!.date)}</Typo.Caption>
         {bucket && <>
           <Typo.SectionTitle>{dayLabel(bucket.label)}</Typo.SectionTitle>
