@@ -1676,6 +1676,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   sendMessage: async (text, controls = {}) => {
+    if (get().liveConnectionLost) return;
     const dashboardTarget = controls.dashboardTarget;
     if (dashboardTarget?.sessionId) {
       try {
@@ -1688,6 +1689,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const view = get().view;
       return view.kind === "project-dashboard" && view.projectId === dashboardTarget?.projectId;
     };
+    if (get().liveConnectionLost) return;
     if (dashboardTarget && !dashboardIsVisible()) return;
     const clientMessageId = dashboardTarget?.clientMessageId ?? browserRandomId("client");
     const clientTurnId = clientTurnIdFromMessageId(clientMessageId);

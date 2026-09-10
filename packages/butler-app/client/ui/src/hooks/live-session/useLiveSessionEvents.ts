@@ -2,14 +2,10 @@ import { appCopy } from "@/app/copy.ts";
 import { invalidateProjectDashboard } from "./projectDashboardInvalidation.ts";
 import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { useEffect, useRef } from "react";
-import { subscribeLiveEvents } from "@/app/api.ts";
+import { createLiveEventConnection } from "./liveEventConnection.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { TimelineEvent } from "@/app/types.ts";
-import {
-  LIVE_EVENT_STABLE_CONNECTION_MS,
-  liveEventReconnectDelayMs,
-} from "./liveEventReconnect.ts";
 import {
   createLiveSessionReconciliation,
   eventSessionId,
@@ -47,10 +43,6 @@ export function useLiveSessionEvents(): void {
 
   useEffect(() => {
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let stableConnectionTimer: ReturnType<typeof setTimeout> | undefined;
-    let consecutiveFailures = 0;
     const reconciliation = createLiveSessionReconciliation(
       useButlerStore,
       () => activeChatIdRef.current,
@@ -59,18 +51,8 @@ export function useLiveSessionEvents(): void {
       useButlerStore,
     );
 
-    const markStreamHealthy = () => {
-      if (useButlerStore.getState().liveConnectionLost) {
-        useButlerStore.setState({ liveConnectionLost: false });
-      }
-      consecutiveFailures = 0;
-      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
-      stableConnectionTimer = undefined;
-    };
-
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
-      markStreamHealthy();
       const dashboardState = useButlerStore.getState();
       if (dashboardState.view.kind === "project-dashboard") invalidateProjectDashboard(event, dashboardState.view.projectId, dashboardState.navigation);
       if (event.type === "stream.reconcile_required") {
@@ -148,52 +130,23 @@ export function useLiveSessionEvents(): void {
       }
     };
 
-    const connect = (reconnect = false) => {
-      if (cancelled) return;
-      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
-      stableConnectionTimer = setTimeout(() => {
-        stableConnectionTimer = undefined;
-        consecutiveFailures = 0;
-      }, LIVE_EVENT_STABLE_CONNECTION_MS);
-      if (reconnect) {
+    const disconnect = createLiveEventConnection({
+      cursor: () => eventCursorRef.current,
+      onEvent: applyEvent,
+      onLostChange: (liveConnectionLost) => {
+        if (useButlerStore.getState().liveConnectionLost !== liveConnectionLost) useButlerStore.setState({ liveConnectionLost });
+      },
+      onRecovered: () => {
         const view = useButlerStore.getState().view;
         if (view.kind === "project-dashboard") useProjectDashboardState.getState().invalidate(view.projectId);
         navigationReconciliation.requestRefresh();
         reconciliation.requestRefresh();
-      }
-      const nextUnsubscribe = subscribeLiveEvents(
-        eventCursorRef.current,
-        applyEvent,
-        () => {
-          if (cancelled || reconnectTimer) return;
-          useButlerStore.setState({ liveConnectionLost: true });
-          if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
-          stableConnectionTimer = undefined;
-          unsubscribe?.();
-          unsubscribe = undefined;
-          const delayMs = liveEventReconnectDelayMs(consecutiveFailures);
-          consecutiveFailures += 1;
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = undefined;
-            connect(true);
-          }, delayMs);
-        },
-        () => {
-          if (!cancelled) useButlerStore.setState({ liveConnectionLost: false });
-        },
-      );
-      if (reconnectTimer) nextUnsubscribe();
-      else unsubscribe = nextUnsubscribe;
-    };
-
-    connect();
+      },
+    });
     return () => {
       cancelled = true;
-      useButlerStore.setState({ liveConnectionLost: false });
-      unsubscribe?.();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      disconnect();
       reconciliation.dispose();
-      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
       navigationReconciliation.dispose();
     };
   }, []);

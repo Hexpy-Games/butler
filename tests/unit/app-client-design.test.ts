@@ -3166,6 +3166,11 @@ test("conversation progress and composer workers use design-system blocks", () =
     read(
       "packages/butler-app/client/ui/src/hooks/live-session/useLiveSessionEvents.ts",
     ),
+  ).toContain("createLiveEventConnection(");
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/hooks/live-session/liveEventConnection.ts",
+    ),
   ).toContain("subscribeLiveEvents(");
 });
 

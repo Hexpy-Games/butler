@@ -9,6 +9,7 @@ import type { KeyboardEventLike } from "./composerEventTypes";
 import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 import { useComposerStore } from "../composerStore";
+import { useButlerStore } from "@/app/store.ts";
 import { readLocalComposerDraft, writeCachedComposerDraft } from "@/app/composerDraftCache";
 
 interface UseComposerSubmitProps {
@@ -49,6 +50,7 @@ export function useComposerSubmit({
   return useCallback(
     (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
       event.preventDefault();
+      if (useButlerStore.getState().liveConnectionLost) return;
       const value = text.trim();
       if (
         (!value && attachments.length === 0) ||

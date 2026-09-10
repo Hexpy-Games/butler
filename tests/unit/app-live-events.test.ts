@@ -144,6 +144,7 @@ test("client disconnect and server shutdown signals both remove listeners", asyn
   let secondReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     expect(activeSubscriptions).toBe(1);
+    await readHeartbeat(firstReader);
     firstClientController.abort();
     expect(activeSubscriptions).toBe(0);
     expect(await firstReader.read()).toEqual({ value: undefined, done: true });
@@ -154,6 +155,7 @@ test("client disconnect and server shutdown signals both remove listeners", asyn
     });
     secondReader = secondResponse.body?.getReader();
     if (!secondReader) throw new Error("Missing second live event body.");
+    await readHeartbeat(secondReader);
     expect(activeSubscriptions).toBe(1);
     serverShutdownController.abort();
     expect(activeSubscriptions).toBe(0);
@@ -223,6 +225,7 @@ test("slow SSE consumers receive a bounded reconcile marker and release the read
     // Hold the reader so the stream's desiredSize reaches zero. The live
     // route must collapse the pending queue to a durable resync marker rather
     // than retaining every event emitted by a slow renderer.
+    await readHeartbeat(reader); // Drain replay before holding the live reader.
     for (let index = 0; index < 200; index += 1) {
       server.store.appendSafeServerEvent(`test.slow_consumer_${index}`, {});
     }
@@ -241,6 +244,19 @@ function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "butler-live-events-"));
   temporaryRoots.push(root);
   return root;
+}
+
+async function readHeartbeat(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const text = new TextDecoder().decode(value);
+    if (text.includes("event: heartbeat")) {
+      expect(text).toBe("event: heartbeat\ndata: null\n\n");
+      return;
+    }
+  }
+  throw new Error("Missing immediate heartbeat after replay");
 }
 
 function event(id: number, type: string): AppEventEnvelope {
@@ -276,7 +292,7 @@ async function readSseEvent(
         .find((line) => line.startsWith("data: "));
       if (!data) continue;
       const event = JSON.parse(data.slice("data: ".length)) as AppEventEnvelope;
-      if (event.type === type) return event;
+      if (event?.type === type) return event;
     }
   }
   throw new Error(`Expected SSE event did not arrive: ${type}`);

@@ -5,6 +5,9 @@ import {
 import type { AppServerStore } from "../../application/store/app-server-store.ts";
 import { createPushStreamProxy } from "./push-stream-proxy.ts";
 
+// Legacy preload readers ignore falsy data; do not project health as an event.
+const HEARTBEAT_RECORD = "event: heartbeat\ndata: null\n\n";
+
 export function liveEventsResponse(
   store: AppServerStore,
   cursor: number,
@@ -119,8 +122,11 @@ export function liveEventsResponse(
   replayQueue.clear();
   replayQueueOverflowed = false;
   if (!closed) {
+    writeText(HEARTBEAT_RECORD); // Flush an idle connection immediately, not 15s later.
+  }
+  if (!closed) {
     heartbeat = setInterval(() => {
-      if (!closed) writeText(": heartbeat\n\n");
+      if (!closed) writeText(HEARTBEAT_RECORD);
     }, 15_000);
   }
 

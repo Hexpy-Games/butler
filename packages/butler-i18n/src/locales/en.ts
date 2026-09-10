@@ -1507,6 +1507,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     attachmentTooLarge: "The file exceeds the attachment size limit.",
     attachmentSizeLimit: (names, limit) => `${names} — Reduce each file to ${limit} or less, or select another file.`,
     reconnecting: "Live connection lost. Reconnecting automatically. The displayed work status may be out of date.",
+    reconnectingShort: "Reconnecting to live updates",
     dashboardLoading: "Loading project information…",
     dashboardFailed: "Could not load project information.",
     dashboardRetry: "Check your connection and try again.",
