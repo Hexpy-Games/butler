@@ -84,7 +84,9 @@ try {
     assert.equal(await calendar.getByText("색상별 하루 활동 항목 수", { exact: true }).count(), 0);
     assert.equal(await panel.getByText(/^예: 대화/).count(), 0);
     assert.equal(await panel.getByText(/개별 도구 호출은/).count(), 0);
-    assert.equal(await calendar.locator('[class*="legendItem"]').count(), 7); // wrapper plus six items
+    assert.equal(await calendar.locator('[class*="legend"]').count(), 0);
+    assert.equal(await panel.getByText(/^한 칸은 하루입니다/).count(), 0);
+    assert.equal(await panel.getByText("Work에 기록된 변경과 활동 날짜입니다.", { exact: true }).count(), 0);
     assert(!await page.evaluate(() => document.documentElement.scrollWidth > innerWidth));
     await page.screenshot({ path: `${output}/${width}-activity.png`, animations: "disabled" });
   }

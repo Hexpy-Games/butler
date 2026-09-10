@@ -16,12 +16,11 @@ export function ProjectActivityStatistics() {
   const start = new Date(`${data.days[0]!.date}T12:00:00`).getDay();
   const activity = data.work?.activity ?? [];
   return <div className={styles.pair}>
-    <Section title={copy.calendar} description={copy.calendarHelp}>
+    <Section title={copy.calendar}>
       <Stack gap="md" className={styles.surface}>
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
         {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
         <ActivityHeatmap ariaLabel={copy.calendar} startWeekday={start}
-          legend={{ labels: copy.densityLevels }}
           weekdayLabels={Array.from({ length: 7 }, (_, index) =>
             new Date(2026, 0, 4 + index).toLocaleDateString(locale, { weekday: "short" }))}
           selectedId={selected} onSelect={setSelected}
@@ -42,7 +41,7 @@ export function ProjectActivityStatistics() {
         </>}
       </Stack>
     </Section>
-    <Section title={copy.focus} description={copy.focusHelp}>
+    <Section title={copy.focus}>
       <Stack gap="sm" className={styles.surface}>
         {!activity.length && <Typo.Caption>{data.ledgerHistoryAvailable ? copy.empty : copy.unavailable}</Typo.Caption>}
         {activity.slice(0, limit).map((item) => <NavRow key={item.sourceKey} multiline onClick={() => openSource(item.sourceKey)}
