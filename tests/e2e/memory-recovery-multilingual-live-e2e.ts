@@ -3727,7 +3727,7 @@ async function runT4PerformancePhase(input: {
     const attemptFile = writeT4Evidence(input.options.artifactDir, "projection/extractor-attempts.json", attempts);
     const receiptFile = writeT4Evidence(input.options.artifactDir, "projection/embedding-receipts.json", receipts);
     projectionEvidence = {
-      completion_ids: jobs.map((job) => job.completion_job_id).filter((id): id is string => typeof id === "string"),
+      completion_ids: jobs.flatMap((job) => JSON.parse(job.observed_completion_job_ids ?? "[]")),
       projection_job_ids: jobs.map((job) => job.job_id).filter((id): id is string => typeof id === "string"),
       extractor_attempt_refs: attempts.length ? [{ ref: attemptFile.ref, sha256: attemptFile.sha256 }] : [],
       embedding_receipt_refs: receipts.length ? [{ ref: receiptFile.ref, sha256: receiptFile.sha256 }] : [],
