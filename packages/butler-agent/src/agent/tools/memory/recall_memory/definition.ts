@@ -50,9 +50,10 @@ export const recallMemoryToolDefinition = {
       time: {
         type: "object",
         additionalProperties: false,
+        description: "Half-open ISO 8601 interval [from, to) with explicit UTC offsets.",
         properties: {
-          from: { type: "string" },
-          to: { type: "string" },
+          from: { type: "string", description: "Inclusive start, as an ISO 8601 timestamp with an explicit UTC offset." },
+          to: { type: "string", description: "Exclusive end, as an ISO 8601 timestamp with an explicit UTC offset. For a complete calendar period, use the start of the next period in the user's timezone; do not subtract a smaller time unit." },
           basis: { type: "string", enum: ["conversation", "event"] },
         },
         required: ["from", "to", "basis"],
