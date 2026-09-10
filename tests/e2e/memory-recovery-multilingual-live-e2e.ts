@@ -4199,8 +4199,11 @@ async function createT4EmbeddingRelay(path: string, upstreamPath: string) {
   let armed = false;
   let held: { client: import("node:net").Socket; chunks: Buffer[]; responseComplete: boolean;
     checkedRequest: Record<string, unknown> } | null = null;
+  const sockets = new Set<import("node:net").Socket>();
   const server = createServer((client) => {
     const upstream = createConnection(upstreamPath);
+    sockets.add(client);
+    sockets.add(upstream);
     let requestBytes = "";
     let holdThisRequest = false;
     client.on("data", (chunk) => {
@@ -4227,7 +4230,8 @@ async function createT4EmbeddingRelay(path: string, upstreamPath: string) {
     });
     upstream.on("error", (error) => client.destroy(error));
     client.on("error", () => upstream.destroy());
-    client.on("close", () => { if (!upstream.destroyed) upstream.destroy(); });
+    upstream.on("close", () => sockets.delete(upstream));
+    client.on("close", () => { sockets.delete(client); if (!upstream.destroyed) upstream.destroy(); });
   });
   await new Promise<void>((resolveReady, reject) => {
     server.once("error", reject);
@@ -4240,8 +4244,11 @@ async function createT4EmbeddingRelay(path: string, upstreamPath: string) {
       ? createHash("sha256").update(Buffer.concat(held.chunks)).digest("hex") : null; },
     release() { if (!held?.responseComplete || !held.chunks.length) throw new Error("T4 embedding relay has no complete held response");
       for (const chunk of held.chunks) held.client.write(chunk); held.client.end(); held = null; },
-    async close() { if (held) { held.client.destroy(); held = null; }
-      await new Promise<void>((resolveClose) => server.close(() => resolveClose())); },
+    async close() { armed = false;
+      const closed = new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      for (const socket of sockets) socket.destroy();
+      held = null;
+      await closed; },
   };
 }
 
