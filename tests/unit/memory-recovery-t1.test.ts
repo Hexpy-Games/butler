@@ -17,6 +17,7 @@ import type { PromptOptions } from "../../packages/butler-agent/src/integrations
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
 import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import type { MemoryExecutionContext } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 import { extractOutputSchema } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
@@ -3434,6 +3435,8 @@ test("extractor candidates exclude claims from a different canonical scope", asy
 test("explicit same-name and confusable creates remain distinct identities", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-identity-create-"));
   roots.push(butlerData);
+  const embeddingServer = await startCheckedEmbeddingServer(process.env.EMBED_SOCKET!);
+  try {
   const descriptor = initializeEmptyMemoryGeneration(butlerData);
   const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
   const context = {
@@ -3573,6 +3576,9 @@ test("explicit same-name and confusable creates remain distinct identities", asy
       sha256: createHash("sha256").update(readFileSync(join(process.cwd(), path))).digest("hex"),
     })),
   });
+  } finally {
+    await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
+  }
 });
 
 test("validated ordinary corrections preserve the previous claim and apply through T3 semantics", async () => {
@@ -4139,10 +4145,18 @@ test("rebuild target writes its validated cache without exposing it through the 
   const source = seedTurn(
     butlerData, "rebuild-cache-session", "rebuild-cache-turn",
     "REBUILD_CACHE_ONLY_SENTINEL", "Noted.", 1,
+    {
+      user: "user_input", assistant: "assistant_public",
+      publicAdmission: { eventId: "rebuild-cache-public-source" },
+    },
   );
   const secondSource = seedTurn(
     butlerData, "rebuild-cache-session-two", "rebuild-cache-turn-two",
     "REBUILD_CACHE_SECOND_SENTINEL", "Noted twice.", 1,
+    {
+      user: "user_input", assistant: "assistant_public",
+      publicAdmission: { eventId: "rebuild-cache-public-source-two" },
+    },
   );
   const initialCanonical = new Database(join(butlerData, "runtime", "conversation-store.sqlite"), { readonly: true });
   const sourceMessageId = initialCanonical.query<{ id: string }, [string]>(
@@ -4307,6 +4321,10 @@ test("rebuild target writes its validated cache without exposing it through the 
   const delta = seedTurn(
     butlerData, "rebuild-cache-session", "rebuild-cache-delta",
     "LIVE_DELTA_AFTER_PREPARE", "Noted later.", 1,
+    {
+      user: "user_input", assistant: "assistant_public",
+      publicAdmission: { eventId: "rebuild-cache-public-delta" },
+    },
   );
   expect(delta.turn_id).not.toBe(source.turn_id);
   const liveCanonical = new Database(join(butlerData, "runtime", "conversation-store.sqlite"), { readonly: true });
@@ -5328,6 +5346,7 @@ function seedTurn(
   origins: {
     user: "user_input" | "internal_control" | "unknown";
     assistant: "assistant_public" | "internal_control" | "unknown";
+    publicAdmission?: { eventId: string };
   } = { user: "user_input", assistant: "assistant_public" },
   projectId: string | null = "project-a",
 ) {
@@ -5340,13 +5359,31 @@ function seedTurn(
       projectId,
       actor: "user",
       turnId,
+      requestId: origins.publicAdmission?.eventId,
     });
+    if (origins.publicAdmission) {
+      new NativeInboundQueue(butlerData).enqueue({
+        eventId: origins.publicAdmission.eventId,
+        transport: "app",
+        accountId: "default",
+        peer: { kind: "dm", id: sessionId },
+        sender: { id: "user" },
+        message: {
+          id: origins.publicAdmission.eventId,
+          text: userText,
+          timestamp: new Date(0).toISOString(),
+        },
+        routingHints: { sessionId, turnId: turn.id },
+      });
+    }
     const user = store.appendUserMessage({
       sessionId,
       turnId: turn.id,
       text: userText,
       originKind: origins.user,
-      originRef: `app:${turnId}:user`,
+      originRef: origins.publicAdmission?.eventId ?? `app:${turnId}:user`,
+      sourceGateway: origins.publicAdmission ? "app" : undefined,
+      sourceRef: origins.publicAdmission?.eventId,
     });
     const assistant = store.appendAssistantMessage({
       sessionId,
