@@ -28,6 +28,7 @@ export type {
 } from "./tunnel-http-proxy-config.ts";
 export { createTunnelProxyServer } from "./tunnel-http-proxy-relay.ts";
 export type { TunnelProxyServer } from "./tunnel-http-proxy-relay.ts";
+export { issueTunnelLoginLink } from "./tunnel-one-time-login.ts";
 
 /** Start the repository-owned operational tunnel from injected environment. */
 export async function startTunnelProxyFromEnv(

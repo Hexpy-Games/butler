@@ -25,6 +25,7 @@ export interface TunnelProxyServiceConfig {
   password?: string;
   session_secret?: string;
   login_token?: string;
+  login_directory?: string;
   upstream_bearer_token?: string;
   max_html_bytes?: number;
   max_buffered_bytes?: number;
@@ -86,6 +87,9 @@ export function tunnelProxyEnvironmentFromServiceConfig(
     ...(config.login_token
       ? { BUTLER_TUNNEL_PROXY_LOGIN_TOKEN: config.login_token }
       : {}),
+    ...(config.login_directory
+      ? { BUTLER_TUNNEL_PROXY_LOGIN_DIRECTORY: config.login_directory }
+      : {}),
     ...(config.upstream_bearer_token
       ? { BUTLER_TUNNEL_PROXY_UPSTREAM_BEARER_TOKEN: config.upstream_bearer_token }
       : {}),
@@ -112,6 +116,7 @@ function serviceConfigFromProxyConfig(
     ...(auth.basicPassword ? { password: auth.basicPassword } : {}),
     ...(auth.sessionSecret ? { session_secret: auth.sessionSecret } : {}),
     ...(auth.loginToken ? { login_token: auth.loginToken } : {}),
+    ...(auth.oneTimeLoginDirectory ? { login_directory: auth.oneTimeLoginDirectory } : {}),
     ...(auth.upstreamBearerToken
       ? { upstream_bearer_token: auth.upstreamBearerToken }
       : {}),
@@ -147,6 +152,7 @@ function normalizeTunnelProxyServiceConfig(value: unknown): TunnelProxyServiceCo
   const password = optionalString(record.password);
   const sessionSecret = optionalString(record.session_secret);
   const loginToken = optionalString(record.login_token);
+  const loginDirectory = optionalString(record.login_directory);
   const upstreamBearerToken = optionalString(record.upstream_bearer_token);
   const maxHtmlBytes = boundedInteger(record.max_html_bytes, 1, 16 * 1024 * 1024);
   const maxBufferedBytes = boundedInteger(
@@ -167,6 +173,7 @@ function normalizeTunnelProxyServiceConfig(value: unknown): TunnelProxyServiceCo
     ...(password ? { password } : {}),
     ...(sessionSecret ? { session_secret: sessionSecret } : {}),
     ...(loginToken ? { login_token: loginToken } : {}),
+    ...(loginDirectory ? { login_directory: loginDirectory } : {}),
     ...(upstreamBearerToken
       ? { upstream_bearer_token: upstreamBearerToken }
       : {}),

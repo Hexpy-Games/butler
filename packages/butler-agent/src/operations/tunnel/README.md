@@ -44,3 +44,23 @@ The public `tunnel-http-proxy.ts` entrypoint delegates listener ownership to
 `tunnel-http-proxy-relay.ts`; request authentication, body policy, and
 downstream/upstream teardown are owned by `tunnel-http-proxy-request.ts`. This
 keeps one active-request lifecycle owner without a second buffering layer.
+
+## One-time browser login
+
+Set `BUTLER_TUNNEL_PROXY_LOGIN_DIRECTORY` to a private directory and retain the
+existing session secret. Issue a ten-minute, single-use link with:
+
+```sh
+bun run packages/butler-agent/src/operations/tunnel/tunnel-login-cli.ts /private/login-directory https://your-butler-host
+```
+
+The command's output is a credential: deliver it only to the intended user, never
+to shared logs. The fragment is cleared from browser history on load. GET/HEAD
+previews do not authenticate; the confirmation button POSTs and consumes the
+capability. Reusable `login_token` URLs are no longer accepted (the old config
+field remains readable for migration). Existing Basic/session access is unchanged.
+
+Installations still using the historical file-backed LaunchAgent can bundle
+`tunnel-file-proxy-cli.ts` for Node and replace their proxy executable. It reads
+the existing credentials without rotating them, and uses the same repository proxy
+and one-time login implementation. Only the proxy needs restarting.

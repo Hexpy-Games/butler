@@ -29,6 +29,7 @@ export interface TunnelProxyAuthConfig {
   basicPassword?: string;
   sessionSecret?: string;
   loginToken?: string;
+  oneTimeLoginDirectory?: string;
   upstreamBearerToken?: string;
 }
 
@@ -91,6 +92,9 @@ export function normalizeTunnelProxyConfig(
   const hasBasicPassword = Boolean(auth.basicPassword?.trim());
   if (hasBasicUsername !== hasBasicPassword) {
     throw new Error("Tunnel Basic auth requires both username and password.");
+  }
+  if (auth.oneTimeLoginDirectory && !auth.sessionSecret?.trim()) {
+    throw new Error("One-time login requires an existing session secret.");
   }
   return {
     ...config,
@@ -252,6 +256,7 @@ export function tunnelProxyConfigFromEnv(
       basicPassword: envString(env, "BUTLER_TUNNEL_PROXY_PASSWORD"),
       sessionSecret: envString(env, "BUTLER_TUNNEL_PROXY_SESSION_SECRET"),
       loginToken: envString(env, "BUTLER_TUNNEL_PROXY_LOGIN_TOKEN"),
+      oneTimeLoginDirectory: envString(env, "BUTLER_TUNNEL_PROXY_LOGIN_DIRECTORY"),
       upstreamBearerToken: envString(
         env,
         "BUTLER_TUNNEL_PROXY_UPSTREAM_BEARER_TOKEN",
