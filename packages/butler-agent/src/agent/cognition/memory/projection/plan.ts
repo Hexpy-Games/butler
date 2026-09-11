@@ -356,7 +356,7 @@ export function applyPlan(
       db.query("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers,valid_from) VALUES(?,?,?,?,?,?,?)")
         .run(edgeId, replacementId, correction.previous_claim_ref, correction.relation, replacementId,
           JSON.stringify({ effective_at: correction.effective_at }), correction.effective_at);
-      for (const ev of validateQuotes(input, correction.evidence, true))
+      for (const ev of validateQuotes(input, correction.evidence, true).flatMap(resolveContextEvidence))
         db.query("INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)")
           .run(edgeId, ev.sourceId, replacement.basis, MEMORY_EXTRACTION_VERSION);
     }
