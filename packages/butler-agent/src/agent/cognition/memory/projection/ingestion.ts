@@ -763,7 +763,7 @@ export async function advanceNextMemoryProjection(input: {
         await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
           assertProjectionSourceCurrent(sourceRoot, db, extractInput);
           const candidateResolutions = assertPlanCandidatesCurrent(db, sourceRoot, extractInput, durablePlan!);
-          applyPlan(db, pending.job_id, pending.window_ref, extractInput, pending.output!, durablePlan!, candidateResolutions);
+          applyPlan(db, pending.job_id, pending.window_ref, extractInput, pending.output!, durablePlan!, candidateResolutions, sourceRoot);
           installAndBackfillRecallIndexes(db);
         })());
       } catch (error) {
@@ -873,6 +873,7 @@ export async function advanceNextMemoryProjection(input: {
           output,
           plan,
           candidateResolutions,
+          sourceRoot,
         );
         installAndBackfillRecallIndexes(db);
       })());
