@@ -79,6 +79,7 @@ import type { ProviderStreamProjectionHandler } from "../../../../integrations/p
 import { writeSemanticHotCacheEntry } from "../../continuity/hot-cache-writer.ts";
 import {
   enforceExtractInputBudget,
+  packExtractionCandidates,
   MEMORY_SOURCE_WINDOW_BYTES,
   nearestGraphemeByteMidpoint,
 } from "./windows.ts";
@@ -1296,21 +1297,20 @@ async function buildSourceWindowCandidates(input: {
   `).all(input.chunk.memory_chunk_id, input.chunk.current_revision).map((row) => row.entity_id);
   const semantic = selectSemanticSeeds(input.db, recallInput, vectorNodes, Date.now() + 5_000, 32, { projectId: input.chunk.project_id }).allSeeds;
   const ids = [...new Set([...bound, ...semantic])].slice(0, 32);
-  const candidates: ExtractInput["candidates"] = [];
-  for (const id of ids) {
+  return packExtractionCandidates(ids, (id) => {
     const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null; properties: string }, [string]>("SELECT id,type,identity_scope,project_id,properties FROM entities WHERE id=?").get(id);
-    if (!node) continue;
+    if (!node) return null;
     const identityNode = node.type === "entity" || node.type === "project";
     if (!identityNode && (input.chunk.project_id === null
       ? node.identity_scope !== "user" || node.project_id !== null
-      : node.identity_scope !== "project" || node.project_id !== input.chunk.project_id)) continue;
+      : node.identity_scope !== "project" || node.project_id !== input.chunk.project_id)) return null;
     const aliases = input.db.query<{ surface_original: string; source_id: string }, any>(`
       SELECT DISTINCT a.surface_original,a.source_id FROM entity_aliases a
       JOIN memory_chunk_sources s ON s.source_id=a.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
       WHERE a.entity_id=? AND s.origin_kind IN ('user_input','assistant_public') AND (c.project_id IS NULL OR c.project_id IS ?)
       ORDER BY a.surface_original,a.source_id LIMIT 3
     `).all(id, input.chunk.project_id);
-    if (!aliases.length) continue;
+    if (!aliases.length) return null;
     const evidence = aliases.slice(0, 2).map((alias) => {
       const source = sourceRows(input.db, [alias.source_id])[0]!;
       const resolved = hydrateSource(input.butlerData, source, 160);
@@ -1337,10 +1337,8 @@ async function buildSourceWindowCandidates(input: {
       };
     }
     const candidate = { ref: node.id, type: node.type as ExtractInput["candidates"][number]["type"], label: aliases[0]!.surface_original, aliases: aliases.map((alias) => alias.surface_original), scope: node.identity_scope, project_id: node.project_id, claim, evidence };
-    if (Buffer.byteLength(JSON.stringify([...candidates, candidate])) > MAX_CANDIDATE_BYTES) break;
-    candidates.push(candidate);
-  }
-  return candidates;
+    return candidate;
+  });
 }
 
 function assertProjectionSourceCurrent(
