@@ -4922,6 +4922,32 @@ test("project recall excludes global evidence and reads project evidence unchang
   });
 });
 
+test("public extraction supplies closed claim candidates and explicit local reference rules", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-candidate-"));
+  roots.push(butlerData);
+  const descriptor = initializeEmptyMemoryGeneration(butlerData);
+  const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
+  const context = { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal };
+  for (const [index, text] of ["내 고양이 루나의 영어 이름은 Luna야.", "Luna likes the blue ball.", "Luna likes the blue ball."].entries()) {
+    const job = await memory.ingestConversationMemory({ context, source: seedTurn(butlerData, "candidate-session", `candidate-turn-${index}`, text, "Noted.", 1) });
+    expect((await advanceUntilSemanticTerminal(memory, context, job.job_id))?.semantic_graph.state).toBe("complete");
+  }
+  const input = extractionInputs.at(-1)!;
+  const refs = new Set(input.candidates.map((value: any) => value.ref));
+  const claims = input.candidates.filter((value: any) => value.claim?.subject_ref || value.claim?.object_ref);
+  expect(claims.length).toBeGreaterThan(0);
+  for (const claim of claims) {
+    for (const ref of [claim.claim.subject_ref, claim.claim.object_ref]) {
+      if (ref) expect(refs.has(ref)).toBe(true);
+    }
+  }
+  const request = extractionRequests.at(-1)!;
+  expect(request.instructions).toContain("never stored candidate IDs");
+  const schema = request.responseFormat.schema as any;
+  expect(schema.properties.claims.items.properties.subject_ref.description).toContain("same output");
+  expect(schema.properties.relations.items.properties.claim_ref.description).toContain("assertion claim");
+}, 20_000);
+
 test("two canonical multilingual episodes reuse explicit alias and recall typed graph evidence", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-t1-"));
   roots.push(butlerData);

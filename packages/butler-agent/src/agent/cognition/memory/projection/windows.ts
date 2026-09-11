@@ -63,6 +63,46 @@ export function nearestGraphemeByteMidpoint(
   return best;
 }
 
+const MAX_EXTRACTION_CANDIDATES = 32;
+const MAX_CANDIDATE_LOOKUPS = 96;
+
+/** Dependencies precede their claim so removing a suffix preserves usable refs. */
+export function packExtractionCandidates(
+  seeds: string[],
+  load: (ref: string) => ExtractInput["candidates"][number] | null,
+): ExtractInput["candidates"] {
+  const loaded = new Map<string, ExtractInput["candidates"][number] | null>();
+  const selected = new Set<string>();
+  const result: ExtractInput["candidates"] = [];
+  for (const seed of seeds.slice(0, MAX_EXTRACTION_CANDIDATES)) {
+    const group = new Map<string, ExtractInput["candidates"][number]>();
+    const visiting = new Set<string>();
+    const append = (ref: string): boolean => {
+      if (selected.has(ref) || group.has(ref)) return true;
+      if (visiting.has(ref) || selected.size + group.size + visiting.size >= MAX_EXTRACTION_CANDIDATES) return false;
+      if (!loaded.has(ref)) {
+        if (loaded.size >= MAX_CANDIDATE_LOOKUPS) return false;
+        loaded.set(ref, load(ref));
+      }
+      const candidate = loaded.get(ref);
+      if (!candidate) return false;
+      visiting.add(ref);
+      for (const endpoint of [candidate.claim?.subject_ref, candidate.claim?.object_ref]) {
+        if (endpoint && !append(endpoint)) return false;
+      }
+      visiting.delete(ref);
+      group.set(ref, candidate);
+      return true;
+    };
+    if (!append(seed)) continue;
+    const next = [...result, ...group.values()];
+    if (jsonBytes(next) > MEMORY_CANDIDATE_BYTES) continue;
+    result.push(...group.values());
+    for (const ref of group.keys()) selected.add(ref);
+  }
+  return result;
+}
+
 export function enforceExtractInputBudget(input: ExtractInput): ExtractInput {
   while (jsonBytes(input.context_units) > MEMORY_CONTEXT_BYTES && input.context_units.length > 1) {
     input.context_units.shift();
