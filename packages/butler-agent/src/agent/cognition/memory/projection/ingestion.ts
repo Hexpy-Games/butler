@@ -118,16 +118,17 @@ export async function repairMemoryCandidateInputs(input: {
 }) {
   const request = input.request as {
     schema?: unknown;
-    windows?: Array<{ window_ref: string; expected_input_sha256: string; expected_attempt_count: number }>;
+    windows?: Array<{ window_ref: string; expected_input_sha256: string; expected_attempt_count: number; candidate_source_sha256?: string }>;
   } | null;
   if (!request || request.schema !== "butler.memory-candidate-input-repair.v1" ||
     !Array.isArray(request.windows) || !request.windows.length || request.windows.length > 32 ||
     Object.keys(request).some((key) => key !== "schema" && key !== "windows") ||
     request.windows.some((row) => !row || typeof row !== "object" ||
-      Object.keys(row).some((key) => !["window_ref", "expected_input_sha256", "expected_attempt_count"].includes(key)) ||
+      Object.keys(row).some((key) => !["window_ref", "expected_input_sha256", "expected_attempt_count", "candidate_source_sha256"].includes(key)) ||
       typeof row.window_ref !== "string" || !/^[a-f0-9]{64}$/u.test(row.window_ref) ||
       typeof row.expected_input_sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(row.expected_input_sha256) ||
-      !Number.isSafeInteger(row.expected_attempt_count) || row.expected_attempt_count < 0) ||
+      !Number.isSafeInteger(row.expected_attempt_count) || row.expected_attempt_count < 0 ||
+      (row.candidate_source_sha256 !== undefined && (typeof row.candidate_source_sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(row.candidate_source_sha256)))) ||
     new Set(request.windows.map((row) => row.window_ref)).size !== request.windows.length) {
     throw new Error("memory_input_repair_invalid_request");
   }
@@ -160,15 +161,36 @@ export async function repairMemoryCandidateInputs(input: {
           throw new Error("memory_input_repair_precondition_changed");
         }
         assertProjectionSourceCurrent(generation.sourceRoot, db, pinned);
+        let candidateSource = pinned;
+        if (expected.candidate_source_sha256 && expected.candidate_source_sha256 !== row.input_sha256) {
+          const archived = db.query<{ recovery_request_json: string }, [string, string]>(`SELECT recovery_request_json
+            FROM memory_projection_attempts WHERE window_ref=? AND attempt_kind='recovery'
+            AND json_extract(recovery_request_json,'$.schema')='butler.memory-candidate-input-repair-receipt.v1'
+            AND json_extract(recovery_request_json,'$.prior_input_sha256')=? LIMIT 1`)
+            .get(expected.window_ref, expected.candidate_source_sha256);
+          if (!archived) throw new Error("memory_input_repair_precondition_changed");
+          const previousJson = (JSON.parse(archived.recovery_request_json) as { prior_input_json: string }).prior_input_json;
+          if (projectionHash(["extract-input", previousJson]) !== expected.candidate_source_sha256)
+            throw new Error("memory_input_repair_precondition_changed");
+          candidateSource = JSON.parse(previousJson) as ExtractInput;
+          for (const field of ["schema", "episode_ref", "revision", "window_ref", "bound_project_id", "source_units", "context_units"] as const) {
+            if (JSON.stringify(candidateSource[field]) !== JSON.stringify(pinned[field]))
+              throw new Error("memory_input_repair_precondition_changed");
+          }
+        }
+        const emptyCandidateInput: ExtractInput = { ...pinned, candidates: [] };
+        const candidateBytes = MEMORY_EXTRACT_INPUT_BYTES - jsonBytes(emptyCandidateInput) + jsonBytes([]);
+        if (candidateBytes < jsonBytes([])) throw new Error("memory_extract_input_exceeds_budget");
         const repaired: ExtractInput = { ...pinned, candidates: loadSourceWindowCandidates({
           db, butlerData: generation.sourceRoot, projectId: pinned.bound_project_id,
-          ids: pinned.candidates.map((candidate) => candidate.ref),
+          ids: candidateSource.candidates.map((candidate) => candidate.ref),
+          candidateBytes,
         }) };
-        // Historical source/context are immutable. Reduce only the dependency-ordered candidate suffix.
-        while (jsonBytes(repaired) > MEMORY_EXTRACT_INPUT_BYTES && repaired.candidates.length)
-          repaired.candidates.pop();
         if (jsonBytes(repaired) > MEMORY_EXTRACT_INPUT_BYTES)
           throw new Error("memory_extract_input_exceeds_budget");
+        const repairedRefs = new Set(repaired.candidates.map((candidate) => candidate.ref));
+        if (candidateSource.candidates.some((candidate) => !repairedRefs.has(candidate.ref)))
+          throw new Error("memory_input_repair_candidates_incomplete");
         if (input.dryRun) {
           receipts.push({ window_ref: expected.window_ref, state: "preview",
             prior_input_sha256: row.input_sha256,
@@ -188,11 +210,11 @@ export async function repairMemoryCandidateInputs(input: {
           (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,
            attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-          receiptRef, expected.window_ref, row.job_id, row.attempt_count, "input_repaired", null,
+          receiptRef, expected.window_ref, row.job_id, row.attempt_count, `input_repaired:${receiptRef}`, null,
           row.input_sha256, now, "recovery", 0, 1, row.recovery_revision,
           JSON.stringify({ schema: "butler.memory-candidate-input-repair-receipt.v1",
             prior_input_json: row.input_json, prior_input_sha256: row.input_sha256,
-            repaired_input_sha256: digest, repaired_at: now }),
+            repaired_input_sha256: digest, candidate_source_sha256: expected.candidate_source_sha256 ?? row.input_sha256, repaired_at: now }),
         );
         db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?")
           .run(serialized, digest, expected.window_ref);
@@ -1399,6 +1421,7 @@ function loadSourceWindowCandidates(input: {
   butlerData: string;
   projectId: string | null;
   ids: string[];
+  candidateBytes?: number;
 }): ExtractInput["candidates"] {
   return packExtractionCandidates(input.ids, (id) => {
     const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null; properties: string }, [string]>("SELECT id,type,identity_scope,project_id,properties FROM entities WHERE id=?").get(id);
@@ -1439,9 +1462,19 @@ function loadSourceWindowCandidates(input: {
         condition: properties.condition ?? null,
       };
     }
-    const candidate = { ref: node.id, type: node.type as ExtractInput["candidates"][number]["type"], label: aliases[0]!.surface_original, aliases: aliases.map((alias) => alias.surface_original), scope: node.identity_scope, project_id: node.project_id, claim, evidence };
-    return candidate;
-  });
+    const label = aliases[0]!.surface_original;
+    return {
+      ref: node.id,
+      type: node.type as ExtractInput["candidates"][number]["type"],
+      label,
+      aliases: [...new Set(aliases.map((alias) => alias.surface_original))]
+        .filter((alias) => identityNode || alias !== label),
+      scope: node.identity_scope,
+      project_id: node.project_id,
+      claim,
+      evidence,
+    };
+  }, input.candidateBytes);
 }
 
 function assertProjectionSourceCurrent(

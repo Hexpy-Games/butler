@@ -359,7 +359,7 @@ test("public candidate input repair preserves history, rolls back stale batches 
     db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?").run(original, originalHash, window.window_ref);
     const selected = { window_ref: window.window_ref, expected_input_sha256: originalHash, expected_attempt_count: 0 };
     const requestPath = join(root, "input-repair.json");
-    const invoke = (windows: typeof selected[], dryRun = false) => {
+    const invoke = (windows: Array<typeof selected & { candidate_source_sha256?: string }>, dryRun = false) => {
       writeFileSync(requestPath, JSON.stringify({ schema: "butler.memory-candidate-input-repair.v1", windows }));
       return runMemoryRebuildCommand({ butlerData: root,
         argv: ["--memory-rebuild", "repair-inputs", "--generation", generationId, "--input", requestPath, ...(dryRun ? ["--dry-run"] : [])], signal: new AbortController().signal });
@@ -374,6 +374,8 @@ test("public candidate input repair preserves history, rolls back stale batches 
     expect((await invoke([selected])).repaired).toBe(1);
     const repaired = JSON.parse(row().input_json) as ExtractInput;
     expect(repaired.candidates.map((value) => value.ref)).toEqual(["subject", "claim"]);
+    expect(repaired.candidates.map(({ label, aliases }) => ({ label, aliases })))
+      .toEqual([{ label: "日本語", aliases: ["日本語"] }, { label: "العربية", aliases: [] }]);
     expect(repaired.source_units).toEqual(input.source_units);
     expect(repaired.context_units).toEqual(input.context_units);
     expect(row().state).toBe("pending");
@@ -384,6 +386,30 @@ test("public candidate input repair preserves history, rolls back stale batches 
     await expect(invoke([selected])).rejects.toThrow("memory_input_repair_precondition_changed");
     const current = { ...selected, expected_input_sha256: row().input_sha256 };
     expect((await invoke([current])).repaired).toBe(0);
+    const reduced = JSON.stringify({ ...repaired, candidates: repaired.candidates.filter((value) => value.type === "entity") });
+    const reducedHash = projectionHash(["extract-input", reduced]);
+    db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?").run(reduced, reducedHash, window.window_ref);
+    const restore = { ...current, expected_input_sha256: reducedHash, candidate_source_sha256: originalHash };
+    await expect(invoke([{ ...restore, candidate_source_sha256: "0".repeat(64) }])).rejects.toThrow("memory_input_repair_precondition_changed");
+    expect((await invoke([restore])).repaired).toBe(1);
+    expect(JSON.parse(row().input_json).candidates.map((value: any) => value.ref)).toEqual(["subject", "claim"]);
+    const history = db.query<{ recovery_request_json: string }, []>("SELECT recovery_request_json FROM memory_projection_attempts").all();
+    expect(history.map((value) => JSON.parse(value.recovery_request_json).prior_input_json)).toEqual([original, reduced]);
+    current.expected_input_sha256 = row().input_sha256;
+
+    const tightInput = { ...JSON.parse(original), context_units: [{ ...input.context_units[0]!, text: "" }] };
+    const emptyInputBytes = Buffer.byteLength(JSON.stringify({ ...tightInput, candidates: [] }));
+    const insufficientCandidateBytes = Buffer.byteLength(JSON.stringify(repaired.candidates)) - 1;
+    tightInput.context_units[0].text = "x".repeat(24 * 1024 - emptyInputBytes - insufficientCandidateBytes + 2);
+    const fullContext = JSON.stringify(tightInput);
+    const fullContextHash = projectionHash(["extract-input", fullContext]);
+    db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?").run(fullContext, fullContextHash, window.window_ref);
+    await expect(invoke([{ ...current, expected_input_sha256: fullContextHash }])).rejects.toThrow("memory_input_repair_candidates_incomplete");
+    expect(row().input_json).toBe(fullContext);
+    const restoredJson = JSON.stringify(repaired);
+    db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?").run(restoredJson, projectionHash(["extract-input", restoredJson]), window.window_ref);
+    current.expected_input_sha256 = row().input_sha256;
+
     db.query("UPDATE memory_projection_windows SET state='complete' WHERE window_ref=?").run(window.window_ref);
     await expect(invoke([current])).rejects.toThrow("memory_input_repair_precondition_changed");
     expect((await invoke([current], true)).repaired).toBe(0);

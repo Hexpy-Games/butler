@@ -70,6 +70,7 @@ const MAX_CANDIDATE_LOOKUPS = 96;
 export function packExtractionCandidates(
   seeds: string[],
   load: (ref: string) => ExtractInput["candidates"][number] | null,
+  maxBytes = MEMORY_CANDIDATE_BYTES,
 ): ExtractInput["candidates"] {
   const loaded = new Map<string, ExtractInput["candidates"][number] | null>();
   const selected = new Set<string>();
@@ -96,7 +97,7 @@ export function packExtractionCandidates(
     };
     if (!append(seed)) continue;
     const next = [...result, ...group.values()];
-    if (jsonBytes(next) > MEMORY_CANDIDATE_BYTES) continue;
+    if (jsonBytes(next) > maxBytes) continue;
     result.push(...group.values());
     for (const ref of group.keys()) selected.add(ref);
   }
