@@ -44,15 +44,14 @@ export async function embedViaSocket(text: string, socketPath = DEFAULT_SOCKET, 
     }, timeoutMs);
 
     const socket = createConnection(socketPath);
+    socket.setEncoding("utf8");
     let data = "";
 
     socket.on("connect", () => {
       socket.write(JSON.stringify({ text }) + "\n");
     });
 
-    socket.on("data", (chunk) => {
-      data += chunk.toString();
-    });
+    socket.on("data", (chunk) => { data += chunk; });
 
     socket.on("end", () => {
       clearTimeout(timeout);
@@ -83,15 +82,14 @@ export async function embedBatchViaSocket(texts: string[], socketPath = DEFAULT_
     }, timeoutMs);
 
     const socket = createConnection(socketPath);
+    socket.setEncoding("utf8");
     let data = "";
 
     socket.on("connect", () => {
       socket.write(JSON.stringify({ texts }) + "\n");
     });
 
-    socket.on("data", (chunk) => {
-      data += chunk.toString();
-    });
+    socket.on("data", (chunk) => { data += chunk; });
 
     socket.on("end", () => {
       clearTimeout(timeout);
@@ -159,6 +157,7 @@ export async function embedCheckedViaSocket(input: {
 function socketRequest(value: unknown, socketPath: string, timeoutMs: number, signal?: AbortSignal, timeoutIsDeadline = false): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const socket = createConnection(socketPath);
+    socket.setEncoding("utf8");
     let data = "";
     let settled = false;
     const finish = (fn: () => void) => {
@@ -175,7 +174,7 @@ function socketRequest(value: unknown, socketPath: string, timeoutMs: number, si
     if (signal?.aborted) { onAbort(); return; }
     signal?.addEventListener("abort", onAbort, { once: true });
     socket.on("connect", () => socket.write(`${JSON.stringify(value)}\n`));
-    socket.on("data", (chunk) => { data += chunk.toString(); });
+    socket.on("data", (chunk) => { data += chunk; });
     socket.on("end", () => finish(() => { try { resolve(JSON.parse(data.trim())); } catch { reject(new CheckedEmbeddingError("embed_invalid_response")); } }));
     socket.on("error", (error) => finish(() => reject(error)));
   });
