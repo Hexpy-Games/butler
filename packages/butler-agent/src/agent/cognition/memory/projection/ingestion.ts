@@ -48,6 +48,7 @@ import {
   type ProjectionSourceRow,
   vectorRegistrationFailureStage,
   recordHotCacheOutcomes,
+  fallbackProjectionWindowOnQuota,
 } from "./store.ts";
 import { embedVectorQuantum, filterCurrentGenerationVectorMatches, findPersistedVectorReceipt, prepareReusedGenerationVectorRows, searchGenerationVectors, writeGenerationVectorRows } from "../recall/vector.ts";
 import { selectSemanticSeeds } from "../recall/candidates.ts";
@@ -953,6 +954,7 @@ export async function advanceNextMemoryProjection(input: {
             : origin === "external" ? "memory_extract_cancelled" : undefined;
           failureEvidence = {
             ...extractionFailureEvidence(error, pending.model, origin, performance.now() - started, failureCode),
+            configured_reasoning_effort: pending.reasoningEffort,
             visible_stream: stream.settle(),
             ...(requestWire ? { request_wire: requestWire } : {}),
           };
@@ -1946,6 +1948,14 @@ async function handleProjectionFailure(
   error: unknown,
   attempt: { providerInvoked: boolean; preserveResult: boolean; failureEvidence?: unknown; failureCode?: string } = { providerInvoked: true, preserveResult: false },
 ): Promise<void> {
+  if (attempt.providerInvoked && !attempt.preserveResult && error instanceof ModelProviderRequestError) {
+    const switched = await withMemoryWriteGateAsync(context, () => fallbackProjectionWindowOnQuota(db, {
+      jobId: pending.job_id, windowRef: pending.window_ref, ownerNonce: pending.ownerNonce,
+      model: pending.model, providerCode: error.code, statusCode: error.statusCode,
+      failureEvidence: attempt.failureEvidence,
+    }));
+    if (switched) return;
+  }
   if (isSplitFailure(error)) {
     await withMemoryWriteGateAsync(context, () => db.transaction(() => {
       const owned = db.query("SELECT 1 FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE w.window_ref=? AND w.job_id=? AND w.state='running' AND w.owner_nonce=?").get(pending.window_ref, pending.job_id, pending.ownerNonce);

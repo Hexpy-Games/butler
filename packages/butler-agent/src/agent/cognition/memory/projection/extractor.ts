@@ -134,6 +134,8 @@ export async function runStructuredMemoryExtractor(input: {
     onAdapterEntry: input.onProviderAdapterEntry,
   });
   const evidence = {
+    configured_model: input.model,
+    configured_reasoning_effort: input.reasoningEffort,
     reported_model: result.model,
     usage: result.usage
       ? {
