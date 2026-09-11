@@ -217,7 +217,9 @@ function tryAcquire(path: string, options: AcquireOptions): ConsolidationLease |
   let db: Database;
   try { db = new Database(coordinatorPath(path)); }
   catch (error) { if (isBusy(error)) return null; throw error; }
-  try { db.exec("PRAGMA busy_timeout=0; BEGIN IMMEDIATE"); }
+  // DELETE-mode IMMEDIATE admits new readers; release COMMIT may then fail while
+  // upgrading the lock. EXCLUSIVE rejects reader contention before granting a lease.
+  try { db.exec("PRAGMA busy_timeout=0; BEGIN EXCLUSIVE"); }
   catch (error) { db.close(); if (isBusy(error)) return null; throw error; }
   if (options.signal?.aborted || (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt)) {
     try { db.exec("ROLLBACK"); } finally { db.close(); }

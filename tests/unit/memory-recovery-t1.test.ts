@@ -1705,6 +1705,81 @@ test("memory writer lease is not age-stolen and only its owner can release it", 
   releaseConsolidationLock(legacyPath, replacement!);
 });
 
+test("memory writer lease excludes SQLite readers before ownership is granted", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-memory-reader-gate-"));
+  roots.push(root);
+  const path = consolidationLockPath(root);
+  const initial = acquireConsolidationLock(path, { purpose: "initialize_reader_gate" });
+  expect(initial).not.toBeNull();
+  releaseConsolidationLock(path, initial!);
+
+  const coordinatorPath = `${path}.coord.sqlite`;
+  const reader = Bun.spawn({
+    cmd: [process.execPath, "-e", `
+      import { Database } from "bun:sqlite";
+      const db = new Database(${JSON.stringify(`${path}.coord.sqlite`)}, { readonly: true });
+      db.exec("BEGIN");
+      db.query("SELECT format_version FROM memory_write_gate WHERE singleton=1").get();
+      console.log("held");
+      await Bun.stdin.text();
+      db.exec("ROLLBACK");
+      db.close();
+    `],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let waiterLease: Awaited<ReturnType<typeof acquireConsolidationLockAsync>> = null;
+  let readerReleased = false;
+  try {
+    const held = await reader.stdout.getReader().read();
+    expect(new TextDecoder().decode(held.value)).toContain("held");
+    expect(acquireConsolidationLock(path, { purpose: "reader_blocked_owner" })).toBeNull();
+    const waiter = acquireConsolidationLockAsync(path, {
+      purpose: "yielding_reader_owner", waitClass: "background", deadlineAt: Date.now() + 1_000,
+    });
+    reader.stdin.write("release\n");
+    reader.stdin.end();
+    readerReleased = true;
+    expect(await reader.exited).toBe(0);
+    waiterLease = await waiter;
+    expect(waiterLease).not.toBeNull();
+
+    const blockedReader = Bun.spawnSync([process.execPath, "-e", `
+      import { Database } from "bun:sqlite";
+      let db;
+      try {
+        db = new Database(${JSON.stringify(`${path}.coord.sqlite`)}, { readonly: true });
+        db.query("SELECT format_version FROM memory_write_gate WHERE singleton=1").get();
+        process.exitCode = 2;
+      } catch (error) {
+        if (error?.code !== "SQLITE_BUSY") throw error;
+        console.log(error.code);
+      } finally { db?.close(); }
+    `]);
+    expect(blockedReader.exitCode).toBe(0);
+    expect(blockedReader.stdout.toString()).toContain("SQLITE_BUSY");
+    releaseConsolidationLock(path, waiterLease!);
+    waiterLease = null;
+
+    const releasedReader = new Database(coordinatorPath, { readonly: true });
+    try {
+      expect(releasedReader.query("SELECT format_version FROM memory_write_gate WHERE singleton=1").get()).toBeTruthy();
+    } finally {
+      releasedReader.close();
+    }
+    const next = acquireConsolidationLock(path, { purpose: "post_reader_owner" });
+    expect(next).not.toBeNull();
+    releaseConsolidationLock(path, next!);
+  } finally {
+    if (!readerReleased) {
+      try { reader.stdin.write("release\n"); reader.stdin.end(); } catch {}
+      await reader.exited;
+    }
+    if (waiterLease) releaseConsolidationLock(path, waiterLease, false);
+  }
+});
+
 test("canonical mutation during extraction rejects the stale plan", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-mutation-"));
   roots.push(butlerData);
