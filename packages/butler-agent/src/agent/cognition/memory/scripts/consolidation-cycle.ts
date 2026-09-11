@@ -49,7 +49,8 @@ import { NativeInboundQueue, type PersistedOriginEvidence } from "../../../../ga
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { reprocessMemoryProjectionWindowAsync } from "../projection/ingestion.ts";
-import { ensureV2MemorySchema, openProjectionDb } from "../projection/store.ts";
+import { ensureV2MemorySchema, openProjectionDb, type ClaimedVectorUnit } from "../projection/store.ts";
+import { completedVectorReceiptLacksExpectedIdentity } from "../recall/vector.ts";
 import { executeMemoryIdentityCommand, type IdentityCommand } from "../projection/identity.ts";
 import { readMemoryHealth } from "../quality.ts";
 import { listTypedMemoryLifecycleSnapshot, listTypedMemoryRecordsSnapshot } from "../quality.ts";
@@ -346,12 +347,112 @@ function option(argv: string[], name: string): string | null {
   return index >= 0 && argv[index + 1] ? argv[index + 1]! : null;
 }
 
+type VectorRepairRequest = {
+  generation_id: string;
+  units: Array<{
+    unit_id: string;
+    owner_revision: string;
+    source_revision: string;
+    receipt_json: string;
+  }>;
+};
+
+function readVectorRepairRequest(path: string): VectorRepairRequest {
+  let value: unknown;
+  try { value = JSON.parse(fs.readFileSync(path, "utf8")); }
+  catch { throw new Error("memory_vector_repair_invalid_request"); }
+  const request = value as Partial<VectorRepairRequest> | null;
+  if (!request || typeof request.generation_id !== "string" || !request.generation_id ||
+    !Array.isArray(request.units) || request.units.length === 0 ||
+    request.units.some((unit) => !unit || typeof unit.unit_id !== "string" || !unit.unit_id ||
+      typeof unit.owner_revision !== "string" || !unit.owner_revision ||
+      typeof unit.source_revision !== "string" || !unit.source_revision ||
+      typeof unit.receipt_json !== "string" || !unit.receipt_json) ||
+    new Set(request.units.map((unit) => unit.unit_id)).size !== request.units.length)
+    throw new Error("memory_vector_repair_invalid_request");
+  return request as VectorRepairRequest;
+}
+
+function resetSelectedInvalidVectors(input: {
+  context: MemoryExecutionContext;
+  db: ReturnType<typeof openProjectionDb>;
+  request: VectorRepairRequest;
+}): number {
+  const generation = resolveMemoryGeneration(input.context);
+  const manifest = readMemoryGenerationManifest(input.context.butlerData, generation.generationId);
+  if (input.request.generation_id !== generation.generationId || !manifest.embedding)
+    throw new Error("memory_vector_repair_preimage_changed");
+  const units: Array<ClaimedVectorUnit & { state: string; source_membership_invalid: number }> = [];
+  for (const requested of input.request.units) {
+    const unit = input.db.query<ClaimedVectorUnit & { state: string; source_membership_invalid: number }, [string]>(`
+      SELECT u.*,j.revision source_revision,c.conversation_session_id,
+        (SELECT ordered.source_kind FROM memory_chunk_sources ordered
+          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+          ORDER BY ordered.source_id LIMIT 1) source_kind,
+        (SELECT ordered.observed_at FROM memory_chunk_sources ordered
+          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+            AND ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json))
+            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
+              SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+          ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
+        CASE WHEN NOT (u.project_id IS c.project_id)
+          OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
+          OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
+            SELECT 1 FROM memory_chunk_sources current_source
+            WHERE current_source.source_id=refs.value
+              AND current_source.episode_id=c.memory_chunk_id
+              AND current_source.revision=c.current_revision
+              AND (u.record_kind='episode' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
+                SELECT 1 FROM entity_mentions current_mention
+                WHERE current_mention.entity_id=u.owner_id AND current_mention.source_id=current_source.source_id
+                  AND current_mention.episode_id=c.memory_chunk_id AND current_mention.revision=c.current_revision)))
+          )) THEN 1 ELSE 0 END source_membership_invalid
+      FROM memory_vector_units u
+      JOIN memory_projection_jobs j ON j.job_id=u.job_id
+      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+      WHERE u.unit_id=?`).get(requested.unit_id);
+    if (!unit || unit.state !== "complete" || unit.owner_revision !== requested.owner_revision ||
+      unit.source_revision !== requested.source_revision || unit.receipt_json !== requested.receipt_json ||
+      unit.source_membership_invalid !== 0 || !unit.source_kind || !unit.source_observed_at)
+      throw new Error("memory_vector_repair_preimage_changed");
+    units.push(unit);
+  }
+  if (units.some((unit) => !completedVectorReceiptLacksExpectedIdentity(
+    unit, generation.generationId, manifest.embedding!.version,
+  )))
+    throw new Error("memory_vector_repair_preimage_changed");
+  return input.db.transaction(() => {
+    for (const [index, unit] of units.entries()) {
+      const requested = input.request.units[index]!;
+      const changed = input.db.query(`UPDATE memory_vector_units SET state='pending',error_code=NULL,
+        next_attempt_at=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL,receipt_json=NULL,
+        provider_invoked=0,outcome_known=1,invocation_ref=NULL
+        WHERE unit_id=? AND state='complete' AND owner_revision=? AND receipt_json=?
+          AND EXISTS(SELECT 1 FROM memory_projection_jobs current_job
+            JOIN memory_chunks current_chunk ON current_chunk.memory_chunk_id=current_job.episode_id
+              AND current_chunk.current_revision=current_job.revision
+            WHERE current_job.job_id=memory_vector_units.job_id AND current_job.revision=?)`)
+        .run(unit.unit_id, requested.owner_revision, requested.receipt_json, requested.source_revision).changes;
+      if (changed !== 1) throw new Error("memory_vector_repair_preimage_changed");
+    }
+    for (const unit of units) {
+      const column = unit.record_kind === "node" ? "node_vectors_state" : "episode_vectors_state";
+      input.db.query(`UPDATE memory_projection_jobs SET ${column}=? WHERE job_id=?`)
+        .run(JSON.stringify({ state: "pending", blocked_by: "memory_vector_repair_requested" }), unit.job_id);
+    }
+    return units.length;
+  })();
+}
+
 export async function runMemoryRebuildCommand(input: {
   butlerData: string; argv: string[]; signal: AbortSignal;
 }): Promise<Record<string, unknown>> {
   const marker = input.argv.indexOf("--memory-rebuild");
   const operation = marker >= 0 ? input.argv[marker + 1] : null;
   const generationId = option(input.argv, "--generation");
+  const vectorRepairPath = option(input.argv, "--vector-repair-input");
+  if (input.argv.includes("--vector-repair-input") && (!vectorRepairPath || operation !== "retry-failed"))
+    throw new Error("memory_rebuild_invalid_request");
   if (operation === "prepare") {
     const prepared = readLiveMemorySourceInventory(input.butlerData, { signal: input.signal });
     return { operation, ...prepareMemoryRebuild({ butlerData: input.butlerData, ...prepared,
@@ -478,6 +579,15 @@ export async function runMemoryRebuildCommand(input: {
     const db = openProjectionDb(resolveMemoryGeneration(context).graphPath);
     let retried = { semantic_windows: 0, vector_units: 0, cache_jobs: 0 };
     try {
+      if (vectorRepairPath) {
+        const request = readVectorRepairRequest(vectorRepairPath);
+        const vectorUnits = await import("../projection/ingestion.ts").then((module) =>
+          module.withMemoryWriteGateAsync(context, async () => {
+            ensureV2MemorySchema(db);
+            return resetSelectedInvalidVectors({ context, db, request });
+          }));
+        return { operation, generationId, retried: { ...retried, vector_units: vectorUnits } };
+      }
       retried = await import("../projection/ingestion.ts").then((module) => module.withMemoryWriteGateAsync(context, () => {
         ensureV2MemorySchema(db);
         const recovery = createHash("sha256").update(JSON.stringify(["memory-retry-failed", generationId, new Date().toISOString()])).digest("hex");

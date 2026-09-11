@@ -25,7 +25,7 @@ import type { MemoryExecutionContext } from "./contracts.ts";
 import type { EmbeddingRuntimeMetadata } from "../scripts/embed.ts";
 import { ensureV2MemorySchema, expandSplitSourceLeaves, sourceRows, type ClaimedVectorUnit } from "./store.ts";
 import { hydrateSource, memorySourceInventoryHash } from "./source.ts";
-import { findPersistedVectorReceipt } from "../recall/vector.ts";
+import { countInvalidPersistedVectorReadiness } from "../recall/vector.ts";
 import {
   acquireConsolidationLock,
   acquireConsolidationLockAsync,
@@ -923,7 +923,7 @@ export async function computeMemoryGenerationReadiness(input: {
           (row.state === "complete" && !row.normalized_plan_json);
       } catch { return true; }
     }).length;
-    const vectorEvidenceRows = db.query<ClaimedVectorUnit & { state: string }, [string]>(`
+    const vectorEvidenceRows = db.query<ClaimedVectorUnit & { state: string; source_membership_invalid: number }, [string]>(`
       SELECT u.*,j.revision source_revision,c.conversation_session_id,
         (SELECT ordered.source_kind FROM memory_chunk_sources ordered
           WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
@@ -940,7 +940,21 @@ export async function computeMemoryGenerationReadiness(input: {
               (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own
                 WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
-            ordered.scalar_pointer,ordered.byte_start))) source_ids_json
+            ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
+        CASE WHEN NOT (u.project_id IS c.project_id)
+          OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
+          OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
+            SELECT 1 FROM memory_chunk_sources current_source
+            WHERE current_source.source_id=refs.value
+              AND current_source.episode_id=c.memory_chunk_id
+              AND current_source.revision=c.current_revision
+              AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
+                SELECT 1 FROM entity_mentions current_mention
+                WHERE current_mention.entity_id=u.owner_id
+                  AND current_mention.source_id=current_source.source_id
+                  AND current_mention.episode_id=c.memory_chunk_id
+                  AND current_mention.revision=c.current_revision)))
+          )) THEN 1 ELSE 0 END source_membership_invalid
       FROM memory_vector_units u
       JOIN memory_projection_jobs j ON j.job_id=u.job_id
       JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
@@ -950,7 +964,7 @@ export async function computeMemoryGenerationReadiness(input: {
       try {
         const receipt = JSON.parse(row.receipt_json ?? "null") as { generation?: string; embedding_version?: string } | null;
         const refs = JSON.parse(row.source_ids_json ?? "[]") as unknown;
-        return !receipt || receipt.generation !== input.generationId || receipt.embedding_version !== manifest.embedding?.version ||
+        return row.source_membership_invalid !== 0 || !receipt || receipt.generation !== input.generationId || receipt.embedding_version !== manifest.embedding?.version ||
           !Array.isArray(refs) || refs.length === 0 || refs.some((ref) => typeof ref !== "string" || !expectedEvidence.has(ref));
       } catch { return true; }
     }).length;
@@ -1048,25 +1062,11 @@ async function actualVectorEvidenceInvalid(input: {
     sourceRoot: input.generationRoot,
     canonicalSnapshotPath: null,
   };
-  const groups = new Map<string, Array<ClaimedVectorUnit & { state: string }>>();
-  for (const row of input.rows) {
-    const values = groups.get(row.receipt_json ?? "") ?? [];
-    values.push(row);
-    groups.set(row.receipt_json ?? "", values);
-  }
-  let invalid = 0;
-  for (const [receiptJson, units] of groups) {
-    try {
-      const receipt = JSON.parse(receiptJson || "null") as {
-        generation?: string; embedding_version?: string; vector_keys?: string[]; row_count?: number;
-      } | null;
-      const actual = await findPersistedVectorReceipt(generation, units, input.embeddingVersion);
-      if (!receipt || !actual || receipt.generation !== actual.generation ||
-        receipt.embedding_version !== actual.embedding_version || receipt.row_count !== actual.row_count ||
-        !sameStringSet(receipt.vector_keys, actual.vector_keys)) invalid += units.length;
-    } catch { invalid += units.length; }
-  }
-  return invalid;
+  return countInvalidPersistedVectorReadiness(
+    generation,
+    input.rows,
+    input.embeddingVersion,
+  );
 }
 
 async function actualCacheEvidenceInvalid(input: {
