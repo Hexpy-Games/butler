@@ -6,6 +6,7 @@ import { AgentConversationStore } from "../../packages/butler-agent/src/agent/co
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import { ingestConversationMemory } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
 import { createContextEvidenceResolver } from "../../packages/butler-agent/src/agent/cognition/memory/projection/context-evidence.ts";
+import { runMemoryRebuildCommand } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts";
 import {
   openProjectionDb,
   type ProjectionSourceRow,
@@ -126,6 +127,7 @@ async function fixture(
     candidates: [],
   };
   return {
+    generationId: descriptor.generation_id,
     root,
     db,
     input,
@@ -192,6 +194,69 @@ test("maps multilingual message context across real parts and trimmed suffixes",
         quote: "끝",
       },
     ]);
+  } finally {
+    db.close();
+  }
+});
+
+test("public retry-failed resumes a saved plan without clearing its provider result", async () => {
+  const { root, db, input, generationId } = await fixture();
+  try {
+    const row = db
+      .query<
+        { window_ref: string },
+        []
+      >("SELECT window_ref FROM memory_projection_windows LIMIT 1")
+      .get()!;
+    const savedInput = JSON.stringify({ ...input, window_ref: row.window_ref });
+    const savedOutput = JSON.stringify({
+      schema: "butler.memory-extract-output.v2",
+      window_ref: row.window_ref,
+      disposition: "processed",
+      covered_unit_refs: input.source_units.map((unit) => unit.ref),
+      nodes: [],
+      claims: [],
+      relations: [],
+      corrections: [],
+      summary: null,
+    });
+    const savedPlan = JSON.stringify({
+      refs: {},
+      evidence: {},
+      candidate_bindings: {},
+    });
+    db.query(
+      "UPDATE memory_projection_windows SET state='failed',error_code='memory_extract_provider_failed',attempt_count=1,input_json=?,output_json=?,normalized_plan_json=? WHERE window_ref=?",
+    ).run(savedInput, savedOutput, savedPlan, row.window_ref);
+    const result = await runMemoryRebuildCommand({
+      butlerData: root,
+      argv: ["--memory-rebuild", "retry-failed", "--generation", generationId],
+      signal: new AbortController().signal,
+    });
+    expect(result.retried).toEqual({
+      semantic_windows: 1,
+      vector_units: 0,
+      cache_jobs: 0,
+    });
+    const after = db
+      .query<
+        {
+          state: string;
+          input_json: string;
+          output_json: string;
+          normalized_plan_json: string;
+          attempt_count: number;
+        },
+        [string]
+      >("SELECT state,input_json,output_json,normalized_plan_json,attempt_count FROM memory_projection_windows WHERE window_ref=?")
+      .get(row.window_ref)!;
+    expect(after).toEqual({
+      state: "planned",
+      input_json: savedInput,
+      output_json: savedOutput,
+      normalized_plan_json: savedPlan,
+      attempt_count: 1,
+    });
   } finally {
     db.close();
   }
