@@ -13,7 +13,8 @@ import {
   openProjectionDb,
   type ProjectionSourceRow,
 } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
-import type { ExtractInput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
+import type { ExtractInput, ExtractOutput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
+import { applyPlan, normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -200,6 +201,41 @@ test("maps multilingual message context across real parts and trimmed suffixes",
   } finally {
     db.close();
   }
+});
+
+test("correction edges persist multilingual context as canonical sources and replay without duplicate evidence", async () => {
+  const { root, db, input, first, second } = await fixture();
+  try {
+    const row = db.query<{ window_ref: string; job_id: string }, []>(
+      "SELECT window_ref,job_id FROM memory_projection_windows LIMIT 1",
+    ).get()!;
+    input.window_ref = row.window_ref;
+    const current = input.source_units[0]!;
+    const currentQuote = { unit_ref: current.ref, quote: current.text, occurrence: 0 };
+    db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES('prior','memory_atom','prior','{}','user',NULL,?)")
+      .run(current.observed_at);
+    input.candidates = [{ ref: "prior", type: "memory_atom", label: "prior", aliases: [], scope: "user", project_id: null,
+      evidence: [{ ref: current.ref, text: current.text, observed_at: current.observed_at, basis: "assistant_statement" }] }];
+    const output: ExtractOutput = {
+      schema: "butler.memory-extract-output.v2", window_ref: row.window_ref, disposition: "processed",
+      covered_unit_refs: [current.ref], nodes: [], relations: [], summary: null,
+      claims: [{ local_ref: "replacement", type: "memory_atom", statement: current.text,
+        resolution: { kind: "create", provisional: false, identity_scope: "user" },
+        subject_ref: null, object_ref: null, speech_act: "assertion", basis: "assistant_statement",
+        polarity: "unspecified", condition: null, valid_from: null, valid_to: null, salience: "normal", evidence: [currentQuote] }],
+      corrections: [{ previous_claim_ref: "prior", replacement_claim_ref: "replacement", relation: "supersedes", effective_at: null,
+        evidence: [currentQuote, { unit_ref: input.context_units[0]!.ref, quote: "말  العربية", occurrence: 0 }] }],
+    };
+    const plan = normalizeAndValidatePlan(db, input, output);
+    for (let replay = 0; replay < 2; replay++) {
+      applyPlan(db, row.job_id, row.window_ref, input, output, plan, {}, root);
+      const sources = db.query<{ chunk_source_id: string }, []>(
+        "SELECT v.chunk_source_id FROM edge_evidence v JOIN edges e ON e.edge_id=v.edge_id WHERE e.rel_type='supersedes' ORDER BY v.chunk_source_id",
+      ).all().map((entry) => entry.chunk_source_id);
+      expect(sources).toEqual([current.ref, first.source_id, second.source_id].sort());
+      expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+    }
+  } finally { db.close(); }
 });
 
 test("public retry-failed resumes a saved plan without clearing its provider result", async () => {
