@@ -239,6 +239,12 @@ export function canonicalConversationProjectionInventory(input: {
         if (!sessionCache.has(outcome.session_id)) sessionCache.set(outcome.session_id, store.getSession(outcome.session_id));
         const session = sessionCache.get(outcome.session_id);
         if (!session || session.status === "deleted" || !sessionInInventoryScope(session.id, session.project_id, input)) { exclude("scope_or_session"); continue; }
+        const turn = store.readTurn(outcome.turn_id);
+        if (!turn || turn.id !== outcome.turn_id || turn.session_id !== outcome.session_id ||
+          !["complete", "failed", "aborted"].includes(turn.status)) {
+          exclude("turn_not_terminal");
+          continue;
+        }
         const request = outcome.request_message_id ? cachedMessage(store, messageCache, outcome.request_message_id) : null;
         const assistant = outcome.public_assistant_message_id ? cachedMessage(store, messageCache, outcome.public_assistant_message_id) : null;
         if (!request || request.role !== "user" || !["complete", "compacted"].includes(request.status) || request.origin_kind !== "user_input") { exclude(request?.origin_kind === "unknown" ? "unknown_origin" : "request_ineligible"); continue; }

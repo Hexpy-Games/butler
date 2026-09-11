@@ -4236,6 +4236,68 @@ test("rebuild snapshot inventory matches normal 8 KiB Unicode source registratio
   expect(entry!.sourceIds).toEqual(registeredSourceIds);
 });
 
+test("conversation inventory excludes recoverable running turns until canonical terminal transition", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-terminal-inventory-"));
+  roots.push(butlerData);
+  const descriptor = initializeEmptyMemoryGeneration(butlerData);
+  const eventId = "terminal-inventory-public-source";
+  const store = new AgentConversationStore({ butlerData });
+  const turn = store.beginTurn({
+    gateway: "app", externalSessionId: "terminal-inventory-session",
+    sessionId: "terminal-inventory-session", projectId: "project-a", actor: "user",
+    turnId: "terminal-inventory-turn", requestId: eventId,
+  });
+  new NativeInboundQueue(butlerData).enqueue({
+    eventId, transport: "app", accountId: "default",
+    peer: { kind: "dm", id: turn.session_id }, sender: { id: "user" },
+    message: { id: eventId, text: "Preserve this running public request.", timestamp: new Date(0).toISOString() },
+    routingHints: { sessionId: turn.session_id, turnId: turn.id },
+  });
+  const request = store.appendUserMessage({
+    sessionId: turn.session_id, turnId: turn.id,
+    text: "Preserve this running public request.", originKind: "user_input",
+    originRef: eventId, sourceGateway: "app", sourceRef: eventId,
+  });
+  store.writeTurnOutcome({
+    sessionId: turn.session_id, turnId: turn.id, generation: 1,
+    outcome: "recoverable", requestMessageId: request.id, publicAssistantMessageId: null,
+    safeCode: "runtime_recoverable",
+  });
+  store.close();
+
+  const { canonicalConversationProjectionInventory } = await import(
+    "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts"
+  );
+  const readInventory = () => canonicalConversationProjectionInventory({
+    butlerData, asOf: new Date().toISOString(), deadlineAt: Date.now() + 5_000,
+    scope: "all_user_sessions" as const, currentSessionId: "", currentProjectId: null,
+    sessionIds: [], projectFilter: "any" as const, projectIds: [],
+  });
+  const runningInventory = readInventory();
+  expect(runningInventory.entries).toHaveLength(0);
+  expect(runningInventory.exclusions.turn_not_terminal).toBe(1);
+
+  const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
+  const context = {
+    butlerData,
+    target: { kind: "active" as const, expected_generation: descriptor.generation_id },
+    signal: new AbortController().signal,
+  };
+  const source = {
+    kind: "conversation_turn" as const, session_id: turn.session_id,
+    turn_id: turn.id, outcome_generation: 1,
+  };
+  await expect(memory.ingestConversationMemory({ context, source })).rejects.toThrow("memory_source_not_terminal");
+
+  const terminalStore = new AgentConversationStore({ butlerData });
+  terminalStore.finalizeTurn({ turnId: turn.id, status: "complete" });
+  terminalStore.close();
+  const terminalInventory = readInventory();
+  expect(terminalInventory.entries).toHaveLength(1);
+  expect(terminalInventory.exclusions.turn_not_terminal).toBeUndefined();
+  expect((await memory.ingestConversationMemory({ context, source })).source.state).toBe("complete");
+});
+
 test("rebuild target writes its validated cache without exposing it through the active prompt", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-rebuild-cache-"));
   roots.push(butlerData);
