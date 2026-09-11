@@ -1,9 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
-import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { initializeEmptyMemoryGeneration, prepareMemoryRebuild } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import { ingestConversationMemory } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
 import { createContextEvidenceResolver } from "../../packages/butler-agent/src/agent/cognition/memory/projection/context-evidence.ts";
 import { projectionHash } from "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts";
@@ -23,6 +24,7 @@ afterEach(() => {
 async function fixture(
   secondText = "العربية 日本語 끝  ",
   firstText = "  앞말 ",
+  assistantText = "확인했습니다.",
 ) {
   const root = mkdtempSync(join(tmpdir(), "memory-context-evidence-"));
   roots.push(root);
@@ -50,7 +52,7 @@ async function fixture(
   const assistant = store.appendAssistantMessage({
     sessionId: "session",
     turnId: turn.id,
-    text: "확인했습니다.",
+    text: assistantText,
     originKind: "assistant_public",
     originRef: "app:turn:assistant",
   });
@@ -415,3 +417,56 @@ test("public candidate input repair preserves history, rolls back stale batches 
     expect((await invoke([current], true)).repaired).toBe(0);
   } finally { db.close(); }
 });
+
+
+test("identity CLI repairs reviewed duplicates in a pinned rebuild and preserves serving identity", async () => {
+  const { root, db, first, second, input, generationId } = await fixture("Luna", "루나", "Luna 이야기입니다.");
+  try {
+    for (const [id, label, source] of [["canonical", "루나", first], ["duplicate", "Luna", { source_id: input.source_units[0]!.ref, episode_id: input.episode_ref, revision: input.revision }]] as const) {
+      db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user',?)").run(id, label, first.observed_at);
+      db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(id, source.source_id, source.episode_id, source.revision);
+    }
+    const canonicalStore = new AgentConversationStore({ butlerData: root });
+    const canonicalRevision = canonicalStore.readPublicSourceRevision();
+    canonicalStore.close();
+    const prepared = prepareMemoryRebuild({ butlerData: root, sourceInventory: {}, sourceInventoryHash: "a".repeat(64), expectedCanonicalRevision: canonicalRevision,
+      verifySnapshotInventory: () => ({ sourceInventory: {}, sourceInventoryHash: "a".repeat(64) }) });
+    const candidateGraph = join(root, "cognition/memory/generations", prepared.generationId, "graph.sqlite");
+    rmSync(candidateGraph);
+    db.exec(`VACUUM INTO '${candidateGraph.replaceAll("'", "''")}'`);
+    // A rebuild must read its snapshot, even when the serving source is unavailable.
+    renameSync(join(root, "runtime"), join(root, "runtime-live-offline"));
+    const requestPath = join(root, "identity-command.json");
+    const invoke = (command: any, rebuilding = true) => {
+      writeFileSync(requestPath, JSON.stringify(command));
+      const result = spawnSync(process.execPath, ["run", "packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts",
+        "--memory-identity", command.operation, "--input", requestPath, ...(rebuilding ? ["--rebuild"] : [])],
+      { cwd: process.cwd(), env: { ...process.env, BUTLER_DATA: root, BUTLER_HOME: process.cwd() }, encoding: "utf8" });
+      return { code: result.status, value: JSON.parse((result.stdout || result.stderr).trim()) };
+    };
+    const inspect = { schema: "butler.memory-identity-command.v1", expected_generation: prepared.generationId,
+      operation: "inspect", source_ref: second.source_id, node_refs: ["duplicate", "canonical"] };
+    expect(invoke(inspect, false).code).toBe(1);
+    const inspected = invoke(inspect);
+    expect(inspected.code).toBe(0);
+    const command = { ...inspect, operation: "apply", operation_id: "reviewed-duplicate", decision: "same_entity", reason: "reviewed_duplicate",
+      review_note: "Operator compared the user name and the public response in the same conversation.",
+      source: { source_ref: second.source_id, quote: "Luna", occurrence: 0 }, loser_node_ref: "duplicate", canonical_node_ref: "canonical",
+      loser_evidence: { source_ref: input.source_units[0]!.ref, quote: "Luna", occurrence: 0 },
+      canonical_evidence: { source_ref: first.source_id, quote: "루나", occurrence: 0 },
+      expected_loser: inspected.value.states.duplicate, expected_canonical: inspected.value.states.canonical } as any;
+    delete command.source_ref; delete command.node_refs;
+    expect(invoke({ ...command, review_note: "" }).code).toBe(1);
+    const applied = invoke(command);
+    expect(applied.code).toBe(0);
+    expect(applied.value.recorded_outcome).toBe("applied");
+    expect(invoke(command).value.replayed).toBe(true);
+    const candidate = openProjectionDb(candidateGraph);
+    try {
+      expect(candidate.query<{ canonical_node_id: string }, []>("SELECT canonical_node_id FROM entities WHERE id='duplicate'").get()!.canonical_node_id).toBe("canonical");
+      expect(db.query<{ canonical_node_id: string | null }, []>("SELECT canonical_node_id FROM entities WHERE id='duplicate'").get()!.canonical_node_id).toBeNull();
+      expect(JSON.parse(readFileSync(join(root, "cognition/memory/active-generation.json"), "utf8")).generation_id).toBe(generationId);
+      expect(candidate.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_attempts").get()!.n).toBe(0);
+    } finally { candidate.close(); }
+  } finally { db.close(); }
+}, 20_000);
