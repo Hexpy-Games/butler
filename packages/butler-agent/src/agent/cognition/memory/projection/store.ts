@@ -111,6 +111,10 @@ export function ensureV2MemorySchema(db: Database): void {
       input_json TEXT,input_sha256 TEXT,input_migration_note TEXT,parent_window_ref TEXT,replaced_by_json TEXT,
       UNIQUE(job_id,ordinal)
     );
+    CREATE TABLE IF NOT EXISTS memory_hot_cache_outcomes(
+      entry_id TEXT PRIMARY KEY, generation TEXT NOT NULL, admitted INTEGER NOT NULL,
+      reason TEXT, receipt_json TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS memory_projection_attempts(
       attempt_ref TEXT PRIMARY KEY,window_ref TEXT NOT NULL,job_id TEXT NOT NULL,
       attempt_count INTEGER NOT NULL,state TEXT NOT NULL,error_code TEXT,
@@ -1119,4 +1123,19 @@ export function expandSplitSourceLeaves(db: Database, sourceId: string): string[
   const archived = db.query<{ child_source_ids_json: string }, [string]>("SELECT child_source_ids_json FROM memory_source_split_parents WHERE source_id=?").get(sourceId);
   if (!archived) return [sourceId];
   return (JSON.parse(archived.child_source_ids_json) as string[]).flatMap((child) => expandSplitSourceLeaves(db, child));
+}
+
+/** Cache admission outlives the projection job receipt that caused it. */
+export function recordHotCacheOutcomes(db: Database, generation: string, receipt: {
+  source_id: string; admitted?: boolean;
+  excluded_entries?: Array<{ entry_id: string; reason: string }>;
+}): void {
+  const save = db.query(`INSERT INTO memory_hot_cache_outcomes(entry_id,generation,admitted,reason,receipt_json)
+    VALUES(?,?,?,?,?) ON CONFLICT(entry_id) DO UPDATE SET generation=excluded.generation,
+    admitted=excluded.admitted,reason=excluded.reason,receipt_json=excluded.receipt_json`);
+  db.transaction(() => {
+    save.run(receipt.source_id, generation, receipt.admitted === false ? 0 : 1, null, JSON.stringify(receipt));
+    for (const excluded of receipt.excluded_entries ?? [])
+      save.run(excluded.entry_id, generation, 0, excluded.reason, JSON.stringify(receipt));
+  })();
 }

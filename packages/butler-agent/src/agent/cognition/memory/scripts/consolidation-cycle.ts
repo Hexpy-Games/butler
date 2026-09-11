@@ -30,7 +30,7 @@ import { refreshRegisteredProjectCapsules } from "../project-memory.ts";
 import {
   activeMemoryDescriptorPath, initializeEmptyMemoryGenerationAsync, readActiveDescriptor,
   resolveMemoryGeneration, prepareMemoryRebuild, inspectMemoryGeneration,
-  computeMemoryGenerationReadiness, prepareMemoryGenerationValidation, validateMemoryGeneration, activateMemoryGeneration,
+  computeMemoryGenerationReadiness, reconcileMemoryGenerationHotCache, prepareMemoryGenerationValidation, validateMemoryGeneration, activateMemoryGeneration,
   prepareMemoryGenerationActivation, rollbackMemoryGeneration, writeMemoryGenerationManifest, refreshMemoryRebuildSnapshot,
   readMemoryGenerationManifest, openMemoryGenerationCandidateWitness,
   prepareMemoryGenerationQualificationReuse, resumeRetiredMemoryGenerationForBuild,
@@ -512,6 +512,8 @@ export async function runMemoryRebuildCommand(input: {
     const catchup = await runRebuildGenerationCatchup({ butlerData: input.butlerData, generationId,
       canonicalSnapshotId: manifest.canonical_snapshot_id, limit: 256, signal: input.signal,
       deadlineAt: projectionDeadlineAt });
+    await import("../projection/ingestion.ts").then((module) => module.withMemoryWriteGateAsync(context, () =>
+      reconcileMemoryGenerationHotCache(context)));
     const projectionContext = { ...context, deadlineAt: projectionDeadlineAt };
     const snapshotRoot = resolveMemoryGeneration(context).sourceRoot;
     const typed = listTypedMemoryRecordsSnapshot(snapshotRoot);

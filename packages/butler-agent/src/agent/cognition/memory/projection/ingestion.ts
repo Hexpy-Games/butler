@@ -47,6 +47,7 @@ import {
   sourceRows,
   type ProjectionSourceRow,
   vectorRegistrationFailureStage,
+  recordHotCacheOutcomes,
 } from "./store.ts";
 import { embedVectorQuantum, filterCurrentGenerationVectorMatches, findPersistedVectorReceipt, prepareReusedGenerationVectorRows, searchGenerationVectors, writeGenerationVectorRows } from "../recall/vector.ts";
 import { selectSemanticSeeds } from "../recall/candidates.ts";
@@ -2059,7 +2060,7 @@ function advanceHotCacheQuantum(
     });
     const receipts = windows.map((window) => {
       const entryId = projectionHash(["hot-cache-window-summary", row.generation, row.episode_id, window.window_ref, row.revision, window.summary]);
-      return writeSemanticHotCacheEntry({
+      const receipt = writeSemanticHotCacheEntry({
         butlerData: context.butlerData,
         generationRoot: generation.root,
         generationId: row.generation,
@@ -2084,6 +2085,8 @@ function advanceHotCacheQuantum(
         resolvedGeneration: generation,
         sourceButlerData: generation.sourceRoot,
       });
+      recordHotCacheOutcomes(db, generation.generationId, receipt);
+      return receipt;
     });
     if (receipts.length === 0) throw new Error("hot_cache_entry_empty");
     assertJobRevisionCurrent(generation.sourceRoot, db, jobId);

@@ -4176,6 +4176,13 @@ test("two successful semantic windows automatically republish the combined curre
   initial.close();
 
   const completed = await advanceUntilSemanticAndHotCacheComplete(memory, context, registered.job_id);
+  const admissionDb = new Database(join(butlerData, "cognition/memory/generations", descriptor.generation_id, "graph.sqlite"), { readonly: true });
+  try {
+    expect(admissionDb.query<{ n: number }, [string]>(
+      "SELECT COUNT(*) n FROM memory_hot_cache_outcomes WHERE generation=?",
+    ).get(descriptor.generation_id)!.n).toBeGreaterThan(0);
+  } finally { admissionDb.close(); }
+
   expect(completed.semantic_graph.state).toBe("complete");
   expect(completed.hot_cache.state).toBe("complete");
   const cache = readFileSync(
