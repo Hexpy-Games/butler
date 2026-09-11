@@ -18,18 +18,12 @@ import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integra
 import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import {
-  initializeEmptyMemoryGeneration,
-  resolveMemoryGeneration,
-} from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import type { MemoryExecutionContext } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 import { extractOutputSchema } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/schema-validation.ts";
 import { unicodeCaseFold } from "../../packages/butler-agent/src/agent/cognition/memory/projection/unicode.ts";
-import {
-  openProjectionDb,
-  progressFromDb,
-} from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import { openProjectionDb } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 import { publishConversationCompletionObservation } from "../../packages/butler-agent/src/agent/cognition/continuity/completion-observation.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
@@ -4179,15 +4173,76 @@ test("two successful semantic windows automatically republish the combined curre
   await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
 });
 
+test("rebuild snapshot inventory matches normal 8 KiB Unicode source registration", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-rebuild-source-spans-"));
+  roots.push(butlerData);
+  initializeEmptyMemoryGeneration(butlerData);
+  const text = "REBUILD_UNICODE_SPAN 고양이🐈 ".repeat(350).trim();
+  const textBytes = Buffer.byteLength(text, "utf8");
+  const source = seedTurn(
+    butlerData, "rebuild-span-session", "rebuild-span-turn", text, "Noted.", 1,
+    {
+      user: "user_input", assistant: "assistant_public",
+      publicAdmission: { eventId: "rebuild-span-public-source" },
+    },
+  );
+  expect(textBytes).toBeGreaterThan(8 * 1024);
+  expect(textBytes).toBeLessThan(32 * 1024);
+
+  const { runMemoryRebuildCommand } = await import(
+    "../../packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts"
+  );
+  const prepared = await runMemoryRebuildCommand({
+    butlerData, argv: ["--memory-rebuild", "prepare"], signal: new AbortController().signal,
+  });
+  const generationId = String(prepared.generationId);
+  const canonicalSnapshotId = String(prepared.canonicalSnapshotId);
+  const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
+  const registered = await memory.ingestConversationMemory({
+    context: {
+      butlerData,
+      target: { kind: "rebuild", generation_id: generationId, canonical_snapshot_id: canonicalSnapshotId },
+      signal: new AbortController().signal,
+    },
+    source,
+  });
+  expect(registered.source.state).toBe("complete");
+
+  const generationRoot = join(butlerData, "cognition", "memory", "generations", generationId);
+  const graph = new Database(join(generationRoot, "graph.sqlite"), { readonly: true });
+  let episodeId = "";
+  let registeredSourceIds: string[] = [];
+  let registeredUserSourceCount = 0;
+  try {
+    episodeId = graph.query<{ episode_id: string }, [string]>(
+      "SELECT episode_id FROM memory_projection_jobs WHERE job_id=?",
+    ).get(registered.job_id)!.episode_id;
+    registeredSourceIds = graph.query<{ source_id: string }, [string]>(
+      "SELECT source_id FROM memory_chunk_sources WHERE episode_id=? ORDER BY source_id",
+    ).all(episodeId).map((row) => row.source_id);
+    registeredUserSourceCount = graph.query<{ count: number }, [string]>(
+      "SELECT COUNT(*) count FROM memory_chunk_sources WHERE episode_id=? AND role='user'",
+    ).get(episodeId)!.count;
+  } finally {
+    graph.close();
+  }
+  const inventory = JSON.parse(readFileSync(
+    join(generationRoot, "source-snapshot", "memory-source-inventory.json"), "utf8",
+  )) as { entries: Array<{ episodeId: string; sourceUnitCount: number; sourceIds: string[] }> };
+  const entry = inventory.entries.find((item) => item.episodeId === episodeId);
+  expect(registeredUserSourceCount).toBeGreaterThan(1);
+  expect(entry).toBeTruthy();
+  expect(entry!.sourceUnitCount).toBe(registeredSourceIds.length);
+  expect(entry!.sourceIds).toEqual(registeredSourceIds);
+});
+
 test("rebuild target writes its validated cache without exposing it through the active prompt", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-rebuild-cache-"));
   roots.push(butlerData);
   const active = initializeEmptyMemoryGeneration(butlerData);
-  const longUnicodeSource =
-    "REBUILD_CACHE_ONLY_SENTINEL 고양이🐈 ".repeat(280).trim();
   const source = seedTurn(
     butlerData, "rebuild-cache-session", "rebuild-cache-turn",
-    longUnicodeSource, "Noted.", 1,
+    "REBUILD_CACHE_ONLY_SENTINEL", "Noted.", 1,
     {
       user: "user_input", assistant: "assistant_public",
       publicAdmission: { eventId: "rebuild-cache-public-source" },
@@ -4274,13 +4329,12 @@ test("rebuild target writes its validated cache without exposing it through the 
   };
   transformExtractionOutput = (output, input) => {
     const unit = input.source_units.find((item: any) => item.role === "user") ?? input.source_units[0];
-    const summaryText = [...unit.text].slice(0, 480).join("");
     for (const key of Object.keys(output)) delete output[key];
     Object.assign(output, {
       schema: "butler.memory-extract-output.v2", window_ref: input.window_ref,
       disposition: "processed", covered_unit_refs: input.source_units.map((item: any) => item.ref),
       nodes: [], claims: [], relations: [], corrections: [],
-      summary: { text: summaryText, evidence: [{ unit_ref: unit.ref, quote: summaryText, occurrence: 0 }] },
+      summary: { text: unit.text, evidence: [{ unit_ref: unit.ref, quote: unit.text, occurrence: 0 }] },
     });
   };
   const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
@@ -4324,26 +4378,6 @@ test("rebuild target writes its validated cache without exposing it through the 
   readyActiveGraph.close();
   const registered = await memory.ingestConversationMemory({ context, source });
   const secondRegistered = await memory.ingestConversationMemory({ context, source: secondSource });
-  const registeredGraph = new Database(join(stagedDestinationRoot, "graph.sqlite"), { readonly: true });
-  const registeredEpisodeId = registeredGraph.query<{ episode_id: string }, [string]>(
-    "SELECT episode_id FROM memory_projection_jobs WHERE job_id=?",
-  ).get(registered.job_id)!.episode_id;
-  const registeredSourceIds = registeredGraph.query<{ source_id: string }, [string]>(
-    "SELECT source_id FROM memory_chunk_sources WHERE episode_id=? ORDER BY source_id",
-  ).all(registeredEpisodeId).map((row) => row.source_id);
-  const registeredLongSourceIds = registeredGraph.query<{ source_id: string }, [string, string]>(
-    "SELECT source_id FROM memory_chunk_sources WHERE episode_id=? AND conversation_message_id=? ORDER BY source_id",
-  ).all(registeredEpisodeId, sourceMessageId!).map((row) => row.source_id);
-  registeredGraph.close();
-  const snapshotInventory = JSON.parse(readFileSync(
-    join(snapshotRoot, "memory-source-inventory.json"), "utf8",
-  )) as { entries: Array<{ episodeId: string; sourceUnitCount: number; sourceIds: string[] }> };
-  const registeredInventoryEntry = snapshotInventory.entries.find(
-    (entry) => entry.episodeId === registeredEpisodeId,
-  )!;
-  expect(registeredLongSourceIds.length).toBeGreaterThan(1);
-  expect(registeredInventoryEntry.sourceUnitCount).toBe(registeredSourceIds.length);
-  expect(registeredInventoryEntry.sourceIds).toEqual(registeredSourceIds);
   const typedJobs: Array<{ job_id: string }> = [];
   for (const { record } of snapshotRecords) {
     typedJobs.push(await memory.ingestConversationMemory({
@@ -4645,7 +4679,7 @@ test("rebuild target writes its validated cache without exposing it through the 
     stage_inventory: stageInventory,
   });
   await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
-}, 15_000);
+});
 
 test("project recall excludes global evidence and reads project evidence unchanged", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-global-read-"));
@@ -5332,20 +5366,11 @@ async function advanceUntilSemanticAndHotCacheComplete(
   context: unknown,
   jobId: string,
 ): Promise<any> {
-  const readCurrent = () => {
-    const generation = resolveMemoryGeneration(context as MemoryExecutionContext);
-    const db = new Database(generation.graphPath, { readonly: true });
-    try { return progressFromDb(db, jobId); }
-    finally { db.close(); }
-  };
-  let current = readCurrent();
-  if (current.semantic_graph.state === "complete" && current.hot_cache.state === "complete") return current;
   let last: unknown = null;
   for (let attempt = 0; attempt < 64; attempt += 1) {
     const progress = await memory.advanceNextMemoryProjection({ context });
     if (progress) last = progress;
-    current = progress?.job_id === jobId ? progress : readCurrent();
-    if (current.semantic_graph.state === "complete" && current.hot_cache.state === "complete") return current;
+    if (progress?.job_id === jobId && progress.semantic_graph.state === "complete" && progress.hot_cache.state === "complete") return progress;
   }
   const target = (context as any)?.target;
   const diagnostics = target?.kind === "rebuild" ? (() => {
