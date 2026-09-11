@@ -18,12 +18,18 @@ import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integra
 import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import {
+  initializeEmptyMemoryGeneration,
+  resolveMemoryGeneration,
+} from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import type { MemoryExecutionContext } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 import { extractOutputSchema } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/schema-validation.ts";
 import { unicodeCaseFold } from "../../packages/butler-agent/src/agent/cognition/memory/projection/unicode.ts";
-import { openProjectionDb } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import {
+  openProjectionDb,
+  progressFromDb,
+} from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 import { publishConversationCompletionObservation } from "../../packages/butler-agent/src/agent/cognition/continuity/completion-observation.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
@@ -5326,11 +5332,20 @@ async function advanceUntilSemanticAndHotCacheComplete(
   context: unknown,
   jobId: string,
 ): Promise<any> {
+  const readCurrent = () => {
+    const generation = resolveMemoryGeneration(context as MemoryExecutionContext);
+    const db = new Database(generation.graphPath, { readonly: true });
+    try { return progressFromDb(db, jobId); }
+    finally { db.close(); }
+  };
+  let current = readCurrent();
+  if (current.semantic_graph.state === "complete" && current.hot_cache.state === "complete") return current;
   let last: unknown = null;
   for (let attempt = 0; attempt < 64; attempt += 1) {
     const progress = await memory.advanceNextMemoryProjection({ context });
     if (progress) last = progress;
-    if (progress?.job_id === jobId && progress.semantic_graph.state === "complete" && progress.hot_cache.state === "complete") return progress;
+    current = progress?.job_id === jobId ? progress : readCurrent();
+    if (current.semantic_graph.state === "complete" && current.hot_cache.state === "complete") return current;
   }
   const target = (context as any)?.target;
   const diagnostics = target?.kind === "rebuild" ? (() => {
