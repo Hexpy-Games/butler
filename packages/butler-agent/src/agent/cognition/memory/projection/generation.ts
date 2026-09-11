@@ -1011,13 +1011,13 @@ export async function computeMemoryGenerationReadiness(input: {
       embeddingVersion: manifest.embedding?.version ?? null,
       rows: vectorEvidenceRows,
     });
-    const cacheActualInvalid = await actualCacheEvidenceInvalid({
+    const cacheActualInvalid = (await invalidCacheEvidenceJobs({
       generationRoot: join(cognitionMemoryRoot(input.butlerData), "generations", input.generationId),
       generationId: input.generationId,
       rows: cacheEvidenceRows,
       sourceButlerData: snapshotRoot,
       now: inventory.as_of ?? new Date().toISOString(),
-    });
+    })).length;
     const missing = Math.max(0, expected.size - registered);
     const unexpected = registeredRows.filter((row) => !expectedEvidence.has(row.source_id)).length;
     const unaccounted = missing + unexpected + semanticEvidenceInvalid + vectorEvidenceInvalid + cacheEvidenceInvalid +
@@ -1028,6 +1028,8 @@ export async function computeMemoryGenerationReadiness(input: {
       semantic_rows: semanticEvidenceRows.slice().sort((a, b) => a.window_ref.localeCompare(b.window_ref)),
       vector_rows: vectorEvidenceRows.slice().sort((a, b) => a.unit_id.localeCompare(b.unit_id)),
       cache_rows: cacheEvidenceRows.slice().sort((a, b) => a.job_id.localeCompare(b.job_id)),
+      cache_outcome_rows: db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_hot_cache_outcomes'").get()
+        ? db.query("SELECT * FROM memory_hot_cache_outcomes WHERE generation=? ORDER BY entry_id").all(input.generationId) : [],
       graph_rows: graphEvidenceRows,
       canonical_invalid: canonicalEvidenceInvalid,
       vector_actual_invalid: vectorActualInvalid,
@@ -1069,13 +1071,13 @@ async function actualVectorEvidenceInvalid(input: {
   );
 }
 
-async function actualCacheEvidenceInvalid(input: {
+async function invalidCacheEvidenceJobs(input: {
   generationRoot: string;
   generationId: string;
   rows: Array<{ job_id: string; revision: string; receipt_json: string | null }>;
   sourceButlerData: string;
   now: string;
-}): Promise<number> {
+}): Promise<string[]> {
   const generation: MemoryGenerationHandle = {
     generationId: input.generationId,
     root: input.generationRoot,
@@ -1088,7 +1090,20 @@ async function actualCacheEvidenceInvalid(input: {
     module.readGenerationHotCacheCandidateEvidence({ generation, sourceButlerData: input.sourceButlerData, now: input.now }));
   const entries = new Map(evidence.map((entry) => [entry.entry_id, entry]));
   const evicted = new Set<string>();
-  for (const row of input.rows) {
+  const db = new Database(generation.graphPath, { readonly: true });
+  let historicalRows: Array<{ receipt_json: string | null }>;
+  let outcomes: Map<string, number>;
+  try {
+    historicalRows = db.query<{ receipt_json: string | null }, [string]>(`
+      SELECT j.hot_cache_receipt_json receipt_json FROM memory_projection_jobs j
+      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+      WHERE j.generation=? AND j.hot_cache_receipt_json IS NOT NULL`).all(input.generationId);
+    outcomes = db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_hot_cache_outcomes'").get()
+      ? new Map(db.query<{ entry_id: string; admitted: number }, [string]>(
+        "SELECT entry_id,admitted FROM memory_hot_cache_outcomes WHERE generation=?").all(input.generationId)
+        .map((row) => [row.entry_id, row.admitted])) : new Map();
+  } finally { db.close(); }
+  for (const row of historicalRows) {
     try {
       const receipt = JSON.parse(row.receipt_json ?? "null") as {
         entries?: Array<{ excluded_entries?: Array<{ entry_id?: string; reason?: string }> }>;
@@ -1110,12 +1125,61 @@ async function actualCacheEvidenceInvalid(input: {
       if (!Array.isArray(receipt.entries) || receipt.entries.length === 0) return true;
       return receipt.entries.some((item) => {
         if (item.generation_id !== input.generationId || item.source_revision !== row.revision || !item.source_id) return true;
-        if (item.admitted === false || evicted.has(item.source_id)) return false;
+        const admission = outcomes.get(item.source_id);
+        if (admission === 0 || (admission === undefined && (item.admitted === false || evicted.has(item.source_id)))) return false;
         const entry = entries.get(item.source_id);
         return !entry || entry.source_revision !== row.revision || !entry.current;
       });
     } catch { return true; }
-  }).length;
+  }).map((row) => row.job_id);
+}
+
+/** Called under the existing rebuild write gate; only cache work is requeued. */
+export async function reconcileMemoryGenerationHotCache(context: MemoryExecutionContext): Promise<number> {
+  if (context.target.kind !== "rebuild") throw new Error("memory_rebuild_invalid_request");
+  const generation = resolveMemoryGeneration(context);
+  const inventory = readJson(join(generation.sourceRoot, "memory-source-inventory.json")) as { as_of?: string };
+  const db = new Database(generation.graphPath);
+  try {
+    ensureV2MemorySchema(db);
+    // Retain provable legacy evictions before another job replaces its receipt.
+    const present = new Set((await import("../../continuity/hot-cache-writer.ts")).readGenerationHotCacheCandidateEvidence({
+      generation, sourceButlerData: generation.sourceRoot, now: inventory.as_of ?? new Date().toISOString(),
+    }).map((entry) => entry.entry_id));
+    const remember = db.query(`INSERT OR IGNORE INTO memory_hot_cache_outcomes
+      (entry_id,generation,admitted,reason,receipt_json) VALUES(?,?,0,?,?)`);
+    for (const row of db.query<{ receipt_json: string }, [string]>(`
+      SELECT j.hot_cache_receipt_json receipt_json FROM memory_projection_jobs j
+      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+      WHERE j.generation=? AND j.hot_cache_receipt_json IS NOT NULL`).all(generation.generationId)) {
+      try {
+        const receipt = JSON.parse(row.receipt_json) as { entries?: Array<{
+          generation_id?: string; excluded_entries?: Array<{ entry_id: string; reason: string }>;
+        }> };
+        for (const entry of receipt.entries ?? []) {
+          if (entry.generation_id !== generation.generationId) continue;
+          for (const excluded of entry.excluded_entries ?? [])
+            if (!present.has(excluded.entry_id) && ["budget", "oversized", "expired", "invalidated"].includes(excluded.reason))
+              remember.run(excluded.entry_id, generation.generationId, excluded.reason, JSON.stringify(entry));
+        }
+      } catch { /* Malformed evidence remains subject to readiness validation. */ }
+    }
+    const rows = db.query<{ job_id: string; revision: string; receipt_json: string | null }, [string]>(`
+      SELECT j.job_id,j.revision,j.hot_cache_receipt_json receipt_json FROM memory_projection_jobs j
+      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+      WHERE j.generation=? AND json_extract(j.hot_cache_state,'$.state')='complete'`).all(generation.generationId);
+    const invalid = await invalidCacheEvidenceJobs({ generationRoot: generation.root,
+      generationId: generation.generationId, rows, sourceButlerData: generation.sourceRoot,
+      now: inventory.as_of ?? new Date().toISOString() });
+    return db.transaction(() => {
+      let changed = 0;
+      for (const job of invalid) changed += db.query(`UPDATE memory_projection_jobs
+        SET hot_cache_state=?,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0
+        WHERE job_id=? AND json_extract(hot_cache_state,'$.state')='complete'`)
+        .run(JSON.stringify({ state: "pending", blocked_by: "hot_cache_evidence_missing" }), job).changes;
+      return changed;
+    })();
+  } finally { db.close(); }
 }
 
 export type MemoryGenerationCandidateWitness = {
