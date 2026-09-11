@@ -6,6 +6,14 @@ import { join } from "node:path";
 import { claimNextProjectionWindow, configureProjectionModelPolicy, ensureV2MemorySchema, fallbackProjectionWindowOnQuota, readProjectionModelPolicy, recordProviderInvocationIntent } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import { runPromptTextWithUsage } from "../../packages/butler-agent/src/integrations/providers/runtime.ts";
 import { registerHostedModelConfig } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
+import { MAX_MEMORY_EXTRACTION_TIMEOUT_MS, memoryExtractionTimeoutMs } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
+
+test("GLM rebuild gets the extended timeout while serving and Sol retain their deadline", () => {
+  expect(memoryExtractionTimeoutMs("zai/glm-5.3", "rebuild")).toBe(600_000);
+  expect(memoryExtractionTimeoutMs("zai-api/glm-5.3", "rebuild")).toBe(MAX_MEMORY_EXTRACTION_TIMEOUT_MS);
+  expect(memoryExtractionTimeoutMs("zai/glm-5.3", "active")).toBe(180_000);
+  expect(memoryExtractionTimeoutMs("openai/gpt-5.6-sol", "rebuild")).toBe(180_000);
+});
 
 const policy = { primary_model: "zai/glm-5.3", primary_effort: "high", fallback_model: "openai/gpt-5.6-sol", fallback_effort: "medium" };
 function seed(path: string): Database {

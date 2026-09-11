@@ -52,7 +52,7 @@ import {
 } from "./store.ts";
 import { embedVectorQuantum, filterCurrentGenerationVectorMatches, findPersistedVectorReceipt, prepareReusedGenerationVectorRows, searchGenerationVectors, writeGenerationVectorRows } from "../recall/vector.ts";
 import { selectSemanticSeeds } from "../recall/candidates.ts";
-import { MemoryExtractAttemptError, runStructuredMemoryExtractor } from "./extractor.ts";
+import { MemoryExtractAttemptError, memoryExtractionTimeoutMs, runStructuredMemoryExtractor } from "./extractor.ts";
 import {
   acquireConsolidationLock,
   acquireConsolidationLockAsync,
@@ -912,7 +912,7 @@ export async function advanceNextMemoryProjection(input: {
     }
     const timeout = new AbortController();
     const timeoutReason = {};
-    const timer = setTimeout(() => timeout.abort(timeoutReason), 180_000);
+    const timer = setTimeout(() => timeout.abort(timeoutReason), memoryExtractionTimeoutMs(pending.model, input.context.target.kind));
     const signal = AbortSignal.any([input.context.signal, timeout.signal]);
     let output: ExtractOutput;
     let providerEvidence: unknown;
