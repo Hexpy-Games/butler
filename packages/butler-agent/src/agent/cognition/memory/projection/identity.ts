@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import { acquireConsolidationLockAsync, consolidationLockPath, releaseConsolidationLock } from "../scripts/lib/lock.ts";
-import { resolveMemoryGeneration } from "./generation.ts";
+import { readMemoryGenerationManifest, resolveMemoryGeneration } from "./generation.ts";
 import type { ExtractInput, MemoryExecutionContext } from "./contracts.ts";
 import { assertCanonicalProjectionSourcesCurrent, hydrateSource } from "./source.ts";
 import { openProjectionDb, sourceRows, type ProjectionSourceRow } from "./store.ts";
@@ -11,7 +11,7 @@ export type IdentityHistoryRef = { job_ref: string; decision_ref: string };
 export type ExpectedIdentityState = { direct_redirect: string | null; resolved_node_ref: string; history_head: IdentityHistoryRef | null };
 export type IdentityCommand =
   | { schema: "butler.memory-identity-command.v1"; expected_generation: string; operation: "inspect"; source_ref: string; node_refs: [string, string] }
-  | { schema: "butler.memory-identity-command.v1"; expected_generation: string; operation: "apply"; operation_id: string; decision: "same_entity"; reason: "explicit_alias" | "explicit_identity_correction"; source: IdentityQuote; loser_node_ref: string; canonical_node_ref: string; loser_evidence: IdentityQuote; canonical_evidence: IdentityQuote; expected_loser: ExpectedIdentityState; expected_canonical: ExpectedIdentityState }
+  | { schema: "butler.memory-identity-command.v1"; expected_generation: string; operation: "apply"; operation_id: string; decision: "same_entity"; reason: "explicit_alias" | "explicit_identity_correction" | "reviewed_duplicate"; review_note?: string; source: IdentityQuote; loser_node_ref: string; canonical_node_ref: string; loser_evidence: IdentityQuote; canonical_evidence: IdentityQuote; expected_loser: ExpectedIdentityState; expected_canonical: ExpectedIdentityState }
   | { schema: "butler.memory-identity-command.v1"; expected_generation: string; operation: "revoke"; operation_id: string; source: IdentityQuote; decision_job_ref: string; decision_ref: string; expected_loser: ExpectedIdentityState };
 
 type IdentityRecord = {
@@ -20,7 +20,8 @@ type IdentityRecord = {
   operation_id: string;
   payload_digest: string;
   operation: "apply" | "revoke" | "invalidate";
-  reason: "explicit_alias" | "explicit_identity_correction" | "operator_revoke" | "source_revision";
+  reason: "explicit_alias" | "explicit_identity_correction" | "reviewed_duplicate" | "operator_revoke" | "source_revision";
+  review_note?: string;
   decision_origin: "operator_cli" | "source_revision";
   literal_loser: string;
   literal_canonical: string | null;
@@ -92,15 +93,15 @@ export async function executeMemoryIdentityCommand(input: {
   command: IdentityCommand;
 }): Promise<IdentityReceipt> {
   validateCommand(input.command);
-  if (input.context.target.kind !== "active" || input.context.target.expected_generation !== input.command.expected_generation)
-    throw new Error("memory_generation_changed");
-  const generation = resolveMemoryGeneration(input.context);
+  if (input.command.operation === "apply" && input.command.reason === "reviewed_duplicate" && input.context.target.kind !== "rebuild")
+    throw new Error("memory_identity_invalid_command");
+  const generation = requireIdentityGeneration(input.context, input.command.expected_generation);
   const db = openProjectionDb(generation.graphPath);
   try {
     const sourceRef = input.command.operation === "inspect" ? input.command.source_ref : input.command.source.source_ref;
     const source = requireSourceAndJob(db, sourceRef);
     if (input.command.operation === "inspect") {
-      assertCurrentUserSource(input.context.butlerData, db, source.row);
+      assertCurrentUserSource(generation.sourceRoot, db, source.row);
       const decisionProject = sourceProject(db, source.row);
       for (const nodeRef of input.command.node_refs) assertNodeReadableFromProject(requireNode(db, nodeRef), decisionProject);
       return receipt(db, input.command.operation, source.jobId, null, "inspected", "active", false, {
@@ -115,8 +116,8 @@ export async function executeMemoryIdentityCommand(input: {
       return receipt(db, mutation.operation, source.jobId, replay.decision_ref, replay.recorded_outcome,
         currentDisposition(db, source.row, replay), true);
     }
-    assertCurrentUserSource(input.context.butlerData, db, source.row);
-    normalizeEvidence(db, input.context.butlerData, source.row, input.command.source);
+    assertCurrentUserSource(generation.sourceRoot, db, source.row);
+    normalizeEvidence(db, generation.sourceRoot, source.row, input.command.source);
     const lockPath = consolidationLockPath(input.context.butlerData);
     const lease = await acquireConsolidationLockAsync(lockPath, {
       purpose: "projection",
@@ -126,14 +127,23 @@ export async function executeMemoryIdentityCommand(input: {
     if (!lease) throw new Error("memory_write_busy");
     let commit = false;
     try {
-      resolveMemoryGeneration(input.context);
+      requireIdentityGeneration(input.context, input.command.expected_generation);
       const result = db.transaction(() => mutation.operation === "apply"
-        ? applyIdentity(db, input.context.butlerData, source, mutation, digest)
-        : revokeIdentity(db, input.context.butlerData, source, mutation, digest))();
+        ? applyIdentity(db, generation.sourceRoot, source, mutation, digest)
+        : revokeIdentity(db, generation.sourceRoot, source, mutation, digest))();
       commit = true;
       return result;
     } finally { releaseConsolidationLock(lockPath, lease, commit); }
   } finally { db.close(); }
+}
+
+function requireIdentityGeneration(context: MemoryExecutionContext, expected: string) {
+  const generation = resolveMemoryGeneration(context);
+  if (generation.generationId !== expected || (context.target.kind === "rebuild" &&
+    readMemoryGenerationManifest(context.butlerData, expected).state !== "building")) {
+    throw new Error("memory_generation_changed");
+  }
+  return generation;
 }
 
 function applyIdentity(
@@ -150,8 +160,8 @@ function applyIdentity(
   if (loser.identity_scope !== canonical.identity_scope || loser.project_id !== canonical.project_id) throw new Error("memory_identity_scope_mismatch");
   const decisionSource = normalizeEvidence(db, butlerData, source.row, command.source);
   assertSourceScope(db, source.row, loser.identity_scope, loser.project_id);
-  const loserSource = validateNodeEvidence(db, butlerData, command.loser_evidence, loser.id);
-  const canonicalSource = validateNodeEvidence(db, butlerData, command.canonical_evidence, canonical.id);
+  const loserSource = validateNodeEvidence(db, butlerData, command.loser_evidence, loser.id, command.reason === "reviewed_duplicate");
+  const canonicalSource = validateNodeEvidence(db, butlerData, command.canonical_evidence, canonical.id, command.reason === "reviewed_duplicate");
   assertEvidenceReadableFromDecision(decisionSource, loserSource);
   assertEvidenceReadableFromDecision(decisionSource, canonicalSource);
   assertExpected(identityState(db, loser.id), command.expected_loser);
@@ -164,6 +174,7 @@ function applyIdentity(
     schema: "butler.memory-identity-decision.v1", decision_ref: decisionRef, operation_id: command.operation_id,
     payload_digest: digest, operation: "apply", decision_origin: "operator_cli", literal_loser: loser.id,
     reason: command.reason,
+    ...(command.review_note ? { review_note: command.review_note } : {}),
     literal_canonical: canonical.id, resolved_target: target, previous_head: previous.history_head,
     previous_direct_redirect: previous.direct_redirect, previous_owner: previous.resolved_node_ref,
     resulting_direct_redirect: canonical.id, resulting_owner: target,
@@ -387,11 +398,17 @@ function assertCurrentUserSource(butlerData: string, db: Database, row: Projecti
   assertCanonicalProjectionSourcesCurrent(butlerData, db, [row]);
 }
 
-function validateNodeEvidence(db: Database, butlerData: string, quote: IdentityQuote, nodeId: string): NormalizedIdentityEvidence {
+function validateNodeEvidence(db: Database, butlerData: string, quote: IdentityQuote, nodeId: string, allowPublicAssistant = false): NormalizedIdentityEvidence {
   const source = sourceRows(db, [quote.source_ref])[0];
   if (!source || !db.query("SELECT 1 FROM entity_mentions WHERE entity_id=? AND source_id=?").get(nodeId, quote.source_ref))
     throw new Error("memory_identity_evidence_mismatch");
-  assertCurrentUserSource(butlerData, db, source);
+  if (allowPublicAssistant && source.role === "assistant" && source.origin_kind === "assistant_public") {
+    const current = db.query<{ current_revision: string }, [string]>("SELECT current_revision FROM memory_chunks WHERE memory_chunk_id=?").get(source.episode_id);
+    if (current?.current_revision !== source.revision) throw new Error("memory_identity_source_not_current");
+    assertCanonicalProjectionSourcesCurrent(butlerData, db, [source]);
+  } else {
+    assertCurrentUserSource(butlerData, db, source);
+  }
   return normalizeEvidence(db, butlerData, source, quote);
 }
 
@@ -638,7 +655,7 @@ function validateCommand(command: IdentityCommand): void {
   const allowed = command.operation === "inspect"
     ? ["schema", "expected_generation", "operation", "source_ref", "node_refs"]
     : command.operation === "apply"
-      ? ["schema", "expected_generation", "operation", "operation_id", "decision", "reason", "source", "loser_node_ref", "canonical_node_ref", "loser_evidence", "canonical_evidence", "expected_loser", "expected_canonical"]
+      ? ["schema", "expected_generation", "operation", "operation_id", "decision", "reason", "review_note", "source", "loser_node_ref", "canonical_node_ref", "loser_evidence", "canonical_evidence", "expected_loser", "expected_canonical"]
       : ["schema", "expected_generation", "operation", "operation_id", "source", "decision_job_ref", "decision_ref", "expected_loser"];
   if (Object.keys(command).some((key) => !allowed.includes(key))) throw new Error("memory_identity_invalid_command");
   if (typeof command.expected_generation !== "string" || !command.expected_generation) throw new Error("memory_identity_invalid_command");
@@ -650,8 +667,11 @@ function validateCommand(command: IdentityCommand): void {
   validateIdentityQuote(command.source);
   validateExpectedState(command.expected_loser);
   if (command.operation === "apply") {
-    if (command.decision !== "same_entity" || !["explicit_alias", "explicit_identity_correction"].includes(command.reason) ||
+    if (command.decision !== "same_entity" || !["explicit_alias", "explicit_identity_correction", "reviewed_duplicate"].includes(command.reason) ||
       !command.loser_node_ref || !command.canonical_node_ref) throw new Error("memory_identity_invalid_command");
+    if (command.reason === "reviewed_duplicate"
+      ? typeof command.review_note !== "string" || !command.review_note.trim() || Buffer.byteLength(command.review_note) > 2048
+      : command.review_note !== undefined) throw new Error("memory_identity_invalid_command");
     validateIdentityQuote(command.loser_evidence);
     validateIdentityQuote(command.canonical_evidence);
     validateExpectedState(command.expected_canonical);

@@ -281,8 +281,14 @@ if (import.meta.main) {
     try {
       const command = JSON.parse(fs.readFileSync(inputPath, "utf8")) as IdentityCommand;
       if (command.operation !== operation) throw new Error("memory_identity_invalid_command");
+      const dataRoot = butlerData();
+      const rebuilding = process.argv.includes("--rebuild");
+      const manifest = rebuilding ? readMemoryGenerationManifest(dataRoot, command.expected_generation) : null;
+      if (manifest && manifest.state !== "building") throw new Error("memory_generation_changed");
       const result = await executeMemoryIdentityCommand({
-        context: { butlerData: butlerData(), target: { kind: "active", expected_generation: command.expected_generation }, signal: new AbortController().signal },
+        context: { butlerData: dataRoot, target: manifest
+          ? { kind: "rebuild", generation_id: command.expected_generation, canonical_snapshot_id: manifest.canonical_snapshot_id }
+          : { kind: "active", expected_generation: command.expected_generation }, signal: new AbortController().signal },
         command,
       });
       console.log(JSON.stringify(result));
