@@ -49,7 +49,8 @@ import { NativeInboundQueue, type PersistedOriginEvidence } from "../../../../ga
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { reprocessMemoryProjectionWindowAsync, repairMemoryCandidateInputs } from "../projection/ingestion.ts";
-import { ensureV2MemorySchema, openProjectionDb, type ClaimedVectorUnit } from "../projection/store.ts";
+import { configureProjectionModelPolicy, ensureV2MemorySchema, openProjectionDb, type ClaimedVectorUnit } from "../projection/store.ts";
+import { findModelMetadata } from "../../../../integrations/providers/model-catalog.ts";
 import { completedVectorReceiptLacksExpectedIdentity } from "../recall/vector.ts";
 import { executeMemoryIdentityCommand, type IdentityCommand } from "../projection/identity.ts";
 import { readMemoryHealth } from "../quality.ts";
@@ -487,6 +488,33 @@ export async function runMemoryRebuildCommand(input: {
     waitClass: "background" as const,
   };
   if (operation === "inspect") return { operation, result: inspectMemoryGeneration({ butlerData: input.butlerData, generationId }) };
+  if (operation === "set-extractor") {
+    if (manifest.state !== "building" || readActiveDescriptor(input.butlerData).generation_id === generationId)
+      throw new Error("memory_generation_changed");
+    const policy = {
+      primary_model: option(input.argv, "--model"),
+      primary_effort: option(input.argv, "--reasoning-effort"),
+      fallback_model: option(input.argv, "--quota-fallback-model"),
+      fallback_effort: option(input.argv, "--quota-fallback-reasoning-effort"),
+    };
+    for (const [model, effort] of [[policy.primary_model, policy.primary_effort], [policy.fallback_model, policy.fallback_effort]]) {
+      const metadata = model ? findModelMetadata(model) : null;
+      if (!metadata?.runtime_supported || !effort || !metadata.reasoning_efforts?.some((value) => value === effort))
+        throw new Error("memory_rebuild_invalid_model_policy");
+    }
+    if (policy.primary_model === policy.fallback_model) throw new Error("memory_rebuild_invalid_model_policy");
+    const db = openProjectionDb(resolveMemoryGeneration(context).graphPath);
+    try {
+      const configured = await import("../projection/ingestion.ts").then((module) => module.withMemoryWriteGateAsync(context, () => {
+        ensureV2MemorySchema(db);
+        return configureProjectionModelPolicy(db, {
+          primary_model: policy.primary_model!, primary_effort: policy.primary_effort!,
+          fallback_model: policy.fallback_model!, fallback_effort: policy.fallback_effort!,
+        });
+      }));
+      return { operation, generationId, policy: configured };
+    } finally { db.close(); }
+  }
   if (operation === "repair-inputs") {
     const requestPath = option(input.argv, "--input");
     if (!requestPath || fs.statSync(requestPath).size > 32 * 1024)

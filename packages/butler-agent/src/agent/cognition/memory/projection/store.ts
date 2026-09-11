@@ -88,6 +88,13 @@ export function ensureV2MemorySchema(db: Database): void {
       edge_id TEXT NOT NULL REFERENCES edges(edge_id), chunk_source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
       basis TEXT NOT NULL, extraction_version TEXT NOT NULL, PRIMARY KEY(edge_id,chunk_source_id)
     );
+    CREATE TABLE IF NOT EXISTS memory_projection_model_policy(
+      id INTEGER PRIMARY KEY CHECK(id=1),
+      primary_model TEXT NOT NULL, primary_effort TEXT NOT NULL,
+      fallback_model TEXT NOT NULL, fallback_effort TEXT NOT NULL,
+      active_slot TEXT NOT NULL CHECK(active_slot IN ('primary','fallback')),
+      updated_at TEXT NOT NULL, last_transition_json TEXT
+    );
     CREATE TABLE IF NOT EXISTS memory_projection_jobs(
       job_id TEXT PRIMARY KEY, episode_id TEXT NOT NULL, revision TEXT NOT NULL,
       extraction_version TEXT NOT NULL, generation TEXT NOT NULL,
@@ -692,6 +699,77 @@ function providerAttemptCount(db: Database, windowRef: string, recoveryRevision:
   ).get(windowRef, recoveryRevision)?.count ?? 0);
 }
 
+export interface ProjectionModelPolicy {
+  primary_model: string;
+  primary_effort: string;
+  fallback_model: string;
+  fallback_effort: string;
+  active_slot: "primary" | "fallback";
+  updated_at: string;
+  last_transition_json: string | null;
+}
+
+export function readProjectionModelPolicy(db: Database): ProjectionModelPolicy | null {
+  return db.query<ProjectionModelPolicy, []>("SELECT primary_model,primary_effort,fallback_model,fallback_effort,active_slot,updated_at,last_transition_json FROM memory_projection_model_policy WHERE id=1").get();
+}
+
+export function configureProjectionModelPolicy(
+  db: Database,
+  policy: Pick<ProjectionModelPolicy, "primary_model" | "primary_effort" | "fallback_model" | "fallback_effort">,
+): ProjectionModelPolicy {
+  return db.transaction(() => {
+    if (db.query("SELECT 1 FROM memory_projection_windows WHERE state='running' LIMIT 1").get())
+      throw new Error("memory_projection_model_change_busy");
+    db.query(`INSERT INTO memory_projection_model_policy
+      (id,primary_model,primary_effort,fallback_model,fallback_effort,active_slot,updated_at,last_transition_json)
+      VALUES(1,?,?,?,?,'primary',?,NULL)
+      ON CONFLICT(id) DO UPDATE SET primary_model=excluded.primary_model,primary_effort=excluded.primary_effort,
+        fallback_model=excluded.fallback_model,fallback_effort=excluded.fallback_effort,
+        active_slot='primary',updated_at=excluded.updated_at,last_transition_json=NULL`)
+      .run(policy.primary_model, policy.primary_effort, policy.fallback_model, policy.fallback_effort, new Date().toISOString());
+    return readProjectionModelPolicy(db)!;
+  })();
+}
+
+function projectionModelSelection(db: Database, model: string, reasoningEffort: string): { model: string; reasoningEffort: string } {
+  const policy = readProjectionModelPolicy(db);
+  if (!policy) return { model, reasoningEffort };
+  return policy.active_slot === "primary"
+    ? { model: policy.primary_model, reasoningEffort: policy.primary_effort }
+    : { model: policy.fallback_model, reasoningEffort: policy.fallback_effort };
+}
+
+// Called under the generation write gate. Settle the failed invocation and
+// select the authorized fallback in one transaction, without rewriting jobs.
+export function fallbackProjectionWindowOnQuota(db: Database, input: {
+  jobId: string; windowRef: string; ownerNonce: string; model: string;
+  providerCode?: string; statusCode?: number; failureEvidence?: unknown;
+}): boolean {
+  if (input.statusCode !== 429 && input.providerCode !== "provider_quota_exhausted") return false;
+  return db.transaction(() => {
+    const policy = readProjectionModelPolicy(db);
+    if (!policy || input.model !== policy.primary_model || policy.primary_model === policy.fallback_model) return false;
+    const owned = db.query("SELECT 1 FROM memory_projection_windows WHERE window_ref=? AND job_id=? AND state='running' AND owner_nonce=? AND normalized_plan_json IS NULL")
+      .get(input.windowRef, input.jobId, input.ownerNonce);
+    if (!owned) throw new Error("memory_projection_window_changed");
+    const code = input.statusCode === 429 ? "provider_rate_limited" : "provider_quota_exhausted";
+    markWindowFailure(db, input.jobId, input.windowRef, code, {
+      ownerNonce: input.ownerNonce, attemptKind: "provider", providerInvoked: true,
+      clearResult: true, failureEvidence: input.failureEvidence,
+    });
+    const recovery = randomUUID();
+    if (policy.active_slot === "primary") db.query(`UPDATE memory_projection_model_policy
+      SET active_slot='fallback',updated_at=?,last_transition_json=? WHERE id=1 AND active_slot='primary'`)
+      .run(new Date().toISOString(), JSON.stringify({ reason: code, status: input.statusCode ?? null,
+        window_ref: input.windowRef, invocation_ref: input.ownerNonce, recovery_revision: recovery }));
+    db.query(`UPDATE memory_projection_windows SET state='pending',error_code=NULL,next_attempt_at=NULL,
+      recovery_revision=?,recovery_base_attempt_count=attempt_count WHERE window_ref=? AND state='failed'`)
+      .run(recovery, input.windowRef);
+    refreshSemanticState(db, input.jobId);
+    return true;
+  })();
+}
+
 export function claimNextProjectionWindow(
   db: Database,
   input: { jobId?: string; now?: string; ownerPid?: number; ownerNonce?: string; isOwnerActive?: (jobId: string, windowRef: string, ownerNonce: string) => boolean } = {},
@@ -744,8 +822,7 @@ export function claimNextProjectionWindow(
       job_id: row.job_id,
       window_ref: row.window_ref,
       sourceRefs: JSON.parse(row.source_refs_json),
-      model: row.extraction_model,
-      reasoningEffort: row.reasoning_effort,
+      ...projectionModelSelection(db, row.extraction_model, row.reasoning_effort),
       previousState: row.state,
       output: row.output_json
         ? (JSON.parse(row.output_json) as ExtractOutput)

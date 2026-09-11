@@ -168,6 +168,20 @@ export function hostedChatResponseFormat(
   };
 }
 
+export function hostedChatPromptContract(
+  providerId: string,
+  options: Pick<PromptOptions, "instructions" | "responseFormat">,
+): { instructions: string | undefined; responseFormat: Record<string, unknown> | undefined } {
+  const schema = options.responseFormat;
+  if ((providerId === "zai" || providerId === "zai-api") && schema?.type === "json_schema") {
+    return {
+      instructions: `${options.instructions?.trim() ?? ""}\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n${JSON.stringify(schema.schema)}`,
+      responseFormat: { type: "json_object" },
+    };
+  }
+  return { instructions: options.instructions, responseFormat: hostedChatResponseFormat(schema) };
+}
+
 
 
 export function hostedChatReasoningParams(
