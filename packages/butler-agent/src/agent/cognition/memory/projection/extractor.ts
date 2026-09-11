@@ -2,8 +2,16 @@ import { createHash } from "node:crypto";
 import { runPromptTextWithUsage } from "../../../../integrations/providers/runtime.ts";
 import type { ProviderStreamProjectionHandler } from "../../../../integrations/providers/runtime-contracts.ts";
 import { validateJsonObjectSchema } from "../../../tools/schema-validation.ts";
-import type { ExtractInput, ExtractOutput, QuoteRef } from "./contracts.ts";
+import type { ExtractInput, ExtractOutput, MemoryExecutionContext, QuoteRef } from "./contracts.ts";
 import { graphemeCount } from "./unicode.ts";
+
+export const MAX_MEMORY_EXTRACTION_TIMEOUT_MS = 600_000;
+const DEFAULT_MEMORY_EXTRACTION_TIMEOUT_MS = 180_000;
+
+export function memoryExtractionTimeoutMs(model: string, targetKind: MemoryExecutionContext["target"]["kind"]): number {
+  return targetKind === "rebuild" && (model === "zai/glm-5.3" || model === "zai-api/glm-5.3")
+    ? MAX_MEMORY_EXTRACTION_TIMEOUT_MS : DEFAULT_MEMORY_EXTRACTION_TIMEOUT_MS;
+}
 
 const IDENTITY_REUSE_GUIDANCE = "For resolution.kind=reuse, locate the exact candidate whose ref equals node_ref. resolution.evidence must include a current-source quote and a historical quote whose unit_ref occurs in that selected candidate.evidence. A quote from another candidate or context is not a substitute even if it names the same entity. candidate.claim subject/object refs describe stored structure and do not authorize reuse of nodes absent from candidates.";
 const LOCAL_REF_GUIDANCE = "subject_ref, object_ref, from_ref and to_ref must name local_ref handles declared in this same output's nodes or claims, never stored candidate IDs. To reuse a candidate endpoint, declare its node with resolution.kind=reuse and resolution.node_ref equal to that provided candidate.ref, then use the declared local_ref. claim_ref and replacement_claim_ref must name a local_ref in this output's claims. candidate.ref is used only by resolution.node_ref and correction.previous_claim_ref, not as an implicit output declaration.";

@@ -48,6 +48,7 @@ import { readHistoricalAppOriginEvidence } from "../../../conversation/historica
 import { NativeInboundQueue, type PersistedOriginEvidence } from "../../../../gateways/core/inbound-queue.ts";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
+import { MAX_MEMORY_EXTRACTION_TIMEOUT_MS } from "../projection/extractor.ts";
 import { reprocessMemoryProjectionWindowAsync, repairMemoryCandidateInputs } from "../projection/ingestion.ts";
 import { configureProjectionModelPolicy, ensureV2MemorySchema, openProjectionDb, type ClaimedVectorUnit } from "../projection/store.ts";
 import { findModelMetadata } from "../../../../integrations/providers/model-catalog.ts";
@@ -467,15 +468,17 @@ export async function runMemoryRebuildCommand(input: {
   }
   if (!generationId) throw new Error("memory_rebuild_invalid_request");
   let manifest = inspectMemoryGeneration({ butlerData: input.butlerData, generationId }).manifest;
-  const buildWallMs = 10 * 60_000;
-  // The extractor owner has a 180 second local timeout. Keep another 30 seconds
+  const quantumAdmissionWindowMs = 330_000;
+  // Reserve the longest extractor timeout. Keep another 30 seconds
   // for settlement and 60 seconds for finalization in this serial pass. Those are
   // operational margins, not hard I/O bounds: each background lease acquisition
   // can wait up to 30 seconds, and final source reads consume the supplied command
   // deadline rather than owning an independent 60 second timer.
-  const semanticQuantumMaxMs = 180_000;
+  const semanticQuantumMaxMs = MAX_MEMORY_EXTRACTION_TIMEOUT_MS;
   const quantumSettlementGraceMs = 30_000;
   const finalizationReserveMs = 60_000;
+  const buildWallMs = quantumAdmissionWindowMs + semanticQuantumMaxMs +
+    quantumSettlementGraceMs + finalizationReserveMs;
   const deadlineAt = Date.now() + buildWallMs;
   const projectionDeadlineAt = deadlineAt - finalizationReserveMs;
   const quantumAdmissionDeadlineAt = projectionDeadlineAt -
