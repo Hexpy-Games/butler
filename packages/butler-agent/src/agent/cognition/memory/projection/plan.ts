@@ -9,6 +9,7 @@ import { openProjectionDb, refreshSemanticState, sourceRows } from "./store.ts";
 import { graphemeCount, unicodeCaseFold, unicodeNfc } from "./unicode.ts";
 import { assertCanonicalProjectionSourcesCurrent, projectionHash } from "./source.ts";
 import { resolveIdentityForProjectionInput } from "./identity.ts";
+import { createContextEvidenceResolver } from "./context-evidence.ts";
 
 export type NormalizedPlan = {
   refs: Record<string, string>;
@@ -192,6 +193,7 @@ export function applyPlan(
   output: ExtractOutput,
   plan: NormalizedPlan,
   candidateResolutions: Record<string, string>,
+  sourceRoot: string,
 ): void {
   db.transaction(() => {
     if (output.disposition === "unsupported") {
@@ -202,6 +204,9 @@ export function applyPlan(
       return;
     }
     const now = new Date().toISOString();
+    const resolveContextEvidence = createContextEvidenceResolver(db, sourceRoot, input);
+    const resolvedEvidence = Object.fromEntries(Object.entries(plan.evidence).map(([ref, evidence]) =>
+      [ref, evidence.flatMap(resolveContextEvidence)]));
     const refs = { ...plan.refs };
     for (const node of output.nodes) {
       if (node.resolution.kind !== "reuse") continue;
@@ -212,7 +217,8 @@ export function applyPlan(
     const sourceByRef = new Map(
       sourceRows(
         db,
-        input.source_units.map((unit) => unit.ref),
+        [...new Set([...input.source_units.map((unit) => unit.ref),
+          ...Object.values(resolvedEvidence).flatMap((evidence) => evidence.map((item) => item.sourceId))])],
       ).map((row) => [row.source_id, row]),
     );
     const upsertNode = (
@@ -239,7 +245,7 @@ export function applyPlan(
           now,
         );
       }
-      for (const ev of plan.evidence[localRef] ?? []) {
+      for (const ev of resolvedEvidence[localRef] ?? []) {
         const row = sourceByRef.get(ev.sourceId);
         if (!row) continue;
         db.query(
@@ -254,7 +260,7 @@ export function applyPlan(
         ...node.aliases,
       ];
       for (const alias of aliases)
-        for (const ev of validateQuotes(input, alias.evidence, true)) {
+        for (const ev of validateQuotes(input, alias.evidence, true).flatMap(resolveContextEvidence)) {
           db.query(
             "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
           ).run(
@@ -298,7 +304,7 @@ export function applyPlan(
           refs[claim.local_ref],
         );
       }
-      for (const ev of plan.evidence[claim.local_ref] ?? []) {
+      for (const ev of resolvedEvidence[claim.local_ref] ?? []) {
         db.query(
           "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
         ).run(
@@ -407,7 +413,7 @@ export function applyPlan(
       db.query(
         "INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers) VALUES(?,?,?,?,?,'{}')",
       ).run(edgeId, fromId, toId, rel, claimId);
-      for (const ev of validateQuotes(input, evidence, true))
+      for (const ev of validateQuotes(input, evidence, true).flatMap(resolveContextEvidence))
         db.query(
           "INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)",
         ).run(edgeId, ev.sourceId, basis, MEMORY_EXTRACTION_VERSION);
