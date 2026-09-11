@@ -591,9 +591,10 @@ export async function runMemoryRebuildCommand(input: {
       retried = await import("../projection/ingestion.ts").then((module) => module.withMemoryWriteGateAsync(context, () => {
         ensureV2MemorySchema(db);
         const recovery = createHash("sha256").update(JSON.stringify(["memory-retry-failed", generationId, new Date().toISOString()])).digest("hex");
-        const semantic = db.query(`UPDATE memory_projection_windows SET state='pending',error_code=NULL,next_attempt_at=NULL,
+        const semantic = db.query(`UPDATE memory_projection_windows SET
+          state=CASE WHEN normalized_plan_json IS NOT NULL THEN 'planned' ELSE 'pending' END,error_code=NULL,next_attempt_at=NULL,
           owner_pid=NULL,owner_nonce=NULL,started_at=NULL,recovery_revision=?,recovery_base_attempt_count=attempt_count
-          WHERE state='failed' AND normalized_plan_json IS NULL`).run(recovery).changes;
+          WHERE state='failed'`).run(recovery).changes;
         const vectors = db.query(`UPDATE memory_vector_units SET state='pending',error_code=NULL,next_attempt_at=NULL,
           owner_pid=NULL,owner_nonce=NULL,started_at=NULL
           WHERE state='failed' AND receipt_json IS NULL AND outcome_known=1`).run().changes;
