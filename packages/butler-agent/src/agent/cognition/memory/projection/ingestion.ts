@@ -80,6 +80,8 @@ import { writeSemanticHotCacheEntry } from "../../continuity/hot-cache-writer.ts
 import {
   enforceExtractInputBudget,
   packExtractionCandidates,
+  jsonBytes,
+  MEMORY_EXTRACT_INPUT_BYTES,
   MEMORY_SOURCE_WINDOW_BYTES,
   nearestGraphemeByteMidpoint,
 } from "./windows.ts";
@@ -108,6 +110,98 @@ type WindowReprocessRequest = {
   expected_model: string;
   expected_reasoning_effort: string;
 };
+
+export async function repairMemoryCandidateInputs(input: {
+  context: MemoryExecutionContext;
+  request: unknown;
+  dryRun?: boolean;
+}) {
+  const request = input.request as {
+    schema?: unknown;
+    windows?: Array<{ window_ref: string; expected_input_sha256: string; expected_attempt_count: number }>;
+  } | null;
+  if (!request || request.schema !== "butler.memory-candidate-input-repair.v1" ||
+    !Array.isArray(request.windows) || !request.windows.length || request.windows.length > 32 ||
+    Object.keys(request).some((key) => key !== "schema" && key !== "windows") ||
+    request.windows.some((row) => !row || typeof row !== "object" ||
+      Object.keys(row).some((key) => !["window_ref", "expected_input_sha256", "expected_attempt_count"].includes(key)) ||
+      typeof row.window_ref !== "string" || !/^[a-f0-9]{64}$/u.test(row.window_ref) ||
+      typeof row.expected_input_sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(row.expected_input_sha256) ||
+      !Number.isSafeInteger(row.expected_attempt_count) || row.expected_attempt_count < 0) ||
+    new Set(request.windows.map((row) => row.window_ref)).size !== request.windows.length) {
+    throw new Error("memory_input_repair_invalid_request");
+  }
+  const generation = resolveMemoryGeneration(input.context);
+  const db = openProjectionDb(generation.graphPath);
+  try {
+    return await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+      const receipts = [];
+      for (const expected of request.windows!) {
+        const row = db.query<{
+          job_id: string; state: string; input_json: string | null; input_sha256: string | null;
+          output_json: string | null; normalized_plan_json: string | null;
+          owner_nonce: string | null; owner_pid: number | null; attempt_count: number; recovery_revision: string | null;
+        }, [string]>("SELECT * FROM memory_projection_windows WHERE window_ref=?").get(expected.window_ref);
+        const eligibleState = row && (row.state === "pending" || (input.dryRun && row.state === "complete"));
+        if (!row || !eligibleState || row.owner_nonce !== null || row.owner_pid !== null ||
+          (!input.dryRun && (row.output_json !== null || row.normalized_plan_json !== null)) || !row.input_json ||
+          row.input_sha256 !== expected.expected_input_sha256 || row.attempt_count !== expected.expected_attempt_count ||
+          projectionHash(["extract-input", row.input_json]) !== row.input_sha256) {
+          throw new Error("memory_input_repair_precondition_changed");
+        }
+        const pinned = JSON.parse(row.input_json) as ExtractInput;
+        if (pinned.schema !== "butler.memory-extract-input.v2" || pinned.window_ref !== expected.window_ref)
+          throw new Error("memory_input_repair_precondition_changed");
+        if (!input.dryRun && db.query(`SELECT 1 FROM memory_projection_attempts a
+          WHERE a.window_ref=? AND a.provider_invoked=1 AND a.outcome_known=0
+          AND NOT EXISTS(SELECT 1 FROM memory_projection_attempts settled
+            WHERE settled.window_ref=a.window_ref AND settled.invocation_ref=a.invocation_ref AND settled.outcome_known=1)
+          LIMIT 1`).get(expected.window_ref)) {
+          throw new Error("memory_input_repair_precondition_changed");
+        }
+        assertProjectionSourceCurrent(generation.sourceRoot, db, pinned);
+        const repaired: ExtractInput = { ...pinned, candidates: loadSourceWindowCandidates({
+          db, butlerData: generation.sourceRoot, projectId: pinned.bound_project_id,
+          ids: pinned.candidates.map((candidate) => candidate.ref),
+        }) };
+        // Historical source/context are immutable. Reduce only the dependency-ordered candidate suffix.
+        while (jsonBytes(repaired) > MEMORY_EXTRACT_INPUT_BYTES && repaired.candidates.length)
+          repaired.candidates.pop();
+        if (jsonBytes(repaired) > MEMORY_EXTRACT_INPUT_BYTES)
+          throw new Error("memory_extract_input_exceeds_budget");
+        if (input.dryRun) {
+          receipts.push({ window_ref: expected.window_ref, state: "preview",
+            prior_input_sha256: row.input_sha256,
+            repaired_input_sha256: projectionHash(["extract-input", JSON.stringify(repaired)]),
+            repaired_candidates: repaired.candidates });
+          continue;
+        }
+        if (JSON.stringify(repaired.candidates) === JSON.stringify(pinned.candidates)) {
+          receipts.push({ window_ref: expected.window_ref, state: "unchanged", input_sha256: row.input_sha256 });
+          continue;
+        }
+        const serialized = JSON.stringify(repaired);
+        const digest = projectionHash(["extract-input", serialized]);
+        const receiptRef = projectionHash(["candidate-input-repair", expected.window_ref, row.input_sha256, digest]);
+        const now = new Date().toISOString();
+        db.query(`INSERT INTO memory_projection_attempts
+          (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,
+           attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          receiptRef, expected.window_ref, row.job_id, row.attempt_count, "input_repaired", null,
+          row.input_sha256, now, "recovery", 0, 1, row.recovery_revision,
+          JSON.stringify({ schema: "butler.memory-candidate-input-repair-receipt.v1",
+            prior_input_json: row.input_json, prior_input_sha256: row.input_sha256,
+            repaired_input_sha256: digest, repaired_at: now }),
+        );
+        db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?")
+          .run(serialized, digest, expected.window_ref);
+        receipts.push({ window_ref: expected.window_ref, state: "repaired", input_sha256: digest, receipt_ref: receiptRef });
+      }
+      return { repaired: receipts.filter((row) => row.state === "repaired").length, receipts };
+    })());
+  } finally { db.close(); }
+}
 
 export function reprocessMemoryProjectionWindow(input: {
   context: MemoryExecutionContext;
@@ -1297,19 +1391,28 @@ async function buildSourceWindowCandidates(input: {
   `).all(input.chunk.memory_chunk_id, input.chunk.current_revision).map((row) => row.entity_id);
   const semantic = selectSemanticSeeds(input.db, recallInput, vectorNodes, Date.now() + 5_000, 32, { projectId: input.chunk.project_id }).allSeeds;
   const ids = [...new Set([...bound, ...semantic])].slice(0, 32);
-  return packExtractionCandidates(ids, (id) => {
+  return loadSourceWindowCandidates({ db: input.db, butlerData: input.butlerData, projectId: input.chunk.project_id, ids });
+}
+
+function loadSourceWindowCandidates(input: {
+  db: ReturnType<typeof openProjectionDb>;
+  butlerData: string;
+  projectId: string | null;
+  ids: string[];
+}): ExtractInput["candidates"] {
+  return packExtractionCandidates(input.ids, (id) => {
     const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null; properties: string }, [string]>("SELECT id,type,identity_scope,project_id,properties FROM entities WHERE id=?").get(id);
     if (!node) return null;
     const identityNode = node.type === "entity" || node.type === "project";
-    if (!identityNode && (input.chunk.project_id === null
+    if (!identityNode && (input.projectId === null
       ? node.identity_scope !== "user" || node.project_id !== null
-      : node.identity_scope !== "project" || node.project_id !== input.chunk.project_id)) return null;
+      : node.identity_scope !== "project" || node.project_id !== input.projectId)) return null;
     const aliases = input.db.query<{ surface_original: string; source_id: string }, any>(`
       SELECT DISTINCT a.surface_original,a.source_id FROM entity_aliases a
       JOIN memory_chunk_sources s ON s.source_id=a.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
       WHERE a.entity_id=? AND s.origin_kind IN ('user_input','assistant_public') AND (c.project_id IS NULL OR c.project_id IS ?)
       ORDER BY a.surface_original,a.source_id LIMIT 3
-    `).all(id, input.chunk.project_id);
+    `).all(id, input.projectId);
     if (!aliases.length) return null;
     const evidence = aliases.slice(0, 2).map((alias) => {
       const source = sourceRows(input.db, [alias.source_id])[0]!;

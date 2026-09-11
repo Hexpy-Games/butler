@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import { ingestConversationMemory } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
 import { createContextEvidenceResolver } from "../../packages/butler-agent/src/agent/cognition/memory/projection/context-evidence.ts";
+import { projectionHash } from "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts";
 import { runMemoryRebuildCommand } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts";
 import {
   openProjectionDb,
@@ -337,4 +338,54 @@ test("splits one context quote at canonical UTF-8 source slice boundaries", asyn
   } finally {
     db.close();
   }
+});
+
+
+test("public candidate input repair preserves history, rolls back stale batches and protects completed windows", async () => {
+  const { root, db, input, generationId, second } = await fixture();
+  try {
+    const window = db.query<{ window_ref: string }, []>("SELECT window_ref FROM memory_projection_windows LIMIT 1").get()!;
+    for (const [id, type, label] of [["subject", "entity", "日本語"], ["claim", "preference", "العربية"]]) {
+      db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,?,?,'user',?)").run(id!, type!, label!, second.observed_at);
+      db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(id!, label!, label!, label!, second.source_id);
+    }
+    db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id) VALUES('edge','claim','subject','has_subject','claim')").run();
+    const original = JSON.stringify({ ...input, window_ref: window.window_ref, candidates: [{
+      ref: "claim", type: "preference", label: "العربية", aliases: ["العربية"], scope: "user", project_id: null,
+      claim: { subject_ref: "subject", object_ref: null, relation: null, polarity: null, condition: null },
+      evidence: [{ ref: second.source_id, text: "العربية 日本語 끝", basis: "user_statement", observed_at: second.observed_at }],
+    }] });
+    const originalHash = projectionHash(["extract-input", original]);
+    db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=?").run(original, originalHash, window.window_ref);
+    const selected = { window_ref: window.window_ref, expected_input_sha256: originalHash, expected_attempt_count: 0 };
+    const requestPath = join(root, "input-repair.json");
+    const invoke = (windows: typeof selected[], dryRun = false) => {
+      writeFileSync(requestPath, JSON.stringify({ schema: "butler.memory-candidate-input-repair.v1", windows }));
+      return runMemoryRebuildCommand({ butlerData: root,
+        argv: ["--memory-rebuild", "repair-inputs", "--generation", generationId, "--input", requestPath, ...(dryRun ? ["--dry-run"] : [])], signal: new AbortController().signal });
+    };
+    const row = () => db.query<{ input_json: string; input_sha256: string; state: string; attempt_count: number }, [string]>("SELECT input_json,input_sha256,state,attempt_count FROM memory_projection_windows WHERE window_ref=?").get(window.window_ref)!;
+    await expect(invoke([selected, { ...selected, window_ref: "f".repeat(64) }])).rejects.toThrow("memory_input_repair_precondition_changed");
+    expect(row().input_json).toBe(original);
+    expect(db.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_attempts").get()!.n).toBe(0);
+    const preview = await invoke([selected], true);
+    expect((preview.receipts as any[])[0].repaired_candidates.map((value: any) => value.ref)).toEqual(["subject", "claim"]);
+    expect(row().input_json).toBe(original);
+    expect((await invoke([selected])).repaired).toBe(1);
+    const repaired = JSON.parse(row().input_json) as ExtractInput;
+    expect(repaired.candidates.map((value) => value.ref)).toEqual(["subject", "claim"]);
+    expect(repaired.source_units).toEqual(input.source_units);
+    expect(repaired.context_units).toEqual(input.context_units);
+    expect(row().state).toBe("pending");
+    expect(row().attempt_count).toBe(0);
+    const archived = db.query<{ recovery_request_json: string; provider_invoked: number }, []>("SELECT recovery_request_json,provider_invoked FROM memory_projection_attempts").get()!;
+    expect(JSON.parse(archived.recovery_request_json).prior_input_json).toBe(original);
+    expect(archived.provider_invoked).toBe(0);
+    await expect(invoke([selected])).rejects.toThrow("memory_input_repair_precondition_changed");
+    const current = { ...selected, expected_input_sha256: row().input_sha256 };
+    expect((await invoke([current])).repaired).toBe(0);
+    db.query("UPDATE memory_projection_windows SET state='complete' WHERE window_ref=?").run(window.window_ref);
+    await expect(invoke([current])).rejects.toThrow("memory_input_repair_precondition_changed");
+    expect((await invoke([current], true)).repaired).toBe(0);
+  } finally { db.close(); }
 });

@@ -48,7 +48,7 @@ import { readHistoricalAppOriginEvidence } from "../../../conversation/historica
 import { NativeInboundQueue, type PersistedOriginEvidence } from "../../../../gateways/core/inbound-queue.ts";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { reprocessMemoryProjectionWindowAsync } from "../projection/ingestion.ts";
+import { reprocessMemoryProjectionWindowAsync, repairMemoryCandidateInputs } from "../projection/ingestion.ts";
 import { ensureV2MemorySchema, openProjectionDb, type ClaimedVectorUnit } from "../projection/store.ts";
 import { completedVectorReceiptLacksExpectedIdentity } from "../recall/vector.ts";
 import { executeMemoryIdentityCommand, type IdentityCommand } from "../projection/identity.ts";
@@ -481,6 +481,18 @@ export async function runMemoryRebuildCommand(input: {
     waitClass: "background" as const,
   };
   if (operation === "inspect") return { operation, result: inspectMemoryGeneration({ butlerData: input.butlerData, generationId }) };
+  if (operation === "repair-inputs") {
+    const requestPath = option(input.argv, "--input");
+    if (!requestPath || fs.statSync(requestPath).size > 32 * 1024)
+      throw new Error("memory_input_repair_invalid_request");
+    if (readActiveDescriptor(input.butlerData).generation_id === generationId) {
+      context = { ...context, target: { kind: "active", expected_generation: generationId } };
+    } else if (manifest.state !== "building") {
+      throw new Error("memory_generation_changed");
+    }
+    const result = await repairMemoryCandidateInputs({ context, request: JSON.parse(fs.readFileSync(requestPath, "utf8")), dryRun: input.argv.includes("--dry-run") });
+    return { operation, generationId, ...result };
+  }
   if (operation === "build") {
     const currentInventory = readLiveMemorySourceInventory(input.butlerData, { signal: input.signal, deadlineAt });
     if (currentInventory.sourceInventoryHash !== manifest.source_inventory_hash) {
