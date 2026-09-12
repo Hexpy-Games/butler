@@ -1,3 +1,4 @@
+import { ensureSourceIndexSchema } from "./source-index.ts";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { foldedGraphemeNgrams } from "./unicode.ts";
@@ -163,6 +164,7 @@ export function ensureV2MemorySchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_jobs_state ON memory_projection_jobs(last_served_at,created_at,job_id);
     CREATE INDEX IF NOT EXISTS idx_vector_units_state ON memory_vector_units(state,job_id,record_kind,unit_id);
   `);
+  ensureSourceIndexSchema(db);
   ensureColumn(db, "memory_projection_jobs", "hot_cache_receipt_json", "TEXT");
   ensureColumn(db, "memory_projection_jobs", "identity_decisions_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "entities", "identity_history_job_id", "TEXT REFERENCES memory_projection_jobs(job_id)");

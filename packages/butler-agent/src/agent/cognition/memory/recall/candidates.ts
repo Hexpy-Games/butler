@@ -1,3 +1,4 @@
+import { sourceQueryTerms } from "../projection/source-index.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { conversationStorePath } from "../../../conversation/store.ts";
@@ -416,3 +417,30 @@ function uniqueOriginalByNfc(values: string[]): string[] {
 }
 function uniqueValue<T>(value: T, index: number, values: T[]): boolean { return values.indexOf(value) === index; }
 export function compareUtf8(a: string, b: string): number { return Buffer.compare(Buffer.from(a), Buffer.from(b)); }
+
+/** Candidate limits apply after source scope filtering, over the entire source index. */
+export function selectRawSourceCandidates(
+  db: Database,
+  input: RecallMemoryInput,
+  deadlineAt: number,
+): { sources: Array<{ sourceId: string; episodeId: string; revision: string; score: number }>; partial: boolean } {
+  const maxQueryTerms = 256;
+  const allTerms = sourceQueryTerms([input.cue, ...(input.seedPhrases ?? [])]);
+  const terms = allTerms.slice(0, maxQueryTerms);
+  if (!terms.length || Date.now() >= deadlineAt) return { sources: [], partial: Date.now() >= deadlineAt };
+  const minimumMatches = terms.length === 1 ? 1 : Math.max(2, Math.ceil(terms.length / 4));
+  const sources = db.query<{ sourceId: string; episodeId: string; revision: string; score: number }, any>(`
+    SELECT s.source_id sourceId,s.episode_id episodeId,s.revision,
+      CAST(COUNT(DISTINCT p.term) AS REAL)/? score
+    FROM memory_source_terms p
+    JOIN memory_source_text raw ON raw.id=p.source_key
+    JOIN memory_source_leaves s ON s.source_id=raw.source_id
+    JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+    WHERE p.term IN (${terms.map(() => "?").join(",")}) AND c.status='active' AND ${scopeSql(input)}
+    GROUP BY s.source_id
+    HAVING COUNT(DISTINCT p.term)>=?
+    ORDER BY score DESC,s.observed_at DESC,s.source_id
+    LIMIT ?
+  `).all(terms.length, ...terms, ...scopeArgs(input), minimumMatches, MAX_CHANNEL_CANDIDATES);
+  return { sources, partial: allTerms.length > maxQueryTerms || Date.now() >= deadlineAt };
+}
