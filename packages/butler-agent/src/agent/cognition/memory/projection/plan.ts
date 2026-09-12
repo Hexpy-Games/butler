@@ -1,5 +1,5 @@
+import { insertClaim, readClaim, recordMention, sourceClass } from "./claim-store.ts";
 import { mapCondition } from "./meaning.ts";
-import { randomUUID } from "node:crypto";
 import {
   MEMORY_EXTRACTION_VERSION,
   type ExtractInput,
@@ -54,7 +54,7 @@ export function normalizeAndValidatePlan(
       )
         throw new Error("memory_extract_invalid_identity_reuse");
       validateReuseEvidence(input, candidate, item.resolution.evidence);
-      refs[item.local_ref] = candidate.ref;
+      refs[item.local_ref] = projectionHash(["memory-node", input.window_ref, item.local_ref, item.label]);
       bindingCandidates.set(item.local_ref, candidate);
     } else {
       if (
@@ -62,7 +62,7 @@ export function normalizeAndValidatePlan(
         !input.bound_project_id
       )
         throw new Error("memory_extract_invalid_scope");
-      refs[item.local_ref] = randomUUID();
+      refs[item.local_ref] = projectionHash(["memory-node", input.window_ref, item.local_ref, item.label]);
     }
   }
   for (const claim of output.claims) {
@@ -78,11 +78,11 @@ export function normalizeAndValidatePlan(
         throw new Error("memory_extract_invalid_identity_reuse");
       }
       validateReuseEvidence(input, candidate, claim.resolution.evidence);
-      refs[claim.local_ref] = candidate.ref;
+      refs[claim.local_ref] = projectionHash(["memory-claim", input.window_ref, { ...claim, resolution: undefined }]);
       bindingCandidates.set(claim.local_ref, candidate);
     } else {
       // Claim scope is deliberately ignored here. Runtime derives it from the canonical source binding.
-      refs[claim.local_ref] = randomUUID();
+      refs[claim.local_ref] = projectionHash(["memory-claim", input.window_ref, { ...claim, resolution: undefined }]);
     }
   }
   const evidence: NormalizedPlan["evidence"] = {};
@@ -142,12 +142,12 @@ export function normalizeAndValidatePlan(
     bindingCandidates.set(`correction:${correction.previous_claim_ref}`, previousClaim);
     const replacement = claims.get(correction.replacement_claim_ref)!;
     const previousSubject = db.query<{ target_node_id: string }, [string]>("SELECT target_node_id FROM edges WHERE source_node_id=? AND rel_type='has_subject' ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.target_node_id ?? null;
-    const replacementSubject = replacement.subject_ref ? refs[replacement.subject_ref] ?? null : null;
-    const previousRelation = db.query<{ rel_type: string }, [string]>("SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member') ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.rel_type ?? null;
+    const subject = output.nodes.find((node) => node.local_ref === replacement.subject_ref);
+    const replacementSubject = subject?.resolution.kind === "reuse" ? subject.resolution.node_ref : replacement.subject_ref ? refs[replacement.subject_ref] ?? null : null;
+    const previousRelation = db.query<{ rel_type: string }, [string]>("SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member','identity_match','same_claim','refines') ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.rel_type ?? null;
     const replacementRelation = output.relations.find((relation) => relation.claim_ref === replacement.local_ref)?.relation ?? null;
-    const previousProperties = db.query<{ properties: string; type: string }, [string]>("SELECT properties,type FROM entities WHERE id=?").get(previousClaim.ref);
-    const previousCondition = previousProperties ? (JSON.parse(previousProperties.properties) as { condition?: string | null }).condition ?? null : null;
-    if (!previousProperties || previousProperties.type !== replacement.type || previousSubject !== replacementSubject || previousRelation !== replacementRelation || previousCondition !== replacement.condition)
+    const previousCondition = readClaim(db, previousClaim.ref)?.condition ?? null;
+    if (previousClaim.type !== replacement.type || previousSubject !== replacementSubject || previousRelation !== replacementRelation || previousCondition !== replacement.condition)
       throw new Error("memory_extract_invalid_correction");
   }
   if (output.summary) {
@@ -204,6 +204,7 @@ export function applyPlan(
   plan: NormalizedPlan,
   candidateResolutions: Record<string, string>,
   sourceRoot: string,
+  stage: "meaning" | "bound" = "bound",
 ): void {
   db.transaction(() => {
     if (output.disposition === "unsupported") {
@@ -218,12 +219,6 @@ export function applyPlan(
     const resolvedEvidence = Object.fromEntries(Object.entries(plan.evidence).map(([ref, evidence]) =>
       [ref, evidence.flatMap(resolveContextEvidence)]));
     const refs = { ...plan.refs };
-    for (const node of output.nodes) {
-      if (node.resolution.kind !== "reuse") continue;
-      const resolved = candidateResolutions[refs[node.local_ref]!];
-      if (!resolved) throw new Error("memory_extract_candidate_changed");
-      refs[node.local_ref] = resolved;
-    }
     const sourceByRef = new Map(
       sourceRows(
         db,
@@ -238,41 +233,51 @@ export function applyPlan(
       resolution: { kind: string; identity_scope?: string },
     ) => {
       const id = refs[localRef];
-      if (resolution.kind === "create") {
-        if (!resolution.identity_scope)
-          throw new Error("memory_extract_invalid_scope");
+      {
+        const scope = resolution.identity_scope ?? (input.bound_project_id ? "project" : "user");
         db.query(
-          "INSERT OR IGNORE INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES(?,?,?,?,?,?,?)",
+          "INSERT OR IGNORE INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at,window_ref) VALUES(?,?,?,?,?,?,?)",
         ).run(
           id,
           type,
           label,
-          "{}",
-          resolution.identity_scope,
-          resolution.identity_scope === "project"
+          scope,
+          scope === "project"
             ? input.bound_project_id
             : null,
           now,
+          windowRef,
         );
       }
       for (const ev of resolvedEvidence[localRef] ?? []) {
         const row = sourceByRef.get(ev.sourceId);
         if (!row) continue;
         db.query(
-          "INSERT OR IGNORE INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)",
+          "INSERT OR IGNORE INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)",
         ).run(id, row.source_id, row.episode_id, row.revision);
       }
     };
     for (const node of output.nodes) {
       upsertNode(node.local_ref, node.type, node.label, node.resolution);
+      for (const ev of resolvedEvidence[node.local_ref] ?? []) {
+        recordMention(db, refs[node.local_ref]!, ev.sourceId, node.label, ev.quote, ev.byteStart);
+      }
+      if (stage === "bound" && node.resolution.kind === "reuse") {
+        const target = candidateResolutions[node.resolution.node_ref];
+        if (!target) throw new Error("memory_extract_candidate_changed");
+        const edgeId = projectionHash(["identity-match", refs[node.local_ref], target]);
+        db.query("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,qualifiers) VALUES(?,?,?,'identity_match','{}')").run(edgeId, refs[node.local_ref]!, target);
+        for (const ev of validateQuotes(input, node.resolution.evidence, true).flatMap(resolveContextEvidence)) db.query("INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)").run(edgeId, ev.sourceId, "inference", MEMORY_EXTRACTION_VERSION);
+      }
       const aliases = [
         { text: node.label, evidence: node.evidence },
         ...node.aliases,
       ];
       for (const alias of aliases)
         for (const ev of validateQuotes(input, alias.evidence, true).flatMap(resolveContextEvidence)) {
+          recordMention(db, refs[node.local_ref]!, ev.sourceId, alias.text, ev.quote, ev.byteStart);
           db.query(
-            "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
           ).run(
             refs[node.local_ref],
             alias.text,
@@ -299,26 +304,24 @@ export function applyPlan(
         claim.statement,
         runtimeResolution,
       );
-      if (claim.resolution.kind === "create") {
-        db.query("UPDATE entities SET properties=? WHERE id=?").run(
-          JSON.stringify({
-            statement: claim.statement,
-            speech_act: claim.speech_act,
-            basis: claim.basis,
-            polarity: claim.polarity,
-            condition: claim.condition,
-            ...(claim.requirement ? { requirement: { action: claim.requirement.action,
-              condition: mapCondition(claim.requirement.condition, (ref) => refs[ref]!) } } : {}),
-            valid_from: claim.valid_from,
-            valid_to: claim.valid_to,
-            salience: claim.salience,
-          }),
-          refs[claim.local_ref],
-        );
+      {
+        insertClaim(db, refs[claim.local_ref]!, {
+          statement: claim.statement, speech_act: claim.speech_act, basis: claim.basis,
+          polarity: claim.polarity, condition: claim.condition,
+          requirement: claim.requirement ? { action: claim.requirement.action, condition: mapCondition(claim.requirement.condition, (ref) => refs[ref]!) } : undefined,
+          valid_from: claim.valid_from, valid_to: claim.valid_to, salience: claim.salience,
+        }, sourceClass((resolvedEvidence[claim.local_ref] ?? []).map((ev) => sourceByRef.get(ev.sourceId)!)));
+      }
+      if (stage === "bound" && claim.resolution.kind === "reuse") {
+        const target = candidateResolutions[claim.resolution.node_ref];
+        if (!target) throw new Error("memory_extract_candidate_changed");
+        const edgeId = projectionHash(["same-claim", refs[claim.local_ref], target]);
+        db.query("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,qualifiers) VALUES(?,?,?,'same_claim','{}')").run(edgeId, refs[claim.local_ref]!, target);
+        for (const ev of validateQuotes(input, claim.resolution.evidence, true).flatMap(resolveContextEvidence)) db.query("INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)").run(edgeId, ev.sourceId, "inference", MEMORY_EXTRACTION_VERSION);
       }
       for (const ev of resolvedEvidence[claim.local_ref] ?? []) {
         db.query(
-          "INSERT OR IGNORE INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
+          "INSERT OR IGNORE INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,?)",
         ).run(
           refs[claim.local_ref],
           claim.statement,
@@ -365,6 +368,17 @@ export function applyPlan(
         claim.basis,
       );
     }
+    if (stage === "bound") {
+      const meaning = db.query<{ plan_json: string }, [string]>("SELECT plan_json FROM memory_meaning_commits WHERE window_ref=?").get(windowRef);
+      const originalRefs = meaning ? (JSON.parse(meaning.plan_json) as NormalizedPlan).refs : {};
+      for (const claim of output.claims) {
+        const original = originalRefs[claim.local_ref], bound = refs[claim.local_ref];
+        if (!original || original === bound) continue;
+        const edgeId = projectionHash(["refines", bound, original]);
+        db.query("INSERT OR IGNORE INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers) VALUES(?,?,?,'refines',?,'{}')").run(edgeId, bound!, original, bound!);
+        for (const ev of resolvedEvidence[claim.local_ref] ?? []) db.query("INSERT OR IGNORE INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES(?,?,?,?)").run(edgeId, ev.sourceId, "inference", MEMORY_EXTRACTION_VERSION);
+      }
+    }
     for (const correction of output.corrections) {
       const replacement = output.claims.find((claim) => claim.local_ref === correction.replacement_claim_ref);
       const replacementId = refs[correction.replacement_claim_ref];
@@ -392,6 +406,10 @@ export function applyPlan(
       db.query("UPDATE memory_chunks SET summary=?,summary_status='complete' WHERE memory_chunk_id=?").run(summary, input.episode_ref);
       if (summary !== previous) db.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_receipt_json=NULL,hot_cache_next_attempt_at=NULL WHERE job_id=?")
         .run(JSON.stringify({ state: "pending", blocked_by: null }), jobId);
+    }
+    if (stage === "meaning") {
+      db.query("UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'").run();
+      return;
     }
     db.query(
       "UPDATE memory_projection_windows SET state='complete',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?",
@@ -448,7 +466,7 @@ function validateQuotes(
   byteEnd: number;
   quote: string;
 }> {
-  if (!Array.isArray(quotes) || quotes.length > 4)
+  if (!Array.isArray(quotes) || quotes.length > 8)
     throw new Error("memory_extract_invalid_quote");
   const units = new Map(
     [
@@ -579,14 +597,14 @@ export function assertPlanCandidatesCurrent(
   const resolutions: Record<string, string> = {};
   for (const binding of Object.values(plan.candidate_bindings ?? {})) {
     const entity = db.query<{ type: string; identity_scope: string; project_id: string | null; canonical_node_id: string | null }, [string]>(
-      "SELECT type,identity_scope,project_id,canonical_node_id FROM entities WHERE id=?",
+      "SELECT type,identity_scope,project_id,canonical_node_id FROM memory_nodes WHERE id=?",
     ).get(binding.node_ref);
     if (!entity || entity.type !== binding.type || entity.identity_scope !== binding.scope || entity.project_id !== binding.project_id)
       throw new Error("memory_extract_candidate_changed");
     const resolved = resolveIdentityForProjectionInput(db, butlerData, input, binding.node_ref);
     if (resolved.partial) throw new Error("memory_extract_candidate_changed");
     const current = db.query<{ type: string; identity_scope: string; project_id: string | null }, [string]>(
-      "SELECT type,identity_scope,project_id FROM entities WHERE id=?",
+      "SELECT type,identity_scope,project_id FROM memory_nodes WHERE id=?",
     ).get(resolved.nodeId);
     if (!current || current.type !== binding.type || current.identity_scope !== binding.scope || current.project_id !== binding.project_id)
       throw new Error("memory_extract_candidate_changed");

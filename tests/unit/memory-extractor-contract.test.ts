@@ -87,7 +87,7 @@ test("B failure resumes from durable A without a second meaning call", async () 
   try {
     const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
       loadCandidates: async () => [{ ref: "old-camera", type: "entity" as const, label: "相機", aliases: [], scope: "user" as const, project_id: null, evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" as const }] }],
-      stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+      stages: { commitMeaning: async () => {}, load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
     await expect(runStructuredMemoryExtractor(args)).rejects.toThrow("bounded-B-failure");
     fail = false;
     const result = await runStructuredMemoryExtractor(args);
@@ -147,12 +147,12 @@ test("legacy mixed windows split before A while completed rows and original text
     // Earlier neighboring extraction already uses this still-unprocessed source as evidence.
     const parentSource = db.query<any, any[]>("SELECT * FROM memory_chunk_sources WHERE source_id=?").get(refs[0]);
     db.exec("PRAGMA foreign_keys=ON");
-    db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES('prior','entity','prior','user','2026-01-01')").run();
-    db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('prior','prior','prior','prior',?,'create')").run(refs[0]);
-    db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('prior',?,?,?)").run(refs[0],parentSource.episode_id,parentSource.revision);
+    db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('prior','entity','prior','user','2026-01-01')").run();
+    db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('prior','prior','prior','prior',?,'create')").run(refs[0]);
+    db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('prior',?,?,?)").run(refs[0],parentSource.episode_id,parentSource.revision);
     db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type) VALUES('prior-edge','prior','prior','test')").run();
     db.query("INSERT INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES('prior-edge',?,'user_statement','test')").run(refs[0]);
-    const priorEvidence = ["entity_aliases", "entity_mentions", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all());
+    const priorEvidence = ["memory_aliases", "memory_evidence", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all());
 
     for (let count = 0; count < 12; count++) {
       if (!db.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_windows WHERE state NOT IN ('complete','replaced')").get()!.n) break;
@@ -163,7 +163,7 @@ test("legacy mixed windows split before A while completed rows and original text
 
     expect(db.query("SELECT * FROM memory_chunk_sources WHERE source_id=?").get(refs[0])).toEqual(parentSource);
     expect(db.query("SELECT * FROM memory_source_leaves WHERE source_id=?").get(refs[0])).toBeNull();
-    expect(["entity_aliases", "entity_mentions", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all())).toEqual(priorEvidence);
+    expect(["memory_aliases", "memory_evidence", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all())).toEqual(priorEvidence);
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(requests.map((p) => p.speaker)).toEqual(["user", "user", "assistant"]);
     const texts = requests.map((p) => p.parts.map((part: any) => part.text).join(""));
@@ -202,7 +202,7 @@ test("invalid cached A is preserved while a bounded correction supplies the reus
   const root = mkdtempSync(join(tmpdir(), "memory-stage-repair-"));
   try {
     const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
-      loadCandidates: async () => [], stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+      loadCandidates: async () => [], stages: { commitMeaning: async () => {}, load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
     const result = await runStructuredMemoryExtractor(args);
     expect(result.output.claims).toHaveLength(1);
     expect(requests).toHaveLength(2);
@@ -223,7 +223,7 @@ test("stage repair exhaustion never issues further calls for the same saved inva
   const root = mkdtempSync(join(tmpdir(), "memory-stage-cap-"));
   try {
     const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
-      loadCandidates: async () => [], stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+      loadCandidates: async () => [], stages: { commitMeaning: async () => {}, load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
     for (let n = 0; n < 2; n++) {
       const error = await runStructuredMemoryExtractor(args).then(() => null, error => error);
       expect(error.repairExhausted).toBe(true);
@@ -255,7 +255,7 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
   try {
     const result = await runStructuredMemoryExtractor({ butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
       loadCandidates: async () => [{ ref: "old-camera", type: "entity", label: "相機", aliases: [], scope: "user", project_id: null, evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" }] }],
-      stages: { load: async key => saved.get(key) ?? null, save: async (key, result) => { saved.set(key, result); } } });
+      stages: { commitMeaning: async () => {}, load: async key => saved.get(key) ?? null, save: async (key, result) => { saved.set(key, result); } } });
     expect(a).toBe(1); expect(b).toBe(2);
     expect(result.output.nodes.every(node => node.resolution.kind === "create")).toBe(true);
     expect(saved.size).toBe(3);

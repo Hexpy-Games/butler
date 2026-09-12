@@ -1,3 +1,4 @@
+import { insertMemoryNodeFixture } from "../helpers/memory-node-fixture.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -212,8 +213,7 @@ test("correction edges persist multilingual context as canonical sources and rep
     input.window_ref = row.window_ref;
     const current = input.source_units[0]!;
     const currentQuote = { unit_ref: current.ref, quote: current.text, occurrence: 0 };
-    db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES('prior','memory_atom','prior','{}','user',NULL,?)")
-      .run(current.observed_at);
+    insertMemoryNodeFixture(db, { id: "prior", type: "memory_atom", label_original: "prior", claim: "{}", identity_scope: "user", project_id: null, created_at: current.observed_at });
     input.candidates = [{ ref: "prior", type: "memory_atom", label: "prior", aliases: [], scope: "user", project_id: null,
       evidence: [{ ref: current.ref, text: current.text, observed_at: current.observed_at, basis: "assistant_statement" }] }];
     const output: ExtractOutput = {
@@ -319,7 +319,7 @@ test("rejects changed context, scope, source hashes and missing canonical spans"
       "UPDATE memory_chunk_sources SET content_hash='changed' WHERE source_id=?",
       "DELETE FROM memory_chunk_sources WHERE source_id=?",
     ]) {
-      db.exec("BEGIN");
+      db.exec("BEGIN; PRAGMA defer_foreign_keys=ON");
       try {
         db.query(sql).run(second.source_id);
         expect(() =>
@@ -384,8 +384,8 @@ test("public candidate input repair preserves history, rolls back stale batches 
   try {
     const window = db.query<{ window_ref: string }, []>("SELECT window_ref FROM memory_projection_windows LIMIT 1").get()!;
     for (const [id, type, label] of [["subject", "entity", "日本語"], ["claim", "preference", "العربية"]]) {
-      db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,?,?,'user',?)").run(id!, type!, label!, second.observed_at);
-      db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(id!, label!, label!, label!, second.source_id);
+      insertMemoryNodeFixture(db, { id: id!, type: type!, label_original: label!, identity_scope: "user", created_at: second.observed_at });
+      db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(id!, label!, label!, label!, second.source_id);
     }
     db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id) VALUES('edge','claim','subject','has_subject','claim')").run();
     const original = JSON.stringify({ ...input, window_ref: window.window_ref, candidates: [{
@@ -459,8 +459,8 @@ test("identity CLI repairs reviewed duplicates in a pinned rebuild and preserves
   const { root, db, first, second, input, generationId } = await fixture("Luna", "루나", "Luna 이야기입니다.");
   try {
     for (const [id, label, source] of [["canonical", "루나", first], ["duplicate", "Luna", { source_id: input.source_units[0]!.ref, episode_id: input.episode_ref, revision: input.revision }]] as const) {
-      db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user',?)").run(id, label, first.observed_at);
-      db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(id, source.source_id, source.episode_id, source.revision);
+      db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user',?)").run(id, label, first.observed_at);
+      db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(id, source.source_id, source.episode_id, source.revision);
     }
     const canonicalStore = new AgentConversationStore({ butlerData: root });
     const canonicalRevision = canonicalStore.readPublicSourceRevision();
@@ -499,8 +499,8 @@ test("identity CLI repairs reviewed duplicates in a pinned rebuild and preserves
     expect(invoke(command).value.replayed).toBe(true);
     const candidate = openProjectionDb(candidateGraph);
     try {
-      expect(candidate.query<{ canonical_node_id: string }, []>("SELECT canonical_node_id FROM entities WHERE id='duplicate'").get()!.canonical_node_id).toBe("canonical");
-      expect(db.query<{ canonical_node_id: string | null }, []>("SELECT canonical_node_id FROM entities WHERE id='duplicate'").get()!.canonical_node_id).toBeNull();
+      expect(candidate.query<{ canonical_node_id: string }, []>("SELECT canonical_node_id FROM memory_nodes WHERE id='duplicate'").get()!.canonical_node_id).toBe("canonical");
+      expect(db.query<{ canonical_node_id: string | null }, []>("SELECT canonical_node_id FROM memory_nodes WHERE id='duplicate'").get()!.canonical_node_id).toBeNull();
       expect(JSON.parse(readFileSync(join(root, "cognition/memory/active-generation.json"), "utf8")).generation_id).toBe(generationId);
       expect(candidate.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_attempts").get()!.n).toBe(0);
     } finally { candidate.close(); }

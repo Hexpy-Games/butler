@@ -46,6 +46,7 @@ type RequestWireEvidence = { profile: string; input_json_sha256: string; input_j
 export type ExtractionStages = {
   load: (key: string) => Promise<ExtractionStageResult | null>;
   save: (key: string, result: ExtractionStageResult) => Promise<void>;
+  commitMeaning: (output: ExtractOutput) => Promise<void>;
 };
 
 export async function runStructuredMemoryExtractor(input: {
@@ -69,7 +70,7 @@ export async function runStructuredMemoryExtractor(input: {
     for (let repair = 0; repair <= MAX_STAGE_REPAIRS; repair++) {
       const prompt = JSON.stringify(repair === 0 ? promptValue : { input: promptValue,
         correction: { error: rejection, instruction: "Return a corrected complete response. Use only the provided reference IDs and evidence. Do not invent IDs." } });
-      const responseSchema = repair === 0 ? schema : repairSchema ?? (stage === "meaning" ? boundedEvidenceSchema(schema, passages.length) : schema);
+      const responseSchema = stage === "meaning" ? boundedEvidenceSchema(schema, passages.length) : repairSchema ?? schema;
       const request_wire = { profile: `memory-${stage}.v4`, input_json_sha256: hash(prompt), input_json_utf8_bytes: Buffer.byteLength(prompt),
         instructions_sha256: hash(instructions), output_schema_sha256: hash(JSON.stringify(responseSchema)) };
       // The original key is unchanged. Repair responses are append-only and separately addressable.
@@ -119,6 +120,8 @@ export async function runStructuredMemoryExtractor(input: {
     (value) => validateMeaning(value, passages));
   if (meaning.status !== "processed") throw new MemoryExtractDispositionError(meaning.status, meaning, stages.at(-1)!);
   const output = meaningToOutput(input.extractInput, meaning, passages);
+  validateExtractOutputShape(output, input.extractInput);
+  await input.stages.commitMeaning(structuredClone(output));
   const binding = await prepareBindingBatches(meaning, passages, input.loadCandidates);
   input.extractInput.candidates = binding.candidates;
   const warnings: BindingWarning[] = [];
@@ -134,7 +137,7 @@ export async function runStructuredMemoryExtractor(input: {
   // Role-aware, whole-item projection: never cut a condition in half to fit the cache.
   const summary: string[] = []; const evidence: QuoteRef[] = [];
   for (const claim of output.claims) {
-    const line = `[${claim.basis}/${claim.speech_act}] ${claim.statement}`;
+    const line = `[model_interpretation/${claim.basis}/${claim.speech_act}] ${claim.statement}`;
     if (graphemeCount([...summary, line].join("\n")) > 480) continue;
     const unique = [...new Map([...evidence, ...claim.evidence].map((quote) => [JSON.stringify(quote), quote])).values()];
     if (unique.length > 4) continue;
@@ -196,10 +199,10 @@ function buildExtractOutputSchema(compact: boolean): Record<string, unknown> {
   );
   const quote = compact ? schemaRef("Quote") : quoteShape;
   const evidenceShape = {
-    ...array(quote, 4),
+    ...array(quote, 8),
     minItems: 1,
     description:
-      "One to four quotes, including at least one quote from a current source unit.",
+      "One to eight quotes, including at least one quote from a current source unit.",
   };
   const evidence = compact ? schemaRef("Evidence") : evidenceShape;
   const create = object(
@@ -260,7 +263,7 @@ function buildExtractOutputSchema(compact: boolean): Record<string, unknown> {
       object_ref: { ...nullableString(64), description: OUTPUT_ENDPOINT_DESCRIPTION },
       speech_act: {
         type: "string",
-        enum: ["assertion", "question", "proposal"],
+        enum: ["assertion", "question", "proposal", "request", "unknown"],
       },
       basis: {
         type: "string",

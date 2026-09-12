@@ -138,6 +138,7 @@ export function applyBinding(value: unknown, batch: BindingBatch, output: Extrac
       warnings.push({ code: "correction_context_unavailable", target_ref: decision.target });
       continue;
     }
+    claim.evidence = [...new Map([...claim.evidence, ...evidence].map((quote) => [JSON.stringify(quote), quote])).values()];
     const previous = candidate.claim?.statement ?? candidate.label;
     claim.statement = previous.slice(0, span.start) + span.value + previous.slice(span.end);
     claim.type = candidate.type; claim.condition = candidate.claim?.condition ?? null;

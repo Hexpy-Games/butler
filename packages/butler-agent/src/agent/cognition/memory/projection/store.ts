@@ -1,3 +1,4 @@
+import { ensureClaimSchema, readClaim } from "./claim-store.ts";
 import { ensureSourceIndexSchema } from "./source-index.ts";
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -38,10 +39,12 @@ export function openProjectionDb(path: string, readonly = false): Database {
 }
 
 export function ensureV2MemorySchema(db: Database): void {
+  if (db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='entities'").get()) throw new Error("memory_schema_migration_required");
   migrateNullableCanonicalSourceIds(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS memory_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     INSERT OR IGNORE INTO memory_state(key,value) VALUES('graph_revision','0');
+    INSERT OR IGNORE INTO memory_state(key,value) VALUES('source_graph_schema','3');
     CREATE TABLE IF NOT EXISTS memory_chunks(
       memory_chunk_id TEXT PRIMARY KEY, source_key TEXT NOT NULL UNIQUE,
       current_revision TEXT NOT NULL, conversation_session_id TEXT,
@@ -59,31 +62,31 @@ export function ensureV2MemorySchema(db: Database): void {
       role TEXT NOT NULL, origin_kind TEXT NOT NULL, observed_at TEXT NOT NULL, basis TEXT NOT NULL,
       UNIQUE(episode_id,revision,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end)
     );
-    CREATE TABLE IF NOT EXISTS entities(
+    CREATE TABLE IF NOT EXISTS memory_nodes(
       id TEXT PRIMARY KEY, type TEXT NOT NULL, label_original TEXT NOT NULL,
-      properties TEXT NOT NULL DEFAULT '{}', identity_scope TEXT NOT NULL,
-      project_id TEXT, canonical_node_id TEXT REFERENCES entities(id), created_at TEXT NOT NULL
+      identity_scope TEXT NOT NULL,
+      project_id TEXT, canonical_node_id TEXT REFERENCES memory_nodes(id), created_at TEXT NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS entity_aliases(
-      entity_id TEXT NOT NULL REFERENCES entities(id), surface_original TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS memory_aliases(
+      node_id TEXT NOT NULL REFERENCES memory_nodes(id), surface_original TEXT NOT NULL,
       nfc_key TEXT NOT NULL, folded_key TEXT NOT NULL, language_tags TEXT NOT NULL DEFAULT '[]',
       source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id), resolution_kind TEXT NOT NULL,
-      PRIMARY KEY(entity_id,surface_original,source_id)
+      PRIMARY KEY(node_id,surface_original,source_id)
     );
-    CREATE TABLE IF NOT EXISTS entity_mentions(
-      entity_id TEXT NOT NULL REFERENCES entities(id), source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
-      episode_id TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(entity_id,source_id)
+    CREATE TABLE IF NOT EXISTS memory_evidence(
+      node_id TEXT NOT NULL REFERENCES memory_nodes(id), source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
+      episode_id TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(node_id,source_id)
     );
-    CREATE TABLE IF NOT EXISTS entity_alias_postings(
-      gram TEXT NOT NULL,entity_id TEXT NOT NULL REFERENCES entities(id),
+    CREATE TABLE IF NOT EXISTS memory_alias_postings(
+      gram TEXT NOT NULL,node_id TEXT NOT NULL REFERENCES memory_nodes(id),
       source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
       surface_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,
-      PRIMARY KEY(gram,entity_id,source_id,surface_original)
+      PRIMARY KEY(gram,node_id,source_id,surface_original)
     );
     CREATE TABLE IF NOT EXISTS edges(
-      edge_id TEXT PRIMARY KEY, source_node_id TEXT NOT NULL REFERENCES entities(id),
-      target_node_id TEXT NOT NULL REFERENCES entities(id), rel_type TEXT NOT NULL,
-      claim_node_id TEXT REFERENCES entities(id), qualifiers TEXT NOT NULL DEFAULT '{}',
+      edge_id TEXT PRIMARY KEY, source_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
+      target_node_id TEXT NOT NULL REFERENCES memory_nodes(id), rel_type TEXT NOT NULL,
+      claim_node_id TEXT REFERENCES memory_nodes(id), qualifiers TEXT NOT NULL DEFAULT '{}',
       valid_from TEXT, valid_to TEXT, status TEXT NOT NULL DEFAULT 'active',
       UNIQUE(source_node_id,target_node_id,rel_type,claim_node_id,qualifiers)
     );
@@ -154,21 +157,27 @@ export function ensureV2MemorySchema(db: Database): void {
       source_ids_json TEXT,source_byte_start INTEGER,source_byte_end INTEGER,source_role TEXT,
       UNIQUE(job_id,record_kind,owner_id,owner_revision,project_id,origin_kind)
     );
-    CREATE INDEX IF NOT EXISTS idx_alias_nfc ON entity_aliases(nfc_key,entity_id);
-    CREATE INDEX IF NOT EXISTS idx_alias_folded ON entity_aliases(folded_key,entity_id);
+    CREATE INDEX IF NOT EXISTS idx_alias_nfc ON memory_aliases(nfc_key,node_id);
+    CREATE INDEX IF NOT EXISTS idx_alias_folded ON memory_aliases(folded_key,node_id);
+    CREATE INDEX IF NOT EXISTS memory_evidence_episode ON memory_evidence(episode_id,node_id,source_id);
+    CREATE INDEX IF NOT EXISTS memory_evidence_source ON memory_evidence(source_id,node_id);
+    CREATE INDEX IF NOT EXISTS memory_edges_claim ON edges(claim_node_id,status,rel_type);
     CREATE INDEX IF NOT EXISTS idx_edges_source_rel ON edges(source_node_id,rel_type);
     CREATE INDEX IF NOT EXISTS idx_edges_target_rel ON edges(target_node_id,rel_type);
-    CREATE INDEX IF NOT EXISTS idx_mentions_entity_episode ON entity_mentions(entity_id,episode_id);
+    CREATE INDEX IF NOT EXISTS idx_mentions_entity_episode ON memory_evidence(node_id,episode_id);
     CREATE INDEX IF NOT EXISTS idx_sources_message_revision ON memory_chunk_sources(conversation_message_id,revision);
     CREATE INDEX IF NOT EXISTS idx_chunks_project_origin ON memory_chunks(project_id,origin_kind,conversation_start,memory_chunk_id);
     CREATE INDEX IF NOT EXISTS idx_jobs_state ON memory_projection_jobs(last_served_at,created_at,job_id);
     CREATE INDEX IF NOT EXISTS idx_vector_units_state ON memory_vector_units(state,job_id,record_kind,unit_id);
   `);
+  ensureColumn(db, "memory_nodes", "window_ref", "TEXT REFERENCES memory_projection_windows(window_ref)");
+  db.exec("CREATE INDEX IF NOT EXISTS memory_nodes_window ON memory_nodes(window_ref)");
+  ensureClaimSchema(db);
   ensureSourceIndexSchema(db);
   ensureColumn(db, "memory_projection_jobs", "hot_cache_receipt_json", "TEXT");
   ensureColumn(db, "memory_projection_jobs", "identity_decisions_json", "TEXT NOT NULL DEFAULT '[]'");
-  ensureColumn(db, "entities", "identity_history_job_id", "TEXT REFERENCES memory_projection_jobs(job_id)");
-  ensureColumn(db, "entities", "identity_history_ref", "TEXT");
+  ensureColumn(db, "memory_nodes", "identity_history_job_id", "TEXT REFERENCES memory_projection_jobs(job_id)");
+  ensureColumn(db, "memory_nodes", "identity_history_ref", "TEXT");
   ensureColumn(db, "memory_projection_jobs", "hot_cache_attempt_count", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "memory_projection_jobs", "hot_cache_next_attempt_at", "TEXT");
   ensureColumn(db, "memory_projection_jobs", "hot_cache_owner_pid", "INTEGER");
@@ -288,19 +297,19 @@ function ensureColumn(db: Database, table: string, name: string, declaration: st
 }
 
 export function installAndBackfillRecallIndexes(db: Database): void {
-  const postingColumns = db.query<{ name: string }, []>("PRAGMA table_info(entity_alias_postings)").all().map((row) => row.name);
-  if (postingColumns.length > 0 && !postingColumns.includes("surface_original")) db.exec("DROP TABLE entity_alias_postings");
+  const postingColumns = db.query<{ name: string }, []>("PRAGMA table_info(memory_alias_postings)").all().map((row) => row.name);
+  if (postingColumns.length > 0 && !postingColumns.includes("surface_original")) db.exec("DROP TABLE memory_alias_postings");
   db.exec(`
-    CREATE TABLE IF NOT EXISTS entity_alias_postings(
-      gram TEXT NOT NULL,entity_id TEXT NOT NULL REFERENCES entities(id),
+    CREATE TABLE IF NOT EXISTS memory_alias_postings(
+      gram TEXT NOT NULL,node_id TEXT NOT NULL REFERENCES memory_nodes(id),
       source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),
       surface_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,
-      PRIMARY KEY(gram,entity_id,source_id,surface_original)
+      PRIMARY KEY(gram,node_id,source_id,surface_original)
     );
-    CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON entity_alias_postings(gram,entity_id,source_id);
-    CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON entity_alias_postings(entity_id,gram,source_id,surface_original);
-    CREATE INDEX IF NOT EXISTS idx_alias_postings_alias ON entity_alias_postings(entity_id,source_id,surface_original,gram);
-    CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON entity_alias_postings(identity_scope,project_id,gram,entity_id);
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON memory_alias_postings(gram,node_id,source_id);
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON memory_alias_postings(node_id,gram,source_id,surface_original);
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_alias ON memory_alias_postings(node_id,source_id,surface_original,gram);
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON memory_alias_postings(identity_scope,project_id,gram,node_id);
     CREATE TABLE IF NOT EXISTS memory_vector_units(
       unit_id TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES memory_projection_jobs(job_id),
       record_kind TEXT NOT NULL,owner_id TEXT NOT NULL,owner_revision TEXT NOT NULL,
@@ -322,25 +331,25 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     if (!db.query("SELECT 1 FROM memory_state WHERE key='alias_postings_incremental_v1'").get()) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS memory_alias_index_dirty(
-          entity_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,
-          PRIMARY KEY(entity_id,source_id,surface_original)
+          node_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,
+          PRIMARY KEY(node_id,source_id,surface_original)
         );
-        CREATE TRIGGER IF NOT EXISTS memory_alias_index_insert AFTER INSERT ON entity_aliases BEGIN
-          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.entity_id,NEW.source_id,NEW.surface_original);
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_insert AFTER INSERT ON memory_aliases BEGIN
+          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.node_id,NEW.source_id,NEW.surface_original);
         END;
-        CREATE TRIGGER IF NOT EXISTS memory_alias_index_update AFTER UPDATE ON entity_aliases BEGIN
-          DELETE FROM entity_alias_postings WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
-          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.entity_id,NEW.source_id,NEW.surface_original);
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_update AFTER UPDATE ON memory_aliases BEGIN
+          DELETE FROM memory_alias_postings WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.node_id,NEW.source_id,NEW.surface_original);
         END;
-        CREATE TRIGGER IF NOT EXISTS memory_alias_index_delete BEFORE DELETE ON entity_aliases BEGIN
-          DELETE FROM entity_alias_postings WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
-          DELETE FROM memory_alias_index_dirty WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_delete BEFORE DELETE ON memory_aliases BEGIN
+          DELETE FROM memory_alias_postings WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+          DELETE FROM memory_alias_index_dirty WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
         END;
-        CREATE TRIGGER IF NOT EXISTS memory_alias_index_scope AFTER UPDATE OF identity_scope,project_id ON entities
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_scope AFTER UPDATE OF identity_scope,project_id ON memory_nodes
         WHEN NEW.identity_scope IS NOT OLD.identity_scope OR NEW.project_id IS NOT OLD.project_id BEGIN
-          INSERT OR IGNORE INTO memory_alias_index_dirty SELECT entity_id,source_id,surface_original FROM entity_aliases WHERE entity_id=NEW.id;
+          INSERT OR IGNORE INTO memory_alias_index_dirty SELECT node_id,source_id,surface_original FROM memory_aliases WHERE node_id=NEW.id;
         END;
-        INSERT OR IGNORE INTO memory_alias_index_dirty SELECT entity_id,source_id,surface_original FROM entity_aliases;
+        INSERT OR IGNORE INTO memory_alias_index_dirty SELECT node_id,source_id,surface_original FROM memory_aliases;
       `);
       flushAliasIndexChanges(db);
       db.query("INSERT INTO memory_state(key,value) VALUES('alias_postings_incremental_v1','complete')").run();
@@ -350,20 +359,20 @@ export function installAndBackfillRecallIndexes(db: Database): void {
 
 /** Called in the graph writer transaction: work scales with changed aliases only. */
 function flushAliasIndexChanges(db: Database): void {
-  const rows = db.query<{ entity_id: string; source_id: string; surface_original: string; folded_key: string | null; identity_scope: string | null; project_id: string | null }, []>(`
-    SELECT d.entity_id,d.source_id,d.surface_original,a.folded_key,e.identity_scope,e.project_id
-    FROM memory_alias_index_dirty d LEFT JOIN entity_aliases a
-      ON a.entity_id=d.entity_id AND a.source_id=d.source_id AND a.surface_original=d.surface_original
-    LEFT JOIN entities e ON e.id=a.entity_id
+  const rows = db.query<{ node_id: string; source_id: string; surface_original: string; folded_key: string | null; identity_scope: string | null; project_id: string | null }, []>(`
+    SELECT d.node_id,d.source_id,d.surface_original,a.folded_key,e.identity_scope,e.project_id
+    FROM memory_alias_index_dirty d LEFT JOIN memory_aliases a
+      ON a.node_id=d.node_id AND a.source_id=d.source_id AND a.surface_original=d.surface_original
+    LEFT JOIN memory_nodes e ON e.id=a.node_id
   `).all();
-  const remove = db.query("DELETE FROM entity_alias_postings WHERE entity_id=? AND source_id=? AND surface_original=?");
-  const insert = db.query("INSERT OR IGNORE INTO entity_alias_postings(gram,entity_id,source_id,surface_original,identity_scope,project_id) VALUES(?,?,?,?,?,?)");
-  const clean = db.query("DELETE FROM memory_alias_index_dirty WHERE entity_id=? AND source_id=? AND surface_original=?");
+  const remove = db.query("DELETE FROM memory_alias_postings WHERE node_id=? AND source_id=? AND surface_original=?");
+  const insert = db.query("INSERT OR IGNORE INTO memory_alias_postings(gram,node_id,source_id,surface_original,identity_scope,project_id) VALUES(?,?,?,?,?,?)");
+  const clean = db.query("DELETE FROM memory_alias_index_dirty WHERE node_id=? AND source_id=? AND surface_original=?");
   for (const row of rows) {
-    remove.run(row.entity_id, row.source_id, row.surface_original);
+    remove.run(row.node_id, row.source_id, row.surface_original);
     if (row.folded_key !== null && row.identity_scope !== null) for (const gram of foldedGraphemeNgrams(row.folded_key))
-      insert.run(gram, row.entity_id, row.source_id, row.surface_original, row.identity_scope, row.project_id);
-    clean.run(row.entity_id, row.source_id, row.surface_original);
+      insert.run(gram, row.node_id, row.source_id, row.surface_original, row.identity_scope, row.project_id);
+    clean.run(row.node_id, row.source_id, row.surface_original);
   }
 }
 
@@ -391,9 +400,9 @@ export function refreshVectorUnitsForJob(db: Database, jobId: string, episodePro
   if (!job) throw new Error("memory_projection_job_not_found");
   const chunk = db.query<{ project_id: string | null; origin_kind: string; summary: string }, [string, string]>("SELECT project_id,origin_kind,summary FROM memory_chunks WHERE memory_chunk_id=? AND current_revision=?").get(job.episode_id, job.revision);
   if (!chunk) throw new Error("memory_source_changed");
-  const nodes = db.query<{ id: string; type: string; label_original: string; properties: string; origin_kind: string }, [string, string]>(`
-    SELECT e.id,e.type,e.label_original,e.properties,s.origin_kind
-    FROM entities e JOIN entity_mentions m ON m.entity_id=e.id
+  const nodes = db.query<{ id: string; type: string; label_original: string; origin_kind: string }, [string, string]>(`
+    SELECT e.id,e.type,e.label_original,s.origin_kind
+    FROM memory_nodes e JOIN memory_evidence m ON m.node_id=e.id
     JOIN memory_chunk_sources s ON s.source_id=m.source_id
     WHERE m.episode_id=? AND m.revision=? GROUP BY e.id,s.origin_kind ORDER BY e.id,s.origin_kind
   `).all(job.episode_id, job.revision);
@@ -402,11 +411,11 @@ export function refreshVectorUnitsForJob(db: Database, jobId: string, episodePro
     const desiredNodeUnits = new Set<string>();
     for (const node of nodes) {
       const aliases = db.query<{ surface_original: string }, [string, string, string, string]>(`
-        SELECT DISTINCT a.surface_original FROM entity_aliases a JOIN memory_chunk_sources s ON s.source_id=a.source_id
-        WHERE a.entity_id=? AND s.episode_id=? AND s.revision=? AND s.origin_kind=? ORDER BY a.surface_original LIMIT 8
+        SELECT DISTINCT a.surface_original FROM memory_aliases a JOIN memory_chunk_sources s ON s.source_id=a.source_id
+        WHERE a.node_id=? AND s.episode_id=? AND s.revision=? AND s.origin_kind=? ORDER BY a.surface_original LIMIT 8
       `).all(node.id, job.episode_id, job.revision, node.origin_kind).map((row) => row.surface_original);
       const scopedLabel = aliases[0] ?? (node.type === "entity" || node.type === "project" ? "" : node.label_original);
-      const claim = projectionClaimFields(node.properties);
+      const claim = readClaim(db, node.id) ?? { statement: null, condition: null, polarity: null, requirement: undefined };
       const projection = [
         `type:${JSON.stringify(node.type)}`,
         `label:${JSON.stringify(scopedLabel)}`,
@@ -418,8 +427,8 @@ export function refreshVectorUnitsForJob(db: Database, jobId: string, episodePro
       ].join("\n");
       const revision = projectionDigest(["node-vector", node.id, chunk.project_id, node.origin_kind, projection]);
       const sourceIds = db.query<{ source_id: string }, [string, string, string, string]>(`
-        SELECT DISTINCT m.source_id FROM entity_mentions m JOIN memory_chunk_sources s ON s.source_id=m.source_id
-        WHERE m.entity_id=? AND m.episode_id=? AND m.revision=? AND s.origin_kind=? ORDER BY m.source_id
+        SELECT DISTINCT m.source_id FROM memory_evidence m JOIN memory_chunk_sources s ON s.source_id=m.source_id
+        WHERE m.node_id=? AND m.episode_id=? AND m.revision=? AND s.origin_kind=? ORDER BY m.source_id
       `).all(node.id, job.episode_id, job.revision, node.origin_kind).map((row) => row.source_id);
       try {
         for (const [ordinal, text] of projectionChunks(projection).entries()) {
@@ -530,11 +539,11 @@ export function claimNextVectorQuantum(
         (SELECT ordered.observed_at FROM memory_chunk_sources ordered
           WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
             AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
-            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
         COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id FROM memory_chunk_sources ordered
           WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
-            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,ordered.scalar_pointer,ordered.byte_start))) source_ids_json
       FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id
       JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
@@ -663,20 +672,6 @@ function refreshVectorStageStates(db: Database, jobId: string): void {
       : complete === total ? { state: "complete", completed_units: complete, total_units: total }
       : { state: "pending", blocked_by: null };
     db.query(`UPDATE memory_projection_jobs SET ${column}=?,last_served_at=? WHERE job_id=?`).run(JSON.stringify(state), new Date().toISOString(), jobId);
-  }
-}
-
-function projectionClaimFields(properties: string): { statement: string | null; condition: string | null; polarity: string | null; requirement?: unknown } {
-  try {
-    const value = JSON.parse(properties) as { statement?: unknown; condition?: unknown; polarity?: unknown; requirement?: unknown };
-    return {
-      ...(value.requirement ? { requirement: value.requirement } : {}),
-      statement: typeof value.statement === "string" ? value.statement : null,
-      condition: typeof value.condition === "string" ? value.condition : null,
-      polarity: typeof value.polarity === "string" ? value.polarity : null,
-    };
-  } catch {
-    return { statement: null, condition: null, polarity: null };
   }
 }
 

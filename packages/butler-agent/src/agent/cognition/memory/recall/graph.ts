@@ -31,7 +31,7 @@ const PPR_ALPHA = 0.2;
 const PPR_PROPAGATION = 1 - PPR_ALPHA;
 const PPR_EPSILON = 1e-6;
 const PPR_MAX_ITERATIONS = 32;
-const NAVIGATION_RELATIONS = new Set(["belongs_to", "co_occurred"]);
+const NAVIGATION_RELATIONS = new Set(["belongs_to", "co_occurred", "identity_match", "same_claim"]);
 const POSITIVE_RELATIONS = new Set([
   "related_to", "depends_on", "likes", "dislikes", "decided",
   "has_subject", "has_object", "condition_member", ...NAVIGATION_RELATIONS,

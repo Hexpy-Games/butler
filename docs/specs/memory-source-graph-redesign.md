@@ -1,3 +1,26 @@
+# 현재 구현 상태 — I1~I4 완료
+구현 결과와 수용 근거는 [memory-source-graph-implementation-report.md](memory-source-graph-implementation-report.md)에 기록한다. 새 generation의 schema_version과 DB source_graph_schema는 3이다. 이전 CLI는 offline 원본에서 새 DB를 만들며 기존 generation의 임베딩 파일/설정/ID를 유지하는 배포 절차와 구분한다. 운영 복구 및 유료 모델 비교는 별도 작업이다.
+
+구체화: memory_mentions의 byte 범위는 source span 안의 상대 UTF-8 위치다. A의 ID는 window/local_ref와 불변 내용에 묶인다. B가 정정 문장을 확장하면 다른 ID로 저장하고 refines를 연결한다. 원래 A와 원문은 유지한다. B의 정정 근거는 현재 발화와 과거 문장을 함께 포함하며 프로그램이 결합하는 내부 근거 목록은 최대 8개다. 모델이 직접 고르는 A 근거는 여전히 최대 4개다. memory_nodes.window_ref로 처리 중 A를 과거 후보에서 제외한다. memory_meaning_commits는 A 완료와 전체 window 완료를 분리해 보존한다. 미분류 구형 발화는 unknown이다. 검색에서 recorded는 검증된 현재 사실이 아닌 저장된 해석을 뜻한다. 모든 현재 상태 답변에 확인 필요 메타데이터를 둔다.
+
+아래 초안의 등록 시점 문구는 계획 이력이며, 현재 구현 범위는 위 결과 문서와 상세 계약을 따른다.
+
+## 실제 데이터 검토에서 확정한 검색 계약
+원문에 질의 전체가 그대로 등장하는 결과는 연관 개념만 일치하는 결과보다 우선한다. 범위·제외·시각 검증은 먼저 적용하며, 동일 정확 일치 그룹 안에서는 기존 그래프/벡터/어휘 순위를 유지한다. 원문을 직접 인용한 질의가 주변 주제의 여러 그래프 연결 때문에 밀리는 현상을 방지한다. 그래프 보조 집계는 episode→node, source→node, claim→edge 색인을 사용한다. 어휘 빈도의 모집단은 질의마다 한 번 구성하며 IDF 계산식은 유지한다.
+
+## I2/I3 상세 계약 — 2026-09-13 구현 기준
+- memory_nodes: 공통 그래프 식별자, 종류, 표시명, scope/project, canonical identity 및 추출window 소유자. 기존entities의혼합properties는제거한다. 표시명은탐색라벨이며기억내용권위가아니다.
+- memory_claims: node_id PK/FK, statement,speech_act,basis,polarity,condition,requirement(JSON AST),valid_from,valid_to,salience,source_class,authority. authority는model_interpretation이며발화자의보고를실행관찰로승격할수없다. source_class는프로그램이canonical근거의role/source_kind로도출한다. 현입력에독립실행관찰producer는없으므로이를만들어내지않는다. 현재상태답변에는실행확인을요구하는명시메타데이터를반환한다.
+- memory_evidence: node_id/source_id/episode_id/revision. 모든노드의추출출처이며문자열등장과다르다.
+- memory_mentions: node_id/source_id,source내byte_start/end,surface,method(literal/inferred). 런타임이실제원문에서표현을찾은경우만literal. 모호한별칭/지시어는inferred로보존하고자동정체성병합하지않는다.
+- memory_aliases 및postings: 노드탐색의파생색인. 기존alias이름도함께정리한다.
+- memory_meaning_commits: window_ref PK, input_hash, output_json, plan_json,committed_at. A검증후같은원문으로구성한노드/기억/근거/관계를영속화한다. B실패시유효A를지우지않고회상할수있다. 완료window와A완료를별도로집계한다.
+- 새추출노드ID는window/local_ref로결정하여재시도와A/B간안정적이다. B의같은대상판정은identity_match탐색연결로,같은주장판정은same_claim연결로남긴다. 기존주장에새보고를덮어쓰거나합쳐서출처가승격되지않는다. 모델동일성연결은원문이있는추정이며수동identity정정기록과구분한다. 처리중A노드는다른B의과거후보에포함하지않는다.
+- A저장은B요청보다먼저필수로수행한다. 정상적needs_context/unsupported는기존처리를유지한다. B는A원문/IDs를변경할수없고확인된후보연결/정정만추가한다. applyPlan은동일저장코드로meaning/bound단계를처리하며meaning에서는window완료/owner해제를하지않는다. 과거무효응답은이력으로유지하고새스키마에서묵시재사용하지않는다.
+- 정정관계는구형기억을삭제하지않는다. raw검색은해석의유효기간/정정상태로제외하지않고historical해석을구분한다. 검색/캐시는유효한근거집합에서만구성하며격리/제외원문의파생결과를사용하지않는다. 캐시는origin/authority를유지하고근거revision변화로무효화된다.
+- 일회이전은독립snapshotDB에서만명시실행한다. 원래엔티티ID/관계ID/출처ID/완료추출/시도이력을보존하고혼합properties를claim필드로분해한다. 출처가불명확하면unknown으로남긴다. 단계응답이없어복원불가능한요청종류는unknown으로두며모델호출은하지않는다. 구형테이블/view를운영호환층으로남기지않는다. 진행중복구프로세스/DB/세대전환은실행하지않는다.
+검증: 실제ingestion→A저장→B실패→회상→B재개경로,의도적fact오분류의authority보존,동일주장다른발화자의출처분리,직접/추정언급,OR조건,정정/제외/캐시,복사본이전후원본키/완료응답해시보존을최소검사한다. 유료모델비교는후속Task범위다.
+
 ## 구현 승인과 분리 (2026-09-13)
 사용자가 이 세션에서 개선안 개발을 승인했다. 기존 복구 오류 수정은 별도 세션으로 인계한다. 개선 worktree=/Users/yeonwoo/.codex/worktrees/memory-source-graph/butler, branch=codex/memory-source-graph-redesign, 시작 SHA=90c31ae30ffa4e98c35eabff94e55c77a692e3e1. 운영 root/복구 worktree/실행 데이터는 이 개발에서 변경하지 않는다. 기존 아래의 '구현 미실행' 문구는 최초 등록 시점 이력이다. 실제 유료 모델 벤치마크와 운영 적용은 이번 개발과 분리한다.
 

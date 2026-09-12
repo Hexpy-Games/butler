@@ -184,7 +184,7 @@ function applyIdentity(
     source_revision: source.row.revision, source_observed_at: source.row.observed_at, recorded_at: new Date().toISOString(), recorded_outcome: "applied",
   };
   appendRecord(db, source.jobId, record);
-  db.query("UPDATE entities SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
+  db.query("UPDATE memory_nodes SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
     .run(canonical.id, source.jobId, decisionRef, loser.id);
   addLocators(db, source.row.episode_id, source.jobId, [loser.id, canonical.id, target], record.source_refs);
   markIdentityDerivativesPending(db, loser.id, canonical.id);
@@ -226,7 +226,7 @@ function revokeIdentity(
     recorded_outcome: restored ? "restored_previous" : "restored_independent",
   };
   appendRecord(db, source.jobId, record);
-  db.query("UPDATE entities SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
+  db.query("UPDATE memory_nodes SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
     .run(restored, source.jobId, decisionRef, loser.id);
   addLocators(db, source.row.episode_id, source.jobId, [loser.id], record.source_refs);
   markIdentityDerivativesPending(db, loser.id, target.literal_canonical ?? loser.id);
@@ -269,7 +269,7 @@ export function invalidateIdentityBindingsForSupersededSources(
         source_observed_at: replacementSource.observed_at, recorded_at: input.recordedAt ?? new Date().toISOString(), recorded_outcome: "invalidated",
       };
       appendRecord(db, input.newJobId, invalidation);
-      db.query("UPDATE entities SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
+      db.query("UPDATE memory_nodes SET canonical_node_id=?,identity_history_job_id=?,identity_history_ref=? WHERE id=?")
         .run(restored, input.newJobId, ref, node.id);
       addLocators(db, input.newEpisodeId, input.newJobId, [node.id], invalidation.source_refs);
       markIdentityDerivativesPending(db, node.id, record.literal_canonical ?? node.id);
@@ -400,7 +400,7 @@ function assertCurrentUserSource(butlerData: string, db: Database, row: Projecti
 
 function validateNodeEvidence(db: Database, butlerData: string, quote: IdentityQuote, nodeId: string, allowPublicAssistant = false): NormalizedIdentityEvidence {
   const source = sourceRows(db, [quote.source_ref])[0];
-  if (!source || !db.query("SELECT 1 FROM entity_mentions WHERE entity_id=? AND source_id=?").get(nodeId, quote.source_ref))
+  if (!source || !db.query("SELECT 1 FROM memory_evidence WHERE node_id=? AND source_id=?").get(nodeId, quote.source_ref))
     throw new Error("memory_identity_evidence_mismatch");
   if (allowPublicAssistant && source.role === "assistant" && source.origin_kind === "assistant_public") {
     const current = db.query<{ current_revision: string }, [string]>("SELECT current_revision FROM memory_chunks WHERE memory_chunk_id=?").get(source.episode_id);
@@ -452,7 +452,7 @@ function assertEvidenceReadableFromDecision(decision: NormalizedIdentityEvidence
 }
 
 function requireNode(db: Database, id: string): { id: string; type: string; identity_scope: string; project_id: string | null; canonical_node_id: string | null; identity_history_job_id: string | null; identity_history_ref: string | null } {
-  const row = db.query<any, [string]>("SELECT id,type,identity_scope,project_id,canonical_node_id,identity_history_job_id,identity_history_ref FROM entities WHERE id=?").get(id);
+  const row = db.query<any, [string]>("SELECT id,type,identity_scope,project_id,canonical_node_id,identity_history_job_id,identity_history_ref FROM memory_nodes WHERE id=?").get(id);
   if (!row) throw new Error("memory_identity_node_not_found");
   return row;
 }

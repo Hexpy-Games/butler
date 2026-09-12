@@ -560,7 +560,7 @@ function currentNodeVectorMemberships(
     JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
     JOIN json_each(u.source_ids_json) refs
     JOIN memory_chunk_sources s ON s.source_id=refs.value AND s.episode_id=j.episode_id AND s.revision=j.revision
-    JOIN entity_mentions m ON m.entity_id=u.owner_id AND m.source_id=s.source_id AND m.episode_id=j.episode_id AND m.revision=j.revision
+    JOIN memory_evidence m ON m.node_id=u.owner_id AND m.source_id=s.source_id AND m.episode_id=j.episode_id AND m.revision=j.revision
     WHERE u.record_kind='node' AND u.owner_id=? AND u.owner_revision=? AND u.state='complete'
       AND EXISTS(SELECT 1 FROM json_each(json_extract(u.receipt_json,'$.vector_keys')) keys WHERE keys.value=?)
       ${clauses.length ? `AND ${clauses.join(" AND ")}` : ""} ${event.sql}
@@ -609,13 +609,13 @@ function currentVectorReceipts(
       (SELECT ordered.observed_at FROM memory_chunk_sources ordered
        WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
          AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
-         AND (?='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+         AND (?='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
        ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
       COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (
         SELECT ordered.source_id FROM memory_chunk_sources ordered
         WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
           AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
-          AND (?='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+          AND (?='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
         ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,ordered.scalar_pointer,ordered.byte_start
       ))) source_refs_json
     FROM memory_vector_units u JOIN memory_projection_jobs j ON j.job_id=u.job_id

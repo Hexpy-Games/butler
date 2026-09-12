@@ -43,12 +43,13 @@ test("DB-backed graph traverses condition_member and separates two systems with 
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?,'user','user_input',?,'user_statement')")
           .run(id, episode, revision, id, message.id, message.parts[0]!.id, Buffer.byteLength(text), hash, observed);
         const properties = kind === "rule" ? { statement: text, speech_act: "assertion", basis: "user_statement", requirement: { action: "capture", condition: { subject: `${system}-gate`, state: "enabled" } } } : {};
-        db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,?,?,?,'user',?)")
-          .run(id, kind === "rule" ? "constraint" : "entity", kind === "rule" ? "capture" : gate, JSON.stringify(properties), observed);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(id, id, episode, revision);
+        db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?,?,?,'user',?)")
+          .run(id, kind === "rule" ? "constraint" : "entity", kind === "rule" ? "capture" : gate, observed);
+        if (kind === "rule") db.query("INSERT INTO memory_claims(node_id,statement,speech_act,basis,polarity,requirement,salience,source_class) VALUES(?,?,'assertion','user_statement','positive',?,'normal','user')").run(id, text, JSON.stringify(properties.requirement));
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(id, id, episode, revision);
         // Only the introduction owns the exact alias. Finding the rule requires
         // traversing its stored condition edge, not co-occurrence in one source.
-        if (kind === "gate") db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
+        if (kind === "gate") db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
           .run(id, gate, gate, gate, id);
       }
       db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,status) VALUES(?,?,?,'condition_member',?,'active')")
