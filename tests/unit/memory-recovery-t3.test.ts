@@ -7,7 +7,7 @@ import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import { advanceNextMemoryProjection, ingestConversationMemory, resolveMemorySource } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
-import { ensureV2MemorySchema, claimNextProjectionWindow, claimNextVectorQuantum, completeVectorQuantum, expandSplitSourceLeaves, failVectorQuantum, invalidatePlannedWindow, markPlannedWindowFailure, markWindowFailure, progressFromDb, refreshSemanticState, refreshVectorUnitsForJob, saveValidatedPlan, selectNextProjectionJob, sourceRows } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import { ensureV2MemorySchema, claimNextProjectionWindow, claimNextVectorQuantum, completeVectorQuantum, expandSplitSourceLeaves, failVectorQuantum, invalidatePlannedWindow, markPlannedWindowFailure, markWindowFailure, progressFromDb, recordVectorInvocationStarted, refreshSemanticState, refreshVectorUnitsForJob, saveValidatedPlan, selectNextProjectionJob, sourceRows } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-request-errors.ts";
 import { assertPlanCandidatesCurrent, type NormalizedPlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
@@ -187,6 +187,10 @@ test("T3 vector owner preserves successful units while bounded retries and expli
   expect(progressFromDb(db, "job").episode_vectors.state).toBe("partial");
   const due = claimNextVectorQuantum(db, { jobId: "job", kind: "episode", now: "2026-09-09T00:03:00Z", ownerPid: process.pid, ownerNonce: "vector-owner-3" });
   expect(due).toHaveLength(4);
+  // A call with no observed response must retain the existing unknown-outcome boundary.
+  recordVectorInvocationStarted(db, due);
+  expect(claimNextVectorQuantum(db, { jobId: "job", kind: "episode", ownerNonce: "after-interruption" })).toHaveLength(0);
+  expect(db.query("SELECT unit_id FROM memory_vector_units WHERE error_code='memory_embedding_outcome_unknown' AND outcome_known=0").all()).toHaveLength(4);
 
   refreshVectorUnitsForJob(db, "job", [stable, { sourceId: "oversized", text: `a${"\u0301".repeat(4_001)}`, role: "user", byteStart: 0 }]);
   expect(db.query<{ error_code: string; state: string }, []>("SELECT error_code,state FROM memory_vector_units WHERE error_code='memory_vector_oversized_grapheme'").get()).toEqual({ error_code: "memory_vector_oversized_grapheme", state: "failed" });
@@ -195,6 +199,19 @@ test("T3 vector owner preserves successful units while bounded retries and expli
 });
 
 test("T3 advance resumes a verified persisted vector row without embedding it twice", async () => {
+  // embed.ts binds its default socket at import time, so isolate this test before imports.
+  if (process.env.BUTLER_T3_VECTOR_CHILD !== "1") {
+    const socketRoot = mkdtempSync(join(tmpdir(), "bt3-vector-"));
+    try {
+      const child = Bun.spawn([process.execPath, "test", import.meta.path, "--test-name-pattern", "resumes a verified persisted vector"], {
+        env: { ...process.env, BUTLER_T3_VECTOR_CHILD: "1", EMBED_SOCKET: join(socketRoot, "embed.sock") },
+        stdout: "pipe", stderr: "pipe",
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      expect(exitCode, stdout + stderr).toBe(0);
+    } finally { rmSync(socketRoot, { recursive: true, force: true }); }
+    return;
+  }
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t3-vector-writer-"));
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
@@ -240,11 +257,12 @@ test("T3 advance resumes a verified persisted vector row without embedding it tw
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(socketPath, resolve); });
     try {
       const interrupted = await advanceNextMemoryProjection({ context });
-      expect(interrupted?.node_vectors.state).toBe("pending");
+      expect(interrupted?.node_vectors.state).toBe("running");
       expect(embeddingRequests).toBe(1);
       db = new Database(graphPath);
+      expect(db.query("SELECT state,provider_invoked,outcome_known,receipt_json FROM memory_vector_units WHERE record_kind='node'").get())
+        .toEqual({ state: "running", provider_invoked: 1, outcome_known: 1, receipt_json: null });
       db.exec("DROP TRIGGER interrupt_vector_receipt");
-      db.query("UPDATE memory_vector_units SET next_attempt_at='2000-01-01T00:00:00Z' WHERE record_kind='node' AND state='pending'").run();
       db.query("UPDATE memory_projection_jobs SET next_stage='node_vectors' WHERE job_id=?").run(registered.job_id);
       db.close();
       const resumed = await advanceNextMemoryProjection({ context });
