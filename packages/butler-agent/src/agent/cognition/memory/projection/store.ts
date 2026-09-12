@@ -1020,16 +1020,17 @@ export function splitProjectionWindow(
     const flattened = input.children.flat();
     if (flattened.length !== new Set(flattened).size || JSON.stringify(flattened) !== JSON.stringify(parentSources.flatMap((sourceId) => expandSplitSourceLeaves(db, sourceId))))
       throw new Error("memory_projection_split_coverage_changed");
-    const later = db.query<{ window_ref: string; ordinal: number }, [string, number]>(
-      "SELECT window_ref,ordinal FROM memory_projection_windows WHERE job_id=? AND ordinal>? ORDER BY ordinal DESC",
-    ).all(input.jobId, parent.ordinal);
-    for (const row of later) db.query("UPDATE memory_projection_windows SET ordinal=? WHERE window_ref=?").run(row.ordinal + 1, row.window_ref);
+    const nextOrdinal = db.query<{ ordinal: number }, [string, number]>(
+      "SELECT MIN(ordinal) ordinal FROM memory_projection_windows WHERE job_id=? AND ordinal>?",
+    ).get(input.jobId, parent.ordinal)?.ordinal;
+    const rightOrdinal = nextOrdinal == null ? parent.ordinal + 1 : (parent.ordinal + nextOrdinal) / 2;
+    if (rightOrdinal <= parent.ordinal) throw new Error("memory_projection_window_order_exhausted");
     const parkedOrdinal = Number(db.query<{ ordinal: number }, [string]>("SELECT MIN(ordinal)-1 ordinal FROM memory_projection_windows WHERE job_id=?").get(input.jobId)?.ordinal ?? -1);
     db.query("UPDATE memory_projection_windows SET ordinal=? WHERE window_ref=?").run(parkedOrdinal, input.windowRef);
     const refs = input.children.map((child, index) => ({
       ref: projectionDigest(["memory-window-child", input.windowRef, index, ...child]),
       child,
-      ordinal: parent.ordinal + index,
+      ordinal: index === 0 ? parent.ordinal : rightOrdinal,
     }));
     for (const child of refs) db.query(`INSERT INTO memory_projection_windows
       (window_ref,job_id,ordinal,source_refs_json,state,parent_window_ref,recovery_revision) VALUES(?,?,?,?,'pending',?,?)`)

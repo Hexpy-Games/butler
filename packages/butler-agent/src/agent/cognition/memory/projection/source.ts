@@ -10,7 +10,7 @@ import type {
 import type { ExtractInput, ResolvedMemorySource } from "./contracts.ts";
 import {
   MEMORY_SOURCE_WINDOW_BYTES,
-  splitMeaningSourceSpans,
+  splitGraphemeUtf8Spans,
 } from "./windows.ts";
 import {
   sourceRows,
@@ -454,7 +454,9 @@ export function splitUtf8Spans(
   text: string,
   maxBytes: number,
 ): Array<{ start: number; end: number }> {
-  return splitMeaningSourceSpans(text, maxBytes);
+  // Canonical source IDs are stable across extractor upgrades. Model-sized
+  // partitions belong to the window lineage, not the source inventory.
+  return splitGraphemeUtf8Spans(text, maxBytes).map(({ start, end }) => ({ start, end }));
 }
 
 export function packWindows(
