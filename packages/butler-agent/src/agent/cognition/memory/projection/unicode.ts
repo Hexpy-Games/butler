@@ -1545,3 +1545,11 @@ export function unicodeCaseFold(value:string):string {
 export function graphemeCount(value:string):number {
   return [...new Intl.Segmenter("und", { granularity:"grapheme" }).segment(value)].length;
 }
+
+/** The persisted alias index and query-side document norms use identical grams. */
+export function foldedGraphemeNgrams(value: string): string[] {
+  const graphemes = [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].map((item) => item.segment);
+  const grams: string[] = [];
+  for (const size of [2, 3]) for (let index = 0; index + size <= graphemes.length; index += 1) grams.push(graphemes.slice(index, index + size).join(""));
+  return [...new Set(grams)];
+}

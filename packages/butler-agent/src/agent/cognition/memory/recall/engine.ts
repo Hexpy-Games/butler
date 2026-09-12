@@ -238,6 +238,11 @@ const VECTOR_AMBIGUITY_SCAN_MARGIN = 0.05;
 const VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION = 0.025;
 const VECTOR_QUERY_MIN_CORROBORATING_SEED_MATCHES = 2;
 const DEFAULT_RECALL_CACHE_TTL_MS = 30_000;
+const V2_RECALL_DEADLINE_MS = 5_000;
+const V2_RECALL_SOURCE_RESERVE_MS = 2_000;
+const V2_RECALL_GRAPH_RESERVE_MS = 1_500;
+const V2_RECALL_ENVELOPE_BYTES = 24 * 1024;
+const V2_RECALL_COMPACT_EXCERPT_GRAPHEMES = 120;
 const V2_RECALL_CURSOR_TTL_MS = 5 * 60_000;
 const V2_RECALL_CURSOR_MAX_ENTRIES = 32;
 type V2RecallCandidateMetadata = Pick<
@@ -1979,7 +1984,7 @@ async function recallSourceBackedMemoryWithCache(
   inventories: V2RecallInventoryCache,
 ): Promise<RecallMemoryResult> {
   const input = normalizeV2RecallInput(request);
-  const deadlineAt = Date.now() + 5_000;
+  const deadlineAt = Date.now() + V2_RECALL_DEADLINE_MS;
   if (input.cursor) return continueV2Recall(input, deadlineAt, inventories);
   const generation = resolveMemoryGeneration(input.context);
   if (input.includeVector) {
@@ -2049,7 +2054,11 @@ function recallSourceBackedGraph(
 ): RecallMemoryResult {
   const db = openProjectionDb(generation.graphPath, true);
   const graphStartedAt = performance.now();
+  const graphDeadlineAt = deadlineAt - V2_RECALL_SOURCE_RESERVE_MS;
+  const candidateDeadlineAt = graphDeadlineAt - V2_RECALL_GRAPH_RESERVE_MS;
   try {
+    // Pin graph revision for all query-local cached reads and cursor metadata.
+    db.exec("BEGIN");
     const admitted = input.admittedChannels ?? {
       graph: true,
       lexical: true,
@@ -2058,7 +2067,7 @@ function recallSourceBackedGraph(
       explicit: true,
       task: true,
     };
-    const projectionCoverage = graphProjectionCoverage(db, input, generation, deadlineAt);
+    const projectionCoverage = graphProjectionCoverage(db, input, generation, candidateDeadlineAt);
     const graphProjectionPending = projectionCoverage.pending;
     const currentVector = vectorInput?.vector
       ? filterCurrentVectorMatches(db, input, generation, vectorInput.vector)
@@ -2067,7 +2076,7 @@ function recallSourceBackedGraph(
       db,
       input,
       currentVector?.nodes,
-      deadlineAt,
+      candidateDeadlineAt,
     );
     const temporal = admitted.context
       ? selectTemporalSeeds(db, input)
@@ -2114,7 +2123,7 @@ function recallSourceBackedGraph(
       projectFilter: input.projectFilter,
       projectIds: input.projectIds,
       includeInternal: input.includeInternal,
-      deadlineAt,
+      deadlineAt: graphDeadlineAt,
     };
     const resolvedSeedResults = selected.seeds.map((seed) =>
       resolveIdentityAt(db, seed, identityScope),
@@ -2123,13 +2132,20 @@ function recallSourceBackedGraph(
       selected.coverageCodes.push("identity_partial");
     }
     const resolvedSeeds = resolvedSeedResults.map((result) => result.nodeId);
+    const adjacencyCache = new Map<string, ReturnType<typeof loadEligibleAdjacency>>();
     const expansion = expandGraph(
       [...new Set(resolvedSeeds)],
-      (nodeId, limit, offset) =>
-        admitted.graph
-          ? loadEligibleAdjacency(db, input, nodeId, limit, offset)
-          : { edges: [], truncated: false },
-      deadlineAt,
+      (nodeId, limit, offset) => {
+        if (!admitted.graph) return { edges: [], truncated: false };
+        const key = JSON.stringify([nodeId, limit, offset]);
+        let page = adjacencyCache.get(key);
+        if (!page) {
+          page = loadEligibleAdjacency(db, input, nodeId, limit, offset);
+          adjacencyCache.set(key, page);
+        }
+        return page;
+      },
+      graphDeadlineAt,
       (nodeId, limit) =>
         identityMembersForTarget(db, nodeId, { ...identityScope, limit }),
     );
@@ -2487,13 +2503,8 @@ function recallSourceBackedGraph(
       candidateResults,
       inventories,
     );
-    const results = cursorPage.episodeIds.flatMap((episodeId) => {
-      const result = candidateResults.find((item) =>
-        item.episode_ref === episodeId,
-      );
-      return result ? [result] : [];
-    });
-    const bindingRejectedEpisodeIds = new Set<string>();
+    const results: RecallMemoryResult["results"] = [];
+    let nextResultOffset = 0;
     const buildResponse = (): RecallMemoryResult => {
       const deadlineHit = Date.now() >= deadlineAt;
       const partial = graphProjectionPending ||
@@ -2566,56 +2577,39 @@ function recallSourceBackedGraph(
             ],
           },
         },
-        next_cursor: cursorPage.nextCursor,
+        next_cursor: nextResultOffset < cursorPage.candidateCount
+          ? encodeRecallCursor(cursorPage.key, nextResultOffset) : null,
         diagnostics: vectorInput?.vector?.diagnostics ?? [],
       };
     };
+    // Give every ranked result a complete, source-backed bundle before spending
+    // the envelope on supplementary evidence for the first few results.
     let response = buildResponse();
-    while (
-      memoryRecallNativeEnvelopeBytes(response) > 24 * 1024 &&
-      results.length > 0
-    ) {
-      resultBudgetHit = true;
-      if (results.length > 1) results.pop();
-      else if (results[0]!.evidence.length > 1) {
-        results[0]!.evidence.splice(1);
-        const rankedEpisode = ranked.find((item) =>
-          item.episodeId === results[0]!.episode_ref,
-        )!;
-        const rebound = bindResultToEvidence(
-          rankedEpisode,
-          results[0]!.evidence,
-        );
-        if (rebound) results[0] = rebound;
-        else {
-          const rejected = results.shift();
-          if (rejected) bindingRejectedEpisodeIds.add(rejected.episode_ref);
-          const returnedEpisodeIds = new Set(
-            results.map((result) => result.episode_ref),
-          );
-          const refill = candidateResults.find((candidate) =>
-            !bindingRejectedEpisodeIds.has(candidate.episode_ref) &&
-            !returnedEpisodeIds.has(candidate.episode_ref),
-          );
-          if (refill) results.push(refill);
-        }
-      } else {
-        const excerpt = results[0]!.evidence[0]?.excerpt ?? "";
-        if (graphemeCount(excerpt) <= 1) break;
-        results[0]!.evidence[0]!.excerpt = truncateRecallExcerpt(
-          excerpt,
-          Math.max(1, Math.floor(graphemeCount(excerpt) * 0.75)),
-        );
+    for (const [index, result] of candidateResults.entries()) {
+      const rankedEpisode = ranked.find((item) => item.episodeId === result.episode_ref)!;
+      const minimum = minimumRecallBundle(result, (evidence) => bindResultToEvidence(rankedEpisode, evidence));
+      results.push(minimum);
+      nextResultOffset = index + 1;
+      if (memoryRecallNativeEnvelopeBytes(buildResponse()) > V2_RECALL_ENVELOPE_BYTES) {
+        results.pop();
+        resultBudgetHit = true;
+        if (results.length) { nextResultOffset = index; break; }
+        // A complete bundle that cannot fit alone is omitted with coverage.
+        // Advance past it so a cursor cannot loop forever on the same item.
+        continue;
       }
-      response = buildResponse();
+      if (results.length >= input.limit) break;
     }
+    for (let index = 0; index < results.length; index += 1) {
+      const minimum = results[index]!;
+      results[index] = candidateResults.find((item) => item.episode_ref === minimum.episode_ref)!;
+      if (memoryRecallNativeEnvelopeBytes(buildResponse()) > V2_RECALL_ENVELOPE_BYTES) results[index] = minimum;
+    }
+    response = buildResponse();
     const inventory = inventories.get(cursorPage.key)!;
     inventory.status = response.status;
     inventory.coverage = response.coverage;
     inventory.diagnostics = response.diagnostics;
-    response.next_cursor = results.length < cursorPage.candidateCount
-      ? encodeRecallCursor(cursorPage.key, results.length)
-      : null;
     if (!response.next_cursor) inventories.delete(cursorPage.key);
     recordV2ReturnedRankingMetrics({
       input,
@@ -2626,6 +2620,7 @@ function recallSourceBackedGraph(
     });
     return response;
   } finally {
+    if (db.inTransaction) db.exec("ROLLBACK");
     db.close();
   }
 }
@@ -2708,6 +2703,8 @@ function continueV2Recall(
   ) throw new Error("stale_cursor");
   const db = openProjectionDb(generation.graphPath, true);
   try {
+    // Pin graph revision for all query-local cached reads and cursor metadata.
+    db.exec("BEGIN");
     const graphRevision = db.query<{ value: string }, []>(
       "SELECT value FROM memory_state WHERE key='graph_revision'",
     ).get()?.value ?? "0";
@@ -2867,13 +2864,14 @@ function continueV2Recall(
         ...new Set([
           ...(prior?.source.codes ?? []),
           ...(sourcePartial ? ["source_resolution_failed"] : []),
+          ...(budgetTrimmed ? ["serialization_budget"] : []),
         ]),
       ];
       return {
         status:
           cursor.inventory.status === "unavailable" && results.length === 0
             ? "unavailable"
-            : cursor.inventory.status === "partial" || sourcePartial ||
+            : cursor.inventory.status === "partial" || sourcePartial || budgetTrimmed ||
                 Boolean(next)
             ? "partial"
             : "complete",
@@ -2903,24 +2901,68 @@ function continueV2Recall(
         diagnostics: cursor.inventory.diagnostics ?? [],
       };
     };
-    let response = build(false);
-    while (
-      results.length && memoryRecallNativeEnvelopeBytes(response) > 24 * 1024
-    ) {
-      results.pop();
-      resultOffsets.pop();
-      response = build(true);
-      response.coverage.source.state = "partial";
-      response.coverage.source.codes = [
-        ...new Set([...response.coverage.source.codes, "serialization_budget"]),
-      ];
-      response.status = results.length ? "partial" : "unavailable";
+    const fullResults = results.slice();
+    const fullOffsets = resultOffsets.slice();
+    results.length = 0;
+    resultOffsets.length = 0;
+    let budgetTrimmed = false;
+    for (const [index, result] of fullResults.entries()) {
+      const minimum = minimumRecallBundle(result, (evidence) => {
+        const row = rowById.get(result.episode_ref)!;
+        const summary = row.hasClaims
+          ? matchedClaimSummary(db, effective, row.episodeId, result.matched_node_ref,
+            mentions.filter((mention) => mention.episodeId === row.episodeId),
+            new Set(evidence.map((item) => rawMemorySourceId(item.source_ref))))
+          : row.summary;
+        return summary ? { ...result, summary, evidence, requirements: resultRequirements(db, effective, evidence) } : null;
+      });
+      results.push(minimum);
+      resultOffsets.push(fullOffsets[index]!);
+      if (memoryRecallNativeEnvelopeBytes(build(budgetTrimmed)) > V2_RECALL_ENVELOPE_BYTES) {
+        results.pop();
+        resultOffsets.pop();
+        budgetTrimmed = true;
+        if (results.length) break;
+      }
     }
+    for (let index = 0; index < results.length; index += 1) {
+      const minimum = results[index]!;
+      results[index] = fullResults.find((item) => item.episode_ref === minimum.episode_ref)!;
+      if (memoryRecallNativeEnvelopeBytes(build(budgetTrimmed)) > V2_RECALL_ENVELOPE_BYTES) results[index] = minimum;
+    }
+    const response = build(budgetTrimmed);
     if (!response.next_cursor) inventories.delete(cursor.key);
     return response;
   } finally {
+    if (db.inTransaction) db.exec("ROLLBACK");
     db.close();
   }
+}
+
+function minimumRecallBundle(
+  result: V2RecallResultItem,
+  rebind: (evidence: V2RecallResultItem["evidence"]) => V2RecallResultItem | null,
+): V2RecallResultItem {
+  let minimum = result;
+  const requirementKey = (item: V2RecallResultItem) => JSON.stringify(
+    (item.requirements ?? []).map(({ source_refs: _refs, ...requirement }) => requirement)
+      .sort((a, b) => a.node_ref.localeCompare(b.node_ref)),
+  );
+  for (let index = result.evidence.length - 1; index > 0; index -= 1) {
+    const candidate = rebind(minimum.evidence.filter((_, current) => current !== index));
+    if (candidate && candidate.summary === result.summary &&
+      candidate.matched_node_ref === result.matched_node_ref &&
+      requirementKey(candidate) === requirementKey(result)) minimum = candidate;
+  }
+  // A constraint's source excerpt is kept intact. For ordinary facts the full
+  // statement stays in summary; only the supplementary source preview shrinks.
+  if (!minimum.requirements?.length) {
+    minimum = Object.create(Object.getPrototypeOf(minimum), Object.getOwnPropertyDescriptors(minimum)) as V2RecallResultItem;
+    minimum.evidence = minimum.evidence.map((item) => ({ ...item,
+      excerpt: truncateRecallExcerpt(item.excerpt, V2_RECALL_COMPACT_EXCERPT_GRAPHEMES),
+    }));
+  }
+  return minimum;
 }
 
 function memoryRecallNativeEnvelopeBytes(result: RecallMemoryResult): number {
@@ -3165,7 +3207,7 @@ function loadEligibleAdjacency(
     JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE (e.source_node_id=? OR e.target_node_id=?) AND e.status='active'
-      AND e.rel_type IN ('related_to','depends_on','likes','dislikes','decided','has_subject','has_object','belongs_to','co_occurred')
+      AND e.rel_type IN ('related_to','depends_on','likes','dislikes','decided','has_subject','has_object','condition_member','belongs_to','co_occurred')
       AND (e.valid_from IS NULL OR julianday(e.valid_from)<=julianday(?))
       AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))
       AND (e.claim_node_id IS NULL OR ${claimValidity.sql}) AND ${

@@ -1,11 +1,11 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { conversationStorePath } from "../../../conversation/store.ts";
-import { unicodeCaseFold, unicodeNfc } from "../projection/unicode.ts";
+import { foldedGraphemeNgrams, unicodeCaseFold, unicodeNfc } from "../projection/unicode.ts";
 import type { RecallMemoryInput, SeedCandidate } from "./contracts.ts";
 
 const MAX_CHANNEL_CANDIDATES = 64;
-const segmenter = new Intl.Segmenter("und", { granularity: "grapheme" });
+const LEXICAL_GRAM_BATCH_SIZE = 400;
 
 export type SemanticSeedSelection = {
   seeds: string[];
@@ -188,7 +188,7 @@ function aliasCandidates(db: Database, input: RecallMemoryInput, phrases: string
 }
 
 function lexicalCandidates(db: Database, input: RecallMemoryInput, cue: string, deadlineAt: number, sourceScope?: { projectId: string | null }): { candidates: SeedCandidate[]; partial: boolean } {
-  const queryGrams = graphemeNgrams(unicodeCaseFold(cue));
+  const queryGrams = foldedGraphemeNgrams(unicodeCaseFold(cue));
   if (queryGrams.length === 0) return { candidates: [], partial: false };
   const validity = claimEligibility(input);
   const n = Number(db.query<{ count: number }, any>(`
@@ -210,30 +210,39 @@ function lexicalCandidates(db: Database, input: RecallMemoryInput, cue: string, 
   let partial = false;
   for (const document of matchedDocuments) {
     if (Date.now() >= deadlineAt) { partial = true; break; }
-    const grams = db.query<{ gram: string }, [string, string, string]>(`
-      SELECT gram FROM entity_alias_postings WHERE entity_id=? AND source_id=? AND surface_original=? ORDER BY gram
-    `).all(document.entity_id, document.source_id, document.surface_original).map((row) => row.gram);
-    documentGrams.set(JSON.stringify([document.entity_id, document.source_id, document.surface_original]), { nodeId: document.entity_id, grams });
+    // The surface is already selected by the posting index. Recreate its norm
+    // with the writer's exact Unicode algorithm instead of rereading every posting.
+    documentGrams.set(JSON.stringify([document.entity_id, document.source_id, document.surface_original]), {
+      nodeId: document.entity_id, grams: foldedGraphemeNgrams(unicodeCaseFold(document.surface_original)),
+    });
   }
-  const allGrams = [...new Set([...documentGrams.values()].flatMap((document) => document.grams))];
+  const allGrams = [...new Set([...queryGrams, ...[...documentGrams.values()].flatMap((document) => document.grams)])];
   const df = new Map<string, number>();
-  for (let offset = 0; offset < allGrams.length; offset += 400) {
+  for (let offset = 0; offset < allGrams.length; offset += LEXICAL_GRAM_BATCH_SIZE) {
     if (Date.now() >= deadlineAt) { partial = true; break; }
-    const batch = allGrams.slice(offset, offset + 400);
+    const batch = allGrams.slice(offset, offset + LEXICAL_GRAM_BATCH_SIZE);
     const rows = db.query<{ gram: string; count: number }, any>(`
-      SELECT gram,COUNT(*) count FROM (
-        SELECT DISTINCT p.gram,p.entity_id,p.source_id,p.surface_original FROM entity_alias_postings p
-        JOIN entities e ON e.id=p.entity_id
-        JOIN memory_chunk_sources s ON s.source_id=p.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-        WHERE p.gram IN (${batch.map(() => "?").join(",")}) AND ${validity.sql} AND ${scopeSql(input, sourceScope)}
-      ) GROUP BY gram
-    `).all(...batch, ...validity.args, ...scopeArgs(input, sourceScope));
+      WITH eligible AS MATERIALIZED (
+        SELECT DISTINCT a.entity_id,a.source_id FROM entity_aliases a
+        JOIN entities e ON e.id=a.entity_id
+        JOIN memory_chunk_sources s ON s.source_id=a.source_id
+        JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+        WHERE ${validity.sql} AND ${scopeSql(input, sourceScope)}
+      )
+      SELECT p.gram,COUNT(*) count FROM entity_alias_postings p
+      CROSS JOIN eligible d ON d.entity_id=p.entity_id AND d.source_id=p.source_id
+      WHERE p.gram IN (${batch.map(() => "?").join(",")}) GROUP BY p.gram
+    `).all(...validity.args, ...scopeArgs(input, sourceScope), ...batch);
+    for (const gram of batch) df.set(gram, 0);
     for (const row of rows) df.set(row.gram, Number(row.count));
   }
+  // An unfinished DF is unknown, not zero frequency. Do not invent scores.
+  if (queryGrams.some((gram) => !df.has(gram))) return { candidates: [], partial: true };
   const queryNorm = queryGrams.reduce((sum, gram) => sum + idf(n, df.get(gram) ?? 0), 0);
   const querySet = new Set(queryGrams);
   const scores = new Map<string, number>();
   for (const document of documentGrams.values()) {
+    if (document.grams.some((gram) => !df.has(gram))) continue;
     const documentNorm = document.grams.reduce((sum, gram) => sum + idf(n, df.get(gram) ?? 0), 0);
     const matched = document.grams.reduce((sum, gram) => sum + (querySet.has(gram) ? idf(n, df.get(gram) ?? 0) : 0), 0);
     const score = matched / Math.sqrt(queryNorm * documentNorm);
@@ -398,12 +407,6 @@ function seedFusionScore(channels: Map<SeedCandidate["channel"], SeedCandidate>)
 }
 
 function idf(n: number, df: number): number { return Math.log(1 + (n + 1) / (df + 1)); }
-function graphemeNgrams(value: string): string[] {
-  const graphemes = [...segmenter.segment(value)].map((part) => part.segment);
-  const grams: string[] = [];
-  for (const size of [2, 3]) for (let i = 0; i + size <= graphemes.length; i += 1) grams.push(graphemes.slice(i, i + size).join(""));
-  return [...new Set(grams)];
-}
 function uniqueOriginalByNfc(values: string[]): string[] {
   const seen = new Set<string>();
   return values.map((value) => value.trim()).filter((value) => {

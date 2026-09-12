@@ -501,7 +501,7 @@ test("multi-claim summary follows the hydrated cue-matched claim instead of UUID
   } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });
 
-test("serialization reduction rebinds summary, matched node, and path to surviving ordered evidence", async () => {
+test("serialization preserves the matched claim and its source before supplementary excerpts", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t2-reduction-"));
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
@@ -549,16 +549,16 @@ test("serialization reduction rebinds summary, matched node, and path to survivi
       ...recallInput({ cue: "needle", asOf: "2026-09-08T00:00:00Z", limit: 1 }),
       context: { butlerData, target: { kind: "active", expected_generation: descriptor.generation_id }, signal: new AbortController().signal },
     });
-    expect(recalled.coverage.source.codes).toContain("serialization_budget");
-    expect(recalled.results[0]?.evidence.map((item) => Buffer.from(item.source_ref.split(":")[3]!, "base64url").toString("utf8"))).toEqual(["reduce-a"]);
-    expect(recalled.results[0]?.summary).toBe("alpha fact");
-    expect(recalled.results[0]?.matched_node_ref).toBe("reduce-a-claim");
-    expect(recalled.results[0]?.association_path.at(-1)).toEqual({ from: "reduce-b-claim", relation: "related_to", to: "reduce-a-claim", traversed_reverse: false });
+    expect(recalled.results[0]?.evidence.map((item) => Buffer.from(item.source_ref.split(":")[3]!, "base64url").toString("utf8"))).toEqual(["reduce-a", "reduce-b"]);
+    expect(recalled.results[0]?.summary).toBe("needle fact");
+    expect(recalled.results[0]?.matched_node_ref).toBe("reduce-b-claim");
+    expect(recalled.results[0]?.association_path).toEqual([]);
+    expect(Buffer.byteLength(JSON.stringify(recalled))).toBeLessThanOrEqual(24 * 1024);
     expect(Buffer.byteLength(JSON.stringify(recalled))).toBeLessThanOrEqual(24 * 1024);
   } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });
 
-test("serialization refill reconsiders the highest ranked candidate popped for budget", async () => {
+test("serialization shares the envelope across complete ranked result bundles", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t2-refill-"));
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
@@ -671,11 +671,26 @@ test("serialization refill reconsiders the highest ranked candidate popped for b
       .filter((event) => event.category === "memory" && event.name === "recall_v2_ranking" && event.dimensions?.ranking_stage === "candidate")
       .map((event) => [event.dimensions?.episode_sha256, event.dimensions?.candidate_rank]));
     expect(episodes.map((episode) => candidateRanks.get(createHash("sha256").update(episode.episodeId).digest("hex")))).toEqual([1, 2, 3]);
-    expect(recalled.coverage.source.codes).toContain("serialization_budget");
-    expect(recalled.results.map((result) => result.episode_ref)).toEqual([episodes[1]!.episodeId]);
-    expect(recalled.results[0]?.summary).toBe("needle second");
-    expect(recalled.results[0]?.evidence.map((item) => Buffer.from(item.source_ref.split(":")[3]!, "base64url").toString("utf8"))).toEqual(["refill-b-0"]);
+    expect(recalled.results.map((result) => result.episode_ref)).toEqual(episodes.map((episode) => episode.episodeId));
+    expect(recalled.results.map((result) => result.summary)).toEqual(["needle top", "needle second", "needle third"]);
+    expect(recalled.results[0]?.evidence.map((item) => Buffer.from(item.source_ref.split(":")[3]!, "base64url").toString("utf8"))).toContain("refill-a-1");
     expect(Buffer.byteLength(JSON.stringify(recalled))).toBeLessThanOrEqual(24 * 1024);
+    const oversizedDb = new Database(join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite"));
+    oversizedDb.query("UPDATE entities SET properties=json_set(properties,'$.statement',?) WHERE id='refill-a-claim'").run(largeClaim);
+    oversizedDb.exec("UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'");
+    oversizedDb.close();
+    const pageInput = {
+      ...recallInput({ cue: "needle", asOf: "2026-09-08T00:00:00Z", limit: 1 }),
+      context: { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal },
+    };
+    const page = await recallSourceBackedMemory(pageInput);
+    expect(page.coverage.source.codes).toContain("serialization_budget");
+    expect(page.results.map((item) => item.summary)).toEqual(["needle second"]);
+    expect(page.next_cursor).not.toBeNull();
+    const next = await recallSourceBackedMemory({ ...pageInput, cursor: page.next_cursor! });
+    expect(next.results.map((item) => item.summary)).toEqual(["needle third"]);
+    expect(next.next_cursor).toBeNull();
+
   } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });
 
