@@ -11,6 +11,7 @@ import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integra
 import { runStructuredMemoryExtractor, type ExtractionStageResult } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { sourcePassages, meaningToOutput, validateMeaning, type Meaning } from "../../packages/butler-agent/src/agent/cognition/memory/projection/meaning.ts";
 import { prepareBindingBatches, applyBinding, applyBindingRepair } from "../../packages/butler-agent/src/agent/cognition/memory/projection/binding.ts";
+import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 import { splitMeaningSourceSpans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
 import type { ExtractInput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 
@@ -213,6 +214,79 @@ test("invalid cached A is preserved while a bounded correction supplies the reus
     expect(requests).toHaveLength(2);
     expect(JSON.stringify([...saved])).toBe(snapshot);
     expect([...saved.values()][0]!.raw).toBe(JSON.stringify(invalid));
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("cached oversized entity name enters bounded A repair without replacing its saved response", async () => {
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>();
+  const oversized: Meaning = { ...empty, entities: [{ name: "대상".repeat(129), evidence: [0] }] };
+  const corrected: Meaning = { ...empty, entities: [{ name: "간결한 대상", evidence: [0] }] };
+  let setup = true;
+  const requests: any[] = [];
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async request => {
+    const wire = JSON.parse(request.prompt);
+    const prompt = wire.input ?? wire;
+    if (prompt.parts) {
+      if (!wire.input) return response(oversized) as never;
+      if (setup) throw new Error("stop-after-caching-A");
+      requests.push(wire);
+      return response(corrected) as never;
+    }
+    if (!setup) requests.push(wire);
+    return response({ decisions: prompt.targets.map((target: any) => ({ target: target.target, candidate: null, span: null,
+      support: [] })) }) as never;
+  };
+  const root = mkdtempSync(join(tmpdir(), "memory-name-repair-"));
+  try {
+    const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [], stages: { load: async (key: string) => saved.get(key) ?? null,
+        save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+    await expect(runStructuredMemoryExtractor(args)).rejects.toThrow("stop-after-caching-A");
+    const initial = [...saved.entries()][0]!;
+    setup = false;
+    const result = await runStructuredMemoryExtractor(args);
+    expect(result.output.nodes[0]!.label).toBe("간결한 대상");
+    expect([...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(result.output.nodes[0]!.label)]).toHaveLength(6);
+    expect(normalizeAndValidatePlan(null as never, args.extractInput, result.output).refs.n0).toBeTruthy();
+    expect(requests.filter(request => request.input?.parts)).toHaveLength(1);
+    expect(requests.filter(request => request.parts)).toHaveLength(0);
+    expect(requests[0]!.correction.error).toContain("memory_extract_invalid_output entity=0 field=name graphemes=258 limit=256");
+    expect(requests[0]!.correction.error).toContain("concise entity name grounded in the source evidence");
+    expect(saved.get(initial[0])!.raw).toBe(initial[1].raw);
+    expect([...saved.keys()].some(key => key.endsWith(":repair:1"))).toBe(true);
+    expect(result.evidence.stages[0]).toMatchObject({ stage: "meaning", reused: true, repair: 0 });
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("entity names use Unicode grapheme boundaries and stop after two invalid A repairs", async () => {
+  const parts = sourcePassages(input);
+  const combined = "e\u0301".repeat(256);
+  expect(validateMeaning({ ...empty, entities: [{ name: combined, evidence: [0] }] }, parts).entities[0]!.name).toBe(combined);
+
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>();
+  const oversized = { ...empty, entities: [{ name: `${combined}x`, evidence: [0] }] };
+  let calls = 0;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async request => {
+    calls++;
+    expect(JSON.parse(request.prompt).targets).toBeUndefined();
+    return response(oversized) as never;
+  };
+  const root = mkdtempSync(join(tmpdir(), "memory-name-repair-cap-"));
+  try {
+    const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => { throw new Error("B-must-not-run"); }, stages: { load: async (key: string) => saved.get(key) ?? null,
+        save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+    for (let run = 0; run < 2; run++) {
+      const error = await runStructuredMemoryExtractor(args).then(() => null, error => error);
+      expect(error).toBeTruthy();
+      expect(error.message).toBe("memory_extract_invalid_output");
+      expect(error.repairExhausted).toBe(true);
+    }
+    expect(calls).toBe(3);
+    expect(saved.size).toBe(3);
+    expect([...saved.values()].every(stage => stage.raw === JSON.stringify(oversized))).toBe(true);
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
 });
 
