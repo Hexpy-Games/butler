@@ -5,7 +5,7 @@ import { validateJsonObjectSchema } from "../../../tools/schema-validation.ts";
 import type { ExtractInput, ExtractOutput, MemoryExecutionContext, QuoteRef } from "./contracts.ts";
 import { graphemeCount } from "./unicode.ts";
 import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
-import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, prepareBindingBatches, applyBinding, bindingRepairSchema, type CandidateLoader, type BindingWarning } from "./binding.ts";
+import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, MemoryBindingValidationError, prepareBindingBatches, applyBinding, bindingRepairSchema, type CandidateLoader, type BindingWarning } from "./binding.ts";
 
 const MAX_STAGE_REPAIRS = 2;
 
@@ -66,6 +66,7 @@ export async function runStructuredMemoryExtractor(input: {
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   const call = async <T>(stage: string, promptValue: unknown, instructions: string, schema: Record<string, unknown>, validate: (value: unknown) => T, repairSchema?: Record<string, unknown>): Promise<T> => {
     let rejection: string | null = null;
+    let rejectionCode: string | null = null;
     for (let repair = 0; repair <= MAX_STAGE_REPAIRS; repair++) {
       const prompt = JSON.stringify(repair === 0 ? promptValue : { input: promptValue,
         correction: { error: rejection, instruction: "Return a corrected complete response. Use only the provided reference IDs and evidence. Do not invent IDs." } });
@@ -104,9 +105,10 @@ export async function runStructuredMemoryExtractor(input: {
         return validate(value);
       } catch (cause) {
         if (!(cause instanceof Error) || !cause.message.startsWith("memory_extract_invalid_")) throw cause;
-        rejection = cause.message;
+        rejectionCode = cause.message;
+        rejection = cause instanceof MemoryBindingValidationError ? cause.repairFeedback : rejectionCode;
         if (repair === MAX_STAGE_REPAIRS)
-          throw new MemoryExtractAttemptError(rejection, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
+          throw new MemoryExtractAttemptError(rejectionCode, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
       }
     }
     throw new Error("memory_extract_stage_changed");

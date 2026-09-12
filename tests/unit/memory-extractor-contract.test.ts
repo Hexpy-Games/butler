@@ -235,12 +235,18 @@ test("stage repair exhaustion never issues further calls for the same saved inva
 
 test("only invalid B is repaired and partial binding mutations are discarded", async () => {
   const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
-  const saved = new Map<string, ExtractionStageResult>(); let a = 0, b = 0;
+  const saved = new Map<string, ExtractionStageResult>(); const requests: any[] = []; let a = 0, b = 0;
   OPENAI_PROVIDER_ADAPTER.runPrompt = async request => {
-    const wire = JSON.parse(request.prompt), prompt = wire.input ?? wire;
+    const wire = JSON.parse(request.prompt), prompt = wire.input ?? wire; requests.push(wire);
     if (prompt.parts) { a++; return response(meaning) as never; }
     b++;
     if (wire.correction) {
+      expect(wire.correction.error).toContain("memory_extract_invalid_identity_reuse");
+      expect(wire.correction.error).toContain(`target=${prompt.targets[1].target}`);
+      expect(wire.correction.error).toContain(`candidate=${prompt.targets[1].candidates[0].ref}`);
+      expect(wire.correction.error).toContain("missing=selected_historical");
+      expect(wire.correction.error).toContain(`offered_current=${prompt.targets[1].evidence.join(",")}`);
+      expect(wire.correction.error).toContain(`offered_selected_historical=${prompt.targets[1].candidates[0].evidence.join(",")}`);
       const schema = (request.responseFormat as any).schema.properties.decisions.items.properties;
       expect(schema.target.enum).toEqual(prompt.targets.map((target: any) => target.target));
       expect(schema.support.items.enum).toEqual(prompt.evidence.map((item: any) => item.ref));
@@ -248,7 +254,8 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
       expect(schema.span.enum).toEqual([null]);
     }
     return response({ decisions: prompt.targets.map((target: any, index: number) => b === 1
-      ? { target: target.target, candidate: index === 0 ? target.candidates[0].ref : "invented", span: null, support: [...target.evidence, ...target.candidates[0].evidence] }
+      ? { target: target.target, candidate: index < 2 ? target.candidates[0].ref : null, span: null,
+          support: index === 0 ? [...target.evidence, ...target.candidates[0].evidence] : index === 1 ? [...target.evidence] : [] }
       : { target: target.target, candidate: null, span: null, support: [] }) }) as never;
   };
   const root = mkdtempSync(join(tmpdir(), "memory-binding-repair-"));
@@ -258,6 +265,8 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
       stages: { load: async key => saved.get(key) ?? null, save: async (key, result) => { saved.set(key, result); } } });
     expect(a).toBe(1); expect(b).toBe(2);
     expect(result.output.nodes.every(node => node.resolution.kind === "create")).toBe(true);
+    expect(requests.filter(request => request.parts)).toHaveLength(1);
+    expect([...saved.values()].some(stage => JSON.parse(stage.raw).decisions?.[1]?.support?.length === 1)).toBe(true);
     expect(saved.size).toBe(3);
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
 });
