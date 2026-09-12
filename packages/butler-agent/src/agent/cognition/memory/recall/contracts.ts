@@ -97,6 +97,7 @@ export type RecallMemoryResult = {
         include_internal?: boolean;
       };
     }>;
+    requirements?: Array<{ node_ref: string; action: string; condition: import("../projection/meaning.ts").Condition<string>; basis: string; source_refs: string[] }>;
     qualifications: string[];
   }>;
   coverage: {

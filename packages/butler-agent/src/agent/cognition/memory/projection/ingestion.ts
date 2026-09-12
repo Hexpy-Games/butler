@@ -43,6 +43,9 @@ import {
   invalidatePlannedWindow,
   selectNextProjectionJob,
   pinWindowInput,
+  readExtractionStage,
+  saveExtractionStage,
+  pinBindingCandidates,
   splitProjectionWindow,
   sourceRows,
   type ProjectionSourceRow,
@@ -935,11 +938,26 @@ export async function advanceNextMemoryProjection(input: {
           model: pending.model,
           reasoningEffort: pending.reasoningEffort,
           signal,
+          loadCandidates: async (cue) => {
+            const source = sourceRows(db, pending.sourceRefs)[0]!;
+            return buildSourceWindowCandidates({ context: input.context, butlerData: sourceRoot, db,
+              chunk: { memory_chunk_id: extractInput.episode_ref, current_revision: extractInput.revision, project_id: extractInput.bound_project_id },
+              sessionId: source.conversation_session_id ?? "", turnId: "", operationId: pending.window_ref,
+              sourceUnits: [{ ...extractInput.source_units[0]!, text: cue }] });
+          },
+          stages: {
+            load: async (key) => readExtractionStage(db, pending.window_ref, key),
+            save: async (key, result) => { await withMemoryWriteGateAsync(input.context, () => {
+              assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+              saveExtractionStage(db, pending.window_ref, pending.ownerNonce, key, result);
+            }); },
+          },
           onProviderStreamEvent: stream.observe,
           onRequestPrepared: (evidence) => { requestWire = evidence; },
           onProviderInvocationIntent: async () => {
             await withMemoryWriteGateAsync(input.context, () => {
               assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+              pinBindingCandidates(db, pending.window_ref, pending.ownerNonce, extractInput);
               recordProviderInvocationIntent(db, pending.window_ref, pending.ownerNonce);
             });
             providerInvocationIntended = true;
@@ -969,6 +987,7 @@ export async function advanceNextMemoryProjection(input: {
       providerEvidence = { ...extraction.evidence, visible_stream: stream.settle() };
       await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
         assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+        pinBindingCandidates(db, pending.window_ref, pending.ownerNonce, extractInput);
         saveAttemptResult(db, pending.window_ref, pending.ownerNonce, output, providerEvidence);
       })());
       providerResultSaved = true;
@@ -1314,16 +1333,7 @@ async function buildExtractInput(
   ) {
     throw new Error("memory_source_ineligible");
   }
-  const candidates = await buildSourceWindowCandidates({
-    context,
-    butlerData,
-    db,
-    chunk,
-    sessionId: rows[0]?.conversation_session_id ?? "",
-    turnId: chunk.conversation_turn_id ?? "",
-    operationId: windowRef,
-    sourceUnits: source_units,
-  });
+  const candidates: ExtractInput["candidates"] = [];
   const context_units = rows[0]?.conversation_session_id
     ? readPriorPublicContext(butlerData, rows[0].conversation_session_id, source_units)
     : [];
@@ -1455,6 +1465,7 @@ function loadSourceWindowCandidates(input: {
     let claim: ExtractInput["candidates"][number]["claim"] = null;
     if (!identityNode) {
       const properties = JSON.parse(node.properties) as {
+        statement?: string;
         polarity?: "positive" | "negative" | "unspecified";
         condition?: string | null;
       };
@@ -1462,9 +1473,10 @@ function loadSourceWindowCandidates(input: {
         "SELECT rel_type,target_node_id FROM edges WHERE source_node_id=? AND rel_type IN ('has_subject','has_object') ORDER BY edge_id",
       ).all(node.id);
       const relation = input.db.query<{ rel_type: NonNullable<ExtractInput["candidates"][number]["claim"]>["relation"] }, [string]>(
-        "SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts') ORDER BY edge_id LIMIT 1",
+        "SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member') ORDER BY edge_id LIMIT 1",
       ).get(node.id)?.rel_type ?? null;
       claim = {
+        statement: properties.statement,
         subject_ref: endpoints.find((edge) => edge.rel_type === "has_subject")?.target_node_id ?? null,
         object_ref: endpoints.find((edge) => edge.rel_type === "has_object")?.target_node_id ?? null,
         relation,

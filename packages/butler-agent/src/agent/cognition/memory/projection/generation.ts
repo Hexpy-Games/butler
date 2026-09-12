@@ -21,7 +21,7 @@ import { listFeedbackEntries } from "../../feedback/buffer.ts";
 import { listBoxManifests } from "../../box/store.ts";
 import { TaskStore } from "../../../work/task-store.ts";
 import { cognitionBoxRoot, cognitionMemoryRoot } from "../../paths.ts";
-import type { MemoryExecutionContext } from "./contracts.ts";
+import { MEMORY_EXTRACTION_VERSION, type MemoryExecutionContext } from "./contracts.ts";
 import type { EmbeddingRuntimeMetadata } from "../scripts/embed.ts";
 import { ensureV2MemorySchema, expandSplitSourceLeaves, sourceRows, type ClaimedVectorUnit } from "./store.ts";
 import { hydrateSource, memorySourceInventoryHash } from "./source.ts";
@@ -245,7 +245,7 @@ function initializeEmptyMemoryGenerationLocked(
     state: "active",
     initialization_origin: "empty",
     schema_version: 2,
-    extraction_version: "memory-extract-v2",
+    extraction_version: MEMORY_EXTRACTION_VERSION,
     ranking_version: 2,
     embedding: null,
     unicode_version: requiredRuntimeVersion("unicode"),
@@ -330,7 +330,7 @@ export type MemoryRecoveryAcceptance = {
   verification_source_inventory_hash: string;
   implementation_commit: string;
   tool_contract_version: 2;
-  extraction_version: "memory-extract-v2";
+  extraction_version: "memory-extract-v2" | typeof MEMORY_EXTRACTION_VERSION;
   embedding_version: string;
   cases: Array<{
     id: string; mr_ids: string[]; query_hash: string; source_refs: string[];
@@ -353,7 +353,7 @@ export type MemoryRecoveryCaseTrace = {
     generation_id: string;
     implementation_commit: string;
     tool_contract_version: 2;
-    extraction_version: "memory-extract-v2";
+    extraction_version: "memory-extract-v2" | typeof MEMORY_EXTRACTION_VERSION;
     embedding:
       | { status: "executed"; version: string }
       | { status: "not_executed"; reason: "not_required" };
@@ -607,7 +607,7 @@ export function prepareMemoryRebuild(input: {
   const manifest: MemoryGenerationManifest = {
     schema: "butler.memory-generation.v2", generation_id: generationId, format: "v2",
     state: "building", initialization_origin: "rebuild", schema_version: 2,
-    extraction_version: "memory-extract-v2", ranking_version: 2, embedding: null,
+    extraction_version: MEMORY_EXTRACTION_VERSION, ranking_version: 2, embedding: null,
     unicode_version: requiredRuntimeVersion("unicode"), icu_version: requiredRuntimeVersion("icu"),
     canonical_snapshot_id: canonicalSnapshotId,
     canonical_snapshot_path: "source-snapshot/runtime/conversation-store.sqlite",
@@ -1629,7 +1629,7 @@ export async function validateMemoryGeneration(input: {
 
 function assertMemoryRecoveryAcceptance(value: MemoryRecoveryAcceptance, verificationRoot: string): void {
   if (!value || value.schema !== "butler.memory-recovery-acceptance.v3" || value.tool_contract_version !== 2 ||
-    value.extraction_version !== "memory-extract-v2" || !validSha(value.verification_source_inventory_hash) ||
+    !["memory-extract-v2", MEMORY_EXTRACTION_VERSION].includes(value.extraction_version) || !validSha(value.verification_source_inventory_hash) ||
     !validGitCommit(value.implementation_commit) || !validSha(value.embedding_version) || !Array.isArray(value.cases))
     throw new Error("memory_acceptance_invalid");
   const ids = new Set<string>();
@@ -2180,7 +2180,7 @@ export async function activateMemoryGeneration(input: {
     manifest.acceptance_binding.target_evidence_sha256 !== prepared.readiness.evidence_sha256 ||
     !implementationCommit || prepared.implementationCommit !== implementationCommit ||
     manifest.acceptance_binding.implementation_commit !== implementationCommit ||
-    manifest.extraction_version !== "memory-extract-v2" || !manifest.embedding?.version ||
+    !["memory-extract-v2", MEMORY_EXTRACTION_VERSION].includes(manifest.extraction_version ?? "") || !manifest.embedding?.version ||
     !storedAcceptancePath || !storedEvidenceRoot ||
     manifest.acceptance_binding.qualification_sha256 !== prepared.qualificationSha)
     throw new Error("activation_requires_catchup");
@@ -2230,7 +2230,7 @@ lease: ConsolidationLease): Promise<ActiveMemoryGeneration> {
       : null;
     const readiness = previous.readiness;
     const bootstrap = previous.initialization_origin === "empty" && previous.schema_version === 2 &&
-      previous.extraction_version === "memory-extract-v2" && !previous.required_acceptance_passed && !binding;
+      ["memory-extract-v2", MEMORY_EXTRACTION_VERSION].includes(previous.extraction_version ?? "") && !previous.required_acceptance_passed && !binding;
     const qualified = Boolean(prepared && binding && input.sourceInventoryHash === previous.source_inventory_hash && readiness &&
       readiness.unaccounted === 0 && readiness.semantic.failed === 0 && readiness.vectors.failed === 0 &&
       readiness.cache.failed === 0 && generationManifestSha(input.butlerData, previous.generation_id) === prepared?.manifestSha &&

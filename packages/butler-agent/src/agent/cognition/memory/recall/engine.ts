@@ -2379,6 +2379,7 @@ function recallSourceBackedGraph(
         : row.summary;
       if (!summary) return null;
       const result: V2RecallResultItem = {
+        requirements: resultRequirements(db, input, evidence),
         episode_ref: row.episodeId,
         revision: row.revision,
         summary,
@@ -2831,6 +2832,7 @@ function continueV2Recall(
         continue;
       }
       results.push({
+        requirements: resultRequirements(db, effective, evidence),
         episode_ref: row.episodeId,
         revision: row.revision,
         summary,
@@ -3943,4 +3945,26 @@ function deriveRecallStatus(
 ): RecallMemoryResult["status"] {
   if (resultCount === 0 && executionIncomplete) return "unavailable";
   return partial ? "partial" : "complete";
+}
+
+function resultRequirements(db: Database, input: RecallMemoryInput, evidence: RecallMemoryResult["results"][number]["evidence"]): NonNullable<RecallMemoryResult["results"][number]["requirements"]> {
+  const ids = evidence.map((item) => rawMemorySourceId(item.source_ref));
+  if (!ids.length) return [];
+  const validity = claimEligibility(input);
+  const rows = db.query<{ id: string; properties: string; source_id: string }, any>(`
+    SELECT DISTINCT e.id,e.properties,m.source_id FROM entities e JOIN entity_mentions m ON m.entity_id=e.id
+    JOIN memory_chunk_sources s ON s.source_id=m.source_id
+    JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+    WHERE m.source_id IN (${ids.map(() => "?").join(",")}) AND json_extract(e.properties,'$.requirement') IS NOT NULL
+      AND ${validity.sql} AND ${scopeSql(input)}
+  `).all(...ids, ...validity.args, ...scopeArgs(input));
+  const result: NonNullable<RecallMemoryResult["results"][number]["requirements"]> = [];
+  for (const row of rows) {
+    const properties = JSON.parse(row.properties);
+    const ref = evidence.find((item) => rawMemorySourceId(item.source_ref) === row.source_id)!.source_ref;
+    const existing = result.find((item) => item.node_ref === row.id);
+    if (existing) { if (!existing.source_refs.includes(ref)) existing.source_refs.push(ref); }
+    else result.push({ node_ref: row.id, ...properties.requirement, basis: properties.basis, source_refs: [ref] });
+  }
+  return result;
 }

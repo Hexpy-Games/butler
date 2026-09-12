@@ -10,7 +10,7 @@ import type {
 import type { ExtractInput, ResolvedMemorySource } from "./contracts.ts";
 import {
   MEMORY_SOURCE_WINDOW_BYTES,
-  splitGraphemeUtf8Spans,
+  splitMeaningSourceSpans,
 } from "./windows.ts";
 import {
   sourceRows,
@@ -454,7 +454,7 @@ export function splitUtf8Spans(
   text: string,
   maxBytes: number,
 ): Array<{ start: number; end: number }> {
-  return splitGraphemeUtf8Spans(text, maxBytes).map(({ start, end }) => ({ start, end }));
+  return splitMeaningSourceSpans(text, maxBytes);
 }
 
 export function packWindows(
@@ -463,22 +463,13 @@ export function packWindows(
   maxBytes: number,
 ): string[][] {
   const rows = sourceRows(db, refs);
-  const output: string[][] = [];
-  let current: string[] = [];
-  let size = 0;
-  for (const ref of refs) {
-    const row = rows.find((item) => item.source_id === ref)!;
-    const bytes = row.byte_end - row.byte_start;
-    if (current.length && size + bytes > maxBytes) {
-      output.push(current);
-      current = [];
-      size = 0;
-    }
-    current.push(ref);
-    size += bytes;
+  // A source span is already bounded and has one speaker. Never merge it back
+  // into a larger mixed-speaker extraction window.
+  if (rows.length !== refs.length) throw new Error("memory_source_changed");
+  for (const row of rows) {
+    if (row.byte_end - row.byte_start > maxBytes) throw new Error("memory_extract_source_window_exceeds_budget");
   }
-  if (current.length) output.push(current);
-  return output;
+  return refs.map((ref) => [ref]);
 }
 
 export function combinedOrigin(

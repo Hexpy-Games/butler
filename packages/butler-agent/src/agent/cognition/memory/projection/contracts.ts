@@ -1,4 +1,6 @@
-export const MEMORY_EXTRACTION_VERSION = "memory-extract-v2" as const;
+import type { Condition } from "./meaning.ts";
+
+export const MEMORY_EXTRACTION_VERSION = "memory-extract-v3" as const;
 
 export type MemoryNodeType =
   | "entity"
@@ -83,7 +85,7 @@ export type MemoryJobProgress = {
   observed_completion_job_ids: string[];
   episode_id: string;
   revision: string;
-  extraction_version: typeof MEMORY_EXTRACTION_VERSION;
+  extraction_version: "memory-extract-v2" | typeof MEMORY_EXTRACTION_VERSION;
   generation: string;
   source: StageState;
   semantic_graph: StageState;
@@ -135,6 +137,7 @@ export type ExtractInput = {
     project_id: string | null;
     // Older pinned inputs omit this field and remain immutable.
     claim?: {
+      statement?: string;
       subject_ref: string | null;
       object_ref: string | null;
       relation: ExtractOutput["relations"][number]["relation"] | null;
@@ -151,7 +154,7 @@ export type ExtractInput = {
 };
 
 export type ExtractOutput = {
-  schema: "butler.memory-extract-output.v2";
+  schema: "butler.memory-extract-output.v2" | "butler.memory-extract-output.v3";
   window_ref: string;
   disposition: "processed" | "unsupported";
   covered_unit_refs: string[];
@@ -174,6 +177,7 @@ export type ExtractOutput = {
     basis: MemoryBasis;
     polarity: "positive" | "negative" | "unspecified";
     condition: string | null;
+    requirement?: { action: string; condition: Condition<string> };
     valid_from: string | null;
     valid_to: string | null;
     salience: "high" | "normal" | "unspecified";

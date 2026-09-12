@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import type {
   ExtractOutput,
+  ExtractInput,
   MemoryJobProgress,
   StageState,
 } from "./contracts.ts";
@@ -173,6 +174,7 @@ export function ensureV2MemorySchema(db: Database): void {
     ["memory_projection_windows", "owner_nonce", "TEXT"],
     ["memory_projection_windows", "started_at", "TEXT"],
     ["memory_projection_windows", "input_json", "TEXT"],
+    ["memory_projection_windows", "extraction_stages_json", "TEXT NOT NULL DEFAULT '{}'"],
     ["memory_projection_windows", "input_sha256", "TEXT"],
     ["memory_projection_windows", "input_migration_note", "TEXT"],
     ["memory_projection_windows", "parent_window_ref", "TEXT"],
@@ -370,6 +372,7 @@ export function refreshVectorUnitsForJob(db: Database, jobId: string, episodePro
         `label:${JSON.stringify(scopedLabel)}`,
         `statement:${JSON.stringify(claim.statement)}`,
         `condition:${JSON.stringify(claim.condition)}`,
+        ...(claim.requirement ? [`requirement:${JSON.stringify(claim.requirement)}`] : []),
         `polarity:${JSON.stringify(claim.polarity)}`,
         ...aliases.map((alias) => `alias:${JSON.stringify(alias)}`),
       ].join("\n");
@@ -623,10 +626,11 @@ function refreshVectorStageStates(db: Database, jobId: string): void {
   }
 }
 
-function projectionClaimFields(properties: string): { statement: string | null; condition: string | null; polarity: string | null } {
+function projectionClaimFields(properties: string): { statement: string | null; condition: string | null; polarity: string | null; requirement?: unknown } {
   try {
-    const value = JSON.parse(properties) as { statement?: unknown; condition?: unknown; polarity?: unknown };
+    const value = JSON.parse(properties) as { statement?: unknown; condition?: unknown; polarity?: unknown; requirement?: unknown };
     return {
+      ...(value.requirement ? { requirement: value.requirement } : {}),
       statement: typeof value.statement === "string" ? value.statement : null,
       condition: typeof value.condition === "string" ? value.condition : null,
       polarity: typeof value.polarity === "string" ? value.polarity : null,
@@ -666,7 +670,7 @@ export function progressFromDb(db: Database, jobId: string): MemoryJobProgress {
     observed_completion_job_ids: JSON.parse(row.observed_completion_job_ids),
     episode_id: row.episode_id,
     revision: row.revision,
-    extraction_version: "memory-extract-v2",
+    extraction_version: row.extraction_version as MemoryJobProgress["extraction_version"],
     generation: row.generation,
     source,
     semantic_graph: semantic,
@@ -1215,4 +1219,36 @@ export function recordHotCacheOutcomes(db: Database, generation: string, receipt
     for (const excluded of receipt.excluded_entries ?? [])
       save.run(excluded.entry_id, generation, 0, excluded.reason, JSON.stringify(receipt));
   })();
+}
+
+export function readExtractionStage(db: Database, windowRef: string, key: string): import("./extractor.ts").ExtractionStageResult | null {
+  const row = db.query<{ extraction_stages_json: string }, [string]>("SELECT extraction_stages_json FROM memory_projection_windows WHERE window_ref=?").get(windowRef);
+  return row ? JSON.parse(row.extraction_stages_json)[key] ?? null : null;
+}
+
+export function saveExtractionStage(db: Database, windowRef: string, ownerNonce: string, key: string, result: import("./extractor.ts").ExtractionStageResult): void {
+  const row = db.query<{ extraction_stages_json: string }, [string, string]>("SELECT extraction_stages_json FROM memory_projection_windows WHERE window_ref=? AND state='running' AND owner_nonce=?").get(windowRef, ownerNonce);
+  if (!row) throw new Error("memory_projection_window_changed");
+  const stages = JSON.parse(row.extraction_stages_json);
+  if (stages[key] && JSON.stringify(stages[key]) !== JSON.stringify(result)) throw new Error("memory_extract_stage_changed");
+  stages[key] = result;
+  db.transaction(() => {
+    db.query("UPDATE memory_projection_windows SET extraction_stages_json=? WHERE window_ref=? AND owner_nonce=?")
+      .run(JSON.stringify(stages), windowRef, ownerNonce);
+    // A completed stage settles its invocation before the next stage can start.
+    db.query("UPDATE memory_projection_attempts SET outcome_known=1,provider_invoked=1 WHERE window_ref=? AND invocation_ref=? AND state='invocation_intent'")
+      .run(windowRef, ownerNonce);
+    db.query(`INSERT OR IGNORE INTO memory_projection_attempts
+      (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,output_json,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref,recovery_revision)
+      SELECT ?,window_ref,job_id,attempt_count,'provider_stage',NULL,input_sha256,?,?,?,'provider',1,1,?,recovery_revision
+      FROM memory_projection_windows WHERE window_ref=? AND owner_nonce=?`)
+      .run(`${windowRef}:stage:${key}`, result.raw, JSON.stringify(result.evidence), new Date().toISOString(), ownerNonce, windowRef, ownerNonce);
+  })();
+}
+
+export function pinBindingCandidates(db: Database, windowRef: string, ownerNonce: string, input: ExtractInput): void {
+  const json = JSON.stringify(input);
+  const result = db.query("UPDATE memory_projection_windows SET input_json=?,input_sha256=? WHERE window_ref=? AND state='running' AND owner_nonce=?")
+    .run(json, projectionDigest(["extract-input", json]), windowRef, ownerNonce);
+  if (result.changes !== 1) throw new Error("memory_projection_window_changed");
 }

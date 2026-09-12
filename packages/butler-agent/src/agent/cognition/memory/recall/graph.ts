@@ -34,7 +34,7 @@ const PPR_MAX_ITERATIONS = 32;
 const NAVIGATION_RELATIONS = new Set(["belongs_to", "co_occurred"]);
 const POSITIVE_RELATIONS = new Set([
   "related_to", "depends_on", "likes", "dislikes", "decided",
-  "has_subject", "has_object", ...NAVIGATION_RELATIONS,
+  "has_subject", "has_object", "condition_member", ...NAVIGATION_RELATIONS,
 ]);
 
 export function expandGraph(

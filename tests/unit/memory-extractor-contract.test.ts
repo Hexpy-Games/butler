@@ -1,136 +1,113 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtractInput, ExtractOutput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
-import { extractOutputSchema, runStructuredMemoryExtractor } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
-import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
-import { registerHostedModelConfig } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { ingestConversationMemory, advanceNextMemoryProjection } from "../../packages/butler-agent/src/agent/cognition/memory/index.ts";
+import { recallSourceBackedMemory } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
+import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
+import { runStructuredMemoryExtractor, type ExtractionStageResult } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
+import { sourcePassages, meaningToOutput, validateMeaning, type Meaning } from "../../packages/butler-agent/src/agent/cognition/memory/projection/meaning.ts";
+import { prepareBindingBatches, applyBinding } from "../../packages/butler-agent/src/agent/cognition/memory/projection/binding.ts";
+import { splitMeaningSourceSpans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
+import type { ExtractInput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 
-const sourceText = "日本語 العربية cafe\u0301 👩🏽‍🚀 u0 조건";
-const input: ExtractInput = {
-  schema: "butler.memory-extract-input.v2", episode_ref: "episode", revision: "revision",
-  window_ref: "window", bound_project_id: null, context_units: [], candidates: [],
-  source_units: [{ ref: "canonical-source", text: sourceText, role: "user", origin_kind: "user_input", observed_at: "2026-09-12T00:00:00Z" }],
-};
+const text = "相機を使うには代理 または外部ブラウザーが必要です。";
+const input: ExtractInput = { schema: "butler.memory-extract-input.v2", episode_ref: "episode", revision: "revision", window_ref: "window", bound_project_id: null,
+  source_units: [{ ref: "canonical", text, role: "user", origin_kind: "user_input", observed_at: "2026-09-12T00:00:00Z" }], context_units: [], candidates: [] };
+const meaning: Meaning = { status: "processed", entities: [{ name: "相機", evidence: [0] }, { name: "代理", evidence: [0] }, { name: "外部ブラウザー", evidence: [0] }],
+  items: [{ kind: "requires", subject: 0, action: "使う", condition: { any: [{ subject: 1, state: "利用" }, { subject: 2, state: "利用" }] }, evidence: [0] }], attributes: [] };
+const empty: Meaning = { status: "processed", entities: [], items: [], attributes: [] };
+const response = (value: unknown) => ({ text: JSON.stringify(value), model: "gpt-5.6-sol", usage: null });
 
-function withoutDescriptions(value: any): any {
-  if (Array.isArray(value)) return value.map(withoutDescriptions);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "description")
-    .map(([key, item]) => [key, withoutDescriptions(item)]));
-}
-
-function expand(value: any, definitions: Record<string, any>): any {
-  if (Array.isArray(value)) return value.map((item) => expand(item, definitions));
-  if (!value || typeof value !== "object") return value;
-  if (value.$ref) {
-    expect(value.$ref.startsWith("#/$defs/")).toBe(true);
-    const definition = definitions[value.$ref.slice("#/$defs/".length)];
-    expect(definition).toBeDefined();
-    return expand(definition, definitions);
-  }
-  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "$defs")
-    .map(([key, item]) => [key, expand(item, definitions)]));
-}
-
-async function withProvider(bodyOutput: (body: any) => any, inspect: (invoke: () => ReturnType<typeof runStructuredMemoryExtractor>, bodies: any[], evidence: any[]) => Promise<void>, extractInput = input) {
-  const root = mkdtempSync(join(tmpdir(), "memory-extractor-contract-"));
-  const oldData = process.env.BUTLER_DATA;
-  const oldFetch = globalThis.fetch;
-  const bodies: any[] = [];
-  const evidence: any[] = [];
+test("public ingestion preserves source roles and OR in stored graph and recall from either operand", async () => {
+  const root = mkdtempSync(join(tmpdir(), "memory-meaning-public-"));
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const requests: any[] = [];
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => {
+    const prompt = JSON.parse(request.prompt); requests.push(prompt);
+    return response(prompt.speaker === "user" ? meaning : empty) as never;
+  };
   try {
-    process.env.BUTLER_DATA = root;
-    registerHostedModelConfig({ providerId: "zai", modelId: "glm-5.3", authType: "api_key", apiKey: "test-only" }, root);
-    globalThis.fetch = (async (_url: any, init: any) => {
-      const body = JSON.parse(init.body);
-      bodies.push(body);
-      return new Response(JSON.stringify({ model: "glm-5.3", choices: [{ message: { role: "assistant", content: JSON.stringify(bodyOutput(body)) }, finish_reason: "stop" }] }), { headers: { "Content-Type": "application/json" } });
-    }) as typeof fetch;
-    await inspect(() => runStructuredMemoryExtractor({ butlerData: root, extractInput, model: "zai/glm-5.3", reasoningEffort: "high", signal: AbortSignal.timeout(5000), onRequestPrepared: (value) => evidence.push(value) }), bodies, evidence);
-  } finally {
-    globalThis.fetch = oldFetch;
-    if (oldData === undefined) delete process.env.BUTLER_DATA; else process.env.BUTLER_DATA = oldData;
-    rmSync(root, { recursive: true, force: true });
-  }
-}
+    const descriptor = initializeEmptyMemoryGeneration(root);
+    expect(JSON.parse(readFileSync(join(root, "cognition/memory/generations", descriptor.generation_id, "manifest.json"), "utf8")).extraction_version).toBe("memory-extract-v3");
+    const context = { butlerData: root, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: AbortSignal.timeout(20000) };
+    const store = new AgentConversationStore({ butlerData: root });
+    const turn = store.beginTurn({ gateway: "app", externalSessionId: "session", sessionId: "session", projectId: null, actor: "user", turnId: "turn" });
+    const user = store.appendUserMessage({ sessionId: "session", turnId: turn.id, text, originKind: "user_input", originRef: "app:turn:user" });
+    const assistant = store.appendAssistantMessage({ sessionId: "session", turnId: turn.id, text: "了解しました。", originKind: "assistant_public", originRef: "app:turn:assistant" });
+    store.finalizeTurn({ turnId: turn.id, status: "complete", outcomeCapsule: { sessionId: "session", turnId: turn.id, generation: 1, outcome: "delivered", requestMessageId: user.id, publicAssistantMessageId: assistant.id, providerId: "test", modelRef: "test/model" } });
+    store.close();
+    await ingestConversationMemory({ context, source: { kind: "conversation_turn", session_id: "session", turn_id: "turn", outcome_generation: 1 } });
+    const db = new Database(join(root, "cognition/memory/generations", descriptor.generation_id, "graph.sqlite"));
+    for (let count = 0; count < 8; count++) {
+      const remaining = db.query<{ count: number }, []>("SELECT count(*) count FROM memory_projection_windows WHERE state!='complete'").get()!.count;
+      if (!remaining) break;
+      await advanceNextMemoryProjection({ context });
+    }
+    expect(db.query("SELECT state,error_code FROM memory_projection_windows WHERE state!='complete'").all()).toEqual([]);
+    expect(requests.filter((item) => item.speaker).map((item) => item.speaker).sort()).toEqual(["assistant", "user"]);
+    expect(requests.every((item) => !item.candidates && !item.episode_ref)).toBe(true);
+    expect(db.query<{ n: number }, []>("SELECT count(*) n FROM edges WHERE rel_type='condition_member'").get()!.n).toBe(2);
+    for (const cue of ["代理", "外部ブラウザー"]) {
+      const result = await recallSourceBackedMemory({ context, cue, includeVector: false, includeInternal: false, limit: 5, scope: "all_user_sessions", projectFilter: "any", projectIds: [], sessionIds: [], asOf: new Date().toISOString(), runtime: { sessionId: "session", turnId: "query", currentUserMessage: cue, nativeOperationId: "query", projectId: null } });
+      const requirements = result.results.flatMap((item) => item.requirements ?? []);
+      expect(requirements).toHaveLength(1);
+      expect(requirements[0]!.condition).toHaveProperty("any");
+      expect(requirements[0]!.basis).toBe("user_statement");
+      expect(requirements[0]!.source_refs.length).toBeGreaterThan(0);
+    }
+    db.close();
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+}, 25000);
 
-function emptyOutput(disposition: "processed" | "unsupported", covered: string[]): ExtractOutput {
-  return { schema: "butler.memory-extract-output.v2", window_ref: "window", disposition, covered_unit_refs: covered, nodes: [], claims: [], relations: [], corrections: [], summary: null };
-}
-
-test("actual GLM wire compacts the same schema and preserves Unicode and request hashes", async () => {
-  await withProvider(() => ({ ...emptyOutput("processed", ["u0"]), summary: { text: sourceText, evidence: [{ unit_ref: "u0", quote: sourceText, occurrence: 0 }] } }), async (invoke, bodies, evidence) => {
-    const result = await invoke();
-    expect(bodies).toHaveLength(1);
-    expect(bodies[0]).toMatchObject({ model: "glm-5.3", reasoning_effort: "high", response_format: { type: "json_object" } });
-    const bridge = "\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n";
-    const [instructions, schemaText] = bodies[0].messages[0].content.split(bridge);
-    const schema = JSON.parse(schemaText);
-    expect(Object.keys(schema.$defs)).toEqual(["Quote", "Evidence", "Resolution"]);
-    expect(expand(schema, schema.$defs)).toEqual(withoutDescriptions(extractOutputSchema()));
-    expect(schemaText.length).toBeLessThan(JSON.stringify(extractOutputSchema()).length / 2);
-    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-    expect(evidence[0].instructions_sha256).toBe(hash(instructions));
-    expect(evidence[0].output_schema_sha256).toBe(hash(schemaText));
-    expect(evidence[0].input_json_sha256).toBe(hash(bodies[0].messages[1].content));
-    expect(JSON.parse(bodies[0].messages[1].content).source_units[0]).toEqual({ ...input.source_units[0], ref: "u0" });
-    expect(result.output.covered_unit_refs).toEqual(["canonical-source"]);
-    expect(result.output.summary?.evidence[0]).toEqual({ unit_ref: "canonical-source", quote: sourceText, occurrence: 0 });
-    expect(() => normalizeAndValidatePlan(null as never, input, result.output)).not.toThrow();
-  });
+test("B failure resumes from durable A without a second meaning call", async () => {
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>();
+  const kinds: string[] = [];
+  let fail = true;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => {
+    const prompt = JSON.parse(request.prompt); kinds.push(prompt.parts ? "A" : "B");
+    if (prompt.parts) return response(meaning) as never;
+    if (fail) throw new Error("bounded-B-failure");
+    return response({ decisions: prompt.targets.map((target: any) => ({ target: target.target, candidate: null, span: null, support: [] })) }) as never;
+  };
+  const root = mkdtempSync(join(tmpdir(), "memory-stage-"));
+  try {
+    const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [{ ref: "old-camera", type: "entity" as const, label: "相機", aliases: [], scope: "user" as const, project_id: null, evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" as const }] }],
+      stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+    await expect(runStructuredMemoryExtractor(args)).rejects.toThrow("bounded-B-failure");
+    fail = false;
+    const result = await runStructuredMemoryExtractor(args);
+    expect(kinds).toEqual(["A", "B", "B"]);
+    expect(result.output.claims[0]!.requirement!.condition).toHaveProperty("any");
+    expect(result.evidence.stages[0]!.reused).toBe(true);
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
 });
 
-test("unsupported coverage rule is sent and enforced without a provider retry", async () => {
-  for (const covered of [[], ["u0"]]) {
-    await withProvider(() => emptyOutput("unsupported", covered), async (invoke, bodies) => {
-      if (covered.length) await expect(invoke()).rejects.toThrow("memory_extract_invalid_output");
-      else expect((await invoke()).output).toEqual(emptyOutput("unsupported", []));
-      expect(bodies).toHaveLength(1);
-      expect(bodies[0].messages[0].content).toContain("unsupported: covered_unit_refs, nodes, claims, relations and corrections are []; summary is null.");
-    });
-  }
-});
-
-test("candidate handles restore only identity and correction refs, preserving local handles and Unicode text", async () => {
-  const text = sourceText + " c0";
-  const history = { ref: "historical-source", text, basis: "user_statement" as const, observed_at: "2026-09-11T00:00:00Z" };
-  const candidateInput: ExtractInput = { ...input, source_units: [{ ...input.source_units[0]!, text }], candidates: [
-    { ref: "stored-entity-id", type: "entity", label: "c0", aliases: [], scope: "user", project_id: null, evidence: [history] },
-    { ref: "stored-claim-id", type: "constraint", label: text, aliases: [], scope: "user", project_id: null, evidence: [history],
-      claim: { subject_ref: "stored-entity-id", object_ref: "c0", relation: "depends_on", polarity: "positive", condition: null } },
-  ] };
-  const currentEvidence = [{ unit_ref: "u0", quote: text, occurrence: 0 }];
-  const reuseEvidence = [...currentEvidence, { unit_ref: "u1", quote: text, occurrence: 0 }];
-  const makeOutput = (candidateRef: string) => ({ ...emptyOutput("processed", ["u0"]),
-    nodes: [{ local_ref: "c0", type: "entity", label: "c0", aliases: [], evidence: currentEvidence,
-      resolution: { kind: "reuse", node_ref: candidateRef, reason: "named_context", evidence: reuseEvidence } }],
-    claims: [{ local_ref: "f0", type: "constraint", statement: text, subject_ref: "c0", object_ref: null,
-      speech_act: "assertion", basis: "user_statement", polarity: "positive", condition: null, valid_from: null, valid_to: null, salience: "normal",
-      resolution: { kind: "create", provisional: false, identity_scope: "user" }, evidence: currentEvidence }],
-    corrections: [{ previous_claim_ref: "c2", replacement_claim_ref: "f0", relation: "supersedes", effective_at: null, evidence: reuseEvidence }],
-  });
-  const before = JSON.stringify(candidateInput);
-  await withProvider(() => makeOutput("c1"), async (invoke, bodies, evidence) => {
-    const result = await invoke();
-    const wire = JSON.parse(bodies[0].messages[1].content);
-    expect(wire.candidates.map((value: any) => value.ref)).toEqual(["c1", "c2"]);
-    expect(wire.candidates[1].claim).toMatchObject({ subject_ref: "c1", object_ref: "c0" });
-    expect(wire.candidates[0].claim).toBeUndefined();
-    expect(wire.source_units[0].text).toBe(text);
-    expect(evidence[0].profile).toBe("memory-extract-short-refs.v2");
-    expect(result.output.nodes[0]).toMatchObject({ local_ref: "c0", label: "c0", resolution: { node_ref: "stored-entity-id" } });
-    expect(result.output.claims[0]).toMatchObject({ subject_ref: "c0", statement: text });
-    expect(result.output.corrections[0]).toMatchObject({ previous_claim_ref: "stored-claim-id", replacement_claim_ref: "f0" });
-    expect(result.output.nodes[0]!.evidence[0]!.quote).toBe(text);
-    expect(JSON.stringify(candidateInput)).toBe(before);
-  }, candidateInput);
-  for (const unknown of ["c0", "c9", "stored-entity-id"]) {
-    await withProvider(() => makeOutput(unknown), async (invoke, bodies) => {
-      await expect(invoke()).rejects.toThrow("memory_extract_invalid_ref");
-      expect(bodies).toHaveLength(1);
-    }, candidateInput);
-  }
+test("code preserves Unicode source spans and patches only the selected legacy value", async () => {
+  const long = "العربية 日本語 cafe\u0301 👩🏽‍🚀。".repeat(80);
+  const spans = splitMeaningSourceSpans(long, 4096);
+  expect(spans.map((span) => Buffer.from(long).subarray(span.start, span.end).toString()).join("")).toBe(long);
+  const current = { ...input, source_units: [{ ...input.source_units[0]!, text: "username pi를 admin으로 바꿔." }] };
+  const change: Meaning = { status: "processed", entities: [], items: [{ kind: "change", subject: null, field: "username", old: "pi", new: "admin", evidence: [0] }], attributes: [] };
+  const parts = sourcePassages(current);
+  validateMeaning(change, parts);
+  const output = meaningToOutput(current, change, parts);
+  const old = "ssh pi@server, key pi_rsa";
+  const prepared = await prepareBindingBatches(change, parts, async () => [{ ref: "old", type: "memory_atom", label: old, aliases: [], scope: "user", project_id: null,
+    claim: { statement: old, subject_ref: null, object_ref: null, relation: null, polarity: "positive", condition: null },
+    evidence: [{ ref: "history", text: old, observed_at: "2026-09-01", basis: "user_statement" }] }]);
+  current.candidates = prepared.candidates;
+  const batch = prepared.batches[0]!;
+  const target = batch.prompt.targets[0]!, candidate = target.candidates[0]!;
+  const selected = { decisions: [{ target: target.target, candidate: candidate.ref, span: candidate.spans![0]!.ref, support: [...target.evidence, ...candidate.evidence] }] };
+  applyBinding(selected, batch, output, current);
+  expect(output.claims[0]!.statement).toBe("ssh admin@server, key pi_rsa");
+  expect(output.corrections[0]!.previous_claim_ref).toBe("old");
+  selected.decisions[0]!.span = "unknown";
+  expect(() => applyBinding(selected, batch, output, current)).toThrow("memory_extract_correction_unresolved");
 });
