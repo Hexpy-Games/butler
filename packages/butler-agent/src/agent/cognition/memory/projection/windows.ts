@@ -141,3 +141,21 @@ export function enforceExtractInputBudget(input: ExtractInput): ExtractInput {
 export function jsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value));
 }
+
+/** Source spans are lossless and prefer sentence boundaries; code owns byte offsets. */
+export function splitMeaningSourceSpans(text: string, maxBytes: number): Array<{ start: number; end: number }> {
+  const chunks: Array<{ start: number; end: number }> = [];
+  let start = 0, end = 0, count = 0;
+  const flush = () => { if (end > start) chunks.push({ start, end }); start = end; count = 0; };
+  for (const sentence of new Intl.Segmenter("und", { granularity: "sentence" }).segment(text)) {
+    const clusters = [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(sentence.segment)];
+    if (count && (count + clusters.length > 512 || end - start + Buffer.byteLength(sentence.segment) > Math.min(maxBytes, 3500))) flush();
+    for (const cluster of clusters) {
+      const bytes = Buffer.byteLength(cluster.segment);
+      if (count && (count === 512 || end - start + bytes > Math.min(maxBytes, 3500))) flush();
+      end += bytes; count++;
+    }
+  }
+  flush();
+  return chunks;
+}

@@ -1,3 +1,4 @@
+import { mapCondition } from "./meaning.ts";
 import { randomUUID } from "node:crypto";
 import {
   MEMORY_EXTRACTION_VERSION,
@@ -105,6 +106,15 @@ export function normalizeAndValidatePlan(
       (claim.object_ref && !refs[claim.object_ref])
     )
       throw new Error("memory_extract_invalid_ref");
+    if (claim.requirement) {
+      if (output.schema !== "butler.memory-extract-output.v3" || claim.type !== "constraint" || !claim.subject_ref || !claim.requirement.action.trim())
+        throw new Error("memory_extract_invalid_condition");
+      let atoms = 0;
+      mapCondition(claim.requirement.condition, (ref) => {
+        if (!refs[ref] || ++atoms > 16) throw new Error("memory_extract_invalid_ref");
+        return refs[ref]!;
+      });
+    }
     assertBasis(input, claim.basis, claim.evidence);
   }
   for (const relation of output.relations) {
@@ -133,7 +143,7 @@ export function normalizeAndValidatePlan(
     const replacement = claims.get(correction.replacement_claim_ref)!;
     const previousSubject = db.query<{ target_node_id: string }, [string]>("SELECT target_node_id FROM edges WHERE source_node_id=? AND rel_type='has_subject' ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.target_node_id ?? null;
     const replacementSubject = replacement.subject_ref ? refs[replacement.subject_ref] ?? null : null;
-    const previousRelation = db.query<{ rel_type: string }, [string]>("SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts') ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.rel_type ?? null;
+    const previousRelation = db.query<{ rel_type: string }, [string]>("SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member') ORDER BY edge_id LIMIT 1").get(previousClaim.ref)?.rel_type ?? null;
     const replacementRelation = output.relations.find((relation) => relation.claim_ref === replacement.local_ref)?.relation ?? null;
     const previousProperties = db.query<{ properties: string; type: string }, [string]>("SELECT properties,type FROM entities WHERE id=?").get(previousClaim.ref);
     const previousCondition = previousProperties ? (JSON.parse(previousProperties.properties) as { condition?: string | null }).condition ?? null : null;
@@ -297,6 +307,8 @@ export function applyPlan(
             basis: claim.basis,
             polarity: claim.polarity,
             condition: claim.condition,
+            ...(claim.requirement ? { requirement: { action: claim.requirement.action,
+              condition: mapCondition(claim.requirement.condition, (ref) => refs[ref]!) } } : {}),
             valid_from: claim.valid_from,
             valid_to: claim.valid_to,
             salience: claim.salience,
@@ -325,6 +337,11 @@ export function applyPlan(
           claim.evidence,
           claim.basis,
         );
+      if (claim.requirement) {
+        const members = new Set<string>();
+        mapCondition(claim.requirement.condition, (ref) => { members.add(ref); return ref; });
+        for (const ref of members) addEdge("condition_member", claim.local_ref, ref, claim.local_ref, claim.evidence, claim.basis);
+      }
       if (claim.object_ref)
         addEdge(
           "has_object",
