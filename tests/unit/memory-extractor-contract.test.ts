@@ -176,3 +176,66 @@ test("unresolved corrections preserve the new source claim and produce a warning
     expect(output.corrections).toEqual([]);
   }
 });
+
+test("invalid cached A is preserved while a bounded correction supplies the reusable result", async () => {
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>();
+  const requests: any[] = [];
+  const invalid = { status: "processed", entities: [], items: [{ kind: "fact", subject: null, text: "stated fact", evidence: [5667] }], attributes: [] };
+  const valid = { ...invalid, items: [{ ...invalid.items[0], evidence: [0] }] };
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async request => { requests.push(request); return response(requests.length === 1 ? invalid : valid) as never; };
+  const root = mkdtempSync(join(tmpdir(), "memory-stage-repair-"));
+  try {
+    const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [], stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+    const result = await runStructuredMemoryExtractor(args);
+    expect(result.output.claims).toHaveLength(1);
+    expect(requests).toHaveLength(2);
+    expect(JSON.parse(requests[1].prompt).correction.error).toBe("memory_extract_invalid_evidence");
+    expect(requests[1].responseFormat.schema.properties.entities.items.properties.evidence.items.maximum).toBe(sourcePassages(input).length - 1);
+    const snapshot = JSON.stringify([...saved]);
+    await runStructuredMemoryExtractor(args);
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify([...saved])).toBe(snapshot);
+    expect([...saved.values()][0]!.raw).toBe(JSON.stringify(invalid));
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("stage repair exhaustion never issues further calls for the same saved invalid responses", async () => {
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>(); let calls = 0;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async () => { calls++; return response({ ...empty, entities: [{ name: "x", evidence: [5667] }] }) as never; };
+  const root = mkdtempSync(join(tmpdir(), "memory-stage-cap-"));
+  try {
+    const args = { butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [], stages: { load: async (key: string) => saved.get(key) ?? null, save: async (key: string, result: ExtractionStageResult) => { saved.set(key, result); } } };
+    for (let n = 0; n < 2; n++) {
+      const error = await runStructuredMemoryExtractor(args).then(() => null, error => error);
+      expect(error.repairExhausted).toBe(true);
+      expect(error.message).toBe("memory_extract_invalid_evidence");
+    }
+    expect(calls).toBe(3); expect(saved.size).toBe(3);
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("only invalid B is repaired and partial binding mutations are discarded", async () => {
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const saved = new Map<string, ExtractionStageResult>(); let a = 0, b = 0;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async request => {
+    const wire = JSON.parse(request.prompt), prompt = wire.input ?? wire;
+    if (prompt.parts) { a++; return response(meaning) as never; }
+    b++;
+    return response({ decisions: prompt.targets.map((target: any, index: number) => b === 1
+      ? { target: target.target, candidate: index === 0 ? target.candidates[0].ref : "invented", span: null, support: [...target.evidence, ...target.candidates[0].evidence] }
+      : { target: target.target, candidate: null, span: null, support: [] }) }) as never;
+  };
+  const root = mkdtempSync(join(tmpdir(), "memory-binding-repair-"));
+  try {
+    const result = await runStructuredMemoryExtractor({ butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [{ ref: "old-camera", type: "entity", label: "相機", aliases: [], scope: "user", project_id: null, evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" }] }],
+      stages: { load: async key => saved.get(key) ?? null, save: async (key, result) => { saved.set(key, result); } } });
+    expect(a).toBe(1); expect(b).toBe(2);
+    expect(result.output.nodes.every(node => node.resolution.kind === "create")).toBe(true);
+    expect(saved.size).toBe(3);
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});

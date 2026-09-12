@@ -341,6 +341,8 @@ function reprocessMemoryProjectionWindowOwned(context: MemoryExecutionContext, r
           owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?`)
           .run(receiptRef, row.attempt_count, state, now, request.window_ref);
         refreshSemanticState(db, request.job_id);
+        // An explicit recovery request is runnable immediately, before another full job rotation.
+        db.query("UPDATE memory_projection_jobs SET next_stage='semantic_graph',last_served_at=NULL WHERE job_id=?").run(request.job_id);
         return result;
       })();
     } finally { db.close(); }
@@ -1109,7 +1111,7 @@ export async function advanceNextMemoryProjection(input: {
         return progressFromDb(db, pending.job_id);
       }
       if (error instanceof MemoryExtractAttemptError) {
-        const failure = retryDecision(error, pending.recoveryAttemptCount + 1);
+        const failure = error.repairExhausted ? { retryAt: null } : retryDecision(error, pending.recoveryAttemptCount + 1);
         await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
           saveAttemptResult(db, pending.window_ref, pending.ownerNonce, error.output, {
             ...(error.providerEvidence as Record<string, unknown>), visible_stream: stream.settle(),
@@ -1118,7 +1120,7 @@ export async function advanceNextMemoryProjection(input: {
             retryAt: failure.retryAt,
             ownerNonce: pending.ownerNonce,
             attemptKind: "provider",
-            providerInvoked: true,
+            providerInvoked,
             clearResult: true,
             failureEvidence: error.providerEvidence,
           });
