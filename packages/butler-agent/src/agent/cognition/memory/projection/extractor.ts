@@ -4,7 +4,7 @@ import type { ProviderStreamProjectionHandler } from "../../../../integrations/p
 import { validateJsonObjectSchema } from "../../../tools/schema-validation.ts";
 import type { ExtractInput, ExtractOutput, MemoryExecutionContext, QuoteRef } from "./contracts.ts";
 import { graphemeCount } from "./unicode.ts";
-import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
+import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, MemoryMeaningValidationError, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
 import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, MemoryBindingValidationError, prepareBindingBatches, applyBinding, applyBindingRepair, bindingRepairSchema, type CandidateLoader, type BindingWarning } from "./binding.ts";
 
 const MAX_STAGE_REPAIRS = 2;
@@ -109,7 +109,8 @@ export async function runStructuredMemoryExtractor(input: {
       } catch (cause) {
         if (!(cause instanceof Error) || !cause.message.startsWith("memory_extract_invalid_")) throw cause;
         rejectionCode = cause.message;
-        rejection = cause instanceof MemoryBindingValidationError ? cause.repairFeedback : rejectionCode;
+        rejection = cause instanceof MemoryBindingValidationError || cause instanceof MemoryMeaningValidationError
+          ? cause.repairFeedback : rejectionCode;
         if (repair === MAX_STAGE_REPAIRS)
           throw new MemoryExtractAttemptError(rejectionCode, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
       }
