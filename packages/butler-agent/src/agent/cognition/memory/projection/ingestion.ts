@@ -58,6 +58,7 @@ import {
 } from "./store.ts";
 import { embedVectorQuantum, filterCurrentGenerationVectorMatches, findPersistedVectorReceipt, prepareReusedGenerationVectorRows, searchGenerationVectors, writeGenerationVectorRows } from "../recall/vector.ts";
 import { selectSemanticSeeds } from "../recall/candidates.ts";
+import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 import { MemoryExtractDispositionError, MemoryExtractAttemptError, memoryExtractionTimeoutMs, runStructuredMemoryExtractor } from "./extractor.ts";
 import {
   acquireConsolidationLock,
@@ -945,7 +946,15 @@ export async function advanceNextMemoryProjection(input: {
         db, pending.window_ref, pending.ownerNonce, extractInput,
         pending.attemptCount > 1 ? "legacy_input_unavailable" : null,
       ));
-      assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+      const sourceValidationStarted = performance.now();
+      let sourceValid = false;
+      try {
+        assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+        sourceValid = true;
+      } finally {
+        recordOperationalMetric({ category: "memory", name: "memory_projection_source_validation", status: sourceValid ? "ok" : "error",
+          durationMs: performance.now() - sourceValidationStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+      }
     } catch (error) {
       if (isCommitInterruption(error)) return progressFromDb(db, pending.job_id);
       await handleProjectionFailure(input.context, generation, db, pending, error, { providerInvoked: false, preserveResult: false });
@@ -1007,12 +1016,15 @@ export async function advanceNextMemoryProjection(input: {
     let requestWire: Record<string, string | number> | undefined;
     let providerInvocationIntended = false;
     let providerInvoked = false;
+    let projectionFinalizeStarted: number | null = null;
     const started = performance.now();
     const stream = observeExtractionStream(started);
     try {
       let extraction: Awaited<ReturnType<typeof runStructuredMemoryExtractor>>;
       try {
-        extraction = await runStructuredMemoryExtractor({
+        let extractionSucceeded = false;
+        const extractionStarted = performance.now();
+        try { extraction = await runStructuredMemoryExtractor({
           butlerData: sourceRoot,
           extractInput,
           model: pending.model,
@@ -1026,24 +1038,48 @@ export async function advanceNextMemoryProjection(input: {
               sourceUnits: [{ ...extractInput.source_units[0]!, text: cue }] });
           },
           stages: {
-            load: async (key) => readExtractionStage(db, pending.window_ref, key),
-            save: async (key, result) => { await withMemoryWriteGateAsync(input.context, () => {
-              assertProjectionSourceCurrent(sourceRoot, db, extractInput);
-              saveExtractionStage(db, pending.window_ref, pending.ownerNonce, key, result);
-            }); },
+            load: async (key) => {
+              const stageLoadStarted = performance.now();
+              let loaded = false;
+              try { const result = readExtractionStage(db, pending.window_ref, key); loaded = true; return result; }
+              finally { recordOperationalMetric({ category: "memory", name: "memory_projection_stage_load", status: loaded ? "ok" : "error",
+                durationMs: performance.now() - stageLoadStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData }); }
+            },
+            save: async (key, result) => {
+              const stageSaveStarted = performance.now();
+              let saved = false;
+              try { await withMemoryWriteGateAsync(input.context, () => {
+                assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+                saveExtractionStage(db, pending.window_ref, pending.ownerNonce, key, result);
+              }); saved = true; }
+              finally { recordOperationalMetric({ category: "memory", name: "memory_projection_stage_save", status: saved ? "ok" : "error",
+                durationMs: performance.now() - stageSaveStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData }); }
+            },
           },
           onProviderStreamEvent: stream.observe,
           onRequestPrepared: (evidence) => { requestWire = evidence; },
           onProviderInvocationIntent: async () => {
-            await withMemoryWriteGateAsync(input.context, () => {
-              assertProjectionSourceCurrent(sourceRoot, db, extractInput);
-              pinBindingCandidates(db, pending.window_ref, pending.ownerNonce, extractInput);
-              recordProviderInvocationIntent(db, pending.window_ref, pending.ownerNonce);
-            });
-            providerInvocationIntended = true;
+            const invocationGateStarted = performance.now();
+            let invocationValidated = false;
+            try {
+              await withMemoryWriteGateAsync(input.context, () => {
+                assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+                pinBindingCandidates(db, pending.window_ref, pending.ownerNonce, extractInput);
+                recordProviderInvocationIntent(db, pending.window_ref, pending.ownerNonce);
+              });
+              providerInvocationIntended = true;
+              invocationValidated = true;
+            } finally {
+              recordOperationalMetric({ category: "memory", name: "memory_projection_invocation_source_gate", status: invocationValidated ? "ok" : "error",
+                durationMs: performance.now() - invocationGateStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+            }
           },
           onProviderAdapterEntry: () => { providerInvoked = true; },
-        });
+        }); extractionSucceeded = true; }
+        finally {
+          recordOperationalMetric({ category: "memory", name: "memory_projection_extraction_total", status: extractionSucceeded ? "ok" : "error",
+            durationMs: performance.now() - extractionStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+        }
       } catch (error) {
         if (!(error instanceof MemoryExtractAttemptError) && !(error instanceof MemoryExtractDispositionError)) {
           const origin = signal.aborted ? (signal.reason === timeoutReason ? "local" : "external")
@@ -1065,6 +1101,7 @@ export async function advanceNextMemoryProjection(input: {
       }
       output = extraction.output;
       providerEvidence = { ...extraction.evidence, visible_stream: stream.settle() };
+      projectionFinalizeStarted = performance.now();
       await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
         assertProjectionSourceCurrent(sourceRoot, db, extractInput);
         pinBindingCandidates(db, pending.window_ref, pending.ownerNonce, extractInput);
@@ -1164,6 +1201,9 @@ export async function advanceNextMemoryProjection(input: {
       return progressFromDb(db, pending.job_id);
     } finally {
       clearTimeout(timer);
+      if (projectionFinalizeStarted !== null)
+        recordOperationalMetric({ category: "memory", name: "memory_projection_finalization_total", status: planApplied ? "ok" : "error",
+          durationMs: performance.now() - projectionFinalizeStarted, dimensions: { pid: process.pid, plan_applied: planApplied } }, { butlerData: input.context.butlerData });
     }
   } finally {
     activeProjectionOperations.delete(operationKey);
@@ -1465,6 +1505,7 @@ async function buildSourceWindowCandidates(input: {
   operationId: string;
   sourceUnits: ExtractInput["source_units"];
 }): Promise<ExtractInput["candidates"]> {
+  const candidateStarted = performance.now();
   const cue = input.sourceUnits.map((unit) => unit.text).join("\n");
   if (Buffer.byteLength(cue) > MAX_CANDIDATE_BYTES) throw new Error("memory_extract_source_window_exceeds_budget");
   const asOf = input.sourceUnits.reduce((latest, unit) => unit.observed_at > latest ? unit.observed_at : latest, input.sourceUnits[0]?.observed_at ?? new Date().toISOString());
@@ -1484,6 +1525,9 @@ async function buildSourceWindowCandidates(input: {
   let vectorNodes: Awaited<ReturnType<typeof searchGenerationVectors>>["nodes"] = [];
   const generation = resolveMemoryGeneration(input.context);
   if (generation.embedding) {
+    const vectorSearchStarted = performance.now();
+    let vectorPhase: "search" | "filter" = "search";
+    let vectorPhaseStarted = vectorSearchStarted;
     try {
       const matches = await searchGenerationVectors({
         generation,
@@ -1499,6 +1543,11 @@ async function buildSourceWindowCandidates(input: {
         sourceProjectId: input.chunk.project_id,
         deadlineAt: Date.now() + 5_000,
       });
+      recordOperationalMetric({ category: "memory", name: "memory_projection_candidate_vector_search", status: "ok",
+        durationMs: performance.now() - vectorSearchStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+      vectorPhase = "filter";
+      const currentFilterStarted = performance.now();
+      vectorPhaseStarted = currentFilterStarted;
       vectorNodes = filterCurrentGenerationVectorMatches(input.db, generation, matches, {
         scope: recallInput.scope,
         projectFilter: recallInput.projectFilter,
@@ -1510,16 +1559,30 @@ async function buildSourceWindowCandidates(input: {
         sourceProjectId: input.chunk.project_id,
         includeInternal: false,
       }).nodes;
+      recordOperationalMetric({ category: "memory", name: "memory_projection_candidate_current_filter", status: "ok",
+        durationMs: performance.now() - currentFilterStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
     } catch {
+      recordOperationalMetric({ category: "memory", name: vectorPhase === "search"
+        ? "memory_projection_candidate_vector_search" : "memory_projection_candidate_current_filter", status: "error",
+        durationMs: performance.now() - vectorPhaseStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
       vectorNodes = [];
     }
   }
   const bound = input.db.query<{ entity_id: string }, [string, string]>(`
     SELECT DISTINCT entity_id FROM entity_mentions WHERE episode_id=? AND revision=? ORDER BY entity_id LIMIT 8
   `).all(input.chunk.memory_chunk_id, input.chunk.current_revision).map((row) => row.entity_id);
+  const semanticStarted = performance.now();
   const semantic = selectSemanticSeeds(input.db, recallInput, vectorNodes, Date.now() + 5_000, 32, { projectId: input.chunk.project_id }).allSeeds;
+  recordOperationalMetric({ category: "memory", name: "memory_projection_candidate_semantic_seed", status: "ok",
+    durationMs: performance.now() - semanticStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
   const ids = [...new Set([...bound, ...semantic])].slice(0, 32);
-  return loadSourceWindowCandidates({ db: input.db, butlerData: input.butlerData, projectId: input.chunk.project_id, ids });
+  const evidenceStarted = performance.now();
+  const candidates = loadSourceWindowCandidates({ db: input.db, butlerData: input.butlerData, projectId: input.chunk.project_id, ids });
+  recordOperationalMetric({ category: "memory", name: "memory_projection_candidate_evidence_load", status: "ok",
+    durationMs: performance.now() - evidenceStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+  recordOperationalMetric({ category: "memory", name: "memory_projection_candidate_total", status: "ok",
+    durationMs: performance.now() - candidateStarted, dimensions: { pid: process.pid } }, { butlerData: input.context.butlerData });
+  return candidates;
 }
 
 function loadSourceWindowCandidates(input: {
