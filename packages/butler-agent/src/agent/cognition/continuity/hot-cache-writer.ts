@@ -1,3 +1,4 @@
+import { sourceClass, type SourceClass } from "../memory/projection/claim-store.ts";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -43,6 +44,8 @@ export interface SourceBackedHotCacheEntry {
   session_id: string | null;
   source_kind?: "conversation" | "task_report" | "explicit_record";
   graph_revision: number;
+  authority?: "model_interpretation";
+  source_class?: SourceClass;
   source_refs: string[];
 }
 
@@ -394,7 +397,7 @@ export function readGenerationHotCache(input: {
       const afterRevision = db.query<{ value: string }, []>("SELECT value FROM memory_state WHERE key='graph_revision'").get()?.value;
       const afterDescriptor = readActiveDescriptor(input.butlerData);
       if (revision !== afterRevision || afterDescriptor.generation_id !== descriptor.generation_id) return null;
-      return entries.length ? entries.map((entry) => entry.summary).join("\n\n") : null;
+      return entries.length ? entries.map((entry) => `[model_interpretation/${sourceClass(sourceRows(db, entry.source_refs))}; current_state_requires_verification]\n${entry.summary}`).join("\n\n") : null;
     } finally {
       db.close();
     }
@@ -535,11 +538,12 @@ function validateGenerationEntry(
   ).get(entry.episode_id);
   if (!chunk || chunk.current_revision !== entry.source_revision || chunk.status !== "active" || chunk.project_id !== entry.project_id || chunk.conversation_session_id !== entry.session_id) return false;
   const rows = sourceRows(db, entry.source_refs);
+  if (entry.authority && entry.authority !== "model_interpretation") return false;
+  if (entry.source_class && entry.source_class !== sourceClass(rows)) return false;
   const excluded = qualityExclusions(rows);
   if (entry.source_refs.some((sourceId) => excluded.has(sourceId))) return false;
   if (rows.length !== new Set(entry.source_refs).size || rows.some((row) =>
-    row.episode_id !== entry.episode_id || row.revision !== entry.source_revision ||
-    row.conversation_session_id !== entry.session_id || row.source_kind !== (entry.source_kind ?? "conversation") ||
+    !db.query("SELECT 1 FROM memory_chunks WHERE memory_chunk_id=? AND current_revision=? AND status='active' AND (project_id IS ? OR project_id IS NULL)").get(row.episode_id, row.revision, entry.project_id) ||
     !(row.source_kind === "conversation"
       ? ["user_input", "assistant_public"].includes(row.origin_kind)
       : row.source_kind === "task_report"
@@ -553,7 +557,8 @@ function validateGenerationEntry(
   const relationshipSources = sourceRows(db, [...new Set(relationships.map((row) => row.evidence_source_id))]);
   try { assertCanonicalProjectionSourcesCurrent(butlerData, db, relationshipSources); }
   catch { return false; }
-  return !relationships.some((row) => row.relation === "supersedes" && row.target_node_id === row.candidate_node_id);
+  const excludedChanges = qualityExclusions(relationshipSources);
+  return !relationships.some((row) => !excludedChanges.has(row.evidence_source_id) && row.relation === "supersedes" && row.target_node_id === row.candidate_node_id);
 }
 
 function cacheRecallInput(

@@ -117,8 +117,8 @@ test("T3 saved plan keeps its owner and input while stale candidate invalidation
   db.query(`INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,extraction_model,reasoning_effort,observed_completion_job_ids,created_at)
     VALUES('job','ep','r','memory-extract-v2','g','{"state":"complete","completed_units":1,"total_units":1}','{"state":"pending","blocked_by":null}','{"state":"pending","blocked_by":null}','{"state":"pending","blocked_by":null}','{"state":"pending","blocked_by":null}','model','medium','[]','2026-09-08T00:00:00Z')`).run();
   db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('src','ep','r','conversation','s','m','p','/text',0,4,'h','user','user_input','2026-09-08T00:00:00Z','user_statement')").run();
-  db.query("INSERT INTO entities(id,type,label_original,identity_scope,project_id,created_at) VALUES('candidate','entity','Luna','user',NULL,'2026-09-08T00:00:00Z')").run();
-  db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('candidate','src','ep','r')").run();
+  db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at) VALUES('candidate','entity','Luna','user',NULL,'2026-09-08T00:00:00Z')").run();
+  db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('candidate','src','ep','r')").run();
   db.query("INSERT INTO memory_projection_windows(window_ref,job_id,ordinal,source_refs_json,state,input_json,input_sha256) VALUES('window','job',0,'[\"src\"]','pending','{\"fixed\":true}','input-hash')").run();
   const claimed = claimNextProjectionWindow(db, { jobId: "job", ownerNonce: "owner-1" })!;
   const output = { schema: "butler.memory-extract-output.v2", window_ref: "window", disposition: "processed", covered_unit_refs: ["src"], nodes: [], claims: [], relations: [], corrections: [], summary: null } as any;
@@ -127,7 +127,7 @@ test("T3 saved plan keeps its owner and input while stale candidate invalidation
   markPlannedWindowFailure(db, "job", "window", claimed.ownerNonce, "memory_write_busy", "2000-01-01T00:00:00Z");
   const resumed = claimNextProjectionWindow(db, { jobId: "job", ownerNonce: "owner-2" })!;
   expect(resumed).toMatchObject({ previousState: "planned", attemptCount: 2, pinnedInput: { fixed: true }, plan });
-  db.query("UPDATE entities SET identity_scope='project',project_id='other' WHERE id='candidate'").run();
+  db.query("UPDATE memory_nodes SET identity_scope='project',project_id='other' WHERE id='candidate'").run();
   expect(() => assertPlanCandidatesCurrent(db, "/nonexistent", { episode_ref: "ep", revision: "r", bound_project_id: null } as any, resumed.plan as NormalizedPlan)).toThrow("memory_extract_candidate_changed");
   invalidatePlannedWindow(db, "job", "window", resumed.ownerNonce, "memory_extract_candidate_changed");
   expect(db.query<{ state: string; input_json: string | null; normalized_plan_json: string | null }, []>("SELECT state,input_json,normalized_plan_json FROM memory_projection_windows").get()).toEqual({ state: "pending", input_json: null, normalized_plan_json: null });
@@ -187,8 +187,8 @@ test("T3 advance resumes a verified persisted vector row without embedding it tw
     const graphPath = join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite");
     let db = new Database(graphPath);
     const source = db.query<{ source_id: string; revision: string; observed_at: string }, []>("SELECT source_id,revision,observed_at FROM memory_chunk_sources ORDER BY source_id LIMIT 1").get()!;
-    db.query("INSERT INTO entities(id,type,label_original,identity_scope,project_id,created_at) VALUES('vector-node','entity','Luna','user',NULL,?)").run(source.observed_at);
-    db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('vector-node',?,?,?)").run(source.source_id, registered.episode_id, source.revision);
+    db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at) VALUES('vector-node','entity','Luna','user',NULL,?)").run(source.observed_at);
+    db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('vector-node',?,?,?)").run(source.source_id, registered.episode_id, source.revision);
     db.query("UPDATE memory_projection_jobs SET semantic_graph_state=?,next_stage='node_vectors' WHERE job_id=?")
       .run(JSON.stringify({ state: "complete", completed_units: 1, total_units: 1 }), registered.job_id);
     refreshVectorUnitsForJob(db, registered.job_id, [{ sourceId: source.source_id, text: "Luna vector source", role: "user", byteStart: 0 }]);

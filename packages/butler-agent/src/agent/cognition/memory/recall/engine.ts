@@ -1,3 +1,6 @@
+import { memorySourceHandle, rawMemorySourceId } from "./source-ref.ts";
+import { resultInterpretations } from "./interpretations.ts";
+import { readClaim } from "../projection/claim-store.ts";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { createHash } from "node:crypto";
@@ -254,6 +257,7 @@ type V2RecallCandidateMetadata = Pick<
   | "channels"
   | "matched_node_ref"
   | "association_path"
+  | "qualifications"
 >;
 type V2RecallInventory = {
   createdAt: number;
@@ -1614,7 +1618,7 @@ function loadGraphCandidates(input: {
     try {
       const nodes = db.prepare(`
         SELECT e.id, e.type, e.name, COUNT(edge.id) AS degree
-        FROM entities e
+        FROM memory_nodes e
         LEFT JOIN edges edge ON edge.source_id = e.id OR edge.target_id = e.id
         GROUP BY e.id
       `).all() as Array<
@@ -1629,16 +1633,16 @@ function loadGraphCandidates(input: {
         : "";
       const mentionParams = projectId ? [projectId, projectId] : [];
       const mentions = db.prepare(`
-        SELECT m.id, m.entity_id, m.session_id, m.timestamp, m.snippet, e.name
-        FROM entity_mentions m
-        JOIN entities e ON e.id = m.entity_id
+        SELECT m.id, m.node_id, m.session_id, m.timestamp, m.snippet, e.name
+        FROM memory_evidence m
+        JOIN memory_nodes e ON e.id = m.node_id
         WHERE m.snippet IS NOT NULL AND length(m.snippet) > 0
         ${projectWhere}
         ORDER BY m.timestamp DESC
         LIMIT 200
       `).all(...mentionParams) as Array<{
         id: number;
-        entity_id: string;
+        node_id: string;
         session_id: string;
         timestamp: number;
         snippet: string;
@@ -1656,8 +1660,8 @@ function loadGraphCandidates(input: {
         const existing = groupedMentions.get(key);
         if (existing) {
           existing.timestamp = Math.max(existing.timestamp, mention.timestamp);
-          if (!existing.entityIds.includes(mention.entity_id)) {
-            existing.entityIds.push(mention.entity_id);
+          if (!existing.entityIds.includes(mention.node_id)) {
+            existing.entityIds.push(mention.node_id);
           }
           continue;
         }
@@ -1666,7 +1670,7 @@ function loadGraphCandidates(input: {
           session_id: mention.session_id,
           timestamp: mention.timestamp,
           snippet: mention.snippet,
-          entityIds: [mention.entity_id],
+          entityIds: [mention.node_id],
         });
       }
       return {
@@ -2102,6 +2106,7 @@ function recallSourceBackedGraph(
       : { sources: [], partial: false };
     const rawEpisodeIds = [...new Set(rawSources.sources.map((source) => source.episodeId))];
     const rawEpisodeSet = new Set(rawEpisodeIds);
+    const exactRawEpisodes = new Set(rawSources.sources.filter((source) => source.exactMatch).map((source) => source.episodeId));
     if (rawSources.partial) selected.coverageCodes.push("lexical_partial");
     const directEpisodeIds = [
       ...new Set([
@@ -2265,7 +2270,7 @@ function recallSourceBackedGraph(
         : lexicalList,
       context: contextList,
     });
-    const rows = episodeRows(db, input, fused.episodeIds).map((row) => {
+    const rows = episodeRows(db, input, fused.episodeIds, rawEpisodeSet).map((row) => {
       const relationships = episodeRelationshipState(db, input, row.episodeId);
       return {
         ...row,
@@ -2279,7 +2284,7 @@ function recallSourceBackedGraph(
         ],
         supportCount: supportCountForEpisode(db, input, row.episodeId),
       };
-    }).filter((row) => !row.superseded);
+    }).filter((row) => !row.superseded || rawEpisodeSet.has(row.episodeId));
     const graphRanks = rankMap(graphList),
       lexicalRanks = rankMap(lexicalList),
       contextRanks = rankMap(contextList);
@@ -2322,6 +2327,8 @@ function recallSourceBackedGraph(
       ),
       128,
     );
+    // Direct original quotations take precedence over merely associated concepts.
+    ranked.sort((a, b) => Number(exactRawEpisodes.has(b.episodeId)) - Number(exactRawEpisodes.has(a.episodeId)));
     recordV2Stage(input, "recall_v2_graph_read_ppr", graphStartedAt);
     recordV2CandidateRankingMetrics({
       input,
@@ -2410,12 +2417,14 @@ function recallSourceBackedGraph(
           episodeMentions,
           survivingSources,
         )
-        : row.summary;
+        : null;
       const rawEvidence = evidence.find((item) => rawSourceIds.has(rawMemorySourceId(item.source_ref)));
-      const summary = interpretedSummary || rawEvidence?.excerpt;
+      const summary = interpretedSummary || rawEvidence?.excerpt || evidence[0]?.excerpt;
       if (!summary) return null;
       const result: V2RecallResultItem = {
         requirements: resultRequirements(db, input, evidence),
+        interpretations: resultInterpretations(db, input, evidence),
+        current_state_requires_verification: true,
         episode_ref: row.episodeId,
         revision: row.revision,
         summary,
@@ -2435,7 +2444,8 @@ function recallSourceBackedGraph(
         evidence,
         qualifications: [
           ...(row.qualifications as string[]),
-          ...(!interpretedSummary ? ["unclassified_source"] : []),
+          ...(!interpretedSummary ? ["unclassified_source"] : ["model_interpretation"]),
+          ...(rawEvidence ? ["raw_source_match"] : []),
           ...(evidence.some((item) =>
               sourceById.get(rawMemorySourceId(item.source_ref))
                 ?.origin_kind === "unknown",
@@ -2739,7 +2749,8 @@ function continueV2Recall(
       cursor.offset + input.limit,
     );
     const ids = page.map((item) => item.episode_ref);
-    const rows = episodeRows(db, effective, ids);
+    const rawEpisodes = new Set(page.filter((item) => item.qualifications.includes("raw_source_match")).map((item) => item.episode_ref));
+    const rows = episodeRows(db, effective, ids, rawEpisodes);
     const rowById = new Map(rows.map((row) => [row.episodeId, row]));
     const mentions = [
       ...loadEligibleMentionsForEpisodes(db, effective, ids),
@@ -2783,7 +2794,7 @@ function continueV2Recall(
         effective,
         row.episodeId,
       );
-      if (relationships.superseded) {
+      if (relationships.superseded && !rawEpisodes.has(row.episodeId)) {
         sourcePartial = true;
         continue;
       }
@@ -2837,7 +2848,7 @@ function continueV2Recall(
       const surviving = new Set(
         evidence.map((item) => rawMemorySourceId(item.source_ref)),
       );
-      const summary = row.hasClaims
+      const interpreted = row.hasClaims
         ? matchedClaimSummary(
           db,
           effective,
@@ -2846,13 +2857,14 @@ function continueV2Recall(
           episodeMentions,
           surviving,
         )
-        : row.summary;
+        : null;
+      const summary = interpreted || evidence[0]?.excerpt;
       if (!summary) {
         sourcePartial = true;
         continue;
       }
       results.push({
-        requirements: resultRequirements(db, effective, evidence),
+        interpretations: resultInterpretations(db, effective, evidence), current_state_requires_verification: true, requirements: resultRequirements(db, effective, evidence),
         episode_ref: row.episodeId,
         revision: row.revision,
         summary,
@@ -2932,12 +2944,13 @@ function continueV2Recall(
     for (const [index, result] of fullResults.entries()) {
       const minimum = minimumRecallBundle(result, (evidence) => {
         const row = rowById.get(result.episode_ref)!;
-        const summary = row.hasClaims
+        const interpreted = row.hasClaims
           ? matchedClaimSummary(db, effective, row.episodeId, result.matched_node_ref,
             mentions.filter((mention) => mention.episodeId === row.episodeId),
             new Set(evidence.map((item) => rawMemorySourceId(item.source_ref))))
-          : row.summary;
-        return summary ? { ...result, summary, evidence, requirements: resultRequirements(db, effective, evidence) } : null;
+          : null;
+        const summary = interpreted || evidence[0]?.excerpt;
+        return summary ? { ...result, summary, evidence, interpretations: resultInterpretations(db, effective, evidence), current_state_requires_verification: true, requirements: resultRequirements(db, effective, evidence) } : null;
       });
       results.push(minimum);
       resultOffsets.push(fullOffsets[index]!);
@@ -3053,12 +3066,14 @@ function v2RecallCursorPage(
       channels,
       matched_node_ref,
       association_path,
+      qualifications,
     }) => ({
       episode_ref,
       revision,
       channels,
       matched_node_ref,
       association_path,
+      qualifications,
     })),
   };
   inventories.set(key, inventory);
@@ -3088,15 +3103,15 @@ function loadEligibleMentionsForEpisodes(
   const validity = claimEligibility(input);
   return db.query<
     {
-      entity_id: string;
+      node_id: string;
       source_id: string;
       episode_id: string;
       revision: string;
     },
     any
   >(`
-    SELECT DISTINCT m.entity_id,m.source_id,m.episode_id,m.revision FROM entity_mentions m
-    JOIN entities e ON e.id=m.entity_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
+    SELECT DISTINCT m.node_id,m.source_id,m.episode_id,m.revision FROM memory_evidence m
+    JOIN memory_nodes e ON e.id=m.node_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE m.episode_id IN (${
     episodeIds.map(() => "?").join(",")
@@ -3105,7 +3120,7 @@ function loadEligibleMentionsForEpisodes(
   } ${event.sql} ORDER BY m.episode_id,m.source_id
   `).all(...episodeIds, ...validity.args, ...scopeArgs(input), ...event.args)
     .map((row) => ({
-      nodeId: row.entity_id,
+      nodeId: row.node_id,
       sourceId: row.source_id,
       episodeId: row.episode_id,
       revision: row.revision,
@@ -3226,18 +3241,22 @@ function loadEligibleAdjacency(
   >(`
     SELECT e.edge_id,e.source_node_id,e.target_node_id,e.rel_type,e.claim_node_id,COUNT(DISTINCT s.episode_id) support
     FROM edges e JOIN edge_evidence ee ON ee.edge_id=e.edge_id
-    LEFT JOIN entities claim ON claim.id=e.claim_node_id
+    LEFT JOIN memory_nodes claim ON claim.id=e.claim_node_id
     JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE (e.source_node_id=? OR e.target_node_id=?) AND e.status='active'
-      AND e.rel_type IN ('related_to','depends_on','likes','dislikes','decided','has_subject','has_object','condition_member','belongs_to','co_occurred')
+      AND e.rel_type IN ('related_to','depends_on','likes','dislikes','decided','has_subject','has_object','condition_member','belongs_to','co_occurred','identity_match','same_claim')
       AND (e.valid_from IS NULL OR julianday(e.valid_from)<=julianday(?))
       AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))
       AND (e.claim_node_id IS NULL OR ${claimValidity.sql}) AND ${
     scopeSql(input)
   }
+      AND NOT EXISTS(SELECT 1 FROM edge_evidence dependency
+        LEFT JOIN memory_chunk_sources ds ON ds.source_id=dependency.chunk_source_id
+        LEFT JOIN memory_chunks dc ON dc.memory_chunk_id=ds.episode_id AND dc.current_revision=ds.revision
+        WHERE dependency.edge_id=e.edge_id AND (dc.memory_chunk_id IS NULL OR NOT (${scopeSql(input, undefined, "ds", "dc")})))
     GROUP BY e.edge_id ORDER BY
-      CASE WHEN e.rel_type IN ('belongs_to','co_occurred') THEN 1 ELSE 0 END,
+      CASE WHEN e.rel_type IN ('belongs_to','co_occurred','identity_match','same_claim') THEN 1 ELSE 0 END,
       support DESC,e.rel_type,
       CASE WHEN e.source_node_id=? THEN e.target_node_id ELSE e.source_node_id END,e.edge_id
     LIMIT ${queryLimit} OFFSET ${Math.max(0, Math.trunc(offset))}
@@ -3247,6 +3266,7 @@ function loadEligibleAdjacency(
     input.asOf,
     input.asOf,
     ...claimValidity.args,
+    ...scopeArgs(input),
     ...scopeArgs(input),
     nodeId,
   );
@@ -3310,8 +3330,8 @@ function vectorEventEligible(
   if (input.time?.basis !== "event") return true;
   const clauses = [
     "e.type IN ('preference','goal','constraint','decision','memory_atom')",
-    "julianday(json_extract(e.properties,'$.valid_from'))<julianday(?)",
-    "julianday(COALESCE(json_extract(e.properties,'$.valid_to'),?))>julianday(?)",
+    "julianday((SELECT valid_from FROM memory_claims WHERE node_id=e.id))<julianday(?)",
+    "julianday(COALESCE((SELECT valid_to FROM memory_claims WHERE node_id=e.id),?))>julianday(?)",
   ];
   const args: Array<string | null> = [
     input.time.to,
@@ -3324,7 +3344,7 @@ function vectorEventEligible(
   }
   return Boolean(
     db.query<{ found: number }, Array<string | null>>(`
-    SELECT 1 found FROM entity_mentions m JOIN entities e ON e.id=m.entity_id
+    SELECT 1 found FROM memory_evidence m JOIN memory_nodes e ON e.id=m.node_id
     JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE ${clauses.join(" AND ")} AND ${scopeSql(input)} LIMIT 1
@@ -3402,24 +3422,24 @@ function loadEligibleMentions(
   const validity = claimEligibility(input);
   return db.query<
     {
-      entity_id: string;
+      node_id: string;
       source_id: string;
       episode_id: string;
       revision: string;
     },
     any
   >(`
-    SELECT DISTINCT m.entity_id,m.source_id,m.episode_id,m.revision FROM entity_mentions m
-    JOIN entities e ON e.id=m.entity_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
+    SELECT DISTINCT m.node_id,m.source_id,m.episode_id,m.revision FROM memory_evidence m
+    JOIN memory_nodes e ON e.id=m.node_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-    WHERE m.entity_id IN (${
+    WHERE m.node_id IN (${
     nodeIds.map(() => "?").join(",")
   }) AND ${validity.sql} AND ${scopeSql(input)} ${event.sql}
     ORDER BY m.episode_id,m.source_id
   `).all(...nodeIds, ...validity.args, ...scopeArgs(input), ...event.args).map((
     row,
   ) => ({
-    nodeId: row.entity_id,
+    nodeId: row.node_id,
     sourceId: row.source_id,
     episodeId: row.episode_id,
     revision: row.revision,
@@ -3433,14 +3453,14 @@ function eventEpisodeEligibility(
   if (input.time?.basis !== "event") return { sql: "", args: [] };
   return {
     sql: `AND EXISTS(
-      SELECT 1 FROM entity_mentions time_mention
-      JOIN entities time_entity ON time_entity.id=time_mention.entity_id
+      SELECT 1 FROM memory_evidence time_mention
+      JOIN memory_nodes time_entity ON time_entity.id=time_mention.node_id
       JOIN memory_chunk_sources time_source ON time_source.source_id=time_mention.source_id
       JOIN memory_chunks time_chunk ON time_chunk.memory_chunk_id=time_source.episode_id AND time_chunk.current_revision=time_source.revision
       WHERE time_mention.episode_id=${episodeExpression}
         AND time_entity.type IN ('preference','goal','constraint','decision','memory_atom')
-        AND julianday(json_extract(time_entity.properties,'$.valid_from'))<julianday(?)
-        AND julianday(COALESCE(json_extract(time_entity.properties,'$.valid_to'),?))>julianday(?)
+        AND julianday((SELECT valid_from FROM memory_claims WHERE node_id=time_entity.id))<julianday(?)
+        AND julianday(COALESCE((SELECT valid_to FROM memory_claims WHERE node_id=time_entity.id),?))>julianday(?)
         AND ${scopeSql(input, undefined, "time_source", "time_chunk")}
     )`,
     args: [input.time.to, input.time.to, input.time.from, ...scopeArgs(input)],
@@ -3451,9 +3471,10 @@ function episodeRows(
   db: Database,
   input: RecallMemoryInput,
   episodeIds: string[],
+  rawEpisodes = new Set<string>(),
 ) {
   if (!episodeIds.length) return [];
-  const validity = claimEligibility(input, "claim");
+  const validity = claimEligibility(input, "claim", "node_id");
   const rows = db.query<
     {
       episodeId: string;
@@ -3479,21 +3500,21 @@ function episodeRows(
     scopeSql(input)
   }
     ), all_claims AS (
-      SELECT m.episode_id,e.id entity_id,e.type,e.properties,m.source_id FROM entity_mentions m
+      SELECT m.episode_id,e.id node_id,e.type,m.source_id FROM memory_evidence m
       JOIN eligible_sources source ON source.source_id=m.source_id
-      JOIN entities e ON e.id=m.entity_id
+      JOIN memory_nodes e ON e.id=m.node_id
       WHERE e.type IN ('preference','goal','constraint','decision','memory_atom')
     ), eligible_claims AS (
       SELECT claim.* FROM all_claims claim WHERE ${validity.sql}
     )
     SELECT c.memory_chunk_id episodeId,c.current_revision revision,c.summary summary,
-      CASE WHEN COUNT(DISTINCT all_claims.entity_id)>0 THEN 1 ELSE 0 END hasClaims,
+      CASE WHEN COUNT(DISTINCT all_claims.node_id)>0 THEN 1 ELSE 0 END hasClaims,
       strftime('%Y-%m-%dT%H:%M:%fZ',MAX(julianday(source.observed_at))) conversationAt,
       c.conversation_session_id sessionId,c.conversation_turn_id turnId,
       c.project_id projectId,
-      MAX(json_extract(eligible_claims.properties,'$.valid_from')) eventAt,
-      CASE WHEN MAX(CASE json_extract(eligible_claims.properties,'$.salience') WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=2 THEN 'high'
-        WHEN MAX(CASE json_extract(eligible_claims.properties,'$.salience') WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=1 THEN 'normal' ELSE 'unspecified' END salience,
+      MAX((SELECT valid_from FROM memory_claims WHERE node_id=eligible_claims.node_id)) eventAt,
+      CASE WHEN MAX(CASE (SELECT salience FROM memory_claims WHERE node_id=eligible_claims.node_id) WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=2 THEN 'high'
+        WHEN MAX(CASE (SELECT salience FROM memory_claims WHERE node_id=eligible_claims.node_id) WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=1 THEN 'normal' ELSE 'unspecified' END salience,
       0 explicitPriority,
       CASE WHEN MAX(CASE WHEN eligible_claims.type='goal' THEN 1 ELSE 0 END)=1 THEN 7 ELSE 30 END halfLifeDays,
       0 supportCount
@@ -3501,9 +3522,9 @@ function episodeRows(
     LEFT JOIN all_claims ON all_claims.episode_id=c.memory_chunk_id
     LEFT JOIN eligible_claims ON eligible_claims.episode_id=c.memory_chunk_id
     GROUP BY c.memory_chunk_id
-    HAVING COUNT(DISTINCT all_claims.entity_id)=0 OR COUNT(DISTINCT eligible_claims.entity_id)>0
+    HAVING COUNT(DISTINCT all_claims.node_id)=0 OR COUNT(DISTINCT eligible_claims.node_id)>0 OR c.memory_chunk_id IN (${[...rawEpisodes].map(() => "?").join(",") || "NULL"})
     ORDER BY c.memory_chunk_id
-  `).all(...episodeIds, ...scopeArgs(input), ...validity.args);
+  `).all(...episodeIds, ...scopeArgs(input), ...validity.args, ...rawEpisodes);
   const requestedHistoricalEvent = input.time?.basis === "event" &&
     Date.parse(input.time.to) <= Date.parse(input.asOf);
   return rows.map((row) => ({
@@ -3542,12 +3563,13 @@ function matchedClaimSummary(
   ].includes(nodeType(db, matchedNodeId) ?? "");
   const validity = claimEligibility(input);
   const row = db.query<{ statement: unknown }, any>(`
-    SELECT json_extract(e.properties,'$.statement') statement FROM entity_mentions m
-    JOIN entities e ON e.id=m.entity_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
+    SELECT (SELECT statement FROM memory_claims WHERE node_id=e.id) statement FROM memory_evidence m
+    JOIN memory_nodes e ON e.id=m.node_id JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE m.episode_id=? AND m.source_id IN (${
     matchedSourceIds.map(() => "?").join(",")
   })
+      AND NOT EXISTS(SELECT 1 FROM memory_evidence dependency WHERE dependency.node_id=e.id AND dependency.source_id NOT IN (${[...survivingSourceIds].map(() => "?").join(",")}))
       AND e.type IN ('preference','goal','constraint','decision','memory_atom')
       ${matchedIsClaim ? "AND e.id=?" : ""} AND ${validity.sql} AND ${
     scopeSql(input)
@@ -3556,6 +3578,7 @@ function matchedClaimSummary(
   `).get(
     episodeId,
     ...matchedSourceIds,
+    ...survivingSourceIds,
     ...(matchedIsClaim ? [matchedNodeId] : []),
     ...validity.args,
     ...scopeArgs(input),
@@ -3580,7 +3603,7 @@ function episodeHasHistoricalClaim(
   );
   return Boolean(
     db.query<{ found: number }, any>(`
-    SELECT 1 found FROM entity_mentions m JOIN entities selected ON selected.id=m.entity_id
+    SELECT 1 found FROM memory_evidence m JOIN memory_nodes selected ON selected.id=m.node_id
     JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE m.episode_id=? AND selected.type IN ('preference','goal','constraint','decision','memory_atom')
@@ -3598,10 +3621,10 @@ function supportCountForEpisode(
 ): number {
   return Number(
     db.query<{ count: number }, any>(`
-    SELECT COUNT(DISTINCT s.episode_id) count FROM entity_mentions candidate
+    SELECT COUNT(DISTINCT s.episode_id) count FROM memory_evidence candidate
     JOIN memory_chunk_sources candidate_source ON candidate_source.source_id=candidate.source_id
     JOIN memory_chunks candidate_chunk ON candidate_chunk.memory_chunk_id=candidate_source.episode_id AND candidate_chunk.current_revision=candidate_source.revision
-    JOIN edges e ON e.claim_node_id=candidate.entity_id JOIN edge_evidence ee ON ee.edge_id=e.edge_id
+    JOIN edges e ON e.claim_node_id=candidate.node_id JOIN edge_evidence ee ON ee.edge_id=e.edge_id
     JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE candidate.episode_id=? AND e.status='active'
       AND (e.valid_from IS NULL OR julianday(e.valid_from)<=julianday(?))
@@ -3674,12 +3697,12 @@ function currentExplicitRuleSourceIds(
 ): string[] {
   const validity = claimEligibility(input);
   return db.query<{ source_id: string }, any>(`
-    SELECT DISTINCT m.source_id FROM entity_mentions m JOIN entities e ON e.id=m.entity_id
+    SELECT DISTINCT m.source_id FROM memory_evidence m JOIN memory_nodes e ON e.id=m.node_id
     JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE m.episode_id=? AND e.type='constraint'
-      AND json_extract(e.properties,'$.speech_act')='assertion'
-      AND json_extract(e.properties,'$.basis')='user_statement'
+      AND (SELECT speech_act FROM memory_claims WHERE node_id=e.id)='assertion'
+      AND (SELECT basis FROM memory_claims WHERE node_id=e.id)='user_statement'
       AND ((s.source_kind='conversation' AND s.role='user' AND s.origin_kind='user_input')
         OR (s.source_kind='explicit_record' AND s.role='explicit'))
       AND s.basis='user_statement'
@@ -3697,10 +3720,10 @@ function hasLaterCurrentSupersession(
   if (input.time?.basis === "event") {
     return Boolean(
       db.query<{ found: number }, any>(`
-      SELECT 1 found FROM entity_mentions candidate
+      SELECT 1 found FROM memory_evidence candidate
       JOIN memory_chunk_sources candidate_source ON candidate_source.source_id=candidate.source_id
       JOIN memory_chunks candidate_chunk ON candidate_chunk.memory_chunk_id=candidate_source.episode_id AND candidate_chunk.current_revision=candidate_source.revision
-      JOIN edges e ON e.target_node_id=candidate.entity_id AND e.rel_type='supersedes' AND e.status='active'
+      JOIN edges e ON e.target_node_id=candidate.node_id AND e.rel_type='supersedes' AND e.status='active'
       JOIN edge_evidence ee ON ee.edge_id=e.edge_id
       JOIN memory_chunk_sources correction_source ON correction_source.source_id=ee.chunk_source_id
       JOIN memory_chunks correction_chunk ON correction_chunk.memory_chunk_id=correction_source.episode_id AND correction_chunk.current_revision=correction_source.revision
@@ -3727,10 +3750,10 @@ function hasLaterCurrentSupersession(
   };
   return Boolean(
     db.query<{ found: number }, any>(`
-    SELECT 1 found FROM entity_mentions candidate
+    SELECT 1 found FROM memory_evidence candidate
     JOIN memory_chunk_sources candidate_source ON candidate_source.source_id=candidate.source_id
     JOIN memory_chunks candidate_chunk ON candidate_chunk.memory_chunk_id=candidate_source.episode_id AND candidate_chunk.current_revision=candidate_source.revision
-    JOIN edges e ON e.target_node_id=candidate.entity_id AND e.rel_type='supersedes' AND e.status='active'
+    JOIN edges e ON e.target_node_id=candidate.node_id AND e.rel_type='supersedes' AND e.status='active'
     JOIN edge_evidence ee ON ee.edge_id=e.edge_id
     JOIN memory_chunk_sources correction_source ON correction_source.source_id=ee.chunk_source_id
     JOIN memory_chunks correction_chunk ON correction_chunk.memory_chunk_id=correction_source.episode_id AND correction_chunk.current_revision=correction_source.revision
@@ -3756,7 +3779,7 @@ function hasLaterCurrentSupersession(
 
 function nodeType(db: Database, nodeId: string): string | null {
   return db.query<{ type: string }, [string]>(
-    "SELECT type FROM entities WHERE id=?",
+    "SELECT type FROM memory_nodes WHERE id=?",
   ).get(nodeId)?.type ?? null;
 }
 
@@ -3892,19 +3915,6 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function memorySourceHandle(generationId: string, sourceId: string): string {
-  return `memory-source:v2:${
-    Buffer.from(generationId, "utf8").toString("base64url")
-  }:${Buffer.from(sourceId, "utf8").toString("base64url")}`;
-}
-
-function rawMemorySourceId(sourceRef: string): string {
-  const parts = sourceRef.split(":");
-  return parts.length === 4 && parts[0] === "memory-source" && parts[1] === "v2"
-    ? Buffer.from(parts[3]!, "base64url").toString("utf8")
-    : sourceRef;
-}
-
 function compareEvidenceHandles(
   a: { basis: string; observed_at: string; source_id: string } | undefined,
   b: { basis: string; observed_at: string; source_id: string } | undefined,
@@ -4016,16 +4026,18 @@ function resultRequirements(db: Database, input: RecallMemoryInput, evidence: Re
   const ids = evidence.map((item) => rawMemorySourceId(item.source_ref));
   if (!ids.length) return [];
   const validity = claimEligibility(input);
-  const rows = db.query<{ id: string; properties: string; source_id: string }, any>(`
-    SELECT DISTINCT e.id,e.properties,m.source_id FROM entities e JOIN entity_mentions m ON m.entity_id=e.id
+  const rows = db.query<{ id: string; source_id: string }, any>(`
+    SELECT DISTINCT e.id,m.source_id FROM memory_nodes e JOIN memory_evidence m ON m.node_id=e.id
     JOIN memory_chunk_sources s ON s.source_id=m.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-    WHERE m.source_id IN (${ids.map(() => "?").join(",")}) AND json_extract(e.properties,'$.requirement') IS NOT NULL
+    WHERE m.source_id IN (${ids.map(() => "?").join(",")}) AND (SELECT requirement FROM memory_claims WHERE node_id=e.id) IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM memory_evidence dependency WHERE dependency.node_id=e.id AND dependency.source_id NOT IN (${ids.map(() => "?").join(",")}))
       AND ${validity.sql} AND ${scopeSql(input)}
-  `).all(...ids, ...validity.args, ...scopeArgs(input));
+  `).all(...ids, ...ids, ...validity.args, ...scopeArgs(input));
   const result: NonNullable<RecallMemoryResult["results"][number]["requirements"]> = [];
   for (const row of rows) {
-    const properties = JSON.parse(row.properties);
+    const properties = readClaim(db, row.id);
+    if (!properties?.requirement) continue;
     const ref = evidence.find((item) => rawMemorySourceId(item.source_ref) === row.source_id)!.source_ref;
     const existing = result.find((item) => item.node_ref === row.id);
     if (existing) { if (!existing.source_refs.includes(ref)) existing.source_refs.push(ref); }

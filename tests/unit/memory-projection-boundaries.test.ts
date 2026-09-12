@@ -1,3 +1,4 @@
+import { insertMemoryNodeFixture } from "../helpers/memory-node-fixture.ts";
 import { test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -73,7 +74,7 @@ test("public legacy boundary recovery expands context, preserves coverage and re
     expect(prompts[1].parts[0].before + prompts[1].parts[0].text + prompts[1].parts[0].after).toContain("The server uses port 2222.");
     expect(f.db.query("SELECT * FROM memory_projection_windows WHERE window_ref!=?").all(window.window_ref)).toEqual(completed);
     expect(f.db.query("SELECT * FROM memory_chunk_sources ORDER BY source_id").all()).toEqual(sources);
-    expect(f.db.query<any, []>("SELECT count(DISTINCT source_id) n FROM entity_mentions").get().n).toBeGreaterThan(1);
+    expect(f.db.query<any, []>("SELECT count(DISTINCT source_id) n FROM memory_evidence").get().n).toBeGreaterThan(1);
     expect(f.db.query<any, []>("SELECT count(*) n FROM memory_projection_attempts WHERE state='failed'").get().n).toBe(0);
     f.db.query("UPDATE memory_projection_jobs SET next_stage='hot_cache'").run();
     await advanceNextMemoryProjection({ context: f.context });
@@ -98,22 +99,22 @@ test("incremental alias index handles updates, scope moves and deletion without 
     const source = f.db.query<any, []>("SELECT source_id FROM memory_chunk_sources LIMIT 1").get().source_id;
     installAndBackfillRecallIndexes(f.db);
     for (const [id, label] of [["one", "한글"], ["two", "العربية"]]) {
-      f.db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,'entity',?,'{}','user','2026-09-12')").run(id, label);
-      f.db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(id, label, label, unicodeCaseFold(label!), source);
+      insertMemoryNodeFixture(f.db, { id: id, type: "entity", label_original: label, claim: "{}", identity_scope: "user", created_at: "2026-09-12" });
+      f.db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(id, label, label, unicodeCaseFold(label!), source);
     }
     installAndBackfillRecallIndexes(f.db);
-    const unchanged = f.db.query("SELECT rowid,* FROM entity_alias_postings WHERE entity_id='two' ORDER BY gram").all();
-    f.db.query("UPDATE entity_aliases SET folded_key='日本語' WHERE entity_id='one'").run();
-    f.db.query("UPDATE entities SET identity_scope='project',project_id='project' WHERE id='one'").run();
+    const unchanged = f.db.query("SELECT rowid,* FROM memory_alias_postings WHERE node_id='two' ORDER BY gram").all();
+    f.db.query("UPDATE memory_aliases SET folded_key='日本語' WHERE node_id='one'").run();
+    f.db.query("UPDATE memory_nodes SET identity_scope='project',project_id='project' WHERE id='one'").run();
     expect(f.db.query<any, []>("SELECT count(*) n FROM memory_alias_index_dirty").get().n).toBe(1);
     installAndBackfillRecallIndexes(f.db);
-    expect(f.db.query<any, []>("SELECT DISTINCT identity_scope,project_id FROM entity_alias_postings WHERE entity_id='one'").all()).toEqual([{ identity_scope: "project", project_id: "project" }]);
-    expect(f.db.query("SELECT rowid,* FROM entity_alias_postings WHERE entity_id='two' ORDER BY gram").all()).toEqual(unchanged);
+    expect(f.db.query<any, []>("SELECT DISTINCT identity_scope,project_id FROM memory_alias_postings WHERE node_id='one'").all()).toEqual([{ identity_scope: "project", project_id: "project" }]);
+    expect(f.db.query("SELECT rowid,* FROM memory_alias_postings WHERE node_id='two' ORDER BY gram").all()).toEqual(unchanged);
     const count = f.db.query<any, []>("SELECT total_changes() n").get().n;
     installAndBackfillRecallIndexes(f.db);
     expect(f.db.query<any, []>("SELECT total_changes() n").get().n).toBe(count);
-    f.db.query("DELETE FROM entity_aliases WHERE entity_id='one'").run();
-    expect(f.db.query<any, []>("SELECT count(*) n FROM entity_alias_postings WHERE entity_id='one'").get().n).toBe(0);
+    f.db.query("DELETE FROM memory_aliases WHERE node_id='one'").run();
+    expect(f.db.query<any, []>("SELECT count(*) n FROM memory_alias_postings WHERE node_id='one'").get().n).toBe(0);
   } finally { f.close(); }
 });
 

@@ -1,3 +1,4 @@
+import { readClaim, sourceClass } from "./claim-store.ts";
 import { indexMemorySourceText } from "./source-index.ts";
 import { attachAdjacentSourceContext } from "./context-evidence.ts";
 import { createLazyConversationProjectionReader } from "../../../conversation/projection-reader-store.ts";
@@ -516,7 +517,7 @@ export async function ingestConversationMemory(input: {
           const existingJob = Boolean(existingIds);
           if (existingIds) for (const id of JSON.parse(existingIds.observed_completion_job_ids) as string[]) completionIds.add(id);
           db.query(
-            "INSERT OR IGNORE INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES(?,'episode',?,'{}','user',NULL,?)",
+            "INSERT OR IGNORE INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at) VALUES(?,'episode',?,'user',NULL,?)",
           ).run(episodeId, episodeId, now);
           const registered: string[] = [];
           for (const scalar of scalars)
@@ -696,7 +697,7 @@ async function ingestTypedMemoryRecord(
         .run(episodeId, `${owner.source_kind}:${owner.record_id}`, owner.revision,
           owner.conversation_session_id, owner.observed_at, owner.observed_at,
           owner.project_id, owner.source_kind, owner.content_hash, now, now);
-      db.query("INSERT OR IGNORE INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES(?,'episode',?,'{}','user',NULL,?)")
+      db.query("INSERT OR IGNORE INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at) VALUES(?,'episode',?,'user',NULL,?)")
         .run(episodeId, episodeId, now);
       const refs: string[] = [];
       for (const span of splitUtf8Spans(owner.text, MAX_WINDOW_BYTES)) {
@@ -1029,6 +1030,22 @@ export async function advanceNextMemoryProjection(input: {
               sourceUnits: [{ ...extractInput.source_units[0]!, text: cue }] });
           },
           stages: {
+            commitMeaning: async (meaningOutput) => {
+              await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+                assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+                const owner = db.query<{ input_sha256: string }, [string, string]>("SELECT input_sha256 FROM memory_projection_windows WHERE window_ref=? AND owner_nonce=? AND state='running'").get(pending.window_ref, pending.ownerNonce);
+                if (!owner) throw new Error("memory_projection_owner_changed");
+                const saved = db.query<{ input_hash: string; output_json: string }, [string]>("SELECT input_hash,output_json FROM memory_meaning_commits WHERE window_ref=?").get(pending.window_ref);
+                if (saved) {
+                  if (saved.input_hash !== projectionHash(["meaning-input", { ...extractInput, candidates: [] }]) || saved.output_json !== JSON.stringify(meaningOutput)) throw new Error("memory_meaning_changed");
+                  return;
+                }
+                const meaningPlan = normalizeAndValidatePlan(db, extractInput, meaningOutput);
+                applyPlan(db, pending.job_id, pending.window_ref, extractInput, meaningOutput, meaningPlan, {}, sourceRoot, "meaning");
+                db.query("INSERT INTO memory_meaning_commits(window_ref,input_hash,output_json,plan_json,committed_at) VALUES(?,?,?,?,?)").run(pending.window_ref, projectionHash(["meaning-input", { ...extractInput, candidates: [] }]), JSON.stringify(meaningOutput), JSON.stringify(meaningPlan), new Date().toISOString());
+                installAndBackfillRecallIndexes(db);
+              })());
+            },
             load: async (key) => readExtractionStage(db, pending.window_ref, key),
             save: async (key, result) => { await withMemoryWriteGateAsync(input.context, () => {
               assertProjectionSourceCurrent(sourceRoot, db, extractInput);
@@ -1517,9 +1534,9 @@ async function buildSourceWindowCandidates(input: {
       vectorNodes = [];
     }
   }
-  const bound = input.db.query<{ entity_id: string }, [string, string]>(`
-    SELECT DISTINCT entity_id FROM entity_mentions WHERE episode_id=? AND revision=? ORDER BY entity_id LIMIT 8
-  `).all(input.chunk.memory_chunk_id, input.chunk.current_revision).map((row) => row.entity_id);
+  const bound = input.db.query<{ node_id: string }, [string, string]>(`
+    SELECT DISTINCT node_id FROM memory_evidence WHERE episode_id=? AND revision=? ORDER BY node_id LIMIT 8
+  `).all(input.chunk.memory_chunk_id, input.chunk.current_revision).map((row) => row.node_id);
   const semantic = selectSemanticSeeds(input.db, recallInput, vectorNodes, Date.now() + 5_000, 32, { projectId: input.chunk.project_id }).allSeeds;
   const ids = [...new Set([...bound, ...semantic])].slice(0, 32);
   return loadSourceWindowCandidates({ db: input.db, butlerData: input.butlerData, projectId: input.chunk.project_id, ids });
@@ -1534,16 +1551,18 @@ function loadSourceWindowCandidates(input: {
 }): ExtractInput["candidates"] {
   const sourceEvidence = new Map<string, ExtractInput["candidates"][number]["evidence"][number]>();
   return packExtractionCandidates(input.ids, (id) => {
-    const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null; properties: string }, [string]>("SELECT id,type,identity_scope,project_id,properties FROM entities WHERE id=?").get(id);
+    const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null }, [string]>("SELECT id,type,identity_scope,project_id FROM memory_nodes WHERE id=?").get(id);
     if (!node) return null;
+    const provisional = input.db.query("SELECT 1 FROM memory_nodes n JOIN memory_projection_windows w ON w.window_ref=n.window_ref WHERE n.id=? AND w.state!='complete'").get(node.id);
+    if (provisional) return null;
     const identityNode = node.type === "entity" || node.type === "project";
     if (!identityNode && (input.projectId === null
       ? node.identity_scope !== "user" || node.project_id !== null
       : node.identity_scope !== "project" || node.project_id !== input.projectId)) return null;
     const aliases = input.db.query<{ surface_original: string; source_id: string }, any>(`
-      SELECT DISTINCT a.surface_original,a.source_id FROM entity_aliases a
+      SELECT DISTINCT a.surface_original,a.source_id FROM memory_aliases a
       JOIN memory_chunk_sources s ON s.source_id=a.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-      WHERE a.entity_id=? AND s.origin_kind IN ('user_input','assistant_public') AND (c.project_id IS NULL OR c.project_id IS ?)
+      WHERE a.node_id=? AND s.origin_kind IN ('user_input','assistant_public') AND (c.project_id IS NULL OR c.project_id IS ?)
       ORDER BY a.surface_original,a.source_id LIMIT 3
     `).all(id, input.projectId);
     if (!aliases.length) return null;
@@ -1560,16 +1579,13 @@ function loadSourceWindowCandidates(input: {
     });
     let claim: ExtractInput["candidates"][number]["claim"] = null;
     if (!identityNode) {
-      const properties = JSON.parse(node.properties) as {
-        statement?: string;
-        polarity?: "positive" | "negative" | "unspecified";
-        condition?: string | null;
-      };
+      const properties = readClaim(input.db, node.id);
+      if (!properties) return null;
       const endpoints = input.db.query<{ rel_type: string; target_node_id: string }, [string]>(
         "SELECT rel_type,target_node_id FROM edges WHERE source_node_id=? AND rel_type IN ('has_subject','has_object') ORDER BY edge_id",
       ).all(node.id);
       const relation = input.db.query<{ rel_type: NonNullable<ExtractInput["candidates"][number]["claim"]>["relation"] }, [string]>(
-        "SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member') ORDER BY edge_id LIMIT 1",
+        "SELECT rel_type FROM edges WHERE claim_node_id=? AND rel_type NOT IN ('has_subject','has_object','supersedes','contradicts','condition_member','identity_match','same_claim','refines') ORDER BY edge_id LIMIT 1",
       ).get(node.id)?.rel_type ?? null;
       claim = {
         statement: properties.statement,
@@ -2179,7 +2195,7 @@ function advanceHotCacheQuantum(
       return [{ window_ref: window.window_ref, summary, valid_until: validity, salience,
         kind: [...new Set(claims.flatMap((claim) => claim.type ? [claim.type] : []))].join("+") || "window_summary",
         basis: [...new Set(summarySources.map((source) => source.basis))].sort(),
-        source_refs: summarySourceRefs,
+        source_refs: summarySourceRefs, source_class: sourceClass(summarySources),
         node_refs: [...new Set(Object.values(plan?.refs ?? {}))].sort(),
       }];
     });
@@ -2204,7 +2220,7 @@ function advanceHotCacheQuantum(
           basis: window.basis, salience: window.salience, scope: row.project_id ? "project" : "global",
           project_id: row.project_id, session_id: row.conversation_session_id, graph_revision: graphRevision,
           source_kind: row.source_kind,
-          source_refs: window.source_refs,
+          source_refs: window.source_refs, authority: "model_interpretation", source_class: window.source_class,
         },
         memoryContext: context,
         resolvedGeneration: generation,

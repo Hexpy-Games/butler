@@ -1,3 +1,4 @@
+import { insertMemoryNodeFixture } from "../helpers/memory-node-fixture.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, readdirSync, rmSync, readFileSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -240,7 +241,7 @@ test("v2 consolidation recomputes absolute current episode support without mergi
     db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,'ep',?,'conversation','s','m',?,'/text',0,1,'h','user','user_input','2026-09-01T00:00:00Z','user_statement')")
       .run(source, revision, part);
   }
-  for (const id of ["left", "right"]) db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user','2026-09-01T00:00:00Z')").run(id, id);
+  for (const id of ["left", "right"]) db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user','2026-09-01T00:00:00Z')").run(id, id);
   db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,qualifiers) VALUES('edge','left','right','related','{\"legacy\":true,\"active_support_episodes\":99}')").run();
   for (const source of ["current-1", "current-2", "stale"]) db.query("INSERT INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES('edge',?,'user_statement','memory-extract-v2')").run(source);
 
@@ -251,7 +252,7 @@ test("v2 consolidation recomputes absolute current episode support without mergi
   expect(first).toMatchObject({ candidates_considered: 1, merges_applied: 0, edges_boosted: 1 });
   expect(second).toMatchObject({ candidates_considered: 1, merges_applied: 0, edges_boosted: 0 });
   expect(JSON.parse(once)).toMatchObject({ legacy: true, active_support_episodes: 1 });
-  expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM entities").get()!.n).toBe(2);
+  expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM memory_nodes").get()!.n).toBe(2);
   db.close();
 });
 
@@ -545,9 +546,8 @@ test("active-generation maintenance entry recomputes absolute v2 support without
   db.query(`INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis)
     VALUES('source','episode','revision','conversation_message','session','message','part','/text',0,4,'hash','user','user_input',?,'user_statement')`).run(observedAt);
   for (const [id, label] of [["left", "Left"], ["right", "Right"], ["claim", "Claim"]] as const)
-    db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES(?,? ,?,'{}','user',NULL,?)")
-      .run(id, id === "claim" ? "memory_atom" : "entity", label, observedAt);
-  db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('left','source','episode','revision'),('right','source','episode','revision'),('claim','source','episode','revision')").run();
+    insertMemoryNodeFixture(db, { id: id, type: id === "claim" ? "memory_atom" : "entity", label_original: label, claim: "{}", identity_scope: "user", project_id: null, created_at: observedAt });
+  db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('left','source','episode','revision'),('right','source','episode','revision'),('claim','source','episode','revision')").run();
   db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,claim_node_id,qualifiers) VALUES('edge','left','right','related_to','claim','{}')").run();
   db.query("INSERT INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES('edge','source','user_statement','memory-extract-v2')").run();
   db.close();
@@ -558,13 +558,13 @@ test("active-generation maintenance entry recomputes absolute v2 support without
   expect({ status: first.status, signal: first.signal }).toEqual({ status: 0, signal: null });
   let check = new Database(graphPath, { readonly: true });
   const firstQualifiers = JSON.parse(check.query<{ qualifiers: string }, []>("SELECT qualifiers FROM edges WHERE edge_id='edge'").get()!.qualifiers);
-  const firstCounts = check.query<{ edges: number; mentions: number }, []>("SELECT (SELECT COUNT(*) FROM edges) edges,(SELECT COUNT(*) FROM entity_mentions) mentions").get()!;
+  const firstCounts = check.query<{ edges: number; mentions: number }, []>("SELECT (SELECT COUNT(*) FROM edges) edges,(SELECT COUNT(*) FROM memory_evidence) mentions").get()!;
   check.close();
   const second = run();
   expect({ status: second.status, signal: second.signal }).toEqual({ status: 0, signal: null });
   check = new Database(graphPath, { readonly: true });
   const secondQualifiers = JSON.parse(check.query<{ qualifiers: string }, []>("SELECT qualifiers FROM edges WHERE edge_id='edge'").get()!.qualifiers);
-  expect(check.query<{ edges: number; mentions: number }, []>("SELECT (SELECT COUNT(*) FROM edges) edges,(SELECT COUNT(*) FROM entity_mentions) mentions").get()).toEqual(firstCounts);
+  expect(check.query<{ edges: number; mentions: number }, []>("SELECT (SELECT COUNT(*) FROM edges) edges,(SELECT COUNT(*) FROM memory_evidence) mentions").get()).toEqual(firstCounts);
   check.close();
   expect(firstQualifiers.active_support_episodes).toBe(1);
   expect(secondQualifiers.active_support_episodes).toBe(1);

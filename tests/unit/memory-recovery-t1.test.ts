@@ -435,7 +435,7 @@ test("short unit references preserve canonical ingestion and reject unknown or e
       } else {
         expect(row.error_code).toBe(mode === "unknown" ? "memory_extract_invalid_output" : "extraction_budget_exceeded");
         expect(row.normalized_plan_json).toBeNull();
-        expect(db.query<any, []>("SELECT COUNT(*) n FROM entities WHERE type!='episode'").get().n).toBe(0);
+        expect(db.query<any, []>("SELECT COUNT(*) n FROM memory_nodes WHERE type!='episode'").get().n).toBe(0);
       }
     } finally { db.close(); }
   }
@@ -995,7 +995,7 @@ test("saved plan apply failures retry through the normal advance owner without e
   expect(extractionInputs).toHaveLength(1);
   db = new Database(graphPath, { readonly: true });
   expect(
-    db.query<{ n: number }, []>("SELECT COUNT(*) n FROM entities").get()!.n,
+    db.query<{ n: number }, []>("SELECT COUNT(*) n FROM memory_nodes").get()!.n,
   ).toBeGreaterThan(0);
   db.close();
 
@@ -2269,7 +2269,7 @@ test("same projection reuses measured inference while rewriting current source p
     let db = new Database(graphPath);
     db.query(
       `UPDATE memory_vector_units SET state='failed',error_code='fixture_nonshared_claim'
-      WHERE job_id=? AND record_kind='node' AND owner_id IN (SELECT id FROM entities WHERE type='memory_atom')`,
+      WHERE job_id=? AND record_kind='node' AND owner_id IN (SELECT id FROM memory_nodes WHERE type='memory_atom')`,
     ).run(first.job_id);
     db.query(
       "UPDATE memory_projection_jobs SET next_stage='node_vectors' WHERE job_id=?",
@@ -2388,14 +2388,14 @@ test("same projection reuses measured inference while rewriting current source p
     const pendingReuse = db
       .query<{ state: string; receipt_json: string | null }, [string]>(
         `SELECT u.state,u.receipt_json FROM memory_vector_units u
-      JOIN entities e ON e.id=u.owner_id WHERE u.job_id=? AND u.record_kind='node' AND e.type='entity'`,
+      JOIN memory_nodes e ON e.id=u.owner_id WHERE u.job_id=? AND u.record_kind='node' AND e.type='entity'`,
       )
       .get(second.job_id)!;
     expect(pendingReuse.state).toBe("pending");
     expect(pendingReuse.receipt_json).not.toBeNull();
     db.query(
       `UPDATE memory_vector_units SET state='failed',error_code='fixture_nonshared_claim'
-      WHERE job_id=? AND record_kind='node' AND owner_id IN (SELECT id FROM entities WHERE type='memory_atom')`,
+      WHERE job_id=? AND record_kind='node' AND owner_id IN (SELECT id FROM memory_nodes WHERE type='memory_atom')`,
     ).run(second.job_id);
     db.query(
       "UPDATE memory_projection_jobs SET next_stage='node_vectors' WHERE job_id=?",
@@ -2414,7 +2414,7 @@ test("same projection reuses measured inference while rewriting current source p
         [string]
       >(
         `SELECT u.owner_id,u.owner_revision,u.receipt_json FROM memory_vector_units u
-      JOIN entities e ON e.id=u.owner_id WHERE u.job_id=? AND u.record_kind='node' AND e.type='entity'`,
+      JOIN memory_nodes e ON e.id=u.owner_id WHERE u.job_id=? AND u.record_kind='node' AND e.type='entity'`,
       )
       .get(second.job_id)!;
     const vectorKey = (
@@ -2492,7 +2492,7 @@ test("same projection reuses measured inference while rewriting current source p
           observedAt,
         );
         db.query(
-          "INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)",
+          "INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)",
         ).run(reusedNode.owner_id, sourceId, episodeId, revision);
         db.query(
           `INSERT INTO memory_vector_units(unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,receipt_json,source_ids_json)
@@ -2518,7 +2518,7 @@ test("same projection reuses measured inference while rewriting current source p
       SELECT DISTINCT s.conversation_session_id session_id,s.observed_at FROM memory_vector_units u
       JOIN memory_projection_jobs j ON j.job_id=u.job_id
       JOIN json_each(u.source_ids_json) refs JOIN memory_chunk_sources s ON s.source_id=refs.value
-      JOIN entity_mentions m ON m.entity_id=u.owner_id AND m.source_id=s.source_id
+      JOIN memory_evidence m ON m.node_id=u.owner_id AND m.source_id=s.source_id
       WHERE u.owner_id=? AND u.record_kind='node' AND u.state='complete' ORDER BY julianday(s.observed_at),s.source_id
     `,
       )
@@ -3601,12 +3601,12 @@ test("explicit same-name and confusable creates remain distinct identities", asy
   );
   const graph = new Database(graphPath, { readonly: true });
   const baselineEntity = graph.query<{ id: string; label_original: string }, [string]>(`SELECT e.id,e.label_original
-    FROM entities e JOIN entity_mentions m ON m.entity_id=e.id
+    FROM memory_nodes e JOIN memory_evidence m ON m.node_id=e.id
     JOIN memory_chunks c ON c.memory_chunk_id=m.episode_id
     WHERE c.conversation_turn_id=? AND e.type='entity' AND e.label_original='Luna' LIMIT 1`)
     .get(baselineSource.turn_id)!;
   const createdEntities = graph.query<{ id: string; label_original: string }, [string]>(`SELECT DISTINCT e.id,e.label_original
-    FROM entities e JOIN entity_mentions m ON m.entity_id=e.id
+    FROM memory_nodes e JOIN memory_evidence m ON m.node_id=e.id
     JOIN memory_chunks c ON c.memory_chunk_id=m.episode_id
     WHERE c.conversation_turn_id=? AND e.type='entity' ORDER BY e.label_original,e.id`)
     .all(createSource.turn_id);
@@ -3614,11 +3614,11 @@ test("explicit same-name and confusable creates remain distinct identities", asy
   const allEntityIds = [baselineEntity.id, ...createdEntities.map((row) => row.id)];
   expect(new Set(allEntityIds).size).toBe(4);
   const aliases = graph.query<{
-    entity_id: string; surface_original: string; nfc_key: string; folded_key: string; source_id: string;
-  }, [string, string, string, string]>(`SELECT entity_id,surface_original,nfc_key,folded_key,source_id
-    FROM entity_aliases WHERE entity_id IN (?,?,?,?) ORDER BY entity_id,surface_original`)
+    node_id: string; surface_original: string; nfc_key: string; folded_key: string; source_id: string;
+  }, [string, string, string, string]>(`SELECT node_id,surface_original,nfc_key,folded_key,source_id
+    FROM memory_aliases WHERE node_id IN (?,?,?,?) ORDER BY node_id,surface_original`)
     .all(allEntityIds[0]!, allEntityIds[1]!, allEntityIds[2]!, allEntityIds[3]!);
-  expect(new Set(aliases.map((row) => row.entity_id))).toEqual(new Set(allEntityIds));
+  expect(new Set(aliases.map((row) => row.node_id))).toEqual(new Set(allEntityIds));
   const sourceRows = graph.query<any, [string, string]>(`SELECT s.* FROM memory_chunk_sources s
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id
     WHERE c.conversation_turn_id IN (?,?) ORDER BY c.conversation_turn_id,s.source_id`)
@@ -3930,7 +3930,7 @@ test("validated ordinary corrections preserve the previous claim and apply throu
     { readonly: true },
   );
   try {
-    expect(graph.query<{ n: number }, []>("SELECT count(*) n FROM edges e JOIN entities c ON c.id=e.claim_node_id WHERE e.rel_type='likes' AND json_extract(c.properties,'$.polarity')='negative'").get()!.n).toBe(1);
+    expect(graph.query<{ n: number }, []>("SELECT count(*) n FROM edges e JOIN memory_nodes c ON c.id=e.claim_node_id WHERE e.rel_type='likes' AND (SELECT polarity FROM memory_claims WHERE node_id=c.id)='negative'").get()!.n).toBe(1);
     expect(graph.query<{ n: number }, []>("SELECT count(*) n FROM edges WHERE rel_type='contradicts'").get()!.n).toBe(1);
     const persisted = graph.query<{ input_json: string; output_json: string; provider_evidence_json: string }, [string]>("SELECT input_json,output_json,provider_evidence_json FROM memory_projection_windows WHERE job_id=? AND state='complete'").get(registered.job_id)!;
     const persistedInput = JSON.parse(persisted.input_json);
@@ -5037,7 +5037,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
     >("SELECT window_ref,normalized_plan_json FROM memory_projection_windows WHERE normalized_plan_json IS NOT NULL")
     .get()!;
   const savedNodeIds = replayDb
-    .query<{ id: string }, []>("SELECT id FROM entities ORDER BY id")
+    .query<{ id: string }, []>("SELECT id FROM memory_nodes ORDER BY id")
     .all()
     .map((row) => row.id);
   replayDb
@@ -5075,7 +5075,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
   });
   expect(
     replayedDb
-      .query<{ id: string }, []>("SELECT id FROM entities ORDER BY id")
+      .query<{ id: string }, []>("SELECT id FROM memory_nodes ORDER BY id")
       .all()
       .map((row) => row.id),
   ).toEqual(savedNodeIds);
@@ -5336,7 +5336,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
     .query<
       { id: string; properties: string },
       []
-    >("SELECT id,properties FROM entities WHERE type='preference' ORDER BY id LIMIT 1")
+    >("SELECT id,(SELECT json_object('statement',statement,'condition',condition,'polarity',polarity) FROM memory_claims WHERE node_id=memory_nodes.id) properties FROM memory_nodes WHERE type='preference' ORDER BY id LIMIT 1")
     .get()!;
   beforeReuse.close();
   let reuseInput: Record<string, any> | null = null;
@@ -5488,7 +5488,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
       .query<
         { id: string; properties: string },
         [string]
-      >("SELECT id,properties FROM entities WHERE id=?")
+      >("SELECT id,(SELECT json_object('statement',statement,'condition',condition,'polarity',polarity) FROM memory_claims WHERE node_id=memory_nodes.id) properties FROM memory_nodes WHERE id=?")
       .get(originalClaim.id)!;
     expect(preservedClaim.id).toBe(originalClaim.id);
     expect(preservedClaim.properties).toBe(originalClaim.properties);
@@ -5497,7 +5497,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
         .query<
           { count: number },
           []
-        >("SELECT COUNT(*) count FROM entities WHERE type='preference'")
+        >("SELECT COUNT(*) count FROM memory_nodes WHERE type='preference'")
         .get()!.count,
     ).toBe(1);
     expect(
@@ -5505,7 +5505,7 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
         .query<
           { count: number },
           [string, string]
-        >("SELECT COUNT(*) count FROM entity_mentions m JOIN memory_chunk_sources s ON s.source_id=m.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE m.entity_id=? AND c.conversation_turn_id=? AND s.role='assistant'")
+        >("SELECT COUNT(*) count FROM memory_evidence m JOIN memory_chunk_sources s ON s.source_id=m.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE m.node_id=? AND c.conversation_turn_id=? AND s.role='assistant'")
         .get(originalClaim.id, "turn-s3")!.count,
     ).toBe(1);
     expect(

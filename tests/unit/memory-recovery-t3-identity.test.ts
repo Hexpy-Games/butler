@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, beforeAll, afterAll, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,43 +7,28 @@ import { spawnSync } from "node:child_process";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 
-mock.module("../../packages/butler-agent/src/integrations/providers/runtime.ts", () => ({
-  runPromptTextWithUsage: async (request: { prompt: string; model: string }) => {
-    const input = JSON.parse(request.prompt) as { window_ref: string; source_units: Array<{ ref: string; text: string }> };
-    const source = input.source_units[0]!;
-    const label = source.text.includes("Luna only") ? "Luna" : source.text.includes("루나 only") ? "루나" : source.text.includes("Selene only") ? "Selene" : null;
-    const evidence = label ? [{ unit_ref: source.ref, quote: label, occurrence: 0 }] : [];
-    const outOfScopeCandidate = source.text.includes("reuse out of scope")
-      ? (input as any).candidates?.find((candidate: any) => candidate.type === "entity" && candidate.aliases.includes("루나"))
-      : null;
-    const resolution = outOfScopeCandidate
-      ? { kind: "reuse", node_ref: outOfScopeCandidate.ref, reason: "explicit_alias", evidence: [
-        { unit_ref: source.ref, quote: label, occurrence: 0 },
-        { unit_ref: outOfScopeCandidate.evidence[0].ref, quote: outOfScopeCandidate.evidence[0].text, occurrence: 0 },
-      ] }
-      : { kind: "create", provisional: false, identity_scope: "user" };
-    return {
-      text: JSON.stringify({
-        schema: "butler.memory-extract-output.v2",
-        window_ref: input.window_ref,
-        disposition: "processed",
-        covered_unit_refs: input.source_units.map((unit) => unit.ref),
-        nodes: label ? [{ local_ref: "cat", type: "entity", label, resolution, aliases: [], evidence }] : [],
-        claims: label ? [{ local_ref: "identity-fact", type: "memory_atom", resolution: { kind: "create", provisional: false, identity_scope: "user" },
-          statement: source.text, subject_ref: "cat", object_ref: "cat", speech_act: "assertion", basis: "user_statement",
-          polarity: "positive", condition: null, valid_from: null, valid_to: null, salience: "normal", evidence }] : [],
-        relations: [],
-        corrections: [], summary: label ? { text: source.text, evidence } : null,
-      }),
-      model: request.model,
-      usage: { promptTokens: 10, cachedTokens: 0, outputTokens: 10, totalTokens: 20 },
-    };
-  },
-  runPromptText: async () => { throw new Error("unexpected provider call"); },
-  runFunctionToolPromptText: async () => { throw new Error("unexpected provider call"); },
-  runModelRound: async () => { throw new Error("unexpected provider call"); },
-  createProviderModelRoundPort: () => { throw new Error("unexpected provider port"); },
-}));
+import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
+const originalAdapter = OPENAI_PROVIDER_ADAPTER.runPrompt;
+beforeAll(() => {
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => {
+    const input = JSON.parse(request.prompt);
+    let output;
+    if (input.parts) {
+      const source = input.parts[0];
+      const label = source.text.includes("Luna only") ? "Luna" : source.text.includes("루나 only") ? "루나" : source.text.includes("Selene only") ? "Selene" : null;
+      output = { status: "processed", entities: label ? [{ name: label, evidence: [source.id] }] : [],
+        items: label ? [{ kind: "fact", subject: 0, text: source.text, evidence: [source.id] }] : [], attributes: [] };
+    } else {
+      output = { decisions: input.targets.map((target: any) => {
+        const candidate = target.candidates.find((item: any) => item.label === target.meaning.name);
+        return { target: target.target, candidate: candidate?.ref ?? null, span: null,
+          support: candidate ? [...target.evidence, ...candidate.evidence] : [] };
+      }) };
+    }
+    return { text: JSON.stringify(output), model: "gpt-5.6-sol", usage: null } as never;
+  };
+});
+afterAll(() => { OPENAI_PROVIDER_ADAPTER.runPrompt = originalAdapter; });
 
 test("T3 identity CLI preserves scoped source-backed graph history across transitive apply and revoke", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t3-identity-"));
@@ -72,7 +57,7 @@ test("T3 identity CLI preserves scoped source-backed graph history across transi
     const sources = db.query<{ source_id: string; conversation_turn_id: string }, []>(`SELECT s.source_id,c.conversation_turn_id FROM memory_chunk_sources s
       JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE s.role='user' ORDER BY c.conversation_turn_id`).all();
     const sourceByTurn = new Map(sources.map((source) => [source.conversation_turn_id, source.source_id]));
-    const nodeForSource = (sourceId: string) => db.query<{ entity_id: string }, [string]>("SELECT m.entity_id FROM entity_mentions m JOIN entities e ON e.id=m.entity_id WHERE m.source_id=? AND e.type='entity' ORDER BY m.entity_id LIMIT 1").get(sourceId)!.entity_id;
+    const nodeForSource = (sourceId: string) => db.query<{ node_id: string }, [string]>("SELECT m.node_id FROM memory_evidence m JOIN memory_nodes e ON e.id=m.node_id WHERE m.source_id=? AND e.type='entity' ORDER BY m.node_id LIMIT 1").get(sourceId)!.node_id;
     const decisionSource = sourceByTurn.get("turn-decision")!, decisionSource2 = sourceByTurn.get("turn-decision-2")!;
     const projectDecisionSource = sourceByTurn.get("turn-project-decision")!;
     const loserSource = sourceByTurn.get("turn-korean")!, canonicalSource = sourceByTurn.get("turn-luna")!, finalCanonicalSource = sourceByTurn.get("turn-selene")!;
@@ -124,10 +109,10 @@ test("T3 identity CLI preserves scoped source-backed graph history across transi
     const scopeCheck = new Database(graphPath, { readonly: true });
     const outOfScopeSourceRef = scopeCheck.query<{ source_id: string }, []>(`SELECT s.source_id FROM memory_chunk_sources s
       JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id WHERE c.conversation_turn_id='turn-out-of-scope-reuse' AND s.role='user'`).get()!.source_id;
-    expect(scopeCheck.query<{ entity_id: string }, [string]>(`SELECT m.entity_id FROM entity_mentions m JOIN entities e ON e.id=m.entity_id
-      WHERE m.source_id=? AND e.type='entity' ORDER BY m.entity_id LIMIT 1`).get(outOfScopeSourceRef)?.entity_id).toBe(loser);
+    expect(scopeCheck.query<{ node_id: string }, [string]>(`SELECT m.node_id FROM memory_evidence m JOIN memory_nodes e ON e.id=m.node_id
+      WHERE m.source_id=? AND e.type='entity' ORDER BY m.node_id LIMIT 1`).get(outOfScopeSourceRef)?.node_id).not.toBe(loser);
     expect(scopeCheck.query<{ n: number }, [string, string]>(`SELECT COUNT(*) n FROM edges e JOIN edge_evidence ee ON ee.edge_id=e.edge_id
-      WHERE ee.chunk_source_id=? AND e.rel_type IN ('has_subject','has_object') AND e.target_node_id=?`).get(outOfScopeSourceRef, loser)?.n).toBe(2);
+      WHERE ee.chunk_source_id=? AND e.rel_type='identity_match' AND e.target_node_id=?`).get(outOfScopeSourceRef, loser)?.n).toBe(1);
     scopeCheck.close();
     const projectRevoke = runIdentityCli(butlerData, "revoke", {
       schema: "butler.memory-identity-command.v1", expected_generation: descriptor.generation_id, operation: "revoke",
@@ -142,14 +127,10 @@ test("T3 identity CLI preserves scoped source-backed graph history across transi
       JOIN edge_evidence ee ON ee.edge_id=e.edge_id ORDER BY e.edge_id,ee.chunk_source_id
     `).all();
     graphAfterScopeProof.close();
-    const foreignStates = JSON.parse(runIdentityCli(butlerData, "inspect", {
+    // A now derives project scope from the canonical source; even inspection is rejected across that boundary.
+    expect(runIdentityCli(butlerData, "inspect", {
       schema: "butler.memory-identity-command.v1", expected_generation: descriptor.generation_id,
       operation: "inspect", source_ref: decisionSource, node_refs: [loser, foreignCanonical],
-    }).stdout).states;
-    expect(runIdentityCli(butlerData, "apply", {
-      ...command, operation_id: "apply-incompatible-grounding-scope", canonical_node_ref: foreignCanonical,
-      canonical_evidence: { source_ref: foreignSource, quote: "Luna", occurrence: 0 },
-      expected_loser: foreignStates[loser], expected_canonical: foreignStates[foreignCanonical],
     }).status).not.toBe(0);
     const preChainStates = JSON.parse(runIdentityCli(butlerData, "inspect", {
       schema: "butler.memory-identity-command.v1", expected_generation: descriptor.generation_id,

@@ -177,7 +177,7 @@ export type ExtractOutput = {
     statement: string;
     subject_ref: string | null;
     object_ref: string | null;
-    speech_act: "assertion" | "question" | "proposal";
+    speech_act: "assertion" | "question" | "proposal" | "request" | "unknown";
     basis: MemoryBasis;
     polarity: "positive" | "negative" | "unspecified";
     condition: string | null;

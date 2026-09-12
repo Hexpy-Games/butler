@@ -244,7 +244,7 @@ function initializeEmptyMemoryGenerationLocked(
     format: "v2",
     state: "active",
     initialization_origin: "empty",
-    schema_version: 2,
+    schema_version: 3,
     extraction_version: MEMORY_EXTRACTION_VERSION,
     ranking_version: 2,
     embedding: null,
@@ -606,7 +606,7 @@ export function prepareMemoryRebuild(input: {
   try { ensureV2MemorySchema(graph); } finally { graph.close(); }
   const manifest: MemoryGenerationManifest = {
     schema: "butler.memory-generation.v2", generation_id: generationId, format: "v2",
-    state: "building", initialization_origin: "rebuild", schema_version: 2,
+    state: "building", initialization_origin: "rebuild", schema_version: 3,
     extraction_version: MEMORY_EXTRACTION_VERSION, ranking_version: 2, embedding: null,
     unicode_version: requiredRuntimeVersion("unicode"), icu_version: requiredRuntimeVersion("icu"),
     canonical_snapshot_id: canonicalSnapshotId,
@@ -932,13 +932,13 @@ export async function computeMemoryGenerationReadiness(input: {
           WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
             AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
             AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
-              SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+              SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
         COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id
           FROM memory_chunk_sources ordered WHERE ordered.episode_id=c.memory_chunk_id
             AND ordered.revision=c.current_revision AND (u.record_kind='episode' OR
-              (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own
-                WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+              (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own
+                WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
             ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
         CASE WHEN NOT (u.project_id IS c.project_id)
@@ -949,8 +949,8 @@ export async function computeMemoryGenerationReadiness(input: {
               AND current_source.episode_id=c.memory_chunk_id
               AND current_source.revision=c.current_revision
               AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
-                SELECT 1 FROM entity_mentions current_mention
-                WHERE current_mention.entity_id=u.owner_id
+                SELECT 1 FROM memory_evidence current_mention
+                WHERE current_mention.node_id=u.owner_id
                   AND current_mention.source_id=current_source.source_id
                   AND current_mention.episode_id=c.memory_chunk_id
                   AND current_mention.revision=c.current_revision)))
@@ -2229,7 +2229,7 @@ lease: ConsolidationLease): Promise<ActiveMemoryGeneration> {
       ? join(generationRoot, binding.verification_root_ref)
       : null;
     const readiness = previous.readiness;
-    const bootstrap = previous.initialization_origin === "empty" && previous.schema_version === 2 &&
+    const bootstrap = previous.initialization_origin === "empty" && previous.schema_version === 3 &&
       ["memory-extract-v2", MEMORY_EXTRACTION_VERSION].includes(previous.extraction_version ?? "") && !previous.required_acceptance_passed && !binding;
     const qualified = Boolean(prepared && binding && input.sourceInventoryHash === previous.source_inventory_hash && readiness &&
       readiness.unaccounted === 0 && readiness.semantic.failed === 0 && readiness.vectors.failed === 0 &&
@@ -2341,9 +2341,10 @@ function sqliteHasRows(path: string): boolean {
     const contentTables = [
       "memory_chunks",
       "memory_chunk_sources",
-      "entities",
+      "memory_nodes",
+      "entities", // Detect old content before bootstrap; never treat an old DB as empty.
       "edges",
-      "entity_mentions",
+      "memory_evidence",
       "memory_projection_jobs",
       "memory_projection_windows",
     ];

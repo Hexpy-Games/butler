@@ -98,6 +98,13 @@ export type RecallMemoryResult = {
       };
     }>;
     requirements?: Array<{ node_ref: string; action: string; condition: import("../projection/meaning.ts").Condition<string>; basis: string; source_refs: string[] }>;
+    interpretations?: Array<{
+      node_ref: string; statement: string; speech_act: string; basis: string;
+      source_class: import("../projection/claim-store.ts").SourceClass;
+      authority: "model_interpretation"; source_refs: string[]; support_complete: boolean;
+      status: "recorded" | "historical" | "superseded" | "conflicted" | "refined";
+    }>;
+    current_state_requires_verification?: true;
     qualifications: string[];
   }>;
   coverage: {

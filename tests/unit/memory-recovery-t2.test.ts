@@ -1,3 +1,4 @@
+import { insertMemoryNodeFixture } from "../helpers/memory-node-fixture.ts";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
@@ -120,19 +121,19 @@ test("T2 install backfills Unicode grapheme postings and scoped lexical seeds", 
   ensureV2MemorySchema(db);
   db.query("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,project_id,origin_kind,status,source_hash,created_at,updated_at) VALUES('ep','source','r1','s',NULL,'user_input','active','h','2026-09-08T00:00:00Z','2026-09-08T00:00:00Z')").run();
   db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('src','ep','r1','conversation','s','m','p','/text',0,9,'h','user','user_input','2026-09-08T00:00:00Z','user_statement')").run();
-  db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES('n','entity','별무리','user','2026-09-08T00:00:00Z')").run();
-  db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('n','별무리','별무리','별무리','src','create')").run();
+  db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('n','entity','별무리','user','2026-09-08T00:00:00Z')").run();
+  db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('n','별무리','별무리','별무리','src','create')").run();
   installAndBackfillRecallIndexes(db);
-  expect(db.query<{ count: number }, []>("SELECT COUNT(*) count FROM entity_alias_postings WHERE entity_id='n'").get()!.count).toBeGreaterThan(0);
+  expect(db.query<{ count: number }, []>("SELECT COUNT(*) count FROM memory_alias_postings WHERE node_id='n'").get()!.count).toBeGreaterThan(0);
   const selected = selectSemanticSeeds(db, {
     context: { butlerData: process.env.BUTLER_DATA!, target: { kind: "rebuild", generation_id: "x", canonical_snapshot_id: "x" }, signal: new AbortController().signal },
     cue: "무리", includeVector: false, includeInternal: false, limit: 6, scope: "all_user_sessions", projectFilter: "unassigned", projectIds: [], sessionIds: [], asOf: "2026-09-09T00:00:00Z",
     runtime: { sessionId: "s", turnId: "t", currentUserMessage: "무리", nativeOperationId: "op", projectId: null },
   });
   expect(selected.seeds).toContain("n");
-  db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('n','별 무리','별 무리','별 무리','src','create')").run();
+  db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('n','별 무리','별 무리','별 무리','src','create')").run();
   installAndBackfillRecallIndexes(db);
-  expect(db.query<{ count: number }, []>("SELECT COUNT(*) count FROM entity_alias_postings WHERE entity_id='n' AND surface_original='별 무리'").get()!.count).toBeGreaterThan(0);
+  expect(db.query<{ count: number }, []>("SELECT COUNT(*) count FROM memory_alias_postings WHERE node_id='n' AND surface_original='별 무리'").get()!.count).toBeGreaterThan(0);
   db.close();
 });
 
@@ -146,8 +147,8 @@ test("lexical scoring uses unsquared IDF sums and UTC-equivalent source instants
       .run(`ep-${index}`, `source-${index}`, observed, observed);
     db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,'r1','conversation','s',?,?,'/text',0,1,'h','user','user_input',?,'user_statement')")
       .run(`src-${index}`, `ep-${index}`, `message-${index}`, `part-${index}`, observed);
-    db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user','2026-09-07T00:00:00Z')").run(`node-${index}`, surface);
-    db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
+    db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?,'entity',?,'user','2026-09-07T00:00:00Z')").run(`node-${index}`, surface);
+    db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
       .run(`node-${index}`, surface, surface, surface, `src-${index}`);
   }
   installAndBackfillRecallIndexes(db);
@@ -233,9 +234,9 @@ test("source hydration rejects a changed companion scalar and refills from the n
         const hash = createHash("sha256").update(message.text).digest("hex");
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?, 'user','user_input','2026-09-08T00:00:00Z','user_statement')")
           .run(source, episode, message.revision, `source-session-${index}`, message.id, message.partId, Buffer.byteLength(message.text), hash);
-        db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES(?,'entity','needle','user','2026-09-08T00:00:00Z')").run(node);
-        db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,'needle','needle','needle',?,'create')").run(node, source);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(node, source, episode, message.revision);
+        db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES(?,'entity','needle','user','2026-09-08T00:00:00Z')").run(node);
+        db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,'needle','needle','needle',?,'create')").run(node, source);
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(node, source, episode, message.revision);
       }
       installAndBackfillRecallIndexes(db);
     } finally { db.close(); }
@@ -343,10 +344,9 @@ test("stored supersedes relationships remove the old claim and prioritize the cu
           .run(episode.episodeId, episode.episodeId, episode.revision, `session-${index}`, episode.turnId, episode.text);
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?,'user','user_input','2026-09-08T00:00:00Z','user_statement')")
           .run(sourceId, episode.episodeId, episode.revision, `session-${index}`, episode.messageId, episode.partId, Buffer.byteLength(episode.text), createHash("sha256").update(episode.text).digest("hex"));
-        db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,'memory_atom',?,?,'user','2026-09-08T00:00:00Z')")
-          .run(nodeId, episode.text, JSON.stringify({ statement: episode.text, valid_from: "2026-09-08T00:00:00Z", salience: "normal" }));
-        db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,'preference','preference','preference',?,'create')").run(nodeId, sourceId);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(nodeId, sourceId, episode.episodeId, episode.revision);
+        insertMemoryNodeFixture(db, { id: nodeId, type: "memory_atom", label_original: episode.text, claim: JSON.stringify({ statement: episode.text, valid_from: "2026-09-08T00:00:00Z", salience: "normal" }), identity_scope: "user", created_at: "2026-09-08T00:00:00Z" });
+        db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,'preference','preference','preference',?,'create')").run(nodeId, sourceId);
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(nodeId, sourceId, episode.episodeId, episode.revision);
       }
       db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type,valid_from,status) VALUES('correction','new-claim','old-claim','supersedes','2026-09-08T00:00:00Z','active')").run();
       db.query("INSERT INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES('correction','source-1','user_statement','v')").run();
@@ -396,10 +396,9 @@ test("fixed as-of validity excludes expired and future claims while preserving p
           .run(row.episodeId, row.episodeId, row.revision, sessionId, row.turnId, row.text, contentHash, row.observed, row.observed);
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?, 'user','user_input',?,'user_statement')")
           .run(sourceId, row.episodeId, row.revision, sessionId, row.messageId, row.partId, Buffer.byteLength(row.text), contentHash, row.observed);
-        db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,?,?,?, 'user',?)")
-          .run(row.id, row.type, row.text, JSON.stringify(row.properties), row.observed);
-        for (const alias of row.aliases) db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(row.id, alias, alias, alias, sourceId);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(row.id, sourceId, row.episodeId, row.revision);
+        insertMemoryNodeFixture(db, { id: row.id, type: row.type, label_original: row.text, claim: JSON.stringify(row.properties), identity_scope: "user", created_at: row.observed });
+        for (const alias of row.aliases) db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')").run(row.id, alias, alias, alias, sourceId);
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(row.id, sourceId, row.episodeId, row.revision);
         db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES(?,?,?,?,?,'model','medium','[]',?,?,?,?,?,?)")
           .run(`job-${row.id}`, row.episodeId, row.revision, "v", descriptor.generation_id, complete, complete, complete, complete, complete, row.observed);
       }
@@ -478,11 +477,10 @@ test("multi-claim summary follows the hydrated cue-matched claim instead of UUID
       ]) {
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?,?,?,?,?)")
           .run(source.id, episodeId, revision, sessionId, source.message.id, source.message.parts[0]!.id, Buffer.byteLength(source.text), source.hash, source.role, source.origin, observed, source.basis);
-        db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,'memory_atom',?,?,'user',?)")
-          .run(source.node, source.text, JSON.stringify({ statement: source.text, valid_from: "2026-09-01T00:00:00Z" }), observed);
-        db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
+        insertMemoryNodeFixture(db, { id: source.node, type: "memory_atom", label_original: source.text, claim: JSON.stringify({ statement: source.text, valid_from: "2026-09-01T00:00:00Z" }), identity_scope: "user", created_at: observed });
+        db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
           .run(source.node, source.alias, source.alias, source.alias, source.id);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(source.node, source.id, episodeId, revision);
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(source.node, source.id, episodeId, revision);
       }
       db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('summary-job',?,?, 'v',?,'model','medium','[]',?,?,?,?,?,?)")
         .run(episodeId, revision, descriptor.generation_id, complete, complete, complete, complete, complete, observed);
@@ -533,11 +531,10 @@ test("serialization preserves the matched claim and its source before supplement
       ]) {
         db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?,?,?,?,?)")
           .run(source.id, episodeId, revision, sessionId, source.message.id, source.message.parts[0]!.id, Buffer.byteLength(source.text), source.hash, source.role, source.origin, observed, source.basis);
-        db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,'memory_atom',?,?,'user',?)")
-          .run(source.node, source.statement, JSON.stringify({ statement: source.statement, valid_from: observed }), observed);
-        db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
+        insertMemoryNodeFixture(db, { id: source.node, type: "memory_atom", label_original: source.statement, claim: JSON.stringify({ statement: source.statement, valid_from: observed }), identity_scope: "user", created_at: observed });
+        db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
           .run(source.node, source.alias, source.alias, source.alias, source.id);
-        db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(source.node, source.id, episodeId, revision);
+        db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)").run(source.node, source.id, episodeId, revision);
       }
       db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('reduction-job',?,?,'v',?,'model','medium','[]',?,?,?,?,?,?)")
         .run(episodeId, revision, descriptor.generation_id, complete, complete, complete, complete, complete, observed);
@@ -649,11 +646,10 @@ test("serialization shares the envelope across complete ranked result bundles", 
         for (const source of episode.sources) {
           db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,'conversation',?,?,?,'/text',0,?,?,?,?,?,?)")
             .run(source.id, episode.episodeId, episode.revision, episode.sessionId, source.messageId, source.partId, Buffer.byteLength(source.text), source.hash, source.role, source.origin, observed, source.basis);
-          db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES(?,?,?,?, 'user',?)")
-            .run(source.node, source.type, source.statement, JSON.stringify({ statement: source.statement, valid_from: observed }), observed);
-          db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
+          insertMemoryNodeFixture(db, { id: source.node, type: source.type, label_original: source.statement, claim: JSON.stringify({ statement: source.statement, valid_from: observed }), identity_scope: "user", created_at: observed });
+          db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES(?,?,?,?,?,'create')")
             .run(source.node, source.alias, source.alias, source.alias, source.id);
-          db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES(?,?,?,?)")
+          db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES(?,?,?,?)")
             .run(source.node, source.id, episode.episodeId, episode.revision);
         }
         db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES(?,?,?,?,?,'model','medium','[]',?,?,?,?,?,?)")
@@ -676,7 +672,7 @@ test("serialization shares the envelope across complete ranked result bundles", 
     expect(recalled.results[0]?.evidence.map((item) => Buffer.from(item.source_ref.split(":")[3]!, "base64url").toString("utf8"))).toContain("refill-a-1");
     expect(Buffer.byteLength(JSON.stringify(recalled))).toBeLessThanOrEqual(24 * 1024);
     const oversizedDb = new Database(join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite"));
-    oversizedDb.query("UPDATE entities SET properties=json_set(properties,'$.statement',?) WHERE id='refill-a-claim'").run(largeClaim);
+    oversizedDb.query("UPDATE memory_claims SET statement=? WHERE node_id='refill-a-claim'").run(largeClaim);
     oversizedDb.exec("UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'");
     oversizedDb.close();
     const pageInput = {
@@ -700,22 +696,21 @@ test("node vector projection identity includes deterministic condition and polar
   const complete = JSON.stringify({ state: "complete" });
   db.query("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,conversation_turn_id,project_id,origin_kind,status,summary,summary_status,source_hash,created_at,updated_at) VALUES('episode','source','r1','session','turn',NULL,'user_input','active','summary','complete','h','2026-09-01T00:00:00Z','2026-09-01T00:00:00Z')").run();
   db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('source','episode','r1','conversation','session','message','part','/text',0,1,'h','user','user_input','2026-09-01T00:00:00Z','user_statement')").run();
-  db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,created_at) VALUES('claim','constraint','label',?,'user','2026-09-01T00:00:00Z')")
-    .run(JSON.stringify({ statement: "same", condition: "weekday", polarity: "positive" }));
-  db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('claim','별칭','별칭','별칭','source','create')").run();
-  db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('claim','source','episode','r1')").run();
+  insertMemoryNodeFixture(db, { id: "claim", type: "constraint", label_original: "label", claim: JSON.stringify({ statement: "same", condition: "weekday", polarity: "positive" }), identity_scope: "user", created_at: "2026-09-01T00:00:00Z" });
+  db.query("INSERT INTO memory_aliases(node_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('claim','별칭','별칭','별칭','source','create')").run();
+  db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('claim','source','episode','r1')").run();
   db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('job','episode','r1','v','generation','model','medium','[]',?,?,?,?,?,'2026-09-01T00:00:00Z')")
     .run(complete, complete, complete, complete, complete);
   refreshVectorUnitsForJob(db, "job", "episode");
   const first = db.query<{ owner_revision: string; projection_text: string }, []>("SELECT owner_revision,projection_text FROM memory_vector_units WHERE record_kind='node'").get()!;
   expect(first.projection_text).toContain('statement:"same"\ncondition:"weekday"\npolarity:"positive"');
   db.query("DELETE FROM memory_vector_units WHERE record_kind='node'").run();
-  db.query("UPDATE entities SET properties=? WHERE id='claim'").run(JSON.stringify({ statement: "same", condition: "weekend", polarity: "positive" }));
+  db.query("UPDATE memory_claims SET condition='weekend',polarity='positive' WHERE node_id='claim'").run();
   refreshVectorUnitsForJob(db, "job", "episode");
   const conditionChanged = db.query<{ owner_revision: string }, []>("SELECT owner_revision FROM memory_vector_units WHERE record_kind='node'").get()!.owner_revision;
   expect(conditionChanged).not.toBe(first.owner_revision);
   db.query("DELETE FROM memory_vector_units WHERE record_kind='node'").run();
-  db.query("UPDATE entities SET properties=? WHERE id='claim'").run(JSON.stringify({ statement: "same", condition: "weekend", polarity: "negative" }));
+  db.query("UPDATE memory_claims SET condition='weekend',polarity='negative' WHERE node_id='claim'").run();
   refreshVectorUnitsForJob(db, "job", "episode");
   expect(db.query<{ owner_revision: string }, []>("SELECT owner_revision FROM memory_vector_units WHERE record_kind='node'").get()!.owner_revision).not.toBe(conditionChanged);
   db.close();
@@ -727,8 +722,8 @@ test("current vector filtering retains an exact current row behind a closer stal
   const state = JSON.stringify({ state: "complete" });
   db.query("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,conversation_turn_id,project_id,origin_kind,status,source_hash,created_at,updated_at) VALUES('episode','source','r1','session','turn',NULL,'user_input','active','h','2026-09-08T00:00:00Z','2026-09-08T00:00:00Z')").run();
   db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('src','episode','r1','conversation','session','message','part','/text',0,1,'h','user','user_input','2026-09-08T00:00:00Z','user_statement')").run();
-  db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES('node','entity','node','user','2026-09-08T00:00:00Z')").run();
-  db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('node','src','episode','r1')").run();
+  db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('node','entity','node','user','2026-09-08T00:00:00Z')").run();
+  db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('node','src','episode','r1')").run();
   db.query("INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) VALUES('job','episode','r1','v','generation','model','medium','[]',?,?,?,?,?,'2026-09-08T00:00:00Z')")
     .run(state, state, state, state, state);
   db.query("INSERT INTO memory_vector_units(unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state) VALUES('unit','job','node','node','node-r1',NULL,'user_input','node','complete')").run();

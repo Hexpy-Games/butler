@@ -1,3 +1,4 @@
+import { insertMemoryNodeFixture } from "../helpers/memory-node-fixture.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -86,7 +87,7 @@ describe("memory vector UTF-8 repair", () => {
     const db = openProjectionDb(graphPath);
     ensureV2MemorySchema(db);
     const now = "2026-09-11T00:00:00.000Z";
-    db.query("INSERT INTO entities(id,type,label_original,properties,identity_scope,project_id,created_at) VALUES('shared-node','entity','공유 노드','{}','project','project-a',?)").run(now);
+    insertMemoryNodeFixture(db, { id: "shared-node", type: "entity", label_original: "공유 노드", claim: "{}", identity_scope: "project", project_id: "project-a", created_at: now });
     const insertScope = (suffix: string, hotCacheState: string) => {
       db.query(`INSERT INTO memory_chunks
         (memory_chunk_id,source_key,current_revision,conversation_session_id,project_id,origin_kind,status,source_hash,created_at,updated_at)
@@ -97,7 +98,7 @@ describe("memory vector UTF-8 repair", () => {
          byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis)
         VALUES(?,?,'source-r1','conversation',?,?,?,'/content',0,12,?,'user','user_input',?,'canonical')`)
         .run(`source-${suffix}`, `episode-${suffix}`, `session-${suffix}`, `message-${suffix}`, `part-${suffix}`, `content-hash-${suffix}`, now);
-      db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('shared-node',?,?,'source-r1')")
+      db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('shared-node',?,?,'source-r1')")
         .run(`source-${suffix}`, `episode-${suffix}`);
       db.query(`INSERT INTO memory_projection_jobs
         (job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,

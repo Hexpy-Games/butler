@@ -760,9 +760,9 @@ export function readMemoryHealth(input: {
   const diagnostics: string[] = [];
   const queueBacklog = countJsonl(join(queueDir, "sync.jsonl"));
   const deadLetterCount = countJsonl(join(queueDir, "dead-letter.jsonl"));
-  const graphEntityCount = countSqliteRows(graphDbPath, "entities");
+  const graphEntityCount = countSqliteRows(graphDbPath, "memory_nodes");
   const graphEdgeCount = countSqliteRows(graphDbPath, "edges");
-  const graphMentionCount = countSqliteRows(graphDbPath, "entity_mentions");
+  const graphMentionCount = countSqliteRows(graphDbPath, "memory_evidence");
   const memoryChunkCount = countSqliteRows(metadataDbPath, "memory_chunks");
   if (stale) diagnostics.push("hot cache is stale or missing");
   if (queueBacklog > 0) diagnostics.push(`${queueBacklog} memory sync request(s) are queued`);

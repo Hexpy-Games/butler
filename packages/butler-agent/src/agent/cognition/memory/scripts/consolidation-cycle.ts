@@ -401,7 +401,7 @@ function resetSelectedInvalidVectors(input: {
           WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
             AND ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json))
             AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
-              SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+              SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
           ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
         CASE WHEN NOT (u.project_id IS c.project_id)
           OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
@@ -411,8 +411,8 @@ function resetSelectedInvalidVectors(input: {
               AND current_source.episode_id=c.memory_chunk_id
               AND current_source.revision=c.current_revision
               AND (u.record_kind='episode' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
-                SELECT 1 FROM entity_mentions current_mention
-                WHERE current_mention.entity_id=u.owner_id AND current_mention.source_id=current_source.source_id
+                SELECT 1 FROM memory_evidence current_mention
+                WHERE current_mention.node_id=u.owner_id AND current_mention.source_id=current_source.source_id
                   AND current_mention.episode_id=c.memory_chunk_id AND current_mention.revision=c.current_revision)))
           )) THEN 1 ELSE 0 END source_membership_invalid
       FROM memory_vector_units u
