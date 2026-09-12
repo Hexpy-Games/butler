@@ -40,6 +40,7 @@ import {
   recordWindowAttemptFailure,
   recordProviderInvocationIntent,
   recordVectorInvocationStarted,
+  recordVectorResultReceived,
   refreshSemanticState,
   refreshVectorUnitsForJob,
   saveValidatedPlan,
@@ -881,6 +882,8 @@ export async function advanceNextMemoryProjection(input: {
       });
       await withMemoryWriteGateAsync(input.context, async () => {
         for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
+        // Persist the known call outcome before vector/receipt writes can be interrupted.
+        recordVectorResultReceived(db, units);
         const pinned = bindObservedGenerationEmbeddingUnderWriteGate(input.context, embedded.metadata);
         const current = resolveMemoryGeneration(input.context);
         if (pinned.version !== embedded.metadata.version || current.embedding?.version !== pinned.version)

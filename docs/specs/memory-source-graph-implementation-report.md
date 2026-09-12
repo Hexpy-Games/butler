@@ -43,6 +43,15 @@ episode→node, source→node, claim→edge 색인이 없어 근거 집계가 �
 
 후속 증거: `/tmp/memory-t3-fixture-correction.log`, `/tmp/memory-t3-after-fixture-correction.log`, `/tmp/memory-t3-fixture-lint.log`, `/tmp/memory-t3-fixture-typecheck.log`.
 
+### 3번 벡터 중단 수정 완료 — 2026-09-13
+격리 재현에서 벡터 1개가 저장됐으나 완료 기록 중단 후 `outcome_known=0` 때문에 다음 advance가 `memory_embedding_outcome_unknown`으로 실패 처리했다. 기존 저장 벡터 확인에 도달하지 못하는 실제 결함이었다.
+
+최소 수정으로 임베딩 성공 응답을 받은 사실을 벡터/완료 기록보다 먼저 DB에 기록한다. `recordVectorResultReceived`는 현재 실행 owner의 호출만 갱신하고, 기존 `advanceNextMemoryProjection`의 writer gate 안에서 호출한다. 이후 완료 기록이 실패하면 기존 회수 경로가 pending으로 돌리고 기존 벡터 조회가 완료 기록을 복구한다. 새 복구 상태·재시도 정책·부분 묶음 처리·스키마는 추가하지 않았다. 두 기존 파일의 크기 경고는 검토했으며, 기존 저장 책임과 실행 순서에 13줄을 추가하는 수정에 파일 분리는 필요하지 않다.
+
+검증: 완료 기록 강제 실패 → 중단 상태에 응답 수신 사실 보존 → 다음 advance에서 완료, 임베딩 호출 총 1회. 테스트는 별도 Bun 프로세스의 시작 환경에 독립 소켓을 지정하여 기본 운영 소켓을 사용하지 않는다. 응답을 받지 못한 호출의 기존 unknown 처리는 유지된다. T3 전체 11/11 통과(부모 프로세스 81 assertions; 재개 검사는 격리 자식에서 실행).
+
+증거: `/tmp/memory-t3-vector-resume-isolated.log`(수정 전 실패), `/tmp/memory-t3-vector-fix.log`, `/tmp/memory-t3-all-fixed.log`, `/tmp/memory-t3-vector-shape.log`. 운영 배포·진행 중 복구 데이터 수정 및 이미 실패로 확정된 기록의 일괄 재처리는 수행하지 않았다.
+
 최종 증거:
 - `/tmp/memory-final-acceptance.log`: 공개 경로/검색/조건/원문/벡터 검증.
 - `/tmp/memory-final-identity.log`: 수동 동일성 CLI의 적용·취소·범위·전이 검증.

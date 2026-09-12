@@ -582,6 +582,16 @@ export function recordVectorInvocationStarted(db: Database, units: ClaimedVector
   }
 }
 
+export function recordVectorResultReceived(db: Database, units: ClaimedVectorUnit[]): void {
+  db.transaction(() => {
+    for (const unit of units) {
+      const changed = db.query("UPDATE memory_vector_units SET outcome_known=1 WHERE unit_id=? AND state='running' AND owner_nonce=? AND provider_invoked=1")
+        .run(unit.unit_id, unit.owner_nonce);
+      if (changed.changes !== 1) throw new Error("memory_vector_unit_changed");
+    }
+  })();
+}
+
 export function failVectorQuantum(db: Database, units: ClaimedVectorUnit[], code: string, retryAt: string | null = null): void {
   db.transaction(() => {
     for (const unit of units) {
