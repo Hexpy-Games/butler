@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
+import { foldedGraphemeNgrams } from "./unicode.ts";
 import type {
   ExtractOutput,
   ExtractInput,
@@ -290,6 +291,7 @@ export function installAndBackfillRecallIndexes(db: Database): void {
       surface_original TEXT NOT NULL,identity_scope TEXT NOT NULL,project_id TEXT,
       PRIMARY KEY(gram,entity_id,source_id,surface_original)
     );
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON entity_alias_postings(gram,entity_id,source_id);
     CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON entity_alias_postings(entity_id,gram,source_id,surface_original);
     CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON entity_alias_postings(identity_scope,project_id,gram,entity_id);
     CREATE TABLE IF NOT EXISTS memory_vector_units(
@@ -318,13 +320,6 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     for (const row of rows) for (const gram of foldedGraphemeNgrams(row.folded_key))
       insert.run(gram, row.entity_id, row.source_id, row.surface_original, row.identity_scope, row.project_id);
   })();
-}
-
-function foldedGraphemeNgrams(value: string): string[] {
-  const graphemes = [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].map((item) => item.segment);
-  const grams: string[] = [];
-  for (const size of [2, 3]) for (let index = 0; index + size <= graphemes.length; index += 1) grams.push(graphemes.slice(index, index + size).join(""));
-  return [...new Set(grams)];
 }
 
 export type ClaimedVectorUnit = {

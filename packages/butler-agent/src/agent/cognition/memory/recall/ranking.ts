@@ -82,14 +82,21 @@ export function rankEpisodes(
 export function diversifyBySession(values: RankedEpisode[], limit: number): RankedEpisode[] {
   const selected: RankedEpisode[] = [];
   const sessions = new Set<string>();
-  for (const value of values) {
-    if (!sessions.has(value.sessionId)) { selected.push(value); sessions.add(value.sessionId); }
-    if (selected.length >= limit) return selected;
-  }
-  const selectedIds = new Set(selected.map((value) => value.episodeId));
-  for (const value of values) {
-    if (!selectedIds.has(value.episodeId)) selected.push(value);
-    if (selected.length >= limit) break;
+  // Diversity breaks relevance ties; it must not move a weaker session ahead
+  // of a stronger result (or override the explicit-rule priority).
+  for (let offset = 0; offset < values.length && selected.length < limit;) {
+    const head = values[offset]!;
+    let end = offset + 1;
+    while (end < values.length && values[end]!.score === head.score &&
+      Boolean(values[end]!.explicitPriority) === Boolean(head.explicitPriority)) end += 1;
+    const remaining = values.slice(offset, end);
+    while (remaining.length && selected.length < limit) {
+      const unseen = remaining.findIndex((value) => !sessions.has(value.sessionId));
+      const [value] = remaining.splice(unseen < 0 ? 0 : unseen, 1);
+      selected.push(value!);
+      sessions.add(value!.sessionId);
+    }
+    offset = end;
   }
   return selected;
 }
