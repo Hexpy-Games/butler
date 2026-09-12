@@ -1426,6 +1426,7 @@ function loadSourceWindowCandidates(input: {
   ids: string[];
   candidateBytes?: number;
 }): ExtractInput["candidates"] {
+  const sourceEvidence = new Map<string, ExtractInput["candidates"][number]["evidence"][number]>();
   return packExtractionCandidates(input.ids, (id) => {
     const node = input.db.query<{ id: string; type: string; identity_scope: "user" | "project"; project_id: string | null; properties: string }, [string]>("SELECT id,type,identity_scope,project_id,properties FROM entities WHERE id=?").get(id);
     if (!node) return null;
@@ -1440,10 +1441,16 @@ function loadSourceWindowCandidates(input: {
       ORDER BY a.surface_original,a.source_id LIMIT 3
     `).all(id, input.projectId);
     if (!aliases.length) return null;
-    const evidence = aliases.slice(0, 2).map((alias) => {
-      const source = sourceRows(input.db, [alias.source_id])[0]!;
-      const resolved = hydrateSource(input.butlerData, source, 160);
-      return { ref: source.source_id, text: resolved.excerpt, observed_at: source.observed_at, basis: source.basis as ExtractInput["candidates"][number]["evidence"][number]["basis"] };
+    const evidence = [...new Set(aliases.map((alias) => alias.source_id))].slice(0, 2).map((sourceId) => {
+      const cached = sourceEvidence.get(sourceId);
+      if (cached) return cached;
+      const source = sourceRows(input.db, [sourceId])[0]!;
+      // Preserve the whole canonical span: a prefix can omit the claim's proof
+      // and shadow a current unit with the same ref during quote validation.
+      const resolved = hydrateSource(input.butlerData, source);
+      const unit = { ref: source.source_id, text: resolved.text, observed_at: source.observed_at, basis: source.basis as ExtractInput["candidates"][number]["evidence"][number]["basis"] };
+      sourceEvidence.set(sourceId, unit);
+      return unit;
     });
     let claim: ExtractInput["candidates"][number]["claim"] = null;
     if (!identityNode) {
