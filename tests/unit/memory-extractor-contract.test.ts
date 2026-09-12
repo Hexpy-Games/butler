@@ -10,7 +10,7 @@ import { recallSourceBackedMemory } from "../../packages/butler-agent/src/agent/
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
 import { runStructuredMemoryExtractor, type ExtractionStageResult } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { sourcePassages, meaningToOutput, validateMeaning, type Meaning } from "../../packages/butler-agent/src/agent/cognition/memory/projection/meaning.ts";
-import { prepareBindingBatches, applyBinding } from "../../packages/butler-agent/src/agent/cognition/memory/projection/binding.ts";
+import { prepareBindingBatches, applyBinding, applyBindingRepair } from "../../packages/butler-agent/src/agent/cognition/memory/projection/binding.ts";
 import { splitMeaningSourceSpans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
 import type { ExtractInput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 
@@ -240,6 +240,12 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
     const wire = JSON.parse(request.prompt), prompt = wire.input ?? wire; requests.push(wire);
     if (prompt.parts) { a++; return response(meaning) as never; }
     b++;
+    if (!wire.correction) {
+      const initial = (request.responseFormat as any).schema.properties.decisions.items.properties;
+      expect(initial.support).toBeTruthy();
+      expect(initial.current_support).toBeUndefined();
+      expect(initial.selected_historical_support).toBeUndefined();
+    }
     if (wire.correction) {
       expect(wire.correction.error).toContain("memory_extract_invalid_identity_reuse");
       expect(wire.correction.error).toContain(`target=${prompt.targets[1].target}`);
@@ -247,16 +253,24 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
       expect(wire.correction.error).toContain("missing=selected_historical");
       expect(wire.correction.error).toContain(`offered_current=${prompt.targets[1].evidence.join(",")}`);
       expect(wire.correction.error).toContain(`offered_selected_historical=${prompt.targets[1].candidates[0].evidence.join(",")}`);
-      const schema = (request.responseFormat as any).schema.properties.decisions.items.properties;
-      expect(schema.target.enum).toEqual(prompt.targets.map((target: any) => target.target));
-      expect(schema.support.items.enum).toEqual(prompt.evidence.map((item: any) => item.ref));
-      expect(schema.candidate.enum).toEqual([null, ...prompt.targets.flatMap((target: any) => target.candidates.map((candidate: any) => candidate.ref))]);
-      expect(schema.span.enum).toEqual([null]);
+      expect(wire.correction.instruction).toContain("current_support");
+      expect(wire.correction.instruction).toContain("selected_historical_support");
+      const choices = (request.responseFormat as any).schema.properties.decisions.items.anyOf;
+      const selected = choices[1].properties;
+      expect(selected.target.enum).toEqual(prompt.targets.map((target: any) => target.target));
+      expect(selected.candidate.enum).toEqual(prompt.targets.flatMap((target: any) => target.candidates.map((candidate: any) => candidate.ref)));
+      expect(selected.span.enum).toEqual([null]);
+      expect(selected.current_support).toMatchObject({ minItems: 1, maxItems: 3,
+        items: { enum: prompt.targets.flatMap((target: any) => target.evidence) } });
+      expect(selected.selected_historical_support).toMatchObject({ minItems: 1, maxItems: 1,
+        items: { enum: prompt.targets.flatMap((target: any) => target.candidates.flatMap((candidate: any) => candidate.evidence)) } });
+      expect(choices[0].properties).toMatchObject({ candidate: { type: "null" }, span: { type: "null" },
+        current_support: { maxItems: 0 }, selected_historical_support: { maxItems: 0 } });
     }
     return response({ decisions: prompt.targets.map((target: any, index: number) => b === 1
       ? { target: target.target, candidate: index < 2 ? target.candidates[0].ref : null, span: null,
           support: index === 0 ? [...target.evidence, ...target.candidates[0].evidence] : index === 1 ? [...target.evidence] : [] }
-      : { target: target.target, candidate: null, span: null, support: [] }) }) as never;
+      : { target: target.target, candidate: null, span: null, current_support: [], selected_historical_support: [] }) }) as never;
   };
   const root = mkdtempSync(join(tmpdir(), "memory-binding-repair-"));
   try {
@@ -268,5 +282,38 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
     expect(requests.filter(request => request.parts)).toHaveLength(1);
     expect([...saved.values()].some(stage => JSON.parse(stage.raw).decisions?.[1]?.support?.length === 1)).toBe(true);
     expect(saved.size).toBe(3);
+    const savedSnapshot = JSON.stringify([...saved]);
+    await runStructuredMemoryExtractor({ butlerData: root, extractInput: structuredClone(input), model: "openai/gpt-5.6-sol", reasoningEffort: "medium", signal: AbortSignal.timeout(10000),
+      loadCandidates: async () => [{ ref: "old-camera", type: "entity", label: "相機", aliases: [], scope: "user", project_id: null, evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" }] }],
+      stages: { load: async key => saved.get(key) ?? null, save: async (key, result) => { saved.set(key, result); } } });
+    expect(a).toBe(1); expect(b).toBe(2); expect(JSON.stringify([...saved])).toBe(savedSnapshot);
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("binding repair keeps current and selected historical evidence in their declared roles", async () => {
+  const parts = sourcePassages(input);
+  const output = meaningToOutput(input, meaning, parts);
+  const prepared = await prepareBindingBatches(meaning, parts, async () => [
+    { ref: "old-camera", type: "entity", label: "相機", aliases: [], scope: "user", project_id: null,
+      evidence: [{ ref: "past", text: "相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" }] },
+    { ref: "other-camera", type: "entity", label: "別の相機", aliases: [], scope: "user", project_id: null,
+      evidence: [{ ref: "other-past", text: "別の相機を覚えて。", observed_at: "2026-09-01", basis: "user_statement" }] },
+  ]);
+  const batch = prepared.batches[0]!, target = batch.prompt.targets[0]!, candidate = target.candidates[0]!, other = target.candidates[1]!;
+  const decisions = batch.prompt.targets.map((item, index) => index === 0
+    ? { target: item.target, candidate: candidate.ref, span: null, current_support: item.evidence.slice(0, 1), selected_historical_support: candidate.evidence }
+    : { target: item.target, candidate: null, span: null, current_support: [], selected_historical_support: [] });
+  applyBindingRepair({ decisions }, batch, output, { ...input, candidates: prepared.candidates });
+  expect(output.nodes[0]!.resolution).toMatchObject({ kind: "reuse", node_ref: "old-camera" });
+  const swapped = structuredClone(decisions);
+  swapped[0]!.current_support = candidate.evidence;
+  swapped[0]!.selected_historical_support = target.evidence.slice(0, 1);
+  expect(() => applyBindingRepair({ decisions: swapped }, batch, meaningToOutput(input, meaning, parts), { ...input, candidates: prepared.candidates }))
+    .toThrow("memory_extract_invalid_identity_reuse");
+  const wrongCandidate = structuredClone(decisions);
+  wrongCandidate[0]!.selected_historical_support = other.evidence;
+  expect(() => applyBindingRepair({ decisions: wrongCandidate }, batch, meaningToOutput(input, meaning, parts), { ...input, candidates: prepared.candidates }))
+    .toThrow("memory_extract_invalid_identity_reuse");
+  expect(() => applyBindingRepair({ decisions: [null] }, batch, meaningToOutput(input, meaning, parts), { ...input, candidates: prepared.candidates }))
+    .toThrow("memory_extract_invalid_binding");
 });
