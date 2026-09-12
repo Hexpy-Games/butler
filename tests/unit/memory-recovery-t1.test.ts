@@ -421,7 +421,7 @@ test("short unit references preserve canonical ingestion and reject unknown or e
       expect(wire.source_units.map((unit: any) => unit.text)).toEqual(canonical.source_units.map((unit: any) => unit.text));
       expect(canonical.source_units[0].ref).not.toBe("u0");
       expect(JSON.parse(row.provider_evidence_json).request_wire).toEqual({
-        profile: "memory-extract-short-unit-refs.v1",
+        profile: "memory-extract-short-refs.v2",
         input_json_sha256: createHash("sha256").update(JSON.stringify(wire)).digest("hex"),
         input_json_utf8_bytes: Buffer.byteLength(JSON.stringify(wire)),
       });
@@ -753,7 +753,7 @@ test.each(["small", "mixed", "dense"])("local extraction timeout preserves histo
       expect(row.input_json).toBe(pinned);
       const evidence = JSON.parse(row.provider_evidence_json);
       const requestJson = JSON.stringify(extractionInputs.at(-1));
-      expect(evidence.request_wire).toEqual({ profile: "memory-extract-short-unit-refs.v1",
+      expect(evidence.request_wire).toEqual({ profile: "memory-extract-short-refs.v2",
         input_json_sha256: createHash("sha256").update(requestJson).digest("hex"), input_json_utf8_bytes: Buffer.byteLength(requestJson) });
       if (mode === "mixed" && attempt === 2) expect(evidence).toMatchObject({ provider_code: "provider_busy", upstream_status: 503, timeout_origin: "unknown" });
       else expect(evidence).toMatchObject({ failure_kind: "before_result", code: "memory_extract_timeout", exception_name: "AbortError",
@@ -4929,6 +4929,39 @@ test("project recall excludes global evidence and reads project evidence unchang
   });
 });
 
+test("public extraction preserves late multilingual candidate evidence and source byte positions", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-late-evidence-"));
+  roots.push(butlerData);
+  const descriptor = initializeEmptyMemoryGeneration(butlerData);
+  const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
+  const context = { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal };
+  const original = "日本語 العربية e\u0301 🧭 ".repeat(13) + "내 고양이 루나의 영어 이름은 Luna야.";
+  const first = await memory.ingestConversationMemory({ context, source: seedTurn(butlerData, "late-evidence", "late-first", original, "Noted.", 1) });
+  expect((await advanceUntilSemanticTerminal(memory, context, first.job_id))?.semantic_graph.state).toBe("complete");
+  transformExtractionOutput = (output, input) => {
+    const candidate = input.candidates.find((item: any) => item.aliases.includes("Luna"));
+    output.nodes[0].evidence.push({ unit_ref: candidate.evidence[0].ref, quote: "Luna", occurrence: 0 });
+  };
+  const second = await memory.ingestConversationMemory({ context, source: seedTurn(butlerData, "late-evidence", "late-second", "Luna likes the blue ball.", "Noted.", 1) });
+  expect((await advanceUntilSemanticTerminal(memory, context, second.job_id))?.semantic_graph.state).toBe("complete");
+  const input = extractionInputs.at(-1)!;
+  const candidate = input.candidates.find((item: any) => item.aliases.includes("Luna"));
+  expect(candidate.evidence).toHaveLength(1);
+  expect(candidate.evidence[0].text).toBe(original);
+  expect(Buffer.byteLength(JSON.stringify(input.candidates))).toBeLessThanOrEqual(8 * 1024);
+  const db = openProjectionDb(join(butlerData, "cognition/memory/generations", descriptor.generation_id, "graph.sqlite"));
+  try {
+    const row = db.query<{ normalized_plan_json: string }, [string]>("SELECT normalized_plan_json FROM memory_projection_windows WHERE window_ref=?").get(input.window_ref)!;
+    const evidence = Object.values(JSON.parse(row.normalized_plan_json).evidence).flat() as Array<{ sourceId: string; byteStart: number; byteEnd: number; quote: string }>;
+    const originalSource = db.query<{ source_id: string }, [string]>("SELECT source_id FROM memory_chunk_sources WHERE content_hash=?").get(createHash("sha256").update(original).digest("hex"))!;
+    const prior = evidence.find((item) => item.sourceId === originalSource.source_id && item.quote === "Luna")!;
+    expect(prior.byteStart).toBe(Buffer.byteLength(original.slice(0, original.indexOf("Luna"))));
+    expect(Buffer.from(original).subarray(prior.byteStart, prior.byteEnd).toString()).toBe("Luna");
+  } finally {
+    db.close();
+  }
+}, 20_000);
+
 test("public extraction supplies closed claim candidates and explicit local reference rules", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-candidate-"));
   roots.push(butlerData);
@@ -4949,10 +4982,8 @@ test("public extraction supplies closed claim candidates and explicit local refe
     }
   }
   const request = extractionRequests.at(-1)!;
-  expect(request.instructions).toContain("never stored candidate IDs");
-  const schema = request.responseFormat.schema as any;
-  expect(schema.properties.claims.items.properties.subject_ref.description).toContain("same output");
-  expect(schema.properties.relations.items.properties.claim_ref.description).toContain("assertion claim");
+  expect(request.instructions).toContain("declared output local_ref, never candidate IDs");
+  expect(request.instructions).toContain("Relations require an assertion claim; endpoints equal its subject/object");
 }, 20_000);
 
 test("two canonical multilingual episodes reuse explicit alias and recall typed graph evidence", async () => {
@@ -5435,16 +5466,12 @@ test("two canonical multilingual episodes reuse explicit alias and recall typed 
   expect(thirdProgress?.semantic_graph.state).toBe("complete");
   const requestContract = extractionRequests.at(-1)!;
   expect(requestContract.instructions).toContain(
-    "A claim's basis describes the current observation",
+    "Current claim/relation evidence determines basis",
   );
   expect(requestContract.instructions).toContain(
-    "Historical candidates[].evidence belongs in resolution.evidence",
+    "resolution.evidence needs both a current quote and a historical quote from that candidate's own evidence",
   );
-  const requestSchema = JSON.stringify(requestContract.responseFormat.schema);
-  expect(requestSchema).toContain("The basis of the current observation");
-  expect(requestSchema).toContain(
-    "Candidate evidence establishes reuse identity only",
-  );
+  expect(requestContract.instructions).toContain("Historical evidence does not replace current evidence or determine its basis");
   const wrongBasis = structuredClone(reuseOutput!);
   wrongBasis.claims[0].basis = "user_statement";
   expect(() =>
