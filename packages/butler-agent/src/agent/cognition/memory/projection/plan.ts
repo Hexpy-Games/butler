@@ -208,7 +208,7 @@ export function applyPlan(
   db.transaction(() => {
     if (output.disposition === "unsupported") {
       db.query(
-        "UPDATE memory_projection_windows SET state='unsupported',error_code='semantic_unsupported',owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?",
+        "UPDATE memory_projection_windows SET state='unsupported',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL WHERE window_ref=?",
       ).run(windowRef);
       refreshSemanticState(db, jobId);
       return;
@@ -610,11 +610,19 @@ export function assertPlanCandidatesCurrent(
   return resolutions;
 }
 
+/** Use the same quote validation and canonical mapping as graph persistence. */
+export function resolveSummaryEvidenceSources(
+  db: ReturnType<typeof openProjectionDb>, sourceRoot: string, input: ExtractInput, evidence: QuoteRef[],
+): string[] {
+  const resolve = createContextEvidenceResolver(db, sourceRoot, input);
+  return [...new Set(validateQuotes(input, evidence, true).flatMap(resolve).map((quote) => quote.sourceId))];
+}
+
 export function safeProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("memory_write_busy")) return "memory_write_busy";
   if (["memory_extract_input_exceeds_budget", "memory_extract_source_window_exceeds_budget", "memory_extract_output_exceeds_budget"].includes(message)) return message;
-  if (message.startsWith("memory_extract_invalid_") || ["memory_extract_needs_context", "memory_extract_unsupported"].includes(message)) return message;
+  if (message.startsWith("memory_extract_invalid_") || ["memory_extract_needs_context", "memory_extract_unsupported", "memory_extract_correction_unresolved", "memory_extract_binding_oversize", "memory_extract_candidate_changed", "memory_extract_stage_changed"].includes(message)) return message;
   if (
     message === "memory_source_changed" ||
     message === "memory_generation_changed" ||

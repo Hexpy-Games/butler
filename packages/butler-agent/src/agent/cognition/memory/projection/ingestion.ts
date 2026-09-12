@@ -30,6 +30,7 @@ import {
   ensureV2MemorySchema,
   installAndBackfillRecallIndexes,
   markWindowFailure,
+  recordWindowDisposition,
   markPlannedWindowFailure,
   markVectorRegistrationFailure,
   openProjectionDb,
@@ -78,6 +79,7 @@ import {
   assertPlanCandidatesCurrent,
   assertPlanSourceCurrent,
   normalizeAndValidatePlan,
+  resolveSummaryEvidenceSources,
   safeProjectionError,
   type NormalizedPlan,
 } from "./plan.ts";
@@ -1099,9 +1101,9 @@ export async function advanceNextMemoryProjection(input: {
           ? attachAdjacentSourceContext(db, sourceRoot, { ...extractInput, candidates: [] }, nextExpansion) : null;
         await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
           assertProjectionSourceCurrent(sourceRoot, db, extractInput);
-          markWindowFailure(db, pending.job_id, pending.window_ref, error.message, { ownerNonce: pending.ownerNonce,
-            attemptKind: "validation", providerInvoked, clearResult: true,
-            failureEvidence: { ...error.evidence, failure_kind: "model_disposition", disposition: error.disposition } });
+          recordWindowDisposition(db, pending.job_id, pending.window_ref, pending.ownerNonce,
+            { ...error.evidence, disposition: error.disposition, warnings: [{ code: error.disposition }],
+              context_recovery: revised ? "scheduled" : "exhausted_or_unavailable" }, providerInvoked);
           if (revised) reviseProjectionContext(db, pending.window_ref, extractInput, revised);
         })());
         return progressFromDb(db, pending.job_id);
@@ -2136,32 +2138,29 @@ function advanceHotCacheQuantum(
   }
   try {
     const graphRevision = Number(db.query<{ value: string }, []>("SELECT value FROM memory_state WHERE key='graph_revision'").get()?.value ?? 0);
-    const windows = db.query<{ window_ref: string; output_json: string | null; normalized_plan_json: string | null; source_refs_json: string }, [string]>(
-      "SELECT window_ref,output_json,normalized_plan_json,source_refs_json FROM memory_projection_windows WHERE job_id=? AND state='complete' ORDER BY ordinal,window_ref",
+    const windows = db.query<{ window_ref: string; input_json: string | null; output_json: string | null; normalized_plan_json: string | null; source_refs_json: string }, [string]>(
+      "SELECT window_ref,input_json,output_json,normalized_plan_json,source_refs_json FROM memory_projection_windows WHERE job_id=? AND state='complete' ORDER BY ordinal,window_ref",
     ).all(jobId).flatMap((window) => {
-      try {
-        const output = JSON.parse(window.output_json ?? "null") as { summary?: { text?: string; evidence?: Array<{ unit_ref?: string }> } | null; claims?: Array<{ type?: string; valid_to?: string | null; salience?: "high" | "normal" | "unspecified"; basis?: string }> } | null;
-        const plan = JSON.parse(window.normalized_plan_json ?? "null") as { refs?: Record<string, string> } | null;
-        const summary = output?.summary?.text?.trim();
-        if (!summary) return [];
-        const windowSourceRefs = new Set(JSON.parse(window.source_refs_json) as string[]);
-        const summarySourceRefs = [...new Set((output?.summary?.evidence ?? []).flatMap((quote) =>
-          quote.unit_ref && windowSourceRefs.has(quote.unit_ref) ? [quote.unit_ref] : [],
-        ))];
-        if (summarySourceRefs.length === 0) return [];
-        const summarySources = sourceRows(db, summarySourceRefs);
-        if (summarySources.length !== summarySourceRefs.length) return [];
-        const claims = output?.claims ?? [];
-        const validity = claims.flatMap((claim) => claim.valid_to ? [claim.valid_to] : []).sort()[0] ?? null;
-        const salience = claims.some((claim) => claim.salience === "high") ? "high" as const
-          : claims.some((claim) => claim.salience === "normal") ? "normal" as const : "unspecified" as const;
-        return [{ window_ref: window.window_ref, summary, valid_until: validity, salience,
-          kind: [...new Set(claims.flatMap((claim) => claim.type ? [claim.type] : []))].join("+") || "window_summary",
-          basis: [...new Set(summarySources.map((source) => source.basis))].sort(),
-          source_refs: summarySourceRefs,
-          node_refs: [...new Set(Object.values(plan?.refs ?? {}))].sort(),
-        }];
-      } catch { return []; }
+      const output = JSON.parse(window.output_json ?? "null") as ExtractOutput | null;
+      const plan = JSON.parse(window.normalized_plan_json ?? "null") as { refs?: Record<string, string> } | null;
+      const summary = output?.summary?.text?.trim();
+      if (!summary) return [];
+      if (!window.input_json || !plan?.refs) throw new Error("hot_cache_evidence_invalid");
+      const pinnedInput = JSON.parse(window.input_json) as ExtractInput;
+      const summarySourceRefs = resolveSummaryEvidenceSources(db, generation.sourceRoot, pinnedInput,
+        output!.summary!.evidence);
+      const summarySources = sourceRows(db, summarySourceRefs);
+      if (!summarySourceRefs.length || summarySources.length !== summarySourceRefs.length) throw new Error("hot_cache_evidence_invalid");
+      const claims = output?.claims ?? [];
+      const validity = claims.flatMap((claim) => claim.valid_to ? [claim.valid_to] : []).sort()[0] ?? null;
+      const salience = claims.some((claim) => claim.salience === "high") ? "high" as const
+        : claims.some((claim) => claim.salience === "normal") ? "normal" as const : "unspecified" as const;
+      return [{ window_ref: window.window_ref, summary, valid_until: validity, salience,
+        kind: [...new Set(claims.flatMap((claim) => claim.type ? [claim.type] : []))].join("+") || "window_summary",
+        basis: [...new Set(summarySources.map((source) => source.basis))].sort(),
+        source_refs: summarySourceRefs,
+        node_refs: [...new Set(Object.values(plan?.refs ?? {}))].sort(),
+      }];
     });
     const receipts = windows.map((window) => {
       const entryId = projectionHash(["hot-cache-window-summary", row.generation, row.episode_id, window.window_ref, row.revision, window.summary]);
@@ -2193,7 +2192,13 @@ function advanceHotCacheQuantum(
       recordHotCacheOutcomes(db, generation.generationId, receipt);
       return receipt;
     });
-    if (receipts.length === 0) throw new Error("hot_cache_entry_empty");
+    // No eligible summary is an explicit exclusion; invalid evidence already throws above.
+    if (receipts.length === 0) {
+      db.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_receipt_json=?,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?")
+        .run(JSON.stringify({ state: "complete", completed_units: 1, total_units: 1 }),
+          JSON.stringify({ outcome: "excluded", reason: "no_window_summary", entries: [] }), jobId);
+      return;
+    }
     assertJobRevisionCurrent(generation.sourceRoot, db, jobId);
     db.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_receipt_json=?,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?")
       .run(JSON.stringify({ state: "complete", completed_units: 1, total_units: 1 }), JSON.stringify({ outcome: receipts.some((receipt) => receipt.admitted) ? "applied" : "excluded", entries: receipts }), jobId);

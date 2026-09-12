@@ -74,6 +74,21 @@ test("public legacy boundary recovery expands context, preserves coverage and re
     expect(f.db.query("SELECT * FROM memory_projection_windows WHERE window_ref!=?").all(window.window_ref)).toEqual(completed);
     expect(f.db.query("SELECT * FROM memory_chunk_sources ORDER BY source_id").all()).toEqual(sources);
     expect(f.db.query<any, []>("SELECT count(DISTINCT source_id) n FROM entity_mentions").get().n).toBeGreaterThan(1);
+    expect(f.db.query<any, []>("SELECT count(*) n FROM memory_projection_attempts WHERE state='failed'").get().n).toBe(0);
+    f.db.query("UPDATE memory_projection_jobs SET next_stage='hot_cache'").run();
+    await advanceNextMemoryProjection({ context: f.context });
+    const cache = f.db.query<any, []>("SELECT hot_cache_state,hot_cache_receipt_json FROM memory_projection_jobs LIMIT 1").get();
+    expect(JSON.parse(cache.hot_cache_state).state).toBe("complete");
+    expect(JSON.parse(cache.hot_cache_receipt_json).entries.length).toBeGreaterThan(0);
+    // An invented quote is still a real error, never a normal cache exclusion.
+    const stored = f.db.query<any, [string]>("SELECT output_json FROM memory_projection_windows WHERE window_ref=?").get(window.window_ref);
+    const corrupt = JSON.parse(stored.output_json); corrupt.summary.evidence[0].quote = "not present in the canonical source";
+    f.db.query("UPDATE memory_projection_windows SET output_json=? WHERE window_ref=?").run(JSON.stringify(corrupt), window.window_ref);
+    f.db.query("UPDATE memory_projection_jobs SET next_stage='hot_cache',hot_cache_state=?,hot_cache_attempt_count=2").run(JSON.stringify({ state: "pending", blocked_by: null }));
+    await advanceNextMemoryProjection({ context: f.context });
+    const rejected = f.db.query<any, []>("SELECT hot_cache_state,hot_cache_receipt_json FROM memory_projection_jobs LIMIT 1").get();
+    expect(JSON.parse(rejected.hot_cache_state).state).toBe("failed");
+    expect(JSON.parse(rejected.hot_cache_receipt_json).outcome).toBe("failed");
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; f.close(); }
 }, 30000);
 
@@ -116,11 +131,14 @@ test("unsupported and exhausted context remain explicit incomplete results", asy
         for (let n = 0; n < 3; n++) {
           f.db.query("UPDATE memory_projection_jobs SET next_stage='semantic_graph'").run();
           await advanceNextMemoryProjection({ context: f.context });
-          if (f.db.query<any, [string]>("SELECT state FROM memory_projection_windows WHERE window_ref=?").get(w.window_ref).state === "failed") break;
+          if (f.db.query<any, [string]>("SELECT state FROM memory_projection_windows WHERE window_ref=?").get(w.window_ref).state === "unsupported") break;
         }
         const result = f.db.query<any, [string]>("SELECT state,error_code,output_json,provider_evidence_json FROM memory_projection_windows WHERE window_ref=?").get(w.window_ref);
-        expect(result.state).toBe("failed"); expect(result.error_code).toBe(`memory_extract_${status}`);
-        expect(result.output_json).toBeNull(); expect(JSON.parse(result.provider_evidence_json).failure_kind).toBe("model_disposition");
+        expect(result.state).toBe("unsupported"); expect(result.error_code).toBeNull();
+        expect(result.output_json).toBeNull(); expect(JSON.parse(result.provider_evidence_json).warnings).toEqual([{ code: status }]);
+        expect(f.db.query<any, []>("SELECT COUNT(*) n FROM memory_projection_attempts WHERE state='failed'").get().n).toBe(0);
+        const semantic = JSON.parse(f.db.query<any, []>("SELECT semantic_graph_state FROM memory_projection_jobs LIMIT 1").get().semantic_graph_state);
+        expect(semantic.failed_units).toBe(0); expect(semantic.warning_units).toBe(1); expect(semantic.pending_units).toBe(0);
         expect(calls).toBe(1); // Identical prompts reuse the saved result instead of re-calling the model.
       } finally { f.close(); }
     }

@@ -68,6 +68,7 @@ export type StageState =
       total_units: number;
       pending_units: number;
       failed_units: number;
+      warning_units?: number;
     }
   | {
       state: "failed";
