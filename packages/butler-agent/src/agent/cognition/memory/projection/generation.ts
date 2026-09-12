@@ -25,7 +25,7 @@ import { MEMORY_EXTRACTION_VERSION, type MemoryExecutionContext } from "./contra
 import type { EmbeddingRuntimeMetadata } from "../scripts/embed.ts";
 import { ensureV2MemorySchema, sourceRows, type ClaimedVectorUnit, type ProjectionSourceRow } from "./store.ts";
 import { hydrateSource, memorySourceInventoryHash } from "./source.ts";
-import { countInvalidPersistedVectorReadiness } from "../recall/vector.ts";
+import { countInvalidPersistedVectorReadiness, reconcilePersistedNodeVectorRepresentatives, type VectorRepresentativeReconciliation } from "../recall/vector.ts";
 import {
   acquireConsolidationLock,
   acquireConsolidationLockAsync,
@@ -842,6 +842,71 @@ export function inspectMemoryGeneration(input: { butlerData: string; generationI
   } finally { db.close(); }
 }
 
+type VectorEvidenceRow = ClaimedVectorUnit & { state: string; source_membership_invalid: number };
+
+function loadVectorEvidenceRows(db: Database, generationId: string, state: "complete" | "superseded"): VectorEvidenceRow[] {
+  return db.query<VectorEvidenceRow, [string, string]>(`
+    SELECT u.*,j.revision source_revision,c.conversation_session_id,
+      (SELECT ordered.source_kind FROM memory_chunk_sources ordered
+        WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+        ORDER BY ordered.source_id LIMIT 1) source_kind,
+      (SELECT ordered.observed_at FROM memory_chunk_sources ordered
+        WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+          AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
+          AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
+            SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+        ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
+      COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id
+        FROM memory_chunk_sources ordered WHERE ordered.episode_id=c.memory_chunk_id
+          AND ordered.revision=c.current_revision AND (u.record_kind='episode' OR
+            (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own
+              WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
+        ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
+          ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
+      CASE WHEN NOT (u.project_id IS c.project_id)
+        OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
+        OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
+          SELECT 1 FROM memory_chunk_sources current_source
+          WHERE current_source.source_id=refs.value
+            AND current_source.episode_id=c.memory_chunk_id
+            AND current_source.revision=c.current_revision
+            AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
+              SELECT 1 FROM entity_mentions current_mention
+              WHERE current_mention.entity_id=u.owner_id
+                AND current_mention.source_id=current_source.source_id
+                AND current_mention.episode_id=c.memory_chunk_id
+                AND current_mention.revision=c.current_revision)))
+        )) THEN 1 ELSE 0 END source_membership_invalid
+    FROM memory_vector_units u
+    JOIN memory_projection_jobs j ON j.job_id=u.job_id
+    JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+    WHERE j.generation=? AND u.state=?
+  `).all(generationId, state);
+}
+
+export async function reconcileMemoryGenerationVectorRepresentatives(
+  context: MemoryExecutionContext,
+): Promise<VectorRepresentativeReconciliation> {
+  if (context.target.kind !== "rebuild") throw new Error("memory_rebuild_invalid_request");
+  const generation = resolveMemoryGeneration(context);
+  if (!generation.embedding) return { repaired_vector_keys: [], affected_unit_ids: [] };
+  const db = new Database(generation.graphPath, { readonly: true });
+  try {
+    const current = loadVectorEvidenceRows(db, generation.generationId, "complete")
+      .filter((row) => row.source_membership_invalid === 0);
+    const superseded = loadVectorEvidenceRows(db, generation.generationId, "superseded")
+      .filter((row) => row.source_membership_invalid === 0);
+    const result = await reconcilePersistedNodeVectorRepresentatives(
+      generation, current, superseded, generation.embedding.version,
+    );
+    const latest = resolveMemoryGeneration(context);
+    if (latest.generationId !== generation.generationId ||
+      latest.embedding?.version !== generation.embedding.version)
+      throw new Error("memory_generation_changed");
+    return result;
+  } finally { db.close(); }
+}
+
 export async function computeMemoryGenerationReadiness(input: {
   butlerData: string; generationId: string; inventoryHash: string; inventorySourceCount: number;
 }): Promise<MemoryGenerationReadiness> {
@@ -924,43 +989,7 @@ export async function computeMemoryGenerationReadiness(input: {
           (row.state === "complete" && !row.normalized_plan_json);
       } catch { return true; }
     }).length;
-    const vectorEvidenceRows = db.query<ClaimedVectorUnit & { state: string; source_membership_invalid: number }, [string]>(`
-      SELECT u.*,j.revision source_revision,c.conversation_session_id,
-        (SELECT ordered.source_kind FROM memory_chunk_sources ordered
-          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
-          ORDER BY ordered.source_id LIMIT 1) source_kind,
-        (SELECT ordered.observed_at FROM memory_chunk_sources ordered
-          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
-            AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
-            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
-              SELECT 1 FROM entity_mentions own WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
-          ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
-        COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id
-          FROM memory_chunk_sources ordered WHERE ordered.episode_id=c.memory_chunk_id
-            AND ordered.revision=c.current_revision AND (u.record_kind='episode' OR
-              (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM entity_mentions own
-                WHERE own.source_id=ordered.source_id AND own.entity_id=u.owner_id)))
-          ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
-            ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
-        CASE WHEN NOT (u.project_id IS c.project_id)
-          OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
-          OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
-            SELECT 1 FROM memory_chunk_sources current_source
-            WHERE current_source.source_id=refs.value
-              AND current_source.episode_id=c.memory_chunk_id
-              AND current_source.revision=c.current_revision
-              AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
-                SELECT 1 FROM entity_mentions current_mention
-                WHERE current_mention.entity_id=u.owner_id
-                  AND current_mention.source_id=current_source.source_id
-                  AND current_mention.episode_id=c.memory_chunk_id
-                  AND current_mention.revision=c.current_revision)))
-          )) THEN 1 ELSE 0 END source_membership_invalid
-      FROM memory_vector_units u
-      JOIN memory_projection_jobs j ON j.job_id=u.job_id
-      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
-      WHERE j.generation=? AND u.state='complete'
-    `).all(input.generationId);
+    const vectorEvidenceRows = loadVectorEvidenceRows(db, input.generationId, "complete");
     const vectorEvidenceInvalid = vectorEvidenceRows.filter((row) => {
       try {
         const receipt = JSON.parse(row.receipt_json ?? "null") as { generation?: string; embedding_version?: string } | null;

@@ -30,7 +30,7 @@ import { refreshRegisteredProjectCapsules } from "../project-memory.ts";
 import {
   activeMemoryDescriptorPath, initializeEmptyMemoryGenerationAsync, readActiveDescriptor,
   resolveMemoryGeneration, prepareMemoryRebuild, inspectMemoryGeneration,
-  computeMemoryGenerationReadiness, reconcileMemoryGenerationHotCache, prepareMemoryGenerationValidation, validateMemoryGeneration, activateMemoryGeneration,
+  computeMemoryGenerationReadiness, reconcileMemoryGenerationHotCache, reconcileMemoryGenerationVectorRepresentatives, prepareMemoryGenerationValidation, validateMemoryGeneration, activateMemoryGeneration,
   prepareMemoryGenerationActivation, rollbackMemoryGeneration, writeMemoryGenerationManifest, refreshMemoryRebuildSnapshot,
   readMemoryGenerationManifest, openMemoryGenerationCandidateWitness,
   prepareMemoryGenerationQualificationReuse, resumeRetiredMemoryGenerationForBuild,
@@ -577,6 +577,8 @@ export async function runMemoryRebuildCommand(input: {
         after.vector === before.vector && after.cache === before.cache) quanta.other += 1;
       operations += 1;
     }
+    const vectorReconciliation = await import("../projection/ingestion.ts").then((module) =>
+      module.withMemoryWriteGateAsync(context, () => reconcileMemoryGenerationVectorRepresentatives(context)));
     const stableLive = prepareStableLiveMemorySource({ butlerData: input.butlerData, signal: input.signal,
       deadlineAt, classifyOrigins: false });
     if (stableLive.sourceInventoryHash !== manifest.source_inventory_hash) {
@@ -616,6 +618,7 @@ export async function runMemoryRebuildCommand(input: {
       }));
     } finally { candidateWitness.close(); stableLive.witness.close(); }
     return { operation, catchup, quanta, operations, last_progress: lastProgress,
+      vector_reconciliation: vectorReconciliation,
       deadline_reached: admissionClosed || Date.now() >= deadlineAt, pending: {
         semantic: readiness.semantic.pending, vectors: readiness.vectors.pending, cache: readiness.cache.pending,
       }, readiness };
