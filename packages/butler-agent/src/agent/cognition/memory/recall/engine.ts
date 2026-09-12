@@ -37,9 +37,11 @@ import {
   scopeSql,
   selectEpisodeRelationshipRows,
   selectSemanticSeeds,
+  selectRawSourceCandidates,
   selectTemporalSeeds,
 } from "./candidates.ts";
 import { expandGraph } from "./graph.ts";
+import { rawSourceExcerpt } from "./source-excerpt.ts";
 import {
   diversifyBySession,
   fuseEpisodeCandidates,
@@ -2095,10 +2097,17 @@ function recallSourceBackedGraph(
       channels.add("temporal");
       selected.channels.set(nodeId, channels);
     }
+    const rawSources = admitted.lexical
+      ? selectRawSourceCandidates(db, input, candidateDeadlineAt)
+      : { sources: [], partial: false };
+    const rawEpisodeIds = [...new Set(rawSources.sources.map((source) => source.episodeId))];
+    const rawEpisodeSet = new Set(rawEpisodeIds);
+    if (rawSources.partial) selected.coverageCodes.push("lexical_partial");
     const directEpisodeIds = [
       ...new Set([
         ...(currentVector?.episodes.map((item) => item.ownerId) ?? []),
         ...temporal.episodeIds,
+        ...rawEpisodeIds,
       ]),
     ];
     if (selected.seeds.length === 0 && directEpisodeIds.length === 0) {
@@ -2175,6 +2184,11 @@ function recallSourceBackedGraph(
         ),
       ),
     );
+    // A raw hit stays searchable even when other spans already have model claims.
+    const rawSourceIds = new Set(rawSources.sources.map((source) => source.sourceId));
+    for (const source of loadEligibleEpisodeSources(db, input, rawEpisodeIds)) {
+      if (rawSourceIds.has(source.sourceId) && !mentions.some((mention) => mention.sourceId === source.sourceId)) mentions.push(source);
+    }
     const episodeNodes = new Map<string, RecallMention[]>();
     for (const mention of mentions) {
       const values = episodeNodes.get(mention.episodeId) ?? [];
@@ -2212,6 +2226,9 @@ function recallSourceBackedGraph(
         ),
       ]),
     );
+    for (const source of rawSources.sources) {
+      lexicalScores.set(source.episodeId, Math.max(lexicalScores.get(source.episodeId) ?? 0, source.score));
+    }
     const contextScores = new Map(
       episodeIds.map((
         episodeId,
@@ -2371,6 +2388,7 @@ function recallSourceBackedGraph(
       const matched = episodeMentions
         .filter((mention) =>
           mention.relation !== "supports" &&
+          (!rawEpisodeSet.has(row.episodeId) || expansion.paths.has(mention.nodeId)) &&
           survivingSources.has(mention.sourceId),
         )
         .slice()
@@ -2383,7 +2401,7 @@ function recallSourceBackedGraph(
               (expansion.relevance.get(a.nodeId) ?? 0) ||
             Buffer.compare(Buffer.from(a.nodeId), Buffer.from(b.nodeId));
         })[0]?.nodeId ?? null;
-      const summary = row.hasClaims
+      const interpretedSummary = row.hasClaims
         ? matchedClaimSummary(
           db,
           input,
@@ -2393,6 +2411,8 @@ function recallSourceBackedGraph(
           survivingSources,
         )
         : row.summary;
+      const rawEvidence = evidence.find((item) => rawSourceIds.has(rawMemorySourceId(item.source_ref)));
+      const summary = interpretedSummary || rawEvidence?.excerpt;
       if (!summary) return null;
       const result: V2RecallResultItem = {
         requirements: resultRequirements(db, input, evidence),
@@ -2415,6 +2435,7 @@ function recallSourceBackedGraph(
         evidence,
         qualifications: [
           ...(row.qualifications as string[]),
+          ...(!interpretedSummary ? ["unclassified_source"] : []),
           ...(evidence.some((item) =>
               sourceById.get(rawMemorySourceId(item.source_ref))
                 ?.origin_kind === "unknown",
@@ -2454,7 +2475,7 @@ function recallSourceBackedGraph(
       const evidence: RecallMemoryResult["results"][number]["evidence"] = [];
       for (
         const mention of hydratedMentions.slice().sort((a, b) =>
-          compareEvidenceHandles(
+          Number(rawSourceIds.has(b.sourceId)) - Number(rawSourceIds.has(a.sourceId)) || compareEvidenceHandles(
             sourceById.get(a.sourceId),
             sourceById.get(b.sourceId),
             row.prioritySourceIds,
@@ -2476,7 +2497,9 @@ function recallSourceBackedGraph(
             source_ref: sourceRef,
             basis: source.basis,
             source_kind: source.source_kind,
-            excerpt: source.excerpt,
+            excerpt: rawSourceIds.has(mention.sourceId)
+              ? rawSourceExcerpt(source.text, [input.cue, ...(input.seedPhrases ?? [])])
+              : source.excerpt,
             source_resolved: true,
             conversation_session_id: source.conversation_session_id,
             conversation_message_id: source.conversation_message_id,

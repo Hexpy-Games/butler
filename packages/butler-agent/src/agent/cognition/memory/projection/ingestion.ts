@@ -1,3 +1,4 @@
+import { indexMemorySourceText } from "./source-index.ts";
 import { attachAdjacentSourceContext } from "./context-evidence.ts";
 import { createLazyConversationProjectionReader } from "../../../conversation/projection-reader-store.ts";
 import { randomUUID } from "node:crypto";
@@ -558,6 +559,7 @@ export async function ingestConversationMemory(input: {
                   ? "user_statement"
                   : "assistant_statement",
               );
+              indexMemorySourceText(db, sourceId, Buffer.from(scalar.text).subarray(span.start, span.end).toString("utf8"));
               registered.push(sourceId);
             }
           const sourceState = {
@@ -705,6 +707,7 @@ async function ingestTypedMemoryRecord(
           owner.conversation_message_id, owner.record_id, span.start, span.end, owner.content_hash, owner.role,
           "unknown", owner.observed_at, owner.basis,
         );
+        indexMemorySourceText(db, sourceId, Buffer.from(owner.text).subarray(span.start, span.end).toString("utf8"));
         refs.push(sourceId);
       }
       const complete = { state: "complete", completed_units: refs.length, total_units: refs.length };
@@ -1999,12 +2002,14 @@ function splitWindowSourceRows(
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(row.source_id, row.episode_id, row.revision, row.source_kind, row.conversation_session_id,
       row.conversation_message_id, row.part_id, row.scalar_pointer, row.byte_start, row.byte_end, row.content_hash, row.role, row.origin_kind,
       row.observed_at, row.basis, JSON.stringify(ids), new Date().toISOString());
+  const parentText = Buffer.from(hydrateSource(butlerData, row).text);
   for (let index = 0; index < ids.length; index += 1) {
     const [start, end] = bounds[index]!;
     db.query(`INSERT OR IGNORE INTO memory_chunk_sources
       (source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(ids[index]!, row.episode_id, row.revision, row.source_kind, row.conversation_session_id,
         row.conversation_message_id, row.part_id, row.scalar_pointer, start, end, row.content_hash, row.role, row.origin_kind, row.observed_at, row.basis);
+    indexMemorySourceText(db, ids[index]!, parentText.subarray(start - row.byte_start, end - row.byte_start).toString("utf8"));
   }
   // Keep the parent identity and all existing evidence links unchanged. Work uses leaf rows.
   const count = Number(db.query<{ count: number }, [string, string]>("SELECT COUNT(*) count FROM memory_source_leaves WHERE episode_id=? AND revision=?").get(row.episode_id, row.revision)?.count ?? 0);
