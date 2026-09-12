@@ -3,6 +3,7 @@ import type { ExtractInput } from "./contracts.ts";
 import {
   assertCanonicalProjectionSourcesCurrent,
   hydrateSource,
+  projectionHash,
 } from "./source.ts";
 import {
   expandSplitSourceLeaves,
@@ -10,6 +11,9 @@ import {
   type openProjectionDb,
   type ProjectionSourceRow,
 } from "./store.ts";
+
+import { sourcePassages, meaningPrompt } from "./meaning.ts";
+import { graphemeByteBoundaries } from "./windows.ts";
 
 type QuoteSpan = {
   sourceId: string;
@@ -23,6 +27,42 @@ type ContextLayout = {
   segments: Segment[];
   separators: number[];
 };
+
+/** Build bounded adjacent excerpts from the same immutable scalar, not earlier chat messages. */
+export function attachAdjacentSourceContext(
+  db: ReturnType<typeof openProjectionDb>, sourceRoot: string, input: ExtractInput, expansion: 0 | 1,
+): ExtractInput {
+  const original: ExtractInput = { ...input, context_units: input.context_units.filter((unit) => !unit.source_span) };
+  const passages = sourcePassages(original);
+  const sources = new Map(sourceRows(db, input.source_units.map((unit) => unit.ref)).map((row) => [row.source_id, row]));
+  const hydrated = new Map([...sources].map(([ref, row]) => [ref, hydrateSource(sourceRoot, row)]));
+  for (let width = expansion === 0 ? 64 : 128; width >= 0; width = width === 0 ? -1 : Math.floor(width / 2)) {
+    const units: ExtractInput["context_units"] = [];
+    for (const passage of passages) {
+      const ref = passage.quote.unit_ref, row = sources.get(ref)!;
+      const unit = input.source_units.find((value) => value.ref === ref)!;
+      const scalar = hydrated.get(ref)?.scalar_text;
+      if (!row || typeof scalar !== "string") throw new Error("memory_source_changed");
+      let at = -1;
+      for (let n = 0; n <= passage.quote.occurrence; n++) at = unit.text.indexOf(passage.text, at < 0 ? 0 : at + passage.text.length);
+      if (at < 0) throw new Error("memory_source_changed");
+      const focusStart = Buffer.byteLength(unit.text.slice(0, at)), focusEnd = focusStart + Buffer.byteLength(passage.text);
+      const bounds = graphemeByteBoundaries(scalar);
+      const first = bounds.indexOf(row.byte_start + focusStart), last = bounds.indexOf(row.byte_start + focusEnd);
+      if (first < 0 || last < first) throw new Error("memory_source_changed");
+      const allowance = Math.min(width, Math.floor((480 - (last - first)) / 2));
+      const start = bounds[Math.max(0, first - allowance)]!, end = bounds[Math.min(bounds.length - 1, last + allowance)]!;
+      if (start === row.byte_start + focusStart && end === row.byte_start + focusEnd) continue;
+      const span = { source_ref: ref, byte_start: start, byte_end: end, focus_start: focusStart, focus_end: focusEnd, prefix_bytes: row.byte_start + focusStart - start };
+      units.push({ ref: `memory-excerpt:${projectionHash([ref, input.revision, span]).slice(0, 48)}`, text: Buffer.from(scalar).subarray(start, end).toString(),
+        observed_at: row.observed_at, basis: row.basis as ExtractInput["context_units"][number]["basis"], source_span: span });
+    }
+    const next: ExtractInput = { ...original, context_expansion: expansion, context_units: [...original.context_units, ...units] };
+    try { meaningPrompt(next, sourcePassages(next)); return next; }
+    catch (error) { if (!(error instanceof Error) || error.message !== "memory_extract_source_window_exceeds_budget" || width === 0) throw error; }
+  }
+  throw new Error("memory_extract_source_window_exceeds_budget");
+}
 
 /** Resolve pinned context excerpts without changing their model-facing handles or source coverage. */
 export function createContextEvidenceResolver(
@@ -81,7 +121,24 @@ export function createContextEvidenceResolver(
     if (!unit?.text) return fail();
     let segments: Segment[];
     const separators: number[] = [];
-    if (ref.startsWith("conversation-message:")) {
+    if (unit.source_span) {
+      const span = unit.source_span;
+      const anchor = sourceRows(db, [span.source_ref])[0];
+      const current = input.source_units.find((entry) => entry.ref === span.source_ref);
+      if (!anchor || !current || anchor.episode_id !== input.episode_ref || anchor.revision !== input.revision ||
+        anchor.role !== current.role || span.focus_start < 0 || span.focus_end > Buffer.byteLength(current.text) ||
+        span.focus_end <= span.focus_start || span.prefix_bytes !== anchor.byte_start + span.focus_start - span.byte_start ||
+        span.prefix_bytes < 0 || span.byte_end < anchor.byte_start + span.focus_end ||
+        ref !== `memory-excerpt:${projectionHash([span.source_ref, input.revision, span]).slice(0, 48)}`) return fail();
+      const exact = hydrateSource(sourceRoot, { ...anchor, byte_start: span.byte_start, byte_end: span.byte_end });
+      if (exact.text !== unit.text || unit.basis !== anchor.basis) return fail();
+      const rows = db.query<ProjectionSourceRow, [string, string, string, string, string, number, number]>(`
+        SELECT * FROM memory_chunk_sources WHERE episode_id=? AND revision=? AND part_id=? AND scalar_pointer=?
+          AND conversation_message_id IS ? AND byte_end>? AND byte_start<? ORDER BY byte_start
+      `).all(anchor.episode_id, anchor.revision, anchor.part_id, anchor.scalar_pointer, anchor.conversation_message_id, span.byte_start, span.byte_end);
+      if (rows.some((row) => row.role !== anchor.role || row.content_hash !== anchor.content_hash || row.origin_kind !== anchor.origin_kind)) return fail();
+      segments = rows.map((row) => ({ row, start: row.byte_start - span.byte_start, end: row.byte_end - span.byte_start }));
+    } else if (ref.startsWith("conversation-message:")) {
       const reader = createLazyConversationProjectionReader({
         butlerData: sourceRoot,
       });

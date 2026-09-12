@@ -122,11 +122,14 @@ export type ExtractInput = {
     observed_at: string;
     origin_kind: MemoryOriginKind;
   }>;
+  context_expansion?: 0 | 1;
   context_units: Array<{
     ref: string;
     text: string;
     observed_at: string;
     basis: MemoryBasis;
+    // Runtime-owned excerpt identity; absolute UTF8 offsets within the same scalar.
+    source_span?: { source_ref: string; byte_start: number; byte_end: number; focus_start: number; focus_end: number; prefix_bytes: number };
   }>;
   candidates: Array<{
     ref: string;

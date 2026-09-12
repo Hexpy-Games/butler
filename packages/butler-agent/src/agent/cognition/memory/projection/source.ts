@@ -10,7 +10,7 @@ import type {
 import type { ExtractInput, ResolvedMemorySource } from "./contracts.ts";
 import {
   MEMORY_SOURCE_WINDOW_BYTES,
-  splitGraphemeUtf8Spans,
+  graphemeByteBoundaries,
 } from "./windows.ts";
 import {
   sourceRows,
@@ -456,7 +456,23 @@ export function splitUtf8Spans(
 ): Array<{ start: number; end: number }> {
   // Canonical source IDs are stable across extractor upgrades. Model-sized
   // partitions belong to the window lineage, not the source inventory.
-  return splitGraphemeUtf8Spans(text, maxBytes).map(({ start, end }) => ({ start, end }));
+  // Preserve the historical storage partition (including tiny boundary rows).
+  // Meaning passages use adjacent scalar context, never these storage boundaries.
+  const boundaries = graphemeByteBoundaries(text);
+  const spans: Array<{ start: number; end: number }> = [];
+  let start = 0;
+  for (let index = 1; index < boundaries.length; index++) {
+    const end = boundaries[index]!;
+    if (end - start > maxBytes) {
+      const prior = boundaries[index - 1]!;
+      if (prior > start) spans.push({ start, end: prior });
+      spans.push({ start: prior, end });
+      start = end;
+    }
+  }
+  const end = boundaries.at(-1) ?? 0;
+  if (end > start) spans.push({ start, end });
+  return spans;
 }
 
 export function packWindows(

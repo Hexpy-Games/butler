@@ -28,8 +28,11 @@ export function splitGraphemeUtf8Spans(
     if (end - start > maxBytes) {
       const prior = boundaries[index - 1]!;
       if (prior > start) spans.push({ start, end: prior, oversized: false });
-      spans.push({ start: prior, end, oversized: end - prior > maxBytes });
-      start = end;
+      start = prior;
+      if (end - prior > maxBytes) {
+        spans.push({ start: prior, end, oversized: true });
+        start = end;
+      }
     }
   }
   const end = boundaries.at(-1) ?? 0;

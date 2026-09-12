@@ -69,7 +69,7 @@ export function mapCondition<T, U>(condition: Condition<T>, map: (ref: T) => U, 
   return key === "all" ? { all: mapped } : { any: mapped };
 }
 
-export type Passage = { id: number; text: string; quote: QuoteRef };
+export type Passage = { id: number; text: string; quote: QuoteRef; before?: string; after?: string };
 export function sourcePassages(input: ExtractInput): Passage[] {
   const parts: Passage[] = [];
   for (const unit of input.source_units) {
@@ -81,7 +81,18 @@ export function sourcePassages(input: ExtractInput): Passage[] {
         const earlier = unit.text.slice(0, offset);
         let occurrence = 0, found = 0;
         while ((found = earlier.indexOf(text, found)) !== -1) { occurrence++; found += text.length; }
-        parts.push({ id: parts.length, text, quote: { unit_ref: unit.ref, quote: text, occurrence } });
+        const focusStart = Buffer.byteLength(earlier);
+        const context = input.context_units.find((entry) => entry.source_span?.source_ref === unit.ref &&
+          entry.source_span.focus_start === focusStart && entry.source_span.focus_end === focusStart + Buffer.byteLength(text));
+        const span = context?.source_span;
+        parts.push({ id: parts.length, text, quote: context && span
+          ? { unit_ref: context.ref, quote: context.text, occurrence: 0 }
+          : { unit_ref: unit.ref, quote: text, occurrence },
+          ...(context && span ? {
+            before: Buffer.from(context.text).subarray(0, span.prefix_bytes).toString(),
+            after: Buffer.from(context.text).subarray(span.prefix_bytes + Buffer.byteLength(text)).toString(),
+          } : {}),
+        });
         offset += text.length;
       }
     }
@@ -93,10 +104,11 @@ export function sourcePassages(input: ExtractInput): Passage[] {
 export function meaningPrompt(input: ExtractInput, passages: Passage[]) {
   const roles = new Set(input.source_units.map((unit) => unit.role));
   if (roles.size !== 1) throw new Error("memory_extract_mixed_source_roles");
-  const parts = passages.map(({ id, text }) => ({ id, text }));
+  const parts = passages.map(({ id, text, before, after }) => ({ id, text, ...(before !== undefined ? { before, after } : {}) }));
   if (Buffer.byteLength(JSON.stringify(parts)) > 4096) throw new Error("memory_extract_source_window_exceeds_budget");
   const context: Array<{ text: string; basis: string }> = [];
   for (const unit of [...input.context_units].reverse()) {
+    if (unit.source_span) continue;
     const item = { text: unit.text, basis: unit.basis };
     if (Buffer.byteLength(JSON.stringify({ parts, context: [...context, item] })) <= 4096) context.unshift(item);
   }

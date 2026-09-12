@@ -293,6 +293,7 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON entity_alias_postings(gram,entity_id,source_id);
     CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON entity_alias_postings(entity_id,gram,source_id,surface_original);
+    CREATE INDEX IF NOT EXISTS idx_alias_postings_alias ON entity_alias_postings(entity_id,source_id,surface_original,gram);
     CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON entity_alias_postings(identity_scope,project_id,gram,entity_id);
     CREATE TABLE IF NOT EXISTS memory_vector_units(
       unit_id TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES memory_projection_jobs(job_id),
@@ -311,15 +312,53 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     ["started_at", "TEXT"],
     ["receipt_json", "TEXT"],
   ] as const) ensureColumn(db, "memory_vector_units", name, declaration);
-  const rows = db.query<{ entity_id: string; source_id: string; surface_original: string; folded_key: string; identity_scope: string; project_id: string | null }, []>(`
-    SELECT a.entity_id,a.source_id,a.surface_original,a.folded_key,e.identity_scope,e.project_id FROM entity_aliases a JOIN entities e ON e.id=a.entity_id
-    ORDER BY a.entity_id,a.source_id,a.surface_original
-  `).all();
-  const insert = db.query("INSERT OR IGNORE INTO entity_alias_postings(gram,entity_id,source_id,surface_original,identity_scope,project_id) VALUES(?,?,?,?,?,?)");
   db.transaction(() => {
-    for (const row of rows) for (const gram of foldedGraphemeNgrams(row.folded_key))
-      insert.run(gram, row.entity_id, row.source_id, row.surface_original, row.identity_scope, row.project_id);
+    if (!db.query("SELECT 1 FROM memory_state WHERE key='alias_postings_incremental_v1'").get()) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS memory_alias_index_dirty(
+          entity_id TEXT NOT NULL,source_id TEXT NOT NULL,surface_original TEXT NOT NULL,
+          PRIMARY KEY(entity_id,source_id,surface_original)
+        );
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_insert AFTER INSERT ON entity_aliases BEGIN
+          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.entity_id,NEW.source_id,NEW.surface_original);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_update AFTER UPDATE ON entity_aliases BEGIN
+          DELETE FROM entity_alias_postings WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+          INSERT OR IGNORE INTO memory_alias_index_dirty VALUES(NEW.entity_id,NEW.source_id,NEW.surface_original);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_delete BEFORE DELETE ON entity_aliases BEGIN
+          DELETE FROM entity_alias_postings WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+          DELETE FROM memory_alias_index_dirty WHERE entity_id=OLD.entity_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original;
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_alias_index_scope AFTER UPDATE OF identity_scope,project_id ON entities
+        WHEN NEW.identity_scope IS NOT OLD.identity_scope OR NEW.project_id IS NOT OLD.project_id BEGIN
+          INSERT OR IGNORE INTO memory_alias_index_dirty SELECT entity_id,source_id,surface_original FROM entity_aliases WHERE entity_id=NEW.id;
+        END;
+        INSERT OR IGNORE INTO memory_alias_index_dirty SELECT entity_id,source_id,surface_original FROM entity_aliases;
+      `);
+      flushAliasIndexChanges(db);
+      db.query("INSERT INTO memory_state(key,value) VALUES('alias_postings_incremental_v1','complete')").run();
+    } else flushAliasIndexChanges(db);
   })();
+}
+
+/** Called in the graph writer transaction: work scales with changed aliases only. */
+function flushAliasIndexChanges(db: Database): void {
+  const rows = db.query<{ entity_id: string; source_id: string; surface_original: string; folded_key: string | null; identity_scope: string | null; project_id: string | null }, []>(`
+    SELECT d.entity_id,d.source_id,d.surface_original,a.folded_key,e.identity_scope,e.project_id
+    FROM memory_alias_index_dirty d LEFT JOIN entity_aliases a
+      ON a.entity_id=d.entity_id AND a.source_id=d.source_id AND a.surface_original=d.surface_original
+    LEFT JOIN entities e ON e.id=a.entity_id
+  `).all();
+  const remove = db.query("DELETE FROM entity_alias_postings WHERE entity_id=? AND source_id=? AND surface_original=?");
+  const insert = db.query("INSERT OR IGNORE INTO entity_alias_postings(gram,entity_id,source_id,surface_original,identity_scope,project_id) VALUES(?,?,?,?,?,?)");
+  const clean = db.query("DELETE FROM memory_alias_index_dirty WHERE entity_id=? AND source_id=? AND surface_original=?");
+  for (const row of rows) {
+    remove.run(row.entity_id, row.source_id, row.surface_original);
+    if (row.folded_key !== null && row.identity_scope !== null) for (const gram of foldedGraphemeNgrams(row.folded_key))
+      insert.run(gram, row.entity_id, row.source_id, row.surface_original, row.identity_scope, row.project_id);
+    clean.run(row.entity_id, row.source_id, row.surface_original);
+  }
 }
 
 export type ClaimedVectorUnit = {
@@ -851,6 +890,31 @@ export function pinWindowInput(
     SET input_json=COALESCE(input_json,?),input_sha256=COALESCE(input_sha256,?),input_migration_note=COALESCE(input_migration_note,?)
     WHERE window_ref=? AND state='running' AND owner_nonce=?`).run(json, sha, migrationNote, windowRef, ownerNonce);
   if (result.changes !== 1) throw new Error("memory_projection_window_changed");
+}
+
+/** Preserve the previous pinned input while admitting one bounded context expansion. */
+export function reviseProjectionContext(db: Database, windowRef: string, previous: ExtractInput, next: ExtractInput): void {
+  const row = db.query<{ job_id: string; attempt_count: number; recovery_revision: string | null; input_json: string; input_sha256: string }, [string]>(
+    "SELECT * FROM memory_projection_windows WHERE window_ref=? AND state='failed' AND error_code='memory_extract_needs_context' AND output_json IS NULL AND normalized_plan_json IS NULL AND owner_nonce IS NULL",
+  ).get(windowRef);
+  if (!row || row.input_json !== JSON.stringify(previous) || next.source_units.length !== previous.source_units.length ||
+    JSON.stringify(next.source_units) !== JSON.stringify(previous.source_units) || next.window_ref !== previous.window_ref ||
+    next.revision !== previous.revision || next.episode_ref !== previous.episode_ref ||
+    next.context_expansion !== (previous.context_expansion === undefined ? 0 : previous.context_expansion + 1) || next.context_expansion! > 1)
+    throw new Error("memory_projection_window_changed");
+  const json = JSON.stringify(next), sha = projectionDigest(["extract-input", json]);
+  const ref = projectionDigest(["memory-context-revision", windowRef, row.input_sha256, sha]);
+  const now = new Date().toISOString();
+  db.query(`INSERT INTO memory_projection_attempts
+    (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,recorded_at,attempt_kind,provider_invoked,outcome_known,recovery_revision,recovery_request_json)
+    VALUES(?,?,?,?, 'recovery_requested','memory_extract_needs_context',?,?,'recovery',0,1,?,?)`)
+    .run(ref, windowRef, row.job_id, row.attempt_count, row.input_sha256, now, ref,
+      JSON.stringify({ reason: "adjacent_source_context", prior_recovery_revision: row.recovery_revision, previous_input_json: row.input_json,
+        previous_input_sha256: row.input_sha256, next_input_json: json, next_input_sha256: sha }));
+  db.query(`UPDATE memory_projection_windows SET input_json=?,input_sha256=?,input_migration_note=?,recovery_revision=?,
+    recovery_base_attempt_count=attempt_count,state='pending',error_code=NULL,next_attempt_at=? WHERE window_ref=?`)
+    .run(json, sha, "adjacent_source_context", ref, now, windowRef);
+  refreshSemanticState(db, row.job_id);
 }
 
 export function markWindowFailure(

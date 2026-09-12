@@ -477,7 +477,11 @@ function validateQuotes(
       quote: text.slice(span.start, span.end),
     };
   });
-  if (requireCurrent && !result.some((item) => current.has(item.sourceId)))
+  if (requireCurrent && !result.some((item) => {
+    if (current.has(item.sourceId)) return true;
+    const span = input.context_units.find((unit) => unit.ref === item.sourceId)?.source_span;
+    return span && current.has(span.source_ref) && item.byteStart < span.prefix_bytes + span.focus_end - span.focus_start && item.byteEnd > span.prefix_bytes;
+  }))
     throw new Error("memory_extract_invalid_quote");
   return result;
 }
@@ -516,7 +520,8 @@ function assertBasis(
 ): void {
   const units = new Map(input.source_units.map((unit) => [unit.ref, unit]));
   for (const q of evidence) {
-    const unit = units.get(q.unit_ref);
+    const span = input.context_units.find((entry) => entry.ref === q.unit_ref)?.source_span;
+    const unit = units.get(span?.source_ref ?? q.unit_ref);
     if (!unit) continue;
     if (
       (basis === "user_statement" &&
@@ -609,7 +614,7 @@ export function safeProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("memory_write_busy")) return "memory_write_busy";
   if (["memory_extract_input_exceeds_budget", "memory_extract_source_window_exceeds_budget", "memory_extract_output_exceeds_budget"].includes(message)) return message;
-  if (message.startsWith("memory_extract_invalid_")) return message;
+  if (message.startsWith("memory_extract_invalid_") || ["memory_extract_needs_context", "memory_extract_unsupported"].includes(message)) return message;
   if (
     message === "memory_source_changed" ||
     message === "memory_generation_changed" ||

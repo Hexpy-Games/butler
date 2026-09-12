@@ -81,7 +81,14 @@ export async function runStructuredMemoryExtractor(input: {
     catch (cause) { throw new MemoryExtractAttemptError("memory_extract_invalid_json", result.raw, result.evidence, cause); }
   };
   const passages = sourcePassages(input.extractInput);
-  const meaning = validateMeaning(await call("meaning", meaningPrompt(input.extractInput, passages), MEANING_INSTRUCTIONS, MEANING_SCHEMA), passages);
+  const instructions = input.extractInput.context_units.some((unit) => unit.source_span)
+    ? `${MEANING_INSTRUCTIONS} Before/after belongs to the same source and explains the current text; do not extract surrounding-only facts.`
+    : MEANING_INSTRUCTIONS;
+  const rawMeaning = await call("meaning", meaningPrompt(input.extractInput, passages), instructions, MEANING_SCHEMA);
+  let meaning: ReturnType<typeof validateMeaning>;
+  try { meaning = validateMeaning(rawMeaning, passages); }
+  catch (error) { throw new MemoryExtractAttemptError(error instanceof Error ? error.message : "memory_extract_invalid_meaning", rawMeaning, stages.at(-1)!, error); }
+  if (meaning.status !== "processed") throw new MemoryExtractDispositionError(meaning.status, meaning, stages.at(-1)!);
   const output = meaningToOutput(input.extractInput, meaning, passages);
   const binding = await prepareBindingBatches(meaning, passages, input.loadCandidates);
   input.extractInput.candidates = binding.candidates;
@@ -108,6 +115,12 @@ export async function runStructuredMemoryExtractor(input: {
     total_tokens: called.reduce((sum, stage) => sum + (stage.usage!.total_tokens ?? 0), 0) } : null;
   return { output, evidence: { reported_model: stages[0]!.reported_model, usage, duration_ms: Date.now() - started,
     request_wire: stages[0]!.request_wire, stages } };
+}
+
+export class MemoryExtractDispositionError extends Error {
+  constructor(readonly disposition: "needs_context" | "unsupported", readonly output: unknown, readonly evidence: StageEvidence & { reused: boolean }) {
+    super(`memory_extract_${disposition}`);
+  }
 }
 
 export class MemoryExtractAttemptError extends Error {
