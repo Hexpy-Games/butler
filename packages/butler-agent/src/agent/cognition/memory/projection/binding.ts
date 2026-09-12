@@ -84,6 +84,17 @@ export async function prepareBindingBatches(meaning: Meaning, passages: Passage[
   return { batches, candidates: [...all.values()] };
 }
 
+export function bindingRepairSchema(batch: BindingBatch): Record<string, unknown> {
+  const targets = batch.prompt.targets;
+  const candidates = targets.flatMap((target) => target.candidates);
+  return obj({ decisions: arr(obj({
+    target: { type: "string", enum: targets.map((target) => target.target) },
+    candidate: { type: ["string", "null"], enum: [null, ...candidates.map((candidate) => candidate.ref)] },
+    span: { type: ["string", "null"], enum: [null, ...candidates.flatMap((candidate) => candidate.spans?.map((span) => span.ref) ?? [])] },
+    support: arr({ type: "string", enum: batch.prompt.evidence.map((item) => item.ref) }, 4),
+  }), 4) });
+}
+
 export function applyBinding(value: unknown, batch: BindingBatch, output: ExtractOutput, input: ExtractInput): BindingWarning[] {
   const warnings: BindingWarning[] = [];
   if (!value || typeof value !== "object" || Array.isArray(value) || !validateJsonObjectSchema(value as Record<string, unknown>, BINDING_SCHEMA).ok) throw new Error("memory_extract_invalid_binding");

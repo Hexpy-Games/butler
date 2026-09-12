@@ -116,7 +116,7 @@ type WindowReprocessRequest = {
   expected_attempt_count: number;
   expected_failed_attempt_ref: string;
   expected_error_code: string;
-  expected_input_sha256: string;
+  expected_input_sha256: string | null;
   expected_model: string;
   expected_reasoning_effort: string;
 };
@@ -295,27 +295,41 @@ function reprocessMemoryProjectionWindowOwned(context: MemoryExecutionContext, r
           generation: string; extraction_model: string; reasoning_effort: string; attempt_count: number;
           recovery_revision: string | null; recovery_base_attempt_count: number;
           input_json: string | null; input_sha256: string | null; normalized_plan_json: string | null;
-          source_refs_json: string;
+          source_refs_json: string; output_json: string | null; owner_nonce: string | null; owner_pid: number | null;
         }, [string]>(`SELECT w.*,j.episode_id,j.revision,j.generation,j.extraction_model,j.reasoning_effort
           FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id WHERE w.window_ref=?`).get(request.window_ref);
-        const failed = db.query<{ window_ref: string; job_id: string; attempt_count: number; state: string; error_code: string | null; input_sha256: string | null; recovery_revision: string | null }, [string]>(
-          "SELECT window_ref,job_id,attempt_count,state,error_code,input_sha256,recovery_revision FROM memory_projection_attempts WHERE attempt_ref=?",
+        const failed = db.query<{ window_ref: string; job_id: string; attempt_count: number; state: string; error_code: string | null; input_sha256: string | null; recovery_revision: string | null; attempt_kind: string; provider_invoked: number; outcome_known: number }, [string]>(
+          "SELECT window_ref,job_id,attempt_count,state,error_code,input_sha256,recovery_revision,attempt_kind,provider_invoked,outcome_known FROM memory_projection_attempts WHERE attempt_ref=?",
         ).get(request.expected_failed_attempt_ref);
         if (!row || row.state !== "failed" || row.job_id !== request.job_id || row.generation !== request.expected_generation ||
           row.revision !== request.expected_source_revision || row.recovery_revision !== request.expected_recovery_revision ||
           row.attempt_count !== request.expected_attempt_count || row.error_code !== request.expected_error_code ||
-          row.input_sha256 !== request.expected_input_sha256 || !row.input_json ||
+          row.input_sha256 !== request.expected_input_sha256 ||
           row.extraction_model !== request.expected_model || row.reasoning_effort !== request.expected_reasoning_effort ||
           !failed || failed.window_ref !== request.window_ref || failed.job_id !== request.job_id || failed.state !== "failed" ||
           failed.attempt_count !== row.attempt_count || failed.error_code !== row.error_code ||
           failed.input_sha256 !== row.input_sha256 || failed.recovery_revision !== row.recovery_revision)
           throw new Error("memory_reprocess_preimage_changed");
-        const pinned = JSON.parse(row.input_json) as ExtractInput;
-        if (projectionHash(["extract-input", row.input_json]) !== row.input_sha256 || pinned.schema !== "butler.memory-extract-input.v2" ||
-          pinned.episode_ref !== row.episode_id || pinned.revision !== row.revision || pinned.window_ref !== request.window_ref ||
-          JSON.stringify(pinned.source_units.map((unit) => unit.ref)) !== row.source_refs_json)
-          throw new Error("memory_reprocess_input_changed");
-        assertProjectionSourceCurrent(generation.sourceRoot, db, pinned);
+        if (row.input_json !== null) {
+          const pinned = JSON.parse(row.input_json) as ExtractInput;
+          if (projectionHash(["extract-input", row.input_json]) !== row.input_sha256 || pinned.schema !== "butler.memory-extract-input.v2" ||
+            pinned.episode_ref !== row.episode_id || pinned.revision !== row.revision || pinned.window_ref !== request.window_ref ||
+            JSON.stringify(pinned.source_units.map((unit) => unit.ref)) !== row.source_refs_json)
+            throw new Error("memory_reprocess_input_changed");
+          assertProjectionSourceCurrent(generation.sourceRoot, db, pinned);
+        } else {
+          // Input preparation can fail before pinning or any provider invocation.
+          if (row.input_sha256 !== null || row.output_json !== null || row.normalized_plan_json !== null ||
+            row.owner_nonce !== null || row.owner_pid !== null || failed.attempt_kind !== "pre_provider" ||
+            failed.provider_invoked !== 0 || failed.outcome_known !== 1)
+            throw new Error("memory_reprocess_preimage_changed");
+          assertJobRevisionCurrent(generation.sourceRoot, db, row.job_id);
+          const refs = JSON.parse(row.source_refs_json) as string[];
+          const sources = sourceRows(db, refs);
+          if (!refs.length || sources.length !== refs.length || sources.some((source) => source.episode_id !== row.episode_id || source.revision !== row.revision))
+            throw new Error("memory_reprocess_input_changed");
+          for (const source of sources) hydrateSource(generation.sourceRoot, source);
+        }
         const now = new Date().toISOString();
         const exhaustedLocalTimeout = hasExhaustedLocalTimeoutBudget(db, request.window_ref);
         const childRefs = exhaustedLocalTimeout
@@ -372,9 +386,9 @@ function parseWindowReprocessRequest(value: unknown): WindowReprocessRequest {
   const row = value as Record<string, unknown>;
   if (Object.keys(row).length !== fields.length || fields.some((key) => {
     if (key === "expected_attempt_count") return !Number.isSafeInteger(row[key]) || Number(row[key]) < 1;
-    if (key === "expected_recovery_revision" && row[key] === null) return false;
+    if ((key === "expected_recovery_revision" || key === "expected_input_sha256") && row[key] === null) return false;
     return typeof row[key] !== "string" || !(row[key] as string).trim() || (row[key] as string).length > 512;
-  }) || row.schema !== "butler.memory.window-reprocess.v1" || !/^[a-f0-9]{64}$/u.test(String(row.expected_input_sha256)))
+  }) || row.schema !== "butler.memory.window-reprocess.v1" || (row.expected_input_sha256 !== null && !/^[a-f0-9]{64}$/u.test(String(row.expected_input_sha256))))
     throw new Error("memory_reprocess_invalid_request");
   return value as WindowReprocessRequest;
 }
@@ -1356,7 +1370,7 @@ function sourceRowsForEpisode(
 ) {
   return db
     .query<ProjectionSourceRow, [string, string]>(
-      "SELECT * FROM memory_chunk_sources WHERE episode_id=? AND revision=? ORDER BY source_id",
+      "SELECT * FROM memory_source_leaves WHERE episode_id=? AND revision=? ORDER BY source_id",
     )
     .all(episodeId, revision);
 }
@@ -1992,8 +2006,8 @@ function splitWindowSourceRows(
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(ids[index]!, row.episode_id, row.revision, row.source_kind, row.conversation_session_id,
         row.conversation_message_id, row.part_id, row.scalar_pointer, start, end, row.content_hash, row.role, row.origin_kind, row.observed_at, row.basis);
   }
-  db.query("DELETE FROM memory_chunk_sources WHERE source_id=?").run(row.source_id);
-  const count = Number(db.query<{ count: number }, [string, string]>("SELECT COUNT(*) count FROM memory_chunk_sources WHERE episode_id=? AND revision=?").get(row.episode_id, row.revision)?.count ?? 0);
+  // Keep the parent identity and all existing evidence links unchanged. Work uses leaf rows.
+  const count = Number(db.query<{ count: number }, [string, string]>("SELECT COUNT(*) count FROM memory_source_leaves WHERE episode_id=? AND revision=?").get(row.episode_id, row.revision)?.count ?? 0);
   db.query("UPDATE memory_projection_jobs SET source_state=? WHERE episode_id=? AND revision=?")
     .run(JSON.stringify({ state: "complete", completed_units: count, total_units: count }), row.episode_id, row.revision);
   return [[...left, ids[0]!], [ids[1]!, ...right]];

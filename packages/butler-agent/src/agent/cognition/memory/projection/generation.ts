@@ -871,7 +871,7 @@ export async function computeMemoryGenerationReadiness(input: {
     for (const entry of inventory.typed ?? []) for (const sourceId of entry.source_ids)
       expected.set(sourceId, { revision: entry.revision, hashes: [entry.content_hash] });
     const registeredRows = db.query<{ source_id: string; revision: string; content_hash: string; origin_kind: string }, [string]>(`
-      SELECT s.source_id,s.revision,s.content_hash,s.origin_kind FROM memory_chunk_sources s
+      SELECT s.source_id,s.revision,s.content_hash,s.origin_kind FROM memory_source_leaves s
       JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
       JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision
       WHERE j.generation=?

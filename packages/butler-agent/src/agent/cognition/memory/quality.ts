@@ -652,8 +652,8 @@ function readServingMemoryHealth(butlerData: string, now: number): ServingMemory
       if (!Number.isSafeInteger(graphRevision)) return unavailable("serving_store_unavailable");
       const count = (sql: string) => Number(db.query<{ count: number }, []>(sql).get()?.count ?? 0);
       const sourceEligible = "((s.source_kind='conversation' AND s.origin_kind IN ('user_input','assistant_public')) OR s.source_kind IN ('task_report','explicit_record'))";
-      const registered = count("SELECT COUNT(*) count FROM memory_chunk_sources");
-      const registeredCurrent = count(`SELECT COUNT(*) count FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE c.status='active' AND ${sourceEligible}`);
+      const registered = count("SELECT COUNT(*) count FROM memory_chunk_sources WHERE source_id NOT IN (SELECT source_id FROM memory_source_split_parents)");
+      const registeredCurrent = count(`SELECT COUNT(*) count FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision WHERE c.status='active' AND NOT EXISTS(SELECT 1 FROM memory_source_split_parents p WHERE p.source_id=s.source_id) AND ${sourceEligible}`);
       const inventory = canonicalConversationProjectionInventory({ butlerData, asOf: new Date(now).toISOString(), deadlineAt: Date.now() + 1_000,
         scope: "all_user_sessions", currentSessionId: "", currentProjectId: null, sessionIds: [], projectFilter: "any", projectIds: [] });
       const knownEligible = inventory.entries.reduce((sum, entry) => sum + entry.sourceUnitCount, 0);
