@@ -802,9 +802,9 @@ export async function writeGenerationVectorRows(
         nullable: true,
       }]);
     }
-    for (const row of rows) {
-      await table.delete(`vector_key = ${lanceStringLiteral(row.vector_key)}`);
-    }
+    await table.delete(`vector_key IN (${
+      rows.map((row) => lanceStringLiteral(row.vector_key)).join(",")
+    })`);
     await table.add(rows);
   }
   const expected = new Map(rows.map((row) => [row.vector_key, row]));
