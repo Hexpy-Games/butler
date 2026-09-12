@@ -1120,7 +1120,7 @@ async function invalidCacheEvidenceJobs(input: {
         entries?: Array<{ source_id?: string; source_revision?: string; generation_id?: string; admitted?: boolean; excluded_entries?: unknown[] }>;
       } | null;
       if (!receipt) return true;
-      if (!Array.isArray(receipt.entries) && receipt.outcome === "excluded" && receipt.reason === "no_summary")
+      if ((!Array.isArray(receipt.entries) || receipt.entries.length === 0) && receipt.outcome === "excluded" && ["no_summary", "no_window_summary"].includes(receipt.reason ?? ""))
         return false;
       if (!Array.isArray(receipt.entries) || receipt.entries.length === 0) return true;
       return receipt.entries.some((item) => {

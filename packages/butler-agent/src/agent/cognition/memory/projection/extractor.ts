@@ -5,7 +5,7 @@ import { validateJsonObjectSchema } from "../../../tools/schema-validation.ts";
 import type { ExtractInput, ExtractOutput, MemoryExecutionContext, QuoteRef } from "./contracts.ts";
 import { graphemeCount } from "./unicode.ts";
 import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
-import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, prepareBindingBatches, applyBinding, type CandidateLoader } from "./binding.ts";
+import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, prepareBindingBatches, applyBinding, type CandidateLoader, type BindingWarning } from "./binding.ts";
 
 export const MAX_MEMORY_EXTRACTION_TIMEOUT_MS = 600_000;
 const DEFAULT_MEMORY_EXTRACTION_TIMEOUT_MS = 180_000;
@@ -45,7 +45,7 @@ export async function runStructuredMemoryExtractor(input: {
   onRequestPrepared?: (evidence: RequestWireEvidence) => void;
   onProviderInvocationIntent?: () => Promise<void>;
   onProviderAdapterEntry?: () => void;
-}): Promise<{ output: ExtractOutput; evidence: StageEvidence & { stages: Array<StageEvidence & { stage: string; reused: boolean }> } }> {
+}): Promise<{ output: ExtractOutput; evidence: StageEvidence & { warnings: BindingWarning[]; stages: Array<StageEvidence & { stage: string; reused: boolean }> } }> {
   const started = Date.now();
   const stages: Array<StageEvidence & { stage: string; reused: boolean }> = [];
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -92,9 +92,10 @@ export async function runStructuredMemoryExtractor(input: {
   const output = meaningToOutput(input.extractInput, meaning, passages);
   const binding = await prepareBindingBatches(meaning, passages, input.loadCandidates);
   input.extractInput.candidates = binding.candidates;
+  const warnings: BindingWarning[] = [];
   for (const [index, batch] of binding.batches.entries()) {
     const result = await call(`binding${index}`, batch.prompt, BINDING_INSTRUCTIONS, BINDING_SCHEMA);
-    applyBinding(result, batch, output, input.extractInput);
+    warnings.push(...applyBinding(result, batch, output, input.extractInput));
   }
   // Role-aware, whole-item projection: never cut a condition in half to fit the cache.
   const summary: string[] = []; const evidence: QuoteRef[] = [];
@@ -114,7 +115,7 @@ export async function runStructuredMemoryExtractor(input: {
     output_tokens: called.reduce((sum, stage) => sum + stage.usage!.output_tokens, 0),
     total_tokens: called.reduce((sum, stage) => sum + (stage.usage!.total_tokens ?? 0), 0) } : null;
   return { output, evidence: { reported_model: stages[0]!.reported_model, usage, duration_ms: Date.now() - started,
-    request_wire: stages[0]!.request_wire, stages } };
+    request_wire: stages[0]!.request_wire, stages, warnings } };
 }
 
 export class MemoryExtractDispositionError extends Error {

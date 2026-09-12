@@ -118,7 +118,7 @@ test("code preserves Unicode source spans and patches only the selected legacy v
   expect(output.claims[0]!.statement).toBe("ssh admin@server, key pi_rsa");
   expect(output.corrections[0]!.previous_claim_ref).toBe("old");
   selected.decisions[0]!.span = "unknown";
-  expect(() => applyBinding(selected, batch, output, current)).toThrow("memory_extract_correction_unresolved");
+  expect(() => applyBinding(selected, batch, output, current)).toThrow("memory_extract_invalid_binding");
 });
 
 
@@ -159,3 +159,20 @@ test("legacy mixed windows split before A while completed rows and original text
     db.close();
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
 }, 30000);
+
+
+test("unresolved corrections preserve the new source claim and produce a warning", async () => {
+  for (const old of ["previous", null]) {
+    const current = { ...input, source_units: [{ ...input.source_units[0]!, text: "Change the notice to: taking a break." }] };
+    const meaning: Meaning = { status: "processed", entities: [], items: [{ kind: "change", subject: null, field: "notice", old, new: "taking a break", evidence: [0] }], attributes: [] };
+    const parts = sourcePassages(current);
+    const output = meaningToOutput(current, meaning, parts);
+    const before = structuredClone(output);
+    const { batches } = await prepareBindingBatches(meaning, parts, async () => []);
+    const warnings = applyBinding({ decisions: [{ target: "f0", candidate: null, span: null, support: [] }] }, batches[0]!, output, current);
+    expect(warnings).toEqual([{ code: "correction_unresolved", target_ref: "f0" }]);
+    expect(output).toEqual(before);
+    expect(output.claims[0]!.statement).toBe(current.source_units[0]!.text);
+    expect(output.corrections).toEqual([]);
+  }
+});

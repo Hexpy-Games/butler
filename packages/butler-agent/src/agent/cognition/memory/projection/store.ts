@@ -895,7 +895,7 @@ export function pinWindowInput(
 /** Preserve the previous pinned input while admitting one bounded context expansion. */
 export function reviseProjectionContext(db: Database, windowRef: string, previous: ExtractInput, next: ExtractInput): void {
   const row = db.query<{ job_id: string; attempt_count: number; recovery_revision: string | null; input_json: string; input_sha256: string }, [string]>(
-    "SELECT * FROM memory_projection_windows WHERE window_ref=? AND state='failed' AND error_code='memory_extract_needs_context' AND output_json IS NULL AND normalized_plan_json IS NULL AND owner_nonce IS NULL",
+    "SELECT * FROM memory_projection_windows WHERE window_ref=? AND state='unsupported' AND json_extract(provider_evidence_json,'$.disposition')='needs_context' AND output_json IS NULL AND normalized_plan_json IS NULL AND owner_nonce IS NULL",
   ).get(windowRef);
   if (!row || row.input_json !== JSON.stringify(previous) || next.source_units.length !== previous.source_units.length ||
     JSON.stringify(next.source_units) !== JSON.stringify(previous.source_units) || next.window_ref !== previous.window_ref ||
@@ -915,6 +915,27 @@ export function reviseProjectionContext(db: Database, windowRef: string, previou
     recovery_base_attempt_count=attempt_count,state='pending',error_code=NULL,next_attempt_at=? WHERE window_ref=?`)
     .run(json, sha, "adjacent_source_context", ref, now, windowRef);
   refreshSemanticState(db, row.job_id);
+}
+
+/** Persist a valid model abstention without reporting a failed provider call or losing its input. */
+export function recordWindowDisposition(
+  db: Database, jobId: string, windowRef: string, ownerNonce: string,
+  evidence: unknown, providerInvoked: boolean,
+): void {
+  const row = db.query<{ attempt_count: number; input_sha256: string; recovery_revision: string | null }, [string, string]>(
+    "SELECT attempt_count,input_sha256,recovery_revision FROM memory_projection_windows WHERE window_ref=? AND state='running' AND owner_nonce=? AND output_json IS NULL AND normalized_plan_json IS NULL",
+  ).get(windowRef, ownerNonce);
+  if (!row) throw new Error("memory_projection_window_changed");
+  const evidenceJson = JSON.stringify(evidence);
+  db.query(`INSERT INTO memory_projection_attempts
+    (attempt_ref,window_ref,job_id,attempt_count,state,error_code,input_sha256,provider_evidence_json,recorded_at,attempt_kind,provider_invoked,outcome_known,invocation_ref,recovery_revision)
+    VALUES(?,?,?,?,'warning',NULL,?,?,?,'validation',?,1,?,?)`)
+    .run(`${windowRef}:attempt:${row.attempt_count}:disposition`, windowRef, jobId, row.attempt_count,
+      row.input_sha256, evidenceJson, new Date().toISOString(), providerInvoked ? 1 : 0, ownerNonce, row.recovery_revision);
+  db.query(`UPDATE memory_projection_windows SET state='unsupported',error_code=NULL,provider_evidence_json=?,
+    owner_pid=NULL,owner_nonce=NULL,started_at=NULL,next_attempt_at=NULL WHERE window_ref=? AND owner_nonce=?`)
+    .run(evidenceJson, windowRef, ownerNonce);
+  refreshSemanticState(db, jobId);
 }
 
 export function markWindowFailure(
@@ -1208,33 +1229,35 @@ function recoverInterruptedWindows(
 
 export function refreshSemanticState(db: Database, jobId: string): void {
   const counts = db
-    .query<{ total: number; complete: number; failed: number }, [string]>(
+    .query<{ total: number; complete: number; failed: number; warnings: number }, [string]>(
       `
-    SELECT COUNT(*) total,SUM(state='complete') complete,SUM(state IN ('failed','unsupported')) failed
+    SELECT COUNT(*) total,SUM(state='complete') complete,SUM(state='failed') failed,SUM(state='unsupported') warnings
     FROM memory_projection_windows WHERE job_id=? AND state!='replaced'
   `,
     )
-    .get(jobId) ?? { total: 0, complete: 0, failed: 0 };
+    .get(jobId) ?? { total: 0, complete: 0, failed: 0, warnings: 0 };
   const total = Number(counts.total),
     complete = Number(counts.complete),
     failed = Number(counts.failed);
-  const pending = Math.max(0, total - complete - failed);
+  const warnings = Number(counts.warnings ?? 0);
+  const pending = Math.max(0, total - complete - failed - warnings);
   const state: StageState =
     complete === total
       ? { state: "complete", completed_units: complete, total_units: total }
-      : complete > 0 || failed > 0
+      : complete > 0 || failed > 0 || warnings > 0
         ? {
             state: "partial",
             completed_units: complete,
             total_units: total,
             pending_units: pending,
             failed_units: failed,
+            ...(warnings ? { warning_units: warnings } : {}),
           }
         : { state: "pending", blocked_by: null };
   db.query(
     "UPDATE memory_projection_jobs SET semantic_graph_state=?,last_served_at=? WHERE job_id=?",
   ).run(JSON.stringify(state), new Date().toISOString(), jobId);
-  if (state.state === "complete") {
+  if (complete + warnings === total) {
     const nodeCount = Number(db.query<{ count: number }, [string]>("SELECT COUNT(*) count FROM memory_vector_units WHERE job_id=? AND record_kind='node'").get(jobId)?.count ?? 0);
     if (nodeCount === 0) {
       const current = db.query<{ node_vectors_state: string }, [string]>("SELECT node_vectors_state FROM memory_projection_jobs WHERE job_id=?").get(jobId);
