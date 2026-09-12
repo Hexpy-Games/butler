@@ -7,6 +7,21 @@ import { graphemeCount } from "./unicode.ts";
 import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
 import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, prepareBindingBatches, applyBinding, type CandidateLoader, type BindingWarning } from "./binding.ts";
 
+const MAX_STAGE_REPAIRS = 2;
+
+function boundedEvidenceSchema(schema: Record<string, unknown>, passageCount: number): Record<string, unknown> {
+  const bounded = structuredClone(schema);
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    const node = value as Record<string, unknown>;
+    const properties = node.properties as Record<string, unknown> | undefined;
+    if (properties?.evidence) (properties.evidence as Record<string, unknown>).items = { type: "integer", minimum: 0, maximum: passageCount - 1 };
+    for (const child of Object.values(node)) visit(child);
+  };
+  visit(bounded);
+  return bounded;
+}
+
 export const MAX_MEMORY_EXTRACTION_TIMEOUT_MS = 600_000;
 const DEFAULT_MEMORY_EXTRACTION_TIMEOUT_MS = 180_000;
 
@@ -49,53 +64,72 @@ export async function runStructuredMemoryExtractor(input: {
   const started = Date.now();
   const stages: Array<StageEvidence & { stage: string; reused: boolean }> = [];
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-  const call = async (stage: string, promptValue: unknown, instructions: string, schema: Record<string, unknown>): Promise<unknown> => {
-    const prompt = JSON.stringify(promptValue);
-    const request_wire = { profile: `memory-${stage}.v4`, input_json_sha256: hash(prompt), input_json_utf8_bytes: Buffer.byteLength(prompt),
-      instructions_sha256: hash(instructions), output_schema_sha256: hash(JSON.stringify(schema)) };
-    const request_hash = hash(JSON.stringify([input.extractInput.revision, input.model, input.reasoningEffort, request_wire, stage === "meaning" ? null : input.extractInput.candidates]));
-    const key = `${stage}:${request_hash}`;
-    const saved = await input.stages.load(key);
-    let result: ExtractionStageResult;
-    if (saved) {
-      if (saved.request_hash !== request_hash) throw new Error("memory_extract_stage_changed");
-      result = saved;
-    } else {
-      input.onRequestPrepared?.(request_wire);
-      const stageStarted = Date.now();
-      const response = await runPromptTextWithUsage({ prompt, instructions, model: input.model,
-        reasoningEffort: input.reasoningEffort as "low" | "medium" | "high" | "xhigh" | "max",
-        cacheScope: `memory-extract:${input.extractInput.revision}:${stage}`, butlerData: input.butlerData,
-        signal: input.signal, onProviderStreamEvent: input.onProviderStreamEvent, providerRetryAttempts: 0,
-        responseFormat: { type: "json_schema", name: `memory_${stage.replace(/[^a-z]/g, "_")}_v4`, strict: true, schema },
-      }, { onInvocationIntent: input.onProviderInvocationIntent, onAdapterEntry: input.onProviderAdapterEntry });
-      result = { request_hash, raw: response.text, evidence: { reported_model: response.model,
-        usage: response.usage ? { prompt_tokens: response.usage.promptTokens, cached_tokens: response.usage.cachedTokens,
-          output_tokens: response.usage.outputTokens, total_tokens: response.usage.totalTokens } : null,
-        duration_ms: Date.now() - stageStarted, request_wire } };
-      // Persist the exact response before validation. A completed call is never silently repeated.
-      await input.stages.save(key, result);
+  const call = async <T>(stage: string, promptValue: unknown, instructions: string, schema: Record<string, unknown>, validate: (value: unknown) => T): Promise<T> => {
+    let rejection: string | null = null;
+    for (let repair = 0; repair <= MAX_STAGE_REPAIRS; repair++) {
+      const prompt = JSON.stringify(repair === 0 ? promptValue : { input: promptValue,
+        correction: { error: rejection, instruction: "Return a corrected complete response. Use only the provided reference IDs and evidence. Do not invent IDs." } });
+      const responseSchema = repair > 0 && stage === "meaning" ? boundedEvidenceSchema(schema, passages.length) : schema;
+      const request_wire = { profile: `memory-${stage}.v4`, input_json_sha256: hash(prompt), input_json_utf8_bytes: Buffer.byteLength(prompt),
+        instructions_sha256: hash(instructions), output_schema_sha256: hash(JSON.stringify(responseSchema)) };
+      // The original key is unchanged. Repair responses are append-only and separately addressable.
+      const request_hash = hash(JSON.stringify([input.extractInput.revision, input.model, input.reasoningEffort, request_wire, stage === "meaning" ? null : input.extractInput.candidates]));
+      const key = `${stage}:${request_hash}${repair ? `:repair:${repair}` : ""}`;
+      const saved = await input.stages.load(key);
+      let result: ExtractionStageResult;
+      if (saved) {
+        if (saved.request_hash !== request_hash) throw new Error("memory_extract_stage_changed");
+        result = saved;
+      } else {
+        input.onRequestPrepared?.(request_wire);
+        const stageStarted = Date.now();
+        const response = await runPromptTextWithUsage({ prompt, instructions, model: input.model,
+          reasoningEffort: input.reasoningEffort as "low" | "medium" | "high" | "xhigh" | "max",
+          cacheScope: `memory-extract:${input.extractInput.revision}:${stage}`, butlerData: input.butlerData,
+          signal: input.signal, onProviderStreamEvent: input.onProviderStreamEvent, providerRetryAttempts: 0,
+          responseFormat: { type: "json_schema", name: `memory_${stage.replace(/[^a-z]/g, "_")}_v4`, strict: true, schema: responseSchema },
+        }, { onInvocationIntent: input.onProviderInvocationIntent, onAdapterEntry: input.onProviderAdapterEntry });
+        result = { request_hash, raw: response.text, evidence: { reported_model: response.model,
+          usage: response.usage ? { prompt_tokens: response.usage.promptTokens, cached_tokens: response.usage.cachedTokens,
+            output_tokens: response.usage.outputTokens, total_tokens: response.usage.totalTokens } : null,
+          duration_ms: Date.now() - stageStarted, request_wire } };
+        await input.stages.save(key, result);
+      }
+      const evidence = { ...result.evidence, stage, reused: Boolean(saved), repair };
+      stages.push(evidence);
+      try {
+        let value: unknown;
+        try { value = JSON.parse(result.raw); }
+        catch (cause) { throw new Error("memory_extract_invalid_json", { cause }); }
+        return validate(value);
+      } catch (cause) {
+        if (!(cause instanceof Error) || !cause.message.startsWith("memory_extract_invalid_")) throw cause;
+        rejection = cause.message;
+        if (repair === MAX_STAGE_REPAIRS)
+          throw new MemoryExtractAttemptError(rejection, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
+      }
     }
-    stages.push({ ...result.evidence, stage, reused: Boolean(saved) });
-    try { return JSON.parse(result.raw); }
-    catch (cause) { throw new MemoryExtractAttemptError("memory_extract_invalid_json", result.raw, result.evidence, cause); }
+    throw new Error("memory_extract_stage_changed");
   };
   const passages = sourcePassages(input.extractInput);
   const instructions = input.extractInput.context_units.some((unit) => unit.source_span)
     ? `${MEANING_INSTRUCTIONS} Before/after belongs to the same source and explains the current text; do not extract surrounding-only facts.`
     : MEANING_INSTRUCTIONS;
-  const rawMeaning = await call("meaning", meaningPrompt(input.extractInput, passages), instructions, MEANING_SCHEMA);
-  let meaning: ReturnType<typeof validateMeaning>;
-  try { meaning = validateMeaning(rawMeaning, passages); }
-  catch (error) { throw new MemoryExtractAttemptError(error instanceof Error ? error.message : "memory_extract_invalid_meaning", rawMeaning, stages.at(-1)!, error); }
+  const meaning = await call("meaning", meaningPrompt(input.extractInput, passages), instructions, MEANING_SCHEMA,
+    (value) => validateMeaning(value, passages));
   if (meaning.status !== "processed") throw new MemoryExtractDispositionError(meaning.status, meaning, stages.at(-1)!);
   const output = meaningToOutput(input.extractInput, meaning, passages);
   const binding = await prepareBindingBatches(meaning, passages, input.loadCandidates);
   input.extractInput.candidates = binding.candidates;
   const warnings: BindingWarning[] = [];
   for (const [index, batch] of binding.batches.entries()) {
-    const result = await call(`binding${index}`, batch.prompt, BINDING_INSTRUCTIONS, BINDING_SCHEMA);
-    warnings.push(...applyBinding(result, batch, output, input.extractInput));
+    const bound = await call(`binding${index}`, batch.prompt, BINDING_INSTRUCTIONS, BINDING_SCHEMA, (value) => {
+      const next = structuredClone(output);
+      const notices = applyBinding(value, batch, next, input.extractInput);
+      Object.assign(output, next);
+      return notices;
+    });
+    warnings.push(...bound);
   }
   // Role-aware, whole-item projection: never cut a condition in half to fit the cache.
   const summary: string[] = []; const evidence: QuoteRef[] = [];
@@ -130,6 +164,7 @@ export class MemoryExtractAttemptError extends Error {
     readonly output: unknown,
     readonly providerEvidence: unknown,
     cause?: unknown,
+    readonly repairExhausted = false,
   ) {
     super(code, { cause });
   }
