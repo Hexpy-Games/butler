@@ -59,6 +59,15 @@ test("public ingestion preserves source roles and OR in stored graph and recall 
       expect(requirements[0]!.basis).toBe("user_statement");
       expect(requirements[0]!.source_refs.length).toBeGreaterThan(0);
     }
+    // An already admitted v2 revision survives extractor upgrades without new work.
+    db.query("UPDATE memory_projection_jobs SET extraction_version='memory-extract-v2'").run();
+    const before = ["memory_projection_jobs", "memory_projection_windows", "memory_projection_attempts", "memory_chunk_sources"]
+      .map((table) => db.query(`SELECT * FROM ${table}`).all());
+    const calls = requests.length;
+    await ingestConversationMemory({ context, source: { kind: "conversation_turn", session_id: "session", turn_id: "turn", outcome_generation: 1 } });
+    expect(["memory_projection_jobs", "memory_projection_windows", "memory_projection_attempts", "memory_chunk_sources"]
+      .map((table) => db.query(`SELECT * FROM ${table}`).all())).toEqual(before);
+    expect(requests.length).toBe(calls);
     db.close();
   } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
 }, 25000);
@@ -111,3 +120,42 @@ test("code preserves Unicode source spans and patches only the selected legacy v
   selected.decisions[0]!.span = "unknown";
   expect(() => applyBinding(selected, batch, output, current)).toThrow("memory_extract_correction_unresolved");
 });
+
+
+test("legacy mixed windows split before A while completed rows and original text survive", async () => {
+  const root = mkdtempSync(join(tmpdir(), "memory-upgrade-"));
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  const requests: any[] = [];
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => { requests.push(JSON.parse(request.prompt)); return response(empty) as never; };
+  try {
+    const descriptor = initializeEmptyMemoryGeneration(root);
+    const context = { butlerData: root, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: AbortSignal.timeout(25000) };
+    const store = new AgentConversationStore({ butlerData: root });
+    const userText = "x".repeat(900), assistantText = "はい。 العربية 👩🏽‍🚀";
+    const turn = store.beginTurn({ gateway: "app", externalSessionId: "session", sessionId: "session", projectId: null, actor: "user", turnId: "turn" });
+    const user = store.appendUserMessage({ sessionId: "session", turnId: turn.id, text: userText, originKind: "user_input", originRef: "app:turn:user" });
+    const assistant = store.appendAssistantMessage({ sessionId: "session", turnId: turn.id, text: assistantText, originKind: "assistant_public", originRef: "app:turn:assistant" });
+    store.finalizeTurn({ turnId: turn.id, status: "complete", outcomeCapsule: { sessionId: "session", turnId: turn.id, generation: 1, outcome: "delivered", requestMessageId: user.id, publicAssistantMessageId: assistant.id, providerId: "test", modelRef: "test/model" } }); store.close();
+    await ingestConversationMemory({ context, source: { kind: "conversation_turn", session_id: "session", turn_id: "turn", outcome_generation: 1 } });
+    const db = new Database(join(root, "cognition/memory/generations", descriptor.generation_id, "graph.sqlite"));
+    const windows = db.query<any, []>("SELECT * FROM memory_projection_windows ORDER BY ordinal").all();
+    // Reconstruct the old allocation: one mixed pending window, with a later completed row.
+    const refs = windows.flatMap((row) => JSON.parse(row.source_refs_json));
+    db.query("UPDATE memory_projection_windows SET source_refs_json=? WHERE window_ref=?").run(JSON.stringify(refs), windows[0].window_ref);
+    db.query("UPDATE memory_projection_windows SET state='complete',source_refs_json='[]' WHERE window_ref=?").run(windows[1].window_ref);
+    const completed = db.query("SELECT * FROM memory_projection_windows WHERE window_ref=?").get(windows[1].window_ref);
+    for (let count = 0; count < 12; count++) {
+      if (!db.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_windows WHERE state NOT IN ('complete','replaced')").get()!.n) break;
+      await advanceNextMemoryProjection({ context });
+    }
+    expect(db.query("SELECT state,error_code FROM memory_projection_windows WHERE state NOT IN ('complete','replaced')").all()).toEqual([]);
+    expect(db.query("SELECT * FROM memory_projection_windows WHERE window_ref=?").get(windows[1].window_ref)).toEqual(completed);
+    expect(requests.map((p) => p.speaker)).toEqual(["user", "user", "assistant"]);
+    const texts = requests.map((p) => p.parts.map((part: any) => part.text).join(""));
+    expect(texts.join("")).toBe(userText + assistantText);
+    expect(texts.every((part) => [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(part)].length <= 512)).toBe(true);
+    expect(requests.every((p) => Buffer.byteLength(JSON.stringify(p.parts)) <= 4096)).toBe(true);
+    expect(db.query<{ n: number }, []>("SELECT count(*) n FROM memory_source_split_parents").get()!.n).toBeGreaterThan(0);
+    db.close();
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; rmSync(root, { recursive: true, force: true }); }
+}, 30000);

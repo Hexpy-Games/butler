@@ -89,6 +89,7 @@ import {
   MEMORY_EXTRACT_INPUT_BYTES,
   MEMORY_SOURCE_WINDOW_BYTES,
   nearestGraphemeByteMidpoint,
+  splitMeaningSourceSpans,
 } from "./windows.ts";
 import { invalidateIdentityBindingsForSupersededSources } from "./identity.ts";
 import {
@@ -372,6 +373,26 @@ function parseWindowReprocessRequest(value: unknown): WindowReprocessRequest {
   return value as WindowReprocessRequest;
 }
 
+/** Extractor upgrades do not create another job for an already admitted revision. */
+function existingProjectionJob(
+  db: ReturnType<typeof openProjectionDb>, episodeId: string, revision: string, completionJobId?: string,
+): string | null {
+  const rows = db.query<{ job_id: string; observed_completion_job_ids: string }, [string, string]>(`
+    SELECT j.job_id,j.observed_completion_job_ids FROM memory_projection_jobs j
+    JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+    WHERE j.episode_id=? AND j.revision=?
+  `).all(episodeId, revision);
+  if (rows.length > 1) throw new Error("memory_projection_duplicate_revision");
+  const row = rows[0];
+  if (!row) return null;
+  const completions = JSON.parse(row.observed_completion_job_ids) as string[];
+  if (completionJobId && !completions.includes(completionJobId)) {
+    db.query("UPDATE memory_projection_jobs SET observed_completion_job_ids=? WHERE job_id=?")
+      .run(JSON.stringify([...completions, completionJobId].sort()), row.job_id);
+  }
+  return row.job_id;
+}
+
 export async function ingestConversationMemory(input: {
   context: MemoryExecutionContext;
   source: MemorySourceNotice;
@@ -435,6 +456,12 @@ export async function ingestConversationMemory(input: {
     const db = openProjectionDb(generation.graphPath);
     try {
       await withMemoryWriteGateAsync(input.context, () => ensureV2MemorySchema(db));
+      const resumedJob = await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+        assertCanonicalNoticeCurrent(canonical, input.source, revision);
+        return existingProjectionJob(db, episodeId, revision, input.completionJobId);
+      })());
+      if (resumedJob) return progressFromDb(db, resumedJob);
+
       await withMemoryWriteGateAsync(input.context, () =>
         db.transaction(() => {
           assertCanonicalNoticeCurrent(canonical, input.source, revision);
@@ -614,6 +641,14 @@ async function ingestTypedMemoryRecord(
   try {
     const model = readProfilingExtractorModelConfig(generation.sourceRoot);
     await withMemoryWriteGateAsync(input.context, () => ensureV2MemorySchema(db));
+    const resumedJob = await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+      const current = readTypedMemoryRecord(generation.sourceRoot, owner.source_kind, owner.record_id, { unavailable: "throw" });
+      if (!current || current.revision !== owner.revision || current.operation_id !== owner.operation_id)
+        throw new Error("memory_source_changed");
+      return existingProjectionJob(db, episodeId, owner.revision, input.completionJobId);
+    })());
+    if (resumedJob) return progressFromDb(db, resumedJob);
+
     await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
       const current = readTypedMemoryRecord(
         generation.sourceRoot,
@@ -858,6 +893,31 @@ export async function advanceNextMemoryProjection(input: {
   try {
     let extractInput: ExtractInput;
     try {
+      if (!pending.output && pending.previousState !== "planned") {
+        const split = await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+          assertJobRevisionCurrent(sourceRoot, db, pending.job_id);
+          const rows = sourceRows(db, pending.sourceRefs);
+          if (rows.length !== pending.sourceRefs.length) throw new Error("memory_source_changed");
+          let children: [string[], string[]] | null = null;
+          if (pending.sourceRefs.length > 1) {
+            children = [[pending.sourceRefs[0]!], pending.sourceRefs.slice(1)];
+          } else if (rows[0]) {
+            const text = hydrateSource(sourceRoot, rows[0]).text;
+            const spans = splitMeaningSourceSpans(text, MAX_WINDOW_BYTES);
+            if (spans.length > 1) {
+              children = splitWindowSourceRows(db, sourceRoot, rows, spans[0]!.end);
+              if (!children) throw new Error("memory_extract_source_window_exceeds_budget");
+            }
+          }
+          if (!children) return false;
+          splitProjectionWindow(db, { jobId: pending.job_id, windowRef: pending.window_ref, ownerNonce: pending.ownerNonce, children });
+          return true;
+        })());
+        if (split) {
+          await refreshProjectionVectorsAsync(input.context, pending.job_id);
+          return progressFromDb(db, pending.job_id);
+        }
+      }
       extractInput = (pending.pinnedInput as ExtractInput | null) ?? await buildExtractInput(
         input.context, db, pending.job_id, pending.window_ref, pending.sourceRefs,
       );
@@ -1886,11 +1946,12 @@ function splitWindowSourceRows(
   db: ReturnType<typeof openProjectionDb>,
   butlerData: string,
   rows: ProjectionSourceRow[],
+  firstSourceSplitByte?: number,
 ): [string[], string[]] | null {
-  const best = nearestGraphemeByteMidpoint(rows.map((row) => ({
+  const best = firstSourceSplitByte === undefined ? nearestGraphemeByteMidpoint(rows.map((row) => ({
     text: hydrateSource(butlerData, row).text,
     bytes: row.byte_end - row.byte_start,
-  })));
+  }))) : { partIndex: 0, localByte: firstSourceSplitByte };
   if (!best) return null;
   const row = rows[best.partIndex]!;
   if (best.localByte === row.byte_end - row.byte_start) {
