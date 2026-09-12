@@ -174,6 +174,19 @@ test("T3 vector owner preserves successful units while bounded retries and expli
 });
 
 test("T3 advance resumes a verified persisted vector row without embedding it twice", async () => {
+  // embed.ts binds its default socket at import time, so isolate this test before imports.
+  if (process.env.BUTLER_T3_VECTOR_CHILD !== "1") {
+    const socketRoot = mkdtempSync(join(tmpdir(), "bt3-vector-"));
+    try {
+      const child = Bun.spawn([process.execPath, "test", import.meta.path, "--test-name-pattern", "resumes a verified persisted vector"], {
+        env: { ...process.env, BUTLER_T3_VECTOR_CHILD: "1", EMBED_SOCKET: join(socketRoot, "embed.sock") },
+        stdout: "pipe", stderr: "pipe",
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+      expect(exitCode, stdout + stderr).toBe(0);
+    } finally { rmSync(socketRoot, { recursive: true, force: true }); }
+    return;
+  }
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t3-vector-writer-"));
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
@@ -219,11 +232,12 @@ test("T3 advance resumes a verified persisted vector row without embedding it tw
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(socketPath, resolve); });
     try {
       const interrupted = await advanceNextMemoryProjection({ context });
-      expect(interrupted?.node_vectors.state).toBe("pending");
+      expect(interrupted?.node_vectors.state).toBe("running");
       expect(embeddingRequests).toBe(1);
       db = new Database(graphPath);
+      expect(db.query("SELECT state,provider_invoked,outcome_known,receipt_json FROM memory_vector_units WHERE record_kind='node'").get())
+        .toEqual({ state: "running", provider_invoked: 1, outcome_known: 1, receipt_json: null });
       db.exec("DROP TRIGGER interrupt_vector_receipt");
-      db.query("UPDATE memory_vector_units SET next_attempt_at='2000-01-01T00:00:00Z' WHERE record_kind='node' AND state='pending'").run();
       db.query("UPDATE memory_projection_jobs SET next_stage='node_vectors' WHERE job_id=?").run(registered.job_id);
       db.close();
       const resumed = await advanceNextMemoryProjection({ context });

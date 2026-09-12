@@ -38,6 +38,7 @@ import {
   recordWindowAttemptFailure,
   recordProviderInvocationIntent,
   recordVectorInvocationStarted,
+  recordVectorResultReceived,
   refreshSemanticState,
   refreshVectorUnitsForJob,
   saveValidatedPlan,
@@ -840,23 +841,45 @@ export async function advanceNextMemoryProjection(input: {
     for (const key of operationKeys) activeVectorOperations.add(key);
     try {
       if (generation.embedding) {
+        const receiptProbeStarted = performance.now();
         const persisted = await findPersistedVectorReceipt(generation, units, generation.embedding.version);
+        recordOperationalMetric({ category: "memory", name: "memory_projection_vector_receipt_probe", status: "ok",
+          durationMs: performance.now() - receiptProbeStarted,
+          dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, found: Boolean(persisted) } },
+        { butlerData: input.context.butlerData });
         if (persisted) {
+          let completionDurationMs = 0;
           await withMemoryWriteGateAsync(input.context, () => {
             for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
+            const completionStarted = performance.now();
             completeVectorQuantum(db, units, persisted);
+            completionDurationMs = performance.now() - completionStarted;
           });
+          recordOperationalMetric({ category: "memory", name: "memory_projection_vector_completion", status: "ok",
+            durationMs: completionDurationMs,
+            dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, source: "persisted" } },
+          { butlerData: input.context.butlerData });
           return progressFromDb(db, units[0]!.job_id);
         }
+        const reusePrepareStarted = performance.now();
         const reusedRows = await prepareReusedGenerationVectorRows(generation, units, generation.embedding.version);
+        recordOperationalMetric({ category: "memory", name: "memory_projection_vector_reuse_prepare", status: "ok",
+          durationMs: performance.now() - reusePrepareStarted,
+          dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, found: Boolean(reusedRows) } },
+        { butlerData: input.context.butlerData });
         if (reusedRows) {
+          let writeDurationMs = 0;
+          let completionDurationMs = 0;
           await withMemoryWriteGateAsync(input.context, async () => {
             for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
             const current = resolveMemoryGeneration(input.context);
             if (!current.embedding || current.embedding.version !== generation.embedding?.version) throw new Error("memory_embedding_version_mismatch");
             const embeddingVersion = current.embedding.version;
+            const writeStarted = performance.now();
             await writeGenerationVectorRows(current, reusedRows);
+            writeDurationMs = performance.now() - writeStarted;
             for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
+            const completionStarted = performance.now();
             completeVectorQuantum(db, units, {
               generation: current.generationId,
               embedding_version: embeddingVersion,
@@ -864,11 +887,21 @@ export async function advanceNextMemoryProjection(input: {
               row_count: reusedRows.length,
               inference_reused: true,
             });
+            completionDurationMs = performance.now() - completionStarted;
           });
+          recordOperationalMetric({ category: "memory", name: "memory_projection_vector_write", status: "ok",
+            durationMs: writeDurationMs,
+            dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, source: "reused" } },
+          { butlerData: input.context.butlerData });
+          recordOperationalMetric({ category: "memory", name: "memory_projection_vector_completion", status: "ok",
+            durationMs: completionDurationMs,
+            dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, source: "reused" } },
+          { butlerData: input.context.butlerData });
           return progressFromDb(db, units[0]!.job_id);
         }
       }
       await withMemoryWriteGateAsync(input.context, () => recordVectorInvocationStarted(db, units));
+      const embedStarted = performance.now();
       const embedded = await embedVectorQuantum({
         generation,
         units,
@@ -876,24 +909,43 @@ export async function advanceNextMemoryProjection(input: {
         signal: input.context.signal,
         deadlineAt: Math.min(input.context.deadlineAt ?? Number.POSITIVE_INFINITY, Date.now() + 30_000),
       });
+      recordOperationalMetric({ category: "memory", name: "memory_projection_vector_embed", status: "ok",
+        durationMs: performance.now() - embedStarted,
+        dimensions: { pid: process.pid, record_kind: units[0]!.record_kind } }, { butlerData: input.context.butlerData });
+      let writeDurationMs = 0;
+      let completionDurationMs = 0;
       await withMemoryWriteGateAsync(input.context, async () => {
         for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
+        // Persist the known call outcome before vector/receipt writes can be interrupted.
+        recordVectorResultReceived(db, units);
         const pinned = bindObservedGenerationEmbeddingUnderWriteGate(input.context, embedded.metadata);
         const current = resolveMemoryGeneration(input.context);
         if (pinned.version !== embedded.metadata.version || current.embedding?.version !== pinned.version)
           throw new Error("memory_embedding_version_mismatch");
+        const writeStarted = performance.now();
         await writeGenerationVectorRows(current, embedded.rows);
+        writeDurationMs = performance.now() - writeStarted;
         for (const unit of units) assertJobRevisionCurrent(sourceRoot, db, unit.job_id);
         const receivedGeneration = resolveMemoryGeneration(input.context);
         if (receivedGeneration.generationId !== current.generationId || receivedGeneration.embedding?.version !== pinned.version)
           throw new Error("memory_generation_changed");
+        const completionStarted = performance.now();
         completeVectorQuantum(db, units, {
           generation: receivedGeneration.generationId,
           embedding_version: pinned.version,
           vector_keys: embedded.rows.map((row) => row.vector_key).sort(),
           row_count: embedded.rows.length,
         });
+        completionDurationMs = performance.now() - completionStarted;
       });
+      recordOperationalMetric({ category: "memory", name: "memory_projection_vector_write", status: "ok",
+        durationMs: writeDurationMs,
+        dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, source: "embedded" } },
+      { butlerData: input.context.butlerData });
+      recordOperationalMetric({ category: "memory", name: "memory_projection_vector_completion", status: "ok",
+        durationMs: completionDurationMs,
+        dimensions: { pid: process.pid, record_kind: units[0]!.record_kind, source: "embedded" } },
+      { butlerData: input.context.butlerData });
       return progressFromDb(db, units[0]!.job_id);
     } catch (error) {
       if (isCommitInterruption(error)) return progressFromDb(db, units[0]!.job_id);
@@ -1540,6 +1592,7 @@ async function buildSourceWindowCandidates(input: {
         sessionIds: [],
         asOf,
         includeInternal: false,
+        includeEpisodes: false,
         sourceProjectId: input.chunk.project_id,
         deadlineAt: Date.now() + 5_000,
       });

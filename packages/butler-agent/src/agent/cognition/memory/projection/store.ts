@@ -316,6 +316,7 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     ["started_at", "TEXT"],
     ["receipt_json", "TEXT"],
   ] as const) ensureColumn(db, "memory_vector_units", name, declaration);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_vector_units_owner_current ON memory_vector_units(owner_id,owner_revision,record_kind,state,job_id)");
   db.transaction(() => {
     if (!db.query("SELECT 1 FROM memory_state WHERE key='alias_postings_incremental_v1'").get()) {
       db.exec(`
@@ -569,6 +570,16 @@ export function recordVectorInvocationStarted(db: Database, units: ClaimedVector
       .run(unit.owner_nonce, unit.unit_id, unit.owner_nonce);
     if (changed.changes !== 1) throw new Error("memory_vector_unit_changed");
   }
+}
+
+export function recordVectorResultReceived(db: Database, units: ClaimedVectorUnit[]): void {
+  db.transaction(() => {
+    for (const unit of units) {
+      const changed = db.query("UPDATE memory_vector_units SET outcome_known=1 WHERE unit_id=? AND state='running' AND owner_nonce=? AND provider_invoked=1")
+        .run(unit.unit_id, unit.owner_nonce);
+      if (changed.changes !== 1) throw new Error("memory_vector_unit_changed");
+    }
+  })();
 }
 
 export function failVectorQuantum(db: Database, units: ClaimedVectorUnit[], code: string, retryAt: string | null = null): void {
