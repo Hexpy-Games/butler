@@ -149,6 +149,7 @@ export async function searchGenerationVectors(input: {
   time?: { from: string; to: string; basis: "conversation" | "event" };
   sourceProjectId?: string | null;
   includeInternal: boolean;
+  includeEpisodes?: boolean;
   socketPath?: string;
   deadlineAt: number;
   signal?: AbortSignal;
@@ -341,7 +342,7 @@ export async function searchGenerationVectors(input: {
     return result;
   };
   const nodes = await collect("node");
-  const episodes = await collect("episode");
+  const episodes = input.includeEpisodes === false ? [] : await collect("episode");
   return {
     nodes,
     episodes,
