@@ -18,7 +18,8 @@ import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integra
 import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { computeMemoryGenerationReadiness, initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
+import { hydrateSource, memorySourceInventoryHash } from "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts";
 import type { MemoryExecutionContext } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 import { extractOutputSchema } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/schema-validation.ts";
@@ -4255,7 +4256,7 @@ test("two successful semantic windows automatically republish the combined curre
   await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
 });
 
-test("rebuild snapshot inventory matches normal 8 KiB Unicode source registration", async () => {
+test("rebuild readiness preserves nested split-parent evidence while registration stays leaf-based", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-memory-rebuild-source-spans-"));
   roots.push(butlerData);
   initializeEmptyMemoryGeneration(butlerData);
@@ -4310,12 +4311,62 @@ test("rebuild snapshot inventory matches normal 8 KiB Unicode source registratio
   }
   const inventory = JSON.parse(readFileSync(
     join(generationRoot, "source-snapshot", "memory-source-inventory.json"), "utf8",
-  )) as { entries: Array<{ episodeId: string; sourceUnitCount: number; sourceIds: string[] }> };
+  )) as { schema: string; origin?: { version?: string | null }; exclusions?: unknown;
+    entries: Array<{ episodeId: string; sourceUnitCount: number; sourceIds: string[] }>;
+    typed?: unknown[]; typed_lifecycle?: unknown[]; history?: unknown[] };
   const entry = inventory.entries.find((item) => item.episodeId === episodeId);
   expect(registeredUserSourceCount).toBeGreaterThan(1);
   expect(entry).toBeTruthy();
   expect(entry!.sourceUnitCount).toBe(registeredSourceIds.length);
   expect(entry!.sourceIds).toEqual(registeredSourceIds);
+  const mutable = new Database(join(generationRoot, "graph.sqlite"));
+  const split = (sourceId: string, prefix: string): string[] => {
+    const row = mutable.query<any, [string]>("SELECT * FROM memory_chunk_sources WHERE source_id=?").get(sourceId)!;
+    const text = hydrateSource(join(generationRoot, "source-snapshot"), row).text;
+    const graphemes = [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(text)].map((item) => item.segment);
+    const midpoint = row.byte_start + Buffer.byteLength(graphemes.slice(0, Math.floor(graphemes.length / 2)).join(""));
+    const ids = [`${prefix}-left`, `${prefix}-right`];
+    mutable.query(`INSERT INTO memory_source_split_parents
+      (source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,
+       byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis,child_source_ids_json,recorded_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      row.source_id,row.episode_id,row.revision,row.source_kind,row.conversation_session_id,row.conversation_message_id,
+      row.part_id,row.scalar_pointer,row.byte_start,row.byte_end,row.content_hash,row.role,row.origin_kind,row.observed_at,
+      row.basis,JSON.stringify(ids),new Date().toISOString(),
+    );
+    for (const [index, id] of ids.entries()) mutable.query(`INSERT INTO memory_chunk_sources
+      (source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,
+       byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id,row.episode_id,row.revision,row.source_kind,row.conversation_session_id,row.conversation_message_id,row.part_id,
+      row.scalar_pointer,index === 0 ? row.byte_start : midpoint,index === 0 ? midpoint : row.byte_end,row.content_hash,
+      row.role,row.origin_kind,row.observed_at,row.basis,
+    );
+    return ids;
+  };
+  const rootSource = mutable.query<{ source_id: string }, [string]>(`SELECT source_id FROM memory_chunk_sources
+    WHERE episode_id=? AND role='user' ORDER BY byte_end-byte_start DESC LIMIT 1`).get(episodeId)!.source_id;
+  const [intermediate] = split(rootSource, "readiness-parent");
+  split(intermediate!, "readiness-leaf");
+  const job = mutable.query<{ job_id: string; revision: string; project_id: string | null; origin_kind: string }, [string, string]>(`SELECT j.job_id,j.revision,c.project_id,s.origin_kind
+    FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id
+    JOIN memory_chunk_sources s ON s.episode_id=j.episode_id AND s.revision=j.revision
+    WHERE j.job_id=? AND s.source_id=?`).get(registered.job_id, intermediate!)!;
+  mutable.query(`INSERT INTO memory_vector_units(unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,
+    projection_text,state,receipt_json,source_ids_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+    "readiness-parent-vector",job.job_id,"episode","episode-owner",job.revision,job.project_id,job.origin_kind,
+    "historical parent evidence","complete",JSON.stringify({ generation: generationId }),JSON.stringify([intermediate]),
+  );
+  mutable.close();
+  const readinessArgs = { butlerData,generationId,inventoryHash: memorySourceInventoryHash(inventory),
+    inventorySourceCount: inventory.entries.reduce((count, item) => count + item.sourceIds.length, 0) };
+  const valid = await computeMemoryGenerationReadiness(readinessArgs);
+  const invalidDb = new Database(join(generationRoot, "graph.sqlite"));
+  invalidDb.query("UPDATE memory_vector_units SET source_ids_json=? WHERE unit_id='readiness-parent-vector'")
+    .run(JSON.stringify(["unknown-source-evidence"]));
+  invalidDb.close();
+  const invalid = await computeMemoryGenerationReadiness(readinessArgs);
+  expect(invalid.unaccounted).toBe(valid.unaccounted + 1);
+  expect(invalid.ready).toBe(false);
 });
 
 test("conversation inventory excludes recoverable running turns until canonical terminal transition", async () => {
