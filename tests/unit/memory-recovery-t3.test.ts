@@ -7,9 +7,11 @@ import { createServer } from "node:net";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 import { advanceNextMemoryProjection, ingestConversationMemory, resolveMemorySource } from "../../packages/butler-agent/src/agent/cognition/memory/projection/ingestion.ts";
-import { ensureV2MemorySchema, claimNextProjectionWindow, claimNextVectorQuantum, completeVectorQuantum, expandSplitSourceLeaves, failVectorQuantum, invalidatePlannedWindow, markPlannedWindowFailure, markWindowFailure, progressFromDb, refreshSemanticState, refreshVectorUnitsForJob, saveValidatedPlan, selectNextProjectionJob, sourceRows, splitProjectionWindow } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import { ensureV2MemorySchema, claimNextProjectionWindow, claimNextVectorQuantum, completeVectorQuantum, expandSplitSourceLeaves, failVectorQuantum, invalidatePlannedWindow, markPlannedWindowFailure, markWindowFailure, progressFromDb, refreshSemanticState, refreshVectorUnitsForJob, saveValidatedPlan, selectNextProjectionJob, sourceRows } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
+import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-request-errors.ts";
 import { assertPlanCandidatesCurrent, type NormalizedPlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
-import { graphemeByteBoundaries, nearestGraphemeByteMidpoint, splitGraphemeUtf8Spans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
+import { MEMORY_SPLIT_MIN_SOURCE_BYTES, graphemeByteBoundaries, nearestGraphemeByteMidpoint, splitGraphemeUtf8Spans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
 import { runCanonicalMemoryCatchup } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/phases/catchup.ts";
 
 test("T3 grapheme windows preserve exact UTF-8 coverage and expose oversized leaves", () => {
@@ -47,11 +49,15 @@ test("T3 legacy failure migration preserves diagnostic attempt and fixed retry s
   expect(db.query<{ output_json: string; provider_evidence_json: string }, []>("SELECT output_json,provider_evidence_json FROM memory_projection_attempts").get()).toEqual({
     output_json: '{"bad":true}', provider_evidence_json: '{"provider":"safe"}',
   });
-  const claimed = claimNextProjectionWindow(db, { jobId: "job", now: "2026-09-09T00:00:00Z", ownerPid: process.pid, ownerNonce: "owner" });
+  const dueAt = db.query<{ next_attempt_at: string }, []>("SELECT next_attempt_at FROM memory_projection_windows").get()!.next_attempt_at;
+  const beforeDue = new Date(Date.parse(dueAt) - 1).toISOString();
+  expect(claimNextProjectionWindow(db, { jobId: "job", now: beforeDue, ownerPid: process.pid, ownerNonce: "early" })).toBeNull();
+  const claimed = claimNextProjectionWindow(db, { jobId: "job", now: dueAt, ownerPid: process.pid, ownerNonce: "owner" });
   expect(claimed?.attemptCount).toBe(2);
-  markWindowFailure(db, "job", "window", "memory_extract_invalid_quote", { retryAt: "2026-09-09T00:02:00Z", ownerNonce: "owner" });
+  const retryAt = new Date(Date.parse(dueAt) + 120_000).toISOString();
+  markWindowFailure(db, "job", "window", "memory_extract_invalid_quote", { retryAt, ownerNonce: "owner" });
   const retry = db.query<{ state: string; attempt_count: number; next_attempt_at: string }, []>("SELECT state,attempt_count,next_attempt_at FROM memory_projection_windows").get()!;
-  expect(retry).toEqual({ state: "pending", attempt_count: 2, next_attempt_at: "2026-09-09T00:02:00Z" });
+  expect(retry).toEqual({ state: "pending", attempt_count: 2, next_attempt_at: retryAt });
   expect(db.query<{ n: number }, []>("SELECT COUNT(*) n FROM memory_projection_attempts").get()!.n).toBe(2);
   refreshSemanticState(db, "job");
   expect(JSON.parse(db.query<{ semantic_graph_state: string }, []>("SELECT semantic_graph_state FROM memory_projection_jobs").get()!.semantic_graph_state).state).toBe("pending");
@@ -60,54 +66,69 @@ test("T3 legacy failure migration preserves diagnostic attempt and fixed retry s
 
 test("T3 normal registration keeps ordered recursive leaves and reuses completed descendants", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t3-split-"));
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  let calls = 0;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async () => {
+    if (++calls <= 2) throw new ModelProviderRequestError({ code: "context_length_exceeded", message: "injected input limit" });
+    return { text: JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] }), model: "gpt-5.6-sol", usage: null } as never;
+  };
+  let db: Database | undefined;
   try {
-  const descriptor = initializeEmptyMemoryGeneration(butlerData);
-  const store = new AgentConversationStore({ butlerData });
-  store.beginTurn({ gateway: "app", externalSessionId: "split-session", sessionId: "split-session", actor: "user", turnId: "split-turn" });
-  const message = store.appendUserMessage({
-    sessionId: "split-session", turnId: "split-turn", text: "unused", originKind: "user_input", originRef: "test",
-    parts: Array.from({ length: 160 }, (_, index) => ({ kind: "text" as const, contentJson: { text: `source-${String(index).padStart(3, "0")}` } })),
-  });
-  store.finalizeTurn({ turnId: "split-turn", status: "complete", outcomeCapsule: { sessionId: "split-session", turnId: "split-turn", generation: 1, outcome: "delivered", requestMessageId: message.id } });
-  store.close();
-  const context = { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal };
-  const notice = { kind: "conversation_turn" as const, session_id: "split-session", turn_id: "split-turn", outcome_generation: 1 };
-  const registered = await ingestConversationMemory({ context, source: notice });
-  const graphPath = join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite");
-  const db = new Database(graphPath);
-  const parent = claimNextProjectionWindow(db, { jobId: registered.job_id, ownerNonce: "owner-1" })!;
-  const refs = parent.sourceRefs;
-  expect(refs).toHaveLength(160);
-  const firstChildren = splitProjectionWindow(db, {
-    jobId: registered.job_id, windowRef: parent.window_ref, ownerNonce: parent.ownerNonce,
-    children: [refs.slice(0, 80), refs.slice(80)] as [string[], string[]],
-  });
-  const first = claimNextProjectionWindow(db, { jobId: registered.job_id, ownerNonce: "owner-2" })!;
-  expect(first.window_ref).toBe(firstChildren[0]);
-  const secondChildren = splitProjectionWindow(db, {
-    jobId: registered.job_id, windowRef: first.window_ref, ownerNonce: first.ownerNonce,
-    children: [refs.slice(0, 40), refs.slice(40, 80)] as [string[], string[]],
-  });
-  db.query("UPDATE memory_projection_windows SET state='complete',output_json='{}',provider_evidence_json=? WHERE window_ref=?")
-    .run(JSON.stringify({ reported_model: "stub" }), secondChildren[0]!);
+    const descriptor = initializeEmptyMemoryGeneration(butlerData);
+    const store = new AgentConversationStore({ butlerData });
+    // Two midpoint splits need four leaves above the production minimum.
+    const unit = "샌디é👩‍👩‍👧‍👦";
+    const text = unit.repeat(Math.ceil(4 * MEMORY_SPLIT_MIN_SOURCE_BYTES / Buffer.byteLength(unit)) + 2);
+    store.beginTurn({ gateway: "app", externalSessionId: "split-session", sessionId: "split-session", actor: "user", turnId: "split-turn" });
+    const message = store.appendUserMessage({ sessionId: "split-session", turnId: "split-turn", text, originKind: "user_input", originRef: "test" });
+    store.finalizeTurn({ turnId: "split-turn", status: "complete", outcomeCapsule: { sessionId: "split-session", turnId: "split-turn", generation: 1, outcome: "delivered", requestMessageId: message.id } });
+    store.close();
+    const context = { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal };
+    const notice = { kind: "conversation_turn" as const, session_id: "split-session", turn_id: "split-turn", outcome_generation: 1 };
+    const registered = await ingestConversationMemory({ context, source: notice });
+    db = new Database(join(butlerData, "cognition", "memory", "generations", descriptor.generation_id, "graph.sqlite"));
+    const parent = db.query<{ window_ref: string; source_refs_json: string }, []>("SELECT window_ref,source_refs_json FROM memory_projection_windows").get()!;
+    const refs = JSON.parse(parent.source_refs_json) as string[];
+    expect(refs).toHaveLength(1);
+    const childrenOf = (windowRef: string) => db!.query<{ window_ref: string }, [string]>(
+      "SELECT window_ref FROM memory_projection_windows WHERE parent_window_ref=? ORDER BY ordinal",
+    ).all(windowRef).map((row) => row.window_ref);
+    const advanceMeaning = async () => {
+      // Select the stage under test; leave splitting, validation and completion to production.
+      db!.query("UPDATE memory_projection_jobs SET next_stage='semantic_graph' WHERE job_id=?").run(registered.job_id);
+      await advanceNextMemoryProjection({ context });
+    };
+    await advanceMeaning();
+    const firstChildren = childrenOf(parent.window_ref);
+    expect(firstChildren).toHaveLength(2);
+    await advanceMeaning();
+    const secondChildren = childrenOf(firstChildren[0]!);
+    expect(secondChildren).toHaveLength(2);
+    await advanceMeaning();
+    expect(calls).toBe(3);
 
-  const active = db.query<{ window_ref: string; ordinal: number; source_refs_json: string; state: string; output_json: string | null }, []>(
-    "SELECT window_ref,ordinal,source_refs_json,state,output_json FROM memory_projection_windows WHERE state!='replaced' ORDER BY ordinal",
-  ).all();
-  expect(active.map((row) => row.window_ref)).toEqual([...secondChildren, firstChildren[1]]);
-  expect(active.flatMap((row) => JSON.parse(row.source_refs_json) as string[])).toEqual(refs);
-  expect(new Set(active.map((row) => row.ordinal)).size).toBe(active.length);
-  expect(expandSplitSourceLeaves(db, refs[0]!)).toEqual([refs[0]]);
-  expect(sourceRows(db, refs).map((row) => row.source_id)).toEqual(refs);
-  expect(db.query<{ state: string; output_json: string }, [string]>("SELECT state,output_json FROM memory_projection_windows WHERE window_ref=?").get(secondChildren[0]!)).toEqual({ state: "complete", output_json: "{}" });
-  db.close();
-  await ingestConversationMemory({ context, source: notice, completionJobId: "same-notice" });
-  const verified = new Database(graphPath, { readonly: true });
-  expect(verified.query<{ window_ref: string; state: string; output_json: string | null }, []>(
-    "SELECT window_ref,state,output_json FROM memory_projection_windows WHERE state!='replaced' ORDER BY ordinal",
-  ).all()).toEqual(active.map((row) => ({ window_ref: row.window_ref, state: row.state, output_json: row.output_json })));
-  verified.close();
-  } finally { rmSync(butlerData, { recursive: true, force: true }); }
+    const active = db.query<{ window_ref: string; ordinal: number; source_refs_json: string; state: string; output_json: string | null }, []>(
+      "SELECT window_ref,ordinal,source_refs_json,state,output_json FROM memory_projection_windows WHERE state!='replaced' ORDER BY ordinal",
+    ).all();
+    expect(active.map((row) => row.window_ref)).toEqual([...secondChildren, firstChildren[1]!]);
+    expect(active.map((row) => row.state)).toEqual(["complete", "pending", "pending"]);
+    expect(active[0]!.output_json).not.toBeNull();
+    expect(new Set(active.map((row) => row.ordinal)).size).toBe(active.length);
+    const leaves = active.flatMap((row) => JSON.parse(row.source_refs_json) as string[]);
+    expect(expandSplitSourceLeaves(db, refs[0]!)).toEqual(leaves);
+    const spans = sourceRows(db, leaves);
+    expect(spans.map((row) => row.source_id)).toEqual(leaves);
+    const boundaries = new Set(graphemeByteBoundaries(text));
+    expect(spans[0]!.byte_start).toBe(0);
+    expect(spans.at(-1)!.byte_end).toBe(Buffer.byteLength(text));
+    expect(spans.every((row, index) => row.byte_end > row.byte_start && boundaries.has(row.byte_start) && boundaries.has(row.byte_end)
+      && (index === 0 || spans[index - 1]!.byte_end === row.byte_start))).toBe(true);
+    const cachedText = leaves.map((id) => db!.query<{ text: string }, [string]>("SELECT text FROM memory_source_text WHERE source_id=?").get(id)!.text).join("");
+    expect(cachedText).toBe(text);
+    await ingestConversationMemory({ context, source: notice, completionJobId: "same-notice" });
+    expect(db.query("SELECT window_ref,ordinal,source_refs_json,state,output_json FROM memory_projection_windows WHERE state!='replaced' ORDER BY ordinal").all()).toEqual(active);
+    expect(calls).toBe(3);
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; db?.close(); rmSync(butlerData, { recursive: true, force: true }); }
 });
 
 test("T3 saved plan keeps its owner and input while stale candidate invalidation clears only that window", () => {
@@ -267,46 +288,74 @@ test("T3 scheduler serves jobs fairly and rotates independently runnable stages"
 
 test("T3 hot-cache quantum retries I/O and publishes each current summary revision idempotently", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t3-cache-"));
+  const original = OPENAI_PROVIDER_ADAPTER.runPrompt;
+  let calls = 0;
+  OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => {
+    calls++;
+    const prompt = JSON.parse(request.prompt);
+    return { text: JSON.stringify({ status: "processed", entities: [],
+      items: [{ kind: "fact", subject: null, text: prompt.parts[0].text, evidence: [prompt.parts[0].id] }], attributes: [] }),
+      model: "gpt-5.6-sol", usage: null } as never;
+  };
+  let db: Database | undefined;
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
     const store = new AgentConversationStore({ butlerData });
     store.beginTurn({ gateway: "app", externalSessionId: "cache-session", sessionId: "cache-session", actor: "user", turnId: "cache-turn" });
-    const message = store.appendUserMessage({ sessionId: "cache-session", turnId: "cache-turn", text: "cache source", originKind: "user_input", originRef: "test" });
+    const message = store.appendUserMessage({ sessionId: "cache-session", turnId: "cache-turn", text: "first summary", originKind: "user_input", originRef: "test",
+      parts: ["first summary", "second summary"].map((text) => ({ kind: "text" as const, contentJson: { text } })) });
     store.finalizeTurn({ turnId: "cache-turn", status: "complete", outcomeCapsule: { sessionId: "cache-session", turnId: "cache-turn", generation: 1, outcome: "delivered", requestMessageId: message.id } });
     store.close();
     const context = { butlerData, target: { kind: "active" as const, expected_generation: descriptor.generation_id }, signal: new AbortController().signal };
     const notice = { kind: "conversation_turn" as const, session_id: "cache-session", turn_id: "cache-turn", outcome_generation: 1 };
     const registered = await ingestConversationMemory({ context, source: notice });
     const generationRoot = join(butlerData, "cognition", "memory", "generations", descriptor.generation_id);
-    const graphPath = join(generationRoot, "graph.sqlite");
-    const db = new Database(graphPath);
-    const pending = JSON.stringify({ state: "pending", blocked_by: null });
-    db.query("UPDATE memory_chunks SET summary='first summary',summary_status='complete' WHERE memory_chunk_id=?").run(registered.episode_id);
-    db.query("UPDATE memory_projection_jobs SET semantic_graph_state=?,hot_cache_state=?,next_stage='hot_cache' WHERE job_id=?")
-      .run(JSON.stringify({ state: "complete", completed_units: 1, total_units: 1 }), pending, registered.job_id);
-    db.close();
+    db = new Database(join(generationRoot, "graph.sqlite"));
+    const advanceStage = async (stage: "semantic_graph" | "hot_cache") => {
+      db!.query("UPDATE memory_projection_jobs SET next_stage=? WHERE job_id=?").run(stage, registered.job_id);
+      return advanceNextMemoryProjection({ context });
+    };
+    await advanceStage("semantic_graph");
+    expect(calls).toBe(1);
+    const completed = db.query<{ input_json: string; output_json: string; normalized_plan_json: string }, []>(
+      "SELECT input_json,output_json,normalized_plan_json FROM memory_projection_windows WHERE state='complete'",
+    ).all();
+    expect(completed).toHaveLength(1);
+    expect(JSON.parse(completed[0]!.input_json).source_units).toHaveLength(1);
+    expect(JSON.parse(completed[0]!.output_json).summary.evidence).toHaveLength(1);
+    expect(JSON.parse(completed[0]!.normalized_plan_json).refs).toBeDefined();
 
     writeFileSync(join(generationRoot, "hot"), "blocks-directory");
-    const failed = await advanceNextMemoryProjection({ context });
+    const failed = await advanceStage("hot_cache");
     expect(failed?.hot_cache).toMatchObject({ state: "pending", blocked_by: "hot_cache_io_failed" });
+    const retryAt = db.query<{ hot_cache_next_attempt_at: string }, []>("SELECT hot_cache_next_attempt_at FROM memory_projection_jobs").get()!.hot_cache_next_attempt_at;
+    expect(Number.isFinite(Date.parse(retryAt))).toBe(true);
     rmSync(join(generationRoot, "hot"));
     mkdirSync(join(generationRoot, "hot"), { recursive: true });
-    const retryDb = new Database(graphPath);
-    retryDb.query("UPDATE memory_projection_jobs SET hot_cache_next_attempt_at='2000-01-01T00:00:00Z',next_stage='hot_cache' WHERE job_id=?").run(registered.job_id);
-    retryDb.close();
-    expect((await advanceNextMemoryProjection({ context }))?.hot_cache.state).toBe("complete");
+    db.query("UPDATE memory_projection_jobs SET hot_cache_next_attempt_at='2000-01-01T00:00:00Z' WHERE job_id=?").run(registered.job_id);
+    expect((await advanceStage("hot_cache"))?.hot_cache.state).toBe("complete");
+    const cachePath = join(generationRoot, "hot", "cache.md");
+    const firstCache = readFileSync(cachePath, "utf8");
+    expect(firstCache).toContain("first summary");
+    expect(firstCache).not.toContain("second summary");
 
-    const secondDb = new Database(graphPath);
-    secondDb.query("UPDATE memory_chunks SET summary='first summary\n\nsecond summary' WHERE memory_chunk_id=?").run(registered.episode_id);
-    secondDb.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_next_attempt_at=NULL,next_stage='hot_cache' WHERE job_id=?").run(pending, registered.job_id);
-    secondDb.close();
-    expect((await advanceNextMemoryProjection({ context }))?.hot_cache.state).toBe("complete");
-    const cache = readFileSync(join(generationRoot, "hot", "cache.md"), "utf8");
+    // A second real completed window changes the summary; no direct summary injection.
+    await advanceStage("semantic_graph");
+    expect(calls).toBe(2);
+    expect(db.query("SELECT window_ref FROM memory_projection_windows WHERE state!='complete'").all()).toEqual([]);
+    expect((await advanceStage("hot_cache"))?.hot_cache.state).toBe("complete");
+    const cache = readFileSync(cachePath, "utf8");
     expect(cache).toContain("first summary");
     expect(cache).toContain("second summary");
+    const pending = JSON.stringify({ state: "pending", blocked_by: null });
+    db.query("UPDATE memory_projection_jobs SET hot_cache_state=?,hot_cache_next_attempt_at=NULL WHERE job_id=?").run(pending, registered.job_id);
+    expect((await advanceStage("hot_cache"))?.hot_cache.state).toBe("complete");
+    expect(readFileSync(cachePath, "utf8")).toBe(cache);
     const replay = await ingestConversationMemory({ context, source: notice, completionJobId: "cache-replay" });
     expect(replay.hot_cache.state).toBe("complete");
-  } finally { rmSync(butlerData, { recursive: true, force: true }); }
+    expect(readFileSync(cachePath, "utf8")).toBe(cache);
+    expect(calls).toBe(2);
+  } finally { OPENAI_PROVIDER_ADAPTER.runPrompt = original; db?.close(); rmSync(butlerData, { recursive: true, force: true }); }
 });
 
 test("T3 canonical catchup reads terminal outcomes by keyset and only calls ingestion", async () => {
