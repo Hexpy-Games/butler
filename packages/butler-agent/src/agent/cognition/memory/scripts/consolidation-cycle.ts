@@ -58,6 +58,7 @@ import { readMemoryHealth } from "../quality.ts";
 import { listTypedMemoryLifecycleSnapshot, listTypedMemoryRecordsSnapshot } from "../quality.ts";
 import { TaskStore } from "../../../work/task-store.ts";
 import type { MemoryExecutionContext } from "../projection/contracts.ts";
+import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 
 const fs: typeof import("fs") = createRequire(import.meta.url)("fs");
 
@@ -531,6 +532,7 @@ export async function runMemoryRebuildCommand(input: {
     return { operation, generationId, ...result };
   }
   if (operation === "build") {
+    const buildStarted = performance.now();
     const currentInventory = readLiveMemorySourceInventory(input.butlerData, { signal: input.signal, deadlineAt });
     if (currentInventory.sourceInventoryHash !== manifest.source_inventory_hash) {
       const next = refreshMemoryRebuildSnapshot({ butlerData: input.butlerData, generationId,
@@ -563,9 +565,15 @@ export async function runMemoryRebuildCommand(input: {
     while (quanta.semantic_windows < 100 && operations < 400 && !input.signal.aborted) {
       if (Date.now() >= quantumAdmissionDeadlineAt) { admissionClosed = true; break; }
       const before = readRebuildQuantumCounters(projectionContext);
+      const quantumStarted = performance.now();
       const progress = await import("../projection/ingestion.ts").then((module) =>
         module.advanceNextMemoryProjection({ context: projectionContext }));
-      if (!progress) break;
+      if (!progress) {
+        recordOperationalMetric({ category: "memory", name: "memory_rebuild_quantum", status: "ok",
+          durationMs: performance.now() - quantumStarted, dimensions: { pid: process.pid, quantum_type: "other" } },
+        { butlerData: input.butlerData });
+        break;
+      }
       lastProgress = progress as unknown as Record<string, unknown>;
       const after = readRebuildQuantumCounters(projectionContext);
       quanta.semantic_windows += Math.max(0,
@@ -573,10 +581,19 @@ export async function runMemoryRebuildCommand(input: {
         after.semanticSettled - before.semanticSettled);
       quanta.vector_units += Math.max(0, after.vector - before.vector);
       quanta.cache_jobs += Math.max(0, after.cache - before.cache);
+      const quantumTypes: string[] = [];
+      if (after.semanticAttempts > before.semanticAttempts || after.semanticSettled > before.semanticSettled) quantumTypes.push("semantic");
+      if (after.vector > before.vector) quantumTypes.push("vector");
+      if (after.cache > before.cache) quantumTypes.push("cache");
+      if (!quantumTypes.length) quantumTypes.push("other");
       if (after.semanticAttempts === before.semanticAttempts && after.semanticSettled === before.semanticSettled &&
         after.vector === before.vector && after.cache === before.cache) quanta.other += 1;
+      recordOperationalMetric({ category: "memory", name: "memory_rebuild_quantum", status: "ok",
+        durationMs: performance.now() - quantumStarted, dimensions: { pid: process.pid, quantum_type: quantumTypes.join("+") } },
+      { butlerData: input.butlerData });
       operations += 1;
     }
+    const finalizationStarted = performance.now();
     const vectorReconciliation = await import("../projection/ingestion.ts").then((module) =>
       module.withMemoryWriteGateAsync(context, () => reconcileMemoryGenerationVectorRepresentatives(context)));
     const stableLive = prepareStableLiveMemorySource({ butlerData: input.butlerData, signal: input.signal,
@@ -617,6 +634,10 @@ export async function runMemoryRebuildCommand(input: {
         }));
       }));
     } finally { candidateWitness.close(); stableLive.witness.close(); }
+    recordOperationalMetric({ category: "memory", name: "memory_rebuild_finalization", status: "ok",
+      durationMs: performance.now() - finalizationStarted, dimensions: { pid: process.pid } }, { butlerData: input.butlerData });
+    recordOperationalMetric({ category: "memory", name: "memory_rebuild_build_total", status: "ok",
+      durationMs: performance.now() - buildStarted, dimensions: { pid: process.pid } }, { butlerData: input.butlerData });
     return { operation, catchup, quanta, operations, last_progress: lastProgress,
       vector_reconciliation: vectorReconciliation,
       deadline_reached: admissionClosed || Date.now() >= deadlineAt, pending: {
