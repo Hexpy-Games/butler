@@ -133,7 +133,7 @@ export function createContextEvidenceResolver(
       const exact = hydrateSource(sourceRoot, { ...anchor, byte_start: span.byte_start, byte_end: span.byte_end });
       if (exact.text !== unit.text || unit.basis !== anchor.basis) return fail();
       const rows = db.query<ProjectionSourceRow, [string, string, string, string, string, number, number]>(`
-        SELECT * FROM memory_chunk_sources WHERE episode_id=? AND revision=? AND part_id=? AND scalar_pointer=?
+        SELECT * FROM memory_source_leaves WHERE episode_id=? AND revision=? AND part_id=? AND scalar_pointer=?
           AND conversation_message_id IS ? AND byte_end>? AND byte_start<? ORDER BY byte_start
       `).all(anchor.episode_id, anchor.revision, anchor.part_id, anchor.scalar_pointer, anchor.conversation_message_id, span.byte_start, span.byte_end);
       if (rows.some((row) => row.role !== anchor.role || row.content_hash !== anchor.content_hash || row.origin_kind !== anchor.origin_kind)) return fail();
@@ -180,7 +180,7 @@ export function createContextEvidenceResolver(
         .query<
           ProjectionSourceRow,
           [string]
-        >("SELECT * FROM memory_chunk_sources WHERE conversation_message_id=? AND scalar_pointer='/text' ORDER BY part_id,byte_start")
+        >("SELECT * FROM memory_source_leaves WHERE conversation_message_id=? AND scalar_pointer='/text' ORDER BY part_id,byte_start")
         .all(message.id);
       checkRows(rows);
       let offset = 0;

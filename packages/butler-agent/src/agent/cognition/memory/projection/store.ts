@@ -139,6 +139,10 @@ export function ensureV2MemorySchema(db: Database): void {
       role TEXT NOT NULL,origin_kind TEXT NOT NULL,observed_at TEXT NOT NULL,basis TEXT NOT NULL,
       child_source_ids_json TEXT NOT NULL,recorded_at TEXT NOT NULL
     );
+    -- Parent source identities remain valid evidence; only leaves partition work and text.
+    CREATE VIEW IF NOT EXISTS memory_source_leaves AS
+      SELECT s.* FROM memory_chunk_sources s
+      WHERE NOT EXISTS(SELECT 1 FROM memory_source_split_parents p WHERE p.source_id=s.source_id);
     CREATE TABLE IF NOT EXISTS memory_vector_units(
       unit_id TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES memory_projection_jobs(job_id),
       record_kind TEXT NOT NULL,owner_id TEXT NOT NULL,owner_revision TEXT NOT NULL,
@@ -436,7 +440,7 @@ export function refreshVectorUnitsForJob(db: Database, jobId: string, episodePro
       }
     }
     activeStage = "episode";
-    const sources = db.query<{ role: string; source_id: string }, [string, string]>("SELECT role,source_id FROM memory_chunk_sources WHERE episode_id=? AND revision=? ORDER BY observed_at,conversation_message_id,part_id,scalar_pointer,byte_start").all(job.episode_id, job.revision);
+    const sources = db.query<{ role: string; source_id: string }, [string, string]>("SELECT role,source_id FROM memory_source_leaves WHERE episode_id=? AND revision=? ORDER BY observed_at,conversation_message_id,part_id,scalar_pointer,byte_start").all(job.episode_id, job.revision);
     const episodeInputs = typeof episodeProjectionText === "string"
       ? [{ sourceId: sources.map((row) => row.source_id).join("\0"), text: episodeProjectionText, role: "mixed", byteStart: 0 }]
       : episodeProjectionText;

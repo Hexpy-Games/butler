@@ -3100,7 +3100,7 @@ function loadEligibleEpisodeSources(
     { source_id: string; episode_id: string; revision: string },
     any
   >(`
-    SELECT s.source_id,s.episode_id,s.revision FROM memory_chunk_sources s
+    SELECT s.source_id,s.episode_id,s.revision FROM memory_source_leaves s
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
     WHERE s.episode_id IN (${episodeIds.map(() => "?").join(",")}) AND ${
     scopeSql(input)

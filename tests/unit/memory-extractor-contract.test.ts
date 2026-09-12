@@ -144,12 +144,27 @@ test("legacy mixed windows split before A while completed rows and original text
     db.query("UPDATE memory_projection_windows SET source_refs_json=? WHERE window_ref=?").run(JSON.stringify(refs), windows[0].window_ref);
     db.query("UPDATE memory_projection_windows SET state='complete',source_refs_json='[]' WHERE window_ref=?").run(windows[1].window_ref);
     const completed = db.query("SELECT * FROM memory_projection_windows WHERE window_ref=?").get(windows[1].window_ref);
+    // Earlier neighboring extraction already uses this still-unprocessed source as evidence.
+    const parentSource = db.query<any, any[]>("SELECT * FROM memory_chunk_sources WHERE source_id=?").get(refs[0]);
+    db.exec("PRAGMA foreign_keys=ON");
+    db.query("INSERT INTO entities(id,type,label_original,identity_scope,created_at) VALUES('prior','entity','prior','user','2026-01-01')").run();
+    db.query("INSERT INTO entity_aliases(entity_id,surface_original,nfc_key,folded_key,source_id,resolution_kind) VALUES('prior','prior','prior','prior',?,'create')").run(refs[0]);
+    db.query("INSERT INTO entity_mentions(entity_id,source_id,episode_id,revision) VALUES('prior',?,?,?)").run(refs[0],parentSource.episode_id,parentSource.revision);
+    db.query("INSERT INTO edges(edge_id,source_node_id,target_node_id,rel_type) VALUES('prior-edge','prior','prior','test')").run();
+    db.query("INSERT INTO edge_evidence(edge_id,chunk_source_id,basis,extraction_version) VALUES('prior-edge',?,'user_statement','test')").run(refs[0]);
+    const priorEvidence = ["entity_aliases", "entity_mentions", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all());
+
     for (let count = 0; count < 12; count++) {
       if (!db.query<{ n: number }, []>("SELECT count(*) n FROM memory_projection_windows WHERE state NOT IN ('complete','replaced')").get()!.n) break;
       await advanceNextMemoryProjection({ context });
     }
     expect(db.query("SELECT state,error_code FROM memory_projection_windows WHERE state NOT IN ('complete','replaced')").all()).toEqual([]);
     expect(db.query("SELECT * FROM memory_projection_windows WHERE window_ref=?").get(windows[1].window_ref)).toEqual(completed);
+
+    expect(db.query("SELECT * FROM memory_chunk_sources WHERE source_id=?").get(refs[0])).toEqual(parentSource);
+    expect(db.query("SELECT * FROM memory_source_leaves WHERE source_id=?").get(refs[0])).toBeNull();
+    expect(["entity_aliases", "entity_mentions", "edge_evidence"].map(table => db.query(`SELECT * FROM ${table}`).all())).toEqual(priorEvidence);
+    expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(requests.map((p) => p.speaker)).toEqual(["user", "user", "assistant"]);
     const texts = requests.map((p) => p.parts.map((part: any) => part.text).join(""));
     expect(texts.join("")).toBe(userText + assistantText);
@@ -225,6 +240,13 @@ test("only invalid B is repaired and partial binding mutations are discarded", a
     const wire = JSON.parse(request.prompt), prompt = wire.input ?? wire;
     if (prompt.parts) { a++; return response(meaning) as never; }
     b++;
+    if (wire.correction) {
+      const schema = (request.responseFormat as any).schema.properties.decisions.items.properties;
+      expect(schema.target.enum).toEqual(prompt.targets.map((target: any) => target.target));
+      expect(schema.support.items.enum).toEqual(prompt.evidence.map((item: any) => item.ref));
+      expect(schema.candidate.enum).toEqual([null, ...prompt.targets.flatMap((target: any) => target.candidates.map((candidate: any) => candidate.ref))]);
+      expect(schema.span.enum).toEqual([null]);
+    }
     return response({ decisions: prompt.targets.map((target: any, index: number) => b === 1
       ? { target: target.target, candidate: index === 0 ? target.candidates[0].ref : "invented", span: null, support: [...target.evidence, ...target.candidates[0].evidence] }
       : { target: target.target, candidate: null, span: null, support: [] }) }) as never;
