@@ -48,7 +48,7 @@ export async function prepareBindingBatches(meaning: Meaning, passages: Passage[
     const evidence = target.evidence.map((id) => {
       const ref = `${target.ref}u${id}`;
       quotes.set(ref, passages[id]!.quote);
-      return { ref, text: passages[id]!.text, role: "current" };
+      return { ref, text: passages[id]!.quote.quote, role: "current" };
     });
     const candidates = eligible.flatMap((candidate, index) => {
       const historical = historicalQuote(candidate);

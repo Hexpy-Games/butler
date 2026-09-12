@@ -1,3 +1,4 @@
+import { attachAdjacentSourceContext } from "./context-evidence.ts";
 import { createLazyConversationProjectionReader } from "../../../conversation/projection-reader-store.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -43,6 +44,7 @@ import {
   invalidatePlannedWindow,
   selectNextProjectionJob,
   pinWindowInput,
+  reviseProjectionContext,
   readExtractionStage,
   saveExtractionStage,
   pinBindingCandidates,
@@ -55,7 +57,7 @@ import {
 } from "./store.ts";
 import { embedVectorQuantum, filterCurrentGenerationVectorMatches, findPersistedVectorReceipt, prepareReusedGenerationVectorRows, searchGenerationVectors, writeGenerationVectorRows } from "../recall/vector.ts";
 import { selectSemanticSeeds } from "../recall/candidates.ts";
-import { MemoryExtractAttemptError, memoryExtractionTimeoutMs, runStructuredMemoryExtractor } from "./extractor.ts";
+import { MemoryExtractDispositionError, MemoryExtractAttemptError, memoryExtractionTimeoutMs, runStructuredMemoryExtractor } from "./extractor.ts";
 import {
   acquireConsolidationLock,
   acquireConsolidationLockAsync,
@@ -1025,7 +1027,7 @@ export async function advanceNextMemoryProjection(input: {
           onProviderAdapterEntry: () => { providerInvoked = true; },
         });
       } catch (error) {
-        if (!(error instanceof MemoryExtractAttemptError)) {
+        if (!(error instanceof MemoryExtractAttemptError) && !(error instanceof MemoryExtractDispositionError)) {
           const origin = signal.aborted ? (signal.reason === timeoutReason ? "local" : "external")
             : error instanceof ModelProviderRequestError && error.timeoutKind ? "provider" : "unknown";
           failureCode = origin === "local" ? "memory_extract_timeout"
@@ -1091,6 +1093,19 @@ export async function advanceNextMemoryProjection(input: {
       return progressFromDb(db, pending.job_id);
     } catch (error) {
       if (isCommitInterruption(error)) return progressFromDb(db, pending.job_id);
+      if (error instanceof MemoryExtractDispositionError) {
+        const nextExpansion = extractInput.context_expansion === undefined ? 0 : extractInput.context_expansion === 0 ? 1 : null;
+        const revised = error.disposition === "needs_context" && nextExpansion !== null
+          ? attachAdjacentSourceContext(db, sourceRoot, { ...extractInput, candidates: [] }, nextExpansion) : null;
+        await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
+          assertProjectionSourceCurrent(sourceRoot, db, extractInput);
+          markWindowFailure(db, pending.job_id, pending.window_ref, error.message, { ownerNonce: pending.ownerNonce,
+            attemptKind: "validation", providerInvoked, clearResult: true,
+            failureEvidence: { ...error.evidence, failure_kind: "model_disposition", disposition: error.disposition } });
+          if (revised) reviseProjectionContext(db, pending.window_ref, extractInput, revised);
+        })());
+        return progressFromDb(db, pending.job_id);
+      }
       if (error instanceof MemoryExtractAttemptError) {
         const failure = retryDecision(error, pending.recoveryAttemptCount + 1);
         await withMemoryWriteGateAsync(input.context, () => db.transaction(() => {
@@ -1419,7 +1434,7 @@ async function buildExtractInput(
     context_units,
     candidates,
   };
-  return enforceExtractInputBudget(extractInput);
+  return enforceExtractInputBudget(attachAdjacentSourceContext(db, butlerData, extractInput, 0));
 }
 
 async function buildSourceWindowCandidates(input: {
