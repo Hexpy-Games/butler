@@ -620,9 +620,6 @@ export interface AppCopy {
     workspace: string;
     workspaceLocal: string;
     workspaceWorktree: string;
-    workspaceLocalDescription: string;
-    workspaceWorktreeDescription: string;
-    workspaceProjectRequired: string;
     messageComposer: string;
     placeholder: string;
     placeholderFollowUp: string;

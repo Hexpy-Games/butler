@@ -14,6 +14,22 @@
   width: 100%;
 }
 
+.wrapper[data-shape="pill"] {
+  min-width: 0;
+}
+
+.wrapper[data-shape="pill"] .trigger {
+  justify-content: center;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+}
+
+.leadingIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .trigger {
   display: inline-flex;
   width: 100%;
