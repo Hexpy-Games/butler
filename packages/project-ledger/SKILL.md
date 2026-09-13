@@ -100,8 +100,18 @@ package name or folder name as routing hints. Generated view files are derived
 views stored under the resolved ledger root.
 
 The governing spec lives under the resolved ledger root, for example
-`project-ledger/projects/butler/specs/project-ledger.md`. Legacy `docs/...`
-paths may exist as compatibility symlinks only.
+`project-ledger/projects/butler/specs/project-ledger.md`.
+
+Create specs, plans, work reports, decisions, and their experimental evidence in
+the canonical Ledger through its CLI/native tools. Do not write standalone
+project-management documents or duplicate record bodies under repository `docs/`.
+Use canonical record IDs for Task/Work references. Keep repository documentation
+for package usage, API contracts, and other source-owned technical guidance.
+
+When consolidating existing documents, reuse canonical records whose bodies
+already contain the source; verify preservation before deleting the repository
+copy. Keep compatibility symlinks only when the user explicitly requires them.
+A request to remove repository copies includes removing those symlinks.
 
 ## Work Recording
 
@@ -130,3 +140,8 @@ Only use `--write` when Project Ledger should become the source of truth for
 supported project-management documents. Write mode moves supported `docs/` files
 into the resolved data-home ledger root and leaves `docs/...` compatibility
 symlinks.
+
+`migrate-docs --write` always leaves compatibility symlinks and may overwrite a
+same-path destination. For a consolidation that must remove `docs/` copies,
+compare existing canonical records first, use `record create|update` for missing
+content, verify the preserved body/evidence, and only then remove the source.

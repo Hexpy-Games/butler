@@ -30,6 +30,10 @@ docs, and validation gates are all closed.
 ## Spec Discipline
 
 - Treat the spec as the source of truth, not the plan.
+- Store specs, plans, work reports, and experimental evidence in the canonical
+  Project Ledger through its CLI/native tools. Do not create parallel documents
+  under repository `docs/`; refer to canonical record IDs from Work and Task.
+  Repository READMEs remain appropriate for source-owned usage and API guidance.
 - If behavior is undefined, update the spec before coding.
 - Every feature must have success criteria that map to unit, integration,
   or E2E tests.
