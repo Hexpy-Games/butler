@@ -9,6 +9,7 @@ import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src
 import { ingestConversationMemory, advanceNextMemoryProjection } from "../../packages/butler-agent/src/agent/cognition/memory/index.ts";
 import { recallSourceBackedMemory } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
+import { selectSemanticSeeds } from "../../packages/butler-agent/src/agent/cognition/memory/recall/candidates.ts";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "memory-source-index-"));
@@ -46,6 +47,20 @@ test("source retrieval prefers specific evidence over verbose common words", asy
     const reader = new Database(join(f.root, "cognition/memory/generations", f.context.target.expected_generation, "graph.sqlite"), { readonly: true });
     try { expect(reader.query("SELECT value FROM memory_state WHERE key='graph_revision'").get()).toBeTruthy(); }
     finally { reader.close(); f.db.exec("ROLLBACK"); }
+  } finally { f.close(); }
+});
+
+test("recent context without query evidence cannot occupy graph seed slots", async () => {
+  const f = fixture();
+  try {
+    await f.add("사과밭 기록");
+    f.db.exec("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('garden','entity','사과밭','user','2026-09-13')");
+    f.db.exec("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) SELECT 'garden',source_id,episode_id,revision FROM memory_chunk_sources WHERE role='user'");
+    const input = { context: f.context, cue: "quartz observatory", includeVector: false, includeInternal: false,
+      limit: 5, scope: "current_session" as const, projectFilter: "any" as const, projectIds: [], sessionIds: [], asOf: new Date().toISOString(),
+      runtime: { sessionId: "session", turnId: "query", currentUserMessage: "quartz observatory", nativeOperationId: "query", projectId: null } };
+    expect(selectSemanticSeeds(f.db, input).seeds).toEqual([]);
+    expect(selectSemanticSeeds(f.db, { ...input, admittedChannels: { graph: false, lexical: false, vector: false, context: true, explicit: false, task: false } }).seeds).toEqual(["garden"]);
   } finally { f.close(); }
 });
 

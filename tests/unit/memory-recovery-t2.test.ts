@@ -727,6 +727,9 @@ test("node vector projection identity includes deterministic condition and polar
 test("current vector filtering retains an exact current row behind a closer stale revision", () => {
   const db = new Database(":memory:");
   ensureV2MemorySchema(db);
+  installAndBackfillRecallIndexes(db);
+  expect(db.query<{ name: string }, []>("PRAGMA index_list(memory_vector_units)").all().map((row) => row.name))
+    .toContain("idx_vector_units_owner_current");
   const state = JSON.stringify({ state: "complete" });
   db.query("INSERT INTO memory_chunks(memory_chunk_id,source_key,current_revision,conversation_session_id,conversation_turn_id,project_id,origin_kind,status,source_hash,created_at,updated_at) VALUES('episode','source','r1','session','turn',NULL,'user_input','active','h','2026-09-08T00:00:00Z','2026-09-08T00:00:00Z')").run();
   db.query("INSERT INTO memory_chunk_sources(source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis) VALUES('src','episode','r1','conversation','session','message','part','/text',0,1,'h','user','user_input','2026-09-08T00:00:00Z','user_statement')").run();

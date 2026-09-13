@@ -9,6 +9,7 @@ import {
   findPersistedVectorReceipt,
   generationVectorIdentity,
   prepareReusedGenerationVectorRows,
+  reconcilePersistedNodeVectorRepresentatives,
   writeGenerationVectorRows,
   type GenerationVectorRow,
 } from "../../packages/butler-agent/src/agent/cognition/memory/recall/vector.ts";
@@ -126,6 +127,9 @@ describe("shared node vector readiness", () => {
       [first, second],
       embeddingVersion,
     )).toBe(0);
+    expect(await reconcilePersistedNodeVectorRepresentatives(
+      generation, [first, second], [{ ...second, unit_id: "unit-superseded-current" }], embeddingVersion,
+    )).toEqual({ repaired_vector_keys: [], affected_unit_ids: [] });
 
     const wrongReceipt = {
       ...first,
@@ -155,5 +159,39 @@ describe("shared node vector readiness", () => {
       [first, second],
       embeddingVersion,
     )).toBe(2);
+
+    const invalidSuperseded = nodeUnit({
+      unitId: "unit-superseded-invalid",
+      jobId: "unbound",
+      sourceRevision: "unbound-r3",
+      sourceId: "source-unbound",
+      observedAt: "2026-09-03T00:00:00.000Z",
+      receiptJson: wrongReceipt.receipt_json,
+    });
+    const refused = await reconcilePersistedNodeVectorRepresentatives(
+      generation, [first, second], [invalidSuperseded], embeddingVersion,
+    );
+    expect(refused).toEqual({ repaired_vector_keys: [], affected_unit_ids: [] });
+    expect(await countInvalidPersistedVectorReadiness(
+      generation, [first, second], embeddingVersion,
+    )).toBe(2);
+
+    const superseded = { ...invalidSuperseded, unit_id: "unit-superseded", receipt_json: receipt };
+    const unitsBefore = JSON.stringify([first, second, superseded]);
+    const repaired = await reconcilePersistedNodeVectorRepresentatives(
+      generation, [first, second], [superseded], embeddingVersion,
+    );
+    expect(repaired).toEqual({
+      repaired_vector_keys: [identity.vectorKey],
+      affected_unit_ids: ["unit-a", "unit-b"],
+    });
+    expect(JSON.stringify([first, second, superseded])).toBe(unitsBefore);
+    expect(await countInvalidPersistedVectorReadiness(
+      generation, [first, second], embeddingVersion,
+    )).toBe(0);
+    expect(await findPersistedVectorReceipt(generation, [first], embeddingVersion)).not.toBeNull();
+    expect(await reconcilePersistedNodeVectorRepresentatives(
+      generation, [first, second], [superseded], embeddingVersion,
+    )).toEqual({ repaired_vector_keys: [], affected_unit_ids: [] });
   });
 });

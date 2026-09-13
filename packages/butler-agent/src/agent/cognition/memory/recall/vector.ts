@@ -149,6 +149,7 @@ export async function searchGenerationVectors(input: {
   time?: { from: string; to: string; basis: "conversation" | "event" };
   sourceProjectId?: string | null;
   includeInternal: boolean;
+  includeEpisodes?: boolean;
   socketPath?: string;
   deadlineAt: number;
   signal?: AbortSignal;
@@ -341,7 +342,7 @@ export async function searchGenerationVectors(input: {
     return result;
   };
   const nodes = await collect("node");
-  const episodes = await collect("episode");
+  const episodes = input.includeEpisodes === false ? [] : await collect("episode");
   return {
     nodes,
     episodes,
@@ -761,93 +762,101 @@ export async function writeGenerationVectorRows(
     join(generation.root, "butler.lance"),
   );
   let table;
-  let created = false;
   try {
-    table = await connection.openTable("butler_memory");
-  } catch {
-    const inferableRows = rows.every(
-      (row) => row.conversation_session_id === null,
-    )
-      ? rows.map((row) => ({ ...row, conversation_session_id: "" }))
-      : rows;
-    table = await connection.createTable("butler_memory", inferableRows);
-    if (inferableRows !== rows) {
-      await table.alterColumns([{
-        path: "conversation_session_id",
-        nullable: true,
-      }]);
-      await table.delete("conversation_session_id = ''");
+    let created = false;
+    try {
+      table = await connection.openTable("butler_memory");
+    } catch {
+      const inferableRows = rows.every(
+        (row) => row.conversation_session_id === null,
+      )
+        ? rows.map((row) => ({ ...row, conversation_session_id: "" }))
+        : rows;
+      table = await connection.createTable("butler_memory", inferableRows);
+      if (inferableRows !== rows) {
+        await table.alterColumns([{
+          path: "conversation_session_id",
+          nullable: true,
+        }]);
+        await table.delete("conversation_session_id = ''");
+        await table.add(rows);
+      }
+      created = true;
+    }
+    if (!created) {
+      const fields = (await table.schema()).fields as Array<{
+        name: string;
+        nullable: boolean;
+      }>;
+      if (!fields.some((field) => field.name === "source_kind")) {
+        await table.addColumns([{
+          name: "source_kind",
+          valueSql: "'conversation'",
+        }]);
+      }
+      const sessionField = fields.find(
+        (field) => field.name === "conversation_session_id",
+      );
+      if (sessionField && !sessionField.nullable) {
+        await table.alterColumns([{
+          path: "conversation_session_id",
+          nullable: true,
+        }]);
+      }
+      await table.delete(`vector_key IN (${
+        rows.map((row) => lanceStringLiteral(row.vector_key)).join(",")
+      })`);
       await table.add(rows);
     }
-    created = true;
+    const expected = new Map(rows.map((row) => [row.vector_key, row]));
+    const written = await table.query().where(
+      `vector_key IN (${
+        rows.map((row) => lanceStringLiteral(row.vector_key)).join(",")
+      })`,
+    )
+      .select([
+        "vector_key",
+        "generation",
+        "record_kind",
+        "owner_id",
+        "owner_revision",
+        "source_revision",
+        "embedding_chunk_id",
+        "embedding_version",
+        "project_id",
+        "origin_kind",
+        "source_kind",
+        "conversation_session_id",
+        "source_observed_at",
+        "source_refs_json",
+      ])
+      .limit(rows.length + 1).toArray() as Array<
+        Omit<GenerationVectorRow, "text" | "vector">
+      >;
+    if (
+      written.length !== rows.length || written.some((row) => {
+        const wanted = expected.get(row.vector_key);
+        return !wanted || row.generation !== wanted.generation ||
+          row.record_kind !== wanted.record_kind ||
+          row.owner_id !== wanted.owner_id ||
+          row.owner_revision !== wanted.owner_revision ||
+          row.source_revision !== wanted.source_revision ||
+          row.embedding_chunk_id !== wanted.embedding_chunk_id ||
+          row.embedding_version !== wanted.embedding_version ||
+          row.project_id !== wanted.project_id ||
+          row.origin_kind !== wanted.origin_kind ||
+          row.conversation_session_id !== wanted.conversation_session_id ||
+          row.source_observed_at !== wanted.source_observed_at ||
+          row.source_refs_json !== wanted.source_refs_json;
+      })
+    ) throw new Error("memory_vector_receipt_mismatch");
+  } finally {
+    try {
+      table?.close();
+    } finally {
+      connection.close();
+    }
   }
-  if (!created) {
-    const fields = (await table.schema()).fields as Array<{
-      name: string;
-      nullable: boolean;
-    }>;
-    if (!fields.some((field) => field.name === "source_kind")) {
-      await table.addColumns([{
-        name: "source_kind",
-        valueSql: "'conversation'",
-      }]);
-    }
-    const sessionField = fields.find(
-      (field) => field.name === "conversation_session_id",
-    );
-    if (sessionField && !sessionField.nullable) {
-      await table.alterColumns([{
-        path: "conversation_session_id",
-        nullable: true,
-      }]);
-    }
-    for (const row of rows) {
-      await table.delete(`vector_key = ${lanceStringLiteral(row.vector_key)}`);
-    }
-    await table.add(rows);
-  }
-  const expected = new Map(rows.map((row) => [row.vector_key, row]));
-  const written = await table.query().where(
-    `vector_key IN (${
-      rows.map((row) => lanceStringLiteral(row.vector_key)).join(",")
-    })`,
-  )
-    .select([
-      "vector_key",
-      "generation",
-      "record_kind",
-      "owner_id",
-      "owner_revision",
-      "source_revision",
-      "embedding_chunk_id",
-      "embedding_version",
-      "project_id",
-      "origin_kind",
-      "source_kind",
-      "conversation_session_id",
-      "source_observed_at",
-      "source_refs_json",
-    ])
-    .limit(rows.length + 1).toArray() as Array<
-      Omit<GenerationVectorRow, "text" | "vector">
-    >;
-  if (
-    written.length !== rows.length || written.some((row) => {
-      const wanted = expected.get(row.vector_key);
-      return !wanted || row.generation !== wanted.generation ||
-        row.record_kind !== wanted.record_kind ||
-        row.owner_id !== wanted.owner_id ||
-        row.owner_revision !== wanted.owner_revision ||
-        row.source_revision !== wanted.source_revision ||
-        row.embedding_chunk_id !== wanted.embedding_chunk_id ||
-        row.embedding_version !== wanted.embedding_version ||
-        row.project_id !== wanted.project_id ||
-        row.origin_kind !== wanted.origin_kind ||
-        row.conversation_session_id !== wanted.conversation_session_id ||
-        row.source_observed_at !== wanted.source_observed_at ||
-        row.source_refs_json !== wanted.source_refs_json;
-    })
-  ) throw new Error("memory_vector_receipt_mismatch");
 }
 
 export async function findPersistedVectorReceipt(
@@ -869,70 +878,78 @@ export async function findPersistedVectorReceipt(
   );
   let table;
   try {
-    table = await connection.openTable("butler_memory");
-  } catch {
-    return null;
+    try {
+      table = await connection.openTable("butler_memory");
+    } catch {
+      return null;
+    }
+    const fields = (await table.schema()).fields as Array<{ name: string }>;
+    if (!fields.some((field) => field.name === "source_kind")) return null;
+    const keys: string[] = [];
+    for (const unit of units) {
+      const rows = await table.query().where([
+        `generation = ${lanceStringLiteral(generation.generationId)}`,
+        `record_kind = ${lanceStringLiteral(unit.record_kind)}`,
+        `owner_id = ${lanceStringLiteral(unit.owner_id)}`,
+        `owner_revision = ${lanceStringLiteral(unit.owner_revision)}`,
+        `source_revision = ${lanceStringLiteral(unit.source_revision)}`,
+        `embedding_version = ${lanceStringLiteral(embeddingVersion)}`,
+      ].join(" AND ")).select([
+        "vector_key",
+        "embedding_chunk_id",
+        "project_id",
+        "origin_kind",
+        "source_kind",
+        "conversation_session_id",
+        "source_observed_at",
+        "source_refs_json",
+      ]).limit(2).toArray() as Array<{
+        vector_key: string;
+        embedding_chunk_id: string;
+        project_id: string;
+        origin_kind: string;
+        source_kind: string;
+        conversation_session_id: string | null;
+        source_observed_at: string;
+        source_refs_json: string;
+      }>;
+      if (rows.length !== 1) return null;
+      const row = rows[0]!;
+      const identity = generationVectorIdentity({
+        generationId: generation.generationId,
+        recordKind: unit.record_kind,
+        ownerId: unit.owner_id,
+        ownerRevision: unit.owner_revision,
+        embeddingText: unit.projection_text,
+        ordinal: 0,
+        embeddingVersion,
+      });
+      if (
+        row.vector_key !== identity.vectorKey ||
+        row.embedding_chunk_id !== identity.embeddingChunkId ||
+        row.project_id !== (unit.project_id ?? "") ||
+        row.origin_kind !== unit.origin_kind ||
+        row.source_kind !== unit.source_kind ||
+        row.conversation_session_id !== unit.conversation_session_id ||
+        row.source_observed_at !== normalizeIso(unit.source_observed_at) ||
+        row.source_refs_json !== unit.source_ids_json || !row.vector_key
+      ) return null;
+      keys.push(row.vector_key);
+    }
+    if (new Set(keys).size !== units.length) return null;
+    return {
+      generation: generation.generationId,
+      embedding_version: embeddingVersion,
+      vector_keys: keys.sort(),
+      row_count: keys.length,
+    };
+  } finally {
+    try {
+      table?.close();
+    } finally {
+      connection.close();
+    }
   }
-  const fields = (await table.schema()).fields as Array<{ name: string }>;
-  if (!fields.some((field) => field.name === "source_kind")) return null;
-  const keys: string[] = [];
-  for (const unit of units) {
-    const rows = await table.query().where([
-      `generation = ${lanceStringLiteral(generation.generationId)}`,
-      `record_kind = ${lanceStringLiteral(unit.record_kind)}`,
-      `owner_id = ${lanceStringLiteral(unit.owner_id)}`,
-      `owner_revision = ${lanceStringLiteral(unit.owner_revision)}`,
-      `source_revision = ${lanceStringLiteral(unit.source_revision)}`,
-      `embedding_version = ${lanceStringLiteral(embeddingVersion)}`,
-    ].join(" AND ")).select([
-      "vector_key",
-      "embedding_chunk_id",
-      "project_id",
-      "origin_kind",
-      "source_kind",
-      "conversation_session_id",
-      "source_observed_at",
-      "source_refs_json",
-    ]).limit(2).toArray() as Array<{
-      vector_key: string;
-      embedding_chunk_id: string;
-      project_id: string;
-      origin_kind: string;
-      source_kind: string;
-      conversation_session_id: string | null;
-      source_observed_at: string;
-      source_refs_json: string;
-    }>;
-    if (rows.length !== 1) return null;
-    const row = rows[0]!;
-    const identity = generationVectorIdentity({
-      generationId: generation.generationId,
-      recordKind: unit.record_kind,
-      ownerId: unit.owner_id,
-      ownerRevision: unit.owner_revision,
-      embeddingText: unit.projection_text,
-      ordinal: 0,
-      embeddingVersion,
-    });
-    if (
-      row.vector_key !== identity.vectorKey ||
-      row.embedding_chunk_id !== identity.embeddingChunkId ||
-      row.project_id !== (unit.project_id ?? "") ||
-      row.origin_kind !== unit.origin_kind ||
-      row.source_kind !== unit.source_kind ||
-      row.conversation_session_id !== unit.conversation_session_id ||
-      row.source_observed_at !== normalizeIso(unit.source_observed_at) ||
-      row.source_refs_json !== unit.source_ids_json || !row.vector_key
-    ) return null;
-    keys.push(row.vector_key);
-  }
-  if (new Set(keys).size !== units.length) return null;
-  return {
-    generation: generation.generationId,
-    embedding_version: embeddingVersion,
-    vector_keys: keys.sort(),
-    row_count: keys.length,
-  };
 }
 
 type PersistedVectorReceipt = {
@@ -1032,6 +1049,173 @@ export function completedVectorReceiptLacksExpectedIdentity(
   return keys !== null && !keys.has(identity.vectorKey);
 }
 
+type PersistedVectorMetadata = Omit<GenerationVectorRow, "text" | "vector">;
+
+async function persistedVectorMetadataByKey(
+  generation: MemoryGenerationHandle,
+  physicalKeys: Set<string>,
+): Promise<Map<string, PersistedVectorMetadata[]>> {
+  const rowsByKey = new Map<string, PersistedVectorMetadata[]>();
+  if (!physicalKeys.size) return rowsByKey;
+  const lancedb = await import("@lancedb/lancedb");
+  const connection = await lancedb.connect(join(generation.root, "butler.lance"));
+  let table: import("@lancedb/lancedb").Table | null = null;
+  try {
+    table = await connection.openTable("butler_memory");
+    const rows = await table.query().where(
+      `vector_key IN (${[...physicalKeys].map(lanceStringLiteral).join(",")})`,
+    ).select([
+      "vector_key",
+      "generation",
+      "record_kind",
+      "owner_id",
+      "owner_revision",
+      "source_revision",
+      "embedding_chunk_id",
+      "embedding_version",
+      "project_id",
+      "origin_kind",
+      "source_kind",
+      "conversation_session_id",
+      "source_observed_at",
+      "source_refs_json",
+    ]).limit(physicalKeys.size + 1).toArray() as PersistedVectorMetadata[];
+    for (const row of rows) {
+      const values = rowsByKey.get(row.vector_key) ?? [];
+      values.push(row);
+      rowsByKey.set(row.vector_key, values);
+    }
+    return rowsByKey;
+  } finally {
+    try {
+      table?.close();
+    } finally {
+      connection.close();
+    }
+  }
+}
+
+function vectorStableIdentityMatches(
+  row: PersistedVectorMetadata,
+  generation: MemoryGenerationHandle,
+  unit: ClaimedVectorUnit,
+  identity: { vectorKey: string; embeddingChunkId: string },
+  embeddingVersion: string,
+): boolean {
+  return row.vector_key === identity.vectorKey &&
+    row.generation === generation.generationId &&
+    row.record_kind === unit.record_kind &&
+    row.owner_id === unit.owner_id &&
+    row.owner_revision === unit.owner_revision &&
+    row.embedding_chunk_id === identity.embeddingChunkId &&
+    row.embedding_version === embeddingVersion &&
+    row.project_id === (unit.project_id ?? "") &&
+    row.origin_kind === unit.origin_kind;
+}
+
+function vectorMembershipMatches(row: PersistedVectorMetadata, unit: ClaimedVectorUnit): boolean {
+  return row.source_revision === unit.source_revision &&
+    row.source_kind === unit.source_kind &&
+    row.conversation_session_id === unit.conversation_session_id &&
+    row.source_observed_at === normalizeIso(unit.source_observed_at) &&
+    row.source_refs_json === unit.source_ids_json;
+}
+
+function validVectorUnitEvidence(
+  unit: ClaimedVectorUnit,
+  generationId: string,
+  embeddingVersion: string,
+  vectorKey: string,
+): boolean {
+  let sourceRefs: unknown;
+  try {
+    sourceRefs = JSON.parse(unit.source_ids_json);
+    normalizeIso(unit.source_observed_at);
+  } catch {
+    return false;
+  }
+  return Array.isArray(sourceRefs) && sourceRefs.length > 0 &&
+    sourceRefs.every((ref) => typeof ref === "string" && Boolean(ref)) &&
+    completedVectorReceiptKeys(unit, generationId, embeddingVersion)?.has(vectorKey) === true;
+}
+
+export type VectorRepresentativeReconciliation = {
+  repaired_vector_keys: string[];
+  affected_unit_ids: string[];
+};
+
+export async function reconcilePersistedNodeVectorRepresentatives(
+  generation: MemoryGenerationHandle,
+  currentCompleteUnits: ClaimedVectorUnit[],
+  supersededUnits: ClaimedVectorUnit[],
+  embeddingVersion: string,
+): Promise<VectorRepresentativeReconciliation> {
+  const empty = (): VectorRepresentativeReconciliation => ({ repaired_vector_keys: [], affected_unit_ids: [] });
+  const currentGroups = new Map<string, { identity: { vectorKey: string; embeddingChunkId: string }; units: ClaimedVectorUnit[] }>();
+  for (const unit of currentCompleteUnits) {
+    if (unit.record_kind !== "node") continue;
+    const identity = generationVectorIdentity({
+      generationId: generation.generationId, recordKind: unit.record_kind,
+      ownerId: unit.owner_id, ownerRevision: unit.owner_revision,
+      embeddingText: unit.projection_text, ordinal: 0, embeddingVersion,
+    });
+    if (!validVectorUnitEvidence(unit, generation.generationId, embeddingVersion, identity.vectorKey)) continue;
+    const group = currentGroups.get(identity.vectorKey) ?? { identity, units: [] };
+    group.units.push(unit);
+    currentGroups.set(identity.vectorKey, group);
+  }
+  if (!currentGroups.size) return empty();
+  const supersededByKey = new Map<string, ClaimedVectorUnit[]>();
+  for (const unit of supersededUnits) {
+    if (unit.record_kind !== "node") continue;
+    const identity = generationVectorIdentity({
+      generationId: generation.generationId, recordKind: unit.record_kind,
+      ownerId: unit.owner_id, ownerRevision: unit.owner_revision,
+      embeddingText: unit.projection_text, ordinal: 0, embeddingVersion,
+    });
+    if (!validVectorUnitEvidence(unit, generation.generationId, embeddingVersion, identity.vectorKey)) continue;
+    const values = supersededByKey.get(identity.vectorKey) ?? [];
+    values.push(unit);
+    supersededByKey.set(identity.vectorKey, values);
+  }
+  if (!supersededByKey.size) return empty();
+  const repairableKeys = new Set([...currentGroups.keys()].filter((key) => supersededByKey.has(key)));
+  if (!repairableKeys.size) return empty();
+  let rowsByKey: Map<string, PersistedVectorMetadata[]>;
+  try {
+    rowsByKey = await persistedVectorMetadataByKey(generation, repairableKeys);
+  } catch {
+    return empty();
+  }
+  const representatives: ClaimedVectorUnit[] = [];
+  const affected = new Map<string, string[]>();
+  for (const [vectorKey, group] of currentGroups) {
+    if (!repairableKeys.has(vectorKey)) continue;
+    const physical = rowsByKey.get(vectorKey) ?? [];
+    if (physical.length !== 1) continue;
+    const row = physical[0]!;
+    const candidates = group.units.filter((unit) =>
+      vectorStableIdentityMatches(row, generation, unit, group.identity, embeddingVersion));
+    if (!candidates.length || candidates.some((unit) => vectorMembershipMatches(row, unit))) continue;
+    const stale = (supersededByKey.get(vectorKey) ?? []).some((unit) =>
+      vectorStableIdentityMatches(row, generation, unit, group.identity, embeddingVersion) &&
+      vectorMembershipMatches(row, unit));
+    if (!stale) continue;
+    candidates.sort((a, b) => a.unit_id.localeCompare(b.unit_id));
+    representatives.push(candidates[0]!);
+    affected.set(vectorKey, candidates.map((unit) => unit.unit_id).sort());
+  }
+  if (!representatives.length) return empty();
+  const reused = await prepareReusedGenerationVectorRows(generation, representatives, embeddingVersion);
+  if (!reused || reused.length !== representatives.length) return empty();
+  await writeGenerationVectorRows(generation, reused);
+  const repaired = reused.map((row) => row.vector_key).sort();
+  return {
+    repaired_vector_keys: repaired,
+    affected_unit_ids: repaired.flatMap((key) => affected.get(key) ?? []),
+  };
+}
+
 /**
  * Verifies completed storage without treating a serialized batch receipt as an
  * operation identity. Node payloads are shared by their stable vector key;
@@ -1088,55 +1272,18 @@ export async function countInvalidPersistedVectorReadiness(
     ...nodeGroups.keys(),
     ...episodeUnits.map((entry) => entry.vectorKey),
   ]);
-  const lancedb = await import("@lancedb/lancedb");
-  const connection = await lancedb.connect(join(generation.root, "butler.lance"));
-  let table: import("@lancedb/lancedb").Table | null = null;
   try {
-    table = await connection.openTable("butler_memory");
-    const rows = await table.query().where(
-      `vector_key IN (${[...physicalKeys].map(lanceStringLiteral).join(",")})`,
-    ).select([
-      "vector_key",
-      "generation",
-      "record_kind",
-      "owner_id",
-      "owner_revision",
-      "source_revision",
-      "embedding_chunk_id",
-      "embedding_version",
-      "project_id",
-      "origin_kind",
-      "source_kind",
-      "conversation_session_id",
-      "source_observed_at",
-      "source_refs_json",
-    ]).limit(physicalKeys.size + 1).toArray() as Array<Omit<GenerationVectorRow, "text" | "vector">>;
-    const rowsByKey = new Map<string, Array<Omit<GenerationVectorRow, "text" | "vector">>>();
-    for (const row of rows) {
-      const values = rowsByKey.get(row.vector_key) ?? [];
-      values.push(row);
-      rowsByKey.set(row.vector_key, values);
-    }
+    const rowsByKey = await persistedVectorMetadataByKey(generation, physicalKeys);
     for (const [vectorKey, group] of nodeGroups) {
       const physical = rowsByKey.get(vectorKey) ?? [];
       const row = physical[0];
       const first = group.units[0]!;
       const stableIdentityMatches = physical.length === 1 && row &&
-        row.vector_key === vectorKey &&
-        row.generation === generation.generationId &&
-        row.record_kind === "node" &&
-        row.owner_id === first.owner_id &&
-        row.owner_revision === first.owner_revision &&
-        row.embedding_chunk_id === group.embeddingChunkId &&
-        row.embedding_version === embeddingVersion &&
-        row.project_id === (first.project_id ?? "") &&
-        row.origin_kind === first.origin_kind;
+        vectorStableIdentityMatches(row, generation, first, {
+          vectorKey, embeddingChunkId: group.embeddingChunkId,
+        }, embeddingVersion);
       const representativeIsCurrent = stableIdentityMatches && group.units.some((unit) =>
-        row.source_revision === unit.source_revision &&
-        row.source_kind === unit.source_kind &&
-        row.conversation_session_id === unit.conversation_session_id &&
-        row.source_observed_at === normalizeIso(unit.source_observed_at) &&
-        row.source_refs_json === unit.source_ids_json
+        vectorMembershipMatches(row, unit)
       );
       if (!stableIdentityMatches || !representativeIsCurrent) {
         for (const unit of group.units) invalid.add(unit.unit_id);
@@ -1168,12 +1315,6 @@ export async function countInvalidPersistedVectorReadiness(
       for (const unit of group.units) invalid.add(unit.unit_id);
     }
     for (const { unit } of episodeUnits) invalid.add(unit.unit_id);
-  } finally {
-    try {
-      table?.close();
-    } finally {
-      connection.close();
-    }
   }
   return invalid.size;
 }
@@ -1212,80 +1353,88 @@ export async function prepareReusedGenerationVectorRows(
   );
   let table;
   try {
-    table = await connection.openTable("butler_memory");
-  } catch {
-    return null;
+    try {
+      table = await connection.openTable("butler_memory");
+    } catch {
+      return null;
+    }
+    const persisted = await table.query().where(
+      `vector_key IN (${[...receiptKeys].map(lanceStringLiteral).join(",")})`,
+    )
+      .select([
+        "vector_key",
+        "generation",
+        "record_kind",
+        "owner_id",
+        "owner_revision",
+        "embedding_chunk_id",
+        "embedding_version",
+        "vector",
+      ])
+      .limit(receiptKeys.size + 1).toArray() as Array<
+        Pick<
+          GenerationVectorRow,
+          | "vector_key"
+          | "generation"
+          | "record_kind"
+          | "owner_id"
+          | "owner_revision"
+          | "embedding_chunk_id"
+          | "embedding_version"
+          | "vector"
+        >
+      >;
+    const rows: GenerationVectorRow[] = [];
+    for (const unit of units) {
+      const identity = generationVectorIdentity({
+        generationId: generation.generationId,
+        recordKind: unit.record_kind,
+        ownerId: unit.owner_id,
+        ownerRevision: unit.owner_revision,
+        embeddingText: unit.projection_text,
+        ordinal: 0,
+        embeddingVersion,
+      });
+      const row = persisted.find((candidate) =>
+        candidate.vector_key === identity.vectorKey &&
+        candidate.generation === generation.generationId &&
+        candidate.record_kind === unit.record_kind &&
+        candidate.owner_id === unit.owner_id &&
+        candidate.owner_revision === unit.owner_revision &&
+        candidate.embedding_chunk_id === identity.embeddingChunkId &&
+        candidate.embedding_version === embeddingVersion,
+      );
+      if (
+        !row || !Array.from(row.vector).length ||
+        Array.from(row.vector).some((value) => !Number.isFinite(value))
+      ) return null;
+      rows.push({
+        vector_key: row.vector_key,
+        generation: row.generation,
+        record_kind: row.record_kind,
+        owner_id: row.owner_id,
+        owner_revision: row.owner_revision,
+        source_revision: unit.source_revision,
+        embedding_chunk_id: row.embedding_chunk_id,
+        embedding_version: row.embedding_version,
+        project_id: unit.project_id ?? "",
+        origin_kind: unit.origin_kind,
+        source_kind: unit.source_kind,
+        conversation_session_id: unit.conversation_session_id,
+        source_observed_at: normalizeIso(unit.source_observed_at),
+        source_refs_json: unit.source_ids_json,
+        text: "",
+        vector: Array.from(row.vector),
+      });
+    }
+    return rows;
+  } finally {
+    try {
+      table?.close();
+    } finally {
+      connection.close();
+    }
   }
-  const persisted = await table.query().where(
-    `vector_key IN (${[...receiptKeys].map(lanceStringLiteral).join(",")})`,
-  )
-    .select([
-      "vector_key",
-      "generation",
-      "record_kind",
-      "owner_id",
-      "owner_revision",
-      "embedding_chunk_id",
-      "embedding_version",
-      "vector",
-    ])
-    .limit(receiptKeys.size + 1).toArray() as Array<
-      Pick<
-        GenerationVectorRow,
-        | "vector_key"
-        | "generation"
-        | "record_kind"
-        | "owner_id"
-        | "owner_revision"
-        | "embedding_chunk_id"
-        | "embedding_version"
-        | "vector"
-      >
-    >;
-  const rows: GenerationVectorRow[] = [];
-  for (const unit of units) {
-    const identity = generationVectorIdentity({
-      generationId: generation.generationId,
-      recordKind: unit.record_kind,
-      ownerId: unit.owner_id,
-      ownerRevision: unit.owner_revision,
-      embeddingText: unit.projection_text,
-      ordinal: 0,
-      embeddingVersion,
-    });
-    const row = persisted.find((candidate) =>
-      candidate.vector_key === identity.vectorKey &&
-      candidate.generation === generation.generationId &&
-      candidate.record_kind === unit.record_kind &&
-      candidate.owner_id === unit.owner_id &&
-      candidate.owner_revision === unit.owner_revision &&
-      candidate.embedding_chunk_id === identity.embeddingChunkId &&
-      candidate.embedding_version === embeddingVersion,
-    );
-    if (
-      !row || !Array.from(row.vector).length ||
-      Array.from(row.vector).some((value) => !Number.isFinite(value))
-    ) return null;
-    rows.push({
-      vector_key: row.vector_key,
-      generation: row.generation,
-      record_kind: row.record_kind,
-      owner_id: row.owner_id,
-      owner_revision: row.owner_revision,
-      source_revision: unit.source_revision,
-      embedding_chunk_id: row.embedding_chunk_id,
-      embedding_version: row.embedding_version,
-      project_id: unit.project_id ?? "",
-      origin_kind: unit.origin_kind,
-      source_kind: unit.source_kind,
-      conversation_session_id: unit.conversation_session_id,
-      source_observed_at: normalizeIso(unit.source_observed_at),
-      source_refs_json: unit.source_ids_json,
-      text: "",
-      vector: Array.from(row.vector),
-    });
-  }
-  return rows;
 }
 
 function digest(value: unknown[]): string {
