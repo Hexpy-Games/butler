@@ -1,3 +1,4 @@
+import { createTurnExecutionControls } from "../../packages/butler-agent/src/gateways/core/turn-execution-controls.ts";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1048,3 +1049,33 @@ function envelope(turnId: string, messageId: string, text: string): InboundEnvel
     },
   };
 }
+
+
+test("internal App controls remain internal through gateway admission and final canonical answer", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "btcc-origin-ingress-")); roots.push(butlerData);
+  const bindingStore = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  const binding = bindingStore.upsert({ sessionId: "butler/app-chat-continuity", role: "butler",
+    workspacePath: process.cwd(), runtimeAdapterId: "btcc-turn-runtime", modelProviderId: "openai",
+    modelRef: "openai/gpt-5.6-sol", transportBindings: [] });
+  const conversationStore = new AgentConversationStore({ butlerData });
+  const runtime = new ScriptedBtccGatewayRuntime("보고서 처리 결과");
+  const { btcc, host } = createBtcc({ runtime: runtime.runtime,
+    preparation: new DefaultBtccTurnPreparation({ bindingStore, conversationStore, butlerData,
+      promptAssembler: new PromptAssembler({ butlerHome: process.cwd(), butlerData }),
+      contextDocuments: runtime.contextDocuments, turns: { findTurn: async () => null },
+      wakeAuthorizations: runtime.wakeAuthorizations }),
+    progressEvents: runtime.progressEvents, turns: { findTurn: async () => null } });
+  try {
+    const incoming = envelope("origin-turn", "origin-message", "내부 보고서");
+    incoming.executionControls = createTurnExecutionControls({ turnId: "origin-turn", sessionId: binding.sessionId,
+      resolution: { controls: { model: "openai/gpt-5.6-sol", reasoning_effort: "medium", access_mode: "full_access", plan_mode: false },
+        source: "global_default", sessionControlRevision: 0, catalogGeneration: "test",
+        subsession_result: { relation_id: "relation-origin", result_id: "result-origin", safe_title: "내부 결과" } } });
+    await createBtccGatewayHandlers({ btcc }).butler!({ envelope: incoming,
+      route: { sessionId: binding.sessionId, role: "butler", reason: "session-hint", workspacePath: binding.workspacePath } });
+    const rows = conversationStore.readOriginCandidatesPage(null, 20).filter(row => row.turn_id === "origin-turn");
+    expect(rows.map(row => row.role).sort()).toEqual(["assistant", "user"]);
+    expect(rows.every(row => row.origin_kind === "internal_control")).toBe(true);
+    expect(conversationStore.readTurnOutcome("origin-turn")?.outcome).toBe("delivered");
+  } finally { await host.close(); conversationStore.close(); bindingStore.close(); }
+});
