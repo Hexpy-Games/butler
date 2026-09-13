@@ -1570,6 +1570,7 @@ export interface SessionOption {
 }
 
 export interface ComposerControls {
+  workspaceMode?: "local" | "worktree";
   /** UI target for the existing sender; dashboard remains visible until acceptance. */
   dashboardTarget?: { projectId: string; sessionId?: string; clientMessageId?: string; onSessionCreated?: (id: string) => void };
   contentParts?: import("./messageContent").MessageContent;

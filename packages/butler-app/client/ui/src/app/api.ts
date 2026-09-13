@@ -496,6 +496,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
       kind: body.kind,
       title: body.title,
       initialMessage: body.initial_message,
+      workspaceMode: body.workspace_mode,
       projectId: body.project_id,
       sessionHint: body.session_hint,
       idempotencyKey: body.idempotency_key,

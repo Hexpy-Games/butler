@@ -737,6 +737,9 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       `Permanently remove "${projectName}" from Butler? This will not delete the local folder.`,
   },
   composer: {
+    workspace: "Workspace",
+    workspaceLocal: "Local",
+    workspaceWorktree: "Worktree",
     messageComposer: "Message composer",
     placeholder: "Ask Butler anything",
     placeholderFollowUp: "Ask for follow-up changes",

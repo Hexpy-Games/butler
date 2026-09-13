@@ -22,6 +22,8 @@ import type { MessageContent } from "@/app/messageContent";
 type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
 export interface ComposerStore {
+  workspaceMode: "local" | "worktree";
+  setWorkspaceMode: (mode: "local" | "worktree") => void;
   draftRevision: number;
   draftSessionId: string;
   activateDraftSession: (sessionId: string, text: string, contentParts?: MessageContent) => number;

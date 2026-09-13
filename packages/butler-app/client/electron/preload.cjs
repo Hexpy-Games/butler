@@ -630,12 +630,13 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/sessions?${query}` : "/sessions");
   },
-  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey }) => requestJson("/sessions", {
+  createSession: ({ kind, title, initialMessage, projectId, sessionHint, idempotencyKey, workspaceMode }) => requestJson("/sessions", {
     method: "POST",
     body: JSON.stringify({
       kind,
       title,
       initial_message: initialMessage,
+      workspace_mode: workspaceMode,
       project_id: projectId,
       session_hint: sessionHint,
       idempotency_key: idempotencyKey,

@@ -319,14 +319,16 @@ export async function handleProjectSessionRoutes(
       throw new RequestError(
         400,
         "invalid_request",
-        "Session kind is required.",
+        "A valid session kind and workspace mode are required.",
       );
     const created = input.store.createSession(body, { emitCreated: false });
     try {
-      await input.store.provisionProjectSessionWorktree(
-        created.session.id,
-        input.serverShutdownSignal,
-      );
+      if (body.workspace_mode === "worktree") {
+        await input.store.provisionProjectSessionWorktree(
+          created.session.id,
+          input.serverShutdownSignal,
+        );
+      }
     } catch (error) {
       input.store.rollbackSessionCreation(created.session.id);
       throw error;
