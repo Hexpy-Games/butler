@@ -245,6 +245,7 @@ const VECTOR_QUERY_MIN_CORROBORATING_SEED_MATCHES = 2;
 const DEFAULT_RECALL_CACHE_TTL_MS = 30_000;
 const V2_RECALL_DEADLINE_MS = 5_000;
 const V2_RECALL_SOURCE_RESERVE_MS = 2_000;
+const V2_RECALL_VECTOR_BUDGET_MS = 750;
 const V2_RECALL_GRAPH_RESERVE_MS = 1_500;
 const V2_RECALL_ENVELOPE_BYTES = 24 * 1024;
 const V2_RECALL_COMPACT_EXCERPT_GRAPHEMES = 120;
@@ -2030,7 +2031,8 @@ async function recallSourceBackedWithVector(
       asOf: input.asOf,
       time: input.time,
       includeInternal: input.includeInternal,
-      deadlineAt,
+      // Optional vectors cannot spend the time reserved for source and graph retrieval.
+      deadlineAt: Math.min(deadlineAt, Date.now() + V2_RECALL_VECTOR_BUDGET_MS),
       signal: input.context.signal,
     });
     return recallSourceBackedGraph(input, generation, { vector }, deadlineAt, inventories);
