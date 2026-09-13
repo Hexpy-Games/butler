@@ -26,3 +26,10 @@
 - DS NativeSelect에 icon과 pill 형태를 추가해 기존 네이티브 선택 동작을 유지한다. 기존 기본형 셀렉트의 모습은 유지한다.
 - 실행: DS 형태와 컴포저 적용 → 기존 선택 테스트/모바일·데스크톱 렌더 검토 → 관련 검사와 교정 커밋.
 - 구현 전 리뷰: 서버·전송·기본값 계약은 r1과 같고 표현만 수정한다. 추가 설명이나 별도 패널을 다시 넣지 않는다.
+
+## r3 — 기존 컴포저 캡슐 디자인 재사용 (최신 사용자 교정)
+- 기준은 StewardComposerCapsules와 jump-to-latest가 사용하는 DS PillButton surface="glass"다. NativeSelect의 별도 pill 스타일은 폐기한다.
+- 같은 PillButton을 Radix Select의 asChild 트리거로 연결한다. 높이·테두리·글꼴·그림자·배경·focus/hover를 복제하지 않는다.
+- 기존 컴포저 캡슐처럼 중앙 정렬하고 아이콘(14px)과 Local/Worktree만 표시한다.
+- 순서: 기존 캡슐 구현과 직접 대조 → 실제 PillButton 조합 → 선택 동작과 같은 화면의 캡슐 비교 → 검사·커밋.
+- 구현 전 리뷰: 선택과 전송 계약은 그대로이고, 표현의 단일 소유자를 PillButton glass로 복원한다.

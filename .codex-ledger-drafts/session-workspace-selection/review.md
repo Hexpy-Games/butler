@@ -26,3 +26,11 @@
 - 공용 컴포저 DOM 선택 테스트 1 pass / 19 expectations, UI typecheck, lint:design, 수정 파일 ESLint·CSS 검사, UI build, diff check 통과.
 - DS Viewer의 실제 fixture에 기본형과 캡슐형을 연결했다. desktop 및 320/375/390/430px 렌더 모두 통과했고 desktop·320px 이미지를 직접 확인했다.
 - 서버·전송 계약과 Local 기본값은 그대로다. 운영 재시작이나 배포는 하지 않았다.
+
+## r3 교정 — 기존 컴포저 캡슐 재사용 (r2 시각 인수 취소)
+- 기존 StewardComposerCapsules의 PillButton surface="glass"와 중앙 정렬을 직접 확인했다. r2 NativeSelect pill 외형은 요구한 기존 캡슐과 달랐으므로 관련 API·CSS·fixture 변경을 제거했다.
+- DS SelectPillTrigger는 Radix Trigger asChild 아래에 실제 PillButton surface="glass"를 사용한다. 제품과 기존 진행 캡슐이 같은 스타일 소유자를 공유하며 새 캡슐 CSS는 없다.
+- 공용 ComposerWorkspaceSelect에 중앙 정렬, 14px 아이콘과 선택값만 적용했다. 설명·제목·화살표는 없다.
+- DOM 표시/상태/전송 잠금 검사 1 test / 14 expectations 통과. JSDOM의 portal 제한 때문에 메뉴 동작은 실제 브라우저에서 확인했다.
+- 격리된 실제 UI의 대시보드 클릭 선택, 새 대화 Local 초기화, 키보드 선택이 통과했다. DS Viewer에서 기존 glass PillButton과 선택 트리거를 나란히 렌더링해 동일 외형을 확인했고 desktop/320/375/390/430px 렌더가 통과했다.
+- UI typecheck, lint:design, 변경 파일 ESLint, build, diff check 통과. 서버·전송 동작 변경 없음. 운영 재시작·배포 없음.

@@ -9,6 +9,7 @@ import {
   ChevronUpIcon,
 } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
+import { PillButton } from "../../components/PillButton";
 import styles from "../../components/Select/Select.module.css";
 
 function Select({
@@ -55,6 +56,20 @@ function SelectTrigger({
       <SelectPrimitive.Icon asChild>
         <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
       </SelectPrimitive.Icon>
+    </SelectPrimitive.Trigger>
+  );
+}
+
+function SelectPillTrigger({
+  children,
+  icon,
+  ...props
+}: Omit<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>, "asChild"> & {
+  icon?: React.ReactNode;
+}) {
+  return (
+    <SelectPrimitive.Trigger asChild {...props}>
+      <PillButton surface="glass" icon={icon}>{children}</PillButton>
     </SelectPrimitive.Trigger>
   );
 }
@@ -179,5 +194,6 @@ export {
   SelectScrollUpButton,
   SelectSeparator,
   SelectTrigger,
+  SelectPillTrigger,
   SelectValue,
 };

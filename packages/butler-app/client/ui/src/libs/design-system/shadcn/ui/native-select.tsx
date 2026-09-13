@@ -73,15 +73,11 @@ function NativeSelect({
   defaultValue,
   onChange,
   size = "default",
-  shape = "default",
-  icon,
   stretch = false,
   value,
   ...props
 }: Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size"> & {
   size?: "default" | "sm";
-  shape?: "default" | "pill";
-  icon?: React.ReactNode;
   stretch?: boolean;
 }) {
   const valueString = getValueString(value ?? defaultValue);
@@ -109,7 +105,6 @@ function NativeSelect({
       )}
       data-slot="native-select-wrapper"
       data-size={size}
-      data-shape={shape}
       data-stretch={stretch ? "true" : undefined}
     >
       <span
@@ -117,7 +112,6 @@ function NativeSelect({
         data-slot="native-select-trigger"
         data-size={size}
       >
-        {icon ? <span className={styles.leadingIcon} aria-hidden="true">{icon}</span> : null}
         <span className={styles.value} data-slot="native-select-value">
           {selectedLabel}
         </span>
@@ -133,11 +127,11 @@ function NativeSelect({
       >
         {children}
       </select>
-      {shape !== "pill" ? <ChevronDownIcon
+      <ChevronDownIcon
         aria-hidden="true"
         className={styles.icon}
         data-slot="native-select-icon"
-      /> : null}
+      />
     </div>
   );
 }

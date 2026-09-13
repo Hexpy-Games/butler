@@ -19,11 +19,6 @@ Import from the public design-system alias:
 import { NativeSelect } from "@/butler-ds";
 ```
 
-Use `shape="pill"` with an optional `icon` for a compact capsule showing only
-the icon and selected label, without a chevron. It sizes to its content and keeps
-the native select keyboard and touch behavior. Keep the default shape for forms.
-The new-conversation workspace selector uses this capsule variant.
-
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
 ## Who can use this component
