@@ -3475,6 +3475,8 @@ function episodeRows(
 ) {
   if (!episodeIds.length) return [];
   const validity = claimEligibility(input, "claim", "node_id");
+  // Aggregate each one-to-many input before joining episodes; joining the raw
+  // sources and both claim sets multiplies rows without changing these aggregates.
   const rows = db.query<
     {
       episodeId: string;
@@ -3506,23 +3508,34 @@ function episodeRows(
       WHERE e.type IN ('preference','goal','constraint','decision','memory_atom')
     ), eligible_claims AS (
       SELECT claim.* FROM all_claims claim WHERE ${validity.sql}
+    ), source_summary AS (
+      SELECT episode_id,MAX(julianday(observed_at)) observed_at
+      FROM eligible_sources GROUP BY episode_id
+    ), claim_counts AS (
+      SELECT episode_id,COUNT(DISTINCT node_id) total
+      FROM all_claims GROUP BY episode_id
+    ), claim_summary AS (
+      SELECT eligible_claims.episode_id,COUNT(DISTINCT eligible_claims.node_id) total,
+        MAX(properties.valid_from) event_at,
+        MAX(CASE properties.salience WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END) salience,
+        MAX(CASE WHEN eligible_claims.type='goal' THEN 1 ELSE 0 END) has_goal
+      FROM eligible_claims LEFT JOIN memory_claims properties ON properties.node_id=eligible_claims.node_id
+      GROUP BY eligible_claims.episode_id
     )
     SELECT c.memory_chunk_id episodeId,c.current_revision revision,c.summary summary,
-      CASE WHEN COUNT(DISTINCT all_claims.node_id)>0 THEN 1 ELSE 0 END hasClaims,
-      strftime('%Y-%m-%dT%H:%M:%fZ',MAX(julianday(source.observed_at))) conversationAt,
+      CASE WHEN claim_counts.total>0 THEN 1 ELSE 0 END hasClaims,
+      strftime('%Y-%m-%dT%H:%M:%fZ',source.observed_at) conversationAt,
       c.conversation_session_id sessionId,c.conversation_turn_id turnId,
       c.project_id projectId,
-      MAX((SELECT valid_from FROM memory_claims WHERE node_id=eligible_claims.node_id)) eventAt,
-      CASE WHEN MAX(CASE (SELECT salience FROM memory_claims WHERE node_id=eligible_claims.node_id) WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=2 THEN 'high'
-        WHEN MAX(CASE (SELECT salience FROM memory_claims WHERE node_id=eligible_claims.node_id) WHEN 'high' THEN 2 WHEN 'normal' THEN 1 ELSE 0 END)=1 THEN 'normal' ELSE 'unspecified' END salience,
+      claim_summary.event_at eventAt,
+      CASE claim_summary.salience WHEN 2 THEN 'high' WHEN 1 THEN 'normal' ELSE 'unspecified' END salience,
       0 explicitPriority,
-      CASE WHEN MAX(CASE WHEN eligible_claims.type='goal' THEN 1 ELSE 0 END)=1 THEN 7 ELSE 30 END halfLifeDays,
+      CASE WHEN claim_summary.has_goal=1 THEN 7 ELSE 30 END halfLifeDays,
       0 supportCount
-    FROM memory_chunks c JOIN eligible_sources source ON source.episode_id=c.memory_chunk_id
-    LEFT JOIN all_claims ON all_claims.episode_id=c.memory_chunk_id
-    LEFT JOIN eligible_claims ON eligible_claims.episode_id=c.memory_chunk_id
-    GROUP BY c.memory_chunk_id
-    HAVING COUNT(DISTINCT all_claims.node_id)=0 OR COUNT(DISTINCT eligible_claims.node_id)>0 OR c.memory_chunk_id IN (${[...rawEpisodes].map(() => "?").join(",") || "NULL"})
+    FROM memory_chunks c JOIN source_summary source ON source.episode_id=c.memory_chunk_id
+    LEFT JOIN claim_counts ON claim_counts.episode_id=c.memory_chunk_id
+    LEFT JOIN claim_summary ON claim_summary.episode_id=c.memory_chunk_id
+    WHERE COALESCE(claim_counts.total,0)=0 OR claim_summary.total>0 OR c.memory_chunk_id IN (${[...rawEpisodes].map(() => "?").join(",") || "NULL"})
     ORDER BY c.memory_chunk_id
   `).all(...episodeIds, ...scopeArgs(input), ...validity.args, ...rawEpisodes);
   const requestedHistoricalEvent = input.time?.basis === "event" &&
