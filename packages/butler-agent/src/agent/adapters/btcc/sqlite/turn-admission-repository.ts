@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { subsessionResultClientMessageId } from "../../../../gateways/app/interface/protocol/internal-result-contract.ts";
 import type {
   AdmissionConstructionClaim,
   AdmissionInbox,
@@ -35,6 +36,25 @@ export type PersistedConversationAdmissionEvidence = {
   internalControl: boolean;
   evidence: ConversationOriginEvidence[];
 };
+
+/** Indexed once per recovery pass; historical app rows can lack execution controls. */
+export function readPersistedSubsessionOriginIndex(db: Database): Map<string, ConversationOriginEvidence> {
+  const result = new Map<string, ConversationOriginEvidence>();
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='btcc_subsession_outbox'").get()) return result;
+  const rows = db.query<{
+    outbox_id: string; relation_id: string; result_id: string;
+    parent_session_id: string; message_id: string;
+  }, []>("SELECT outbox_id,relation_id,result_id,parent_session_id,message_id FROM btcc_subsession_outbox").all();
+  for (const row of rows) {
+    if (row.message_id !== `subsession-result:${row.relation_id}:${row.result_id}`)
+      throw new Error("memory_origin_outbox_identity_invalid");
+    const sourceRef = `app:${subsessionResultClientMessageId(row.relation_id, row.result_id)}`;
+    result.set(`${row.parent_session_id}\0${sourceRef}`, {
+      kind: "subsession", ref: row.outbox_id, sha256: digest(stableJson(row)),
+    });
+  }
+  return result;
+}
 
 export function readPersistedConversationAdmissionEvidence(
   db: Database,

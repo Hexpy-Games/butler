@@ -343,15 +343,20 @@ export class ConversationMessageRecords {
         current.outcome_public_assistant_message_id !== input.outcome_public_assistant_message_id)
         return "source_changed";
       const evidenceJson = JSON.stringify(input.decision.evidence);
-      if (current.origin_version) {
-        return current.origin_kind === input.decision.kind && current.origin_ref === input.decision.ref &&
-          current.origin_reason === input.decision.reason && current.origin_version === input.decision.version &&
-          current.origin_evidence_json === evidenceJson ? "unchanged" : "classification_conflict";
-      }
       if (current.origin_kind !== input.origin_kind || current.origin_ref !== input.origin_ref ||
         current.origin_reason !== input.origin_reason || current.origin_version !== input.origin_version ||
         current.origin_evidence_json !== input.origin_evidence_json) return "source_changed";
-      this.dependencies.db.query(`UPDATE conversation_messages SET origin_kind=?,origin_ref=?,origin_reason=?,origin_version=?,origin_evidence_json=? WHERE id=?`)
+      if (current.origin_version) {
+        const unchanged = current.origin_kind === input.decision.kind && current.origin_ref === input.decision.ref &&
+          current.origin_reason === input.decision.reason && current.origin_version === input.decision.version &&
+          current.origin_evidence_json === evidenceJson;
+        if (unchanged) return "unchanged";
+        const internalCorrection = input.correctInternalOrigin === true && input.decision.complete &&
+          input.decision.kind === "internal_control" &&
+          input.decision.evidence.some((evidence) => evidence.kind === "subsession" && evidence.sha256 !== null);
+        if (!internalCorrection) return "classification_conflict";
+      }
+      this.dependencies.db.query("UPDATE conversation_messages SET origin_kind=?,origin_ref=?,origin_reason=?,origin_version=?,origin_evidence_json=? WHERE id=?")
         .run(input.decision.kind, input.decision.ref, input.decision.reason, input.decision.version, evidenceJson, input.message_id);
       this.dependencies.internals.bumpPublicSourceRevision();
       const updatedMessage = this.dependencies.internals.messageById(input.message_id)!;
