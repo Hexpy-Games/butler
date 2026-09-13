@@ -24,7 +24,7 @@ import type { MemoryExecutionContext } from "../../packages/butler-agent/src/age
 import { extractOutputSchema } from "../../packages/butler-agent/src/agent/cognition/memory/projection/extractor.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/schema-validation.ts";
 import { unicodeCaseFold } from "../../packages/butler-agent/src/agent/cognition/memory/projection/unicode.ts";
-import { openProjectionDb } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
+import { openProjectionDb, progressFromDb } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 import { publishConversationCompletionObservation } from "../../packages/butler-agent/src/agent/cognition/continuity/completion-observation.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
@@ -4511,9 +4511,12 @@ test("rebuild target writes its validated cache without exposing it through the 
   };
   transformExtractionOutput = (output, input) => {
     if (!Array.isArray(input.parts)) return;
+    const part = input.parts[0];
     for (const key of Object.keys(output)) delete output[key];
     Object.assign(output, {
-      status: "processed", entities: [], items: [], attributes: [],
+      status: "processed", entities: [],
+      items: [{ kind: "fact", subject: null, text: part.text, evidence: [part.id] }],
+      attributes: [],
     });
   };
   const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
@@ -5572,7 +5575,8 @@ async function advanceUntilSemanticTerminal(
     const progress = await memory.advanceNextMemoryProjection({ context });
     if (
       progress?.job_id === jobId &&
-      ["complete", "partial", "failed"].includes(progress.semantic_graph.state)
+      (["complete", "failed"].includes(progress.semantic_graph.state) ||
+        (progress.semantic_graph.state === "partial" && progress.semantic_graph.pending_units === 0))
     )
       return progress;
   }
@@ -5598,13 +5602,28 @@ async function advanceUntilSemanticAndHotCacheComplete(
   context: unknown,
   jobId: string,
 ): Promise<any> {
+  const target = (context as any)?.target;
+  const persisted = () => {
+    const generation = target?.kind === "active" ? target.expected_generation : target?.generation_id;
+    if (!generation) return null;
+    const db = openProjectionDb(join(
+      (context as any).butlerData, "cognition", "memory", "generations", generation, "graph.sqlite",
+    ), true);
+    try { return progressFromDb(db, jobId); }
+    finally { db.close(); }
+  };
+  const complete = (progress: any) =>
+    progress?.semantic_graph.state === "complete" && progress.hot_cache.state === "complete";
   let last: unknown = null;
   for (let attempt = 0; attempt < 64; attempt += 1) {
+    const before = persisted();
+    if (complete(before)) return before;
     const progress = await memory.advanceNextMemoryProjection({ context });
     if (progress) last = progress;
-    if (progress?.job_id === jobId && progress.semantic_graph.state === "complete" && progress.hot_cache.state === "complete") return progress;
+    if (progress?.job_id === jobId && complete(progress)) return progress;
+    const after = persisted();
+    if (complete(after)) return after;
   }
-  const target = (context as any)?.target;
   const diagnostics = target?.kind === "rebuild" ? (() => {
     const db = new Database(join((context as any).butlerData, "cognition", "memory", "generations", target.generation_id, "graph.sqlite"), { readonly: true });
     try { return db.query("SELECT state,error_code,attempt_count FROM memory_projection_windows WHERE job_id=?").all(jobId); }
@@ -5753,7 +5772,9 @@ function extractFor(input: Record<string, any>): Record<string, any> {
   if (Array.isArray(input.parts)) {
     return {
       status: "processed",
-      entities: [{ name: "Luna", evidence: [input.parts[0].id] }],
+      entities: input.speaker === "user"
+        ? [{ name: "Luna", evidence: [input.parts[0].id] }]
+        : [],
       items: [],
       attributes: [],
     };
