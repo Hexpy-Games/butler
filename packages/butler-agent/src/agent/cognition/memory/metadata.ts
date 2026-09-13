@@ -125,6 +125,9 @@ export function memoryMetadataPath(butlerData: string): string {
 }
 
 export function openMemoryMetadataDb(butlerData: string, options: { readonly?: boolean } = {}): Database {
+  if (!options.readonly && existsSync(join(cognitionMemoryRoot(butlerData), "active-generation.json"))) {
+    throw new Error("legacy_memory_writer_disabled_for_v2");
+  }
   const path = memoryMetadataPath(butlerData);
   if (!options.readonly) ensureDir(dirname(path));
   const db = new Database(path, options.readonly ? { readonly: true } : { create: true });

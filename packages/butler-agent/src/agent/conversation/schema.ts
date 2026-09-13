@@ -1,4 +1,4 @@
-export const CONVERSATION_STORE_SCHEMA_VERSION = 2;
+export const CONVERSATION_STORE_SCHEMA_VERSION = 4;
 
 export const CONVERSATION_STORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   compacted_by_summary_id TEXT,
   source_gateway TEXT,
   source_ref TEXT,
+  origin_kind TEXT NOT NULL DEFAULT 'unknown',
+  origin_ref TEXT,
+  origin_reason TEXT,
+  origin_version TEXT,
+  origin_evidence_json TEXT,
   UNIQUE (session_id, seq),
   FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE,
   FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE SET NULL
@@ -116,6 +121,14 @@ CREATE TABLE IF NOT EXISTS conversation_schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS conversation_public_source_state (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  revision INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO conversation_public_source_state (singleton, revision)
+VALUES (1, 0);
 
 CREATE INDEX IF NOT EXISTS conversation_turns_session_seq_idx
 ON conversation_turns(session_id, seq);

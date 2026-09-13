@@ -1,6 +1,7 @@
 import { normalizeLimit } from "../store-internals.ts";
-import type { ConversationProjectionEvent, TurnOutcomeCapsule } from "../types.ts";
+import type { ConversationMessageWithParts, ConversationProjectionEvent, TurnOutcomeCapsule } from "../types.ts";
 import type { ConversationStoreDependencies } from "./dependencies.ts";
+import { ConversationMessageRecords } from "./message-records.ts";
 
 export class ConversationProjectionRecords {
   constructor(private readonly dependencies: ConversationStoreDependencies) {}
@@ -48,7 +49,12 @@ export class ConversationProjectionRecords {
     }, [number, number]>(`
       SELECT rowid, *
       FROM conversation_turn_outcomes
-      WHERE rowid > ?
+      WHERE rowid > ? AND NOT EXISTS (
+        SELECT 1 FROM conversation_turn_outcomes newer
+        WHERE newer.turn_id=conversation_turn_outcomes.turn_id
+          AND (newer.generation>conversation_turn_outcomes.generation OR
+            (newer.generation=conversation_turn_outcomes.generation AND newer.rowid>conversation_turn_outcomes.rowid))
+      )
       ORDER BY rowid ASC
       LIMIT ?
     `).all(afterRow, capped);
@@ -71,5 +77,22 @@ export class ConversationProjectionRecords {
       safe_code: row.safe_code,
       created_at: row.created_at,
     }));
+  }
+
+  readRecoveredSourceMessages(afterMessageId: string | null, limit = 100): ConversationMessageWithParts[] {
+    const capped = normalizeLimit(limit, 100, 500);
+    const afterRow = afterMessageId
+      ? this.dependencies.db.query<{ rowid: number }, [string]>("SELECT rowid FROM conversation_messages WHERE id=?").get(afterMessageId)?.rowid ?? 0
+      : 0;
+    const ids = this.dependencies.db.query<{ id: string }, [number, number]>(`
+      SELECT id FROM conversation_messages
+      WHERE rowid>? AND turn_id IS NULL AND (
+        (role='user' AND origin_kind='user_input' AND status IN ('complete','failed','compacted') AND provenance IN ('recovered','imported')) OR
+        (role='assistant' AND origin_kind='assistant_public' AND status='complete' AND provenance='recovered')
+      )
+      ORDER BY rowid LIMIT ?
+    `).all(afterRow, capped);
+    const messages = new ConversationMessageRecords(this.dependencies);
+    return ids.map(({ id }) => messages.readMessageById(id)).filter((value): value is ConversationMessageWithParts => Boolean(value));
   }
 }

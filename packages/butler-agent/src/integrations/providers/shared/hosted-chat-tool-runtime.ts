@@ -21,7 +21,7 @@ import {
   hostedChatCompletionsUrl,
   type HostedChatMessage,
   hostedChatReasoningParams,
-  hostedChatResponseFormat,
+  hostedChatPromptContract,
   hostedChatText,
   hostedChatTools,
   hostedProviderErrorLabel,
@@ -39,11 +39,12 @@ export async function runHostedOpenAICompatiblePromptText(
   options: PromptOptions,
 ): Promise<string> {
   const messages: HostedChatMessage[] = [];
-  if (options.instructions?.trim()) {
-    messages.push({ role: "system", content: options.instructions.trim() });
+  const contract = hostedChatPromptContract(config.providerId, options);
+  if (contract.instructions?.trim()) {
+    messages.push({ role: "system", content: contract.instructions.trim() });
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
-  const responseFormat = hostedChatResponseFormat(options.responseFormat);
+  const responseFormat = contract.responseFormat;
   const roundIndex = options.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,

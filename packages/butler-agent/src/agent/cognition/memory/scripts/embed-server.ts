@@ -3,11 +3,16 @@ import { join } from "node:path";
 import { butlerDataPath } from "../../../../runtime/paths.ts";
 import { createServer as netCreateServer } from "net";
 import { chmodSync, existsSync, unlinkSync } from "fs";
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   createLazyEmbeddingFunctions as createLazyEmbeddingFunctionsImpl,
+  bindLoadedEmbeddingAssetIdentity,
   type EmbeddingLifecycle,
   type LazyEmbeddingFunctions,
   type LazyEmbeddingOptions,
+  type CheckedEmbeddingResult,
+  type LoadedEmbeddingAssetIdentity,
 } from "./embed-lifecycle.ts";
 import {
   createHealthServer,
@@ -15,6 +20,7 @@ import {
   type EmbedHealthServerHandle,
 } from "./embed-health.ts";
 import { createEmbedRequestQueue } from "./embed-request-queue.ts";
+import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 
 export {
   DEFAULT_EMBED_IDLE_RECYCLE_MS,
@@ -45,6 +51,7 @@ export interface EmbedServerOptions {
   maxRequestBytes?: number;
   maxQueueRequests?: number;
   maxQueueBytes?: number;
+  embedChecked?: (texts: string[], options?: { resplit?: boolean; maxEmbeddings?: number }) => Promise<CheckedEmbeddingResult>;
 }
 
 export interface EmbedServerHandle {
@@ -60,9 +67,36 @@ async function loadDefaultPipeline(): Promise<FeatureExtractionPipeline> {
     model: string,
     options: { dtype: "q8"; cache_dir: string },
   ) => Promise<FeatureExtractionPipeline>;
-  return createPipeline("feature-extraction", "Xenova/bge-m3", {
+  const cacheDir = join(butlerDataPath(), "cache", "models");
+  const loaded = await createPipeline("feature-extraction", "Xenova/bge-m3", {
     dtype: "q8",
-    cache_dir: join(butlerDataPath(), "cache", "models"),
+    cache_dir: cacheDir,
+  });
+  bindLoadedEmbeddingAssetIdentity(loaded, await fingerprintLoadedBgeAssets(cacheDir));
+  return loaded;
+}
+
+async function fingerprintLoadedBgeAssets(cacheDir: string): Promise<LoadedEmbeddingAssetIdentity> {
+  const root = join(cacheDir, "Xenova", "bge-m3");
+  return {
+    tokenizer_asset_sha256: await aggregateAssetHash(root, ["tokenizer.json", "tokenizer_config.json"]),
+    model_asset_sha256: await aggregateAssetHash(root, ["config.json", join("onnx", "model_quantized.onnx")]),
+  };
+}
+
+async function aggregateAssetHash(root: string, files: string[]): Promise<string> {
+  const aggregate = createHash("sha256");
+  for (const relative of files) aggregate.update(JSON.stringify([relative, await hashFile(join(root, relative))]));
+  return aggregate.digest("hex");
+}
+
+function hashFile(path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", () => reject(new Error("embed_asset_identity_unavailable")));
+    stream.on("end", () => resolve(hash.digest("hex")));
   });
 }
 
@@ -111,7 +145,20 @@ export function createServer(
     options.maxRequestBytes,
     DEFAULT_EMBED_MAX_REQUEST_BYTES,
   );
-  const requestQueue = createEmbedRequestQueue(options);
+  const requestQueue = createEmbedRequestQueue({
+    ...options,
+    onEvent: (event) => recordOperationalMetric({
+      category: "memory",
+      name: `embedding_queue_${event.phase}`,
+      status: event.code ? "error" : "ok",
+      durationMs: event.phase === "settled" ? event.runMs ?? 0 : event.waitMs,
+      dimensions: {
+        request_class: event.requestClass,
+        active: String(event.active),
+        code: event.code ?? "none",
+      },
+    }),
+  });
 
   let healthServer: EmbedHealthServerHandle | null = null;
   let boundHealthPort: number | null = null;
@@ -124,6 +171,8 @@ export function createServer(
   const server = netCreateServer((socket) => {
     let buffer = Buffer.alloc(0);
     let closed = false;
+    let admitted = false;
+    const requestAbort = new AbortController();
     const respond = (value: unknown): void => {
       if (closed || socket.destroyed) return;
       closed = true;
@@ -137,16 +186,28 @@ export function createServer(
       respond({
         error: error instanceof Error ? error.message : String(error),
         code,
-        ...(code === "embed_queue_full" ? { retryable: true } : {}),
+        ...(["embed_queue_full", "embed_request_deadline", "embed_request_cancelled"].includes(code)
+          ? { retryable: true } : {}),
+        ...(code === "embed_input_too_long"
+          ? {
+              token_count: (error as { tokenCount?: number }).tokenCount,
+              max_tokens: (error as { maxTokens?: number }).maxTokens,
+            }
+          : {}),
       });
     };
     const handleLine = (line: Buffer): void => {
+      if (admitted) {
+        respondError(new Error("Only one embedding request is allowed per socket"), "embed_invalid_request");
+        return;
+      }
+      admitted = true;
       const requestBytes = line.byteLength + 1;
       if (line.byteLength > maxRequestBytes) {
         respondError(new Error(`Embedding request exceeds ${maxRequestBytes} bytes`), "embed_request_too_large");
         return;
       }
-      let req: { text?: string; texts?: string[]; health?: boolean };
+      let req: { text?: string; texts?: string[]; health?: boolean; checked?: boolean; resplit?: boolean; max_embeddings?: number; request_class?: "interactive" | "background"; deadline_at?: number };
       try {
         req = JSON.parse(line.toString("utf8"));
       } catch {
@@ -159,14 +220,47 @@ export function createServer(
         return;
       }
 
+      const requestClass = req.request_class ?? "interactive";
+      const deadlineAt = req.deadline_at ?? Number.POSITIVE_INFINITY;
+      if (!(["interactive", "background"] as const).includes(requestClass) ||
+        (!Number.isFinite(deadlineAt) && deadlineAt !== Number.POSITIVE_INFINITY)) {
+        respondError(new Error("Invalid embedding scheduling metadata"), "embed_invalid_request");
+        return;
+      }
+      const scheduling = { requestClass, deadlineAt, signal: requestAbort.signal };
+
+      if (req.checked === true) {
+        const texts = Array.isArray(req.texts) ? req.texts : typeof req.text === "string" ? [req.text] : [];
+        if (!options.embedChecked || texts.length === 0 || !texts.every((text) => typeof text === "string" && text.length > 0)) {
+          respondError(new Error("Invalid checked embedding request"), "embed_invalid_request");
+          return;
+        }
+        if (req.max_embeddings !== undefined && (!Number.isSafeInteger(req.max_embeddings) || req.max_embeddings < 1 || req.max_embeddings > 32)) {
+          respondError(new Error("Invalid checked embedding limit"), "embed_invalid_request");
+          return;
+        }
+        if (requestClass === "background" && texts.length > 4) {
+          respondError(new Error("Background embedding batch exceeds 4 chunks"), "embed_invalid_request");
+          return;
+        }
+        requestQueue.enqueue(() => options.embedChecked!(texts, { resplit: req.resplit === true, maxEmbeddings: req.max_embeddings }), requestBytes, scheduling)
+          .then((result) => respond(result))
+          .catch((error) => respondError(error));
+        return;
+      }
+
       if (Array.isArray(req.texts)) {
         const texts = req.texts;
         if (texts.length === 0 || !texts.every((t) => typeof t === "string")) {
           respondError(new Error("Invalid 'texts' field"), "embed_invalid_request");
           return;
         }
+        if (requestClass === "background" && texts.length > 4) {
+          respondError(new Error("Background embedding batch exceeds 4 chunks"), "embed_invalid_request");
+          return;
+        }
         const batchFn = embedBatchFn ?? ((ts: string[]) => Promise.all(ts.map(embedFn)));
-        requestQueue.enqueue(() => batchFn(texts), requestBytes)
+        requestQueue.enqueue(() => batchFn(texts), requestBytes, scheduling)
           .then((embeddings) => respond({ embeddings }))
           .catch((err) => respondError(err));
         return;
@@ -177,7 +271,7 @@ export function createServer(
         return;
       }
 
-      requestQueue.enqueue(() => embedFn(req.text!), requestBytes)
+      requestQueue.enqueue(() => embedFn(req.text!), requestBytes, scheduling)
         .then((embedding) => respond({ embedding }))
         .catch((err) => respondError(err));
     };
@@ -198,6 +292,7 @@ export function createServer(
     });
 
     socket.on("error", () => {});
+    socket.on("close", () => requestAbort.abort());
   });
   server.once("error", (error) => {
     options.lifecycle?.markUnavailable?.();
@@ -263,6 +358,7 @@ if (import.meta.main) {
   const server = createServer(embedding.embedText, DEFAULT_SOCKET, embedding.embedTexts, {
     healthPort,
     lifecycle: embedding.lifecycle,
+    embedChecked: embedding.embedChecked,
   });
   console.log(`embed-server ready on socket ${DEFAULT_SOCKET}; model loads on first request`);
   server.ready.catch((error) => {

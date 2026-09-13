@@ -15,6 +15,8 @@ import type {
 import { conversationSessionIdForDurableSession } from "./session-admission.ts";
 import { AgentConversationStore } from "./store.ts";
 import type { ConversationProvenance } from "./types.ts";
+import { verifyTurnExecutionControls } from "../../gateways/core/turn-execution-controls.ts";
+import { sessionHintForRow } from "../../gateways/app/domain/sessions/session-read-model.ts";
 
 export function runHistoricalConversationRecovery(input: {
   butlerData: string;
@@ -87,6 +89,41 @@ export function readHistoricalAppProjectionRows(dbPath: string): HistoricalAppPr
   } finally {
     db.close();
   }
+}
+
+export function readHistoricalAppOriginEvidence(input: {
+  dbPath: string; appMessageId?: string; canonicalSessionId: string;
+  canonicalTurnId: string | null; canonicalMessageId: string; externalSessionId?: string | null;
+}): { available: boolean; matched: boolean; internalControl: boolean; ref: string | null; sha256: string | null } {
+  if (!existsSync(input.dbPath)) return { available: true, matched: false, internalControl: false, ref: null, sha256: null };
+  try {
+    const db = new Database(input.dbPath, { readonly: true });
+    try {
+      if (!hasTable(db, "messages") || !hasColumn(db, "messages", "conversation_session_id") ||
+        !hasColumn(db, "messages", "conversation_turn_id") || !hasColumn(db, "messages", "conversation_message_id"))
+        return { available: false, matched: false, internalControl: false, ref: null, sha256: null };
+      const row = input.appMessageId
+        ? db.query<{ id: string; chat_id: string; role: string; conversation_session_id: string | null; conversation_turn_id: string | null; conversation_message_id: string | null; app_turn_id: string | null; execution_controls_json: string | null }, [string]>(
+          "SELECT m.id,m.chat_id,m.role,m.conversation_session_id,m.conversation_turn_id,m.conversation_message_id,t.id app_turn_id,t.execution_controls_json FROM messages m LEFT JOIN turns t ON t.chat_id=m.chat_id AND t.user_message_id=m.id WHERE m.id=?",
+        ).get(input.appMessageId)
+        : db.query<{ id: string; chat_id: string; role: string; conversation_session_id: string | null; conversation_turn_id: string | null; conversation_message_id: string | null; app_turn_id: string | null; execution_controls_json: string | null }, [string, string | null, string]>(
+          "SELECT m.id,m.chat_id,m.role,m.conversation_session_id,m.conversation_turn_id,m.conversation_message_id,t.id app_turn_id,t.execution_controls_json FROM messages m LEFT JOIN turns t ON t.chat_id=m.chat_id AND t.user_message_id=m.id WHERE m.conversation_session_id=? AND m.conversation_turn_id IS ? AND m.conversation_message_id=? ORDER BY m.created_at,m.id LIMIT 1",
+        ).get(input.canonicalSessionId, input.canonicalTurnId, input.canonicalMessageId);
+      const matched = row?.role === "user" && row.conversation_session_id === input.canonicalSessionId &&
+        row.conversation_turn_id === input.canonicalTurnId && row.conversation_message_id === input.canonicalMessageId &&
+        Boolean(row.app_turn_id && row.execution_controls_json) &&
+        (!input.externalSessionId || sessionHintForRow(row.chat_id) === input.externalSessionId);
+      let internalControl = false;
+      if (row?.execution_controls_json) {
+        const controls = verifyTurnExecutionControls(JSON.parse(row.execution_controls_json));
+        if (controls.turn_id !== row.app_turn_id || controls.session_id !== row.chat_id)
+          return { available: false, matched: false, internalControl: false, ref: null, sha256: null };
+        internalControl = Boolean(controls.subsession_result);
+      }
+      return { available: true, matched, internalControl, ref: row?.id ?? null,
+        sha256: row ? createHash("sha256").update(JSON.stringify(row)).digest("hex") : null };
+    } finally { db.close(); }
+  } catch { return { available: false, matched: false, internalControl: false, ref: null, sha256: null }; }
 }
 
 function importDecision(

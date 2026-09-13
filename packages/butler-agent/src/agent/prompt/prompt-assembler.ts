@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { resolveRuntimeMessageLanguage } from "../output/messages.ts";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
-import { isAbsolute, join } from "path";
+import { join } from "path";
 import type { AttachmentRef, InboundEnvelope, StoredSessionBinding } from "../../test-support/harness/contracts.ts";
 import type { GatewayRoute } from "../../gateways/core/contracts.ts";
 import { appendPromptAssemblyContextMetric } from "../../operations/metrics/context-monitor.ts";
@@ -17,8 +17,9 @@ import type {
 } from "../context/context-projection.ts";
 import { cognitionMemoryRoot } from "../cognition/paths.ts";
 import { renderScopedFeedbackBufferContexts } from "../cognition/feedback/buffer.ts";
-import { projectMemoryPath, refreshProjectCapsule } from "../cognition/memory/project-memory.ts";
+import { projectMemoryPath, readProjectCapsuleForPrompt, refreshProjectCapsule } from "../cognition/memory/project-memory.ts";
 import { sessionContinuityPath } from "../cognition/continuity/continuity-store.ts";
+import { readGenerationHotCache } from "../cognition/continuity/hot-cache-writer.ts";
 import {
   readPersonalizationProfile,
   renderPersonalizationProfilePrompt,
@@ -179,21 +180,20 @@ function buildDynamicMemorySections(input: {
   workspacePath: string;
 }): PromptSection[] {
   const sections: PromptSection[] = [];
-  const memoryRoot = cognitionMemoryRoot(input.butlerData);
-  const projectMemoryFile = projectMemoryPath({
+  const projectMemory = readProjectCapsuleForPrompt({
     butlerData: input.butlerData,
     projectId: input.projectId,
   });
-  const projectMemory = projectMemoryFile
-    ? readTextIfExists(projectMemoryFile)
-    : null;
   pushSection(sections, {
     id: "hot-cache",
     title: "Hot Cache",
-    content: readTextIfExists(join(memoryRoot, "hot", "cache.md")),
+    content: readGenerationHotCache({
+      butlerData: input.butlerData,
+      projectId: input.projectId,
+    }),
     region: "retrieved_context",
-    projectionClass: "mandatory_hot_cache",
-    scopeKind: "user",
+    projectionClass: "optional_hot_cache",
+    scopeKind: input.projectId ? "project" : "user",
   });
   pushSection(sections, {
     id: "session-continuity",
@@ -211,25 +211,7 @@ function buildDynamicMemorySections(input: {
     projectionClass: "optional_hot_cache",
     scopeKind: "project",
   });
-  pushSection(sections, {
-    id: "project-hot-cache",
-    title: "Project Hot Cache",
-    content: projectHotCache(input.workspacePath, projectMemory),
-    region: "retrieved_context",
-    projectionClass: "mandatory_hot_cache",
-    scopeKind: input.projectId ? "project" : "session",
-  });
   return sections;
-}
-
-function projectHotCache(workspacePath: string, projectMemory: string | null): string | null {
-  const sessionCache = readTextIfExists(join(workspacePath, ".butler", "hot-cache.md"));
-  if (sessionCache) return sessionCache;
-  const canonicalPath = projectMemory
-    ?.match(/^- canonical_path:\s*(.+)$/mu)?.[1]
-    ?.trim();
-  if (!canonicalPath || !isAbsolute(canonicalPath)) return null;
-  return readTextIfExists(join(canonicalPath, ".butler", "hot-cache.md"));
 }
 
 function buildDynamicPersonalizationSections(input: {
