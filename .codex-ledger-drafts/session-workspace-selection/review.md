@@ -19,3 +19,10 @@
 
 ## 최종 계약 대조와 한계
 두 진입점의 선택 UI, Local 기본값, 실제 생성 요청의 분기, 웹/Electron 전달, 기존 세션 위치 보존을 확인했다. 운영 서비스 재시작·배포·원격 push는 수행하지 않았다. 실제 provider Turn이나 패키징된 Electron 실행을 이번 UI 변경의 검증으로 주장하지 않는다.
+
+## r2 교정 결과 — 캡슐형 선택
+- 사용자가 지적한 설명문·제목·전체 폭 배경을 제거했다. DS NativeSelect의 내용 폭 pill 형태로 Monitor + Local 또는 GitBranch + Worktree만 표시한다. 화살표도 표시하지 않는다.
+- 새 DS 블록 없이 기존 NativeSelect의 선택/키보드/터치 동작과 기본형 스타일을 유지한다. 사용하지 않는 설명 copy 3개도 삭제했다.
+- 공용 컴포저 DOM 선택 테스트 1 pass / 19 expectations, UI typecheck, lint:design, 수정 파일 ESLint·CSS 검사, UI build, diff check 통과.
+- DS Viewer의 실제 fixture에 기본형과 캡슐형을 연결했다. desktop 및 320/375/390/430px 렌더 모두 통과했고 desktop·320px 이미지를 직접 확인했다.
+- 서버·전송 계약과 Local 기본값은 그대로다. 운영 재시작이나 배포는 하지 않았다.

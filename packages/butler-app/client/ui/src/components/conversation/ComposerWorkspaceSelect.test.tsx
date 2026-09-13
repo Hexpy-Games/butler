@@ -24,12 +24,16 @@ test("both new conversation surfaces default to local, allow worktree, and lock 
       });
       const select = container.querySelector("select")!;
       expect(select.value).toBe("local");
+      expect(container.querySelector('[data-slot="native-select-trigger"]')!.textContent).toBe("Local");
+      expect(container.querySelector('[data-slot="native-select-trigger"] svg')).not.toBeNull();
+      expect(container.querySelector('[data-slot="tinted-glass"]')).toBeNull();
       await act(async () => {
         select.value = "worktree";
         select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
       });
       expect(useComposerStore.getState().workspaceMode).toBe("worktree");
       expect(select.value).toBe("worktree");
+      expect(container.querySelector('[data-slot="native-select-trigger"]')!.textContent).toBe("Worktree");
       await act(async () => useComposerStore.setState({ isSending: true }));
       expect(select.disabled).toBe(true);
     }

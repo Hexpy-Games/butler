@@ -29,7 +29,6 @@ import {
   IconButton,
   Input,
   Label,
-  NativeSelect,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -49,6 +48,8 @@ import {
   Plus,
   Search,
 } from "./index";
+
+import { NativeSelectFixture } from "./components/NativeSelect/NativeSelect.fixtures";
 
 // Import block fixtures
 import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
@@ -649,12 +650,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "NativeSelect",
     path: "components/NativeSelect",
     tags: ["form", "mobile"],
-    fixture: () => (
-      <NativeSelect aria-label="Density">
-        <option>Comfortable</option>
-        <option>Compact</option>
-      </NativeSelect>
-    ),
+    fixture: NativeSelectFixture,
   },
   {
     name: "Select",
