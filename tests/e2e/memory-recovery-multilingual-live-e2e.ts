@@ -2033,15 +2033,21 @@ function readT4ClosedBaseline(path: string, root: string, generation: string, gr
   const observation = JSON.parse(readFileSync(join(root, "memory-t4-resume-observation.json"), "utf8")) as any;
   const artifactRoot = dirname(path);
   const failure = JSON.parse(readFileSync(join(artifactRoot, "t4-actual01-failure-preservation.json"), "utf8")) as any;
-  const ad1 = initialTrace.ad1 as DeliveredTarget | undefined;
-  if (initialTrace.schema !== "butler.memory.t4-actual-phase-trace.v1" || initialTrace.status !== "failed" ||
-    trace.schema !== "butler.memory.t4-resume-trace.v1" || trace.status !== "failed" ||
+  const observedClosed = trace.schema === "butler.memory.t4-resume-trace.v1" &&
+    trace.status === "observed_pending_root_semantic_review" && trace.failure == null;
+  const preservedObservation = observedClosed ? trace.preserved_ad1_observation : observation;
+  const preservedFailure = observedClosed ? trace.preserved_actual01_failure : failure;
+  const ad1 = (observedClosed ? trace.ad1 : initialTrace.ad1) as DeliveredTarget | undefined;
+  const legacyClosed = initialTrace.schema === "butler.memory.t4-actual-phase-trace.v1" && initialTrace.status === "failed" &&
+    trace.schema === "butler.memory.t4-resume-trace.v1" && trace.status === "failed" &&
+    trace.failure?.includes("turn-89c78082-5641-49a2-b325-81ce2b783efa");
+  if ((!legacyClosed && !observedClosed) ||
     trace.source_sha256 !== sha(T4_AD1) || trace.question_sha256 !== sha(T4_Q1) ||
     !ad1 || ad1.requestText !== T4_AD1 || ad1.admittedText !== T4_AD1 ||
     ad1.requestSha256 !== sha(T4_AD1) || ad1.admittedSha256 !== sha(T4_AD1) ||
-    observation.schema !== "butler.memory.t4-resume-observation.v1" ||
-    failure.status !== "failed_preserved_no_retry" ||
-    !trace.failure?.includes("turn-89c78082-5641-49a2-b325-81ce2b783efa")) {
+    preservedObservation?.schema !== "butler.memory.t4-resume-observation.v1" ||
+    preservedFailure?.status !== "failed_preserved_no_retry" ||
+    (observedClosed && t4Json(preservedFailure) !== t4Json(failure))) {
     throw new Error("T4 preserved AD1 and failed Q1 evidence changed");
   }
   const btcc = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
@@ -2094,8 +2100,8 @@ function readT4ClosedBaseline(path: string, root: string, generation: string, gr
       ad1,
       ad1_job_id: ad1Jobs[0].job_id,
       ad1_window_ref: ad1Jobs[0].window_ref,
-      preserved_observation: observation,
-      preserved_failure: failure,
+      preserved_observation: preservedObservation,
+      preserved_failure: preservedFailure,
       preserved_queue: { pending: readT4PendingInbound(root), processing_count: 0 },
     } }) as T4ClosedBaseline;
   } finally { graph.close(); }
