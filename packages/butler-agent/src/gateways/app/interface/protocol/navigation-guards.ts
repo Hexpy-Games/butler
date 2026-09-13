@@ -10,6 +10,8 @@ export function isCreateSessionRequest(
   if (!value || typeof value !== "object") return false;
   const input = value as Partial<CreateSessionRequest>;
   if (input.kind !== "chat" && input.kind !== "project") return false;
+  if ("workspace_mode" in input && input.workspace_mode !== "local" && input.workspace_mode !== "worktree") return false;
+  if (input.workspace_mode === "worktree" && input.kind !== "project") return false;
   if ("title" in input && typeof input.title !== "string") return false;
   if ("initial_message" in input && typeof input.initial_message !== "string")
     return false;

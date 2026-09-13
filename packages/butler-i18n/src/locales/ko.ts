@@ -769,6 +769,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       `"${projectName}" 프로젝트를 Butler에서 영구 삭제할까요? 로컬 폴더는 삭제하지 않습니다.`,
   },
   composer: {
+    workspace: "작업 위치",
+    workspaceLocal: "Local",
+    workspaceWorktree: "Worktree",
+    workspaceLocalDescription: "기존 프로젝트 폴더에서 작업합니다",
+    workspaceWorktreeDescription: "이 대화 전용 Git 워크트리를 새로 만듭니다",
+    workspaceProjectRequired: "워크트리를 만들려면 프로젝트를 선택하세요",
     messageComposer: "메시지 입력",
     placeholder: "Butler에게 무엇이든 물어보세요",
     placeholderFollowUp: "후속 변경사항 요청",

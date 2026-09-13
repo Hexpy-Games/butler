@@ -16,11 +16,13 @@ const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
 const noopKeyDown = (_event: ReactKeyboardEvent<HTMLElement>) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
+  workspaceMode: "local",
+  setWorkspaceMode: (workspaceMode) => set({ workspaceMode }),
   draftRevision: 0,
   draftSessionId: "draft:chat",
   activateDraftSession: (draftSessionId, text, contentParts) => {
     const draftRevision = get().draftRevision + 1;
-    set({ draftRevision, draftSessionId, text, contentParts });
+    set({ draftRevision, draftSessionId, text, contentParts, workspaceMode: "local" });
     return draftRevision;
   },
   restoreDraftSession: ({ revision, sessionId, text, contentParts }) => {
