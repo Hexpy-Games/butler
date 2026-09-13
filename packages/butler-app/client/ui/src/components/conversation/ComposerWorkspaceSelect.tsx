@@ -14,7 +14,7 @@ export function ComposerWorkspaceSelect() {
   const project = dashboard || parseDraftChatId(draftId).kind === "project";
   const copy = appCopy.composer;
   return (
-    <Stack align="row" justify="center" cross="center" gap="xs">
+    <Stack align="row" justify="start" cross="center" gap="xs">
       <Select value={project ? mode : "local"} disabled={isSending}
         onValueChange={(value) => setMode(value === "worktree" ? "worktree" : "local")}>
         <SelectPillTrigger aria-label={copy.workspace}

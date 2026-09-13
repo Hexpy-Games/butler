@@ -34,3 +34,7 @@
 - DOM 표시/상태/전송 잠금 검사 1 test / 14 expectations 통과. JSDOM의 portal 제한 때문에 메뉴 동작은 실제 브라우저에서 확인했다.
 - 격리된 실제 UI의 대시보드 클릭 선택, 새 대화 Local 초기화, 키보드 선택이 통과했다. DS Viewer에서 기존 glass PillButton과 선택 트리거를 나란히 렌더링해 동일 외형을 확인했고 desktop/320/375/390/430px 렌더가 통과했다.
 - UI typecheck, lint:design, 변경 파일 ESLint, build, diff check 통과. 서버·전송 동작 변경 없음. 운영 재시작·배포 없음.
+
+## r4 — 왼쪽 정렬
+- 공용 ComposerWorkspaceSelect의 Stack justify를 center에서 start로 변경했다. 대시보드와 새 대화 모두 컴포저 왼쪽에 정렬된다.
+- 코드 diff를 요청과 대조했고 diff check를 통과했다. 기존 디자인과 선택 동작 변경은 없다.
