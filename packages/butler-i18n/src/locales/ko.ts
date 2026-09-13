@@ -769,6 +769,9 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       `"${projectName}" 프로젝트를 Butler에서 영구 삭제할까요? 로컬 폴더는 삭제하지 않습니다.`,
   },
   composer: {
+    workspace: "작업 위치",
+    workspaceLocal: "Local",
+    workspaceWorktree: "Worktree",
     messageComposer: "메시지 입력",
     placeholder: "Butler에게 무엇이든 물어보세요",
     placeholderFollowUp: "후속 변경사항 요청",

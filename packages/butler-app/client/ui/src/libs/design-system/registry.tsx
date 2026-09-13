@@ -34,11 +34,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   Section,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Separator,
   Space,
   Stack,
@@ -49,6 +44,8 @@ import {
   Plus,
   Search,
 } from "./index";
+
+import { SelectFixture } from "./components/Select/Select.fixtures";
 
 // Import block fixtures
 import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
@@ -660,17 +657,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     name: "Select",
     path: "components/Select",
     tags: ["form", "selection"],
-    fixture: () => (
-      <Select defaultValue="one">
-        <SelectTrigger>
-          <SelectValue placeholder="Choose" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="one">One</SelectItem>
-          <SelectItem value="two">Two</SelectItem>
-        </SelectContent>
-      </Select>
-    ),
+    fixture: SelectFixture,
   },
   {
     name: "Slider",

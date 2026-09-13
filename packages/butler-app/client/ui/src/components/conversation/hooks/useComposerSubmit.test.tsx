@@ -11,16 +11,18 @@ test("offline form/Enter and store sends preserve the draft; recovery does not a
   let submit: ReturnType<typeof useComposerSubmit>;
   const sent: string[] = [];
   let accepted: ComposerControls["onAccepted"];
+  let workspaceMode: ComposerControls["workspaceMode"];
   function Harness() {
     submit = useComposerSubmit({ text: "Keep this draft", setText: useComposerStore.getState().setText,
       attachments: [], setAttachments: () => {}, isSending: false, activeTurn: false, uploadingCount: 0,
       model: "test-model", reasoning: "medium", accessMode: "full_access", planMode: false, controlsTouched: false,
       setModelMenuOpen: () => {}, setAccessMenuOpen: () => {},
-      onSend: (text, controls) => { sent.push(text); accepted = controls.onAccepted; } });
+      onSend: (text, controls) => { sent.push(text); accepted = controls.onAccepted; workspaceMode = controls.workspaceMode; } });
     return null;
   }
   try {
     useComposerStore.getState().setText("Keep this draft");
+    useComposerStore.getState().setWorkspaceMode("worktree");
     useButlerStore.setState({ liveConnectionLost: true });
     renderToStaticMarkup(<Harness />);
     submit!({ key: "Enter", preventDefault() {} });
@@ -31,7 +33,9 @@ test("offline form/Enter and store sends preserve the draft; recovery does not a
     expect(sent).toEqual([]);
     submit!({ key: "Enter", preventDefault() {} });
     expect(sent).toEqual(["Keep this draft"]);
+    expect(workspaceMode).toBe("worktree");
     accepted?.();
     expect(useComposerStore.getState().text).toBe("");
+    expect(useComposerStore.getState().workspaceMode).toBe("local");
   } finally { useComposerStore.setState(previous); useButlerStore.setState({ liveConnectionLost: lost }); }
 });

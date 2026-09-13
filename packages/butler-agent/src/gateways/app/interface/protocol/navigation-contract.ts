@@ -142,6 +142,7 @@ export interface ProjectActionResult {
 }
 
 export interface CreateSessionRequest {
+  workspace_mode?: "local" | "worktree";
   kind: ChatKind;
   title?: string;
   initial_message?: string;

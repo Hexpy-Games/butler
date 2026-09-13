@@ -19,6 +19,10 @@ Import from the public design-system alias:
 import { Select } from "@/butler-ds";
 ```
 
+Use `SelectPillTrigger` for a floating composer selector. It renders the same
+`PillButton surface="glass"` used by active-work and jump-to-latest capsules,
+with an optional icon and the selected label. Its styling stays owned by PillButton.
+
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
 ## Who can use this component

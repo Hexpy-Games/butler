@@ -617,6 +617,9 @@ export interface AppCopy {
     projectDeleteConfirm: (projectName: string) => string;
   };
   composer: {
+    workspace: string;
+    workspaceLocal: string;
+    workspaceWorktree: string;
     messageComposer: string;
     placeholder: string;
     placeholderFollowUp: string;
