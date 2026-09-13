@@ -38,7 +38,7 @@ export function migrateSourceGraph(db: Database, sourceRoot: string) {
     if (hasTable(db, "memory_alias_index_dirty")) db.exec("ALTER TABLE memory_alias_index_dirty RENAME COLUMN entity_id TO node_id");
     ensureV2MemorySchema(db);
     const counts = { claims: 0, unknownSpeechActs: 0, mixedOrigins: 0, missingProperties: 0, literalMentions: 0, inferredMentions: 0 };
-    const readEvidence = db.query<{ role: string; source_kind: string }, [string]>("SELECT s.role,s.source_kind FROM memory_evidence e JOIN memory_chunk_sources s ON s.source_id=e.source_id WHERE e.node_id=?");
+    const readEvidence = db.query<{ role: string; source_kind: string; origin_kind: string }, [string]>("SELECT s.role,s.source_kind,s.origin_kind FROM memory_evidence e JOIN memory_chunk_sources s ON s.source_id=e.source_id WHERE e.node_id=?");
     for (const row of db.query<{ id: string; type: string; label_original: string; properties: string }, []>("SELECT id,type,label_original,properties FROM memory_nodes ORDER BY id").iterate()) {
       if (["entity", "project", "episode"].includes(row.type)) continue;
       const properties = JSON.parse(row.properties || "{}");

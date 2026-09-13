@@ -2106,6 +2106,9 @@ function recallSourceBackedGraph(
       : { sources: [], partial: false };
     const rawEpisodeIds = [...new Set(rawSources.sources.map((source) => source.episodeId))];
     const rawEpisodeSet = new Set(rawEpisodeIds);
+    const rawRelevance = new Map<string, number>();
+    for (const source of rawSources.sources) rawRelevance.set(source.episodeId,
+      Math.max(rawRelevance.get(source.episodeId) ?? 0, source.score));
     const exactRawEpisodes = new Set(rawSources.sources.filter((source) => source.exactMatch).map((source) => source.episodeId));
     if (rawSources.partial) selected.coverageCodes.push("lexical_partial");
     const directEpisodeIds = [
@@ -2311,6 +2314,9 @@ function recallSourceBackedGraph(
           contextRank: admitted.context
             ? contextRanks.get(row.episodeId)
             : undefined,
+          queryRelevance: Math.max(rawRelevance.get(row.episodeId) ?? 0,
+            ...((admitted.vector ? currentVector?.episodes : []) ?? [])
+              .filter((item) => item.ownerId === row.episodeId).map((item) => 1 - item.distance)),
           vectorRank: admitted.vector
             ? currentVector?.episodes.find((item) =>
               item.ownerId === row.episodeId,
@@ -3404,6 +3410,7 @@ function graphProjectionCoverage(
   );
   const codes = [
     ...(registeredIncomplete || missing ? ["ingestion_pending"] : []),
+    ...(!inventory.available ? ["canonical_source_unavailable"] : []),
     ...(inventory.partial ? ["ingestion_inventory_partial"] : []),
   ];
   return {
@@ -3987,7 +3994,10 @@ function emptyV2Recall(input: RecallMemoryInput, facts: {
     status: deriveRecallStatus(
       0,
       partial,
-      graphExecutionIncomplete || vectorExecutionIncomplete,
+      // Pending ingestion describes corpus coverage, not a failed search.
+      // A successfully searched corpus with no matches is a normal empty result.
+      facts.deadlineHit || facts.graphCodes.includes("canonical_source_unavailable") ||
+        (vectorExecutionIncomplete && !admitted.graph && !admitted.lexical),
     ),
     results: [],
     coverage: {

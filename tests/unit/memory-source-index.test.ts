@@ -34,6 +34,21 @@ function fixture() {
   return { root, context, db, add, recall, close() { db.close(); store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
+test("source retrieval prefers specific evidence over verbose common words", async () => {
+  const f = fixture();
+  try {
+    await f.add("The cobalt telescope uses a ceramic mount.");
+    await f.add("The equipment uses a useful component. ".repeat(90));
+    const result = await f.recall("What mount does the cobalt telescope use?");
+    expect(result.results[0]?.evidence.some((item) => item.excerpt.includes("ceramic mount"))).toBe(true);
+    expect(f.db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
+    f.db.exec("BEGIN IMMEDIATE; UPDATE memory_state SET value=value WHERE key='graph_revision'");
+    const reader = new Database(join(f.root, "cognition/memory/generations", f.context.target.expected_generation, "graph.sqlite"), { readonly: true });
+    try { expect(reader.query("SELECT value FROM memory_state WHERE key='graph_revision'").get()).toBeTruthy(); }
+    finally { reader.close(); f.db.exec("ROLLBACK"); }
+  } finally { f.close(); }
+});
+
 test("public ingestion exposes multilingual raw evidence before any meaning or binding call", async () => {
   const f = fixture();
   const original = OPENAI_PROVIDER_ADAPTER.runPrompt;

@@ -32,11 +32,12 @@ export function ensureClaimSchema(db: Database): void {
   `);
 }
 
-export function sourceClass(rows: Array<{ role: string; source_kind: string }>): SourceClass {
+export function sourceClass(rows: Array<{ role: string; source_kind: string; origin_kind: string }>): SourceClass {
   const classes = new Set<SourceClass>(rows.map((row) => {
     if (row.source_kind === "task_report") return "task_report";
     if (row.source_kind === "explicit_record") return "explicit";
-    return row.role === "user" ? "user" : row.role === "assistant" ? "assistant" : "unknown";
+    return row.role === "user" && row.origin_kind === "user_input" ? "user"
+      : row.role === "assistant" && row.origin_kind === "assistant_public" ? "assistant" : "unknown";
   }));
   return classes.size > 1 ? "mixed" : [...classes][0] ?? "unknown";
 }

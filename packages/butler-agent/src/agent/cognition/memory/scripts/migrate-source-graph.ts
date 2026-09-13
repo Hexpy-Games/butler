@@ -16,7 +16,7 @@ const started = performance.now();
 const source = new Database(resolve(values["source-graph"]), { readonly: true });
 try { source.query("VACUUM INTO ?").run(output); } finally { source.close(); }
 const db = new Database(output, { create: false, readwrite: true });
-db.exec("PRAGMA foreign_keys=ON");
+db.exec("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL");
 try {
   const result = migrateSourceGraph(db, resolve(values["source-root"]));
   console.log(JSON.stringify({ ...result, output, durationMs: performance.now() - started }));
