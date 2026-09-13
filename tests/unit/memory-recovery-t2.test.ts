@@ -116,6 +116,14 @@ test("episode fusion uses one successful-channel denominator", () => {
   expect(ranked.find((item) => item.episodeId === "graph")!.score).toBeCloseTo(0.32, 8);
 });
 
+test("an unrelated explicit rule cannot outrank a stronger query match", () => {
+  const ranked = rankEpisodes([
+    { episodeId: "relevant", sessionId: "s1", conversationAt: null, graphRank: 1, lexicalRank: 1 },
+    { episodeId: "unrelated-rule", sessionId: "s2", conversationAt: null, lexicalRank: 60, explicitPriority: true },
+  ], { graph: true, vector: false, lexical: true, context: false }, "2026-09-13T00:00:00Z");
+  expect(ranked[0]!.episodeId).toBe("relevant");
+});
+
 test("T2 install backfills Unicode grapheme postings and scoped lexical seeds", () => {
   const db = new Database(":memory:");
   ensureV2MemorySchema(db);
@@ -278,7 +286,7 @@ test("canonical inventory marks an unregistered terminal episode as ingestion pe
       ...recallInput({ cue: "absent", asOf: new Date(Date.now() + 1_000).toISOString() }),
       context: { butlerData, target: { kind: "active", expected_generation: descriptor.generation_id }, signal: new AbortController().signal },
     });
-    expect(recalled.status).toBe("unavailable");
+    expect(recalled.status).toBe("partial");
     expect(recalled.coverage.graph.codes).toContain("ingestion_pending");
     expect(recalled.coverage.source.codes).toContain("ingestion_pending");
     expect(recalled.results).toEqual([]);
@@ -361,7 +369,7 @@ test("stored supersedes relationships remove the old claim and prioritize the cu
   } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });
 
-test("fixed as-of validity excludes expired and future claims while preserving past history and typed rule priority", async () => {
+test("fixed as-of validity excludes expired and future claims while preserving past history and sourced rules", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-t2-validity-"));
   try {
     const descriptor = initializeEmptyMemoryGeneration(butlerData);
@@ -427,10 +435,10 @@ test("fixed as-of validity excludes expired and future claims while preserving p
     expect(knownExpired?.qualifications).toContain("historical");
     expect(knownExpired?.evidence[0]?.excerpt).toBe("expired fact");
     const priority = await current("priority");
-    expect(priority.results[0]?.summary).toBe("priority rule when tired");
-    expect(priority.results[0]?.evidence[0]?.excerpt).toBe("priority rule when tired");
-    const rankingMetric = readOperationalMetricEvents({ butlerData }).find((event) =>
-      event.category === "memory" && event.name === "recall_v2_ranking" && event.dimensions?.episode_sha256 === createHash("sha256").update(rows.find((row) => row.id === "rule")!.episodeId).digest("hex"));
+    const sourcedRule = priority.results.find((result) => result.summary === "priority rule when tired");
+    expect(sourcedRule?.evidence[0]?.excerpt).toBe("priority rule when tired");
+    const rankingMetric = readOperationalMetricEvents({ butlerData }).findLast((event) =>
+      event.category === "memory" && event.name === "recall_v2_ranking" && event.dimensions?.ranking_stage === "candidate" && event.dimensions?.episode_sha256 === createHash("sha256").update(rows.find((row) => row.id === "rule")!.episodeId).digest("hex"));
     expect(rankingMetric?.rawTextStored).toBe(false);
     expect(rankingMetric?.dimensions).toMatchObject({
       native_operation_sha256: createHash("sha256").update("op").digest("hex"),
@@ -440,11 +448,11 @@ test("fixed as-of validity excludes expired and future claims while preserving p
       context_executed: true,
       ranking_stage: "candidate",
     });
-    const returnedMetric = readOperationalMetricEvents({ butlerData }).find((event) =>
+    const returnedMetric = readOperationalMetricEvents({ butlerData }).findLast((event) =>
       event.category === "memory" && event.name === "recall_v2_ranking" && event.dimensions?.ranking_stage === "returned" &&
       event.dimensions?.episode_sha256 === rankingMetric?.dimensions?.episode_sha256 &&
       event.dimensions?.native_operation_sha256 === rankingMetric?.dimensions?.native_operation_sha256);
-    expect(returnedMetric?.dimensions?.returned_rank).toBe(1);
+    expect(returnedMetric?.dimensions?.returned_rank).toBe(priority.results.indexOf(sourcedRule!) + 1);
   } finally { rmSync(butlerData, { recursive: true, force: true }); }
 });
 

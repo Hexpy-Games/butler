@@ -459,8 +459,10 @@ export function readGenerationHotCacheHealth(input: {
       return { available: true, reason: null, total_entries: entries.length, current_entries: current,
         stale_entries: Math.max(0, entries.length - current - expired), expired_entries: expired, evicted_entries: evicted };
     } finally { db.close(); }
-  } catch {
-    return { available: false, reason: "generation_unavailable", total_entries: 0, current_entries: 0, stale_entries: 0, expired_entries: 0, evicted_entries: 0 };
+  } catch (error) {
+    const busy = error && typeof error === "object" && "code" in error &&
+      (error.code === "SQLITE_BUSY" || error.code === "SQLITE_LOCKED");
+    return { available: false, reason: busy ? "cache_unavailable" : "generation_unavailable", total_entries: 0, current_entries: 0, stale_entries: 0, expired_entries: 0, evicted_entries: 0 };
   }
 }
 

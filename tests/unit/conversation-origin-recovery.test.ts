@@ -89,11 +89,15 @@ test("ingestion retires an existing public projection after authoritative origin
     await ingestConversationMemory({ context, source });
     expect(graph.query<{ status:string }, []>("SELECT status FROM memory_chunks WHERE conversation_turn_id='internal-turn'").get()?.status).toBe("active");
     const originalSources = graph.query<{ source_id:string }, []>("SELECT source_id FROM memory_chunk_sources ORDER BY source_id").all();
+    graph.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,created_at) VALUES('old-claim','memory_atom','internal report','user','2026-09-13')").run();
+    graph.query("INSERT INTO memory_claims(node_id,statement,speech_act,basis,polarity,salience,source_class) VALUES('old-claim','internal report','assertion','user_statement','positive','normal','user')").run();
+    graph.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) SELECT 'old-claim',source_id,episode_id,revision FROM memory_chunk_sources WHERE role='user'").run();
     classifyHistoricalConversationOrigins(f.root);
     expect((await ingestConversationMemory({ context, source })).outcome).toBe("superseded");
     expect(graph.query<{ status:string }, []>("SELECT status FROM memory_chunks WHERE conversation_turn_id='internal-turn'").get()?.status).toBe("superseded");
     expect(graph.query("SELECT source_id FROM memory_chunk_sources WHERE origin_kind!='internal_control'").all()).toHaveLength(0);
     expect(graph.query("SELECT source_id FROM memory_chunk_sources ORDER BY source_id").all()).toEqual(originalSources);
+    expect(graph.query("SELECT statement,source_class FROM memory_claims WHERE node_id='old-claim'").get()).toEqual({ statement: "internal report", source_class: "unknown" });
     const revision = graph.query("SELECT value FROM memory_state WHERE key='graph_revision'").get();
     expect((await ingestConversationMemory({ context, source })).outcome).toBe("superseded");
     expect(graph.query("SELECT value FROM memory_state WHERE key='graph_revision'").get()).toEqual(revision);

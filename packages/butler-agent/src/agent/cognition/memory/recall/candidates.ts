@@ -428,19 +428,41 @@ export function selectRawSourceCandidates(
   const allTerms = sourceQueryTerms([input.cue, ...(input.seedPhrases ?? [])]);
   const terms = allTerms.slice(0, maxQueryTerms);
   if (!terms.length || Date.now() >= deadlineAt) return { sources: [], partial: Date.now() >= deadlineAt };
-  const minimumMatches = terms.length === 1 ? 1 : Math.max(2, Math.ceil(terms.length / 4));
-  const sources = db.query<{ sourceId: string; episodeId: string; revision: string; score: number; exactMatch: number }, any>(`
-    SELECT s.source_id sourceId,s.episode_id episodeId,s.revision,
-      CAST(COUNT(DISTINCT p.term) AS REAL)/? score, CASE WHEN instr(raw.text,?)>0 THEN 1 ELSE 0 END exactMatch
-    FROM memory_source_terms p
+  // Frequency statistics use the same current, authorized source population as
+  // the candidates. Common sentence endings must not count like rare subjects.
+  const stats = db.query<{ count: number; averageLength: number }, any>(`
+    SELECT COUNT(*) count,AVG(length(raw.text)) averageLength
+    FROM memory_source_text raw JOIN memory_source_leaves s ON s.source_id=raw.source_id
+    JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+    WHERE ${scopeSql(input)}
+  `).get(...scopeArgs(input));
+  const frequencies = db.query<{ term: string; count: number }, any>(`
+    SELECT p.term,COUNT(*) count FROM memory_source_terms p
     JOIN memory_source_text raw ON raw.id=p.source_key
     JOIN memory_source_leaves s ON s.source_id=raw.source_id
     JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
-    WHERE p.term IN (${terms.map(() => "?").join(",")}) AND c.status='active' AND ${scopeSql(input)}
+    WHERE p.term IN (SELECT value FROM json_each(?)) AND ${scopeSql(input)} GROUP BY p.term
+  `).all(JSON.stringify(terms), ...scopeArgs(input));
+  const df = new Map(frequencies.map((row) => [row.term, row.count]));
+  const weights = terms.map((term) => ({ term, weight: Math.log(1 +
+    ((stats?.count ?? 0) - (df.get(term) ?? 0) + 0.5) / ((df.get(term) ?? 0) + 0.5)) }));
+  const queryWeight = weights.reduce((sum, row) => sum + row.weight, 0);
+  const minimumMatches = terms.length === 1 ? 1 : 2;
+  const sources = db.query<{ sourceId: string; episodeId: string; revision: string; score: number; exactMatch: number }, any>(`
+    WITH query AS (SELECT json_extract(value,'$.term') term,json_extract(value,'$.weight') weight FROM json_each(?))
+    SELECT s.source_id sourceId,s.episode_id episodeId,s.revision,
+      SUM(q.weight)/? * 2.2/(1 + 1.2 * (0.25 + 0.75 * length(raw.text)/?)) score,
+      CASE WHEN instr(raw.text,?)>0 THEN 1 ELSE 0 END exactMatch
+    FROM query q JOIN memory_source_terms p ON p.term=q.term
+    JOIN memory_source_text raw ON raw.id=p.source_key
+    JOIN memory_source_leaves s ON s.source_id=raw.source_id
+    JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
+    WHERE ${scopeSql(input)}
     GROUP BY s.source_id
     HAVING COUNT(DISTINCT p.term)>=?
     ORDER BY exactMatch DESC,score DESC,s.observed_at DESC,s.source_id
     LIMIT ?
-  ` ).all(terms.length, input.cue.trim(), ...terms, ...scopeArgs(input), minimumMatches, MAX_CHANNEL_CANDIDATES);
+  ` ).all(JSON.stringify(weights), queryWeight, Math.max(1, stats?.averageLength ?? 1),
+    input.cue.trim(), ...scopeArgs(input), minimumMatches, MAX_CHANNEL_CANDIDATES);
   return { sources, partial: allTerms.length > maxQueryTerms || Date.now() >= deadlineAt };
 }

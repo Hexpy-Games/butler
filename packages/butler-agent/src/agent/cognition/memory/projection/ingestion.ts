@@ -1706,11 +1706,20 @@ async function supersedeInternalConversationProjection(
       if (!current || current.generation !== outcome.generation || current.request_message_id !== outcome.request_message_id ||
         current.session_id !== outcome.session_id || request?.session_id !== outcome.session_id ||
         request.turn_id !== outcome.turn_id || request.origin_kind !== "internal_control") throw new Error("memory_source_changed");
-      const changed = db.query("UPDATE memory_chunks SET status='superseded',origin_kind='internal_control' WHERE memory_chunk_id=? AND status='active'").run(episodeId).changes;
+      let changed = db.query("UPDATE memory_chunks SET status='superseded',origin_kind='internal_control' WHERE memory_chunk_id=? AND status='active'").run(episodeId).changes;
       for (const messageId of [current.request_message_id, current.public_assistant_message_id]) {
         if (!messageId || canonical.readMessageById(messageId)?.origin_kind !== "internal_control") continue;
-        db.query("UPDATE memory_chunk_sources SET origin_kind='internal_control' WHERE episode_id=? AND conversation_message_id=?")
-          .run(episodeId, messageId);
+        changed += db.query("UPDATE memory_chunk_sources SET origin_kind='internal_control' WHERE episode_id=? AND conversation_message_id=? AND origin_kind!='internal_control'")
+          .run(episodeId, messageId).changes;
+      }
+      for (const claim of db.query<{ node_id: string }, [string]>(
+        "SELECT DISTINCT e.node_id FROM memory_evidence e JOIN memory_claims c ON c.node_id=e.node_id WHERE e.episode_id=?",
+      ).all(episodeId)) {
+        const evidence = db.query<{ role: string; source_kind: string; origin_kind: string }, [string]>(
+          "SELECT s.role,s.source_kind,s.origin_kind FROM memory_evidence e JOIN memory_chunk_sources s ON s.source_id=e.source_id WHERE e.node_id=?",
+        ).all(claim.node_id);
+        const origin = sourceClass(evidence);
+        changed += db.query("UPDATE memory_claims SET source_class=? WHERE node_id=? AND source_class!=?").run(origin, claim.node_id, origin).changes;
       }
       // Claims and vectors remain stored. All recall channels and cache readers
       // require an active source chunk, so the retired episode cannot contribute.

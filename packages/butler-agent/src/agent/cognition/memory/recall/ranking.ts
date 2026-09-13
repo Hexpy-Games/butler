@@ -9,6 +9,7 @@ export type EpisodeRankInput = {
   lexicalRank?: number;
   vectorRank?: number;
   contextRank?: number;
+  queryRelevance?: number;
   explicitPriority?: boolean;
   salience?: "high" | "normal" | "unspecified";
   supportCount?: number;
@@ -73,8 +74,14 @@ export function rankEpisodes(
     const ageDays = basisAt ? Math.max(0, (asOfMs - Date.parse(basisAt)) / 86_400_000) : Number.POSITIVE_INFINITY;
     const recency = Number.isFinite(ageDays) ? 2 ** (-ageDays / (value.halfLifeDays ?? 30)) : 0;
     const support = Math.min(1, Math.log1p(value.supportCount ?? 0) / Math.log(17));
-    return { ...value, score: 0.8 * fused + 0.1 * salience + 0.06 * recency + 0.04 * support, channels };
-  }).sort((a, b) => Number(b.explicitPriority) - Number(a.explicitPriority) || b.score - a.score ||
+    const metadata = 0.5 * salience + 0.3 * recency + 0.2 * support;
+    // Ranks alone discard the difference between a direct source match and
+    // many weak associations. Preserve that measured query evidence when known.
+    const score = value.queryRelevance === undefined
+      ? 0.8 * fused + 0.2 * metadata
+      : 0.55 * Math.min(1, Math.max(0, value.queryRelevance)) + 0.35 * fused + 0.1 * metadata;
+    return { ...value, score, channels };
+  }).sort((a, b) => b.score - a.score || Number(b.explicitPriority) - Number(a.explicitPriority) ||
     compareNullableTime(timeBasis === "event" ? b.eventAt ?? null : b.conversationAt, timeBasis === "event" ? a.eventAt ?? null : a.conversationAt) ||
     Buffer.compare(Buffer.from(a.episodeId), Buffer.from(b.episodeId)));
 }

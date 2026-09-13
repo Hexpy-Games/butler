@@ -233,6 +233,7 @@ function initializeEmptyMemoryGenerationLocked(
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const db = new Database(join(root, "graph.sqlite"), { create: true });
   try {
+    db.exec("PRAGMA journal_mode=WAL");
     ensureV2MemorySchema(db);
   } finally {
     db.close();
@@ -603,7 +604,7 @@ export function prepareMemoryRebuild(input: {
     "canonical-snapshot-v1", generationId, input.sourceInventoryHash,
   ])).digest("hex");
   const graph = new Database(join(root, "graph.sqlite"), { create: true });
-  try { ensureV2MemorySchema(graph); } finally { graph.close(); }
+  try { graph.exec("PRAGMA journal_mode=WAL"); ensureV2MemorySchema(graph); } finally { graph.close(); }
   const manifest: MemoryGenerationManifest = {
     schema: "butler.memory-generation.v2", generation_id: generationId, format: "v2",
     state: "building", initialization_origin: "rebuild", schema_version: 3,
