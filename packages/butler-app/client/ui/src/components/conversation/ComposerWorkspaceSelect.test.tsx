@@ -6,7 +6,7 @@ import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect.tsx";
 import { useComposerStore } from "./composerStore.ts";
 import { projectDraftId } from "@/app/utils.ts";
 
-test("both new conversation surfaces default to local, allow worktree, and lock during send", async () => {
+test("both new conversation surfaces reuse glass capsules, default to local, and lock during send", async () => {
   const dom = new JSDOM('<div id="root"></div>');
   const globals = ["window", "document", "navigator", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"] as const;
   const previous = globals.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
@@ -22,29 +22,24 @@ test("both new conversation surfaces default to local, allow worktree, and lock 
         useComposerStore.setState({ isSending: false });
         root.render(<ComposerWorkspaceSelect />);
       });
-      const select = container.querySelector("select")!;
-      expect(select.value).toBe("local");
-      expect(container.querySelector('[data-slot="native-select-trigger"]')!.textContent).toBe("Local");
-      expect(container.querySelector('[data-slot="native-select-trigger"] svg')).not.toBeNull();
-      expect(container.querySelector('[data-slot="tinted-glass"]')).toBeNull();
-      await act(async () => {
-        select.value = "worktree";
-        select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-      });
+      const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
+      expect(trigger.textContent).toBe("Local");
+      expect(trigger.dataset.surface).toBe("glass-pill");
+      expect(trigger.querySelector("svg")).not.toBeNull();
+      await act(async () => { useComposerStore.getState().setWorkspaceMode("worktree"); });
       expect(useComposerStore.getState().workspaceMode).toBe("worktree");
-      expect(select.value).toBe("worktree");
-      expect(container.querySelector('[data-slot="native-select-trigger"]')!.textContent).toBe("Worktree");
+      expect(trigger.textContent).toBe("Worktree");
       await act(async () => useComposerStore.setState({ isSending: true }));
-      expect(select.disabled).toBe(true);
+      expect(trigger.disabled).toBe(true);
     }
     await act(async () => {
       useComposerStore.getState().activateDraftSession("draft:chat", "");
       useComposerStore.setState({ isSending: false });
     });
-    expect(container.querySelector("select")!.value).toBe("local");
-    expect(container.querySelector<HTMLOptionElement>('option[value="worktree"]')!.disabled).toBe(true);
+    const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
+    expect(trigger.textContent).toBe("Local");
     await act(async () => { useComposerStore.getState().activateDraftSession("existing-session", ""); });
-    expect(container.querySelector("select")).toBeNull();
+    expect(container.querySelector('[role="combobox"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     useComposerStore.setState(state);
