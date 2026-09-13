@@ -233,6 +233,8 @@ export type HistoricalOriginCandidate = {
 
 export type RecordOriginClassificationInput = HistoricalOriginCandidate & {
   decision: ConversationOriginDecision;
+  /** Only authoritative internal evidence may replace an existing public label. */
+  correctInternalOrigin?: boolean;
 };
 
 export type RecordOriginClassificationResult =
