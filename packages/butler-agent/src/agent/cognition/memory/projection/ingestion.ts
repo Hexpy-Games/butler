@@ -446,6 +446,9 @@ export async function ingestConversationMemory(input: {
     if (input.source.kind === "conversation_turn") {
       if (!turn || !outcome || turn.session_id !== input.source.session_id || outcome.generation !== input.source.outcome_generation ||
         !["complete", "failed", "aborted"].includes(turn.status)) throw new Error("memory_source_not_terminal");
+      if (outcome.request_message_id && canonical.readMessageById(outcome.request_message_id)?.origin_kind === "internal_control") {
+        return await supersedeInternalConversationProjection(input.context, generation, canonical, outcome);
+      }
       messages = eligibleCanonicalMessages(canonical, outcome, "memory_source_ineligible");
       sourceKey = `conversation_turn:${turn.id}`;
       episodeId = projectionHash(["canonical-conversation-turn", turn.id]);
@@ -1779,6 +1782,44 @@ function recoveredMessageSourceHash(message: ConversationMessageWithParts): stri
   return new Bun.CryptoHasher("sha256")
     .update(JSON.stringify(message.parts.map((part) => [part.id, part.content_json])))
     .digest("hex");
+}
+
+/** An origin correction must retire the old public projection before catchup skips it. */
+async function supersedeInternalConversationProjection(
+  context: MemoryExecutionContext,
+  generation: MemoryGenerationHandle,
+  canonical: Pick<ConversationProjectionReader, "readMessageById" | "readTurnOutcome">,
+  outcome: NonNullable<ReturnType<ConversationProjectionReader["readTurnOutcome"]>>,
+): Promise<MemoryJobProgress> {
+  const episodeId = projectionHash(["canonical-conversation-turn", outcome.turn_id]);
+  const db = openProjectionDb(generation.graphPath);
+  try {
+    await withMemoryWriteGateAsync(context, () => db.transaction(() => {
+      const current = canonical.readTurnOutcome(outcome.turn_id);
+      const request = current?.request_message_id ? canonical.readMessageById(current.request_message_id) : null;
+      if (!current || current.generation !== outcome.generation || current.request_message_id !== outcome.request_message_id ||
+        current.session_id !== outcome.session_id || request?.session_id !== outcome.session_id ||
+        request.turn_id !== outcome.turn_id || request.origin_kind !== "internal_control") throw new Error("memory_source_changed");
+      const changed = db.query("UPDATE memory_chunks SET status='superseded',origin_kind='internal_control' WHERE memory_chunk_id=? AND status='active'").run(episodeId).changes;
+      for (const messageId of [current.request_message_id, current.public_assistant_message_id]) {
+        if (!messageId || canonical.readMessageById(messageId)?.origin_kind !== "internal_control") continue;
+        db.query("UPDATE memory_chunk_sources SET origin_kind='internal_control' WHERE episode_id=? AND conversation_message_id=?")
+          .run(episodeId, messageId);
+      }
+      // Claims and vectors remain stored. All recall channels and cache readers
+      // require an active source chunk, so the retired episode cannot contribute.
+      if (changed) db.query("UPDATE memory_state SET value=CAST(value AS INTEGER)+1 WHERE key='graph_revision'").run();
+    })());
+  } finally { db.close(); }
+  const complete = { state: "complete" as const, completed_units: 0, total_units: 0 };
+  return {
+    job_id: projectionHash(["internal-origin-exclusion", episodeId, outcome.generation]),
+    observed_completion_job_ids: [], episode_id: episodeId,
+    revision: projectionHash(["internal-origin-exclusion", outcome.generation]),
+    extraction_version: MEMORY_EXTRACTION_VERSION, generation: generation.generationId,
+    source: complete, semantic_graph: complete, episode_vectors: complete,
+    node_vectors: complete, hot_cache: complete, outcome: "superseded",
+  };
 }
 
 function eligibleStandaloneMessage(message: ConversationMessageWithParts): boolean {
