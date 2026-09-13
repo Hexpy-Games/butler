@@ -227,6 +227,14 @@ control. Butler can run tools, edit files, dispatch background workers, and
 operate unattended services, so install it only in environments where that level
 of local agent automation is acceptable.
 
+## Project development records
+
+Specs, plans, decisions, implementation reports, and experimental evidence belong
+in the canonical [Project Ledger](packages/project-ledger/README.md), written
+through its CLI or native tools. Do not create duplicate project-management
+records under `docs/`. Work and Task records should reference canonical record
+IDs; package READMEs remain the home for source-owned usage and API guidance.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
