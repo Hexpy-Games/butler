@@ -8,6 +8,7 @@ import {
   plannedInternalGoal,
   plannedModeSafety,
   PlannedTaskStore,
+  readPlannedTaskMemoryReport,
   validatePlannedTaskPlan,
   type PlannedTaskPlan,
 } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
@@ -163,6 +164,10 @@ test("planned task store writes attempts, reviews, and public reports", () => {
       criterion: "Relevant unit tests pass",
       verdict: "PASS",
       evidence: "bun run check passed",
+    }, {
+      criterion: "Public report includes residual risk",
+      verdict: "PASS",
+      evidence: "report reviewed",
     }],
     missing_evidence: [],
     repair_recommendation: null,
@@ -177,6 +182,48 @@ test("planned task store writes attempts, reviews, and public reports", () => {
   expect(record?.review?.verdict).toBe("PASS");
   expect(record?.publicReport).toBe("Reviewed and ready to report.");
   expect(readFileSync(join(record!.taskDir, "review.md"), "utf8")).toContain("PASS: Relevant unit tests pass");
+  const typed = readPlannedTaskMemoryReport(record!.taskDir);
+  expect(typed?.source_revision).not.toBe(typed?.report_hash);
+  store.writeAttemptResult("planned-test-1", 2, "A newer unreviewed attempt.");
+  expect(readPlannedTaskMemoryReport(record!.taskDir)).toBeNull();
+  store.writeReview({
+    task_id: "planned-test-1", attempt: 2, verdict: "PASS",
+    reviewed_at: "2026-04-25T00:20:00.000Z",
+    goal_review: {
+      goal: "Complete the feature safely before reporting",
+      verdict: "PASS", evidence: "new attempt reviewed",
+    },
+    criteria: [
+      { criterion: "Relevant unit tests pass", verdict: "PASS", evidence: "passed again" },
+      { criterion: "Public report includes residual risk", verdict: "PASS", evidence: "reviewed again" },
+    ],
+    missing_evidence: [], repair_recommendation: null,
+  });
+  store.writePublicReport("planned-test-1", "Reviewed and ready to report.");
+  const rebound = readPlannedTaskMemoryReport(record!.taskDir);
+  expect(rebound?.report_hash).toBe(typed?.report_hash);
+  expect(rebound?.source_revision).not.toBe(typed?.source_revision);
+});
+
+test("compatibility reviews still write reports without creating typed memory authority", () => {
+  const store = new PlannedTaskStore(tempDir);
+  store.create(plan());
+  store.transition("planned-test-1", "PLANNED_RUNNING");
+  store.writeAttemptResult("planned-test-1", 1, "Compatibility result.");
+  store.transition("planned-test-1", "WORKER_DONE");
+  store.transition("planned-test-1", "REVIEWING");
+  store.writeReview({
+    task_id: "planned-test-1", attempt: 1, verdict: "PASS",
+    reviewed_at: "2026-04-25T00:10:00.000Z",
+    criteria: [{ criterion: "Relevant unit tests pass", verdict: "PASS", evidence: "passed" },
+      { criterion: "Public report includes residual risk", verdict: "PASS", evidence: "included" }],
+    missing_evidence: [], repair_recommendation: null,
+  });
+  store.transition("planned-test-1", "REVIEW_PASSED");
+  store.transition("planned-test-1", "PUBLIC_REPORT_READY");
+  const record = store.writePublicReport("planned-test-1", "Compatible public report.");
+  expect(record.publicReport).toBe("Compatible public report.");
+  expect(readPlannedTaskMemoryReport(record.taskDir)).toBeNull();
 });
 
 test("planned task store records worker dispatch attempts before results exist", () => {

@@ -229,6 +229,7 @@ export interface BtccAgentLoopInput {
     name: string;
     arguments: Record<string, unknown>;
     rawArguments: string;
+    toolContractVersion?: 1 | 2;
     signal?: AbortSignal;
   }) => Promise<unknown>;
   onTextToolCalls?: (input: {

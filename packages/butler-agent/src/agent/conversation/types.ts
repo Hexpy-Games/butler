@@ -4,6 +4,24 @@ export type ConversationStatus = "pending" | "complete" | "failed" | "compacted"
 export type ConversationProvenance = "trusted" | "recovered" | "imported" | "synthetic_summary";
 export type ConversationPartKind = "text" | "attachment_ref" | "tool_call" | "tool_result" | "summary_ref" | "message_content";
 export type ConversationProviderShape = "openai" | "anthropic" | "generic" | null;
+export type ConversationOriginKind = "user_input" | "assistant_public" | "internal_control" | "unknown";
+
+export const CONVERSATION_ORIGIN_CLASSIFICATION_VERSION = "conversation-origin-v1" as const;
+
+export type ConversationOriginEvidence = {
+  ref: string;
+  kind: "app_ingress" | "gateway_ingress" | "btcc_admission" | "subsession" | "authorized_wake" | "authority_continuation" | "turn_outcome";
+  sha256: string | null;
+};
+
+export type ConversationOriginDecision = {
+  kind: ConversationOriginKind;
+  ref: string | null;
+  reason: string;
+  version: typeof CONVERSATION_ORIGIN_CLASSIFICATION_VERSION;
+  evidence: ConversationOriginEvidence[];
+  complete: boolean;
+};
 
 export interface ConversationSession {
   id: string;
@@ -51,6 +69,11 @@ export interface ConversationMessage {
   compacted_by_summary_id: string | null;
   source_gateway: string | null;
   source_ref: string | null;
+  origin_kind?: ConversationOriginKind;
+  origin_ref?: string | null;
+  origin_reason?: string | null;
+  origin_version?: string | null;
+  origin_evidence_json?: string | null;
 }
 
 export interface ConversationPart {
@@ -170,6 +193,11 @@ export interface AppendMessageInput {
   provenance?: ConversationProvenance;
   sourceGateway?: string | null;
   sourceRef?: string | null;
+  originKind?: ConversationOriginKind;
+  originRef?: string | null;
+  originReason?: string | null;
+  originVersion?: string | null;
+  originEvidence?: ConversationOriginEvidence[] | null;
   now?: string;
   parts?: Array<{
     kind: ConversationPartKind;
@@ -180,6 +208,40 @@ export interface AppendMessageInput {
     status?: ConversationStatus;
   }>;
 }
+
+export type HistoricalOriginCandidate = {
+  message_id: string;
+  session_id: string;
+  turn_id: string | null;
+  request_id: string | null;
+  source_gateway: string | null;
+  external_session_id: string | null;
+  source_ref: string | null;
+  provenance: ConversationProvenance;
+  role: "user" | "assistant";
+  origin_kind: ConversationOriginKind;
+  origin_ref: string | null;
+  origin_reason: string | null;
+  origin_version: string | null;
+  origin_evidence_json: string | null;
+  source_hash: string;
+  outcome_id: string | null;
+  outcome_generation: number | null;
+  outcome_request_message_id: string | null;
+  outcome_public_assistant_message_id: string | null;
+};
+
+export type RecordOriginClassificationInput = HistoricalOriginCandidate & {
+  decision: ConversationOriginDecision;
+  /** Only authoritative internal evidence may replace an existing public label. */
+  correctInternalOrigin?: boolean;
+};
+
+export type RecordOriginClassificationResult =
+  | "applied"
+  | "unchanged"
+  | "source_changed"
+  | "classification_conflict";
 
 export interface AppendToolPartInput {
   messageId: string;
@@ -259,11 +321,19 @@ export interface ConversationProjectionReader {
   isAvailable?(): boolean;
   readProjectionBatch(afterOutboxId: string | null, limit?: number): ConversationProjectionEvent[];
   getSession(sessionId: string): ConversationSession | null;
+  listSessions(input?: {
+    projectId?: string | null;
+    includeArchived?: boolean;
+    limit?: number;
+  }): ConversationSessionOverview[];
+  readTurn(turnId: string): ConversationTurn | null;
   getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null;
   readTurnOutcomeById(outcomeId: string): TurnOutcomeCapsule | null;
   readTurnOutcome(turnId: string): TurnOutcomeCapsule | null;
   readTurnOutcomes(afterOutcomeId: string | null, limit?: number): TurnOutcomeCapsule[];
+  readRecoveredSourceMessages(afterMessageId: string | null, limit?: number): ConversationMessageWithParts[];
   readMessageById(messageId: string): ConversationMessageWithParts | null;
+  readPublicSourceRevision?(): number;
   readProjectionMessages(
     sessionId: string,
     input?: { afterSeq?: number; limit?: number },

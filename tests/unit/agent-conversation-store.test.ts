@@ -74,7 +74,7 @@ test("conversation store creates the canonical schema and migration marker", () 
     expect(tables).toContain("conversation_projection_outbox");
     expect(tables).toContain("conversation_schema_migrations");
     expect(db.query<{ version: number }, []>("SELECT version FROM conversation_schema_migrations").get()?.version)
-      .toBe(2);
+      .toBe(3);
   } finally {
     db.close();
   }
@@ -104,7 +104,7 @@ test("conversation store upgrades a version-one database without losing semantic
   const verified = new Database(conversationStorePath(tempDir), { readonly: true });
   expect(verified.query<{ version: number }, []>(`
     SELECT MAX(version) AS version FROM conversation_schema_migrations
-  `).get()?.version).toBe(2);
+  `).get()?.version).toBe(3);
   expect(verified.query<{ name: string }, []>(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turn_outcomes'
   `).get()?.name).toBe("conversation_turn_outcomes");
@@ -286,6 +286,7 @@ test("tool call and result parts preserve ids provider shape and ordering", () =
     turnId: turn.id,
     text: "using a tool",
   });
+  const publicRevision=store.readPublicSourceRevision();
 
   store.appendToolCall({
     messageId: assistant.id,
@@ -300,6 +301,7 @@ test("tool call and result parts preserve ids provider shape and ordering", () =
     providerShape: "openai",
     contentJson: { ok: true, text: "done" },
   });
+  expect(store.readPublicSourceRevision()).toBe(publicRevision);
 
   const [message] = store.readSemanticTail("cs_tools", 10);
   expect(message?.parts.map((part) => ({

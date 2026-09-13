@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
+import { createHash } from "node:crypto";
 import { writeLockedTextFile } from "./file-state.ts";
 
 export type PlannedTaskStatus =
@@ -81,6 +82,7 @@ export interface PlannedTaskReview {
   criteria: PlannedCriterionReview[];
   missing_evidence: string[];
   repair_recommendation: string | null;
+  memory_source_verified?: boolean;
 }
 
 export type PlannedTaskReviewInput =
@@ -121,6 +123,37 @@ export interface PlannedTaskRecord {
   publicReport: string | null;
 }
 
+export interface PlannedTaskMemoryReport {
+  schema: "butler.planned-task-memory-report.v1";
+  task_id: string;
+  record_id: string;
+  attempt: number;
+  result_hash: string;
+  review_hash: string;
+  plan_hash: string;
+  report_hash: string;
+  source_revision: string;
+  disposition: "succeeded" | "failed" | "partial";
+  project_id: string;
+  observed_at: string;
+  text: string;
+}
+
+export function plannedTaskMemoryRecordId(taskId: string): string {
+  return `task-report.${Buffer.from(taskId, "utf8").toString("base64url")}`;
+}
+
+export function taskIdFromPlannedTaskMemoryRecordId(recordId: string): string | null {
+  if (!recordId.startsWith("task-report.")) return null;
+  try {
+    const encoded = recordId.slice("task-report.".length);
+    const taskId = Buffer.from(encoded, "base64url").toString("utf8");
+    return taskId && plannedTaskMemoryRecordId(taskId) === recordId ? taskId : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PlannedWorkerAttemptLink {
   record: PlannedTaskRecord;
   attempt: number;
@@ -144,18 +177,105 @@ const STATUS_TRANSITIONS: Record<PlannedTaskStatus, PlannedTaskStatus[]> = {
   CANCELLED: [],
 };
 
-function readText(path: string): string {
+export type PlannedTaskReadOptions = { unavailable?: "throw" };
+
+function missingFile(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function unavailable(options: PlannedTaskReadOptions, error: unknown): never | void {
+  if (options.unavailable === "throw" && !missingFile(error)) {
+    throw new Error("memory_source_unavailable");
+  }
+}
+
+function readText(path: string, options: PlannedTaskReadOptions = {}): string {
   try {
     return readFileSync(path, "utf8").trim();
-  } catch {
+  } catch (error) {
+    unavailable(options, error);
     return "";
   }
 }
 
-function readJson<T>(path: string): T | null {
+function readExactText(path: string, options: PlannedTaskReadOptions = {}): string | null {
+  try {
+    return readFileSync(path, "utf8");
+  } catch (error) {
+    unavailable(options, error);
+    return null;
+  }
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function readPlannedTaskMemoryReport(
+  taskDir: string,
+  options: PlannedTaskReadOptions = {},
+): PlannedTaskMemoryReport | null {
+  const binding = readJson<Omit<PlannedTaskMemoryReport, "text">>(
+    join(taskDir, "memory-report-binding.json"),
+    options,
+  );
+  if (!binding || binding.schema !== "butler.planned-task-memory-report.v1") {
+    return null;
+  }
+  const report = readExactText(join(taskDir, "public-report.md"), options);
+  const result = readExactText(
+    join(taskDir, "attempts", String(binding.attempt).padStart(3, "0"), "result.md"),
+    options,
+  );
+  const review = readExactText(join(taskDir, "review.json"), options);
+  const plan = readExactText(join(taskDir, "plan.json"), options);
+  const current = readPlannedTaskRecord(taskDir, binding.task_id, options);
+  const latestAttempt = Number(current?.attempts.at(-1));
+  const currentDisposition = current?.review
+    ? current.review.verdict === "PASS" &&
+        current.review.goal_review.verdict === "PASS" &&
+        current.review.criteria.every((criterion) => criterion.verdict === "PASS")
+      ? "succeeded"
+      : current.review.verdict === "FAIL" ? "failed" : "partial"
+    : null;
+  if (report === null || result === null || review === null || plan === null ||
+    sha256(report) !== binding.report_hash || sha256(result) !== binding.result_hash ||
+    sha256(review) !== binding.review_hash || sha256(plan) !== binding.plan_hash ||
+    !current || !Number.isInteger(latestAttempt) || latestAttempt !== binding.attempt ||
+    binding.record_id !== plannedTaskMemoryRecordId(binding.task_id) ||
+    current.review?.attempt !== binding.attempt ||
+    current.review.memory_source_verified !== true ||
+    current.review.goal_review.goal.trim() !== plannedInternalGoal(current.plan).trim() ||
+    current.review.missing_evidence.length > 0 ||
+    missingReviewCriteria(current, current.review.criteria).length > 0 ||
+    current.review.criteria.some((criterion) =>
+      criterion.verdict === "PASS" && !criterion.evidence.trim(),
+    ) ||
+    !["PUBLIC_REPORT_READY", "FAILED_PUBLIC_REPORT_READY", "REPORTED"].includes(current.status) ||
+    currentDisposition !== binding.disposition ||
+    (current.status === "PUBLIC_REPORT_READY" && binding.disposition !== "succeeded") ||
+    (current.status === "FAILED_PUBLIC_REPORT_READY" && binding.disposition === "succeeded") ||
+    sourceRevisionForMemoryReport(binding) !== binding.source_revision) {
+    return null;
+  }
+  return { ...binding, text: report };
+}
+
+function sourceRevisionForMemoryReport(
+  binding: Pick<PlannedTaskMemoryReport, "task_id" | "attempt" | "result_hash" | "review_hash" | "plan_hash" | "report_hash" | "disposition">,
+): string {
+  return sha256(JSON.stringify([
+    "planned-task-memory-report", binding.task_id, binding.attempt,
+    binding.result_hash, binding.review_hash, binding.plan_hash,
+    binding.report_hash, binding.disposition,
+  ]));
+}
+
+function readJson<T>(path: string, options: PlannedTaskReadOptions = {}): T | null {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
+  } catch (error) {
+    unavailable(options, error);
     return null;
   }
 }
@@ -314,26 +434,35 @@ export function missingReviewCriteria(record: PlannedTaskRecord, reviews: Planne
     .map((item) => item.criterion);
 }
 
-export function readPlannedTaskRecord(taskDir: string, taskId?: string): PlannedTaskRecord | null {
+export function readPlannedTaskRecord(
+  taskDir: string,
+  taskId?: string,
+  options: PlannedTaskReadOptions = {},
+): PlannedTaskRecord | null {
   if (!existsSync(taskDir)) return null;
-  const plan = readJson<PlannedTaskPlan>(join(taskDir, "plan.json"));
+  const plan = readJson<PlannedTaskPlan>(join(taskDir, "plan.json"), options);
   if (!plan || plan.type !== "planned") return null;
   const attemptsDir = join(taskDir, "attempts");
-  const attempts = existsSync(attemptsDir)
-    ? readdirSync(attemptsDir).filter((entry) => existsSync(join(attemptsDir, entry))).sort()
-    : [];
+  let attempts: string[] = [];
+  try {
+    attempts = existsSync(attemptsDir)
+      ? readdirSync(attemptsDir).filter((entry) => existsSync(join(attemptsDir, entry))).sort()
+      : [];
+  } catch (error) {
+    unavailable(options, error);
+  }
   const latest = attempts.at(-1);
-  const latestResult = latest ? readText(join(attemptsDir, latest, "result.md")) || null : null;
+  const latestResult = latest ? readText(join(attemptsDir, latest, "result.md"), options) || null : null;
   return {
     taskId: taskId ?? plan.task_id,
     taskDir,
-    status: normalizeStatus(readText(join(taskDir, "status"))),
+    status: normalizeStatus(readText(join(taskDir, "status"), options)),
     plan,
     attempts,
     latestResult,
-    review: readJson<PlannedTaskReview>(join(taskDir, "review.json")),
-    decision: readJson<PlannedDecisionRequest>(join(taskDir, "decision.json")),
-    publicReport: readText(join(taskDir, "public-report.md")) || null,
+    review: readJson<PlannedTaskReview>(join(taskDir, "review.json"), options),
+    decision: readJson<PlannedDecisionRequest>(join(taskDir, "decision.json"), options),
+    publicReport: readText(join(taskDir, "public-report.md"), options) || null,
   };
 }
 
@@ -463,6 +592,7 @@ export class PlannedTaskStore {
     const internalGoal = plannedInternalGoal(record.plan);
     const normalized: PlannedTaskReview = {
       ...review,
+      memory_source_verified: Boolean(review.goal_review),
       goal_review: {
         goal: review.goal_review?.goal.trim() || internalGoal,
         verdict: review.goal_review?.verdict ?? review.verdict,
@@ -478,7 +608,60 @@ export class PlannedTaskStore {
   writePublicReport(taskId: string, report: string): PlannedTaskRecord {
     const record = this.read(taskId);
     if (!record) throw new Error(`planned task ${taskId} not found`);
-    writeText(join(record.taskDir, "public-report.md"), `${report.trim()}\n`);
+    const text = `${report.trim()}\n`;
+    const attempt = Number(record.attempts.at(-1));
+    const review = record.review;
+    const eligible = Number.isInteger(attempt) && attempt >= 1 && review !== null &&
+      review.attempt === attempt && review.memory_source_verified === true &&
+      review.goal_review.goal.trim() === plannedInternalGoal(record.plan).trim() &&
+      review.missing_evidence.length === 0 &&
+      missingReviewCriteria(record, review.criteria).length === 0 &&
+      ["PUBLIC_REPORT_READY", "FAILED_PUBLIC_REPORT_READY", "REPORTED"].includes(record.status) &&
+      (record.status !== "PUBLIC_REPORT_READY" ||
+        (review.verdict === "PASS" && review.goal_review.verdict === "PASS" &&
+          review.criteria.every((criterion) => criterion.verdict === "PASS"))) &&
+      (record.status !== "FAILED_PUBLIC_REPORT_READY" ||
+        review.verdict !== "PASS" || review.goal_review.verdict !== "PASS" ||
+        review.criteria.some((criterion) => criterion.verdict !== "PASS")) &&
+      !review.criteria.some((criterion) =>
+        criterion.verdict === "PASS" && !criterion.evidence.trim(),
+      );
+    if (!eligible || !review) {
+      writeText(join(record.taskDir, "public-report.md"), text);
+      rmSync(join(record.taskDir, "memory-report-binding.json"), { force: true });
+      return this.read(taskId)!;
+    }
+    const attemptResult = readExactText(
+      join(record.taskDir, "attempts", String(attempt).padStart(3, "0"), "result.md"),
+    );
+    const reviewJson = readExactText(join(record.taskDir, "review.json"));
+    const planJson = readExactText(join(record.taskDir, "plan.json"));
+    if (attemptResult === null || reviewJson === null || planJson === null) {
+      throw new Error(`planned task ${taskId} report binding is incomplete`);
+    }
+    const disposition = review.verdict === "PASS" &&
+        review.goal_review.verdict === "PASS" &&
+        review.criteria.every((criterion) => criterion.verdict === "PASS")
+      ? "succeeded"
+      : review.verdict === "FAIL" ? "failed" : "partial";
+    writeText(join(record.taskDir, "public-report.md"), text);
+    const binding = {
+      schema: "butler.planned-task-memory-report.v1",
+      task_id: taskId,
+      record_id: plannedTaskMemoryRecordId(taskId),
+      attempt,
+      result_hash: sha256(attemptResult),
+      review_hash: sha256(reviewJson),
+      plan_hash: sha256(planJson),
+      report_hash: sha256(text),
+      disposition,
+      project_id: record.plan.project,
+      observed_at: review.reviewed_at,
+    } as const;
+    writeJson(join(record.taskDir, "memory-report-binding.json"), {
+      ...binding,
+      source_revision: sourceRevisionForMemoryReport(binding),
+    });
     return this.read(taskId)!;
   }
 

@@ -3,7 +3,11 @@ import {
   structuredToolResultModelProjection,
   type ToolResultModelPreviewContext,
 } from "./tool-result-model-preview.ts";
-import { fitExactOperationResultPage, fitToolArtifactPage } from "./artifact-result-preview.ts";
+import {
+  fitExactOperationResultPage,
+  fitToolArtifactPage,
+} from "./artifact-result-preview.ts";
+import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 
 export const MAX_PROVIDER_TOOL_RESULT_BYTES = 50 * 1024;
 const MAX_PROVIDER_TOOL_RESULT_LINES = 2_000;
@@ -48,7 +52,9 @@ export function toolResultPayloadForProvider(
   },
 ): Record<string, unknown> {
   const toolName = options?.toolName;
-  if (!toolName) return fitProviderPayload(payload, MAX_PROVIDER_TOOL_RESULT_BYTES);
+  if (!toolName) {
+    return fitProviderPayload(payload, MAX_PROVIDER_TOOL_RESULT_BYTES);
+  }
   const projection = structuredToolResultModelProjection({
     toolName,
     output: payload.output,
@@ -65,18 +71,24 @@ export function toolResultPayloadForProvider(
   const projectedWithReference = preview && exactReadReference &&
       (projection.partial || previewSignalsPartial(preview))
     ? {
-        ...projected,
-        model_preview: modelPreviewMetadata(
-          serializedBytes(payload),
-          exactReadReference,
-        ),
-      }
+      ...projected,
+      model_preview: modelPreviewMetadata(
+        serializedBytes(payload),
+        exactReadReference,
+      ),
+    }
     : projected;
-  const budget = claimResultBudget(options.context);
+  const budget = Math.min(
+    claimResultBudget(options.context),
+    MAX_PROVIDER_TOOL_RESULT_BYTES,
+  );
   if (toolName === "read_operation_results") {
     return fitExactOperationResultPage(projectedWithReference, budget);
   }
-  if (toolName === "read_tool_output_artifact" || toolName === "read_tool_evidence_artifact") {
+  if (
+    toolName === "read_tool_output_artifact" ||
+    toolName === "read_tool_evidence_artifact"
+  ) {
     return fitToolArtifactPage(projectedWithReference, budget);
   }
   return fitProviderPayload(projectedWithReference, budget, {
@@ -100,13 +112,51 @@ export function serializeToolResultPayloadForProvider(
     exactReadReference?: ToolResultExactReadReference;
   },
 ): string {
-  return JSON.stringify(toolResultPayloadForProvider(payload, options));
+  const startedAt = performance.now();
+  try {
+    const serialized = JSON.stringify(
+      toolResultPayloadForProvider(payload, options),
+    );
+    if (options?.toolName && MEMORY_RESULT_TOOLS.has(options.toolName)) {
+      recordOperationalMetric({
+        category: "memory",
+        name: "memory_tool_result_serialization",
+        status: "ok",
+        durationMs: performance.now() - startedAt,
+        value: Buffer.byteLength(serialized, "utf8"),
+        unit: "bytes",
+        dimensions: { tool_name: options.toolName },
+      });
+    }
+    return serialized;
+  } catch (error) {
+    if (options?.toolName && MEMORY_RESULT_TOOLS.has(options.toolName)) {
+      recordOperationalMetric({
+        category: "memory",
+        name: "memory_tool_result_serialization",
+        status: "error",
+        durationMs: performance.now() - startedAt,
+        dimensions: { tool_name: options.toolName },
+      });
+    }
+    throw error;
+  }
 }
+
+const MEMORY_RESULT_TOOLS = new Set([
+  "recall_memory",
+  "query_memory",
+  "list_conversation_sessions",
+  "read_conversation_session",
+]);
 
 function claimResultBudget(context?: ToolResultModelPreviewContext): number {
   const batch = context?.resultBatchBudget;
   if (!batch) return MAX_PROVIDER_TOOL_RESULT_BYTES;
-  const allowance = Math.max(1, Math.floor(batch.remainingBytes / batch.remainingResults));
+  const allowance = Math.max(
+    1,
+    Math.floor(batch.remainingBytes / batch.remainingResults),
+  );
   batch.remainingResults = Math.max(0, batch.remainingResults - 1);
   const claimed = Math.min(MAX_PROVIDER_TOOL_RESULT_BYTES, allowance);
   batch.remainingBytes = Math.max(0, batch.remainingBytes - claimed);
@@ -135,13 +185,15 @@ function fitProviderPayload(
       arguments: { path: artifact.path, offset_chars: 0, stream: "both" },
     };
   }
-  for (const limits of [
-    { stringChars: 4_800, arrayItems: 16 },
-    { stringChars: 2_400, arrayItems: 8 },
-    { stringChars: 1_200, arrayItems: 4 },
-    { stringChars: 480, arrayItems: 2 },
-    { stringChars: 160, arrayItems: 1 },
-  ]) {
+  for (
+    const limits of [
+      { stringChars: 4_800, arrayItems: 16 },
+      { stringChars: 2_400, arrayItems: 8 },
+      { stringChars: 1_200, arrayItems: 4 },
+      { stringChars: 480, arrayItems: 2 },
+      { stringChars: 160, arrayItems: 1 },
+    ]
+  ) {
     const bounded = boundValue(payload, limits, 0) as Record<string, unknown>;
     const candidate = mergeStructuralOutcome(bounded, {
       ...structuralOutcome(payload, options?.toolName),
@@ -214,18 +266,23 @@ function structuralOutcome(
     error,
     ...(output
       ? {
-          output: compactUndefined({
-            tool_name: toolName,
-            ok: typeof output?.ok === "boolean" ? output.ok : undefined,
-            error: errorIdentity(output?.error),
-            ...controlFacts(output),
-            ...(output.butler_tool_artifact ? {
+        output: compactUndefined({
+          tool_name: toolName,
+          ok: typeof output?.ok === "boolean" ? output.ok : undefined,
+          error: errorIdentity(output?.error),
+          ...controlFacts(output),
+          ...(output.butler_tool_artifact
+            ? {
               butler_tool_artifact: output.butler_tool_artifact,
-              output_presentation: { ...record(output.output_presentation), truncated: true },
-            } : {}),
-            ...(work ? { work } : {}),
-          }),
-        }
+              output_presentation: {
+                ...record(output.output_presentation),
+                truncated: true,
+              },
+            }
+            : {}),
+          ...(work ? { work } : {}),
+        }),
+      }
       : {}),
   });
 }
@@ -252,17 +309,21 @@ const CONTROL_FACT_KEYS = [
   "next_action",
 ] as const;
 
-function controlFacts(output: Record<string, unknown>): Record<string, unknown> {
+function controlFacts(
+  output: Record<string, unknown>,
+): Record<string, unknown> {
   return Object.fromEntries(CONTROL_FACT_KEYS.flatMap((key) => {
     const value = output[key];
     return value === null || typeof value === "string" ||
-      typeof value === "boolean" || typeof value === "number"
+        typeof value === "boolean" || typeof value === "number"
       ? [[key, value]]
       : [];
   }));
 }
 
-function errorIdentity(errorValue: unknown): Record<string, unknown> | string | undefined {
+function errorIdentity(
+  errorValue: unknown,
+): Record<string, unknown> | string | undefined {
   if (typeof errorValue === "string") return boundString(errorValue, 480);
   const error = record(errorValue);
   if (!error) return undefined;
@@ -286,7 +347,9 @@ function boundValue(
   depth: number,
 ): unknown {
   if (typeof value === "string") return boundString(value, limits.stringChars);
-  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (
+    value === null || typeof value === "boolean" || typeof value === "number"
+  ) return value;
   if (depth >= 5) return undefined;
   if (Array.isArray(value)) {
     return value.slice(0, limits.arrayItems)
@@ -305,10 +368,13 @@ function boundValue(
 function boundString(value: string, maxChars: number): string {
   const lines = value.split("\n");
   const lineBounded = lines.length > MAX_PROVIDER_TOOL_RESULT_LINES
-    ? `${lines.slice(0, MAX_PROVIDER_TOOL_RESULT_LINES).join("\n")}\n[remaining lines omitted]`
+    ? `${
+      lines.slice(0, MAX_PROVIDER_TOOL_RESULT_LINES).join("\n")
+    }\n[remaining lines omitted]`
     : value;
   if (lineBounded.length <= maxChars) return lineBounded;
-  const marker = "\n[content omitted; continue from the provided cursor or artifact]\n";
+  const marker =
+    "\n[content omitted; continue from the provided cursor or artifact]\n";
   const side = Math.max(1, Math.floor((maxChars - marker.length) / 2));
   return `${lineBounded.slice(0, side)}${marker}${lineBounded.slice(-side)}`;
 }

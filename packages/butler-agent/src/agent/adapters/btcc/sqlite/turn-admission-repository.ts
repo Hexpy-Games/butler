@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { subsessionResultClientMessageId } from "../../../../gateways/app/interface/protocol/internal-result-contract.ts";
 import type {
   AdmissionConstructionClaim,
   AdmissionInbox,
@@ -15,6 +16,7 @@ import {
   createTurnContinuationBudgetState,
   type TurnContinuationBudgetLimits,
 } from "../../../btcc/turn/index.ts";
+import type { ConversationOriginEvidence } from "../../../conversation/types.ts";
 
 type InboxRow = {
   inbox_id: string;
@@ -26,6 +28,94 @@ type InboxRow = {
 
 type RecordInboundInput = Parameters<TurnAdmissionRepository["recordInbound"]>[0];
 type FreshTurnCommand = RecordInboundInput["command"];
+
+export type PersistedConversationAdmissionEvidence = {
+  available: boolean;
+  matched: boolean;
+  publicIngress: boolean;
+  internalControl: boolean;
+  evidence: ConversationOriginEvidence[];
+};
+
+/** Indexed once per recovery pass; historical app rows can lack execution controls. */
+export function readPersistedSubsessionOriginIndex(db: Database): Map<string, ConversationOriginEvidence> {
+  const result = new Map<string, ConversationOriginEvidence>();
+  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='btcc_subsession_outbox'").get()) return result;
+  const rows = db.query<{
+    outbox_id: string; relation_id: string; result_id: string;
+    parent_session_id: string; message_id: string;
+  }, []>("SELECT outbox_id,relation_id,result_id,parent_session_id,message_id FROM btcc_subsession_outbox").all();
+  for (const row of rows) {
+    if (row.message_id !== `subsession-result:${row.relation_id}:${row.result_id}`)
+      throw new Error("memory_origin_outbox_identity_invalid");
+    const sourceRef = `app:${subsessionResultClientMessageId(row.relation_id, row.result_id)}`;
+    result.set(`${row.parent_session_id}\0${sourceRef}`, {
+      kind: "subsession", ref: row.outbox_id, sha256: digest(stableJson(row)),
+    });
+  }
+  return result;
+}
+
+export function readPersistedConversationAdmissionEvidence(
+  db: Database,
+  locator: {
+    canonicalSessionId: string; turnId: string; requestId: string | null;
+    sourceRef: string; gateway: string | null; runtimeSessionId: string;
+  },
+): PersistedConversationAdmissionEvidence {
+  try {
+    const row = db.query<{
+      turn_id: string; session_id: string; trigger_key: string; original_message_id: string;
+      inbox_id: string; admission_snapshot_ref: string; context_json: string;
+      admission_input_hash: string; command_json: string;
+      inbox_session_id: string; inbox_turn_id: string; inbox_trigger_key: string;
+    }, [string]>(`SELECT t.turn_id,t.session_id,t.trigger_key,t.original_message_id,t.inbox_id,
+      t.admission_snapshot_ref,t.context_json,i.admission_input_hash,i.command_json,
+      i.session_id inbox_session_id,i.turn_id inbox_turn_id,i.trigger_key inbox_trigger_key
+      FROM btcc_turns t JOIN btcc_inbound_inbox i ON i.inbox_id=t.inbox_id WHERE t.turn_id=?`).get(locator.turnId);
+    if (!row) return { available: true, matched: false, publicIngress: false, internalControl: false, evidence: [] };
+    const record = db.query<{ sha256: string; content_json: string }, [string]>(
+      "SELECT sha256,content_json FROM btcc_records WHERE record_id=? AND kind='admission_snapshot'",
+    ).get(row.admission_snapshot_ref);
+    if (!record || digest(record.content_json) !== record.sha256) return { available: false, matched: false, publicIngress: false, internalControl: false, evidence: [] };
+    const command = JSON.parse(row.command_json) as Record<string, any>;
+    const snapshot = JSON.parse(record.content_json) as { context?: Record<string, any> };
+    if (!snapshot.context || stableJson({ context: snapshot.context }) !== record.content_json)
+      return { available: false, matched: false, publicIngress: false, internalControl: false, evidence: [] };
+    const context = snapshot.context;
+    const sourceId = command.kind === "run" ? command.message?.messageId
+      : command.kind === "wake" ? command.trigger?.triggerId : null;
+    const matched = (command.kind === "run" || command.kind === "wake") &&
+      row.session_id === locator.runtimeSessionId && command.sessionId === row.session_id &&
+      row.turn_id === locator.turnId && command.turnId === row.turn_id &&
+      row.inbox_session_id === row.session_id && row.inbox_turn_id === row.turn_id && row.inbox_trigger_key === row.trigger_key &&
+      row.trigger_key === command.triggerKey && row.trigger_key === locator.requestId &&
+      locator.sourceRef === locator.requestId && sourceId === row.original_message_id;
+    if (!matched) return { available: true, matched: false, publicIngress: false, internalControl: false, evidence: [] };
+    const role = context?.executionPolicy?.role;
+    const internalControl = command.kind === "wake" || role === "worker" || role === "steward" || Boolean(context?.executionPolicy?.subsession) ||
+      Boolean(context?.authorityRequestRef) || Boolean(context?.nativeStewardContext);
+    const evidence: ConversationOriginEvidence[] = [
+      { kind: "btcc_admission", ref: row.admission_snapshot_ref, sha256: record.sha256 },
+      ...(context?.nativeStewardContext || context?.executionPolicy?.subsession || role === "worker" || role === "steward"
+        ? [{ kind: "subsession" as const, ref: row.admission_snapshot_ref, sha256: record.sha256 }]
+        : []),
+      ...(command.kind === "wake"
+        ? [{ kind: "authorized_wake" as const, ref: command.trigger.triggerId, sha256: null }]
+        : []),
+      ...(context?.authorityRequestRef
+        ? [{ kind: "authority_continuation" as const, ref: String(context.authorityRequestRef), sha256: null }]
+        : []),
+    ];
+    return {
+      available: true, matched: true, publicIngress: false,
+      internalControl,
+      evidence,
+    };
+  } catch {
+    return { available: false, matched: false, publicIngress: false, internalControl: false, evidence: [] };
+  }
+}
 
 export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   private readonly records: SqliteImmutableRecordStore;

@@ -1,5 +1,5 @@
 import { BUTLER_DIR } from "./constants.ts";
-import { refreshProjectCapsule } from "../project-memory.ts";
+import { refreshProjectCapsuleAsync } from "../project-memory.ts";
 
 function getArg(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -16,7 +16,7 @@ if (import.meta.main) {
 
   const maxBytesRaw = getArg(args, "--max-bytes");
   const maxBytes = maxBytesRaw ? Number.parseInt(maxBytesRaw, 10) : undefined;
-  const result = refreshProjectCapsule({
+  const result = await refreshProjectCapsuleAsync({
     butlerData: getArg(args, "--butler-data") ?? BUTLER_DIR.DATA,
     projectId,
     workspacePath: getArg(args, "--workspace-path"),

@@ -18,6 +18,7 @@ test("provider model-round tool conversion preserves concurrency safety internal
     name: "web_search",
     description: "Search the web",
     parameters: { type: "object", properties: {} },
+    strict: false,
   }]);
 });
 
@@ -32,7 +33,7 @@ test("provider model-round tool conversion keeps unspecified concurrency conserv
   expect(modelFacingFunctionTools([tool])[0]).not.toHaveProperty("concurrencySafe");
 });
 
-test("provider model-facing schemas omit nested descriptions and concurrency metadata", () => {
+test("provider model-facing schemas preserve descriptions and explicitly disable strict normalization", () => {
   const tool: ModelRoundTool = {
     name: "web_search",
     description: "Search the web",
@@ -41,6 +42,7 @@ test("provider model-facing schemas omit nested descriptions and concurrency met
       properties: {
         query: { type: "string", description: "Search query" },
       },
+      required: [],
     },
     concurrencySafe: true,
   };
@@ -52,8 +54,11 @@ test("provider model-facing schemas omit nested descriptions and concurrency met
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string" },
+        query: { type: "string", description: "Search query" },
       },
+      required: [],
     },
+    strict: false,
   }]);
+  expect(modelFacingFunctionTools([tool])[0]).not.toHaveProperty("concurrencySafe");
 });

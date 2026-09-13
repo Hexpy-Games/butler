@@ -3,15 +3,15 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const listConversationSessionsToolDefinition = {
   type: "function",
   name: "list_conversation_sessions",
-  description: "Discover bounded canonical Butler conversation sessions before referencing another chat. Defaults to the active project when present; use all_sessions when the user explicitly refers to a session in another project. App titles are labeled compatibility metadata, while previews come from canonical conversation messages.",
+  toolContractVersion: 2,
+  description: "Discover canonical conversation sessions after applying scope, project, origin, and conversation-time filters. App titles are compatibility labels only.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       scope: {
         type: "string",
-        enum: ["current_project", "all_sessions"],
-        description: "Session discovery scope. Defaults to current_project when a project is active, otherwise all_sessions.",
+        enum: ["current_session", "current_project", "all_user_sessions"],
       },
       limit: {
         type: "integer",
@@ -25,6 +25,22 @@ export const listConversationSessionsToolDefinition = {
         type: "integer",
         description: "Recent canonical user/assistant messages per session, from 1 to 6.",
       },
+      session_ids: { type: "array", items: { type: "string" } },
+      project_filter: { type: "string", enum: ["any", "unassigned", "selected"] },
+      project_ids: { type: "array", items: { type: "string" } },
+      include_internal: { type: "boolean" },
+      session_kind: { type: "string", enum: ["any", "chat", "project", "unknown"] },
+      time: {
+        type: "object", additionalProperties: false,
+        description: "Half-open ISO 8601 interval [from, to) with explicit UTC offsets.",
+        properties: {
+          from: { type: "string", description: "Inclusive start, as an ISO 8601 timestamp with an explicit UTC offset." },
+          to: { type: "string", description: "Exclusive end, as an ISO 8601 timestamp with an explicit UTC offset. For a complete calendar period, use the start of the next period in the user's timezone; do not subtract a smaller time unit." },
+          basis: { type: "string", enum: ["conversation"] },
+        },
+        required: ["from", "to", "basis"],
+      },
+      cursor: { type: "string" },
     },
     required: [],
   },
