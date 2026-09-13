@@ -3565,27 +3565,14 @@ test("explicit same-name and confusable creates remain distinct identities", asy
 
   const labels = ["Luna", "Lúna", "Lunа"] as const;
   transformExtractionOutput = (output, input) => {
-    const unit = input.source_units.find((item: any) =>
-      item.role === "user" && item.text.includes("separate labels"),
-    );
-    if (!unit) return;
-    const evidence = (label: string) => [{ unit_ref: unit.ref, quote: label, occurrence: 0 }];
+    if (!Array.isArray(input.parts) || !input.parts.some((item: any) => item.text.includes("separate labels"))) return;
+    const evidence = input.parts.filter((item: any) => item.text.includes("separate labels")).map((item: any) => item.id);
     for (const key of Object.keys(output)) delete output[key];
     Object.assign(output, {
-      schema: "butler.memory-extract-output.v2",
-      window_ref: input.window_ref,
-      disposition: "processed",
-      covered_unit_refs: input.source_units.map((item: any) => item.ref),
-      nodes: labels.map((label, index) => ({
-        local_ref: `separate-${index}`,
-        type: "entity",
-        label,
-        resolution: { kind: "create", provisional: false, identity_scope: "user" },
-        aliases: [],
-        evidence: evidence(label),
-      })),
-      claims: [], relations: [], corrections: [],
-      summary: { text: unit.text, evidence: [{ unit_ref: unit.ref, quote: unit.text, occurrence: 0 }] },
+      status: "processed",
+      entities: labels.map((name) => ({ name, evidence })),
+      items: [],
+      attributes: [],
     });
   };
   const createText = "Luna, Lúna, and Lunа are separate labels.";
@@ -4523,13 +4510,10 @@ test("rebuild target writes its validated cache without exposing it through the 
     signal: new AbortController().signal,
   };
   transformExtractionOutput = (output, input) => {
-    const unit = input.source_units.find((item: any) => item.role === "user") ?? input.source_units[0];
+    if (!Array.isArray(input.parts)) return;
     for (const key of Object.keys(output)) delete output[key];
     Object.assign(output, {
-      schema: "butler.memory-extract-output.v2", window_ref: input.window_ref,
-      disposition: "processed", covered_unit_refs: input.source_units.map((item: any) => item.ref),
-      nodes: [], claims: [], relations: [], corrections: [],
-      summary: { text: unit.text, evidence: [{ unit_ref: unit.ref, quote: unit.text, occurrence: 0 }] },
+      status: "processed", entities: [], items: [], attributes: [],
     });
   };
   const memory = await import("../../packages/butler-agent/src/agent/cognition/memory/index.ts");
@@ -5766,6 +5750,24 @@ function seedTurn(
 }
 
 function extractFor(input: Record<string, any>): Record<string, any> {
+  if (Array.isArray(input.parts)) {
+    return {
+      status: "processed",
+      entities: [{ name: "Luna", evidence: [input.parts[0].id] }],
+      items: [],
+      attributes: [],
+    };
+  }
+  if (Array.isArray(input.targets)) {
+    return {
+      decisions: input.targets.map((target: any) => ({
+        target: target.target,
+        candidate: null,
+        span: null,
+        support: [],
+      })),
+    };
+  }
   const source =
     input.source_units.find((unit: any) => unit.role === "user") ??
     input.source_units[0];
