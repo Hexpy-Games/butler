@@ -17,7 +17,7 @@ export function ProjectDashboardComposer({ projectId, onReserveChange }: {
     inFlight.current = true; setSending(true);
     try {
       const fingerprint = JSON.stringify([text, controls.contentParts, controls.attachments?.map((file) => file.file_id),
-        controls.model, controls.reasoningEffort, controls.accessMode, controls.planMode, controls.queuePolicy]);
+        controls.model, controls.reasoningEffort, controls.accessMode, controls.planMode, controls.queuePolicy, controls.workspaceMode]);
       const pending = prepareDashboardSend(projectId, fingerprint);
       await useButlerStore.getState().sendMessage(text, { ...controls, onAccepted: () => {
         update(projectId, { pendingSend: undefined }); controls.onAccepted?.();

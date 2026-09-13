@@ -26,6 +26,44 @@ import type { ButlerServiceClient } from "../../packages/butler-agent/src/gatewa
 import { bindQueuedInboundSession } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/queued-inbound-session-binder.ts";
 
+test("public project-session creation defaults to local and validates explicit workspace choices", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-app-local-create-"));
+  const server = createTestAppServer({
+    dbPath: join(root, "app.sqlite"), butlerData: root, butlerHome: process.cwd(),
+    projectWorkspaceRoot: join(root, "projects"), port: 0,
+  });
+  try {
+    const project = await postJson(`${server.url}projects`, { source: "scratch", display_name: "Local project" });
+    const projectId = project.data.project.id as string;
+    const row = server.store.db.query<{ workspace_path: string }, [string]>(
+      "SELECT workspace_path FROM projects WHERE id = ?",
+    ).get(projectId)!;
+    initRepository(row.workspace_path);
+    const worktreesBefore = gitText(row.workspace_path, ["worktree", "list", "--porcelain"]);
+    for (const mode of [undefined, "local"]) {
+      const created = await postJson(`${server.url}sessions`, {
+        kind: "project", project_id: projectId, workspace_mode: mode,
+      });
+      const view = await getJson(`${server.url}session-view?session_id=${encodeURIComponent(created.data.session.id)}`);
+      expect(view.data.branch.workspace_binding).toBe("project");
+      expect(view.data.branch.workspace_mode).toBe("git");
+      expect(gitText(row.workspace_path, ["worktree", "list", "--porcelain"])).toBe(worktreesBefore);
+    }
+    for (const body of [
+      { kind: "project", project_id: projectId, workspace_mode: "invalid" },
+      { kind: "chat", workspace_mode: "worktree" },
+    ]) {
+      const response = await fetch(`${server.url}sessions`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(400);
+    }
+  } finally {
+    server.stop();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("public project-session creation binds a checked-out session worktree before acknowledgement", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-app-worktree-create-"));
   const bindingStorePath = join(root, "runtime", "session-store.sqlite");
@@ -55,6 +93,7 @@ test("public project-session creation binds a checked-out session worktree befor
       kind: "project",
       project_id: projectId,
       title: "Automatic worktree session",
+      workspace_mode: "worktree",
     });
     const chatId = created.data.session.id as string;
     const runtimeSessionId = sessionHintForRow(chatId);
@@ -196,6 +235,7 @@ test("project-session creation fails closed and removes provisional state when a
         kind: "project",
         project_id: projectId,
         title: "Must not fall back",
+        workspace_mode: "worktree",
         session_hint: "conflicting-session",
       }),
     });

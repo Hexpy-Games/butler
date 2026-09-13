@@ -4032,7 +4032,14 @@ test("dashboard target preflight cannot send to an archived or relocated convers
   expect(sent).toBe(false);
 });
 
-test("draft first send includes the initial message in session creation", async () => {
+test.each([
+  { surface: "chat", mode: undefined },
+  { surface: "project", mode: undefined },
+  { surface: "project", mode: "worktree" as const },
+  { surface: "dashboard", mode: "local" as const },
+  { surface: "dashboard", mode: "worktree" as const },
+])("draft first send carries workspace mode: %j", async ({ surface, mode }) => {
+  const kind = surface === "chat" ? "chat" : "project";
   const userText = "오늘을 비가 올것 같아?";
   let createSessionBody: Record<string, unknown> | null = null;
   let sendMessageBody: Record<string, unknown> | null = null;
@@ -4066,7 +4073,8 @@ test("draft first send includes the initial message in session creation", async 
       return jsonResponse({
         session: {
           id: "session-weather",
-          kind: "chat",
+          kind,
+          ...(kind === "project" ? { project_id: "project-weather" } : {}),
           title: "오늘 날씨",
           last_activity_at: "2026-05-31T00:00:00.000Z",
           pinned: false,
@@ -4108,16 +4116,20 @@ test("draft first send includes the initial message in session creation", async 
   }) as unknown as typeof fetch;
 
   useButlerStore.setState({
-    activeChatId: "draft:chat",
-    view: { kind: "session" },
+    activeChatId: kind === "chat" ? "draft:chat" : "draft:project:project-weather",
+    view: surface === "dashboard" ? { kind: "project-dashboard", projectId: "project-weather" } : { kind: "session" },
     messages: [],
     summary: null,
   });
 
-  await useButlerStore.getState().sendMessage(userText);
+  await useButlerStore.getState().sendMessage(userText, {
+    workspaceMode: mode,
+    ...(surface === "dashboard" ? { dashboardTarget: { projectId: "project-weather" } } : {}),
+  });
 
   expect(createSessionBody).toMatchObject({
-    kind: "chat",
+    kind,
+    workspace_mode: mode ?? "local",
     title: userText,
     initial_message: userText,
   });

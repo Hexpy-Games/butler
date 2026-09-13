@@ -1798,6 +1798,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           body: JSON.stringify({
             kind: initialDraft.kind,
             project_id: initialDraft.projectId,
+            workspace_mode: initialDraft.kind === "project" ? controls.workspaceMode ?? "local" : "local",
             title: titleFromPrompt(messageTitle),
             initial_message: text,
           }),

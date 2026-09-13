@@ -1,3 +1,4 @@
+import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect.tsx";
 import type { SessionSummaryView } from "@/app/types.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import { isClientTurnId } from "@/app/utils.ts";
@@ -20,6 +21,7 @@ export function ComposerNotices({
           : undefined}
       />
       <GitDependencyNotice />
+      <ComposerWorkspaceSelect />
     </>
   );
 }

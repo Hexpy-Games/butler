@@ -737,6 +737,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       `Permanently remove "${projectName}" from Butler? This will not delete the local folder.`,
   },
   composer: {
+    workspace: "Workspace",
+    workspaceLocal: "Local",
+    workspaceWorktree: "Worktree",
+    workspaceLocalDescription: "Work in the existing project folder",
+    workspaceWorktreeDescription: "Create a new Git worktree for this conversation",
+    workspaceProjectRequired: "Choose a project to create a worktree",
     messageComposer: "Message composer",
     placeholder: "Ask Butler anything",
     placeholderFollowUp: "Ask for follow-up changes",
