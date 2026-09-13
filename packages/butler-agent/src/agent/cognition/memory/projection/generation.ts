@@ -23,9 +23,9 @@ import { TaskStore } from "../../../work/task-store.ts";
 import { cognitionBoxRoot, cognitionMemoryRoot } from "../../paths.ts";
 import { MEMORY_EXTRACTION_VERSION, type MemoryExecutionContext } from "./contracts.ts";
 import type { EmbeddingRuntimeMetadata } from "../scripts/embed.ts";
-import { ensureV2MemorySchema, expandSplitSourceLeaves, sourceRows, type ClaimedVectorUnit } from "./store.ts";
+import { ensureV2MemorySchema, sourceRows, type ClaimedVectorUnit, type ProjectionSourceRow } from "./store.ts";
 import { hydrateSource, memorySourceInventoryHash } from "./source.ts";
-import { countInvalidPersistedVectorReadiness } from "../recall/vector.ts";
+import { countInvalidPersistedVectorReadiness, reconcilePersistedNodeVectorRepresentatives, type VectorRepresentativeReconciliation } from "../recall/vector.ts";
 import {
   acquireConsolidationLock,
   acquireConsolidationLockAsync,
@@ -843,6 +843,71 @@ export function inspectMemoryGeneration(input: { butlerData: string; generationI
   } finally { db.close(); }
 }
 
+type VectorEvidenceRow = ClaimedVectorUnit & { state: string; source_membership_invalid: number };
+
+function loadVectorEvidenceRows(db: Database, generationId: string, state: "complete" | "superseded"): VectorEvidenceRow[] {
+  return db.query<VectorEvidenceRow, [string, string]>(`
+    SELECT u.*,j.revision source_revision,c.conversation_session_id,
+      (SELECT ordered.source_kind FROM memory_chunk_sources ordered
+        WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+        ORDER BY ordered.source_id LIMIT 1) source_kind,
+      (SELECT ordered.observed_at FROM memory_chunk_sources ordered
+        WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
+          AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
+          AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
+            SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
+        ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
+      COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id
+        FROM memory_chunk_sources ordered WHERE ordered.episode_id=c.memory_chunk_id
+          AND ordered.revision=c.current_revision AND (u.record_kind='episode' OR
+            (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own
+              WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
+        ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
+          ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
+      CASE WHEN NOT (u.project_id IS c.project_id)
+        OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
+        OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
+          SELECT 1 FROM memory_chunk_sources current_source
+          WHERE current_source.source_id=refs.value
+            AND current_source.episode_id=c.memory_chunk_id
+            AND current_source.revision=c.current_revision
+            AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
+              SELECT 1 FROM memory_evidence current_mention
+              WHERE current_mention.node_id=u.owner_id
+                AND current_mention.source_id=current_source.source_id
+                AND current_mention.episode_id=c.memory_chunk_id
+                AND current_mention.revision=c.current_revision)))
+        )) THEN 1 ELSE 0 END source_membership_invalid
+    FROM memory_vector_units u
+    JOIN memory_projection_jobs j ON j.job_id=u.job_id
+    JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
+    WHERE j.generation=? AND u.state=?
+  `).all(generationId, state);
+}
+
+export async function reconcileMemoryGenerationVectorRepresentatives(
+  context: MemoryExecutionContext,
+): Promise<VectorRepresentativeReconciliation> {
+  if (context.target.kind !== "rebuild") throw new Error("memory_rebuild_invalid_request");
+  const generation = resolveMemoryGeneration(context);
+  if (!generation.embedding) return { repaired_vector_keys: [], affected_unit_ids: [] };
+  const db = new Database(generation.graphPath, { readonly: true });
+  try {
+    const current = loadVectorEvidenceRows(db, generation.generationId, "complete")
+      .filter((row) => row.source_membership_invalid === 0);
+    const superseded = loadVectorEvidenceRows(db, generation.generationId, "superseded")
+      .filter((row) => row.source_membership_invalid === 0);
+    const result = await reconcilePersistedNodeVectorRepresentatives(
+      generation, current, superseded, generation.embedding.version,
+    );
+    const latest = resolveMemoryGeneration(context);
+    if (latest.generationId !== generation.generationId ||
+      latest.embedding?.version !== generation.embedding.version)
+      throw new Error("memory_generation_changed");
+    return result;
+  } finally { db.close(); }
+}
+
 export async function computeMemoryGenerationReadiness(input: {
   butlerData: string; generationId: string; inventoryHash: string; inventorySourceCount: number;
 }): Promise<MemoryGenerationReadiness> {
@@ -878,20 +943,21 @@ export async function computeMemoryGenerationReadiness(input: {
       WHERE j.generation=?
     `).all(input.generationId);
     const registeredById = new Map(registeredRows.map((row) => [row.source_id, row]));
-    const expectedEvidence = new Map<string, { revision: string; hashes: string[]; origins?: string[] }>();
+    const expectedProcessingEvidence = new Map<string, { revision: string; hashes: string[]; origins?: string[] }>();
+    const expectedHistoricalEvidence = new Map<string, { revision: string; hashes: string[]; origins?: string[] }>();
     let registered = 0;
     for (const [sourceId, item] of expected) {
       const parent = sourceRows(db, [sourceId])[0];
-      const leaves = expandSplitSourceLeaves(db, sourceId);
-      const leafRows = sourceRows(db, leaves).sort((a, b) => a.byte_start - b.byte_start || a.source_id.localeCompare(b.source_id));
       const parentMatches = Boolean(parent && parent.revision === item.revision && item.hashes.includes(parent.content_hash) &&
         (!item.origins || item.origins.includes(parent.origin_kind)));
-      const completeSpan = Boolean(parent && leafRows.length === leaves.length && leafRows[0]?.byte_start === parent.byte_start &&
-        leafRows.at(-1)?.byte_end === parent.byte_end && leafRows.every((row, index) =>
-          row.revision === parent.revision && row.content_hash === parent.content_hash && row.episode_id === parent.episode_id &&
-          (!item.origins || item.origins.includes(row.origin_kind)) && (index === 0 || leafRows[index - 1]!.byte_end === row.byte_start)));
-      if (parentMatches && completeSpan && leaves.every((leaf) => registeredById.has(leaf))) registered += 1;
-      if (parentMatches && completeSpan) for (const leaf of leaves) expectedEvidence.set(leaf, item);
+      const lineage = parentMatches && parent
+        ? validatedSourceLineage(db, parent, item.origins)
+        : null;
+      if (lineage && lineage.leaves.every((leaf) => registeredById.has(leaf))) registered += 1;
+      if (lineage) {
+        for (const leaf of lineage.leaves) expectedProcessingEvidence.set(leaf, item);
+        for (const evidenceSource of lineage.all) expectedHistoricalEvidence.set(evidenceSource, item);
+      }
     }
     const semantic = {
       complete: count(`SELECT COUNT(*) count FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE j.generation='${input.generationId}' AND w.state='complete'`),
@@ -920,53 +986,17 @@ export async function computeMemoryGenerationReadiness(input: {
     const semanticEvidenceInvalid = semanticEvidenceRows.filter((row) => {
       try {
         const refs = JSON.parse(row.source_refs_json) as unknown;
-        return !Array.isArray(refs) || refs.length === 0 || refs.some((ref) => typeof ref !== "string" || !expectedEvidence.has(ref)) ||
+        return !Array.isArray(refs) || refs.length === 0 || refs.some((ref) => typeof ref !== "string" || !expectedProcessingEvidence.has(ref)) ||
           (row.state === "complete" && !row.normalized_plan_json);
       } catch { return true; }
     }).length;
-    const vectorEvidenceRows = db.query<ClaimedVectorUnit & { state: string; source_membership_invalid: number }, [string]>(`
-      SELECT u.*,j.revision source_revision,c.conversation_session_id,
-        (SELECT ordered.source_kind FROM memory_chunk_sources ordered
-          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
-          ORDER BY ordered.source_id LIMIT 1) source_kind,
-        (SELECT ordered.observed_at FROM memory_chunk_sources ordered
-          WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
-            AND (u.source_ids_json IS NULL OR ordered.source_id IN (SELECT value FROM json_each(u.source_ids_json)))
-            AND (u.record_kind='episode' OR (ordered.origin_kind=u.origin_kind AND EXISTS(
-              SELECT 1 FROM memory_evidence own WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
-          ORDER BY julianday(ordered.observed_at) DESC,ordered.source_id DESC LIMIT 1) source_observed_at,
-        COALESCE(u.source_ids_json,(SELECT json_group_array(source_id) FROM (SELECT source_id
-          FROM memory_chunk_sources ordered WHERE ordered.episode_id=c.memory_chunk_id
-            AND ordered.revision=c.current_revision AND (u.record_kind='episode' OR
-              (ordered.origin_kind=u.origin_kind AND EXISTS(SELECT 1 FROM memory_evidence own
-                WHERE own.source_id=ordered.source_id AND own.node_id=u.owner_id)))
-          ORDER BY julianday(ordered.observed_at),ordered.conversation_message_id,ordered.part_id,
-            ordered.scalar_pointer,ordered.byte_start))) source_ids_json,
-        CASE WHEN NOT (u.project_id IS c.project_id)
-          OR u.source_ids_json IS NULL OR json_array_length(u.source_ids_json)=0
-          OR EXISTS(SELECT 1 FROM json_each(u.source_ids_json) refs WHERE NOT EXISTS(
-            SELECT 1 FROM memory_chunk_sources current_source
-            WHERE current_source.source_id=refs.value
-              AND current_source.episode_id=c.memory_chunk_id
-              AND current_source.revision=c.current_revision
-              AND (u.record_kind!='node' OR (current_source.origin_kind=u.origin_kind AND EXISTS(
-                SELECT 1 FROM memory_evidence current_mention
-                WHERE current_mention.node_id=u.owner_id
-                  AND current_mention.source_id=current_source.source_id
-                  AND current_mention.episode_id=c.memory_chunk_id
-                  AND current_mention.revision=c.current_revision)))
-          )) THEN 1 ELSE 0 END source_membership_invalid
-      FROM memory_vector_units u
-      JOIN memory_projection_jobs j ON j.job_id=u.job_id
-      JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision
-      WHERE j.generation=? AND u.state='complete'
-    `).all(input.generationId);
+    const vectorEvidenceRows = loadVectorEvidenceRows(db, input.generationId, "complete");
     const vectorEvidenceInvalid = vectorEvidenceRows.filter((row) => {
       try {
         const receipt = JSON.parse(row.receipt_json ?? "null") as { generation?: string; embedding_version?: string } | null;
         const refs = JSON.parse(row.source_ids_json ?? "[]") as unknown;
         return row.source_membership_invalid !== 0 || !receipt || receipt.generation !== input.generationId || receipt.embedding_version !== manifest.embedding?.version ||
-          !Array.isArray(refs) || refs.length === 0 || refs.some((ref) => typeof ref !== "string" || !expectedEvidence.has(ref));
+          !Array.isArray(refs) || refs.length === 0 || refs.some((ref) => typeof ref !== "string" || !expectedHistoricalEvidence.has(ref));
       } catch { return true; }
     }).length;
     const cacheEvidenceRows = db.query<{ job_id: string; revision: string; receipt_json: string | null }, [string]>(`
@@ -997,7 +1027,7 @@ export async function computeMemoryGenerationReadiness(input: {
     `).all(input.generationId);
     const graphEvidenceInvalid = count(`SELECT COUNT(*) count FROM edge_evidence ee JOIN edges e ON e.edge_id=ee.edge_id AND e.status='active' LEFT JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id LEFT JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision LEFT JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision AND j.generation='${input.generationId}' WHERE j.job_id IS NULL`);
     let canonicalEvidenceInvalid = 0;
-    for (const sourceId of expectedEvidence.keys()) {
+    for (const sourceId of expectedHistoricalEvidence.keys()) {
       const row = sourceRows(db, [sourceId])[0];
       if (!row) { canonicalEvidenceInvalid += 1; continue; }
       try {
@@ -1020,7 +1050,7 @@ export async function computeMemoryGenerationReadiness(input: {
       now: inventory.as_of ?? new Date().toISOString(),
     })).length;
     const missing = Math.max(0, expected.size - registered);
-    const unexpected = registeredRows.filter((row) => !expectedEvidence.has(row.source_id)).length;
+    const unexpected = registeredRows.filter((row) => !expectedProcessingEvidence.has(row.source_id)).length;
     const unaccounted = missing + unexpected + semanticEvidenceInvalid + vectorEvidenceInvalid + cacheEvidenceInvalid +
       graphEvidenceInvalid + canonicalEvidenceInvalid + vectorActualInvalid + cacheActualInvalid;
     const evidence = {
@@ -1047,6 +1077,50 @@ export async function computeMemoryGenerationReadiness(input: {
     };
     return { ...value, sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") };
   } finally { db.close(); }
+}
+
+function validatedSourceLineage(
+  db: Database,
+  root: ProjectionSourceRow,
+  allowedOrigins?: string[],
+): { leaves: string[]; all: string[] } | null {
+  const visited = new Set<string>();
+  const walk = (sourceId: string): { leaves: string[]; all: string[] } | null => {
+    if (visited.has(sourceId)) return null;
+    visited.add(sourceId);
+    const row = sourceRows(db, [sourceId])[0];
+    if (!row || row.episode_id !== root.episode_id || row.revision !== root.revision ||
+      row.content_hash !== root.content_hash || row.source_kind !== root.source_kind ||
+      row.part_id !== root.part_id || row.scalar_pointer !== root.scalar_pointer ||
+      row.byte_start < root.byte_start || row.byte_end > root.byte_end || row.byte_start >= row.byte_end ||
+      (allowedOrigins && !allowedOrigins.includes(row.origin_kind))) return null;
+    const split = db.query<{ child_source_ids_json: string }, [string]>(
+      "SELECT child_source_ids_json FROM memory_source_split_parents WHERE source_id=?",
+    ).get(sourceId);
+    if (!split) return { leaves: [sourceId], all: [sourceId] };
+    let childIds: string[];
+    try {
+      const parsed = JSON.parse(split.child_source_ids_json) as unknown;
+      if (!Array.isArray(parsed) || parsed.length === 0 || parsed.some((child) => typeof child !== "string") ||
+        new Set(parsed).size !== parsed.length) return null;
+      childIds = parsed;
+    } catch { return null; }
+    const children = childIds.map((child) => sourceRows(db, [child])[0]);
+    if (children.some((child) => !child)) return null;
+    const ordered = children.slice().sort((a, b) => a!.byte_start - b!.byte_start || a!.source_id.localeCompare(b!.source_id));
+    if (ordered[0]!.byte_start !== row.byte_start || ordered.at(-1)!.byte_end !== row.byte_end ||
+      ordered.some((child, index) => child!.episode_id !== row.episode_id || child!.revision !== row.revision ||
+        child!.content_hash !== row.content_hash || child!.source_kind !== row.source_kind || child!.part_id !== row.part_id ||
+        child!.scalar_pointer !== row.scalar_pointer || child!.origin_kind !== row.origin_kind ||
+        (index > 0 && ordered[index - 1]!.byte_end !== child!.byte_start))) return null;
+    const descendants = childIds.map(walk);
+    if (descendants.some((child) => !child)) return null;
+    return {
+      leaves: descendants.flatMap((child) => child!.leaves),
+      all: [sourceId, ...descendants.flatMap((child) => child!.all)],
+    };
+  };
+  return walk(root.source_id);
 }
 
 async function actualVectorEvidenceInvalid(input: {

@@ -2073,6 +2073,11 @@ function recallSourceBackedGraph(
       explicit: true,
       task: true,
     };
+    // Retrieve indexed source evidence before the corpus-wide coverage audit.
+    // An inventory scan must not consume the budget and skip the actual query.
+    const rawSources = admitted.lexical
+      ? selectRawSourceCandidates(db, input, candidateDeadlineAt)
+      : { sources: [], partial: false };
     const projectionCoverage = graphProjectionCoverage(db, input, generation, candidateDeadlineAt);
     const graphProjectionPending = projectionCoverage.pending;
     const currentVector = vectorInput?.vector
@@ -2101,9 +2106,6 @@ function recallSourceBackedGraph(
       channels.add("temporal");
       selected.channels.set(nodeId, channels);
     }
-    const rawSources = admitted.lexical
-      ? selectRawSourceCandidates(db, input, candidateDeadlineAt)
-      : { sources: [], partial: false };
     const rawEpisodeIds = [...new Set(rawSources.sources.map((source) => source.episodeId))];
     const rawEpisodeSet = new Set(rawEpisodeIds);
     const rawRelevance = new Map<string, number>();

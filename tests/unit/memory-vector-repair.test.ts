@@ -13,8 +13,10 @@ import {
 import {
   ensureV2MemorySchema,
   openProjectionDb,
+  type ClaimedVectorUnit,
 } from "../../packages/butler-agent/src/agent/cognition/memory/projection/store.ts";
 import {
+  countInvalidPersistedVectorReadiness,
   generationVectorIdentity,
   writeGenerationVectorRows,
   type GenerationVectorRow,
@@ -24,6 +26,7 @@ import {
   type EmbeddingRuntimeMetadata,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/embed.ts";
 import { runMemoryRebuildCommand } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/consolidation-cycle.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 const roots: string[] = [];
 const embedding: EmbeddingRuntimeMetadata = {
@@ -174,5 +177,88 @@ describe("memory vector UTF-8 repair", () => {
     expect(db.query<{ hot_cache_state: string }, []>("SELECT hot_cache_state FROM memory_projection_jobs WHERE job_id='job-a'").get()?.hot_cache_state)
       .toBe(JSON.stringify({ state: "failed", code: "preserve_me" }));
     db.close();
+  });
+
+  test("public rebuild build reconciles only a superseded shared-node representative before readiness", async () => {
+    const butlerData = mkdtempSync(join(tmpdir(), "butler-vector-representative-"));
+    roots.push(butlerData);
+    new AgentConversationStore({ butlerData }).close();
+    initializeEmptyMemoryGeneration(butlerData);
+    const prepared = await runMemoryRebuildCommand({
+      butlerData, argv: ["--memory-rebuild", "prepare"], signal: new AbortController().signal,
+    });
+    const generationId = String(prepared.generationId);
+    writeMemoryGenerationManifest(butlerData, generationId, (current) => ({ ...current, embedding }));
+    const generationRoot = join(butlerData, "cognition", "memory", "generations", generationId);
+    const graphPath = join(generationRoot, "graph.sqlite");
+    const generation: MemoryGenerationHandle = {
+      generationId, root: generationRoot, graphPath, embedding,
+      sourceRoot: generationRoot, canonicalSnapshotPath: null,
+    };
+    const db = openProjectionDb(graphPath);
+    ensureV2MemorySchema(db);
+    const now = "2026-09-13T00:00:00.000Z";
+    db.query("INSERT INTO memory_nodes(id,type,label_original,identity_scope,project_id,created_at) VALUES('shared-node','entity','공유 노드','project','project-a',?)").run(now);
+    const projectionText = "type:\"entity\"\nlabel:\"공유 노드\"";
+    const identity = generationVectorIdentity({ generationId, recordKind: "node", ownerId: "shared-node",
+      ownerRevision: "shared-projection-r1", embeddingText: projectionText, ordinal: 0, embeddingVersion: embedding.version });
+    const receipt = JSON.stringify({ generation: generationId, embedding_version: embedding.version,
+      vector_keys: [identity.vectorKey], row_count: 1 });
+    const units: ClaimedVectorUnit[] = [];
+    for (const [suffix, state, observed] of [["a", "complete", "2026-09-11T00:00:00.000Z"],
+      ["b", "complete", "2026-09-12T00:00:00.000Z"], ["stale", "superseded", now]] as const) {
+      const revision = `source-r-${suffix}`;
+      db.query(`INSERT INTO memory_chunks
+        (memory_chunk_id,source_key,current_revision,conversation_session_id,project_id,origin_kind,status,source_hash,created_at,updated_at)
+        VALUES(?,?,?,?,?,'user_input','complete',?,?,?)`)
+        .run(`episode-${suffix}`, `source-key-${suffix}`, revision, `session-${suffix}`, "project-a", `source-hash-${suffix}`, now, now);
+      db.query(`INSERT INTO memory_chunk_sources
+        (source_id,episode_id,revision,source_kind,conversation_session_id,conversation_message_id,part_id,scalar_pointer,
+         byte_start,byte_end,content_hash,role,origin_kind,observed_at,basis)
+        VALUES(?,?,?,'conversation',?,?,?,'/content',0,12,?,'user','user_input',?,'canonical')`)
+        .run(`source-${suffix}`, `episode-${suffix}`, revision, `session-${suffix}`, `message-${suffix}`, `part-${suffix}`, `content-hash-${suffix}`, observed);
+      db.query("INSERT INTO memory_evidence(node_id,source_id,episode_id,revision) VALUES('shared-node',?,?,?)")
+        .run(`source-${suffix}`, `episode-${suffix}`, revision);
+      const complete = JSON.stringify({ state: "complete" });
+      const cacheReceipt = JSON.stringify({ outcome: "excluded", reason: "no_summary",
+        generation: generationId, source_revision: revision });
+      db.query(`INSERT INTO memory_projection_jobs
+        (job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,
+         source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,hot_cache_receipt_json,created_at)
+        VALUES(?,?,?,'memory-extract-v2',?,'test','low','[]',?,?,?,?,?,?,?)`)
+        .run(`job-${suffix}`, `episode-${suffix}`, revision, generationId, complete, complete, complete, complete, complete, cacheReceipt, now);
+      db.query(`INSERT INTO memory_vector_units
+        (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,receipt_json,source_ids_json)
+        VALUES(?,?,'node','shared-node','shared-projection-r1','project-a','user_input',?,?,?,?)`)
+        .run(`unit-${suffix}`, `job-${suffix}`, projectionText, state, receipt, JSON.stringify([`source-${suffix}`]));
+      db.query(`INSERT INTO memory_vector_units
+        (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,source_ids_json)
+        VALUES(?,?,'episode',?,?,'project-a','user_input','','superseded',?)`)
+        .run(`episode-unit-${suffix}`, `job-${suffix}`, `episode-${suffix}`, `episode-r-${suffix}`, JSON.stringify([`source-${suffix}`]));
+      units.push({ unit_id: `unit-${suffix}`, job_id: `job-${suffix}`, record_kind: "node", owner_id: "shared-node",
+        owner_revision: "shared-projection-r1", project_id: "project-a", origin_kind: "user_input", projection_text: projectionText,
+        source_revision: revision, conversation_session_id: `session-${suffix}`, source_kind: "conversation",
+        source_observed_at: observed, source_ids_json: JSON.stringify([`source-${suffix}`]), receipt_json: receipt,
+        attempt_count: 1, owner_nonce: `nonce-${suffix}` });
+    }
+    await writeGenerationVectorRows(generation, [{
+      vector_key: identity.vectorKey, generation: generationId, record_kind: "node", owner_id: "shared-node",
+      owner_revision: "shared-projection-r1", source_revision: "source-r-stale", embedding_chunk_id: identity.embeddingChunkId,
+      embedding_version: embedding.version, project_id: "project-a", origin_kind: "user_input", source_kind: "conversation",
+      conversation_session_id: "session-stale", source_observed_at: now, source_refs_json: '["source-stale"]',
+      text: "", vector: [0.25, 0.75],
+    }]);
+    expect(await countInvalidPersistedVectorReadiness(generation, units.slice(0, 2), embedding.version)).toBe(2);
+    const graphBefore = JSON.stringify(db.query("SELECT unit_id,state,receipt_json FROM memory_vector_units ORDER BY unit_id").all());
+    db.close();
+
+    const result = await runMemoryRebuildCommand({
+      butlerData, argv: ["--memory-rebuild", "build", "--generation", generationId], signal: new AbortController().signal,
+    });
+    expect(result.vector_reconciliation).toEqual({ repaired_vector_keys: [identity.vectorKey], affected_unit_ids: ["unit-a", "unit-b"] });
+    expect(await countInvalidPersistedVectorReadiness(generation, units.slice(0, 2), embedding.version)).toBe(0);
+    const check = new Database(graphPath, { readonly: true });
+    expect(JSON.stringify(check.query("SELECT unit_id,state,receipt_json FROM memory_vector_units ORDER BY unit_id").all())).toBe(graphBefore);
+    check.close();
   });
 });

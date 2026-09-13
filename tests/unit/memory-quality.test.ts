@@ -37,45 +37,23 @@ import {
 
 mock.module("../../packages/butler-agent/src/integrations/providers/runtime.ts", () => ({
   runPromptTextWithUsage: async (request: { prompt: string; model: string }) => {
-    const input = JSON.parse(request.prompt) as {
-      window_ref: string;
-      source_units: Array<{ ref: string; text: string; role: string }>;
+    const wire = JSON.parse(request.prompt) as {
+      input?: { parts?: Array<{ id: number; text: string }>; targets?: Array<{ target: string }> };
+      parts?: Array<{ id: number; text: string }>;
+      targets?: Array<{ target: string }>;
     };
-    const source = input.source_units[0]!;
-    const evidence = [{ unit_ref: source.ref, quote: source.text, occurrence: 0 }];
-    const basis = source.role === "task" ? "reviewed_task" : "user_statement";
+    const input = wire.input ?? wire;
+    const output = input.parts ? {
+      status: "processed",
+      entities: [{ name: "出典", evidence: input.parts.map((part) => part.id).slice(0, 4) }],
+      items: [{ kind: "requires", subject: 0, action: input.parts.map((part) => part.text).join(" "),
+        condition: { subject: 0, state: "required" }, evidence: input.parts.map((part) => part.id).slice(0, 4) }],
+      attributes: [{ kind: "importance", item: 0, value: "high" }],
+    } : {
+      decisions: (input.targets ?? []).map((target) => ({ target: target.target, candidate: null, span: null, support: [] })),
+    };
     return {
-      text: JSON.stringify({
-        schema: "butler.memory-extract-output.v2",
-        window_ref: input.window_ref,
-        disposition: "processed",
-        covered_unit_refs: input.source_units.map((unit) => unit.ref),
-        nodes: [{
-          local_ref: "typed-source",
-          type: "entity",
-          label: "出典",
-          resolution: { kind: "create", provisional: false, identity_scope: "user" },
-          aliases: [{ text: "出典", evidence }],
-          evidence,
-        }],
-        claims: [{
-          local_ref: "typed-constraint",
-          type: "constraint",
-          resolution: { kind: "create", provisional: false, identity_scope: "user" },
-          statement: source.text,
-          subject_ref: "typed-source",
-          object_ref: "typed-source",
-          speech_act: "assertion",
-          basis,
-          polarity: "positive",
-          condition: null,
-          valid_from: null,
-          valid_to: null,
-          salience: "high",
-          evidence,
-        }], relations: [], corrections: [],
-        summary: { text: source.text, evidence },
-      }),
+      text: JSON.stringify(output),
       model: request.model,
       usage: { promptTokens: 1, cachedTokens: 0, outputTokens: 1, totalTokens: 2 },
     };
@@ -142,12 +120,12 @@ test("memory health reports freshness, backlog, transcripts, and private data lo
   writeFileSync(join(tempDir, "transcripts", "butler_main.jsonl"), "{}\n", "utf8");
   const graph = new Database(join(tempDir, "cognition", "memory", "db", "graph.sqlite"));
   graph.exec(`
-    CREATE TABLE entities (id TEXT);
+    CREATE TABLE memory_nodes (id TEXT);
     CREATE TABLE edges (id TEXT);
-    CREATE TABLE entity_mentions (id TEXT);
-    INSERT INTO entities VALUES ('entity-1');
+    CREATE TABLE memory_evidence (id TEXT);
+    INSERT INTO memory_nodes VALUES ('entity-1');
     INSERT INTO edges VALUES ('edge-1');
-    INSERT INTO entity_mentions VALUES ('mention-1');
+    INSERT INTO memory_evidence VALUES ('mention-1');
   `);
   graph.close();
 
@@ -275,7 +253,7 @@ test("completed task reports ingest into task memory with provenance and are ret
     "SELECT source_id FROM memory_chunk_sources WHERE source_kind='task_report'",
   ).get();
   expect(taskDb.query<{ basis: string }, []>(
-    "SELECT json_extract(properties,'$.basis') basis FROM entities WHERE type='constraint'",
+    "SELECT c.basis FROM memory_claims c JOIN memory_nodes n ON n.id=c.node_id WHERE n.type='constraint'",
   ).get()?.basis).toBe("reviewed_task");
   taskDb.close();
   expect(resolveMemorySource({
@@ -473,7 +451,7 @@ test("typed explicit owner registers through the normal projection and raw sourc
     "SELECT source_id,conversation_message_id FROM memory_chunk_sources WHERE source_kind='explicit_record' AND part_id=?",
   ).get(rule.record_id);
   const constraint = db.query<{ basis: string }, []>(
-    "SELECT json_extract(properties,'$.basis') basis FROM entities WHERE type='constraint'",
+    "SELECT c.basis FROM memory_claims c JOIN memory_nodes n ON n.id=c.node_id WHERE n.type='constraint'",
   ).get();
   db.close();
   expect(source).toBeTruthy();
@@ -659,7 +637,7 @@ test("typed explicit owner registers through the normal projection and raw sourc
   });
   expect(readMemoryHealth({ butlerData: tempDir }).serving.pending_quality_operations).toBe(1);
   expect(readGenerationHotCache({ butlerData: tempDir, projectId: tempDir }))
-    .toBe("تحقق من المصدر قبل الإجابة.");
+    .toBe("[model_interpretation/explicit; current_state_requires_verification]\n[model_interpretation/user_statement/assertion] تحقق من المصدر قبل الإجابة.");
   const excludedRecall = await createRecallMemoryToolHandler(toolInput)({
     name: "recall_memory",
     args: { cue: "出典", include_vector: false, scope: "all_user_sessions" },
@@ -684,7 +662,7 @@ test("typed explicit owner registers through the normal projection and raw sourc
   } as any) as any;
   expect(excludedRawRead).toMatchObject({ ok: true, text: "出典を確認する。" });
   expect(readGenerationHotCache({ butlerData: tempDir, projectId: tempDir }))
-    .toBe("تحقق من المصدر قبل الإجابة.");
+    .toBe("[model_interpretation/explicit; current_state_requires_verification]\n[model_interpretation/user_statement/assertion] تحقق من المصدر قبل الإجابة.");
   const staleFeedback = addFeedbackEntry(tempDir, {
     text: "Exclude this source if it is still the same revision.",
     targetRef: evidence.source_ref,

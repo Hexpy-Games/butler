@@ -4,8 +4,8 @@ import type { ProviderStreamProjectionHandler } from "../../../../integrations/p
 import { validateJsonObjectSchema } from "../../../tools/schema-validation.ts";
 import type { ExtractInput, ExtractOutput, MemoryExecutionContext, QuoteRef } from "./contracts.ts";
 import { graphemeCount } from "./unicode.ts";
-import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
-import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, prepareBindingBatches, applyBinding, bindingRepairSchema, type CandidateLoader, type BindingWarning } from "./binding.ts";
+import { MEANING_INSTRUCTIONS, MEANING_SCHEMA, MemoryMeaningValidationError, meaningPrompt, sourcePassages, validateMeaning, meaningToOutput } from "./meaning.ts";
+import { BINDING_INSTRUCTIONS, BINDING_SCHEMA, MemoryBindingValidationError, prepareBindingBatches, applyBinding, applyBindingRepair, bindingRepairSchema, type CandidateLoader, type BindingWarning } from "./binding.ts";
 
 const MAX_STAGE_REPAIRS = 2;
 
@@ -65,12 +65,16 @@ export async function runStructuredMemoryExtractor(input: {
   const started = Date.now();
   const stages: Array<StageEvidence & { stage: string; reused: boolean }> = [];
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-  const call = async <T>(stage: string, promptValue: unknown, instructions: string, schema: Record<string, unknown>, validate: (value: unknown) => T, repairSchema?: Record<string, unknown>): Promise<T> => {
+  const call = async <T>(stage: string, promptValue: unknown, instructions: string, schema: Record<string, unknown>, validate: (value: unknown, repair: number) => T, repairSchema?: Record<string, unknown>): Promise<T> => {
     let rejection: string | null = null;
+    let rejectionCode: string | null = null;
     for (let repair = 0; repair <= MAX_STAGE_REPAIRS; repair++) {
+      const correctionInstruction = stage.startsWith("binding")
+        ? "Return a corrected complete response. For a selected candidate, put only current target evidence in current_support and exactly one selected-candidate historical evidence ID in selected_historical_support. For candidate=null, both arrays are empty. Do not invent IDs."
+        : "Return a corrected complete response. Use only the provided reference IDs and evidence. Do not invent IDs.";
       const prompt = JSON.stringify(repair === 0 ? promptValue : { input: promptValue,
-        correction: { error: rejection, instruction: "Return a corrected complete response. Use only the provided reference IDs and evidence. Do not invent IDs." } });
-      const responseSchema = stage === "meaning" ? boundedEvidenceSchema(schema, passages.length) : repairSchema ?? schema;
+        correction: { error: rejection, instruction: correctionInstruction } });
+      const responseSchema = stage === "meaning" ? boundedEvidenceSchema(schema, passages.length) : repair === 0 ? schema : repairSchema ?? schema;
       const request_wire = { profile: `memory-${stage}.v4`, input_json_sha256: hash(prompt), input_json_utf8_bytes: Buffer.byteLength(prompt),
         instructions_sha256: hash(instructions), output_schema_sha256: hash(JSON.stringify(responseSchema)) };
       // The original key is unchanged. Repair responses are append-only and separately addressable.
@@ -102,12 +106,14 @@ export async function runStructuredMemoryExtractor(input: {
         let value: unknown;
         try { value = JSON.parse(result.raw); }
         catch (cause) { throw new Error("memory_extract_invalid_json", { cause }); }
-        return validate(value);
+        return validate(value, repair);
       } catch (cause) {
         if (!(cause instanceof Error) || !cause.message.startsWith("memory_extract_invalid_")) throw cause;
-        rejection = cause.message;
+        rejectionCode = cause.message;
+        rejection = cause instanceof MemoryBindingValidationError || cause instanceof MemoryMeaningValidationError
+          ? cause.repairFeedback : rejectionCode;
         if (repair === MAX_STAGE_REPAIRS)
-          throw new MemoryExtractAttemptError(rejection, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
+          throw new MemoryExtractAttemptError(rejectionCode, result.raw, { ...evidence, repair_exhausted: true }, cause, true);
       }
     }
     throw new Error("memory_extract_stage_changed");
@@ -126,9 +132,11 @@ export async function runStructuredMemoryExtractor(input: {
   input.extractInput.candidates = binding.candidates;
   const warnings: BindingWarning[] = [];
   for (const [index, batch] of binding.batches.entries()) {
-    const bound = await call(`binding${index}`, batch.prompt, BINDING_INSTRUCTIONS, BINDING_SCHEMA, (value) => {
+    const bound = await call(`binding${index}`, batch.prompt, BINDING_INSTRUCTIONS, BINDING_SCHEMA, (value, repair) => {
       const next = structuredClone(output);
-      const notices = applyBinding(value, batch, next, input.extractInput);
+      const notices = repair === 0
+        ? applyBinding(value, batch, next, input.extractInput)
+        : applyBindingRepair(value, batch, next, input.extractInput);
       Object.assign(output, next);
       return notices;
     }, bindingRepairSchema(batch));

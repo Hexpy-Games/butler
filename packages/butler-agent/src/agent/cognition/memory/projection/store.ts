@@ -327,6 +327,7 @@ export function installAndBackfillRecallIndexes(db: Database): void {
     ["started_at", "TEXT"],
     ["receipt_json", "TEXT"],
   ] as const) ensureColumn(db, "memory_vector_units", name, declaration);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_vector_units_owner_current ON memory_vector_units(owner_id,owner_revision,record_kind,state,job_id)");
   db.transaction(() => {
     if (!db.query("SELECT 1 FROM memory_state WHERE key='alias_postings_incremental_v1'").get()) {
       db.exec(`

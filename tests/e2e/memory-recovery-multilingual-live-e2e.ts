@@ -31,6 +31,8 @@ import { toContextMessage } from
   "../../packages/butler-agent/src/agent/context/conversation-context-format.ts";
 import { decodeMessageScalars } from
   "../../packages/butler-agent/src/agent/cognition/memory/projection/source.ts";
+import { MEMORY_EXTRACTION_VERSION } from
+  "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
 import type {
   MemoryOwnerResultEvidence,
   MemoryPerformanceMetricsEvidence,
@@ -48,6 +50,8 @@ const S2 = "Luna likes the blue ball.";
 const S3 = "訂正するね。Lunaは青いボールが好きではなく、赤いボールが好きです。";
 const S3_QUERY = "ما اللعبة التي تحبها قطتي الآن؟";
 const T4_ARABIC_Q = "ما اللعبة التي تحبها قطتي؟";
+const T4_CURRENT_MODEL = "openai/gpt-5.6-sol";
+const T4_CURRENT_REASONING = "medium" as const;
 const FIXED_B_CUE = "내 고양이가 좋아하는 장난감은 무엇인가요?";
 const T4_PERFORMANCE_QUERY_BINDING_SHA = "78356b1adb58f24ad182210a699f33aacb571395893fe8300f2dc170f7b8dd7f";
 const T4_PERFORMANCE_SOURCE_BINDING_SHA = "a622c91f499c57b82d937ae3573d3797100e9f92989b61583a185135d72d2f95";
@@ -2029,15 +2033,21 @@ function readT4ClosedBaseline(path: string, root: string, generation: string, gr
   const observation = JSON.parse(readFileSync(join(root, "memory-t4-resume-observation.json"), "utf8")) as any;
   const artifactRoot = dirname(path);
   const failure = JSON.parse(readFileSync(join(artifactRoot, "t4-actual01-failure-preservation.json"), "utf8")) as any;
-  const ad1 = initialTrace.ad1 as DeliveredTarget | undefined;
-  if (initialTrace.schema !== "butler.memory.t4-actual-phase-trace.v1" || initialTrace.status !== "failed" ||
-    trace.schema !== "butler.memory.t4-resume-trace.v1" || trace.status !== "failed" ||
+  const observedClosed = trace.schema === "butler.memory.t4-resume-trace.v1" &&
+    trace.status === "observed_pending_root_semantic_review" && trace.failure == null;
+  const preservedObservation = observedClosed ? trace.preserved_ad1_observation : observation;
+  const preservedFailure = observedClosed ? trace.preserved_actual01_failure : failure;
+  const ad1 = (observedClosed ? trace.ad1 : initialTrace.ad1) as DeliveredTarget | undefined;
+  const legacyClosed = initialTrace.schema === "butler.memory.t4-actual-phase-trace.v1" && initialTrace.status === "failed" &&
+    trace.schema === "butler.memory.t4-resume-trace.v1" && trace.status === "failed" &&
+    trace.failure?.includes("turn-89c78082-5641-49a2-b325-81ce2b783efa");
+  if ((!legacyClosed && !observedClosed) ||
     trace.source_sha256 !== sha(T4_AD1) || trace.question_sha256 !== sha(T4_Q1) ||
     !ad1 || ad1.requestText !== T4_AD1 || ad1.admittedText !== T4_AD1 ||
     ad1.requestSha256 !== sha(T4_AD1) || ad1.admittedSha256 !== sha(T4_AD1) ||
-    observation.schema !== "butler.memory.t4-resume-observation.v1" ||
-    failure.status !== "failed_preserved_no_retry" ||
-    !trace.failure?.includes("turn-89c78082-5641-49a2-b325-81ce2b783efa")) {
+    preservedObservation?.schema !== "butler.memory.t4-resume-observation.v1" ||
+    preservedFailure?.status !== "failed_preserved_no_retry" ||
+    (observedClosed && t4Json(preservedFailure) !== t4Json(failure))) {
     throw new Error("T4 preserved AD1 and failed Q1 evidence changed");
   }
   const btcc = new Database(join(root, "agent-runtime", "btcc.sqlite"), { readonly: true });
@@ -2090,8 +2100,8 @@ function readT4ClosedBaseline(path: string, root: string, generation: string, gr
       ad1,
       ad1_job_id: ad1Jobs[0].job_id,
       ad1_window_ref: ad1Jobs[0].window_ref,
-      preserved_observation: observation,
-      preserved_failure: failure,
+      preserved_observation: preservedObservation,
+      preserved_failure: preservedFailure,
       preserved_queue: { pending: readT4PendingInbound(root), processing_count: 0 },
     } }) as T4ClosedBaseline;
   } finally { graph.close(); }
@@ -2522,7 +2532,7 @@ function createT4PhaseObserver(delegate: ModelRoundPort, currentTurn: () => stri
         throw new Error("T4 actual provider request escaped its admitted turn/model/time binding");
       }
       if (turnId === rootTurnId &&
-        (request.model !== "openai/gpt-5.5" || request.reasoningEffort !== "medium")) {
+        (request.model !== T4_CURRENT_MODEL || request.reasoningEffort !== T4_CURRENT_REASONING)) {
         throw new Error("T4 public question changed its fixed model selection");
       }
       assertT4AdmittedModelRoute(root, request);
@@ -3543,7 +3553,7 @@ async function runT4PerformancePhase(input: {
     const chatId = await createT4EmptyChat(input.appUrl);
     input.observer.begin("SUPPLEMENT");
     supplements.push(await input.dispatch(item.text,
-      { chatId, model: "openai/gpt-5.5", reasoningEffort: "medium" }, dispatchBudgets));
+      { chatId, model: T4_CURRENT_MODEL, reasoningEffort: T4_CURRENT_REASONING }, dispatchBudgets));
     input.observer.end();
     await runServingGenerationCatchup({ butlerData: input.butlerData, limit: 256, signal: deadlineSignal() });
   }
@@ -3792,6 +3802,16 @@ export async function finalizeT4Qualification(input: {
   const performancePath = resolve(dirname(input.performanceRawPath), raw.performance_report?.ref ?? "");
   if (sha(readFileSync(performancePath, "utf8")) !== raw.performance_report?.sha256) throw new Error("T4 performance report changed");
   const report = JSON.parse(readFileSync(performancePath, "utf8")) as MemoryRecoveryPerformanceReport;
+  const manifest = JSON.parse(readFileSync(join(dirname(input.tracePath), "cognition", "memory", "generations",
+    report.execution.generation_id, "manifest.json"), "utf8"));
+  const supportedExtractionVersions: readonly MemoryRecoveryAcceptance["extraction_version"][] =
+    ["memory-extract-v2", MEMORY_EXTRACTION_VERSION];
+  if (manifest.schema !== "butler.memory-generation.v2" ||
+    manifest.generation_id !== report.execution.generation_id ||
+    !supportedExtractionVersions.includes(manifest.extraction_version)) {
+    throw new Error("T4 qualification generation manifest is invalid");
+  }
+  const extractionVersion = manifest.extraction_version as MemoryRecoveryAcceptance["extraction_version"];
   const ownerFiles = ["t6-b-app-owner-result.json", "t6-b-identity-owner-result.json", "t6-b-rebuild-owner-result.json"];
   const ownerRefs = ownerFiles.map((name) => {
     const path = join(input.ownerEvidenceDir, name);
@@ -3850,7 +3870,7 @@ export async function finalizeT4Qualification(input: {
       binding_ref: ref.ref, binding_sha256: ref.sha256 };
   });
   const execution = { generation_id: report.execution.generation_id, implementation_commit: input.implementationCommit,
-    tool_contract_version: 2 as const, extraction_version: "memory-extract-v2" as const,
+    tool_contract_version: 2 as const, extraction_version: extractionVersion,
     embedding: { status: "executed" as const, version: report.execution.embedding_version },
     stage_source_inventory_hash: inventoryHash, source_inventory_ref: inventoryRef, source_inventory_sha256: inventorySha };
   const cases: MemoryRecoveryAcceptance["cases"] = [];
@@ -4179,7 +4199,7 @@ export async function finalizeT4Qualification(input: {
     verification_generation_id: report.execution.generation_id,
     verification_source_inventory_hash: report.execution.qualification_source_inventory_hash,
     implementation_commit: input.implementationCommit, tool_contract_version: 2,
-    extraction_version: "memory-extract-v2", embedding_version: report.execution.embedding_version,
+    extraction_version: extractionVersion, embedding_version: report.execution.embedding_version,
     cases, performance: { prepared_graph_p95_ms: graph[56]!, prepared_hybrid_p95_ms: hybrid[56]!,
       graph_samples: graph.length, hybrid_samples: hybrid.length,
       report_ref: raw.performance_report.ref, report_sha256: raw.performance_report.sha256 } };
@@ -4536,8 +4556,8 @@ async function runT4ActualPhaseBranch(input: {
       const questionChat = await createT4EmptyChat(input.appUrl);
       if (questionChat === ad1.chatId) throw new Error("T4 question reused the source chat");
       input.observer.begin("Q1");
-      question = await input.dispatch(T4_Q1, { chatId: questionChat, model: "openai/gpt-5.5",
-        reasoningEffort: "medium", awaitT4FinalSynthesis: true });
+      question = await input.dispatch(T4_Q1, { chatId: questionChat, model: T4_CURRENT_MODEL,
+        reasoningEffort: T4_CURRENT_REASONING, awaitT4FinalSynthesis: true });
       input.observer.end();
       trace.question = question;
       if (question.delegatedTerminalStatus && question.delegatedTerminalStatus !== "success") {
@@ -4594,8 +4614,8 @@ async function runT4ActualPhaseBranch(input: {
         save();
       }
       input.observer.begin("ARABIC");
-      arabic = await input.dispatch(T4_ARABIC_Q, { chatId: arabicChat, model: "openai/gpt-5.5",
-        reasoningEffort: "medium", awaitT4FinalSynthesis: true });
+      arabic = await input.dispatch(T4_ARABIC_Q, { chatId: arabicChat, model: T4_CURRENT_MODEL,
+        reasoningEffort: T4_CURRENT_REASONING, awaitT4FinalSynthesis: true });
     } finally {
       input.observer.end();
       if (restoreCache) trace.arabic_cache_restore = restoreCache();

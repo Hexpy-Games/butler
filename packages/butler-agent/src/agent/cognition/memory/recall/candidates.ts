@@ -59,18 +59,22 @@ export function selectSemanticSeeds(
     score: 1 / (1 + Math.max(0, item.distance)),
   }));
   const byNode = new Map<string, Map<SeedCandidate["channel"], SeedCandidate>>();
+  const contextOnly = !admitted.graph && !admitted.lexical && !admitted.vector && !admitted.explicit;
   for (const candidate of [...aliases, ...lexicalResult.candidates, ...vectors, ...context]) {
+    if (candidate.channel === "context" && !contextOnly && !byNode.has(candidate.nodeId)) continue;
     const channels = byNode.get(candidate.nodeId) ?? new Map();
     const prior = channels.get(candidate.channel);
     if (!prior || candidate.rank < prior.rank || (candidate.rank === prior.rank && candidate.score > prior.score)) channels.set(candidate.channel, candidate);
     byNode.set(candidate.nodeId, channels);
   }
-  const contextOrder = context.map((item) => item.nodeId).filter(uniqueValue).slice(0, 4);
-  const semantic = [...byNode.entries()].filter(([nodeId]) => !contextOrder.includes(nodeId)).map(([nodeId, channels]) => ({
+  // Recent messages can disambiguate query matches; they cannot occupy the
+  // seed slots solely because they happen to be in the caller's last turn.
+  const semantic = [...byNode.entries()].map(([nodeId, channels]) => ({
     nodeId,
-    score: seedFusionScore(channels),
-  })).sort((a, b) => b.score - a.score || compareUtf8(a.nodeId, b.nodeId));
-  const allSeeds = [...contextOrder, ...semantic.map((item) => item.nodeId)].filter(uniqueValue).slice(0, maxSeeds);
+    score: contextOnly ? 1 / (60 + (channels.get("context")?.rank ?? 1)) : seedFusionScore(channels),
+    contextRank: channels.get("context")?.rank ?? Number.POSITIVE_INFINITY,
+  })).sort((a, b) => b.score - a.score || a.contextRank - b.contextRank || compareUtf8(a.nodeId, b.nodeId));
+  const allSeeds = semantic.map((item) => item.nodeId).slice(0, maxSeeds);
   const seeds = allSeeds.slice(0, input.time ? 8 : maxSeeds);
   return {
     seeds,
