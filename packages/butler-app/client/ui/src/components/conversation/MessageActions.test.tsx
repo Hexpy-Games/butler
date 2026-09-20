@@ -135,3 +135,38 @@ test("Markdown code copy copies only the selected full block and preserves inlin
   expect(copied).toEqual([code, "echo done\n"]);
   expect(container.querySelectorAll("pre").length).toBe(2);
 });
+
+test("assistant markdown renders quoted emphasis before Korean particles", async () => {
+  const text = "**“굴 파기는 정상이라 전신 상태는 크게 무너지지 않았지만, 공격 이후의 보행 변화라 다리별 사용 여부를 며칠 집중 관찰해야 하는 상태”**로";
+  await act(async () => root.render(<MessageMarkdown text={text} />));
+  const strong = container.querySelector("strong");
+  expect(strong?.textContent).toBe("“굴 파기는 정상이라 전신 상태는 크게 무너지지 않았지만, 공격 이후의 보행 변화라 다리별 사용 여부를 며칠 집중 관찰해야 하는 상태”");
+  expect(strong?.nextSibling?.textContent).toBe("로");
+  expect(container.textContent).not.toContain("**");
+});
+
+test("assistant markdown renders emphasis ending in other punctuation before a suffix", async () => {
+  await act(async () => root.render(
+    <MessageMarkdown text="**(관찰 필요)**로, **주의:**입니다" />,
+  ));
+  expect(Array.from(container.querySelectorAll("strong"), (node) => node.textContent))
+    .toEqual(["(관찰 필요)", "주의:"]);
+  expect(container.querySelector("p")?.textContent).toBe("(관찰 필요)로, 주의:입니다");
+});
+
+test("assistant markdown keeps conversational tildes and deliberate double-tilde strikethrough", async () => {
+  await act(async () => root.render(
+    <MessageMarkdown text="안녕~반가워~ **정상 강조** ~~삭제~~" />,
+  ));
+  expect(container.querySelector("p")?.textContent).toBe("안녕~반가워~ 정상 강조 삭제");
+  expect(container.querySelector("strong")?.textContent).toBe("정상 강조");
+  expect(container.querySelector("del")?.textContent).toBe("삭제");
+});
+
+test("assistant markdown leaves escaped markers and code literal", async () => {
+  await act(async () => root.render(
+    <MessageMarkdown text={"\\*\\*“그대로”\\*\\*로와 `**“코드”**로`"} />,
+  ));
+  expect(container.querySelector("strong")).toBeNull();
+  expect(container.querySelector("p")?.textContent).toBe("**“그대로”**로와 **“코드”**로");
+});

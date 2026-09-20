@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { appCopy } from "@/app/copy.ts";
@@ -7,8 +7,13 @@ import type { MessageFileRef } from "@/app/types.ts";
 import { MarkdownContent } from "@/butler-ds";
 import { resolveMarkdownImageSource } from "./messageMedia";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
+import { remarkPunctuationBoldSuffix } from "./remarkPunctuationBoldSuffix";
 
 const EMPTY_ATTACHMENTS: MessageFileRef[] = [];
+const MESSAGE_MARKDOWN_PLUGINS: ComponentProps<typeof ReactMarkdown>["remarkPlugins"] = [
+  [remarkGfm, { singleTilde: false }],
+  remarkPunctuationBoldSuffix,
+];
 
 function markdownComponents(attachments: MessageFileRef[]) {
   return {
@@ -62,7 +67,7 @@ function MessageMarkdownComponent({
       data-test-class="turn-result-section"
     >
       <MarkdownContent data-test-class="markdown-document">
-        <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown components={components} remarkPlugins={MESSAGE_MARKDOWN_PLUGINS}>
           {text}
         </ReactMarkdown>
       </MarkdownContent>
