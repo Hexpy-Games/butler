@@ -1,11 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   generateNewChatBriefings,
   type NewChatBriefingModelRunnerInput,
 } from "../../packages/butler-agent/src/agent/cognition/consolidation/new-chat-briefing.ts";
+import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import {
   readConsolidationCheckpoint,
   runCognitionConsolidationCycle,
@@ -185,6 +187,155 @@ test("another explicit valid user policy remains honored", async () => {
     model: "openai/gpt-5.4-mini",
     reasoningEffort: "high",
   });
+});
+
+test("scheduled briefing uses the explicit App consolidation settings and current App project ids", async () => {
+  const butlerData = fixture({
+    user: { language: "ko" },
+    personalization: { profiling: {
+      extractorModel: "openai/gpt-5.6-sol",
+      extractorReasoningEffort: "medium",
+    } },
+  });
+  const appDir = join(butlerData, "app-server");
+  mkdirSync(appDir, { recursive: true });
+  const db = new Database(join(appDir, "butler-client.sqlite"), { create: true });
+  db.exec(`
+    CREATE TABLE app_settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
+    CREATE TABLE projects (
+      id TEXT PRIMARY KEY, display_name TEXT NOT NULL, ledger_project_id TEXT,
+      archived INTEGER NOT NULL, status TEXT NOT NULL
+    );
+    CREATE TABLE chats (
+      id TEXT PRIMARY KEY, project_id TEXT, title TEXT NOT NULL,
+      archived INTEGER NOT NULL, updated_at TEXT NOT NULL
+    );
+  `);
+  db.query("INSERT INTO app_settings VALUES ('settings', ?)").run(JSON.stringify({
+    model: "openai/gpt-5.6-sol", reasoning_effort: "medium", language: "ko",
+  }));
+  db.query("INSERT INTO projects VALUES (?, ?, ?, 0, 'active')")
+    .run("project-sandy-bot-35a0e102", "sandy-bot", "sandy-bot");
+  db.query("INSERT INTO projects VALUES (?, ?, ?, 1, 'active')")
+    .run("archived-project", "Archived", "archived-project");
+  db.query("INSERT INTO chats VALUES (?, ?, ?, 0, ?)")
+    .run("chat-1", "project-sandy-bot-35a0e102", "Recent Sandy work", "2026-09-20T00:00:00Z");
+  db.close();
+  const ledgerDir = join(butlerData, "project-ledger", "projects", "sandy-bot");
+  const consolidationDir = join(butlerData, "cognition", "consolidation");
+  mkdirSync(consolidationDir, { recursive: true });
+  writeFileSync(join(consolidationDir, "briefing-exclusions.json"), JSON.stringify({
+    projects: { "project-sandy-bot-35a0e102": ["canary", "카나리"] },
+  }));
+  mkdirSync(ledgerDir, { recursive: true });
+  writeFileSync(join(ledgerDir, "project.json"), JSON.stringify({
+    id: "sandy-bot", name: "Sandy Bot", summary: "A Discord conversation platform",
+  }));
+  writeFileSync(join(ledgerDir, "ledger.jsonl"), `${JSON.stringify({ type: "work.updated", status: "in_progress" })}\n`);
+  const completedDir = join(ledgerDir, "work", "W-SANDY-IDENTITY");
+  const openDir = join(ledgerDir, "work", "W-SANDY-ROUTING");
+  mkdirSync(completedDir, { recursive: true });
+  mkdirSync(openDir, { recursive: true });
+  writeFileSync(join(completedDir, "work.md"),
+    '---\ntitle: "Speaker identity isolation"\nstatus: "done"\nupdatedAt: "2026-09-19T00:00:00Z"\n---\n');
+  writeFileSync(join(openDir, "work.md"),
+    '---\ntitle: "Persona routing"\nstatus: "in_progress"\nupdatedAt: "2026-09-20T00:00:00Z"\n---\n');
+
+  const requests: NewChatBriefingModelRunnerInput[] = [];
+  const result = await generateNewChatBriefings({
+    butlerData,
+    runId: "cr_live_app_projects",
+    now: new Date("2026-09-20T01:00:00Z"),
+    modelRunner: async (input) => {
+      requests.push(input);
+      const output = JSON.parse(validBriefingJson());
+      if (JSON.parse(input.prompt).project) {
+        output.suggestions.unshift({
+          id: "old-canary", title: "Canary rerun", description: "Repeat old work",
+          text: "Re-run the canary", source_kind: "project_next_step",
+        });
+      }
+      return JSON.stringify(output);
+    },
+  });
+  expect(result).toMatchObject({
+    outcome: "completed", generated_count: 2, failed_count: 0,
+    model_ref: "openai/gpt-5.6-sol", reasoning_effort: "medium",
+  });
+  expect(requests).toHaveLength(2);
+  expect(requests.every((request) =>
+    request.model === "openai/gpt-5.6-sol" && request.reasoningEffort === "medium",
+  )).toBe(true);
+  const projectPrompt = JSON.parse(requests[1]!.prompt);
+  expect(projectPrompt).toMatchObject({
+    locale: "ko",
+    project: {
+      id: "project-sandy-bot-35a0e102",
+      summary: "A Discord conversation platform",
+      recent_session_titles: ["Recent Sandy work"],
+      ledger_event_summary: ["work.updated:in_progress x1"],
+      open_work_titles: ["Persona routing"],
+      completed_work_titles: ["Speaker identity isolation"],
+      excluded_topics: ["canary", "카나리"],
+    },
+  });
+  expect(projectPrompt.scope_rules).toContain(
+    "Treat recent session titles as topics already discussed, not as unfinished tasks or requests to repeat.",
+  );
+  expect(result.project_artifact_paths).toHaveLength(1);
+  expect(result.project_artifact_paths[0]).toEndWith("/project-sandy-bot-35a0e102.json");
+  expect(JSON.parse(readFileSync(result.project_artifact_paths[0]!, "utf8"))).toMatchObject({
+    project_id: "project-sandy-bot-35a0e102", locale: "ko",
+  });
+  const projectArtifact = JSON.parse(readFileSync(result.project_artifact_paths[0]!, "utf8"));
+  expect(projectArtifact.suggestions).toHaveLength(4);
+  expect(JSON.stringify(projectArtifact).toLowerCase()).not.toContain("canary");
+  expect(buildNewChatBriefing({
+    butlerData,
+    preferredLocale: "ko",
+    project: { id: "project-sandy-bot-35a0e102", displayName: "sandy-bot" },
+  }).source).toMatchObject({
+    content_origin: "generated",
+    consolidation_run_id: "cr_live_app_projects",
+    project_id: "project-sandy-bot-35a0e102",
+  });
+});
+
+test("all active App projects are eligible beyond the former twelve-project cutoff", async () => {
+  const butlerData = fixture({
+    personalization: { profiling: {
+      extractorModel: "openai/gpt-5.6-sol",
+      extractorReasoningEffort: "medium",
+    } },
+  });
+  const appDir = join(butlerData, "app-server");
+  mkdirSync(appDir, { recursive: true });
+  const db = new Database(join(appDir, "butler-client.sqlite"), { create: true });
+  db.exec(`
+    CREATE TABLE app_settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
+    CREATE TABLE projects (
+      id TEXT PRIMARY KEY, display_name TEXT NOT NULL, ledger_project_id TEXT,
+      archived INTEGER NOT NULL, status TEXT NOT NULL
+    );
+    CREATE TABLE chats (
+      id TEXT PRIMARY KEY, project_id TEXT, title TEXT NOT NULL,
+      archived INTEGER NOT NULL, updated_at TEXT NOT NULL
+    );
+  `);
+  for (let index = 0; index < 13; index++) {
+    const id = `project-${index}`;
+    db.query("INSERT INTO projects VALUES (?, ?, ?, 0, 'active')").run(id, id, id);
+    db.query("INSERT INTO chats VALUES (?, ?, ?, 0, ?)")
+      .run(`chat-${index}`, id, `Topic ${index}`, "2026-09-20T00:00:00Z");
+  }
+  db.close();
+  const result = await generateNewChatBriefings({
+    butlerData,
+    runId: "cr_all_app_projects",
+    modelRunner: async () => validBriefingJson(),
+  });
+  expect(result.generated_count).toBe(14);
+  expect(result.project_artifact_paths).toHaveLength(13);
 });
 
 test("cycle checkpoints a configuration skip as complete and resume does not retry it", async () => {
