@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
+import { Database } from "bun:sqlite";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import { resolveAppGatewayRuntimeConfig } from "../../../operations/gateway/registry.ts";
+import { sanitizePublicText } from "../../events/public-text.ts";
 import { cognitionConsolidationRoot } from "../paths.ts";
 import {
   findModelMetadata,
@@ -154,8 +157,12 @@ type BriefingSettings = {
 interface AppProjectSignal {
   id: string;
   displayName: string;
+  summary: string | null;
   recentSessionTitles: string[];
   ledgerEventSummary: string[];
+  openWorkTitles: string[];
+  completedWorkTitles: string[];
+  excludedTopics: string[];
 }
 
 interface ParsedModelOutput {
@@ -169,7 +176,6 @@ interface ParsedModelOutput {
 const ARTIFACT_SCHEMA = "butler.cognition.new-chat-briefing.v1" as const;
 const TITLE_BUCKETS = ["morning", "afternoon", "evening", "night"] as const;
 const MAX_PERSONA_CHARS = 2_400;
-const MAX_PROJECTS_PER_RUN = 12;
 const ALLOWED_SOURCE_KINDS = new Set<NewChatBriefingSuggestionSourceKind>([
   "unfinished_topic",
   "repeated_question",
@@ -243,7 +249,7 @@ export async function generateNewChatBriefings(
   const locale = settings.locale;
   const persona = readActivePersona(input.butlerData);
   const projection = safeReadRuntimeProjection(input.butlerData);
-  const projects = listActiveProjectSignals(input.butlerData).slice(0, MAX_PROJECTS_PER_RUN);
+  const projects = listActiveProjectSignals(input.butlerData);
   const modelReports: Array<{ model: string; usage?: PromptUsageReport | null }> = [];
   const runner = input.modelRunner ?? defaultNewChatBriefingModelRunner;
   const generatedAt = now.toISOString();
@@ -397,7 +403,9 @@ function artifactFromModelOutput(input: {
   projection: RuntimeProfileProjection | null;
   project?: AppProjectSignal;
 }): NewChatBriefingArtifact {
-  const suggestions = normalizeSuggestions(input.parsed.suggestions, input.scope);
+  const suggestions = normalizeSuggestions(input.parsed.suggestions, input.scope)
+    .filter((suggestion) => !input.project?.excludedTopics.some((topic) =>
+      JSON.stringify(suggestion).toLocaleLowerCase().includes(topic.toLocaleLowerCase())));
   if (suggestions.length < 4) {
     throw new Error("new chat briefing model returned fewer than four valid suggestions");
   }
@@ -498,14 +506,26 @@ function buildBriefingPrompt(input: {
       ? {
           id: input.project.id,
           name: input.project.displayName,
+          summary: input.project.summary,
           recent_session_titles: input.project.recentSessionTitles,
           ledger_event_summary: input.project.ledgerEventSummary,
+          open_work_titles: input.project.openWorkTitles,
+          completed_work_titles: input.project.completedWorkTitles,
+          excluded_topics: input.project.excludedTopics,
         }
       : null,
     scope_rules: input.project
       ? [
           "Every suggestion must be directly about the selected project.",
-          "Use only the project id/name and project summaries as topic sources.",
+          "Treat recent session titles as topics already discussed, not as unfinished tasks or requests to repeat.",
+          "Completed Work titles are explicitly finished; never repackage one as a new design, implementation, review, or verification card.",
+          "Open Work titles are the only explicit unfinished-work signals; do not infer open status from a chat title.",
+          "Use the project summary and past topics to propose distinct, optional future capabilities, experiments, or decisions.",
+          "Each card must create a new outcome beyond the cited past topic; name that outcome in the title and the message to send.",
+          "Do not propose a status check, recap, review, re-audit, re-verification, or finishing an earlier conversation solely because its title appears here.",
+          "Do not claim a feature is missing or work is unfinished without an explicit status signal.",
+          "Avoid restating or lightly rephrasing any recent session title as a card.",
+          "Never mention or propose a topic listed in excluded_topics.",
           "Do not introduce general interests, meals, entertainment, news, or unrelated personal topics unless the project summaries explicitly mention them.",
           "If project signal is thin, make fewer sharper project cards instead of filling with generic topics.",
         ]
@@ -549,6 +569,7 @@ function briefingInstructions(locale: NewChatBriefingLocale, hasPersona: boolean
     "For general briefings, include title_variants with morning, afternoon, evening, and night; these are also page headlines.",
     "For project briefings, do not include time-of-day title variants.",
     "Each card title names a topic. Each card description says why opening it may be useful.",
+    "For project cards, turn historical topics into genuinely new directions; do not ask to repeat prior work or summarize what was already done.",
     "Do not pressure the user, create urgency, shame unfinished work, or tell the user what they must do.",
     "Do not describe the interface, the memory system, the prompt, the persona, or why you generated the artifact.",
     "Do not include raw transcript text, filesystem paths, private reasoning, or provider payloads.",
@@ -589,10 +610,12 @@ function parseModelJson(raw: string): ParsedModelOutput {
 
 function readBriefingSettings(butlerData: string): BriefingSettings {
   const settings = readButlerSettings(butlerData);
-  const locale = settings.language === "ko" ? "ko" : "en";
-  const rawModel = explicitBriefingModel(settings);
+  const appSettings = readAppBriefingSettings(butlerData);
+  const user = jsonRecord(settings.user);
+  const locale = (appSettings.language ?? user.language ?? settings.language) === "ko" ? "ko" : "en";
+  const rawModel = explicitBriefingModel(settings, appSettings);
   if (!rawModel) return unavailableBriefingSettings(locale, "missing_model");
-  const rawReasoning = explicitBriefingReasoning(settings);
+  const rawReasoning = explicitBriefingReasoning(settings, appSettings);
   if (rawReasoning === null) {
     return unavailableBriefingSettings(locale, "missing_reasoning_effort");
   }
@@ -618,19 +641,27 @@ function readBriefingSettings(butlerData: string): BriefingSettings {
   };
 }
 
-function explicitBriefingModel(settings: Record<string, unknown>): string | null {
-  const consolidationModel = normalizeModelRef(settings.consolidation_model);
-  if (consolidationModel && consolidationModel !== "custom/default") {
-    return consolidationModel;
+function explicitBriefingModel(
+  settings: Record<string, unknown>,
+  appSettings: Record<string, unknown>,
+): string | null {
+  const profiling = jsonRecord(jsonRecord(settings.personalization).profiling);
+  const system = jsonRecord(settings.system);
+  const selected = profiling.extractorModel ?? settings.consolidation_model ?? appSettings.consolidation_model;
+  if (selected !== undefined && selected !== "default" && selected !== "custom/default" && selected !== "butler") {
+    return normalizeModelRef(selected);
   }
-  return normalizeModelRef(settings.model);
+  return normalizeModelRef(appSettings.model ?? system.butlerModel ?? system.defaultModel ?? settings.model);
 }
 
-function explicitBriefingReasoning(settings: Record<string, unknown>): unknown | null {
-  if (settings.consolidation_reasoning_effort !== undefined) {
-    return settings.consolidation_reasoning_effort;
-  }
-  return settings.reasoning_effort ?? null;
+function explicitBriefingReasoning(
+  settings: Record<string, unknown>,
+  appSettings: Record<string, unknown>,
+): unknown | null {
+  const profiling = jsonRecord(jsonRecord(settings.personalization).profiling);
+  return profiling.extractorReasoningEffort ?? settings.consolidation_reasoning_effort ??
+    appSettings.consolidation_reasoning_effort ?? appSettings.reasoning_effort ??
+    settings.reasoning_effort ?? null;
 }
 
 function resolveBriefingModelMetadata(
@@ -690,22 +721,64 @@ function readButlerSettings(butlerData: string): Record<string, unknown> {
 }
 
 function listActiveProjectSignals(butlerData: string): AppProjectSignal[] {
-  const ledgerProjects = listProjectsFromLedger(butlerData);
-  const byId = new Map<string, AppProjectSignal>();
-  for (const project of ledgerProjects) {
-    byId.set(project.id, {
-      ...project,
-      recentSessionTitles: uniqueStrings([
-        ...project.recentSessionTitles,
-        ...(byId.get(project.id)?.recentSessionTitles ?? []),
-      ]).slice(0, 8),
-      ledgerEventSummary: uniqueStrings([
-        ...project.ledgerEventSummary,
-        ...(byId.get(project.id)?.ledgerEventSummary ?? []),
-      ]).slice(0, 12),
+  const dbPath = appBriefingDbPath(butlerData);
+  if (!existsSync(dbPath)) return listProjectsFromLedger(butlerData);
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const rows = db.query<{
+      id: string;
+      display_name: string;
+      ledger_project_id: string | null;
+    }, []>(
+      "SELECT id, display_name, ledger_project_id FROM projects WHERE archived = 0 AND status = 'active' ORDER BY display_name ASC",
+    ).all();
+    const titles = db.query<{ title: string }, [string]>(
+      "SELECT title FROM chats WHERE project_id = ? AND archived = 0 ORDER BY updated_at DESC LIMIT 8",
+    );
+    return rows.map((row) => {
+      const ledgerId = row.ledger_project_id || row.id;
+      const work = ledgerWorkTitles(butlerData, ledgerId);
+      return {
+        id: row.id,
+        displayName: row.display_name,
+        summary: ledgerProjectSummary(butlerData, ledgerId),
+        recentSessionTitles: uniqueStrings(titles.all(row.id).map((chat) => chat.title)).slice(0, 8),
+        ledgerEventSummary: ledgerEventSummary(butlerData, ledgerId),
+        openWorkTitles: work.open,
+        completedWorkTitles: work.completed,
+        excludedTopics: projectBriefingExcludedTopics(butlerData, row.id),
+      };
     });
+  } finally {
+    db.close();
   }
-  return [...byId.values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+function appBriefingDbPath(butlerData: string): string {
+  return resolveAppGatewayRuntimeConfig({ butlerData }).dbPath ??
+    join(butlerData, "app-server", "butler-client.sqlite");
+}
+
+function readAppBriefingSettings(butlerData: string): Record<string, unknown> {
+  const dbPath = appBriefingDbPath(butlerData);
+  if (!existsSync(dbPath)) return {};
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const row = db.query<{ value_json: string }, []>(
+      "SELECT value_json FROM app_settings WHERE key = 'settings'",
+    ).get();
+    return row ? jsonRecord(JSON.parse(row.value_json)) : {};
+  } catch {
+    return {};
+  } finally {
+    db.close();
+  }
+}
+
+function jsonRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function listProjectsFromLedger(butlerData: string): AppProjectSignal[] {
@@ -716,13 +789,68 @@ function listProjectsFromLedger(butlerData: string): AppProjectSignal[] {
     .map((entry) => {
       const project = readJsonFile<{ id?: string; name?: string }>(join(root, entry.name, "project.json"));
       const id = project?.id || entry.name;
+      const work = ledgerWorkTitles(butlerData, id);
       return {
         id,
         displayName: project?.name || id,
+        summary: ledgerProjectSummary(butlerData, id),
         recentSessionTitles: [],
         ledgerEventSummary: ledgerEventSummary(butlerData, id),
+        openWorkTitles: work.open,
+        completedWorkTitles: work.completed,
+        excludedTopics: projectBriefingExcludedTopics(butlerData, id),
       };
     });
+}
+
+function ledgerProjectSummary(butlerData: string, projectId: string): string | null {
+  const project = readJsonFile<{ summary?: unknown }>(join(
+    butlerData, "project-ledger", "projects", safeProjectIdSegment(projectId), "project.json",
+  ));
+  return normalizeString(project?.summary) || null;
+}
+
+function ledgerWorkTitles(butlerData: string, projectId: string): { open: string[]; completed: string[] } {
+  const root = join(butlerData, "project-ledger", "projects", safeProjectIdSegment(projectId), "work");
+  if (!existsSync(root)) return { open: [], completed: [] };
+  const records: Array<{ title: string; status: string; updatedAt: string }> = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith("guided-work-")) continue;
+    const path = join(root, entry.name, "work.md");
+    if (!existsSync(path)) continue;
+    try {
+      const frontmatter = readFileSync(path, "utf8").split("\n---\n", 1)[0] ?? "";
+      const field = (name: string) => {
+        const raw = frontmatter.match(new RegExp(`^${name}:\\s*(.+)$`, "mu"))?.[1]?.trim() ?? "";
+        if (raw.startsWith('"')) {
+          try { return JSON.parse(raw) as string; } catch { return ""; }
+        }
+        return raw;
+      };
+      const title = sanitizePublicText(field("title"), "").trim().slice(0, 180);
+      const status = field("status");
+      if (!title || !["done", "in_progress", "blocked", "review"].includes(status)) continue;
+      records.push({ title, status, updatedAt: field("updatedAt") });
+    } catch {
+      continue;
+    }
+  }
+  records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return {
+    open: uniqueStrings(records.filter((record) => record.status !== "done").map((record) => record.title)).slice(0, 12),
+    completed: uniqueStrings(records.filter((record) => record.status === "done").map((record) => record.title)).slice(0, 30),
+  };
+}
+
+function projectBriefingExcludedTopics(butlerData: string, projectId: string): string[] {
+  const policy = readJsonFile<{ projects?: Record<string, unknown> }>(join(
+    cognitionConsolidationRoot(butlerData), "briefing-exclusions.json",
+  ));
+  const values = policy?.projects?.[projectId];
+  return Array.isArray(values)
+    ? uniqueStrings(values.filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim().slice(0, 80)).filter(Boolean)).slice(0, 20)
+    : [];
 }
 
 function ledgerEventSummary(butlerData: string, projectId: string): string[] {
