@@ -17,7 +17,7 @@ import { useOrganization, type SpaceDialog } from "@/app/space/organization";
 export function SpaceGroupForm({
   dialog,
 }: {
-  dialog: Extract<SpaceDialog, { kind: "create" | "rename" }>;
+    dialog: Extract<SpaceDialog, { kind: "create" | "rename" | "group" }>;
 }) {
   useAppLocale();
   const [title, setTitle] = useState(
@@ -27,6 +27,7 @@ export function SpaceGroupForm({
   const mutate = useOrganization((s) => s.mutate);
   return (
     <form
+      aria-busy={pending}
       onSubmit={(e) => {
         e.preventDefault();
         void mutate(
@@ -36,6 +37,13 @@ export function SpaceGroupForm({
                 title: title.trim(),
                 parentKey: dialog.parentKey,
               }
+            : dialog.kind === "group"
+              ? {
+                  action: "group",
+                  title: title.trim(),
+                  sourceKey: dialog.sourceKey,
+                  targetKey: dialog.targetKey,
+                }
             : {
                 action: "rename",
                 groupId: dialog.groupId,
@@ -47,7 +55,7 @@ export function SpaceGroupForm({
       <Stack gap="4">
         <DialogHeader>
           <DialogTitle>
-            {dialog.kind === "create" ? appCopy.space.createGroup : appCopy.space.renameGroup}
+            {dialog.kind === "rename" ? appCopy.space.renameGroup : appCopy.space.createGroup}
           </DialogTitle>
           <DialogDescription>
             {appCopy.space.groupDescription}</DialogDescription>
@@ -67,11 +75,12 @@ export function SpaceGroupForm({
             size="sm"
             variant="ghost"
             type="button"
+            disabled={pending}
             onClick={() => useOrganization.getState().setDialog(null)}
           >
             {appCopy.space.cancel}</Button>
           <Button size="sm" type="submit" disabled={pending || !title.trim()}>
-            {appCopy.space.save}</Button>
+            {pending ? `${appCopy.space.save}…` : appCopy.space.save}</Button>
         </ButtonContainer>
       </Stack>
     </form>

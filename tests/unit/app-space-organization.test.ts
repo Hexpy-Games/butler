@@ -29,7 +29,8 @@ test("public space API preserves sessions through grouping, conflicts, undo and 
     expect((await navigation()).space.nodes.find((n) => n.entityId === a.id)?.parentKey).toBe(parentKey);
     const stale = await request("space/moves", { expectedRevision: 0, sourceKey: `s:${b.id}`, targetKey: parentKey, position: "inside" });
     expect(stale.status).toBe(409);
-    const grouped = await mutate("space/group-sessions", { sourceKey: `s:${b.id}`, targetKey: `s:${a.id}` });
+    const grouped = await mutate("space/group-sessions", { sourceKey: `s:${b.id}`, targetKey: `s:${a.id}`, title: "검진" });
+    expect(grouped.space.groups.find(group => group.id === grouped.groupId)?.title).toBe("검진");
     expect(grouped.space.nodes.filter((n) => n.parentKey === `g:${grouped.groupId}`).map((n) => n.entityId)).toEqual([a.id, b.id]);
     await mutate("space/undo", { undoToken: grouped.undoToken });
     expect((await navigation()).space.nodes.find((n) => n.entityId === a.id)?.parentKey).toBe(parentKey);

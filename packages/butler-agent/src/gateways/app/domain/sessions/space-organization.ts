@@ -109,7 +109,7 @@ export class AppSpaceOrganization {
             before,
             command.sourceKey,
             command.targetKey,
-            title,
+            command.title ?? title,
             origin,
           );
           break;

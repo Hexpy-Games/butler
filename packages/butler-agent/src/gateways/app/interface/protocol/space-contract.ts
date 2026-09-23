@@ -33,7 +33,7 @@ export type SpaceCommand = { expectedRevision: number } & (
       targetKey: string | null;
       position: "before" | "after" | "inside";
     }
-  | { action: "group"; sourceKey: string; targetKey: string }
+  | { action: "group"; sourceKey: string; targetKey: string; title?: string }
   | { action: "undo"; undoToken: string }
   | { action: "pin"; nodeKey: string; pinned: boolean }
 );
@@ -69,7 +69,7 @@ export function isSpaceCommand(value: unknown): value is SpaceCommand {
         ["before", "after", "inside"].includes(String(v.position))
       );
     case "group":
-      return text("sourceKey") && text("targetKey");
+      return text("sourceKey") && text("targetKey") && (v.title === undefined || text("title"));
     case "undo":
       return text("undoToken");
     case "pin":

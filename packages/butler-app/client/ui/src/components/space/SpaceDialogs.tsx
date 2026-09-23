@@ -24,11 +24,11 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
     <Dialog
       open={Boolean(dialog)}
       onOpenChange={(open) => {
-        if (!open) useOrganization.getState().setDialog(null);
+        if (!open && !useOrganization.getState().pending) useOrganization.getState().setDialog(null);
       }}
     >
       <DialogContent>
-        {dialog?.kind === "create" || dialog?.kind === "rename" ? (
+        {dialog?.kind === "create" || dialog?.kind === "rename" || dialog?.kind === "group" ? (
           <SpaceGroupForm key={JSON.stringify(dialog)} dialog={dialog} />
         ) : dialog?.kind === "move" ? (
           <SpaceMoveForm

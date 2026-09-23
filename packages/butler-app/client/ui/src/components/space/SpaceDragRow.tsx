@@ -116,11 +116,11 @@ export function SpaceDragRow({
         const { source, target, end } = useSpaceDrag.getState();
         if (enabled && source && target?.instance === instance) {
           if (target.position === "group") {
-            void useOrganization.getState().mutate({
-                  action: "group",
-                  sourceKey: source,
-                  targetKey: row.node.key,
-                });
+            useOrganization.getState().setDialog({
+              kind: "group",
+              sourceKey: source,
+              targetKey: row.node.key,
+            });
           } else {
             requestSpaceMove(rows, source, row.node.key, target.position);
           }
