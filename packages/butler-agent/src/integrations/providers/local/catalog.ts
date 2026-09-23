@@ -11,7 +11,7 @@ export function localModelConfigToMetadata(model: LocalModelConfig): ProviderMod
     : ["none"]);
   return {
     provider_id: "local",
-    provider_label: model.provider_label,
+    provider_label: "Custom",
     model_id: model.model_id,
     model_ref: model.model_ref,
     display_name: model.display_name,
@@ -33,6 +33,7 @@ export function localModelConfigToMetadata(model: LocalModelConfig): ProviderMod
     api_type: model.api_type,
     platform: model.platform,
     server_url: model.server_url,
+    api_base_url: model.api_base_url,
     source: model.source,
     local_reasoning_budget_ratio: nativeEfforts ? undefined : model.reasoning_budget_ratio,
   };

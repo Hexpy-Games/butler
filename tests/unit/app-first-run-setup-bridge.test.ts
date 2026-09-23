@@ -873,7 +873,7 @@ test("optional external tool probes stay behind selected feature actions", () =>
   expect(mcpSettings).toContain("async function probe");
   expect(mcpSettings).toContain("/probe");
   expect(localModelOperations).toContain("async function discover");
-  expect(localModelOperations).toContain("discoverLocalModels(platform, serverUrl)");
+  expect(localModelOperations).toContain("discoverLocalModels(platform, serverUrl, apiKey, editingModelRef)");
 });
 
 test("Electron bridge calls MCP and local model preflights only for selected endpoints", async () => {

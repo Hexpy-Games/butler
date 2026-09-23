@@ -23,7 +23,7 @@ function zaiApiModel(input: {
     context_window_tokens: input.contextWindowTokens,
     max_output_tokens: 128_000,
     default_reasoning_effort: input.defaultReasoningEffort,
-    reasoning_efforts: ZAI_API_REASONING,
+    reasoning_efforts: input.modelId === "glm-5.3" ? ["low", "high", "max"] : ZAI_API_REASONING,
     token_estimator: "character_estimate",
     source_url: ZAI_API_SOURCE,
     runtime_supported: input.runtimeSupported ?? true,
@@ -33,9 +33,16 @@ function zaiApiModel(input: {
 
 export const ZAI_API_MODELS: readonly ProviderModelMetadata[] = [
   zaiApiModel({
+    modelId: "glm-5.3",
+    displayName: "GLM-5.3",
+    status: "latest",
+    contextWindowTokens: 1_000_000,
+    defaultReasoningEffort: "max",
+  }),
+  zaiApiModel({
     modelId: "glm-5.2",
     displayName: "GLM-5.2",
-    status: "latest",
+    status: "available",
     contextWindowTokens: 1_000_000,
     defaultReasoningEffort: "high",
   }),

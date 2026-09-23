@@ -6,6 +6,8 @@ import { LocalModelConfigForm } from "./LocalModelConfigForm";
 import { SettingsSection } from "./SettingsFormComponents";
 
 interface LocalModelApiSectionProps {
+  apiKey: string | undefined;
+  setApiKey: (value: string) => void;
   platform: LocalModelDiscoveryRequest["platform"];
   setPlatform: (value: LocalModelDiscoveryRequest["platform"]) => void;
   serverUrl: string;
@@ -18,6 +20,8 @@ interface LocalModelApiSectionProps {
 }
 
 export function LocalModelApiSection({
+  apiKey,
+  setApiKey,
   platform,
   setPlatform,
   serverUrl,
@@ -35,6 +39,8 @@ export function LocalModelApiSection({
     <SettingsSection title={copy.apiInfoTitle} description={copy.description}>
       <Stack gap="md">
         <LocalModelConfigForm
+          apiKey={apiKey}
+          setApiKey={setApiKey}
           platform={platform}
           setPlatform={setPlatform}
           serverUrl={serverUrl}

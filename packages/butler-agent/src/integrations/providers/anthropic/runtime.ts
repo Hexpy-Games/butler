@@ -167,7 +167,7 @@ export function anthropicReasoningParams(
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> {
   if (!reasoningEffort) return {};
-  const isClaude5 = /^claude-(?:fable|opus|sonnet)-5$/u.test(config.modelId);
+  const isClaude5 = /^claude-(?:fable|opus|sonnet)-5(?:-\d+)?$/u.test(config.modelId);
   if (isClaude5) {
     return {
       thinking: { type: "adaptive" },

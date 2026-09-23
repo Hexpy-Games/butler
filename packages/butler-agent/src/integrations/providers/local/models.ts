@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,8 +8,10 @@ export type LocalModelPlatform = "llama_cpp" | "ollama" | "lm_studio" | "custom"
 export type LocalModelSource = "discovered" | "manual";
 
 export interface LocalModelConfig {
+  /** Runtime-only secret; excluded from configuration and public metadata. */
+  api_key?: string;
   provider_id: "local";
-  provider_label: "Local";
+  provider_label: "Local" | "Custom";
   model_id: string;
   model_ref: `local/${string}`;
   display_name: string;
@@ -29,6 +32,7 @@ export interface LocalModelConfig {
 
 export interface LocalModelDiscoveryInput {
   serverUrl: string;
+  apiKey?: string;
   apiType?: LocalModelApiType;
   platform?: LocalModelPlatform;
   signal?: AbortSignal;
@@ -37,7 +41,7 @@ export interface LocalModelDiscoveryInput {
 
 export interface DiscoveredLocalModel {
   provider_id: "local";
-  provider_label: "Local";
+  provider_label: "Local" | "Custom";
   model_id: string;
   model_ref: `local/${string}`;
   display_name: string;
@@ -64,6 +68,7 @@ export interface LocalModelDiscoveryResult {
 
 export interface LocalModelRegistrationInput {
   serverUrl: string;
+  apiKey?: string;
   apiType?: LocalModelApiType;
   platform?: LocalModelPlatform;
   modelId: string;
@@ -148,7 +153,7 @@ export function normalizeLocalServerUrl(value: string): {
   url.search = "";
   url.pathname = url.pathname.replace(/\/+$/u, "");
   const serverUrl = url.toString().replace(/\/$/u, "");
-  const apiBaseUrl = serverUrl.endsWith("/v1") ? serverUrl : `${serverUrl}/v1`;
+  const apiBaseUrl = url.pathname && url.pathname !== "/" ? serverUrl : `${serverUrl}/v1`;
   return { serverUrl, apiBaseUrl };
 }
 
@@ -191,21 +196,26 @@ function displayNameForModelId(modelId: string): string {
 function normalizeLocalModelConfig(value: unknown): LocalModelConfig | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Partial<LocalModelConfig>;
-  const modelId = typeof input.model_id === "string" ? safeLocalModelId(input.model_id) : "";
+  const modelId = typeof input.model_id === "string" ? input.model_id.trim() : "";
   const contextWindowTokens = positiveInteger(input.context_window_tokens);
   if (!modelId || !contextWindowTokens) return null;
   let server;
   try {
     server = normalizeLocalServerUrl(typeof input.server_url === "string" ? input.server_url : "");
+    // Older registrations appended /v1 to a prefixed server URL. Preserve the
+    // saved endpoint until the user explicitly edits it.
+    if (typeof input.api_base_url === "string" && input.api_base_url) {
+      server.apiBaseUrl = normalizeLocalServerUrl(input.api_base_url).apiBaseUrl;
+    }
   } catch {
     return null;
   }
   const now = new Date().toISOString();
   return {
     provider_id: "local",
-    provider_label: "Local",
+    provider_label: "Custom",
     model_id: modelId,
-    model_ref: `local/${modelId}`,
+    model_ref: input.model_ref?.startsWith("local/") ? input.model_ref : `local/${safeLocalModelId(modelId)}`,
     display_name: typeof input.display_name === "string" && input.display_name.trim()
       ? input.display_name.trim()
       : displayNameForModelId(modelId),
@@ -234,10 +244,12 @@ export function readLocalModelConfigs(butlerData = defaultButlerData()): LocalMo
       : [];
   const seen = new Set<string>();
   const models: LocalModelConfig[] = [];
+  const secrets = readLocalSecrets(butlerData);
   for (const item of raw) {
     const model = normalizeLocalModelConfig(item);
     if (!model || seen.has(model.model_ref)) continue;
     seen.add(model.model_ref);
+    model.api_key = secrets[model.model_ref];
     models.push(model);
   }
   return models;
@@ -248,7 +260,7 @@ function normalizeLocalModelInput(
   previous?: LocalModelConfig,
 ): LocalModelConfig {
   const server = normalizeLocalServerUrl(input.serverUrl);
-  const modelId = safeLocalModelId(input.modelId);
+  const modelId = input.modelId.trim();
   const contextWindowTokens = positiveInteger(input.contextWindowTokens);
   if (!modelId) throw new Error("Local model id is required.");
   if (!contextWindowTokens) throw new Error("Local model context window tokens are required.");
@@ -256,9 +268,12 @@ function normalizeLocalModelInput(
   const now = new Date().toISOString();
   return {
     provider_id: "local",
-    provider_label: "Local",
+    provider_label: "Custom",
     model_id: modelId,
-    model_ref: `local/${modelId}`,
+    model_ref: previous?.model_id === modelId ? previous.model_ref : `local/${safeLocalModelId(modelId)}`,
+    api_key: input.apiKey === undefined
+      ? (previous?.api_base_url === server.apiBaseUrl ? previous.api_key : undefined)
+      : input.apiKey.trim() || undefined,
     display_name: input.displayName?.trim() || displayNameForModelId(modelId),
     api_type: normalizeApiType(input.apiType),
     platform: normalizeLocalModelPlatform(input.platform),
@@ -283,25 +298,49 @@ function modelRefFromLookup(value: string): `local/${string}` {
 }
 
 function findLocalModelConfig(models: LocalModelConfig[], lookup: string): LocalModelConfig | undefined {
+  const exact = models.find((model) => model.model_ref === lookup.trim());
+  if (exact) return exact;
   const modelRef = modelRefFromLookup(lookup);
   const modelId = safeLocalModelId(lookup);
   return models.find((model) => model.model_ref === modelRef || model.model_id === modelId);
 }
 
+function readLocalSecrets(butlerData: string): Record<string, string> {
+  const path = join(butlerData, "auth", "custom-model-credentials.json");
+  if (!existsSync(path)) return {};
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function writeLocalSecrets(models: LocalModelConfig[], butlerData: string): void {
+  const path = join(butlerData, "auth", "custom-model-credentials.json");
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const secrets = Object.fromEntries(models.filter((model) => model.api_key).map((model) => [model.model_ref, model.api_key]));
+  writeFileSync(tmp, JSON.stringify(secrets), { mode: 0o600 });
+  renameSync(tmp, path);
+}
+
 function writeLocalModelConfigs(models: LocalModelConfig[], butlerData = defaultButlerData()): void {
   const config = readButlerConfig(butlerData);
+  writeLocalSecrets(models, butlerData);
   writeButlerConfig({
     ...config,
     models: {
       ...(config.models && typeof config.models === "object" ? config.models : {}),
-      local: models,
+      local: models.map(({ api_key: _secret, ...model }) => model),
     },
   }, butlerData);
 }
 
 export function upsertLocalModelConfig(input: LocalModelRegistrationInput, butlerData = defaultButlerData()): LocalModelConfig {
   const existing = readLocalModelConfigs(butlerData);
-  const candidate = normalizeLocalModelInput(input, findLocalModelConfig(existing, input.modelId));
+  const apiBaseUrl = normalizeLocalServerUrl(input.serverUrl).apiBaseUrl;
+  const same = existing.find((model) => model.model_id === input.modelId.trim() && model.api_base_url === apiBaseUrl);
+  const candidate = normalizeLocalModelInput(input, same);
+  if (!same && existing.some((model) => model.model_ref === candidate.model_ref)) {
+    const suffix = createHash("sha256").update(`${apiBaseUrl}\n${candidate.model_id}`).digest("hex").slice(0, 12);
+    candidate.model_ref = `${candidate.model_ref}-${suffix}`;
+  }
 
   const previous = existing.find((model) => model.model_ref === candidate.model_ref);
   const next = existing.filter((model) => model.model_ref !== candidate.model_ref);
@@ -324,6 +363,9 @@ export function updateLocalModelConfig(
   const previous = findLocalModelConfig(existing, lookup);
   if (!previous) throw new Error("Local model is not registered.");
   const candidate = normalizeLocalModelInput(input, previous);
+  if (existing.some((model) => model.model_ref === candidate.model_ref && model.model_ref !== previous.model_ref)) {
+    throw new Error("A Custom model with this reference is already registered.");
+  }
   const next = existing.filter((model) =>
     model.model_ref !== previous.model_ref &&
     model.model_ref !== candidate.model_ref,
@@ -384,10 +426,10 @@ function contextFromModel(model: Record<string, any>): number | null {
     positiveInteger(jsonNumber(model.context_length));
 }
 
-async function fetchJson(url: string, signal?: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<Record<string, any> | null> {
+async function fetchJson(url: string, signal?: AbortSignal, fetchImpl: typeof fetch = fetch, apiKey?: string): Promise<Record<string, any> | null> {
   if (signal?.aborted) throw new Error("Local model discovery was cancelled.");
   try {
-    const response = await fetchImpl(url, { signal });
+    const response = await fetchImpl(url, { signal, redirect: "error", headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} });
     if (!response.ok) return null;
     const body = await response.json();
     return body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, any> : null;
@@ -399,14 +441,15 @@ async function fetchJson(url: string, signal?: AbortSignal, fetchImpl: typeof fe
 async function fetchProps(input: {
   serverRoot: string;
   modelId?: string;
+  apiKey?: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }): Promise<Record<string, any> | null> {
   const base = `${input.serverRoot}/props`;
   const queryUrl = input.modelId ? `${base}?model=${encodeURIComponent(input.modelId)}` : base;
-  const props = await fetchJson(queryUrl, input.signal, input.fetchImpl);
+  const props = await fetchJson(queryUrl, input.signal, input.fetchImpl, input.apiKey);
   if (props) return props;
-  if (queryUrl !== base) return await fetchJson(base, input.signal, input.fetchImpl);
+  if (queryUrl !== base) return await fetchJson(base, input.signal, input.fetchImpl, input.apiKey);
   return null;
 }
 
@@ -426,15 +469,15 @@ function discoveredModelFromApi(input: {
         ? input.model.model
         : "";
   if (!rawId.trim()) return null;
-  const modelId = safeLocalModelId(rawId);
+  const modelId = rawId.trim();
   const contextWindowTokens = contextFromProps(input.props) ??
     contextFromModel(input.model) ??
     DEFAULT_LOCAL_CONTEXT_WINDOW_TOKENS;
   return {
     provider_id: "local",
-    provider_label: "Local",
+    provider_label: "Custom",
     model_id: modelId,
-    model_ref: `local/${modelId}`,
+    model_ref: `local/${safeLocalModelId(modelId)}`,
     display_name: displayNameForModelId(modelId),
     api_type: input.apiType,
     platform: input.platform,
@@ -454,7 +497,7 @@ export async function discoverLocalModels(input: LocalModelDiscoveryInput): Prom
   const platform = normalizeLocalModelPlatform(input.platform);
   const server = normalizeLocalServerUrl(input.serverUrl);
   const serverRoot = localServerRootFromApiBase(server.apiBaseUrl);
-  const modelsResponse = await fetchJson(`${server.apiBaseUrl}/models`, input.signal, input.fetchImpl);
+  const modelsResponse = await fetchJson(`${server.apiBaseUrl}/models`, input.signal, input.fetchImpl, input.apiKey);
   const rawModels = Array.isArray(modelsResponse?.data)
     ? modelsResponse.data
     : Array.isArray(modelsResponse?.models)
@@ -468,12 +511,13 @@ export async function discoverLocalModels(input: LocalModelDiscoveryInput): Prom
   for (const rawModel of rawModels) {
     if (!rawModel || typeof rawModel !== "object" || Array.isArray(rawModel)) continue;
     const rawId = typeof rawModel.id === "string" ? rawModel.id : typeof rawModel.model === "string" ? rawModel.model : "";
-    const props = await fetchProps({
+    const props = platform === "llama_cpp" ? await fetchProps({
+      apiKey: input.apiKey,
       serverRoot,
       modelId: rawId,
       signal: input.signal,
       fetchImpl: input.fetchImpl,
-    });
+    }) : null;
     const discovered = discoveredModelFromApi({
       model: rawModel as Record<string, any>,
       props,

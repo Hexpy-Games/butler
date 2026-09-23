@@ -41,8 +41,21 @@ function openCodeGoModel(input: {
 }
 
 export const OPENCODE_GO_MODELS: readonly ProviderModelMetadata[] = [
+  openCodeGoModel({ modelId: "grok-4.7", displayName: "Grok 4.7", apiShape: "openai_responses", status: "latest", defaultReasoningEffort: "high", reasoningEfforts: ["low", "medium", "high", "xhigh"], contextWindowTokens: 500_000 }),
+  openCodeGoModel({ modelId: "grok-4.6", displayName: "Grok 4.6", apiShape: "openai_responses" }),
+  openCodeGoModel({ modelId: "glm-5.3-flash", displayName: "GLM-5.3-Flash", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "glm-5.3", displayName: "GLM-5.3", apiShape: "openai_chat_completions", defaultReasoningEffort: "max", reasoningEfforts: ["low", "high", "max"] }),
+  openCodeGoModel({ modelId: "longcat-2.0", displayName: "LongCat-2.0", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "deepseek-v4.1-flash", displayName: "DeepSeek V4.1 Flash", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "deepseek-v4-flash-vision-exp", displayName: "DeepSeek V4 Flash Vision Exp", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "mimo-v2.6-flash", displayName: "MiMo-V2.6-Flash", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "mimo-v2.6-pro", displayName: "MiMo-V2.6-Pro", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "hy4-preview", displayName: "HY4 Preview", apiShape: "openai_chat_completions" }),
+  openCodeGoModel({ modelId: "muse-spark-1.3-contributor", displayName: "Muse Spark 1.3 Contributor", apiShape: "openai_responses" }),
+  openCodeGoModel({ modelId: "muse-spark-1.2-contributor", displayName: "Muse Spark 1.2 Contributor", apiShape: "openai_responses" }),
+  openCodeGoModel({ modelId: "qwen3.8-flash", displayName: "Qwen3.8 Flash", apiShape: "anthropic_messages" }),
   // OpenAI-compatible Chat Completions carrier.
-  openCodeGoModel({ modelId: "grok-4.5", displayName: "Grok 4.5", apiShape: "openai_chat_completions", status: "latest" }),
+  openCodeGoModel({ modelId: "grok-4.5", displayName: "Grok 4.5", apiShape: "openai_chat_completions", status: "available" }),
   openCodeGoModel({ modelId: "glm-5.2", displayName: "GLM-5.2", apiShape: "openai_chat_completions", status: "recommended" }),
   openCodeGoModel({ modelId: "glm-5.1", displayName: "GLM-5.1", apiShape: "openai_chat_completions", status: "available" }),
   openCodeGoModel({ modelId: "kimi-k3", displayName: "Kimi K3", apiShape: "openai_chat_completions", defaultReasoningEffort: "high", reasoningEfforts: ["none", "low", "medium", "high", "xhigh", "max"] }),

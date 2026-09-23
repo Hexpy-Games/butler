@@ -16,7 +16,9 @@ export function isLocalModelDiscoveryRequest(
 ): value is LocalModelDiscoveryRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const input = value as Partial<LocalModelDiscoveryRequest>;
+  if (input.model_ref !== undefined && typeof input.model_ref !== "string") return false;
   return (
+    (input.api_key === undefined || (typeof input.api_key === "string" && !/[\r\n]/u.test(input.api_key))) &&
     input.provider_id === "local" &&
     input.api_type === "openai_compatible" &&
     isLocalModelPlatform(input.platform) &&
@@ -31,6 +33,7 @@ export function isLocalModelRegistrationRequest(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const input = value as Partial<LocalModelRegistrationRequest>;
   return (
+    (input.api_key === undefined || (typeof input.api_key === "string" && !/[\r\n]/u.test(input.api_key))) &&
     input.provider_id === "local" &&
     input.api_type === "openai_compatible" &&
     isLocalModelPlatform(input.platform) &&

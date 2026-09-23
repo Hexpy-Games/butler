@@ -49,7 +49,7 @@ function zaiModel(input: {
     context_window_tokens: input.contextWindowTokens,
     max_output_tokens: 128_000,
     default_reasoning_effort: input.defaultReasoningEffort,
-    reasoning_efforts: ZAI_REASONING,
+    reasoning_efforts: input.modelId === "glm-5.3" ? ["low", "high", "max"] : ZAI_REASONING,
     token_estimator: "character_estimate",
     source_url: input.sourceUrl ?? ZAI_SOURCE,
     runtime_supported: input.runtimeSupported ?? true,

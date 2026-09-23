@@ -78,8 +78,10 @@ async function createLocalChatCompletionOnce(
   try {
     response = await fetch(localChatUrl(config), {
       method: "POST",
+      redirect: "error",
       headers: {
         "Content-Type": "application/json",
+        ...(config.api_key ? { Authorization: `Bearer ${config.api_key}` } : {}),
       },
       body: admittedRequest.serialized_request,
       signal,
@@ -93,7 +95,10 @@ async function createLocalChatCompletionOnce(
       error,
     });
   }
-  const raw = await response.text();
+  const responseText = await response.text();
+  const raw = !response.ok && config.api_key
+    ? responseText.replaceAll(config.api_key, "[REDACTED]")
+    : responseText;
   let parsed: Record<string, any>;
   try {
     parsed = raw ? JSON.parse(raw) : {};

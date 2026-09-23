@@ -79,7 +79,7 @@ test("namespaced hosted model metadata resolves duplicate model ids by provider"
     context_window_tokens: 1_000_000,
     max_output_tokens: 128_000,
     default_reasoning_effort: "max",
-    reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    reasoning_efforts: ["low", "high", "max"],
     runtime_supported: true,
     hosted_api_shape: "openai_chat_completions",
     source_url: "https://docs.z.ai/guides/llm/glm-5.3",
@@ -88,7 +88,7 @@ test("namespaced hosted model metadata resolves duplicate model ids by provider"
     modelCatalogView().providers.find((provider) => provider.provider_id === "zai")
       ?.latest_model_ref,
   ).toBe("zai/glm-5.3");
-  expect(ZAI_API_MODELS.some((model) => model.model_id === "glm-5.3")).toBe(false);
+  expect(ZAI_API_MODELS.some((model) => model.model_id === "glm-5.3")).toBe(true);
   expect(zaiGlm.provider_id).toBe("zai");
   expect(zaiGlm.hosted_api_shape).toBe("openai_chat_completions");
   expect(zaiGlm.provider_label).toBe("Z.AI Coding Plan");
@@ -132,8 +132,10 @@ test("provider registry binds capabilities and catalogs to one concrete model pr
 
 test("OpenAI catalog exposes GPT-6 Astra as the latest supported model", () => {
   const refs = OPENAI_MODELS.map((model) => model.model_ref);
-  expect(refs.slice(0, 4)).toEqual([
+  expect(refs.slice(0, 6)).toEqual([
     "openai/gpt-6-astra",
+    "openai/gpt-6-sol",
+    "openai/gpt-6-luna",
     "openai/gpt-5.6-sol",
     "openai/gpt-5.6-terra",
     "openai/gpt-5.6-luna",
@@ -155,14 +157,17 @@ test("OpenAI catalog exposes GPT-6 Astra as the latest supported model", () => {
 
 test("frozen hosted provider matrix exposes only current runtime-supported refs", () => {
   const expected = new Map<string, string[]>([
-    ["anthropic", ["claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]],
-    ["google", ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"]],
-    ["xai", ["grok-4.5"]],
+    ["anthropic", ["claude-fable-5-1", "claude-opus-5-5", "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]],
+    ["google", ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"]],
+    ["xai", ["grok-4.7", "grok-4.5"]],
     ["kimi", ["kimi-k3", "kimi-k2.7-code", "kimi-k2.6"]],
-    ["qwen", ["qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash"]],
+    ["qwen", ["qwen3.8-max", "qwen3.8-flash", "qwen3.7-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash"]],
     ["zai", ["glm-5.3", "glm-5.2", "glm-5.1", "glm-5"]],
-    ["zai-api", ["glm-5.2", "glm-5.1", "glm-5"]],
+    ["zai-api", ["glm-5.3", "glm-5.2", "glm-5.1", "glm-5"]],
     ["opencode-go", [
+      "grok-4.7", "grok-4.6", "glm-5.3-flash", "glm-5.3", "longcat-2.0",
+      "deepseek-v4.1-flash", "deepseek-v4-flash-vision-exp", "mimo-v2.6-flash", "mimo-v2.6-pro",
+      "hy4-preview", "muse-spark-1.3-contributor", "muse-spark-1.2-contributor", "qwen3.8-flash",
       "grok-4.5", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
       "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
       "gpt-5.6-luna", "minimax-m3", "minimax-m2.7", "qwen3.8-max", "qwen3.7-max",

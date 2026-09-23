@@ -25,7 +25,8 @@ function xaiModel(
 }
 
 export const XAI_MODELS: readonly ProviderModelMetadata[] = [
-  xaiModel("grok-4.5", "Grok 4.5", true),
+  { ...xaiModel("grok-4.7", "Grok 4.7", true), default_reasoning_effort: "high", reasoning_efforts: ["low", "medium", "high", "xhigh"] },
+  { ...xaiModel("grok-4.5", "Grok 4.5", true), status: "available" },
   xaiModel("grok-4.3", "Grok 4.3 (retired)", false),
   xaiModel("grok-4.20-multi-agent", "Grok 4.20 Multi-Agent (retired)", false),
 ];

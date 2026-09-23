@@ -52,3 +52,35 @@ resolved from the global default model.
 - `SPEC-MODEL-PROVIDER-CONTROL-UX` - Model And Provider Control UX
 - `SPEC-BUTLER-AGENT-LOOP` - Butler Agent Loop
 - `SPEC-PROVIDER-ADAPTER-ARCHITECTURE` - Provider Adapter Architecture
+
+## Custom connections and catalog refresh (2026-09-23)
+
+Settings presents the former Local provider as **Custom**. Existing `local/`
+references and API routes remain compatible. The existing Settings registration
+flow owns URL, optional API key, exact model ID, display name and context window.
+Both discovery and manual entry are available; discovery is never required.
+The supported wire protocol is OpenAI-compatible Chat Completions with optional
+Bearer authentication. Other wire protocols still use their built-in adapters.
+
+API base paths are retained verbatim; a bare host defaults to `/v1`. Raw model IDs
+(including organization prefixes) are sent unchanged. Separate endpoints sharing
+an ID receive distinct references. Updating a connection retains its key only
+when its API base URL is unchanged; explicit empty keys remove authentication.
+Keys are stored separately in `auth/custom-model-credentials.json` with mode 0600,
+never returned in catalog metadata or settings events, and never redirected.
+
+Acceptance: Settings supports manual registration before discovery; authenticated
+model discovery and a subsequent provider request use the entered key, URL and
+raw ID; edit preserves/replaces/removes credentials; endpoint changes do not reuse
+saved secrets; public catalog and events omit secrets; existing local refs work.
+
+Catalog sources checked: [OpenAI](https://developers.openai.com/api/docs/models),
+[Anthropic](https://platform.claude.com/docs/en/models/overview),
+[xAI](https://docs.x.ai/developers/models),
+[Google](https://ai.google.dev/gemini-api/docs/models),
+[Qwen](https://www.alibabacloud.com/help/en/model-studio/text-generation-model),
+[Kimi](https://platform.kimi.ai/docs/models),
+[Z.AI](https://docs.z.ai/guides/llm/glm-5.3), and
+[OpenCode Go](https://opencode.ai/docs/go/). Kimi's current lineup was already
+present. Defaults and persisted model choices are unchanged. Catalog availability
+is not proof that a particular account has access.

@@ -8,6 +8,7 @@ import {
   deleteLocalModelConfig,
   discoverLocalModels,
   readLocalModelConfigs,
+  normalizeLocalServerUrl,
   updateLocalModelConfig,
   upsertLocalModelConfig,
 } from "../../../../integrations/providers/local/models.ts";
@@ -44,8 +45,14 @@ export class AppLocalModelRegistryStore {
   ): Promise<LocalModelDiscoveryResult> {
     let result;
     try {
+      const saved = input.model_ref
+        ? readLocalModelConfigs(this.butlerData).find((model) => model.model_ref === input.model_ref)
+        : undefined;
+      const savedKey = saved?.api_base_url === normalizeLocalServerUrl(input.server_url).apiBaseUrl
+        ? saved?.api_key : undefined;
       result = await discoverLocalModels({
         serverUrl: input.server_url,
+        apiKey: input.api_key ?? savedKey,
         apiType: input.api_type,
         platform: input.platform,
       });
@@ -81,6 +88,7 @@ export class AppLocalModelRegistryStore {
       model = upsertLocalModelConfig(
         {
           serverUrl: input.server_url,
+          apiKey: input.api_key,
           apiType: input.api_type,
           platform: input.platform,
           modelId: input.model_id,
@@ -126,6 +134,7 @@ export class AppLocalModelRegistryStore {
         modelRef,
         {
           serverUrl: input.server_url,
+          apiKey: input.api_key,
           apiType: input.api_type,
           platform: input.platform,
           modelId: input.model_id,

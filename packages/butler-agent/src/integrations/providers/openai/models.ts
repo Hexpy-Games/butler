@@ -8,6 +8,8 @@ export const DEFAULT_CODEX_MODEL_REF = `openai/${DEFAULT_CODEX_MODEL}` as const;
 export const FALLBACK_OPENAI_MODELS = [
   DEFAULT_CODEX_MODEL,
   "gpt-6-astra",
+  "gpt-6-sol",
+  "gpt-6-luna",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",

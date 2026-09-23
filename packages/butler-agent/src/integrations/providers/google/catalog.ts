@@ -30,9 +30,23 @@ function googleModel(input: {
 
 export const GOOGLE_MODELS: readonly ProviderModelMetadata[] = [
   googleModel({
+    modelId: "gemini-3.8-flash",
+    displayName: "Gemini 3.8 Flash",
+    status: "latest",
+    defaultReasoningEffort: "medium",
+    reasoningEfforts: ["low", "medium", "high"],
+  }),
+  googleModel({
+    modelId: "gemini-3.7-flash",
+    displayName: "Gemini 3.7 Flash",
+    status: "available",
+    defaultReasoningEffort: "medium",
+    reasoningEfforts: ["low", "medium", "high"],
+  }),
+  googleModel({
     modelId: "gemini-3.6-flash",
     displayName: "Gemini 3.6 Flash",
-    status: "latest",
+    status: "available",
     defaultReasoningEffort: "medium",
     reasoningEfforts: ["none", "low", "medium", "high", "xhigh"],
   }),

@@ -189,7 +189,8 @@ export function hostedChatReasoningParams(
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> {
   if (!reasoningEffort) return {};
-  if (config.providerId === "zai" || config.providerId === "zai-api") {
+  if (config.providerId === "zai" || config.providerId === "zai-api" ||
+    (config.providerId === "opencode-go" && config.modelId === "glm-5.3")) {
     return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
   }
   if (config.providerId === "xai") {

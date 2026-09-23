@@ -1189,6 +1189,11 @@ export interface AppCopy {
       loadDeveloperLogs: string;
     };
     localModels: {
+      apiKey: string;
+      apiKeyDescription: string;
+      apiKeyPlaceholder: string;
+      apiKeyRemoved: string;
+      removeApiKey: string;
       title: string;
       description: string;
       provider: string;

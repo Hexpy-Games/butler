@@ -17,6 +17,7 @@ import type {
 interface UseLocalModelOperationsProps {
   platform: LocalModelDiscoveryRequest["platform"];
   serverUrl: string;
+  apiKey: string | undefined;
   manualModelId: string;
   manualDisplayName: string;
   manualContext: string;
@@ -41,6 +42,7 @@ interface UseLocalModelOperationsProps {
 export function useLocalModelOperations({
   platform,
   serverUrl,
+  apiKey,
   manualModelId,
   manualDisplayName,
   manualContext,
@@ -69,7 +71,7 @@ export function useLocalModelOperations({
     setStatus("");
     setDiscovery(null);
     try {
-      const result = await discoverLocalModels(platform, serverUrl);
+      const result = await discoverLocalModels(platform, serverUrl, apiKey, editingModelRef);
       setDiscovery(result);
       setSelectedModelRef(result.models[0]?.model_ref ?? "");
       setManualModelId(result.models[0]?.model_id ?? manualModelId);
@@ -98,6 +100,7 @@ export function useLocalModelOperations({
       manualDisplayName,
       manualContext,
       preservedReasoningBudgetRatio,
+      apiKey,
     );
     try {
       const result = await registerLocalModel(isEditing, editingModelRef, payload);

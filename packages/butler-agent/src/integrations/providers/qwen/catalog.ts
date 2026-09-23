@@ -59,9 +59,28 @@ function qwenModel(input: {
 
 export const QWEN_MODELS: readonly ProviderModelMetadata[] = [
   qwenModel({
+    modelId: "qwen3.8-max",
+    displayName: "Qwen3.8 Max",
+    status: "latest",
+    defaultReasoningEffort: "high",
+    vision: true,
+  }),
+  qwenModel({
+    modelId: "qwen3.8-flash",
+    displayName: "Qwen3.8 Flash",
+    status: "available",
+    defaultReasoningEffort: "high",
+  }),
+  qwenModel({
+    modelId: "qwen3.7-flash",
+    displayName: "Qwen3.7 Flash",
+    status: "available",
+    defaultReasoningEffort: "high",
+  }),
+  qwenModel({
     modelId: "qwen3.7-max",
     displayName: "Qwen3.7 Max",
-    status: "latest",
+    status: "available",
     defaultReasoningEffort: "high",
     textOnly: true,
   }),

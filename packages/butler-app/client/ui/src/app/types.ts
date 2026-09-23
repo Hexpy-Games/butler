@@ -150,6 +150,8 @@ export interface ModelCatalogView {
 }
 
 export interface LocalModelDiscoveryRequest {
+  api_key?: string;
+  model_ref?: string;
   provider_id: "local";
   api_type: "openai_compatible";
   platform: "llama_cpp" | "ollama" | "lm_studio" | "custom";

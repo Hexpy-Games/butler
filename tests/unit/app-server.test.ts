@@ -14465,3 +14465,53 @@ const fakeProvider: ModelProviderAdapter = {
     return { text: "unused" };
   },
 };
+
+
+test("Custom registration authenticates discovery and execution without exposing credentials", async () => {
+  const { readLocalModelConfigs } = await import("../../packages/butler-agent/src/integrations/providers/local/models.ts");
+  const { runPromptText } = await import("../../packages/butler-agent/src/integrations/providers/provider.ts");
+  const calls: Array<{ path: string; authorization: string | null; model?: string }> = [];
+  const custom = Bun.serve({ port: 0, async fetch(request) {
+    const path = new URL(request.url).pathname;
+    const body = request.method === "POST" ? await request.json() as { model?: string } : {};
+    calls.push({ path, authorization: request.headers.get("authorization"), model: body.model });
+    if (path === "/gateway/v4/models" || path === "/changed/v1/models") return Response.json({ data: [{ id: "vendor/model", context_length: 32768 }] });
+    if (path === "/gateway/v4/chat/completions") return Response.json({ choices: [{ message: { role: "assistant", content: "custom-ok" } }] });
+    return new Response("not found", { status: 404 });
+  } });
+  const server = createAppServer({ dbPath: join(tempDir, "app.sqlite"), butlerData: tempDir, port: 0 });
+  const input = { provider_id: "local", api_type: "openai_compatible", platform: "custom",
+    server_url: `${custom.url}gateway/v4`, model_id: "vendor/model", context_window_tokens: 32768, source: "manual" };
+  try {
+    const created = await postJson(`${server.url}model-catalog/local-models`, { ...input, api_key: "custom-test-secret" });
+    const ref = created.data.model.model_ref;
+    expect(created.data.model).toMatchObject({ provider_label: "Custom", model_id: "vendor/model" });
+    expect(JSON.stringify(created)).not.toContain("custom-test-secret");
+    expect(readFileSync(join(tempDir, "butler.config.json"), "utf8")).not.toContain("custom-test-secret");
+    expect(statSync(join(tempDir, "auth/custom-model-credentials.json")).mode & 0o777).toBe(0o600);
+    const found = await postJson(`${server.url}model-catalog/local/discover`, { ...input, model_ref: ref });
+    expect(found.data.models[0].model_id).toBe("vendor/model");
+    expect(JSON.stringify(found)).not.toContain("custom-test-secret");
+    expect(await runPromptText({ model: ref, prompt: "hello" })).toBe("custom-ok");
+    expect(calls).toEqual([
+      { path: "/gateway/v4/models", authorization: "Bearer custom-test-secret", model: undefined },
+      { path: "/gateway/v4/chat/completions", authorization: "Bearer custom-test-secret", model: "vendor/model" },
+    ]);
+    const endpoint = `${server.url}model-catalog/local-models/${encodeURIComponent(ref)}`;
+    await patchJson(endpoint, input);
+    expect(readLocalModelConfigs(tempDir)[0]?.api_key).toBe("custom-test-secret");
+    await patchJson(endpoint, { ...input, api_key: "replacement" });
+    expect(readLocalModelConfigs(tempDir)[0]?.api_key).toBe("replacement");
+    await patchJson(endpoint, { ...input, api_key: "" });
+    expect(readLocalModelConfigs(tempDir)[0]?.api_key).toBeUndefined();
+    await patchJson(endpoint, { ...input, api_key: "replacement" });
+    const other = await postJson(`${server.url}model-catalog/local-models`, { ...input, server_url: `${custom.url}other/v1`, api_key: "other-secret" });
+    expect(other.data.model.model_ref).not.toBe(ref);
+    expect(readLocalModelConfigs(tempDir)).toHaveLength(2);
+    await postJson(`${server.url}model-catalog/local/discover`, { ...input, model_ref: ref, server_url: `${custom.url}changed/v1` });
+    expect(calls.at(-1)?.authorization).toBeNull();
+    await patchJson(endpoint, { ...input, server_url: `${custom.url}changed/v1` });
+    expect(readLocalModelConfigs(tempDir).find((model) => model.model_ref === ref)?.api_key).toBeUndefined();
+    expect((await getJson(`${server.url}model-catalog`)).data.models.some((model: { model_ref: string }) => model.model_ref === ref)).toBe(true);
+  } finally { server.stop(); custom.stop(true); }
+});

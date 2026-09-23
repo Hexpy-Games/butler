@@ -2,7 +2,7 @@ import { localModelConfigToMetadata } from "../../packages/butler-agent/src/inte
 import { runLocalPromptTextWithConfig } from "../../packages/butler-agent/src/integrations/providers/local/execution.ts";
 import { localReasoningRequestParams } from "../../packages/butler-agent/src/integrations/providers/local/text-protocol.ts";
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAnthropicModelRound } from "../../packages/butler-agent/src/integrations/providers/anthropic/model-round.ts";
@@ -328,4 +328,15 @@ test("Qwen native effort catalog maps each selection to both actual request path
   expect(localReasoningRequestParams({ ...localConfig(), platform: "llama_cpp",
     reasoning_budget_ratio: 0.25 }, "high")).toEqual({ thinking_budget_tokens: 128 });
   expect(localReasoningRequestParams(localConfig(), "low")).toEqual({});
+});
+
+
+test("legacy local registrations retain their saved prefixed API endpoint", () => {
+  const data = temporaryButlerData();
+  upsertLocalModelConfig({ serverUrl: "https://example.test/legacy/v1", modelId: "old-model", contextWindowTokens: 16384 }, data);
+  const path = join(data, "butler.config.json");
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  config.models.local[0].server_url = "https://example.test/legacy";
+  writeFileSync(path, JSON.stringify(config));
+  expect(readLocalModelConfigs(data)[0]?.api_base_url).toBe("https://example.test/legacy/v1");
 });

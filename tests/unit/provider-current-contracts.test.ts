@@ -199,3 +199,29 @@ test("Z.AI API honors only its own explicit base URL", async () => {
   await expect(runPromptText({ model: "zai-api/glm-5.2", prompt: "custom" })).resolves.toBe("custom");
   expect(seenUrl).toBe("https://zai-api.example.test/v1/chat/completions");
 });
+
+for (const [modelId, effort] of [["claude-opus-5-5", "medium"], ["claude-fable-5-1", "high"]] as const) {
+  test(`${modelId} sends adaptive thinking through the registered provider`, async () => {
+    register("anthropic", modelId);
+    let body: Record<string, unknown> = {};
+    globalThis.fetch = (async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ content: [{ type: "text", text: "ok" }] });
+    }) as typeof fetch;
+    expect(await runPromptText({ model: `anthropic/${modelId}`, prompt: "hi", reasoningEffort: effort })).toBe("ok");
+    expect(body).toMatchObject({ model: modelId, thinking: { type: "adaptive" }, output_config: { effort } });
+  });
+}
+
+for (const provider of ["zai", "zai-api", "opencode-go"] as const) {
+  test(`${provider} GLM-5.3 forwards supported reasoning effort`, async () => {
+    register(provider, "glm-5.3");
+    let body: Record<string, unknown> = {};
+    globalThis.fetch = (async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] });
+    }) as typeof fetch;
+    expect(await runPromptText({ model: `${provider}/glm-5.3`, prompt: "hi", reasoningEffort: "max" })).toBe("ok");
+    expect(body).toMatchObject({ model: "glm-5.3", reasoning_effort: "max" });
+  });
+}

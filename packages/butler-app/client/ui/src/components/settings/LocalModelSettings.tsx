@@ -30,6 +30,8 @@ export function LocalModelSettings({
 
   const state = useLocalModelState();
   const {
+    apiKey,
+    setApiKey,
     platform,
     setPlatform,
     serverUrl,
@@ -63,6 +65,7 @@ export function LocalModelSettings({
   const { hasUnsavedChanges, clearLeaveGuard } = useLocalModelUnsavedGuard({
     initialEditModel,
     isEditing,
+    apiKey,
     platform,
     serverUrl,
     modelId: manualModelId,
@@ -71,6 +74,7 @@ export function LocalModelSettings({
   });
 
   const { discover, register, deleteModel } = useLocalModelOperations({
+    apiKey,
     platform,
     serverUrl,
     manualModelId,
@@ -106,11 +110,11 @@ export function LocalModelSettings({
     setManualContext(String(model.context_window_tokens));
   }
 
-  const showModelInfo = isEditing || Boolean(discovery);
-
   return (
     <Stack gap="md">
       <LocalModelApiSection
+        apiKey={apiKey}
+        setApiKey={setApiKey}
         platform={platform}
         setPlatform={setPlatform}
         serverUrl={serverUrl}
@@ -122,25 +126,23 @@ export function LocalModelSettings({
         onDiscover={discover}
       />
 
-      {showModelInfo ? (
-        <LocalModelInfoSection
-          discovery={discovery}
-          selectedModelRef={selectedModelRef}
-          setSelectedModelRef={chooseDiscoveredModel}
-          manualModelId={manualModelId}
-          setManualModelId={setManualModelId}
-          manualDisplayName={manualDisplayName}
-          setManualDisplayName={setManualDisplayName}
-          manualContext={manualContext}
-          setManualContext={setManualContext}
-          status={status}
-          hasUnsavedChanges={hasUnsavedChanges}
-          canRegister={canRegister}
-          registering={busy === "register"}
-          isEditing={isEditing}
-          onRegister={register}
-        />
-      ) : null}
+      <LocalModelInfoSection
+        discovery={discovery}
+        selectedModelRef={selectedModelRef}
+        setSelectedModelRef={chooseDiscoveredModel}
+        manualModelId={manualModelId}
+        setManualModelId={setManualModelId}
+        manualDisplayName={manualDisplayName}
+        setManualDisplayName={setManualDisplayName}
+        manualContext={manualContext}
+        setManualContext={setManualContext}
+        status={status}
+        hasUnsavedChanges={hasUnsavedChanges}
+        canRegister={canRegister}
+        registering={busy === "register"}
+        isEditing={isEditing}
+        onRegister={register}
+      />
 
       {!hideRegisteredList && registeredLocalModels.length > 0 && (
         <LocalModelRegisteredList
