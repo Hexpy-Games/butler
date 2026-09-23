@@ -14,6 +14,7 @@ import { SpaceGlyph, SpaceIdentity } from "./SpaceIdentity";
 import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
+import { useSpaceDrag } from "@/app/space/drag";
 import styles from "./SpaceSidebar.module.css";
 import interaction from "./SpaceInteractions.module.css";
 
@@ -97,10 +98,18 @@ export const SpaceRow = memo(function SpaceRow({
               />
             ))}
             {children.length > limit && (
-              <SidebarSessionLoadMore
-                remainingCount={children.length - limit}
-                onClick={() => setVisibleCount(limit + 5)}
-              />
+              <div onDragOver={(event) => {
+                if (!useSpaceDrag.getState().source) return;
+                event.preventDefault();
+                event.stopPropagation();
+                useSpaceDrag.getState().over(null);
+                setVisibleCount((count) => Math.min(count + 5, children.length));
+              }}>
+                <SidebarSessionLoadMore
+                  remainingCount={children.length - limit}
+                  onClick={() => setVisibleCount(limit + 5)}
+                />
+              </div>
             )}
           </CollapsibleNavGroup>
         ) : (

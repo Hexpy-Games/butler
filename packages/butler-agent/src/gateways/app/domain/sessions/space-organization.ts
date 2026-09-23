@@ -187,7 +187,7 @@ export class AppSpaceOrganization {
         `g:${id}`,
         id,
         parentKey,
-        siblings.length ? siblings.at(-1)!.position + 1 : 0,
+        siblings.length ? siblings[0]!.position - 1 : 0,
       );
     return id;
   }

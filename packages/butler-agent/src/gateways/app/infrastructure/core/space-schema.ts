@@ -31,9 +31,10 @@ export function migrateSpaceSchema(db: Database): void {
       CREATE INDEX IF NOT EXISTS app_space_topic_lookup ON app_space_topics(topic_normalized);
       CREATE TABLE IF NOT EXISTS app_space_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1),revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO app_space_state VALUES(1,0);
-      CREATE TRIGGER IF NOT EXISTS space_project_created AFTER INSERT ON projects BEGIN
+      DROP TRIGGER IF EXISTS space_project_created;
+      CREATE TRIGGER space_project_created AFTER INSERT ON projects BEGIN
         INSERT INTO app_space_nodes(node_key,project_id,parent_key,position)
-        VALUES('p:'||NEW.id,NEW.id,NULL,(SELECT COALESCE(MAX(position),-1)+1 FROM app_space_nodes WHERE parent_key IS NULL));
+        VALUES('p:'||NEW.id,NEW.id,NULL,(SELECT COALESCE(MIN(position),1)-1 FROM app_space_nodes WHERE parent_key IS NULL));
       END;
       DROP TRIGGER IF EXISTS space_session_created;
       CREATE TRIGGER space_session_created AFTER INSERT ON chats WHEN NEW.id!='general' BEGIN

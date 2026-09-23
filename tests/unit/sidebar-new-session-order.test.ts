@@ -6,7 +6,7 @@ import { createTestAppServer } from "../../packages/butler-agent/src/test-suppor
 import { Database } from "bun:sqlite";
 import { AppSpaceOrganization } from "../../packages/butler-agent/src/gateways/app/domain/sessions/space-organization.ts";
 
-test("new root/project sessions and smart grouping prepend without reordering siblings, including restart", () => {
+test("new projects, groups, sessions and smart grouping prepend without reordering siblings, including restart", () => {
   const dir = mkdtempSync(join(tmpdir(), "sidebar-new-session-"));
   const options = { dbPath: join(dir, "app.sqlite"), butlerData: dir, port: 0 };
   let server = createTestAppServer(options);
@@ -17,9 +17,14 @@ test("new root/project sessions and smart grouping prepend without reordering si
     const b = server.store.createSession({ kind: "chat", title: "Second" }).session;
     expect(children(null)).toEqual([b.id, a.id]);
     const project = server.store.createProject({ source: "scratch", display_name: "Project" }).project;
+    expect(children(null)[0]).toBe(project.id);
+    const group = server.store.mutateSpace({ action: "create", title: "Group", parentKey: null, expectedRevision: server.store.listNavigation().space.revision });
+    expect(children(null)[0]).toBe(group.groupId!);
+    const nested = server.store.mutateSpace({ action: "create", title: "Nested", parentKey: `p:${project.id}`, expectedRevision: server.store.listNavigation().space.revision });
+    expect(children(`p:${project.id}`)[0]).toBe(nested.groupId!);
     const p1 = server.store.createSession({ kind: "project", project_id: project.id }).session;
     const p2 = server.store.createSession({ kind: "project", project_id: project.id }).session;
-    expect(children(`p:${project.id}`)).toEqual([p2.id, p1.id]);
+    expect(children(`p:${project.id}`)).toEqual([p2.id, p1.id, nested.groupId!]);
     const before = children(null);
     server.stop(); server = createTestAppServer(options);
     expect(children(null)).toEqual(before);

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./SidebarShell.module.css";
 import { useStickyClipping } from "./hooks/useStickyClipping";
@@ -14,6 +14,7 @@ export interface SidebarShellProps {
   ariaLabel?: string;
   className?: string;
   scrollFade?: boolean;
+  scrollRef?: Ref<HTMLDivElement>;
 }
 
 export function SidebarShell({
@@ -27,6 +28,7 @@ export function SidebarShell({
   ariaLabel,
   className,
   scrollFade = true,
+  scrollRef,
 }: SidebarShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -67,6 +69,7 @@ export function SidebarShell({
           data-test-class="sidebar-scroll-frame"
         >
           <div
+            ref={scrollRef}
             className={cn(styles.scroll, !scrollFade && styles.unmasked)}
             data-test-class="sidebar-scroll"
           >
