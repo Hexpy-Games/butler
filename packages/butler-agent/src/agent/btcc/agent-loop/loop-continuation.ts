@@ -3,7 +3,7 @@ import type {
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 import type { StableProviderCachePrefixContract } from "../ports/model-round.ts";
-import type { GuidedActivitySnapshot } from "../projection/projection.ts";
+import type { GuidedActivitySnapshot } from "../projection/index.ts";
 
 /** Private cursor at an accepted tool batch. Pending is not a provider result. */
 export type AuthorityLoopContinuation = {

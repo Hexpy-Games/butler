@@ -17,9 +17,15 @@ export type {
   DelegationPacket,
   SessionRelation,
   StewardResultEnvelope,
+  SubsessionDelegationService,
   SubsessionDelegationStore,
 } from "./subsessions/index.ts";
+export { subsessionResultId } from "./subsessions/index.ts";
 export {
   projectBtccFinalContentSummary,
   projectBtccFinalReport,
 } from "./turn/final-content-summary.ts";
+export {
+  projectLedgerPlanFromUnknown,
+  type ProjectLedgerPlan,
+} from "./project-plan.ts";
