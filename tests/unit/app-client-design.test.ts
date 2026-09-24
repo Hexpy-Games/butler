@@ -365,7 +365,9 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).toContain(".scroll");
   expect(sidebarCss).toContain(".scrollFrame");
   expect(sidebarCss).toContain("--sidebar-scrollbar-offset: 10px");
-  expect(sidebarCss).toContain("--sidebar-scroll-fade-size: 14px");
+  expect(sidebarCss).toContain(
+    "--sidebar-scroll-fade-size: var(--scroll-fade-size)",
+  );
   expect(sidebarCss).toContain("--sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px)");
   expect(sidebarCss).toContain(
     "width: calc(100% + var(--sidebar-scrollbar-offset))",
@@ -381,12 +383,14 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarCss).toContain("scrollbar-width: thin");
   expect(sidebarCss).not.toContain("scrollbar-gutter: stable");
   expect(sidebarCss).not.toContain("padding-right: 12px");
-  expect(sidebarCss).toContain("mask-image");
-  expect(sidebarCss).toContain("mask-size");
+  // Edge fades come from the shared scroll-fade primitive, not a copied mask.
+  expect(sidebarCss).not.toContain("mask-image");
+  expect(sidebarCss).toContain(
+    "--scroll-fade-gutter: var(--sidebar-scrollbar-offset)",
+  );
   expect(sidebarCss).toContain(
     "padding-block: var(--sidebar-scroll-edge-padding)",
   );
-  expect(sidebarCss).toContain("var(--sidebar-scrollbar-offset) 100%");
   expect(sidebarCss).not.toContain("margin-right: -");
   expect(
     read("packages/butler-app/client/ui/src/components/space/SpaceSidebar.tsx"),

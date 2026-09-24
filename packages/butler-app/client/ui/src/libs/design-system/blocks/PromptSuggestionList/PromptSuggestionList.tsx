@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { PromptFluidBackground } from "./PromptFluidBackground";
 import {
   PromptFluidPaletteControl,
@@ -57,6 +58,7 @@ export function PromptSuggestionList({
     [fluidPaletteId, fluidPaletteOptions],
   );
   const titleIconState = titleIcon ? "true" : undefined;
+  const railFadeRef = useScrollEdges("x");
 
   return (
     <section
@@ -125,6 +127,7 @@ export function PromptSuggestionList({
         ) : null}
       </header>
       <div
+        ref={railFadeRef}
         className={styles.railViewport}
         data-test-class="new-chat-suggestion-rail"
       >

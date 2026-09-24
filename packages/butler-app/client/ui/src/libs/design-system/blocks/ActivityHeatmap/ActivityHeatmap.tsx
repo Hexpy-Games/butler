@@ -1,4 +1,5 @@
 import { Button } from "../../components/Button";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./ActivityHeatmap.module.css";
 
 export interface ActivityHeatmapDay {
@@ -21,6 +22,7 @@ export interface ActivityHeatmapProps {
 
 export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabels,
   selectedId, onSelect, legend }: ActivityHeatmapProps) {
+  const viewportFadeRef = useScrollEdges("x");
   const offset = Math.max(0, Math.min(6, startWeekday));
   const weeks = Math.ceil((offset + days.length) / 7);
   const months: Array<{ label: string; start: number; span: number }> = [];
@@ -31,7 +33,7 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
     else months.push({ label, start: week + 1, span: 1 });
   }
   return <div className={styles.root} aria-label={ariaLabel}>
-  <div className={styles.viewport}>
+  <div ref={viewportFadeRef} className={styles.viewport}>
     <div className={styles.calendar}>
     {days.some((day) => day.monthLabel) && <>
       {weekdayLabels && <span />}

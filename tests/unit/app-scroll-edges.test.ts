@@ -147,3 +147,29 @@ test("scroll-fade stylesheet drives per-edge masks from the edge attributes", ()
   expect(css).toContain("--scroll-fade-gutter");
   expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^}]*transition/u);
 });
+
+test("horizontal scrollers and legacy vertical masks use the shared scroll-fade primitive", () => {
+  const ui = "packages/butler-app/client/ui/src";
+  const horizontal = [
+    "libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.tsx",
+    "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectPopover.tsx",
+    "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectFooter.tsx",
+    "libs/design-system/blocks/InspectorShell/InspectorShell.tsx",
+    "libs/design-system/components/Tabs/Tabs.tsx",
+    "libs/design-system/blocks/ChangedLineDiff/ChangedLineDiff.tsx",
+    "libs/design-system/blocks/ActivityHeatmap/ActivityHeatmap.tsx",
+    "components/management/ProjectWorkBoard.tsx",
+    "components/conversation/MarkdownCodeBlock.tsx",
+    "components/conversation/MessageMarkdown.tsx",
+  ];
+  for (const file of horizontal) {
+    expect(`${file}: ${readFileSync(`${ui}/${file}`, "utf8").includes('useScrollEdges("x")')}`).toBe(`${file}: true`);
+  }
+  for (const file of [
+    "libs/design-system/blocks/ScrollArea/ScrollArea.module.css",
+    "libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
+    "libs/design-system/blocks/ConversationShell/ConversationShell.module.css",
+  ]) {
+    expect(`${file}: ${/mask-image/u.test(readFileSync(`${ui}/${file}`, "utf8"))}`).toBe(`${file}: false`);
+  }
+});

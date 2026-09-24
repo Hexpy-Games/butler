@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { cn } from "../../lib/utils";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { ChevronDownIcon } from "../../components/Icons";
 import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
@@ -55,16 +57,17 @@ export function ConversationScroll({
   virtualized?: boolean;
   scrollRef?: Ref<HTMLDivElement>;
 }) {
+  const edgesRef = useScrollEdges("y", masked);
+  const ref = useComposedRefs(scrollRef, edgesRef);
   return (
     <div
       className={cn(
         styles.scroll,
-        !masked && styles.unmaskedScroll,
         !scrollable && styles.lockedScroll,
         virtualized && styles.virtualScroll,
       )}
       data-test-class={`conversation-scroll${virtualized ? " message-virtual-scroll" : ""}`}
-      ref={scrollRef}
+      ref={ref}
     >
       {children}
     </div>

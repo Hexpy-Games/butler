@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
+import { useComposedRefs } from "../../lib/composeRefs";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./SidebarShell.module.css";
 import { useStickyClipping } from "./hooks/useStickyClipping";
 
@@ -31,6 +33,8 @@ export function SidebarShell({
   scrollRef,
 }: SidebarShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const edgesRef = useScrollEdges("y", scrollFade);
+  const composedScrollRef = useComposedRefs(scrollRef, edgesRef);
   const stickyRef = useRef<HTMLDivElement>(null);
   useStickyClipping(contentRef, Boolean(stickyHeader));
   useLayoutEffect(() => {
@@ -69,8 +73,8 @@ export function SidebarShell({
           data-test-class="sidebar-scroll-frame"
         >
           <div
-            ref={scrollRef}
-            className={cn(styles.scroll, !scrollFade && styles.unmasked)}
+            ref={composedScrollRef}
+            className={styles.scroll}
             data-test-class="sidebar-scroll"
           >
             <div

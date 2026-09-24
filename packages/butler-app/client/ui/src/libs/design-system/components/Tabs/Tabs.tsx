@@ -1,6 +1,7 @@
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import type * as React from "react";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./Tabs.module.css";
 
 type TabsListVariant = "default" | "line";
@@ -40,8 +41,10 @@ function TabsList({
   variant?: TabsListVariant;
   stretch?: boolean;
 }) {
+  const listFadeRef = useScrollEdges("x");
   return (
     <TabsPrimitive.List
+      ref={listFadeRef}
       data-slot="tabs-list"
       data-variant={variant}
       className={cn(

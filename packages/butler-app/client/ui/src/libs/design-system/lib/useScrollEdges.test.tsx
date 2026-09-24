@@ -4,6 +4,8 @@ import { JSDOM } from "jsdom";
 import React, { act, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { ScrollArea } from "../blocks/ScrollArea";
+import { SidebarShell } from "../blocks/SidebarShell";
+import { ConversationScroll } from "../blocks/ConversationShell";
 
 async function renderInDom(node: React.ReactNode) {
   const dom = new JSDOM('<div id="root"></div>');
@@ -41,3 +43,25 @@ test("ScrollArea opts its scroller into the shared fade on the requested axis", 
   }
 });
 
+test("shell fade-disable props keep scrollers unmasked", async () => {
+  const view = await renderInDom(<>
+    <SidebarShell scrollFade={false}>rows</SidebarShell>
+    <ConversationScroll masked={false}>messages</ConversationScroll>
+  </>);
+  try {
+    expect(view.document.querySelector<HTMLElement>('[data-test-class="sidebar-scroll"]')!.dataset.scrollFade).toBeUndefined();
+    expect(view.document.querySelector<HTMLElement>('[data-test-class="conversation-scroll"]')!.dataset.scrollFade).toBeUndefined();
+  } finally {
+    await view.cleanup();
+  }
+  const masked = await renderInDom(<>
+    <SidebarShell>rows</SidebarShell>
+    <ConversationScroll>messages</ConversationScroll>
+  </>);
+  try {
+    expect(masked.document.querySelector<HTMLElement>('[data-test-class="sidebar-scroll"]')!.dataset.scrollFade).toBe("y");
+    expect(masked.document.querySelector<HTMLElement>('[data-test-class="conversation-scroll"]')!.dataset.scrollFade).toBe("y");
+  } finally {
+    await masked.cleanup();
+  }
+});

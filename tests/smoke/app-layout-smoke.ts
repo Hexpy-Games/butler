@@ -3397,6 +3397,44 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
+  const railFade = page.locator(testClass("new-chat-suggestion-rail")).first();
+  const railFadeAt = async (position: "start" | "mid" | "end") =>
+    railFade.evaluate(async (element, where) => {
+      const grid = element.firstElementChild as HTMLElement | null;
+      if (grid) grid.style.minWidth = `${element.clientWidth * 3}px`;
+      const max = element.scrollWidth - element.clientWidth;
+      element.scrollLeft = where === "start" ? 0 : where === "end" ? max : max / 2;
+      element.dispatchEvent(new Event("scroll"));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 320));
+      const style = getComputedStyle(element);
+      return {
+        axis: element.dataset.scrollFade,
+        overflowing: element.dataset.overflowing,
+        start: style.getPropertyValue("--scroll-fade-start").trim(),
+        end: style.getPropertyValue("--scroll-fade-end").trim(),
+        mask: style.maskImage,
+      };
+    }, position);
+  const railStart = await railFadeAt("start");
+  const railMid = await railFadeAt("mid");
+  const railEnd = await railFadeAt("end");
+  assert(
+    railStart.axis === "x" &&
+      railStart.overflowing === "true" &&
+      railStart.mask !== "none" &&
+      railStart.start === "0px" &&
+      railStart.end === "14px" &&
+      railMid.start === "14px" &&
+      railMid.end === "14px" &&
+      railEnd.start === "14px" &&
+      railEnd.end === "0px",
+    `suggestion rail fade should follow scroll position: ${JSON.stringify({ railStart, railMid, railEnd })}`,
+  );
+  await railFade.evaluate((element) => {
+    const grid = element.firstElementChild as HTMLElement | null;
+    if (grid) grid.style.minWidth = "";
+    element.scrollLeft = 0;
+  });
   const desktopComposer = page.locator(testClass("composer-card"));
   const desktopPreview = desktopComposer.locator(
     '[data-slot="composer-compact-preview"]',

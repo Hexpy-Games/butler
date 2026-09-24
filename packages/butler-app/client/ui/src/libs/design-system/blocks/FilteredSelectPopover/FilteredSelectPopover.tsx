@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { ScrollArea } from "../ScrollArea";
 import { FilteredSelectFooter } from "./FilteredSelectFooter";
 import { FilteredSelectItemButton } from "./FilteredSelectItemButton";
@@ -72,6 +73,7 @@ export function FilteredSelectPopover({
   width = "default",
   resultsMaxRows,
 }: FilteredSelectPopoverProps) {
+  const filtersFadeRef = useScrollEdges("x");
   const visibleGroups = groups.filter((group) => group.items.length > 0);
   const resultsStyle = resultsMaxRows
     ? ({
@@ -95,7 +97,11 @@ export function FilteredSelectPopover({
         value={searchValue}
         onChange={onSearchChange}
       />
-      <div className={styles.filters} data-slot="filtered-select-filters">
+      <div
+        ref={filtersFadeRef}
+        className={styles.filters}
+        data-slot="filtered-select-filters"
+      >
         {filters.map((filter) => (
           <Button
             key={filter.id}

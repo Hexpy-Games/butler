@@ -1,6 +1,6 @@
 .shell {
   --sidebar-scrollbar-offset: 10px;
-  --sidebar-scroll-fade-size: 14px;
+  --sidebar-scroll-fade-size: var(--scroll-fade-size);
   --sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px);
 
   display: flex;
@@ -96,38 +96,7 @@
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
   scrollbar-width: thin;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--sidebar-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--sidebar-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  -webkit-mask-position:
-    0 0,
-    right top;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size:
-    calc(100% - var(--sidebar-scrollbar-offset)) 100%,
-    var(--sidebar-scrollbar-offset) 100%;
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0,
-      var(--text-primary) var(--sidebar-scroll-fade-size),
-      var(--text-primary) calc(100% - var(--sidebar-scroll-fade-size)),
-      transparent 100%
-    ),
-    linear-gradient(var(--text-primary), var(--text-primary));
-  mask-position:
-    0 0,
-    right top;
-  mask-repeat: no-repeat;
-  mask-size:
-    calc(100% - var(--sidebar-scrollbar-offset)) 100%,
-    var(--sidebar-scrollbar-offset) 100%;
+  --scroll-fade-gutter: var(--sidebar-scrollbar-offset);
 }
 
 .scrollContent {
@@ -140,11 +109,6 @@
   flex-direction: column;
   gap: 18px;
   padding-block: var(--sidebar-scroll-edge-padding);
-}
-
-.scroll.unmasked {
-  -webkit-mask-image: none;
-  mask-image: none;
 }
 
 .scrollContent[data-sticky-header] {

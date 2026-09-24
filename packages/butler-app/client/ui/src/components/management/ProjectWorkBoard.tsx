@@ -3,7 +3,7 @@ import { useButlerStore } from "@/app/store.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { planLanes } from "@/app/projectDocuments.ts";
 import { useProjectBoard } from "@/hooks/useProjectBoard.ts";
-import { Button, Notice, Section, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { Button, Notice, Section, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Tabs, TabsList, TabsTrigger, Typo, useScrollEdges } from "@/butler-ds";
 import { ProjectBoardCard } from "./ProjectBoardCard.tsx";
 import styles from "./ProjectWorkBoard.module.css";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
@@ -14,6 +14,7 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
   onSelect: (document: ProjectDashboardDocument) => void;
 }) {
   useAppLocale();
+  const boardFadeRef = useScrollEdges("x");
   const disconnected = useButlerStore((state) => state.liveConnectionLost);
   const kind = useProjectDashboardState((state) => state.projects[projectId]?.boardKind ?? "work");
   const parent = useProjectDashboardState((state) => state.projects[projectId]?.boardParent);
@@ -54,7 +55,7 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
     {page?.status === "unavailable" && <Typo.Body>{page.reason === "unbound" ? copy.unbound : copy.unavailable}</Typo.Body>}
     {loading && !page && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
     {page?.status === "ready" && <>
-      <div className={styles.board} data-test-class="project-work-board">
+      <div ref={boardFadeRef} className={styles.board} data-test-class="project-work-board">
         {lanes.map((lane) => {
           const board = boards[lane.id];
           const lanePage = board.page?.status === "ready" ? board.page : null;

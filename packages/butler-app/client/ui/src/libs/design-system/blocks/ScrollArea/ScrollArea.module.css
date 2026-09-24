@@ -30,6 +30,7 @@
   scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
     transparent;
   scrollbar-width: thin;
+  --scroll-fade-size: var(--scroll-area-fade-size);
   --scroll-fade-gutter: var(--scroll-area-scrollbar-offset);
   --scroll-fade-guard: var(--scroll-area-fade-guard);
 }
