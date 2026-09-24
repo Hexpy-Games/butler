@@ -326,3 +326,50 @@ describe("design-system control and menu sizing", () => {
     expect(lintDesignSystemRules("other.module.css", sample)).toEqual([]);
   });
 });
+
+describe("design-system syntax highlight tokens", () => {
+  const names = [
+    "--syntax-keyword",
+    "--syntax-string",
+    "--syntax-comment",
+    "--syntax-number",
+    "--syntax-title",
+    "--syntax-type",
+    "--syntax-variable",
+    "--syntax-meta",
+    "--syntax-addition",
+    "--syntax-deletion",
+  ];
+
+  test("syntax tokens exist in :root, light, and dark themes", () => {
+    const root = rootTokens();
+    const light = themeTokens(".theme-light");
+    const dark = themeTokens(".theme-dark");
+    for (const name of names) {
+      expect(root.get(name)).toBeDefined();
+      expect(light.get(name)).toBe(root.get(name));
+      expect(dark.get(name)).toBeDefined();
+      expect(dark.get(name)).not.toBe(light.get(name));
+    }
+  });
+
+  test("syntax colors keep readable contrast on the code surface", () => {
+    for (const [theme, surface] of [
+      [themeTokens(".theme-light"), "#ffffff"],
+      [themeTokens(".theme-dark"), resolveToken("--color-surface-base", themeTokens(".theme-dark"))],
+    ] as const) {
+      for (const name of names) {
+        expect(contrast(resolveToken(name, theme), surface)).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test("code block highlight classes consume only syntax tokens", () => {
+    const css = read(`${uiSrc}/components/conversation/MarkdownCodeBlock.module.css`);
+    expect(css).toContain('[data-syntax="keyword"]');
+    expect(css).not.toContain(":global(");
+    const colors = [...css.matchAll(/color:\s*([^;]+);/gu)].map((match) => match[1]);
+    const syntaxColors = colors.filter((value) => value.includes("--syntax-"));
+    expect(syntaxColors.length).toBeGreaterThanOrEqual(names.length);
+  });
+});

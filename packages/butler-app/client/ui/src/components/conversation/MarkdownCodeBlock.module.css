@@ -37,3 +37,44 @@
   border-radius: 0;
   background: transparent;
 }
+
+.pre [data-syntax="keyword"] {
+  color: var(--syntax-keyword);
+}
+
+.pre [data-syntax="string"] {
+  color: var(--syntax-string);
+}
+
+.pre [data-syntax="comment"] {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.pre [data-syntax="number"] {
+  color: var(--syntax-number);
+}
+
+.pre [data-syntax="title"] {
+  color: var(--syntax-title);
+}
+
+.pre [data-syntax="type"] {
+  color: var(--syntax-type);
+}
+
+.pre [data-syntax="variable"] {
+  color: var(--syntax-variable);
+}
+
+.pre [data-syntax="meta"] {
+  color: var(--syntax-meta);
+}
+
+.pre [data-syntax="addition"] {
+  color: var(--syntax-addition);
+}
+
+.pre [data-syntax="deletion"] {
+  color: var(--syntax-deletion);
+}

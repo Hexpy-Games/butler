@@ -153,3 +153,47 @@ test("markdown code blocks render an in-block header with language and copy", as
   expect(container.querySelector('[data-test-class="code-block-actions"]')).toBeNull();
   await act(async () => root.unmount());
 });
+
+test("markdown code blocks load syntax highlighting for known languages", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  const root = createRoot(container);
+  const message: MessageRecord = {
+    id: "assistant-highlight",
+    role: "assistant",
+    text: "```ts\nconst ok: number = 1; // done\n```\n\n```unknownlang\nconst raw = 1;\n```",
+    status: "delivered",
+  };
+
+  await act(async () => {
+    root.render(
+      <MessageContent
+        message={message}
+        copied={false}
+        footerMeta={null}
+        onCopyAssistantMessage={() => undefined}
+      />,
+    );
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  });
+
+  const [typed, unknown] = [...container.querySelectorAll("pre")];
+  const keyword = typed!.querySelector('[data-syntax="keyword"]');
+  expect(keyword?.textContent).toBe("const");
+  expect(typed!.querySelector('[data-syntax="comment"]')?.textContent).toBe("// done");
+  expect(typed!.textContent).toBe("const ok: number = 1; // done\n");
+  expect(unknown!.querySelector("[data-syntax]")).toBeNull();
+  expect(unknown!.textContent).toBe("const raw = 1;\n");
+  await act(async () => root.unmount());
+});

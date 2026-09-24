@@ -418,6 +418,18 @@
   --input: var(--line);
   --ring: var(--focus-ring-color);
   --radius: var(--radius-control);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
 }
 
 @supports (height: 100dvh) {
@@ -602,6 +614,18 @@
   --secondary: rgba(255, 255, 255, 0.08);
   --muted: rgba(255, 255, 255, 0.06);
   --color-mix-light: var(--neutral-white);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-03);
+  --syntax-string: var(--green-03);
+  --syntax-comment: var(--grayscale-06);
+  --syntax-number: var(--amber-04);
+  --syntax-title: var(--blue-02);
+  --syntax-type: var(--amber-03);
+  --syntax-variable: var(--red-04);
+  --syntax-meta: var(--grayscale-05);
+  --syntax-addition: var(--green-04);
+  --syntax-deletion: var(--red-05);
 }
 
 .theme-light {
@@ -689,6 +713,18 @@
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
+
+  /* Syntax highlighting (code blocks) */
+  --syntax-keyword: var(--blue-08);
+  --syntax-string: var(--green-08);
+  --syntax-comment: var(--grayscale-07);
+  --syntax-number: var(--amber-09);
+  --syntax-title: var(--blue-07);
+  --syntax-type: var(--amber-10);
+  --syntax-variable: var(--red-07);
+  --syntax-meta: var(--grayscale-08);
+  --syntax-addition: var(--green-08);
+  --syntax-deletion: var(--red-07);
 }
 
 .sidebar-solid {

@@ -3,6 +3,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { MessageFooter, useScrollEdges } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { CopyTextButton } from "./CopyTextButton";
+import { useSyntaxHighlight } from "./useSyntaxHighlight";
 import styles from "./MarkdownCodeBlock.module.css";
 
 type CodeChildProps = { children?: ReactNode; className?: string };
@@ -23,6 +24,11 @@ export function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
         ? /(?:^|\s)language-([\w+#.-]+)/u.exec(child.props.className ?? "")?.[1]
         : undefined)
     .find(Boolean);
+  const highlighted = useSyntaxHighlight(code, language);
+  const codeElement = codeChildren.find((child) => isValidElement<CodeChildProps>(child));
+  const body = highlighted && isValidElement<CodeChildProps>(codeElement)
+    ? <code className={codeElement.props.className}>{highlighted}</code>
+    : children;
   return (
     <div className={styles.block} data-test-class="code-block">
       <div className={styles.header} data-test-class="code-block-header">
@@ -31,7 +37,7 @@ export function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
           <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
         </MessageFooter>
       </div>
-      <pre ref={preFadeRef} className={styles.pre}>{children}</pre>
+      <pre ref={preFadeRef} className={styles.pre}>{body}</pre>
     </div>
   );
 }
