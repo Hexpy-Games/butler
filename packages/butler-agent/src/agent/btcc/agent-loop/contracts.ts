@@ -113,6 +113,9 @@ export interface BtccAgentLoopToolError {
   code: string;
   message: string;
   field?: string;
+  /** Model-facing fact: how often this identical failure occurred in the Turn. */
+  repeat_count?: number;
+  repetition?: string;
 }
 
 export type BtccAgentLoopToolResult = {

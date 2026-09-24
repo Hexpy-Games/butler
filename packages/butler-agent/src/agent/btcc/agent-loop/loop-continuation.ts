@@ -17,6 +17,7 @@ export type AuthorityLoopContinuation = {
   modelRoundIndex: number;
   iteration: number;
   emptyResponseRecoveryUsed: boolean;
+  failureRepetition?: Record<string, number>;
   toolResults: BtccAgentLoopToolResult[];
   presentation?: { sourceRevision: number; activity: GuidedActivitySnapshot };
   batch: {

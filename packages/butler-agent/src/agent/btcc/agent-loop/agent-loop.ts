@@ -21,6 +21,8 @@ import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
 import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
 import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.ts";
+import { modelRoundRequestId, nextTurnAfterToolBatch, throwIfAgentLoopAborted } from "./agent-loop-round.ts";
+import { createFailureRepetitionTracker } from "./failure-repetition.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
@@ -31,6 +33,7 @@ export async function runBtccAgentLoop(
   const events: BtccAgentLoopEvent[] = [];
   const toolResults: BtccAgentLoopToolResult[] = [...restored?.toolResults ?? []];
   const modelPreviewContext = createToolResultModelPreviewContext();
+  const repetition = createFailureRepetitionTracker(restored?.failureRepetition);
   let continuation: unknown = restored?.providerContinuation;
   let emptyResponseRecoveryUsed = restored?.emptyResponseRecoveryUsed ?? false;
   let modelRoundIndex = restored?.modelRoundIndex ?? 0;
@@ -188,7 +191,7 @@ export async function runBtccAgentLoop(
     const attachExactReference = record.call.name !== "read_operation_results" &&
       operationResultCallId;
     continuationItems.push(toolResultToMessage({
-      result: record.result, modelPreviewContext,
+      result: repetition.annotate(record.call, record.result), modelPreviewContext,
       ...(operationResultCallId ? { operationResultCallId } : {}),
       ...(attachExactReference
         ? {
@@ -434,7 +437,7 @@ export async function runBtccAgentLoop(
             requestRef: pending.requestRef, callId, messages,
             nextItemOrdinal: continuationItems.ordinal(), providerContinuation: continuation,
             instructions: input.instructions, stableProviderCachePrefix: input.stableProviderCachePrefix,
-            modelRoundIndex, iteration: currentIteration, emptyResponseRecoveryUsed, toolResults,
+            modelRoundIndex, iteration: currentIteration, emptyResponseRecoveryUsed, toolResults, failureRepetition: repetition.snapshot(),
             batch: { tools, calls, nextCallIndex: callIndex, results: batchResults },
           },
         };
@@ -470,23 +473,4 @@ export async function runBtccAgentLoop(
       beginFinalReport();
     }
   }
-}
-
-async function nextTurnAfterToolBatch(
-  input: BtccAgentLoopInput,
-  toolCalls: readonly BtccAgentLoopToolCall[],
-  toolResults: readonly BtccAgentLoopToolResult[],
-  iteration: number,
-): Promise<"continue" | "final_report" | "wait"> {
-  return await input.afterToolBatch?.({ toolCalls, toolResults, iteration }) ?? "continue";
-}
-
-function modelRoundRequestId(index: number, recoveryAttempt = 1): string {
-  return `btcc-model-round-${index}${recoveryAttempt > 1 ? `:retry:${recoveryAttempt}` : ""}`;
-}
-
-function throwIfAgentLoopAborted(signal?: AbortSignal): void {
-  if (!signal?.aborted) return;
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("BTCC agent loop was aborted");
 }
