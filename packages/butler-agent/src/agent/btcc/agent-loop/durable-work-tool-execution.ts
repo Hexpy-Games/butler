@@ -151,14 +151,14 @@ function decodeReview(input: WorkToolInput) {
   const verdict = stringValue(input.args.verdict, "verdict");
   const correctionScope = optionalStringValue(input.args.correction_scope);
   if (subject !== "plan" && subject !== "result" && subject !== "completion") {
-    throw new Error(`Unsupported Work review subject: ${subject}`);
+    throw unsupported("subject", subject, ["plan", "result", "completion"]);
   }
   if (verdict !== "accept" && verdict !== "revise" && verdict !== "partial") {
-    throw new Error(`Unsupported Work review verdict: ${verdict}`);
+    throw unsupported("verdict", verdict, ["accept", "revise", "partial"]);
   }
   if (correctionScope && correctionScope !== "planning" &&
     correctionScope !== "execution") {
-    throw new Error(`Unsupported Work correction scope: ${correctionScope}`);
+    throw unsupported("correction_scope", correctionScope, ["planning", "execution"]);
   }
   return {
     ...input.scope,
@@ -178,7 +178,7 @@ function decodeDisposition(input: WorkToolInput) {
   const disposition = stringValue(input.args.disposition, "disposition");
   if (disposition !== "completed" && disposition !== "open" &&
     disposition !== "blocked") {
-    throw new Error(`Unsupported Work disposition: ${disposition}`);
+    throw unsupported("disposition", disposition, ["completed", "open", "blocked"]);
   }
   return {
     ...input.scope,
@@ -216,7 +216,7 @@ function decodeDispositionActionUpdates(value: unknown) {
     const update = recordValue(item, `action_updates[${index}]`);
     const status = stringValue(update.status, `action_updates[${index}].status`);
     if (status !== "done" && status !== "skipped" && status !== "blocked") {
-      throw new Error(`Unsupported Work disposition action status: ${status}`);
+      throw unsupported(`action_updates[${index}].status`, status, ["done", "skipped", "blocked"]);
     }
     const note = optionalStringValue(update.note);
     return {
@@ -285,7 +285,7 @@ function decodeActionUpdates(value: unknown): DurableWorkActionUpdate[] {
     const update = recordValue(item, `action_updates[${index}]`);
     const status = stringValue(update.status, `action_updates[${index}].status`);
     if (!WORK_ACTION_STATUS_SET.has(status)) {
-      throw new Error(`Unsupported Work action status: ${status}`);
+      throw unsupported(`action_updates[${index}].status`, status, [...WORK_ACTION_STATUS_SET]);
     }
     const note = optionalStringValue(update.note);
     return {
@@ -294,6 +294,10 @@ function decodeActionUpdates(value: unknown): DurableWorkActionUpdate[] {
       ...(note ? { note } : {}),
     };
   });
+}
+
+function unsupported(field: string, value: string, allowed: readonly string[]): Error {
+  return new Error(`Unsupported ${field} "${value}". Allowed values: ${allowed.join(", ")}.`);
 }
 
 function stringValue(value: unknown, field: string): string {

@@ -6,6 +6,7 @@ import {
   SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
 } from "./scope.ts";
 import { renderWorkerInput } from "./worker-input.ts";
+import { ActionableRejectionError } from "../agent-loop/actionable-rejection.ts";
 import { subsessionRootWorkId } from "./identities.ts";
 import { snapshotChildProjectContext } from "./project-context.ts";
 import type {
@@ -211,22 +212,34 @@ export async function delegateReviewedWorker(
   };
 }
 
-function selectedPlanAction(
-  reviewed: Awaited<ReturnType<typeof loadReviewedDelegationPlan>>,
+/** A non-executable action is rejected with its status, dependencies and eligible actions. */
+export function selectedPlanAction(
+  reviewed: Pick<Awaited<ReturnType<typeof loadReviewedDelegationPlan>>, "actions" | "action_progress">,
   actionKey: string,
 ) {
-  const action = reviewed.actions.find((candidate) => candidate.actionKey === actionKey);
-  if (!action) throw new Error("worker_plan_action_missing");
   const progress = new Map(reviewed.action_progress.map((item) => [item.actionKey, item.status]));
-  const status = progress.get(actionKey) ?? "pending";
-  if (status === "done" || status === "skipped" || status === "blocked") {
-    throw new Error("worker_plan_action_not_executable");
+  const statusOf = (key: string) => progress.get(key) ?? "pending";
+  const finished = (key: string) => ["done", "skipped"].includes(statusOf(key));
+  const eligible = reviewed.actions.filter((candidate) =>
+    !["done", "skipped", "blocked"].includes(statusOf(candidate.actionKey)) &&
+    candidate.dependencyKeys.every(finished)).map((candidate) => candidate.actionKey);
+  const action = reviewed.actions.find((candidate) => candidate.actionKey === actionKey);
+  if (!action) {
+    throw new ActionableRejectionError({ code: "worker_plan_action_missing",
+      reason: `The reviewed Plan has no action "${actionKey}". Assign one of its eligible action keys or revise the Plan.`,
+      alternatives: eligible, state: { action_key: actionKey, plan_action_keys: reviewed.actions.map((item) => item.actionKey) } });
   }
-  if (action.dependencyKeys.some((dependency) => {
-    const dependencyStatus = progress.get(dependency);
-    return dependencyStatus !== "done" && dependencyStatus !== "skipped";
-  })) {
-    throw new Error("worker_plan_action_dependency_incomplete");
+  const status = statusOf(actionKey);
+  if (status === "done" || status === "skipped" || status === "blocked") {
+    throw new ActionableRejectionError({ code: "worker_plan_action_not_executable",
+      reason: `Plan action "${actionKey}" is already ${status} and cannot be assigned. Assign an eligible action, or revise the Plan if it must run again.`,
+      alternatives: eligible, state: { action_key: actionKey, action_status: status } });
+  }
+  const pending = action.dependencyKeys.filter((dependency) => !finished(dependency));
+  if (pending.length) {
+    throw new ActionableRejectionError({ code: "worker_plan_action_dependency_incomplete",
+      reason: `Plan action "${actionKey}" depends on unfinished actions (${pending.join(", ")}). Finish or wait for those first, or assign an eligible action.`,
+      alternatives: eligible, state: { action_key: actionKey, action_status: status, pending_dependencies: pending } });
   }
   return action;
 }

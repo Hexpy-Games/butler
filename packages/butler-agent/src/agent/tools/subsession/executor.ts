@@ -1,4 +1,5 @@
 import type { SubsessionDelegationService } from "../../btcc/subsessions/index.ts";
+import { ActionableRejectionError, rejectionFromError } from "../../btcc/subsessions/index.ts";
 import type { ButlerToolHandler } from "../tool-execution-contracts.ts";
 import type { ButlerToolCall } from "../types.ts";
 import {
@@ -20,7 +21,7 @@ export function createSubsessionToolHandlers(input: {
   parentAccessMode?: "full_access" | "ask_first" | "read_only";
 }): Record<string, ButlerToolHandler> {
   if (!input.service) return {};
-  return {
+  return withActionableRejections({
     [waitForWorkerToolDefinition.name]: async () => {
       const { parentSessionId, sourceParentTurnId } = requireParentIdentity(input);
       const waiting = await input.service!.shouldWaitForWorker({
@@ -123,7 +124,23 @@ export function createSubsessionToolHandlers(input: {
         status: result.status,
       };
     },
-  };
+  });
+}
+
+/** Model-caused argument and Plan-state errors return as actionable results. */
+function withActionableRejections(
+  handlers: Record<string, ButlerToolHandler>,
+): Record<string, ButlerToolHandler> {
+  return Object.fromEntries(Object.entries(handlers).map(([name, handler]) => [name,
+    (async (call, context) => {
+      try {
+        return await handler(call, context);
+      } catch (error) {
+        const rejected = rejectionFromError(error);
+        if (rejected) return rejected;
+        throw error;
+      }
+    }) as ButlerToolHandler]));
 }
 
 function requireDelegationIdentity(input: {
@@ -151,10 +168,20 @@ function requireDelegationIdentity(input: {
 }
 
 function stringArray(value: unknown, name: string): string[] {
-  if (!Array.isArray(value)) throw new Error(`delegation_${name}_required`);
+  const shape = `"${name}": an array of 1-8 non-empty strings`;
+  if (!Array.isArray(value)) throw argumentRejection(`delegation_${name}_required`, name, shape, value);
   const values = value.map((item) => requiredString(item, name));
-  if (values.length > 8) throw new Error(`delegation_${name}_too_large`);
+  if (values.length > 8) throw argumentRejection(`delegation_${name}_too_large`, name, shape, value);
   return values;
+}
+
+function argumentRejection(code: string, field: string, shape: string, value: unknown): ActionableRejectionError {
+  return new ActionableRejectionError({
+    code,
+    reason: `The call was not run: "${field}" is missing or invalid. Provide it and call again.`,
+    alternatives: [shape],
+    state: { field, received: value === undefined ? "missing" : typeof value },
+  });
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -196,6 +223,8 @@ function optionalSafeTitle(value: unknown): string | undefined {
 }
 
 function requiredString(value: unknown, name: string): string {
-  if (typeof value !== "string" || !value.trim()) throw new Error(`delegation_${name}_required`);
+  if (typeof value !== "string" || !value.trim()) {
+    throw argumentRejection(`delegation_${name}_required`, name, `"${name}": a non-empty string`, value);
+  }
   return value.trim();
 }

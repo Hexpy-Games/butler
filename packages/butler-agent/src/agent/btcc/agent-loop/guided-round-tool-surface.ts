@@ -2,7 +2,7 @@ import type { GuidedEffectJournal } from "../effects/index.ts";
 import type { GuidedToolJournal } from "../ports/index.ts";
 import { RoundToolSurfaceError } from "../ports/model-round.ts";
 import type { DurableWorkService, WorkTurnScope } from "../work/index.ts";
-import type { DurableWorkExecutionMode, DurableWorkView } from "../work/index.ts";
+import type { DurableWorkView } from "../work/index.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import type {
   DelegationPacket,
@@ -13,6 +13,8 @@ import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-call-normalization.ts";
 import type { BtccAgentLoopInput, BtccAgentLoopToolDefinition } from "./contracts.ts";
 import { projectDurableWorkToolSurface } from "./durable-work-tool-surface.ts";
+import { rejection } from "./actionable-rejection.ts";
+import { ROLE_EXECUTION_MODES, unavailableForExecutionMode } from "./guided-execution-mode-rejection.ts";
 import {
   createRoundToolSurfaceSnapshot,
   type BtccRoundToolSurfaceSnapshot,
@@ -142,54 +144,50 @@ export function createActiveDelegationAdmissionGuard(
         // Recheck immediately before execution: an earlier call in this same
         // response may have assigned a Worker after the round surface was built.
         const workerOutstanding = await shouldWaitForWorker?.() ?? false;
+        const current = work
+          ? await work.durableWork.boundWorkForTurn(work.turnId)
+          : undefined;
+        const executionMode = current?.currentPlan?.executionMode;
+        const state = { execution_mode: executionMode ?? null, current_stage: current?.currentStage ?? null };
         if (!WORKER_MANAGEMENT_TOOLS.has(effective.name) &&
           !EXECUTION_CONTEXT_TOOLS.has(effective.name) && workerOutstanding) {
-          return {
-            ok: false,
-            error: {
-              code: "tool_unavailable",
-              message: "Worker execution or an unconsumed result is outstanding. Manage Workers and wait; this execution call was not run.",
-            },
-          };
+          return rejection({ code: "tool_unavailable",
+            reason: `${effective.name} was not run: Worker execution or an unconsumed Worker result is outstanding. Manage Workers or call wait_for_worker until their results arrive.`,
+            alternatives: [...WORKER_MANAGEMENT_TOOLS, ...EXECUTION_CONTEXT_TOOLS],
+            state: { ...state, worker_outstanding: true } });
         }
         if (active && !isActiveDelegationAdmissionTool(effective.name)) {
-          return {
-            ok: false,
-            error: {
-              code: "active_delegated_work_tool_forbidden",
-              message: "This fresh Turn cannot continue, mutate, execute, or re-delegate the active Steward-owned Work.",
-            },
-          };
+          return rejection({ code: "active_delegated_work_tool_forbidden",
+            reason: `${effective.name} was not run: this fresh Turn cannot continue, mutate, execute, or re-delegate the active Steward-owned Work. Steer or cancel the Steward, start separate Work, or use read-only tools.`,
+            alternatives: [...ACTIVE_DELEGATION_TOOLS, ...EFFECT_FREE_TOOL_NAMES],
+            state: { ...state, active_delegation: true } });
         }
         if (work && effective.name === "replace_work_plan") {
           const mode = effective.args.execution_mode;
           if ((mode === "steward" && work.role !== "butler") ||
             (mode === "workers" && work.role !== "steward")) {
-            return { ok: false, error: { code: "tool_unavailable",
-              message: `This ${work.role} Plan cannot use execution_mode: ${mode}. Butler chooses direct or steward; Steward chooses direct or workers; Worker chooses direct. The Plan was not changed.` } };
+            return rejection({ code: "tool_unavailable",
+              reason: `This ${work.role} Plan cannot use execution_mode: ${mode}. Butler chooses direct or steward; Steward chooses direct or workers; Worker chooses direct. The Plan was not changed.`,
+              alternatives: ROLE_EXECUTION_MODES[work.role], state: { ...state, role: work.role, requested_mode: mode } });
           }
         }
-        const current = work
-          ? await work.durableWork.boundWorkForTurn(work.turnId)
-          : undefined;
-        const executionMode = current?.currentPlan?.executionMode;
         const executingPlan = current?.currentStage === "execution";
         if (work?.role === "butler" && executingPlan && effective.name === "delegate_to_steward" &&
           executionMode !== "steward") {
-          return unavailableForExecutionMode(executionMode, "butler");
+          return unavailableForExecutionMode(executionMode, state, "butler");
         }
         if (work?.role === "butler" && executingPlan && executionMode === "steward" &&
           isPlanExecutionCall(effective.name)) {
-          return unavailableForExecutionMode(executionMode);
+          return unavailableForExecutionMode(executionMode, state, work.role);
         }
         if (work?.role === "steward" && executingPlan && effective.name === "delegate_to_worker" &&
           executionMode !== "workers" && !workerOutstanding) {
-          return unavailableForExecutionMode(executionMode);
+          return unavailableForExecutionMode(executionMode, state, work.role);
         }
         if (work?.role === "steward" && executingPlan && isPlanExecutionCall(effective.name) &&
           executionMode !== "direct" &&
           !(work?.workerResultIntegration && isIntegrationReadOrValidation(effective))) {
-          return unavailableForExecutionMode(executionMode);
+          return unavailableForExecutionMode(executionMode, state, work.role);
         }
         return await execute({
           name: call.name,
@@ -213,19 +211,6 @@ function isIntegrationReadOrValidation(call: { name: string; args: Record<string
   return EFFECT_FREE_TOOL_NAMES.has(call.name) ||
     (call.name === "run_command" &&
       (call.args.state_effect === "read_only" || call.args.state_effect === "validation"));
-}
-
-function unavailableForExecutionMode(mode: DurableWorkExecutionMode | undefined, role: "butler" | "steward" = "steward") {
-  const message = role === "butler"
-    ? "To delegate this Work, revise the same Plan with execution_mode: steward, preserving completed action keys and results, then review and call delegate_to_steward. This delegation call was not run."
-    : mode === "steward"
-    ? "The reviewed Plan assigns execution to Steward. Call delegate_to_steward with the remaining objective and constraints; Butler manages and reports the result. This execution call was not run."
-    : mode === "workers"
-    ? "The reviewed Plan assigns execution to Workers. Use Worker management for execution; Steward retains integration, review, validation, and reporting."
-    : mode === "direct"
-      ? "The reviewed Plan assigns execution directly to Steward; Worker assignment is unavailable for this Plan."
-      : "The current Plan has no reviewed execution ownership. Replace and review the Plan with direct or workers before new owned execution.";
-  return { ok: false, error: { code: "tool_unavailable", message } };
 }
 
 async function currentWork(input: {

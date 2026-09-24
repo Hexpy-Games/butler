@@ -727,6 +727,8 @@ test("BTCC rejects removed read_file aliases without executing or echoing argume
       code: "invalid_arguments",
       message: "Tool read_file received unsupported argument(s): path",
       field: "path",
+      // The model learns the accepted shape instead of guessing again.
+      expected: { required: ["requests"], properties: ["requests", "max_total_bytes", "cursor"] },
     },
   });
   expect(JSON.stringify(observed)).not.toContain("private-name.txt");

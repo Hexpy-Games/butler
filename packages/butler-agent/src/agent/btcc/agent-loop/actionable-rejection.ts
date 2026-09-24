@@ -33,3 +33,22 @@ export function rejection(input: {
     },
   };
 }
+
+/** Thrown where a result cannot be returned directly; executors convert it. */
+export class ActionableRejectionError extends Error {
+  readonly code: string;
+  readonly rejection: ActionableRejection["error"];
+  constructor(input: Parameters<typeof rejection>[0]) {
+    const value = rejection(input).error;
+    super(value.message);
+    this.name = "ActionableRejectionError";
+    this.code = value.code;
+    this.rejection = value;
+  }
+}
+
+export function rejectionFromError(error: unknown): ActionableRejection | undefined {
+  const value = error && typeof error === "object" ? Reflect.get(error, "rejection") : undefined;
+  if (!value || typeof value !== "object" || typeof Reflect.get(value, "code") !== "string") return undefined;
+  return { ok: false, error: value as ActionableRejection["error"] };
+}

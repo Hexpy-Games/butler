@@ -6,12 +6,15 @@ import type {
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
 import { validateToolCallArguments } from "../../tools/schema-validation.ts";
+import { rejectionFromError } from "./actionable-rejection.ts";
 
 export interface PreparedBtccToolCall {
   call: BtccAgentLoopToolCall;
   tool: BtccAgentLoopToolDefinition | undefined;
   validationError: string | null;
   validationErrorField: string | null;
+  /** Model-facing correction: expected field shape or the tools that exist. */
+  validationHint?: { expected?: unknown; alternatives?: string[] };
 }
 
 export function prepareBtccToolCall(
@@ -37,6 +40,9 @@ export function prepareBtccToolCall(
       ? validation.error
       : `No such tool available: ${call.name}`,
     validationErrorField: tool ? validation.errorField : null,
+    ...(tool
+      ? validation.error ? { validationHint: { expected: expectedShape(tool.parameters, validation.errorField) } } : {}
+      : { validationHint: { alternatives: input.tools.map((candidate) => candidate.name) } }),
   };
 }
 
@@ -56,6 +62,7 @@ export async function executePreparedBtccToolCall(
         ...(prepared.validationErrorField
           ? { field: prepared.validationErrorField }
           : {}),
+        ...prepared.validationHint,
       },
     };
   }
@@ -91,7 +98,7 @@ export async function executePreparedBtccToolCall(
       toolCallId: prepared.call.id,
       name: prepared.call.name,
       ok: false,
-      error: {
+      error: rejectionFromError(error)?.error ?? {
         code: "tool_execution_failed",
         message: error instanceof Error ? error.message : String(error),
       },
@@ -119,4 +126,13 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
 
 function nonEmptyText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** The schema of the rejected field, or the required fields when none is named. */
+function expectedShape(parameters: unknown, field: string | null): unknown {
+  const schema = objectRecord(parameters);
+  const properties = objectRecord(schema?.properties);
+  const root = field?.split(/[.[]/u)[0];
+  if (root && properties?.[root] !== undefined) return properties[root];
+  return { required: schema?.required ?? [], properties: Object.keys(properties ?? {}) };
 }
