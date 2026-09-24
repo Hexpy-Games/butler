@@ -586,7 +586,7 @@ try {
   );
   assert(
     assistantFooterContainsStatus === 0 &&
-      assistantStatusText.includes("답변 완료") &&
+      assistantStatusText.includes(appCopy.interfaceDetails.answerDone) &&
       assistantStatusBox.y >= assistantFooterBox.y + assistantFooterBox.height &&
       assistantStatusIsLastElement,
     `assistant status should be a separate bottom-most row after metadata: ${JSON.stringify({ assistantFooterContainsStatus, assistantFooterBox, assistantStatusBox, assistantStatusIsLastElement, assistantStatusText })}`,
@@ -676,8 +676,10 @@ try {
   const contextLegendState = await page
     .locator(testClass("context-legend-scroll"))
     .evaluate((scroll) => {
+      // Reserved categories (e.g. output reserve) are not charted and carry no
+      // swatch, so measure the first charted row.
       const firstRow = scroll.querySelector<HTMLElement>(
-        "[data-test-class~='context-legend'] [data-test-class~='key-value-row']",
+        "[data-test-class~='context-legend'] [data-test-class~='key-value-row']:has([data-test-class~='key-value-swatch'])",
       );
       const swatch = firstRow?.querySelector<HTMLElement>(
         "[data-test-class~='key-value-swatch']",
