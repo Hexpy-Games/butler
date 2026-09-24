@@ -3546,7 +3546,7 @@ try {
   await draftProjectSession.click();
   await composerInput.fill("synthetic draft for project session");
   await page
-    .getByRole("button", { name: appCopy.sidebar.newChat, exact: true })
+    .getByRole("button", { name: appCopy.space.newChat, exact: true })
     .first()
     .click();
   await expectInputValue(
@@ -3560,6 +3560,9 @@ try {
     "synthetic draft for project session",
     "project-session draft should restore after navigation",
   );
+  // The active session is persisted on a 250ms debounce (useAppBootstrap);
+  // let it land before reloading.
+  await page.waitForTimeout(400);
   await page.reload({ waitUntil: "domcontentloaded" });
   await composerInput.waitFor({ state: "visible" });
   await expectInputValue(
@@ -3574,7 +3577,7 @@ try {
     await showSidebarAfterDraftReload.click();
   }
   await page
-    .getByRole("button", { name: appCopy.sidebar.newChat, exact: true })
+    .getByRole("button", { name: appCopy.space.newChat, exact: true })
     .first()
     .click();
   await expectInputValue(
