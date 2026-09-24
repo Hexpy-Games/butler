@@ -63,6 +63,7 @@ export function AppShell() {
   if (firstRunState.status !== "complete") {
     return (
       <>
+        <FirstRunTheme />
         <FirstRunSetup
           initialState={firstRunState}
           onComplete={(mode, completedState) => {
@@ -75,6 +76,15 @@ export function AppShell() {
     );
   }
   return <AppWorkspaceShell />;
+}
+
+/** First-run renders outside the themed workspace, so theme the portal root. */
+function FirstRunTheme() {
+  const settings = useButlerStore((state) => state.settings);
+  const systemPrefersDark = useSystemThemePreference();
+  useNativeAppearanceTheme(settings.appearance_theme);
+  usePortalThemeClasses(settings, systemPrefersDark);
+  return null;
 }
 
 function AppWorkspaceShell() {

@@ -87,6 +87,7 @@
   --neutral-light-text-primary: #222326;
   --neutral-light-text-secondary: #696d73;
   --neutral-light-text-disabled: #a7abb0;
+  --neutral-light-placeholder: #6e7278;
   --neutral-dark-text-secondary: #b5b8bd;
   --neutral-dark-text-tertiary: #858991;
   --neutral-dark-text-disabled: #5a5d64;
@@ -158,11 +159,11 @@
   --amber-10: #805600;
 
   /* Semantic Color Tokens */
-  --color-text-primary: var(--grayscale-10);
-  --color-text-secondary: var(--grayscale-07);
-  --color-text-tertiary: var(--grayscale-06);
-  --color-text-disabled: var(--grayscale-05);
-  --color-text-inverse: var(--grayscale-01);
+  --color-text-primary: var(--neutral-light-text-primary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --color-text-tertiary: var(--grayscale-07);
+  --color-text-disabled: var(--neutral-light-text-disabled);
+  --color-text-inverse: var(--neutral-white);
 
   --color-action-primary: var(--blue-06);
   --color-action-primary-hover: var(--blue-07);
@@ -330,7 +331,7 @@
   --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
   --composer-glass-glint: transparent;
   --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
-  --composer-glass-blur: 36px;
+  --composer-glass-blur: 4px;
   --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
   --tinted-glass-bg: var(--composer-glass-bg);
   --tinted-glass-tint: rgba(255, 255, 255, 1);
@@ -361,10 +362,10 @@
   --ok: var(--color-success);
   --danger: var(--color-danger);
   --icon-muted: var(--grayscale-08);
-  --placeholder: var(--grayscale-05);
+  --placeholder: var(--neutral-light-placeholder);
   --send-bg: var(--grayscale-10);
   --send-stop-bg: var(--grayscale-11);
-  --send-fg: var(--neutral-white);
+  --send-fg: var(--color-text-inverse);
   --send-disabled-bg: var(--grayscale-04);
   --worker-active: var(--green-worker-active);
   --worker-warning: var(--amber-worker-warning);
@@ -589,6 +590,9 @@
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
+  --secondary: rgba(255, 255, 255, 0.08);
+  --muted: rgba(255, 255, 255, 0.06);
+  --color-mix-light: var(--neutral-white);
 }
 
 .theme-light {
@@ -621,13 +625,7 @@
   --composer-glass-divider: rgba(0, 0, 0, 0.045);
   --composer-glass-highlight: rgba(255, 255, 255, 0.42);
   --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
-  --composer-glass-glint: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 1) 20%,
-    rgba(255, 255, 255, 1) 80%,
-    rgba(255, 255, 255, 0) 100%
-  );
+  --composer-glass-glint: transparent;
   --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
   --composer-glass-blur: 4px;
   --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
@@ -656,7 +654,7 @@
   --selection: rgba(32, 35, 39, 0.07);
   --selection-strong: rgba(32, 35, 39, 0.1);
   --icon-muted: var(--grayscale-08);
-  --placeholder: var(--grayscale-05);
+  --placeholder: var(--neutral-light-placeholder);
   --send-bg: var(--grayscale-10);
   --send-stop-bg: var(--grayscale-11);
   --send-fg: var(--color-text-inverse);

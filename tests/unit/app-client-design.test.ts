@@ -4201,7 +4201,9 @@ describe("app-client design system foundation", () => {
     expect(viewer).not.toContain("@/hooks/");
 
     // Check semantic tokens connect to palette/meaning
-    expect(cssContent).toContain("--color-text-primary: var(--grayscale-10)");
+    expect(cssContent).toContain(
+      "--color-text-primary: var(--neutral-light-text-primary)",
+    );
     expect(cssContent).toContain("--color-action-primary: var(--blue-06)");
     expect(cssContent).toContain("--color-success: var(--green-06)");
     expect(cssContent).toContain("--color-danger: var(--red-07)");

@@ -67,6 +67,8 @@ const storeState: TestStoreState = {
 };
 
 const storeListeners = new Set<() => void>();
+const portalThemeCalls: Array<boolean | undefined> = [];
+let systemPrefersDarkForTest = false;
 let cachedStoreSnapshot: TestStoreState | null = null;
 
 mock.module("@/components/layout/Chrome.tsx", () => ({
@@ -118,10 +120,12 @@ mock.module("@/hooks/useNativeShellPreferences.ts", () => ({
   useNativeShellPreferences: () => undefined,
 }));
 mock.module("@/hooks/usePortalThemeClasses.ts", () => ({
-  usePortalThemeClasses: () => undefined,
+  usePortalThemeClasses: (_settings: SettingsView, prefersDark?: boolean) => {
+    portalThemeCalls.push(prefersDark);
+  },
 }));
 mock.module("@/hooks/useSystemThemePreference.ts", () => ({
-  useSystemThemePreference: () => false,
+  useSystemThemePreference: () => systemPrefersDarkForTest,
 }));
 mock.module("@/hooks/useNarrowRightPanelAutoCollapse.ts", () => ({
   useNarrowRightPanelAutoCollapse: () => undefined,
@@ -194,6 +198,8 @@ afterEach(() => {
   storeState.settings = { ...EMPTY_SETTINGS, sidebar_style: "translucent" };
   storeListeners.clear();
   cachedStoreSnapshot = null;
+  portalThemeCalls.length = 0;
+  systemPrefersDarkForTest = false;
 });
 
 test("AppShell gates workspace behind pending first-run setup", async () => {
@@ -240,6 +246,18 @@ test("AppShell keeps model setup inside first-run wizard", async () => {
 
   expect(storeState.openSettingsCalls).toEqual([]);
   expect(rendered.container.textContent).toContain("Workspace");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("AppShell applies the resolved theme while first-run setup is pending", async () => {
+  systemPrefersDarkForTest = true;
+  const rendered = await renderAppShell({
+    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
+  });
+
+  expect(rendered.container.textContent).toContain("언어 선택");
+  expect(portalThemeCalls).toContain(true);
 
   await act(async () => rendered.root.unmount());
 });

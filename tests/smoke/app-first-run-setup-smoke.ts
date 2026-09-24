@@ -457,6 +457,25 @@ async function main(): Promise<void> {
     "system language did not preselect Korean",
   );
 
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-color-scheme", value: "dark" }],
+  });
+  await waitForExpression(
+    cdp,
+    "document.body.classList.contains('theme-dark')",
+    "first-run dark theme class",
+  );
+  const firstRunDarkText = await evaluateString(
+    cdp,
+    `getComputedStyle(document.querySelector(${JSON.stringify(firstRunSelector)})).color`,
+  );
+  const darkTextChannels = firstRunDarkText.match(/\d+(?:\.\d+)?/gu)?.slice(0, 3).map(Number) ?? [];
+  assert(
+    darkTextChannels.length === 3 && darkTextChannels.every((channel) => channel > 180),
+    `first-run text should use dark-theme foreground, got ${firstRunDarkText}`,
+  );
+  await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+
   await clickButton(cdp, "계속");
   await waitForHeading(cdp, "안전고지");
   await expectNoForbiddenCopy(cdp);
@@ -514,6 +533,7 @@ async function main(): Promise<void> {
       "electron-first-run-visible",
       "first-run-drag-lane",
       "system-language-ko-preselected",
+      "first-run-honors-dark-theme",
       "language-safety-install-model-order",
       "agent-progress-title",
       "no-normal-gateway-selector",
