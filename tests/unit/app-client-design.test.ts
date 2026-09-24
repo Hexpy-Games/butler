@@ -10,6 +10,16 @@ function read(path: string): string {
   return readFileSync(resolveRepoOrLedgerPath(path), "utf8");
 }
 
+// App copy moved from app/copy.ts into the shared butler-i18n locales (64dbc5c9).
+function appCopySource(): string {
+  return [
+    "packages/butler-app/client/ui/src/app/copy.ts",
+    "packages/butler-i18n/src/copy-contract.ts",
+    "packages/butler-i18n/src/locales/en.ts",
+    "packages/butler-i18n/src/locales/ko.ts",
+  ].map(read).join("\n");
+}
+
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/gu, " ");
 }
@@ -359,7 +369,7 @@ test("dedicated client keeps complete work history and session management contro
   const titlebar = read(
     "packages/butler-app/client/ui/src/components/layout/Titlebar.tsx",
   );
-  const copy = read("packages/butler-app/client/ui/src/app/copy.ts");
+  const copy = appCopySource();
 
   expect(conversation).not.toContain(".slice(-3)");
   expect(sidebarCss).toContain(".scroll");
@@ -412,7 +422,7 @@ test("dedicated client keeps complete work history and session management contro
     read(
       "packages/butler-app/client/ui/src/libs/design-system/components/IconButton/IconButton.module.css",
     ),
-  ).toContain("width: var(--icon-button-size, 30px)");
+  ).toContain("width: var(--icon-button-size, var(--control-height-md))");
   expect(
     read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/RowActionCluster/RowActionCluster.module.css",
@@ -952,7 +962,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   );
   const appShell = read("packages/butler-app/client/ui/src/pages/AppShell.tsx");
   const appApi = read("packages/butler-app/client/ui/src/app/api.ts");
-  const appCopy = read("packages/butler-app/client/ui/src/app/copy.ts");
+  const appCopy = appCopySource();
   const titlebar = read(
     "packages/butler-app/client/ui/src/components/layout/Titlebar.tsx",
   );
@@ -1029,7 +1039,8 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("BUTLER_APP_ELECTRON_USER_DATA_DIR");
   expect(electronMain).toContain('app.setPath("userData", explicitElectronUserDataDir)');
   expect(electronMain).toContain("function appLaunchCwd()");
-  expect(electronMain).toContain("app.isPackaged ? dirname(process.execPath) : __dirname");
+  // Launched helpers run from the data home, never the program home (d9337582).
+  expect(electronMain).toContain("function appLaunchCwd() {\n  return butlerDataRoot;");
   expect(electronMain).toContain("mainProcessOwnsTray");
   expect(electronMain).toContain("helperProcessOwnsTray");
   expect(electronMain).toContain("ensurePersistentMenuBarHelper");
@@ -1748,7 +1759,7 @@ test("conversation message context menu provides copy action", () => {
   const virtualMessageRow = read(
     "packages/butler-app/client/ui/src/components/conversation/VirtualMessageRow.tsx",
   );
-  const copy = read("packages/butler-app/client/ui/src/app/copy.ts");
+  const copy = appCopySource();
 
   expect(virtualMessageRow).toContain('from "@/butler-ds"');
   expect(
@@ -1882,7 +1893,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(setupWizardShellStyles).toContain("-webkit-app-region: drag");
   expect(renderer).toContain("closeSettings");
   expect(renderer).toContain("settingsCopy.panels.butlerModel");
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     'butlerModel: "모델 설정"',
   );
   expect(renderer).toContain("settingsFields.contextLimit");
@@ -1914,16 +1925,16 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("/personalization/profile-import-prompt?");
   expect(renderer).toContain('"/personalization/profile-import"');
   expect(renderer).not.toContain("migrationSourceOptions");
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     "외부 AI 서비스에서 기억을 가져올 수 있습니다.",
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     "가져오기를 누르면 이 화면에서 바로 처리되며",
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     "다음 답변부터 사용됩니다.",
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).not.toContain(
+  expect(appCopySource()).not.toContain(
     "프로필 후보",
   );
   expect(renderer).toContain("copy.actions.clearProfile");
@@ -1948,16 +1959,16 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(read("packages/butler-app/client/electron/preload.cjs")).toContain(
     "getUsageMonitor",
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     "컨텍스트 창 용량과는 별도로 기록됩니다.",
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     'sessionSync: "대화 기록 반영"',
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     'consolidationModel: "대화 기억 정리 모델"',
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).not.toContain(
+  expect(appCopySource()).not.toContain(
     "새벽 정리 모델",
   );
   expect(read("packages/butler-app/client/electron/preload.cjs")).toContain(
@@ -2096,7 +2107,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
       "packages/butler-app/client/ui/src/components/settings/PersonalizationProfileMigration.tsx",
     ),
   ).toContain('id="profile-migration-fields" gap="xl"');
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).not.toContain(
+  expect(appCopySource()).not.toContain(
     "예: 테스트 사용자",
   );
   expect(
@@ -2238,7 +2249,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("/automations");
   expect(renderer).toContain("prompt_body");
   expect(renderer).toContain("copy.queued");
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     'title: "자동화"',
   );
   expect(read("packages/butler-app/client/ui/src/app/utils.ts")).toContain(
@@ -2353,10 +2364,10 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("Pencil");
   expect(renderer).toContain("Rocket");
   expect(renderer).toContain("ShieldCheck");
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(
+  expect(appCopySource()).toContain(
     'codexOauth: "OAuth"',
   );
-  expect(read("packages/butler-app/client/ui/src/app/copy.ts")).not.toContain(
+  expect(appCopySource()).not.toContain(
     "Codex 브라우저 로그인",
   );
   expect(
@@ -2856,7 +2867,7 @@ test("thinking mark components expose state and theme contracts", () => {
 });
 
 test("active turn fallback copy matches the turn state", () => {
-  const copy = read("packages/butler-app/client/ui/src/app/copy.ts");
+  const copy = appCopySource();
   const panel = read(
     "packages/butler-app/client/ui/src/components/conversation/TurnActivityPending.tsx",
   );
