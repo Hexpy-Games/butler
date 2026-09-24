@@ -304,6 +304,8 @@ server.store.createSession({
   session_hint: "butler-client",
   title: "Desktop client polish",
 });
+// Space sidebar session rows expose their title as the row's aria-label.
+const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({
@@ -876,29 +878,20 @@ try {
     .waitFor({ state: "visible" });
   await page.mouse.move(260, 120);
 
+  // The Space sidebar keeps primary actions (search, new chat) in a header that
+  // scrolls with the tree and pins the browse tabs as a sticky header; the old
+  // fixed-header/section layout is gone (see tests/smoke/sidebar-*.ts).
   const searchButton = page.getByRole("button", {
-    name: appCopy.sidebar.search,
+    name: appCopy.space.search,
     exact: true,
   });
   const headerButtonBox = await searchButton.boundingBox();
-  const fixedHeaderBox = await page
-    .locator(testClass("sidebar-fixed-header"))
-    .boundingBox();
-  const scrollBox = await page
-    .locator(testClass("sidebar-scroll"))
-    .boundingBox();
   const sidebarShellBox = await page
     .locator(testClass("app-sidebar"))
     .boundingBox();
   const scrollFrameBox = await page
     .locator(testClass("sidebar-scroll-frame"))
     .boundingBox();
-  assert(
-    fixedHeaderBox &&
-      scrollBox &&
-      scrollBox.y >= fixedHeaderBox.y + fixedHeaderBox.height - 1,
-    `sidebar direct header should stay outside the scroll region: header=${JSON.stringify(fixedHeaderBox)} scroll=${JSON.stringify(scrollBox)}`,
-  );
   assert(
     sidebarShellBox &&
       scrollFrameBox &&
@@ -907,56 +900,12 @@ try {
         sidebarShellBox.x + sidebarShellBox.width,
     `sidebar scroll frame must stay inside the sidebar shell: shell=${JSON.stringify(sidebarShellBox)} frame=${JSON.stringify(scrollFrameBox)}`,
   );
-  const sidebarSectionBoxes = await page
-    .locator(`${testClass("sidebar-scroll")} section`)
-    .evaluateAll((elements) =>
-      elements.map((element) => {
-        const box = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          className: element.className,
-          maxWidth: style.maxWidth,
-          minWidth: style.minWidth,
-          width: box.width,
-          x: box.x,
-        };
-      }),
-    );
-  assert(
-    sidebarSectionBoxes.length > 0,
-    "sidebar session sections are missing",
-  );
-  assert(
-    scrollFrameBox &&
-      sidebarSectionBoxes.every(
-        (box) =>
-          box.x >= scrollFrameBox.x - 0.5 &&
-          box.x + box.width <= scrollFrameBox.x + scrollFrameBox.width + 0.5,
-      ),
-    `sidebar sections must not exceed the scroll frame: frame=${JSON.stringify(scrollFrameBox)} sections=${JSON.stringify(sidebarSectionBoxes)}`,
-  );
-  assert(
-    headerButtonBox &&
-      sidebarSectionBoxes.every(
-        (box) =>
-          Math.abs(box.x - headerButtonBox.x) <= 0.5 &&
-          Math.abs(box.width - headerButtonBox.width) <= 0.5,
-      ),
-    `sidebar sections should share the header button side margins: header=${JSON.stringify(headerButtonBox)} sections=${JSON.stringify(sidebarSectionBoxes)}`,
-  );
   assert(
     headerButtonBox &&
       scrollFrameBox &&
       scrollFrameBox.x + scrollFrameBox.width >
         headerButtonBox.x + headerButtonBox.width + 6,
     `sidebar scrollbar lane should sit to the right of content: header=${JSON.stringify(headerButtonBox)} frame=${JSON.stringify(scrollFrameBox)}`,
-  );
-  assert(
-    (await page
-      .locator(testClass("sidebar-scroll"))
-      .getByRole("button", { name: appCopy.sidebar.search, exact: true })
-      .count()) === 0,
-    "sidebar direct navigation should not be inside the session scroll region",
   );
   const sidebarScrollStyle = await page
     .locator(testClass("sidebar-scroll"))
@@ -989,214 +938,21 @@ try {
     searchBgBefore !== searchBgAfter,
     `sidebar-hover-highlight failed: ${searchBgBefore} -> ${searchBgAfter}`,
   );
-  const projectGroupRowBox = await page
-    .locator(testClass("project-group-row"))
-    .first()
-    .boundingBox();
-  const projectSessionRowBox = await page
-    .locator(testClass("project-session-row"))
-    .first()
-    .boundingBox();
-  assert(
-    projectGroupRowBox && projectSessionRowBox,
-    "sidebar project rows are missing",
-  );
-  assert(
-    Math.abs(projectGroupRowBox.height - projectSessionRowBox.height) <= 1,
-    `sidebar rows should share height: group=${projectGroupRowBox.height}, session=${projectSessionRowBox.height}`,
-  );
-  const projectSessionRow = page
-    .locator(testClass("project-session-row"))
-    .first();
-  const projectSessionDateBox = await projectSessionRow
-    .locator("time")
-    .boundingBox();
-  assert(
-    projectSessionDateBox &&
-      projectSessionRowBox.x +
-        projectSessionRowBox.width -
-        (projectSessionDateBox.x + projectSessionDateBox.width) <=
-        12,
-    `session date should align to the row trailing edge: row=${JSON.stringify(projectSessionRowBox)} date=${JSON.stringify(projectSessionDateBox)}`,
-  );
-  await projectSessionRow.hover();
-  await page.waitForTimeout(140);
-  const projectSessionActionIconBox = await projectSessionRow
-    .getByRole("button", { name: appCopy.sessionActions.menuLabel })
-    .locator("svg")
-    .boundingBox();
-  assert(
-    projectSessionDateBox &&
-      projectSessionActionIconBox &&
-      Math.abs(
-        projectSessionDateBox.x +
-          projectSessionDateBox.width -
-          (projectSessionActionIconBox.x + projectSessionActionIconBox.width),
-      ) <= 1.5,
-    `session date and hover action icon should share trailing edge: date=${JSON.stringify(projectSessionDateBox)} icon=${JSON.stringify(projectSessionActionIconBox)}`,
-  );
-  assert(
-    Math.abs(projectGroupRowBox.x - projectSessionRowBox.x) <= 1,
-    `project sessions should not be indented: group=${projectGroupRowBox.x}, session=${projectSessionRowBox.x}`,
-  );
-  const groupBg = await page
-    .locator(testClass("project-group-row"))
-    .first()
-    .evaluate((node) => getComputedStyle(node).backgroundColor);
-  const sessionBg = await page
-    .locator(testClass("project-session-row"))
-    .first()
-    .evaluate((node) => getComputedStyle(node).backgroundColor);
-  assert(
-    groupBg !== sessionBg,
-    `project group must not receive active child-session styling: ${groupBg}`,
-  );
-  assert(
-    (await page
-      .locator(testClass("project-session-row"))
-      .first()
-      .getAttribute("aria-current")) === "page",
-    "active project session should expose aria-current",
-  );
-  await page.locator(testClass("project-group-row")).first().click();
-  await page.waitForTimeout(240);
-  const projectSessionListCollapsed = await page
-    .locator(testClass("project-session-list"))
-    .first()
-    .evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        gridTemplateRows: style.gridTemplateRows,
-        opacity: style.opacity,
-        ariaHidden: element.getAttribute("aria-hidden"),
-      };
-    });
-  assert(
-    projectSessionListCollapsed.gridTemplateRows === "0px" &&
-      Number(projectSessionListCollapsed.opacity) === 0 &&
-      projectSessionListCollapsed.ariaHidden === "true",
-    `project-row-click-toggles-collapse failed: ${JSON.stringify(projectSessionListCollapsed)}`,
-  );
-  await page.locator(testClass("project-group-row")).first().click();
-  await page.waitForTimeout(240);
-  const projectSessionListReopened = await page
-    .locator(testClass("project-session-list"))
-    .first()
-    .evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        gridTemplateRows: style.gridTemplateRows,
-        opacity: style.opacity,
-        ariaHidden: element.getAttribute("aria-hidden"),
-      };
-    });
-  assert(
-    /^\d+(\.\d+)?px$/u.test(projectSessionListReopened.gridTemplateRows) &&
-      Number(projectSessionListReopened.opacity) === 1 &&
-      projectSessionListReopened.ariaHidden === "false",
-    `project-row-click-reopens failed: ${JSON.stringify(projectSessionListReopened)}`,
-  );
+  // The project that owns the smoke session is the last tree row exposing a
+  // dashboard action (favorites render the same action above the tree).
+  const projectDashboardButton = page
+    .locator(testClass("app-sidebar"))
+    .getByRole("button", { name: ` ${appCopy.space.dashboard}` })
+    .last();
+  await projectDashboardButton.hover();
+  await projectDashboardButton.click();
+  // The ?visual=components fixture project has no server-backed dashboard, so
+  // Project Ledger tiles are unavailable here; exercise dialog layering with
+  // the Space "Create group" dialog instead of a ledger document modal.
   await page
-    .getByRole("button", {
-      name: appCopy.sidebar.collapseProjects,
-      exact: true,
-    })
+    .locator(testClass("app-sidebar"))
+    .getByRole("button", { name: appCopy.space.createGroup, exact: true })
     .click();
-  await page.waitForTimeout(240);
-  const projectSessionListAfterCollapseAll = await page
-    .locator(testClass("project-session-list"))
-    .first()
-    .evaluate((element) => ({
-      ariaHidden: element.getAttribute("aria-hidden"),
-      opacity: getComputedStyle(element).opacity,
-    }));
-  assert(
-    projectSessionListAfterCollapseAll.ariaHidden === "true" &&
-      Number(projectSessionListAfterCollapseAll.opacity) === 0,
-    `project-collapse-all should close project rows: ${JSON.stringify(projectSessionListAfterCollapseAll)}`,
-  );
-  await page.locator(testClass("project-group-row")).first().click();
-  await page.waitForTimeout(240);
-  const projectSessionListAfterIndividualReopen = await page
-    .locator(testClass("project-session-list"))
-    .first()
-    .evaluate((element) => ({
-      ariaHidden: element.getAttribute("aria-hidden"),
-      opacity: getComputedStyle(element).opacity,
-    }));
-  assert(
-    projectSessionListAfterIndividualReopen.ariaHidden === "false" &&
-      Number(projectSessionListAfterIndividualReopen.opacity) === 1,
-    `project-row should reopen after collapse-all: ${JSON.stringify(projectSessionListAfterIndividualReopen)}`,
-  );
-  await page
-    .getByRole("button", { name: appCopy.sidebar.newProject, exact: true })
-    .click();
-  const existingFolderItem = page.getByText(appCopy.sidebar.useExistingFolder);
-  await existingFolderItem.waitFor({ state: "visible" });
-  const existingFolderAriaDisabled =
-    await existingFolderItem.getAttribute("aria-disabled");
-  const existingFolderDataDisabled =
-    await existingFolderItem.getAttribute("data-disabled");
-  assert(
-    existingFolderAriaDisabled === "true" ||
-      existingFolderDataDisabled !== null,
-    `existing-folder action should be disabled without desktop bridge, got aria-disabled=${existingFolderAriaDisabled} data-disabled=${existingFolderDataDisabled}`,
-  );
-  await expectLocatorCount(
-    page,
-    `${testClass("composer-error")}:visible`,
-    0,
-    "disabled project folder picker must not raise composer errors",
-  );
-  await clickConversationAwayFromMenus(page);
-  await page.waitForTimeout(160);
-  if (await page.locator('[data-slot="dropdown-menu-content"]').isVisible()) {
-    await page.keyboard.press("Escape");
-  }
-  await page
-    .locator('[data-slot="dropdown-menu-content"]')
-    .waitFor({ state: "hidden" });
-  await expectLocatorCount(
-    page,
-    '[data-slot="dropdown-menu-content"]:visible',
-    0,
-    "project add popover should close on outside click",
-  );
-
-  await page.locator(testClass("project-group-row")).first().hover();
-  await page
-    .getByRole("button", { name: appCopy.sidebar.projectDashboard })
-    .first()
-    .click();
-  await page
-    .getByRole("heading", { name: /Recent activity/u })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("heading", { name: "Plans" })
-    .waitFor({ state: "visible" });
-  await page
-    .getByRole("heading", { name: "Specs" })
-    .waitFor({ state: "visible" });
-  await page
-    .locator("[aria-label='Recent 30 day project activity']")
-    .waitFor({ state: "visible" });
-  await page
-    .locator("[aria-label='Recent 30 day project activity'] span")
-    .first()
-    .waitFor({ state: "visible" });
-  const documentButton = page
-    .locator(
-      "[data-slot='document-tile'] button, [data-slot='document-tile'][role='button']",
-    )
-    .first();
-  await documentButton.waitFor({ state: "visible" });
-  const documentButtonText = await documentButton.innerText();
-  assert(
-    !/No Project Ledger specs or plans found/iu.test(documentButtonText),
-    `project dashboard should expose clickable Project Ledger specs or plans, got ${documentButtonText}`,
-  );
-  await documentButton.click();
   await page.locator("[role='dialog']").waitFor({ state: "visible" });
   const dialogTopState = await page
     .locator("[role='dialog']")
@@ -1234,9 +990,12 @@ try {
         opacity: "1",
       });
       document.body.append(probe);
+      // The tooltip surface class carries its own transform offset, so
+      // hit-test the probe's rendered center rather than the dialog's.
+      const probeRect = probe.getBoundingClientRect();
       const hit = document.elementFromPoint(
-        rect.left + rect.width / 2,
-        rect.top + rect.height / 2,
+        probeRect.left + probeRect.width / 2,
+        probeRect.top + probeRect.height / 2,
       );
       const result = {
         tooltipOnTop: Boolean(hit && probe.contains(hit)),
@@ -1257,7 +1016,7 @@ try {
     )
     .first()
     .waitFor({ state: "visible" });
-  screenshots.push(await screenshot(page, "project-dashboard-doc-modal.png"));
+  screenshots.push(await screenshot(page, "space-create-group-dialog.png"));
   await page.keyboard.press("Escape");
   await page.locator("[role='dialog']").waitFor({ state: "hidden" });
   await page
@@ -1276,7 +1035,7 @@ try {
   screenshots.push(await screenshot(page, "narrow-project-dashboard.png"));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(240);
-  await page.locator(testClass("project-session-row")).first().click();
+  await page.locator(smokeSessionRowSelector).first().click();
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
 
   const leftResize = page.locator(testClass("left-panel-resize-handle"));
@@ -1728,7 +1487,7 @@ try {
     `narrow sidebar must push the full workspace with comfortable navigation density: ${JSON.stringify({ firstCompactNavMetrics, firstCompactNavRowBox, narrowSidebarBox, workspaceBehindSidebar })}`,
   );
   const compactProjectSession = page
-    .locator(testClass("project-session-row"))
+    .locator(smokeSessionRowSelector)
     .first();
   const compactProjectGesture = page
     .locator(testClass("project-session-gesture"))
@@ -3770,7 +3529,7 @@ try {
     await showSidebarForDraftCheck.click();
   }
   const draftProjectSession = page
-    .locator(testClass("project-session-row"))
+    .locator(smokeSessionRowSelector)
     .first();
   await draftProjectSession.click();
   await composerInput.fill("synthetic draft for project session");
@@ -4305,7 +4064,7 @@ try {
   );
   await closeBlockingOverlays(page);
   await page
-    .locator(testClass("project-session-row"))
+    .locator(smokeSessionRowSelector)
     .first()
     .click({ button: "right" });
   await page
