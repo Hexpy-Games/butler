@@ -39,15 +39,6 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       cause: safeErrorText(message),
     };
   }
-  if (code === "agent_loop_no_progress") {
-    return {
-      code,
-      message:
-        "Butler stopped because the model kept repeating rounds without progress.",
-      retryable: false,
-      cause: safeErrorText(message),
-    };
-  }
   if (code === "prompt_usage_model_call_budget_exhausted") {
     return {
       code,

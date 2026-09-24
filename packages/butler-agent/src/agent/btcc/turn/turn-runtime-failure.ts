@@ -57,8 +57,6 @@ function failureCause(code: string, korean: boolean): string {
     case "provider_request_rejected":
     case "provider_bad_request":
       return korean ? "모델 제공자가 요청을 거부해" : "The model provider's request rejection";
-    case "agent_loop_no_progress":
-      return korean ? "모델 응답이 진전 없이 반복되어" : "Repeated model rounds without progress";
     case "provider_api_error":
       return korean ? "모델 제공자에서 오류가 발생해" : "A model provider error";
     default:
