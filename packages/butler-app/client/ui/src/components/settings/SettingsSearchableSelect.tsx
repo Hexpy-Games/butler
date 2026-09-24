@@ -1,11 +1,10 @@
 import { useId, useMemo, useState } from "react";
 import {
-  Button,
-  ChevronsUpDown,
   FilteredSelectPopover,
   Popover,
   PopoverContent,
   PopoverTrigger,
+  SelectButton,
   SettingsField,
 } from "@/butler-ds";
 
@@ -66,16 +65,13 @@ export function SettingsSearchableSelect({
       control={
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
+            <SelectButton
               id={controlId}
               aria-describedby={description ? descriptionId : undefined}
               data-test-class="settings-searchable-select-trigger"
-              iconEnd={<ChevronsUpDown size={14} />}
-              stretch
-              text={selectedOption?.label ?? value}
-            />
+            >
+              {selectedOption?.label ?? value}
+            </SelectButton>
           </PopoverTrigger>
           <PopoverContent
             align="end"

@@ -22,6 +22,7 @@ export function SettingsSwitch({
     <SettingsField
       data-test-class="toggle-field settings-switch-row"
       id={controlId}
+      layout="inline"
       label={label}
       description={description}
       descriptionId={description ? descriptionId : undefined}

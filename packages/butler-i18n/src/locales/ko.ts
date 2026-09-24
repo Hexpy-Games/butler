@@ -939,7 +939,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     searchPlaceholder: "설정 검색",
     searchEmpty: (query) => `일치하는 설정이 없습니다: ${query}`,
     groups: {
-      general: "일반",
+      preferences: "환경 설정",
       modelsAndExtensions: "모델 및 확장 기능",
       appAndSystem: "앱 및 시스템",
     },
@@ -1069,7 +1069,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       mainScreenThemePreset: "배경 색상",
       mainScreenThemeColors: "사용자 지정 색상",
       mainScreenThemeColor: (index) => `색상 ${index}`,
-      themeSamples: "테마 예시",
       translucentSidebar: "투명 사이드바",
       desktopNotifications: "데스크톱 알림",
       desktopNotificationAssistantMessages: "AI 메시지 알림",

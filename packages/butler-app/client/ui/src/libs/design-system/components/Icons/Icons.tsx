@@ -23,6 +23,7 @@ function createIcon(iconName: keyof typeof FreeIcons) {
 
 // Export individual icon components
 export const Activity = createIcon("Activity01Icon");
+export const AiChip = createIcon("AiChipIcon");
 export const AlertCircle = createIcon("AlertCircleIcon");
 export const Archive = createIcon("ArchiveIcon");
 export const CheckCircle2 = createIcon("CheckmarkCircle02Icon");
@@ -30,7 +31,7 @@ export const CircleAlert = createIcon("AlertCircleIcon");
 export const CircleX = createIcon("CancelCircleIcon");
 export const ListFilter = createIcon("FilterIcon");
 export const ArrowLeft = createIcon("ArrowLeft01Icon");
-export const Blocks = createIcon("SquareLock02Icon");
+export const Blocks = createIcon("CubeIcon");
 export const BookOpenText = createIcon("BookOpen01Icon");
 export const Bot = createIcon("BotIcon");
 export const Briefcase = createIcon("Briefcase01Icon");
@@ -59,6 +60,8 @@ export const Globe2 = createIcon("Globe02Icon");
 export const History = createIcon("Time03Icon");
 export const ImageIcon = createIcon("Image01Icon");
 export const LayoutDashboard = createIcon("LayoutGridIcon");
+export const MagicWand = createIcon("MagicWand01Icon");
+export const McpServer = createIcon("McpServerIcon");
 export const ListChecks = createIcon("Task01Icon");
 export const MessageSquarePlus = createIcon("MessageAdd01Icon");
 export const MessageSquare = createIcon("Message01Icon");

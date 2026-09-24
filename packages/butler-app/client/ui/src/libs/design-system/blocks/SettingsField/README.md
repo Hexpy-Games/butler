@@ -22,6 +22,9 @@ Settings containers and form-oriented blocks.
 Use real labels and keep validation state in the caller. Keep label,
 description, and control in a vertical rhythm so translations and narrow
 viewports do not separate the label from its field.
+Switches may pass `layout="inline"` to sit right of the label and description;
+below 480px the switch stacks under the label again. Selects, inputs, and other
+controls keep the default stacked layout.
 
 ## Wrong use cases
 Do not use it for read-only inspector facts. Use `KeyValueRow`.

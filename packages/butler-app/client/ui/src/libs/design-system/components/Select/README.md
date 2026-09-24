@@ -23,6 +23,10 @@ Use `SelectPillTrigger` for a floating composer selector. It renders the same
 `PillButton surface="glass"` used by active-work and jump-to-latest capsules,
 with an optional icon and the selected label. Its styling stays owned by PillButton.
 
+Use `SelectButton` for a select-looking trigger that opens a custom popover,
+such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,
+height, left-aligned value, and plain chevron.
+
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
 ## Who can use this component

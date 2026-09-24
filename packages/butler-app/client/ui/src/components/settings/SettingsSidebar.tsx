@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import {
-  ArrowLeft, Input, NavRow, NavSection, ScrollArea, SettingsNav, Stack, Typo,
+  ArrowLeft, Input, NavRow, ScrollArea, SettingsNav, Stack, Typo,
 } from "@/butler-ds";
 import type { SettingsSectionId } from "@/app/types.ts";
 import { filterSettingsSectionGroups } from "./settingsSections";
@@ -75,7 +75,7 @@ export function SettingsSidebar({
           onClick={onClose}
         />
       </Stack>
-      <NavSection title={settingsCopy.searchLabel}>
+      <Stack role="search" gap="none">
         <Input
           id="settings-navigation-search"
           type="search"
@@ -85,7 +85,7 @@ export function SettingsSidebar({
           onChange={(event) => setSearchQuery(event.currentTarget.value)}
           data-test-class="settings-navigation-search"
         />
-      </NavSection>
+      </Stack>
       {searchQuery.trim() && filteredGroups.length === 0 ? (
         <Typo.Caption
           role="status"

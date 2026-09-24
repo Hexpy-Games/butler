@@ -907,7 +907,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     searchPlaceholder: "Search settings",
     searchEmpty: (query) => `No settings match: ${query}`,
     groups: {
-      general: "General",
+      preferences: "Preferences",
       modelsAndExtensions: "Models and extensions",
       appAndSystem: "App and system",
     },
@@ -1037,7 +1037,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       mainScreenThemePreset: "Background colors",
       mainScreenThemeColors: "Custom colors",
       mainScreenThemeColor: (index) => `Color ${index}`,
-      themeSamples: "Theme samples",
       translucentSidebar: "Translucent sidebar",
       desktopNotifications: "Desktop notifications",
       desktopNotificationAssistantMessages: "AI message notifications",

@@ -60,6 +60,32 @@ function SelectTrigger({
   );
 }
 
+/**
+ * A plain button styled exactly like `SelectTrigger`, for select-like controls
+ * that open a custom popover (for example a searchable list) instead of a
+ * Radix Select menu. The value stays left-aligned before the plain chevron.
+ */
+const SelectButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement>
+>(function SelectButton({ className, children, type = "button", ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      type={type}
+      data-slot="select-trigger"
+      className={cn(styles.trigger, className)}
+      {...props}
+    >
+      <span data-slot="select-value">{children}</span>
+      <ChevronDownIcon
+        className="pointer-events-none size-4 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </button>
+  );
+});
+
 function SelectPillTrigger({
   children,
   icon,
@@ -193,6 +219,7 @@ export {
   SelectScrollDownButton,
   SelectScrollUpButton,
   SelectSeparator,
+  SelectButton,
   SelectTrigger,
   SelectPillTrigger,
   SelectValue,

@@ -782,7 +782,7 @@ export interface AppCopy {
     searchPlaceholder: string;
     searchEmpty: (query: string) => string;
     groups: {
-      general: string;
+      preferences: string;
       modelsAndExtensions: string;
       appAndSystem: string;
     };
@@ -910,7 +910,6 @@ export interface AppCopy {
       mainScreenThemePreset: string;
       mainScreenThemeColors: string;
       mainScreenThemeColor: (index: number) => string;
-      themeSamples: string;
       translucentSidebar: string;
       desktopNotifications: string;
       desktopNotificationAssistantMessages: string;

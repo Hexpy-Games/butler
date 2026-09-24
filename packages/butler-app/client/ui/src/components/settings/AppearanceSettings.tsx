@@ -2,8 +2,6 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Button, ButtonContainer } from "@/butler-ds";
-import { Sun, Moon, Monitor } from "@/butler-ds";
 import {
   SettingsSection,
   SettingsSelect,
@@ -16,7 +14,6 @@ export function AppearanceSettings() {
   useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
-  const saving = useSettingsUIStore((state) => state.saving);
   const setSettings = useButlerStore((state) => state.setSettings);
 
   const settingsCopy = appCopy.settings;
@@ -44,32 +41,6 @@ export function AppearanceSettings() {
           { value: "dark", label: settingsOptions.dark },
         ]}
       />
-      <ButtonContainer size="default" aria-label={settingsFields.themeSamples}>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "light" }, setSettings)}
-        >
-          <Sun size={15} /> {settingsOptions.light}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "dark" }, setSettings)}
-        >
-          <Moon size={15} /> {settingsOptions.dark}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={saving}
-          onClick={() => update({ appearance_theme: "system" }, setSettings)}
-        >
-          <Monitor size={15} /> {settingsOptions.system}
-        </Button>
-      </ButtonContainer>
       <MainScreenThemeSettings />
       <SettingsSwitch
         label={settingsFields.translucentSidebar}
