@@ -58,9 +58,10 @@ function parseMessageDate(value?: string): Date | null {
 
 function formatWorkedDuration(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, "0")}m ${seconds.toString().padStart(2, "0")}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
 function formatMessageClock(date: Date): string {

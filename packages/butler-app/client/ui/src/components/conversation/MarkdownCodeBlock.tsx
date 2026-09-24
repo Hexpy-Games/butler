@@ -5,21 +5,33 @@ import { appCopy } from "@/app/copy.ts";
 import { CopyTextButton } from "./CopyTextButton";
 import styles from "./MarkdownCodeBlock.module.css";
 
+type CodeChildProps = { children?: ReactNode; className?: string };
+
 export function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
   useAppLocale();
   const preFadeRef = useScrollEdges("x");
-  const code = Children.toArray(children).map((child) => {
-    if (isValidElement<{ children?: ReactNode }>(child)) {
+  const codeChildren = Children.toArray(children);
+  const code = codeChildren.map((child) => {
+    if (isValidElement<CodeChildProps>(child)) {
       return typeof child.props.children === "string" ? child.props.children : "";
     }
     return typeof child === "string" ? child : "";
   }).join("");
+  const language = codeChildren
+    .map((child) =>
+      isValidElement<CodeChildProps>(child)
+        ? /(?:^|\s)language-([\w+#.-]+)/u.exec(child.props.className ?? "")?.[1]
+        : undefined)
+    .find(Boolean);
   return (
-    <div className={styles.block}>
-      <MessageFooter dataTestClass="code-block-actions">
-        <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
-      </MessageFooter>
-      <pre ref={preFadeRef}>{children}</pre>
+    <div className={styles.block} data-test-class="code-block">
+      <div className={styles.header} data-test-class="code-block-header">
+        <span className={styles.language}>{language ?? ""}</span>
+        <MessageFooter dataTestClass="code-block-copy">
+          <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
+        </MessageFooter>
+      </div>
+      <pre ref={preFadeRef} className={styles.pre}>{children}</pre>
     </div>
   );
 }

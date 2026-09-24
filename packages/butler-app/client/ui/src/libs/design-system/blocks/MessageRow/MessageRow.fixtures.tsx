@@ -9,7 +9,7 @@ export function MessageRowFixture() {
       <p>Butler response rendered in the reusable message presenter.</p>
       <MessageFooter>
         <button type="button">Copy</button>
-        <span>Worked for 00m 09s</span>
+        <span>Worked for 9s</span>
       </MessageFooter>
     </MessageRow>
   );

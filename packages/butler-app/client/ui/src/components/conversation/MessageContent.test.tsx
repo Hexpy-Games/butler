@@ -108,3 +108,48 @@ test("failed Steward result text stays a normal answer without a system error co
   expect(container.querySelector(".failure-notice")).toBeNull();
   await act(async () => root.unmount());
 });
+
+test("markdown code blocks render an in-block header with language and copy", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root.");
+  const root = createRoot(container);
+  const message: MessageRecord = {
+    id: "assistant-code",
+    role: "assistant",
+    text: "Code:\n\n```ts\nconst ok = true;\n```\n\n```\nplain\n```",
+    status: "delivered",
+  };
+
+  await act(async () => {
+    root.render(
+      <MessageContent
+        message={message}
+        copied={false}
+        footerMeta={null}
+        onCopyAssistantMessage={() => undefined}
+      />,
+    );
+  });
+
+  const blocks = [...container.querySelectorAll('[data-test-class~="code-block"]')];
+  expect(blocks).toHaveLength(2);
+  const [typed, plain] = blocks;
+  const header = typed!.querySelector('[data-test-class~="code-block-header"]');
+  expect(header).not.toBeNull();
+  expect(header!.firstElementChild?.textContent).toBe("ts");
+  expect(header!.querySelector("button[aria-label]")).not.toBeNull();
+  expect(typed!.firstElementChild).toBe(header);
+  expect(typed!.querySelector("pre")?.textContent).toContain("const ok = true;");
+  expect(plain!.querySelector('[data-test-class~="code-block-header"] button')).not.toBeNull();
+  expect(container.querySelector('[data-test-class="code-block-actions"]')).toBeNull();
+  await act(async () => root.unmount());
+});
