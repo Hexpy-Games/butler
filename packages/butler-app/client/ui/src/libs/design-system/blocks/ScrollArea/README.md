@@ -16,6 +16,13 @@ import { ScrollArea } from "@/butler-ds";
 </ScrollArea>
 ```
 
+## Edge Fade
+
+The scroller opts into the shared scroll-fade primitive (`useScrollEdges` plus
+`scroll-fade.css`). An edge fades only while content is clipped there: no fade
+at a resting edge and none when content fits. Pass `orientation="x"` for a
+horizontal scroller; the fade follows the scrolling axis.
+
 ## Boundaries
 
 - Do not use it as the primary page layout shell.
