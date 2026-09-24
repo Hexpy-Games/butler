@@ -595,17 +595,22 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
   );
 });
 
-test("fresh app chrome defaults to a collapsed left sidebar", () => {
+test("fresh app chrome opens the left sidebar after setup unless a choice is saved", () => {
   const store = read("packages/butler-app/client/ui/src/app/store.ts");
   const uiStateCache = read(
     "packages/butler-app/client/ui/src/app/appUiStateCache.ts",
+  );
+  const bootstrap = read(
+    "packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts",
   );
   const visualHarness = read(
     "packages/butler-app/client/ui/src/pages/VisualHarness.tsx",
   );
 
   expect(store).toContain("leftOpen: false");
-  expect(uiStateCache).toContain("left_open: input.left_open ?? false");
+  expect(uiStateCache).toContain("left_open: input.left_open ?? true");
+  expect(store).toContain("hydrateFreshUiState");
+  expect(bootstrap).toContain("hydrateFreshUiState()");
   expect(visualHarness).toContain("setLeftOpen(false)");
   expect(store).toContain("leftOpen: uiState.left_open");
 });

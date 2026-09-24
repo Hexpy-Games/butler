@@ -43,7 +43,10 @@ import {
   optimisticSessionId,
   summaryWithSessionId,
 } from "./optimisticSession.ts";
-import type { AppUiStateSnapshot } from "./appUiStateCache.ts";
+import {
+  freshAppUiPanelState,
+  type AppUiStateSnapshot,
+} from "./appUiStateCache.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
   DEFAULT_RIGHT_PANEL_WIDTH,
@@ -173,6 +176,7 @@ interface ButlerStore {
   setSidebarProjectsCollapsed: (value: Updater<boolean>) => void;
   setSidebarCollapsedProjectIds: (projectIds: Updater<string[]>) => void;
   hydrateUiState: (uiState: AppUiStateSnapshot) => void;
+  hydrateFreshUiState: () => void;
   setView: (view: AppView) => void;
   openSettings: (section?: SettingsSectionId | string) => void;
   closeSettings: () => void;
@@ -1000,6 +1004,13 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         state.sidebarCollapsedProjectIds,
       ),
     })),
+  hydrateFreshUiState: () =>
+    set((state) =>
+      freshAppUiPanelState(
+        currentAdaptiveMode(chromeEnvironment()),
+        state.rightOpen,
+      ),
+    ),
   hydrateUiState: (uiState) => {
     const panels = restoreAdaptivePanelState({
       mode: currentAdaptiveMode(chromeEnvironment()),
