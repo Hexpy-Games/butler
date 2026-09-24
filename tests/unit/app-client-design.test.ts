@@ -2,7 +2,7 @@ import { expect, test, describe } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
+import { resolveRepoOrLedgerPath, ledgerTest } from "../support/project-ledger-root.ts";
 
 const root = process.cwd();
 
@@ -3313,7 +3313,7 @@ describe("app-client design system foundation", () => {
     expect(buttonContainer).toContain('data-slot="button-container"');
   });
 
-  test("design-system skill maps agent component selection and quality gates", () => {
+  ledgerTest("design-system skill maps agent component selection and quality gates", () => {
     const skillRoot = join(designSystemRoot, "skills/butler-design-system");
     const skill = readFileSync(join(skillRoot, "SKILL.md"), "utf8");
     const componentMap = readFileSync(
@@ -4096,7 +4096,7 @@ describe("app-client design system foundation", () => {
     expect(legacyProductStyles).toEqual([]);
   });
 
-  test("design-system primitive styles are no longer owned by tokens.css", () => {
+  ledgerTest("design-system primitive styles are no longer owned by tokens.css", () => {
     const tokens = readFileSync(join(designSystemRoot, "tokens.css"), "utf8");
     const report = read(
       "project-ledger/projects/butler/reports/butler-dedicated-client-design-system-primitive-stabilization.md",

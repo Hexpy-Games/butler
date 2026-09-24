@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
 const retiredToolRuntimeSpecs = [
   {
@@ -22,7 +22,7 @@ const retiredToolRuntimeSpecs = [
   },
 ];
 
-test("retired tool-runtime specs cannot regain BTCC authority", () => {
+ledgerTest("retired tool-runtime specs cannot regain BTCC authority", () => {
   for (const spec of retiredToolRuntimeSpecs) {
     expect(repoOrLedgerExists(spec.path)).toBe(true);
     const text = readRepoOrLedgerFile(spec.path);
@@ -33,7 +33,7 @@ test("retired tool-runtime specs cannot regain BTCC authority", () => {
   }
 });
 
-test("tool runtime specs reserve Artifact for app-visible deliverables", () => {
+ledgerTest("tool runtime specs reserve Artifact for app-visible deliverables", () => {
   const evidence = readRepoOrLedgerFile("project-ledger/projects/butler/specs/tool-runtime/evidence-capability-ledger.md");
   expect(evidence).toContain("`Artifact` is reserved for app-visible user deliverables");
   expect(evidence).toContain("`durable outcome`");
@@ -42,7 +42,7 @@ test("tool runtime specs reserve Artifact for app-visible deliverables", () => {
   expect(evidence).toContain("legacy internal schema names");
 });
 
-test("intent, search, and discovery defer semantic authority to BTCC", () => {
+ledgerTest("intent, search, and discovery defer semantic authority to BTCC", () => {
   const intent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/model-owned-intent-decisions.md");
   expect(intent).toContain('status: "superseded"');
   expect(intent).toMatch(/exclusively own routing, Work binding, and\s+continuation/);
