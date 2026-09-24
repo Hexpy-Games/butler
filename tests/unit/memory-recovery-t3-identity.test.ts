@@ -8,6 +8,11 @@ import { AgentConversationStore } from "../../packages/butler-agent/src/agent/co
 import { initializeEmptyMemoryGeneration } from "../../packages/butler-agent/src/agent/cognition/memory/projection/generation.ts";
 
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
+import { startEmbeddingStub } from "../support/embedding-stub.ts";
+
+let embeddingStub: Awaited<ReturnType<typeof startEmbeddingStub>> | undefined;
+beforeAll(async () => { embeddingStub = await startEmbeddingStub(); });
+afterAll(async () => { await embeddingStub?.stop(); });
 const originalAdapter = OPENAI_PROVIDER_ADAPTER.runPrompt;
 beforeAll(() => {
   OPENAI_PROVIDER_ADAPTER.runPrompt = async (request) => {

@@ -26,7 +26,11 @@ export class CheckedEmbeddingError extends Error {
   constructor(readonly code: string, readonly maxTokens?: number) { super(code); }
 }
 
-const DEFAULT_SOCKET = process.env.EMBED_SOCKET ?? "/tmp/butler-embed.sock";
+// Resolved per call so a process (or test) can point EMBED_SOCKET elsewhere
+// after this module was first imported.
+function defaultSocket(): string {
+  return process.env.EMBED_SOCKET ?? "/tmp/butler-embed.sock";
+}
 const EMBED_BATCH_SIZE = parseInt(process.env.EMBED_BATCH_SIZE ?? "32", 10);
 
 export class EmbedServerUnavailableError extends Error {
@@ -36,7 +40,7 @@ export class EmbedServerUnavailableError extends Error {
   }
 }
 
-export async function embedViaSocket(text: string, socketPath = DEFAULT_SOCKET, timeoutMs = 300000): Promise<number[] | null> {
+export async function embedViaSocket(text: string, socketPath = defaultSocket(), timeoutMs = 300000): Promise<number[] | null> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       socket.destroy();
@@ -74,7 +78,7 @@ export async function embedViaSocket(text: string, socketPath = DEFAULT_SOCKET, 
   });
 }
 
-export async function embedBatchViaSocket(texts: string[], socketPath = DEFAULT_SOCKET, timeoutMs = 300000): Promise<number[][]> {
+export async function embedBatchViaSocket(texts: string[], socketPath = defaultSocket(), timeoutMs = 300000): Promise<number[][]> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       socket.destroy();
@@ -137,7 +141,7 @@ export async function embedCheckedViaSocket(input: {
     max_embeddings: input.maxEmbeddings,
     request_class: input.requestClass,
     deadline_at: input.deadlineAt,
-  }, input.socketPath ?? DEFAULT_SOCKET, timeoutMs, input.signal,
+  }, input.socketPath ?? defaultSocket(), timeoutMs, input.signal,
   input.deadlineAt !== undefined && remainingDeadlineMs <= configuredTimeoutMs) as Partial<CheckedEmbeddingResult> & { error?: string; code?: string; max_tokens?: number };
   if (result.error || result.code) throw new CheckedEmbeddingError(result.code ?? "embed_request_failed", result.max_tokens);
   if (!Array.isArray(result.embeddings) || !Array.isArray(result.token_counts) || !validMetadata(result.metadata))
@@ -196,11 +200,11 @@ function sameEmbedding(expected: EmbeddingRuntimeMetadata, observed: EmbeddingRu
 
 function validSha(value: unknown): value is string { return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value); }
 
-export async function embed(text: string, socketPath = DEFAULT_SOCKET): Promise<number[] | null> {
+export async function embed(text: string, socketPath = defaultSocket()): Promise<number[] | null> {
   return embedViaSocket(text, socketPath);
 }
 
-export async function embedBatch(texts: string[], socketPath = DEFAULT_SOCKET): Promise<(number[] | null)[]> {
+export async function embedBatch(texts: string[], socketPath = defaultSocket()): Promise<(number[] | null)[]> {
   if (texts.length === 0) return [];
 
   const results: (number[] | null)[] = new Array(texts.length).fill(null);

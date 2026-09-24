@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,6 +14,11 @@ import { prepareBindingBatches, applyBinding, applyBindingRepair } from "../../p
 import { normalizeAndValidatePlan } from "../../packages/butler-agent/src/agent/cognition/memory/projection/plan.ts";
 import { splitMeaningSourceSpans } from "../../packages/butler-agent/src/agent/cognition/memory/projection/windows.ts";
 import type { ExtractInput } from "../../packages/butler-agent/src/agent/cognition/memory/projection/contracts.ts";
+import { startEmbeddingStub } from "../support/embedding-stub.ts";
+
+let embeddingStub: Awaited<ReturnType<typeof startEmbeddingStub>> | undefined;
+beforeAll(async () => { embeddingStub = await startEmbeddingStub(); });
+afterAll(async () => { await embeddingStub?.stop(); });
 
 const text = "相機を使うには代理 または外部ブラウザーが必要です。";
 const input: ExtractInput = { schema: "butler.memory-extract-input.v2", episode_ref: "episode", revision: "revision", window_ref: "window", bound_project_id: null,
