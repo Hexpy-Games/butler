@@ -373,3 +373,28 @@ describe("design-system syntax highlight tokens", () => {
     expect(syntaxColors.length).toBeGreaterThanOrEqual(names.length);
   });
 });
+
+describe("navigation row selection", () => {
+  const css = () => read(`${uiSrc}/libs/design-system/blocks/NavRow/NavRow.module.css`);
+  const rule = (source: string, selector: string) => {
+    const start = source.indexOf(`${selector} {`);
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf("}", start));
+  };
+
+  test("selected rows are clearly stronger than hover", () => {
+    const source = css();
+    const hover = rule(source, ".interactive:hover");
+    const hoverMix = /var\(--selection\)\s+(\d+)%/u.exec(hover);
+    expect(hoverMix).not.toBeNull();
+    expect(Number(hoverMix![1])).toBeLessThanOrEqual(60);
+
+    const active = rule(source, ".active,\n.interactive.active:hover");
+    expect(active).toContain("background: var(--selection-strong)");
+    expect(active).toContain("color: var(--text-primary)");
+    expect(rule(source, ".active .label")).toContain(
+      "font-weight: var(--font-weight-medium)",
+    );
+    expect(rule(source, ".active .icon")).toContain("opacity: 1");
+  });
+});

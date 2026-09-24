@@ -23,7 +23,7 @@ Use NavRow for sidebar navigation items, project rows, session rows, settings it
 
 ## Container vs Presenter
 
-**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. It must not import Butler domain data, stores, routes, or app copy.
+**NavRow is a presenter block.** It owns visual layout, states (active, disabled), hover behavior, and accessibility slots. The active row is clearly stronger than hover: `--selection-strong` background, primary text, medium label weight, and a full-opacity icon; hover uses a softer tint of `--selection`. It must not import Butler domain data, stores, routes, or app copy.
 
 **Container responsibilities:** Domain components inject project names, session titles, route matching for active state, click handlers that navigate, app copy for labels, and domain-specific actions.
 

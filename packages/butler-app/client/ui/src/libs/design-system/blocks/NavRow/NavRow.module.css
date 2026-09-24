@@ -69,11 +69,21 @@
 }
 
 .interactive:hover {
-  background: color-mix(in srgb, var(--selection) 84%, transparent);
+  background: color-mix(in srgb, var(--selection) 60%, transparent);
 }
 
-.active {
+.active,
+.interactive.active:hover {
   background: var(--selection-strong);
+  color: var(--text-primary);
+}
+
+.active .label {
+  font-weight: var(--font-weight-medium);
+}
+
+.active .icon {
+  opacity: 1;
 }
 
 .disabled {
