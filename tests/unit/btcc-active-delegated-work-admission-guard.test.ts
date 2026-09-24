@@ -169,7 +169,9 @@ test("real second App Turn starts distinct W2 while active delegated W1 is struc
     }));
     expect(works.filter((work) => work.status === "abandoned")).toHaveLength(1);
     expect(workMaterialCounts(db, first!.work_id)).toEqual(w1MaterialBeforeT3);
-    expect(rounds.forbiddenResults()).toEqual(Array(5).fill("tool_unavailable"));
+    expect(rounds.forbiddenResults()).toEqual(
+      Array(5).fill("active_delegated_work_tool_forbidden"),
+    );
     expect(rounds.w2PlanUsedStartNew()).toBe(false);
     db.close();
   } finally {
@@ -262,21 +264,25 @@ function admissionGuardRounds(): ModelRoundPort & {
       for (const required of [
         "start_work", "steer_steward", "cancel_steward", "read_file",
       ]) expect(names).toContain(required);
-      for (const forbidden of [
-        "continue_work", "replace_work_plan", "record_work_review",
-        "record_work_disposition", "delegate_to_steward", "write_file",
-        "run_command", "tool_call",
-      ]) expect(names).not.toContain(forbidden);
+      // Tool schemas stay stable across rounds (1859cb32); the fence against
+      // the active Steward-owned W1 is enforced when a call executes, which the
+      // forbidden calls below and forbiddenResults() prove.
       return {
         toolCalls: [
           call("forbidden-continue", "continue_work", { work_id: w1WorkId }),
+          // Well-formed calls, so each reaches the active-delegation fence
+          // instead of stopping at model-facing argument validation.
           call("forbidden-plan", "replace_work_plan", {
-            objective: "Illegally replan W1.", execution_mode: "direct", actions: [], checks: [],
+            objective: "Illegally replan W1.", execution_mode: "direct", governing_refs: [],
+            actions: [{ action_key: "illegal-replan", dependency_keys: [] }],
+            checks: ["W1 stays unchanged."],
           }),
           call("forbidden-effect", "write_file", {
-            path: "forbidden.txt", content: "forbidden", overwrite: false,
+            path: "forbidden.txt", content: "forbidden",
           }),
-          call("forbidden-redelegate", "delegate_to_steward", {}),
+          call("forbidden-redelegate", "delegate_to_steward", {
+            request: "Illegally re-delegate W1.", safe_title: "Forbidden re-delegation",
+          }),
           call("forbidden-bridge", "tool_call", {
             id: "native:write_file",
             arguments: { path: "bridge.txt", content: "forbidden", overwrite: false },
@@ -313,7 +319,7 @@ function admissionGuardRounds(): ModelRoundPort & {
       action_updates: [{ action_key: "delegate-second", status: "active" }],
     });
     if (round === 5) {
-      expect(names).toEqual(["delegate_to_steward"]);
+      expect(names).toContain("delegate_to_steward");
       return response("w2-delegate", "delegate_to_steward", {
         request: "Execute the distinct second reviewed objective in a separate Steward relation.",
         safe_title: "Second active Steward",
