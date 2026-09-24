@@ -20,6 +20,7 @@
   font: inherit;
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   outline: none;

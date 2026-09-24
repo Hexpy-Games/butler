@@ -3312,7 +3312,7 @@ test("new chat briefing returns project scoped opening cards", async () => {
       project_name: "Butler",
       persona_applied: false,
     });
-    expect(result.data.title).toBe("Butler에서 이어갈 일을 살펴볼까요");
+    expect(result.data.title).toBe("Butler에서 이어가기");
     expect(result.data.title).not.toContain("아침");
     expect(result.data.suggestions).toContainEqual(
       expect.objectContaining({

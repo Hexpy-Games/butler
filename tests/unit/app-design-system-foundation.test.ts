@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
+import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { lintDesignSystemRules } from "../../packages/butler-app/scripts/lint/design-system-rules-lint.ts";
 
 const uiSrc = "packages/butler-app/client/ui/src";
@@ -407,5 +408,23 @@ describe("inspector content alignment", () => {
     const block = css.slice(start, css.indexOf("}", start));
     expect(block).toContain("display: grid");
     expect(block).toContain("align-content: start");
+  });
+});
+
+describe("documents, artifacts, and briefing titles", () => {
+  test("link-rendered buttons are not underlined unless they are link variants", () => {
+    const css = read(`${uiSrc}/libs/design-system/components/Button/Button.module.css`);
+    const base = css.slice(css.indexOf(".button {"), css.indexOf("}", css.indexOf(".button {")));
+    expect(base).toContain("text-decoration: none");
+    const link = css.slice(css.indexOf(".variantLink {"), css.indexOf("}", css.indexOf(".variantLink {")));
+    expect(link).toContain("text-decoration: underline");
+  });
+
+  test("project briefing fallback titles are short and balanced", () => {
+    expect(getAppCopy("en-US").briefing.projectTitle("Butler")).toBe("Continue in Butler");
+    expect(getAppCopy("ko-KR").briefing.projectTitle("Butler")).toBe("Butler에서 이어가기");
+    const css = read(`${uiSrc}/libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.module.css`);
+    const title = css.slice(css.search(/^\.title \{/mu), css.indexOf("}", css.search(/^\.title \{/mu)));
+    expect(title).toContain("text-wrap: balance");
   });
 });
