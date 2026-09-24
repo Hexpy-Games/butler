@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ContextCompaction, ContextCompactionStore } from "../../../btcc/ports/context-compaction.ts";
+import type { ContextCompaction, ContextCompactionStore } from "../../../btcc/ports/index.ts";
 
 /** Summary and its exact source boundary are published in one SQLite write. */
 export class SqliteContextCompactionStore implements ContextCompactionStore {

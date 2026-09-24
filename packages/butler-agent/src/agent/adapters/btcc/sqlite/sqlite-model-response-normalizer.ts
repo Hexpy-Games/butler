@@ -5,7 +5,7 @@ import type {
 } from "../../../btcc/ports/index.ts";
 import { parseDeliveredThroughOrdinal } from
   "../../../btcc/ports/index.ts";
-import { parseProjectionIdentity } from "../../../btcc/model-route/context-projection-rebase.ts";
+import { parseProjectionIdentity } from "../../../btcc/model-route/index.ts";
 
 /**
  * Acceptance replay is deliberately limited to the normalized response

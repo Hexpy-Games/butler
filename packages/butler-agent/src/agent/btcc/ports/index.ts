@@ -18,3 +18,7 @@ export {
   turnItemOrdinal,
   validateBoundedProviderOrdinals,
 } from "./bounded-provider-continuation.ts";
+export type {
+  ContextCompaction,
+  ContextCompactionStore,
+} from "./context-compaction.ts";
