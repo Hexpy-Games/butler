@@ -189,6 +189,8 @@ export interface BtccAgentLoopInput {
     reportedModel: string;
   }) => void;
   providerRetryAttempts?: number;
+  /** Consecutive no-progress rounds before the loop stops; see no-progress-guard.ts. */
+  maxNoProgressRounds?: number;
   progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];

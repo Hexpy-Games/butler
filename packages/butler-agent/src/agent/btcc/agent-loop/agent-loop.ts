@@ -21,6 +21,7 @@ import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
 import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
 import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.ts";
+import { createNoProgressGuard } from "./no-progress-guard.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
@@ -36,6 +37,7 @@ export async function runBtccAgentLoop(
   let modelRoundIndex = restored?.modelRoundIndex ?? 0;
   let iteration = restored?.iteration ?? 0;
   let finalReportRound = false;
+  const noProgress = createNoProgressGuard(input.maxNoProgressRounds);
   const beginFinalReport = () => {
     finalReportRound = true;
     continuationItems.push({ role: "user", content:
@@ -107,7 +109,7 @@ export async function runBtccAgentLoop(
         if (directions.length) {
           if (directions.some((observation) => typeof observation === "string" ||
             observation.requestSegmentKind === "current_user_request")) {
-            finalReportRound = false;
+            finalReportRound = false; noProgress.progressed();
             const surface = await resolveRoundToolSurface(input.resolveTools, input.tools);
             request.tools = surface.tools;
             request.toolSurfaceDigest = surface.toolSurfaceDigest;
@@ -221,7 +223,7 @@ export async function runBtccAgentLoop(
       for (const observation of await input.beforeModelRound?.() ?? []) {
         // Apply steering before choosing tools, not inside an already tool-free request.
         if (typeof observation === "string" || observation.requestSegmentKind === "current_user_request") {
-          finalReportRound = false;
+          finalReportRound = false; noProgress.progressed();
         }
         appendObservation(observation);
       }
@@ -288,7 +290,7 @@ export async function runBtccAgentLoop(
       const observation = disposition.observation.trim();
       if (!observation) throw new Error("btcc_text_tool_call_observation_missing");
       continuationItems.push({ role: "user", content: observation });
-      continue;
+      noProgress.stalled("text_tool_call_reprompt"); continue;
     }
 
     if (calls.length === 0) {
@@ -311,7 +313,7 @@ export async function runBtccAgentLoop(
             hasNextModelRound: true,
           });
       if (recoveryObservation) {
-        emptyResponseRecoveryUsed = true;
+        emptyResponseRecoveryUsed = true; noProgress.stalled("empty_response_reprompt");
         continuationItems.push({ role: "user", content: recoveryObservation });
         continue;
       }
@@ -324,7 +326,7 @@ export async function runBtccAgentLoop(
           return { finalText: "", suspension: "waiting_for_worker", messages, events };
         }
         if (review.status === "continue") {
-          finalReportRound = false;
+          finalReportRound = false; noProgress.stalled("final_candidate_reprompt");
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
           continuationItems.push({ role: "user", content: observation });
@@ -403,12 +405,9 @@ export async function runBtccAgentLoop(
         results,
         currentIteration,
       );
-      if (disposition === "wait") {
-        return { finalText: "", suspension: "waiting_for_worker", messages, events };
-      }
-      if (disposition === "final_report") {
-        beginFinalReport();
-      }
+      if (disposition === "wait") return { finalText: "", suspension: "waiting_for_worker", messages, events };
+      noProgress.toolBatch(results);
+      if (disposition === "final_report") beginFinalReport();
       continue;
     }
 
@@ -463,12 +462,9 @@ export async function runBtccAgentLoop(
       batchResults,
       currentIteration,
     );
-    if (disposition === "wait") {
-      return { finalText: "", suspension: "waiting_for_worker", messages, events };
-    }
-    if (disposition === "final_report") {
-      beginFinalReport();
-    }
+    if (disposition === "wait") return { finalText: "", suspension: "waiting_for_worker", messages, events };
+    noProgress.toolBatch(batchResults);
+    if (disposition === "final_report") beginFinalReport();
   }
 }
 

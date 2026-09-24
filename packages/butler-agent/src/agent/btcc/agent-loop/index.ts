@@ -1,4 +1,10 @@
 export { runBtccAgentLoop } from "./agent-loop.ts";
+export {
+  AGENT_LOOP_NO_PROGRESS_CODE,
+  AgentLoopNoProgressError,
+  DEFAULT_MAX_NO_PROGRESS_ROUNDS,
+  selectMaxNoProgressRounds,
+} from "./no-progress-guard.ts";
 export type {
   BtccAgentLoop,
   BtccAgentLoopResult,
