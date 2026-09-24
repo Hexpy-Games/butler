@@ -1221,6 +1221,8 @@ try {
       probe.dataset.slot = "tooltip-content";
       probe.textContent = "Layer probe";
       Object.assign(probe.style, {
+        // Tooltips ignore pointer events; enable them so hit-testing sees the layer.
+        pointerEvents: "auto",
         position: "fixed",
         left: `${rect.left + rect.width / 2 - 40}px`,
         top: `${rect.top + rect.height / 2 - 12}px`,
