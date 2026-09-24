@@ -4,7 +4,7 @@
 
 .trigger {
   display: flex;
-  min-height: 34px;
+  min-height: var(--control-height-lg);
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -19,11 +19,13 @@
 }
 
 .trigger[data-size="sm"] {
-  min-height: 30px;
+  min-height: var(--control-height-md);
 }
 
 .trigger[data-multiline="true"] {
-  min-height: 54px;
+  --select-multiline-min-height: 54px;
+
+  min-height: var(--select-multiline-min-height);
   padding-block: 7px;
 }
 
@@ -99,10 +101,12 @@
 .item {
   position: relative;
   display: flex;
-  min-height: 31px;
+  min-height: var(--menu-item-height);
   align-items: center;
   gap: 8px;
-  padding: 6px 30px 6px 9px;
+  padding: 0 30px 0 9px;
+  padding-block: var(--menu-item-padding-block);
+  line-height: var(--menu-item-line-height);
   border-radius: 8px;
   color: var(--text-primary);
   cursor: pointer;

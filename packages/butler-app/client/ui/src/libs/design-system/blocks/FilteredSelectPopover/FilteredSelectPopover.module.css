@@ -42,12 +42,14 @@
 }
 
 .clearButton {
+  --filtered-select-clear-size: 22px;
+
   position: absolute;
   top: 50%;
   right: 6px;
   display: inline-grid;
-  width: 22px;
-  height: 22px;
+  width: var(--filtered-select-clear-size);
+  height: var(--filtered-select-clear-size);
   place-items: center;
   padding: 0;
   border: 0;
@@ -144,16 +146,18 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 28px;
+  min-height: var(--menu-item-height);
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1);
   align-items: start;
-  padding: 3px var(--space-2);
+  padding: 0 var(--space-2);
+  padding-block: var(--menu-item-padding-block);
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   font: inherit;
+  line-height: var(--menu-item-line-height);
   text-align: left;
   cursor: pointer;
   transition:
@@ -201,7 +205,7 @@
   overflow: hidden;
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -211,7 +215,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
 }
 
 .empty {

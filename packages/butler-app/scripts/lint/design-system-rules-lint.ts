@@ -55,10 +55,34 @@ function zIndexFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] 
     }));
 }
 
+const SIZED_CONTROL_FILES = [
+  "libs/design-system/components/Button/Button.module.css",
+  "libs/design-system/components/IconButton/IconButton.module.css",
+  "libs/design-system/components/DropdownMenu/DropdownMenu.module.css",
+  "libs/design-system/components/ContextMenu/ContextMenu.module.css",
+  "libs/design-system/components/Select/Select.module.css",
+  "libs/design-system/blocks/OptionMenu/OptionMenu.module.css",
+  "libs/design-system/blocks/FilteredSelectPopover/FilteredSelectPopover.module.css",
+];
+
+function rawHeightFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  if (!SIZED_CONTROL_FILES.some((file) => path.endsWith(file))) return [];
+  return [...rule.body.matchAll(/(?:^|;|\s)((?:min-|max-)?height)\s*:\s*(\d+(?:\.\d+)?)px\s*(?:;|$)/gu)]
+    // 1px hairline separators are not control heights.
+    .filter((match) => Number(match[2]) !== 1)
+    .map((match) => ({
+      path,
+      line: rule.line,
+      reason: `raw px ${match[1]} in a control/menu stylesheet must use --control-height-* or --menu-item-height`,
+      text: rule.selector,
+    }));
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
   return cssRules(source).flatMap((rule) => [
     ...focusRingFindings(path, rule),
     ...zIndexFindings(path, rule),
+    ...rawHeightFindings(path, rule),
   ]);
 }
 

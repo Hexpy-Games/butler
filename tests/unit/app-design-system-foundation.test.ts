@@ -247,3 +247,57 @@ describe("design-system layering", () => {
     }
   });
 });
+
+describe("design-system control and menu sizing", () => {
+  const menuFamilies = [
+    "components/DropdownMenu/DropdownMenu.module.css",
+    "components/ContextMenu/ContextMenu.module.css",
+    "components/Select/Select.module.css",
+    "blocks/OptionMenu/OptionMenu.module.css",
+    "blocks/FilteredSelectPopover/FilteredSelectPopover.module.css",
+  ];
+
+  test("menu rows resolve to an exact integer 32px height", () => {
+    const tokens = rootTokens();
+    const padding = Number.parseFloat(tokens.get("--menu-item-padding-block") ?? "");
+    expect(tokens.get("--menu-item-line-height")?.replace(/\(\s+/gu, "(").replace(/\s+\)/gu, ")")).toBe(
+      "calc(var(--menu-item-height) - 2 * var(--menu-item-padding-block))",
+    );
+    const lineHeight = 32 - 2 * padding;
+    expect(Number.isInteger(padding) && Number.isInteger(lineHeight) && lineHeight > 0).toBe(true);
+  });
+
+  test("every menu family uses the shared menu row sizing", () => {
+    for (const file of menuFamilies) {
+      const css = read(`${uiSrc}/libs/design-system/${file}`);
+      const item = /(?:^|\n)\.item \{([^}]*)\}/u.exec(css)?.[1] ?? "";
+      for (const declaration of [
+        "min-height: var(--menu-item-height)",
+        "padding-block: var(--menu-item-padding-block)",
+        "line-height: var(--menu-item-line-height)",
+      ]) {
+        expect(`${file}: ${item.includes(declaration)}`).toBe(`${file}: true`);
+      }
+    }
+  });
+
+  test("Button and IconButton heights come from control-height tokens", () => {
+    const button = read(`${uiSrc}/libs/design-system/components/Button/Button.module.css`);
+    for (const size of ["xs", "sm", "md", "lg"]) {
+      expect(button).toContain(`height: var(--control-height-${size})`);
+    }
+    expect(read(`${uiSrc}/libs/design-system/components/IconButton/IconButton.module.css`)).toContain(
+      "var(--icon-button-size, var(--control-height-md))",
+    );
+  });
+
+  test("lint rejects raw px heights in control and menu CSS", () => {
+    const sample = ".a { height: 30px; }\n.b { min-height: 31px; }\n.c { height: 1px; }\n.d { min-height: var(--menu-item-height); }";
+    const findings = lintDesignSystemRules(
+      "packages/butler-app/client/ui/src/libs/design-system/components/Select/Select.module.css",
+      sample,
+    );
+    expect(findings.map((finding) => finding.line)).toEqual([1, 2]);
+    expect(lintDesignSystemRules("other.module.css", sample)).toEqual([]);
+  });
+});

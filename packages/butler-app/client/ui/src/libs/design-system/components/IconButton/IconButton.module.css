@@ -1,7 +1,7 @@
 .moduleScope {
-  width: var(--icon-button-size, 30px);
-  height: var(--icon-button-size, 30px);
-  min-height: var(--icon-button-size, 30px);
+  width: var(--icon-button-size, var(--control-height-md));
+  height: var(--icon-button-size, var(--control-height-md));
+  min-height: var(--icon-button-size, var(--control-height-md));
   overflow: hidden;
   border-radius: var(--icon-button-radius, var(--radius-pill));
   color: var(--text-secondary);
@@ -36,8 +36,14 @@
 
 @media (width <= 640px), (pointer: coarse) {
   .moduleScope {
-    width: max(var(--icon-button-size, 30px), var(--control-hit-target));
-    height: max(var(--icon-button-size, 30px), var(--control-hit-target));
+    width: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+    height: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
     min-height: var(--control-hit-target);
   }
 }

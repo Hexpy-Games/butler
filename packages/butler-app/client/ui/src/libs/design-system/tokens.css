@@ -16,6 +16,10 @@
   --control-height-md: 30px;
   --control-height-lg: 34px;
   --menu-item-height: 32px;
+  --menu-item-padding-block: 6px;
+  --menu-item-line-height: calc(
+    var(--menu-item-height) - 2 * var(--menu-item-padding-block)
+  );
   --scroll-fade-size: 14px;
   --focus-ring-width: 2px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */

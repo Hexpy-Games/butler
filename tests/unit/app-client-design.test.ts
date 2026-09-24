@@ -3729,7 +3729,7 @@ describe("app-client design system foundation", () => {
     expect(separator).toContain('space = "sm"');
     expect(tokens).not.toMatch(/^\[data-slot/m);
     expect(tokens).not.toContain(".liquid-glass-popover");
-    expect(buttonStyles).toContain("height: 30px");
+    expect(buttonStyles).toContain("height: var(--control-height-md)");
     expect(buttonStyles).toContain("flex: 0 0 auto");
     expect(buttonStyles).toContain("width: max-content");
     expect(buttonStyles).toContain("font-weight: var(--font-weight-regular)");
