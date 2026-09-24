@@ -7,6 +7,7 @@ import { FilteredSelectFooter } from "./FilteredSelectFooter";
 import { FilteredSelectItemButton } from "./FilteredSelectItemButton";
 import { FilteredSelectSearch } from "./FilteredSelectSearch";
 import styles from "./FilteredSelectPopover.module.css";
+import { useSelectedRowIntoView } from "./useSelectedRowIntoView";
 
 export interface FilteredSelectFilter {
   id: string;
@@ -74,6 +75,7 @@ export function FilteredSelectPopover({
   resultsMaxRows,
 }: FilteredSelectPopoverProps) {
   const filtersFadeRef = useScrollEdges("x");
+  const resultsRef = useSelectedRowIntoView();
   const visibleGroups = groups.filter((group) => group.items.length > 0);
   const resultsStyle = resultsMaxRows
     ? ({
@@ -120,6 +122,7 @@ export function FilteredSelectPopover({
         contentClassName={styles.resultsContent}
         dataSlot="filtered-select-results"
         dataTestClass="filtered-select-results"
+        scrollRef={resultsRef}
         style={resultsStyle}
       >
         {visibleGroups.length > 0 ? (

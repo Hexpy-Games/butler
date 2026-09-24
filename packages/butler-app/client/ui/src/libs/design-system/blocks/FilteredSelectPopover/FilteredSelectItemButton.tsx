@@ -1,3 +1,4 @@
+import { CheckIcon } from "../../components/Icons";
 import { Tooltip } from "../../components/Tooltip";
 import type { FilteredSelectItem } from "./FilteredSelectPopover";
 import styles from "./FilteredSelectPopover.module.css";
@@ -24,6 +25,15 @@ export function FilteredSelectItemButton({
           <span className={styles.itemDescription}>{item.description}</span>
         ) : null}
       </span>
+      {item.selected ? (
+        <span
+          aria-hidden="true"
+          className={styles.check}
+          data-slot="filtered-select-check"
+        >
+          <CheckIcon size={14} />
+        </span>
+      ) : null}
     </button>
   );
 

@@ -147,7 +147,7 @@
   width: 100%;
   min-width: 0;
   min-height: var(--menu-item-height);
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-1);
   align-items: start;
   padding: 0 var(--space-2);
@@ -166,7 +166,7 @@
 }
 
 .item:not([data-has-icon="true"]) {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .item:hover,
@@ -190,6 +190,17 @@
 }
 
 .icon svg {
+  display: block;
+}
+
+.check {
+  display: inline-grid;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.check svg {
   display: block;
 }
 
