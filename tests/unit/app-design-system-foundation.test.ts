@@ -398,3 +398,14 @@ describe("navigation row selection", () => {
     expect(rule(source, ".active .icon")).toContain("opacity: 1");
   });
 });
+
+describe("inspector content alignment", () => {
+  test("inspector content packs rows at the start instead of stretching them", () => {
+    const css = read(`${uiSrc}/libs/design-system/blocks/InspectorShell/InspectorShell.module.css`);
+    const start = css.search(/^\.content \{/mu);
+    expect(start).toBeGreaterThan(-1);
+    const block = css.slice(start, css.indexOf("}", start));
+    expect(block).toContain("display: grid");
+    expect(block).toContain("align-content: start");
+  });
+});

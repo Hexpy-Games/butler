@@ -62,11 +62,39 @@ async function assertMediumDrawerKeepsWorkspaceVisible(page: Page): Promise<void
   );
 }
 
+async function assertInspectorContentStartsAtTop(page: Page): Promise<void> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${server.url}?visual=components`, { waitUntil: "load" });
+  const inspector = page.locator(testClass("right-inspector-open"));
+  await inspector.waitFor({ state: "visible" });
+  const layout = await inspector.evaluate((element) => {
+    const content = [...element.querySelectorAll<HTMLElement>("div")].find(
+      (candidate) => getComputedStyle(candidate).alignContent === "start"
+        && getComputedStyle(candidate).display === "grid"
+        && candidate.scrollHeight <= candidate.clientHeight + 1
+        && candidate.children.length > 0,
+    );
+    if (!content) return null;
+    const first = content.firstElementChild!.getBoundingClientRect();
+    return {
+      gap: first.top - content.getBoundingClientRect().top,
+      firstHeight: first.height,
+      contentHeight: content.clientHeight,
+    };
+  });
+  assert(layout, "inspector content should pack rows at the start");
+  assert(
+    layout.gap <= 24 && layout.firstHeight < layout.contentHeight,
+    `inspector rows should start at the top without stretching: ${JSON.stringify(layout)}`,
+  );
+}
+
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await openApp(page);
   await assertMediumDrawerKeepsWorkspaceVisible(page);
+  await assertInspectorContentStartsAtTop(page);
   console.log("app screen contracts smoke passed");
 } finally {
   await browser.close();
