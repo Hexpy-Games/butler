@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -35,7 +35,18 @@ import {
   resolveFeedbackEntry,
 } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
 
+// bun's mock.module is process-wide: keep the real exports alongside the stub
+// and restore them afterwards, or later test files (provider, memory) import a
+// runtime module that lacks runPromptText.
+const realProviderRuntime = {
+  ...(await import("../../packages/butler-agent/src/integrations/providers/runtime.ts")),
+};
+afterAll(() => {
+  mock.module("../../packages/butler-agent/src/integrations/providers/runtime.ts", () => realProviderRuntime);
+});
+
 mock.module("../../packages/butler-agent/src/integrations/providers/runtime.ts", () => ({
+  ...realProviderRuntime,
   runPromptTextWithUsage: async (request: { prompt: string; model: string }) => {
     const wire = JSON.parse(request.prompt) as {
       input?: { parts?: Array<{ id: number; text: string }>; targets?: Array<{ target: string }> };
