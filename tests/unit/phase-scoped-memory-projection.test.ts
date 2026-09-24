@@ -9,6 +9,8 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import { admitTurn } from
+  "../../packages/butler-agent/src/agent/btcc/turn/admission/index.ts";
 import { selectGuidedTurnPhasePolicy } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-phase-policy.ts";
 import {
@@ -588,12 +590,33 @@ async function runCaptured(
       async runRound(value) { request = value; return { text: "done", toolCalls: [] }; },
     },
   });
+  await ensureTurnAdmitted(turn, fixture.stores);
   await agent.run({
     turn, signal: new AbortController().signal,
     transitionContinuationBudget: budgetTransition(),
   });
   if (!request) throw new Error("request_not_captured");
   return request;
+}
+
+/**
+ * Since 19da630e the Guided round surface reads Work through the admitted
+ * Turn row, so hand-built TurnRecords are admitted first, as in production.
+ */
+async function ensureTurnAdmitted(
+  turn: TurnRecord,
+  stores: ReturnType<typeof openBtccSqliteStores>,
+): Promise<void> {
+  if (await stores.turns.findTurn(turn.turnId)) return;
+  await admitTurn({
+    kind: "run",
+    turnId: turn.turnId,
+    sessionId: turn.sessionId,
+    triggerKey: turn.triggerKey,
+    message: { messageId: turn.originalMessageId, content: turn.originalMessage },
+    modelSelection: turn.modelSelection,
+    context: turn.context,
+  }, stores.admission, stores.turns);
 }
 
 function budgetTransition() {
