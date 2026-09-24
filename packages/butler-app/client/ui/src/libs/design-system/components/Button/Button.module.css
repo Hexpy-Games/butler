@@ -43,7 +43,8 @@
 }
 
 .button:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .variantDefault:hover:not(:disabled) {

@@ -104,7 +104,7 @@
 
 .itemButton:focus-visible {
   border-radius: var(--radius-control);
-  outline: 2px solid var(--color-focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--space-1);
 }
 

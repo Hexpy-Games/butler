@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
+import { lintDesignSystemRules } from "../../packages/butler-app/scripts/lint/design-system-rules-lint.ts";
 
-const root = process.cwd();
 const uiSrc = "packages/butler-app/client/ui/src";
 
 function read(path: string): string {
@@ -67,7 +67,10 @@ describe("design-system foundation tokens", () => {
     const tokens = rootTokens();
     expect(tokens.get("--scroll-fade-size")).toBe("14px");
     expect(tokens.get("--focus-ring-color")).toBeDefined();
-    expect(tokens.get("--focus-ring")).toBe("0 0 0 2px var(--focus-ring-color)");
+    expect(tokens.get("--focus-ring-width")).toBe("2px");
+    expect(tokens.get("--focus-ring")).toBe(
+      "0 0 0 var(--focus-ring-width) var(--focus-ring-color)",
+    );
     expect(tokens.get("--menu-item-height")).toBe("32px");
     expect(tokens.get("--control-height-xs")).toBe("24px");
     expect(tokens.get("--control-height-sm")).toBe("28px");
@@ -155,5 +158,67 @@ describe("design-system theme parity", () => {
         expect(contrast(placeholder, surface)).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+});
+
+describe("design-system focus ring", () => {
+  test("focus ring color keeps 3:1 contrast on base surfaces in both themes", () => {
+    for (const theme of [themeTokens(".theme-light"), themeTokens(".theme-dark")]) {
+      const ring = resolveToken("--focus-ring-color", theme);
+      const surface = resolveToken("--color-surface-base", theme);
+      expect(ring).toMatch(/^#[0-9a-f]{6}$/u);
+      expect(contrast(ring, surface)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("legacy ring tokens alias the single focus ring color", () => {
+    const blocks = [rootTokens(), themeTokens(".theme-light"), themeTokens(".theme-dark")];
+    for (const tokens of blocks) {
+      for (const alias of ["--ring", "--color-focus-ring"]) {
+        const value = tokens.get(alias);
+        if (value !== undefined) expect(value).toBe("var(--focus-ring-color)");
+      }
+    }
+    expect(rootTokens().get("--ring")).toBe("var(--focus-ring-color)");
+  });
+
+  test("a shared :focus-visible rule draws the 2px ring", () => {
+    expect(read(tokensPath)).toMatch(
+      /:where\(:focus-visible\)\s*\{[^}]*outline:\s*var\(--focus-ring-width\) solid var\(--focus-ring-color\)/u,
+    );
+  });
+
+  test("core controls consume --focus-ring in their :focus-visible rules", () => {
+    for (const file of [
+      "components/Button/Button.module.css",
+      "components/IconButton/IconButton.module.css",
+      "components/Input/Input.module.css",
+      "components/Textarea/Textarea.module.css",
+      "components/Select/Select.module.css",
+      "components/NativeSelect/NativeSelect.module.css",
+      "components/Card/Card.module.css",
+      "blocks/WorkActivityBlock/WorkActivityBlock.module.css",
+    ]) {
+      const css = read(`${uiSrc}/libs/design-system/${file}`);
+      const focusRules = [...css.matchAll(/([^{}]*:focus-visible[^{}]*)\{([^{}]*)\}/gu)];
+      expect(`${file}: ${focusRules.some((rule) => rule[2].includes("var(--focus-ring)"))}`).toBe(`${file}: true`);
+    }
+  });
+});
+
+describe("design-system rules lint", () => {
+  test("flags outline:none in :focus-visible without the focus ring", () => {
+    const findings = lintDesignSystemRules(
+      "sample.module.css",
+      ".a:focus-visible { outline: none; }\n.b:focus-visible { outline: none; box-shadow: var(--focus-ring); }\n.c:hover { outline: none; }",
+    );
+    expect(findings.map((finding) => finding.line)).toEqual([1]);
+  });
+
+  test("the UI source tree passes the design-system rules lint", () => {
+    const result = spawnSync("bun", ["run", "packages/butler-app/scripts/lint/design-system-rules-lint.ts"], {
+      encoding: "utf8",
+    });
+    expect(`${result.status}\n${result.stderr}`).toBe("0\n");
   });
 });

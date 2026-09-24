@@ -37,7 +37,7 @@
 }
 
 .header:focus-visible {
-  outline: 1px solid var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 

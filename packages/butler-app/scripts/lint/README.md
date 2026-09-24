@@ -1,8 +1,9 @@
 # Butler App Lint Scripts
 
 `packages/butler-app/scripts/lint/` contains Butler App client lint checks for
-component size, CSS module boundaries, design tokens, visible copy, and
-frontend prop boundaries.
+component size, CSS module boundaries, design tokens, design-system rules
+(focus ring, layering, menu sizing), visible copy, and frontend prop
+boundaries.
 
 ## Boundaries
 

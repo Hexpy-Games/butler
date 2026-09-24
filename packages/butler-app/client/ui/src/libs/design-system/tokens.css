@@ -17,8 +17,7 @@
   --control-height-lg: 34px;
   --menu-item-height: 32px;
   --scroll-fade-size: 14px;
-  --focus-ring-color: var(--color-action-primary);
-  --focus-ring: 0 0 0 2px var(--focus-ring-color);
+  --focus-ring-width: 2px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
   --z-sticky: 50;
   --z-drawer: 60;
@@ -188,7 +187,9 @@
   --color-disabled-bg: var(--grayscale-02);
   --color-disabled-fg: var(--grayscale-05);
 
-  --color-focus-ring: rgba(0, 122, 255, 0.34);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
 
   /* Typography Role Tokens */
   --typo-h1-size: 32px;
@@ -410,7 +411,7 @@
   --destructive: var(--danger);
   --border: var(--line);
   --input: var(--line);
-  --ring: rgba(0, 122, 255, 0.34);
+  --ring: var(--focus-ring-color);
   --radius: var(--radius-control);
 }
 
@@ -505,7 +506,10 @@
   --color-disabled-bg: rgba(255, 255, 255, 0.08);
   --color-disabled-fg: var(--neutral-dark-text-disabled);
 
-  --color-focus-ring: rgba(0, 122, 255, 0.34);
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
   --surface: rgba(30, 31, 34, 0.9);
   --adaptive-panel-bg: var(--grayscale-11);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
@@ -602,6 +606,11 @@
   --color-text-tertiary: var(--grayscale-07);
   --color-text-disabled: var(--neutral-light-text-disabled);
   --color-text-inverse: var(--neutral-white);
+
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
+  --color-focus-ring: var(--focus-ring-color);
+  --ring: var(--focus-ring-color);
 
   --surface: rgba(255, 255, 255, 0.9);
   --adaptive-panel-bg: var(--neutral-white);
@@ -736,6 +745,11 @@ input::placeholder,
 textarea::placeholder {
   color: var(--placeholder);
   opacity: 1;
+}
+
+:where(:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 1px;
 }
 
 .sr-only {

@@ -37,7 +37,7 @@
 }
 .title:focus-visible {
   outline: auto;
-  outline-color: var(--ring);
+  outline-color: var(--focus-ring-color);
 }
 .actions {
   display: flex;

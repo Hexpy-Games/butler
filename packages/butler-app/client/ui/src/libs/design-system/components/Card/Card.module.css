@@ -35,5 +35,5 @@
 
 .card[data-interactive="true"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-focus-ring);
+  box-shadow: var(--focus-ring);
 }

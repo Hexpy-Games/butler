@@ -65,7 +65,11 @@
 .clearButton:focus-visible {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+.clearButton:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .srOnly {
@@ -166,7 +170,11 @@
 .item[data-selected="true"] {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+.item:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
 .icon {

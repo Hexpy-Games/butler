@@ -16,6 +16,11 @@
   color: var(--text-primary);
 }
 
+.moduleScope:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .moduleScope.selected {
   background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);

@@ -225,7 +225,12 @@ button.tool[aria-expanded="true"],
 .toolGroup[aria-expanded="true"] {
   background: var(--selection);
   border-color: var(--line-strong);
+}
+
+button.tool:focus-visible,
+.toolGroup:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .toolGroupSummary {
@@ -293,7 +298,11 @@ button.toolDetailButton {
 button.toolDetailButton:hover,
 button.toolDetailButton:focus-visible {
   color: var(--text-secondary);
+}
+
+button.toolDetailButton:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .toolDetailText {
