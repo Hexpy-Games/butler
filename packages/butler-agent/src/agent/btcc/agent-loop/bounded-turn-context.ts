@@ -69,6 +69,8 @@ export async function prepareBoundedModelContext(input: {
   ) => number;
   butlerData?: string;
   compactor?: ContextCompactor;
+  /** Provider rejected the last estimate: compact to a smaller share of the limit. */
+  aggressive?: boolean;
   contextSizing?: { maxMessageBytes: number; messageBytes(messages: readonly ModelRoundMessage[]): number };
 }): Promise<{
   messages: readonly ModelRoundMessage[];
@@ -103,7 +105,7 @@ export async function prepareBoundedModelContext(input: {
       messageBytes(messages),
       sizing ? sizing.messageBytes(messages) * messageLimit / sizing.maxMessageBytes : 0,
     );
-    const projection = await input.compactor.prepare(input.messages, messageLimit, measure);
+    const projection = await input.compactor.prepare(input.messages, messageLimit, measure, { aggressive: input.aggressive });
     const bounded: BoundedTurnContext = {
       messages: projection.messages, modelFacingBytes: messageBytes(projection.messages),
       requestDigest: continuationRequestDigest(projection.messages),

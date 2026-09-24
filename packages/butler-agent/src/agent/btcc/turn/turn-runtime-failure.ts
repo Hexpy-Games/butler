@@ -27,6 +27,7 @@ export function runtimeFailureMessage(
   workCompleted = false,
 ): string {
   const korean = /[가-힣]/.test(originalMessage);
+  if (failure.code === "context_capacity_exceeded") return contextCapacityMessage(korean);
   const cause = failureCause(failure.code, korean);
   if (korean) {
     return workCompleted
@@ -62,4 +63,11 @@ function failureCause(code: string, korean: boolean): string {
     default:
       return korean ? "실행 중 오류가 발생해" : "An execution error";
   }
+}
+
+/** Actionable: the user can shrink or split the input, or pick a larger model. */
+function contextCapacityMessage(korean: boolean): string {
+  return korean
+    ? "현재 메시지, 첨부 파일 또는 최근 도구 결과가 선택한 모델의 컨텍스트 창보다 커서 작업을 이어갈 수 없습니다. 입력을 줄이거나 나누어 보내거나, 더 큰 컨텍스트 창을 가진 모델로 바꿔 주세요. 진행한 내용은 저장되어 있습니다."
+    : "The current message, attachments, or latest tool result is larger than the selected model's context window. Shorten or split the input, or switch to a model with a larger context window. Progress is saved.";
 }

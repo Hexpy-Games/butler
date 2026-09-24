@@ -9,6 +9,7 @@ import {
   guidedOperationalFallback,
   type OperationalFacts,
 } from "./guided-operational-facts.ts";
+import { ContextCapacityExceededError } from "./context-capacity.ts";
 
 export {
   guidedOperationalFallback,
@@ -48,6 +49,10 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
     }
     if (error instanceof ModelRouteRecoveredFailureError) {
       return { failure: { code: error.failureCode, retryable: error.disposition === "retry" } };
+    }
+    // Only mandatory content that cannot fit reaches the user, with guidance.
+    if (error instanceof ContextCapacityExceededError) {
+      return { failure: { code: error.code, retryable: false } };
     }
     throw error;
   }

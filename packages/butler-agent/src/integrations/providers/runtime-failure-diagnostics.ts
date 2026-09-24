@@ -39,6 +39,15 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       cause: safeErrorText(message),
     };
   }
+  if (code === "context_capacity_exceeded") {
+    return {
+      code,
+      message:
+        "The current input does not fit the selected model's context window. Shorten or split it, or switch to a larger-context model.",
+      retryable: false,
+      cause: safeErrorText(message),
+    };
+  }
   if (code === "prompt_usage_model_call_budget_exhausted") {
     return {
       code,

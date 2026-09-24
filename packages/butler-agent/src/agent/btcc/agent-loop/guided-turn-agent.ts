@@ -28,6 +28,7 @@ import { modelContextByteLimit } from "../turn/index.ts";
 import { guidedTurnResult } from "./guided-turn-result.ts";
 import { createGuidedModelRouteRuntime } from "./guided-turn-route-events.ts";
 import { createContextCompactor } from "./context-compaction.ts";
+import { createGuidedContextSummarizer } from "./guided-context-summarizer.ts";
 import { createGuidedDelegationTurnRelease, createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 import { createActiveDelegationAdmissionGuard, createGuidedRoundToolSurfaceResolver } from "./guided-round-tool-surface.ts";
 import { renderPhaseScopedGuidedTurnRequest } from "./phase-scoped-memory-projection.ts";
@@ -437,23 +438,9 @@ export function createProductionGuidedTurnAgent(
             return size ? { maxBytes: size.maxMessageBytes,
               measure: (content) => size.messageBytes([{ role: "user", content }]) } : undefined;
           },
-          summarize: async ({ text, maxOutputBytes, sourceDigest }) => {
-            const capacity = baseModelRound.contextSizing?.({ model: resolveActiveModelRef(), tools: [], butlerData: input.butlerData });
-            const response = await baseModelRound.runRound({
-              roundId: `btcc-summary-${sourceDigest}`, model: resolveActiveModelRef(),
-              messages: [{ role: "user", content: text }], tools: [], signal,
-              reasoningEffort: selectedReasoningEffort, butlerData: input.butlerData,
-              // Reasoning and visible summary share the provider output window.
-              // The summary's text allowance is not the reasoning allowance.
-              maxOutputTokens: String(resolveActiveModelRef()).startsWith("local/") && capacity?.maxOutputTokens === undefined
-                ? undefined
-                : Math.max(1, Math.min(capacity?.maxOutputTokens ?? Infinity,
-                capacity ? Math.floor(capacity.maxMessageBytes / 8) : Infinity,
-                Math.max(16_384, Math.floor(maxOutputBytes / 4)))),
-              usageAttribution: { turnId: turn.turnId, phase: "guided" },
-            });
-            return response.text ?? "";
-          },
+          summarize: createGuidedContextSummarizer({ turnId: turn.turnId, signal, butlerData: input.butlerData,
+            resolveModelRef: resolveActiveModelRef, reasoningEffort: selectedReasoningEffort,
+            modelRound: baseModelRound, ...(continuationBudget ? { continuationBudget } : {}) }),
         }) } : {}),
         maxModelFacingBytes: modelContextByteLimit(turn.modelSelection.contextWindowTokens),
         prompt: requestAttribution.prompt,

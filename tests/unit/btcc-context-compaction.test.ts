@@ -84,7 +84,8 @@ describe("common BTCC rolling context", () => {
           return "이전 내용을 확인했습니다. ".repeat(15);
         } });
       await compactor.prepare(history(8), 16000);
-      expect(summaries).toBeGreaterThan(1);
+      // One bounded summary call; oversized input drops oldest items instead of chunking.
+      expect(summaries).toBe(1);
     } finally { db.close(); }
   });
   test("summary target overshoot is not a failure when the complete request fits", async () => {
@@ -157,7 +158,7 @@ describe("common BTCC rolling context", () => {
       expect(JSON.stringify(messages)).toBe(original);
       expect(first.messages[0]).toEqual(messages[0]);
       expect(first.messages.slice(-2)).toEqual(messages.slice(-2));
-      expect(calls).toBeGreaterThan(1);
+      expect(calls).toBe(1);
       const priorCalls = calls;
       expect(await compactor.prepare(messages, 24000)).toEqual(first);
       expect(calls).toBe(priorCalls);
@@ -178,7 +179,10 @@ describe("common BTCC rolling context", () => {
       messages.push({ role: "user", content: "Stop changing the API. Only fix the parser.", requestSegmentKind: "current_user_request", continuationItemId: "turn-item-61" },
         { role: "assistant", content: "", toolCalls: [{ id: "pending", name: "edit_file", arguments: {}, rawArguments: "{}" }], continuationItemId: "turn-item-62" });
       const failing = createContextCompactor({ turnId: "t", store, summarize: async () => { throw new Error("provider unavailable"); } });
-      await expect(failing.prepare(messages, 16000)).rejects.toThrow("provider unavailable");
+      // A failed summary falls back to deterministic pruning and publishes no boundary.
+      const fallback = await failing.prepare(messages, 16000);
+      expect(Buffer.byteLength(JSON.stringify(fallback.messages))).toBeLessThanOrEqual(16000);
+      expect(fallback.messages.slice(-2)).toEqual(messages.slice(-2));
       expect(store.load("t")).toEqual([]);
       const compactor = createContextCompactor({ turnId: "t", store, summarize: async () => "Inspected sources; parser repair remains." });
       const result = await compactor.prepare(messages, 16000);

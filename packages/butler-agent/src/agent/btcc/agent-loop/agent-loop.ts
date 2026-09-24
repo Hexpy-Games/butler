@@ -9,19 +9,14 @@ import { emitAgentLoopEvent as emit } from "./agent-loop-events.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
 import { executePreparedBtccToolCall, prepareBtccToolCall } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
-import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
-import {
-  modelRoundOutputBytes,
-  prepareBoundedModelContext,
-  toolResultBatchModelFacingBudget,
-} from "./bounded-turn-context.ts";
+import { toolResultBatchModelFacingBudget } from "./bounded-turn-context.ts";
 import { appendAssistantResponse } from "./assistant-response.ts";
 import { createTurnContinuationItems } from "./continuation-item-identity.ts";
 import { finalRoundToolSurface, resolveRoundToolSurface } from "./round-tool-surface.ts";
-import { continuationForContextProjection } from "../model-route/context-projection-rebase.ts";
 import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.ts";
-import { modelRoundRequestId, nextTurnAfterToolBatch, throwIfAgentLoopAborted } from "./agent-loop-round.ts";
+import { nextTurnAfterToolBatch, throwIfAgentLoopAborted } from "./agent-loop-round.ts";
+import { createAgentLoopModelRound } from "./agent-loop-model-round.ts";
 import { createFailureRepetitionTracker } from "./failure-repetition.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
@@ -55,120 +50,13 @@ export async function runBtccAgentLoop(
   };
   if (restored) input = { ...input, instructions: restored.instructions,
     stableProviderCachePrefix: restored.stableProviderCachePrefix };
-  const runModelRound = async (request: {
-    tools: readonly BtccAgentLoopInput["tools"][number][]; toolSurfaceDigest?: string;
-    instructions?: string;
-    toolChoice?: "auto" | "required";
-    iteration: number;
-  }): Promise<ModelRoundResult> => {
-    const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
-    modelRoundIndex += 1;
-    const requestId = modelRoundRequestId(roundIndex, input.recoveryAttempt);
-    const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
-    const publishWaiting = async (
-      status: "started" | "completed" | "failed" | "cancelled",
-    ): Promise<void> => {
-      if (!input.turnId) return;
-      const modelRef = resolveModelRef();
-      await publishModelRoundWaiting(input.progress, {
-        turnId: input.turnId,
-        requestId,
-        status,
-        ...(modelRef ? { modelRef } : {}),
-      });
-    };
-    await publishWaiting("started");
-    try {
-      // Final synthesis may append an ordinary user instruction to this same
-      // history; give it the same canonical identity before provider projection.
-      for (const message of messages) {
-        message.continuationItemId ??= continuationItems.nextId();
-      }
-      let responseItemId = continuationItems.nextId();
-      const replayMessages = input.operationResultReplay
-        ? input.operationResultReplay.prepareMessages(messages, requestId, { statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData })
-        : [...messages];
-      const prepareContext = () => prepareBoundedModelContext({
-        // Summarize semantic history, not the transport's acknowledged handles.
-        messages: input.contextCompactor ? messages : replayMessages,
-        instructions: request.instructions,
-        tools: request.tools,
-        toolChoice: request.toolChoice,
-        budget: input.continuationBudget,
-        compactor: input.contextCompactor,
-        contextSizing: input.modelRound.contextSizing?.({ model: resolveModelRef(),
-          instructions: request.instructions, tools: request.tools, attachments: input.attachments, butlerData: input.butlerData }),
-        maxModelFacingBytes: input.maxModelFacingBytes,
-        roundId: requestId, responseItemId,
-        phaseContinuityPrivateDigester: input.phaseContinuityPrivateDigester,
-        statelessMessageBytes: input.modelRound.statelessMessageBytes, butlerData: input.butlerData,
-      });
-      let bounded = await prepareContext();
-      if (input.contextCompactor && bounded.requiresRebase) {
-        const directions = await input.beforeModelRound?.() ?? [];
-        for (const observation of directions) appendObservation(observation);
-        if (directions.length) {
-          if (directions.some((observation) => typeof observation === "string" ||
-            observation.requestSegmentKind === "current_user_request")) {
-            finalReportRound = false;
-            const surface = await resolveRoundToolSurface(input.resolveTools, input.tools);
-            request.tools = surface.tools;
-            request.toolSurfaceDigest = surface.toolSurfaceDigest;
-            request.toolChoice = input.resolveToolChoice?.() ?? input.toolChoice;
-          }
-          responseItemId = continuationItems.nextId();
-          bounded = await prepareContext();
-        }
-      }
-      const roundContinuation = continuationForContextProjection({
-        boundedContinuation: bounded.envelope,
-        continuation,
-      });
-      const response = await input.modelRound.runRound({
-        roundId: requestId,
-        model: resolveModelRef(),
-        messages: bounded.messages,
-        instructions: request.instructions,
-        tools: request.tools,
-        ...(request.toolSurfaceDigest ? { toolSurfaceDigest: request.toolSurfaceDigest } : {}),
-        toolChoice: request.toolChoice,
-        reasoningEffort: input.reasoningEffort,
-        signal: input.signal,
-        attachments: input.attachments,
-        imageCarrier: input.imageCarrier,
-        imageCapability: input.imageCapability,
-        imageManifests: input.imageManifests,
-        verifiedImagePayloadPort: input.verifiedImagePayloadPort,
-        butlerData: input.butlerData,
-        usageAttribution: input.usageAttribution
-          ? { ...input.usageAttribution, roundIndex }
-          : undefined,
-        cacheScope: input.cacheScope,
-        stableProviderCachePrefix: input.stableProviderCachePrefix,
-        providerRetryAttempts: input.providerRetryAttempts,
-        continuation: roundContinuation,
-        ...(bounded.envelope
-          ? { boundedContinuation: bounded.envelope }
-          : {}),
-        onProviderStreamEvent: input.onProviderStreamEvent,
-        onProviderResponseIdentity: input.onProviderResponseIdentity,
-      });
-      input.operationResultReplay?.accepted(requestId, response);
-      if (input.continuationBudget) {
-        await input.continuationBudget.recordOutput({
-          roundId: requestId,
-          outputBytes: modelRoundOutputBytes(response),
-        });
-      }
-      continuation = response.continuation;
-      await publishWaiting("completed");
-      return continuationItems.identifyResponse(response, responseItemId);
-    } catch (error) {
-      input.operationResultReplay?.failed(requestId);
-      await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
-      throw error;
-    }
-  };
+  const runModelRound = createAgentLoopModelRound({
+    input, messages, continuationItems, appendObservation,
+    claimRoundIndex: () => modelRoundIndex++,
+    onDirection: () => { finalReportRound = false; },
+    getContinuation: () => continuation,
+    setContinuation: (value) => { continuation = value; },
+  });
   const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
