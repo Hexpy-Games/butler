@@ -31,6 +31,7 @@ import { sessionHintForRow } from
   "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 
 const roots: string[] = [];
+const MAX_SCRIPTED_ROUNDS = 12;
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -194,6 +195,7 @@ function admissionGuardRounds(): ModelRoundPort & {
   const childStarted = new Promise<void>((resolve) => { childEntered = resolve; });
   const parentRounds = new Map<"w1_start" | "w1_delegate" | "w2", number>();
   const forbiddenCodes: string[] = [];
+  let stewardRounds = 0;
   return {
     forbiddenResults: () => forbiddenCodes,
     releaseW1Child: () => releaseChild(),
@@ -202,6 +204,8 @@ function admissionGuardRounds(): ModelRoundPort & {
     w2PlanUsedStartNew: () => w2PlanStartNew,
     async runRound(request) {
       if (request.instructions?.includes("Steward role")) {
+        stewardRounds += 1;
+        if (stewardRounds > MAX_SCRIPTED_ROUNDS) throw new Error(`scripted Steward round overrun: ${stewardRounds}`);
         childEntered();
         await childRelease;
         return { text: "Steward stopped after the admission proof.", toolCalls: [] };
@@ -212,6 +216,9 @@ function admissionGuardRounds(): ModelRoundPort & {
         : body.includes("FIRST_DELEGATE") ? "w1_delegate" : "w1_start";
       const round = (parentRounds.get(key) ?? 0) + 1;
       parentRounds.set(key, round);
+      // The scripted model answers without I/O; if the product keeps re-asking,
+      // fail instead of starving the event loop (and the test timeout).
+      if (round > MAX_SCRIPTED_ROUNDS) throw new Error(`scripted ${key} round overrun: ${round}`);
       if (key === "w1_start") {
         return round === 1
           ? response("w1-start", "start_work", {
@@ -230,7 +237,7 @@ function admissionGuardRounds(): ModelRoundPort & {
     });
     if (round === 2) return response("w1-plan", "replace_work_plan", {
       objective: "Execute the first long-running reviewed objective.",
-      execution_mode: "direct",
+      execution_mode: "steward",
       governing_refs: [],
       actions: [{ action_key: "delegate-first", dependency_keys: [] }],
       checks: ["The first Steward remains active."],
@@ -242,10 +249,11 @@ function admissionGuardRounds(): ModelRoundPort & {
       corrections: [],
       action_updates: [{ action_key: "delegate-first", status: "active" }],
     });
-    return response("w1-delegate", "delegate_to_steward", {
+    if (round === 5) return response("w1-delegate", "delegate_to_steward", {
       request: "Execute the first long-running reviewed objective and keep its Steward relation active.",
       safe_title: "First active Steward",
     });
+    return { text: "The first Work is delegated to its Steward.", toolCalls: [] };
   }
 
   function w2Round(request: ModelRoundRequest, round: number) {
@@ -289,7 +297,7 @@ function admissionGuardRounds(): ModelRoundPort & {
       expect(names).toContain("replace_work_plan");
       const args = {
         objective: "Execute a distinct second reviewed objective.",
-        execution_mode: "direct",
+        execution_mode: "steward",
         governing_refs: [],
         actions: [{ action_key: "delegate-second", dependency_keys: [] }],
         checks: ["The second Steward relation is distinct."],
@@ -304,11 +312,14 @@ function admissionGuardRounds(): ModelRoundPort & {
       corrections: [],
       action_updates: [{ action_key: "delegate-second", status: "active" }],
     });
-    expect(names).toEqual(["delegate_to_steward"]);
-    return response("w2-delegate", "delegate_to_steward", {
-      request: "Execute the distinct second reviewed objective in a separate Steward relation.",
-      safe_title: "Second active Steward",
-    });
+    if (round === 5) {
+      expect(names).toEqual(["delegate_to_steward"]);
+      return response("w2-delegate", "delegate_to_steward", {
+        request: "Execute the distinct second reviewed objective in a separate Steward relation.",
+        safe_title: "Second active Steward",
+      });
+    }
+    return { text: "The second Work is delegated to its Steward.", toolCalls: [] };
   }
 }
 
