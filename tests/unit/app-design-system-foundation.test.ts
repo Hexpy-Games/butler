@@ -31,6 +31,31 @@ describe("design-system foundation spec", () => {
     expect(spec).toContain("--menu-item-height");
     expect(spec).toContain("--z-tooltip");
   });
+
+  test("spec records the Phase 2 screen contracts", () => {
+    const spec = read(
+      "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
+    );
+    expect(spec).toContain("## Phase 2 Screen Contracts");
+    for (const heading of [
+      "### Adaptive Drawer Width",
+      "### Sidebar Default State",
+      "### Filtered Select Popover",
+      "### Command Palette",
+      "### Settings Screens",
+      "### Code Blocks And Message Footer",
+      "### Composer Toolbar",
+      "### Navigation Rows",
+      "### Inspector Content",
+      "### Documents, Artifacts, And Briefing Titles",
+    ]) {
+      expect(spec).toContain(heading);
+    }
+    expect(spec).toContain("aria-activedescendant");
+    expect(spec).toContain("--syntax-");
+    expect(spec).toContain("Preferences");
+    expect(spec).toContain("A saved user choice");
+  });
 });
 
 
