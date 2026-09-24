@@ -13,6 +13,18 @@
   --control-height-sm: 28px;
   --control-height-md: 30px;
   --control-height-lg: 34px;
+  --menu-item-height: 32px;
+  --scroll-fade-size: 14px;
+  --focus-ring-color: var(--color-action-primary);
+  --focus-ring: 0 0 0 2px var(--focus-ring-color);
+  /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */
+  --z-sticky: 50;
+  --z-drawer: 60;
+  --z-overlay: 80;
+  --z-dialog: 90;
+  --z-popover: 100;
+  --z-tooltip: 110;
+  --z-drag: 120;
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
