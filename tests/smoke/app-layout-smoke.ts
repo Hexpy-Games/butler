@@ -100,6 +100,16 @@ async function clickConversationAwayFromMenus(page: Page): Promise<void> {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
+async function openSmokeProjectRowMenu(page: Page, title: string): Promise<void> {
+  const row = page
+    .locator(`${testClass("app-sidebar")} ${testClass("tree-row")}`)
+    .filter({ has: page.getByText(title, { exact: true }) })
+    .filter({ has: page.getByRole("button", { name: appCopy.space.dashboard, exact: false }) })
+    .first();
+  await row.hover();
+  await row.locator('button[aria-haspopup="menu"]').first().click();
+}
+
 async function closeBlockingOverlays(page: Page): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const overlayCount = await page
@@ -3961,9 +3971,10 @@ try {
     const disclosureBackground = block
       ? getComputedStyle(block).backgroundColor
       : "";
-    const toolStyle = tool
-      ? getComputedStyle(tool.firstElementChild ?? tool)
-      : null;
+    // The tool row wraps its button in a layout Stack (3d8720aa); measure the
+    // tool surface itself.
+    const toolSurface = tool?.querySelector("button, div[class*='tool']") ?? tool;
+    const toolStyle = toolSurface ? getComputedStyle(toolSurface) : null;
     const readTokenColor = (token: string) => {
       if (!block) return "";
       const probe = document.createElement("span");
@@ -4062,10 +4073,8 @@ try {
     await showSidebarForProjectMenu.click();
     await page.waitForTimeout(320);
   }
-  await page
-    .getByRole("button", { name: appCopy.sidebar.projectMenu })
-    .first()
-    .click();
+  // Space project rows reveal their menu on hover (it shares the chevron slot).
+  await openSmokeProjectRowMenu(page, smokeProject.display_name);
   await page
     .getByRole("menuitem", { name: appCopy.sessionActions.rename })
     .waitFor({ state: "visible" });
@@ -4075,7 +4084,7 @@ try {
     page,
     "[role='menuitem']:visible",
     0,
-    "project menu should close on outside click",
+    "Space project row menu should close on outside click",
   );
   await closeBlockingOverlays(page);
   await page
@@ -4112,10 +4121,8 @@ try {
   await page
     .locator('[data-slot="dropdown-menu-content"]')
     .waitFor({ state: "hidden", timeout: 1200 });
-  await page
-    .getByRole("button", { name: appCopy.sidebar.projectMenu })
-    .first()
-    .click();
+  // Space project rows reveal their menu on hover (it shares the chevron slot).
+  await openSmokeProjectRowMenu(page, smokeProject.display_name);
   await page
     .getByRole("menuitem", { name: appCopy.sessionActions.rename })
     .click();
