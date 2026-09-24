@@ -680,7 +680,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
         <DialogTrigger asChild>
           <Button variant="outline">Open dialog</Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent closeLabel="Close">
           <DialogHeader>
             <DialogTitle>Dialog title</DialogTitle>
             <DialogDescription>Dialog description</DialogDescription>

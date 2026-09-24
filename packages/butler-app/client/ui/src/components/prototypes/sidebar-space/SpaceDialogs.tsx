@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { CreateSpaceDialog } from "./CreateSpaceDialog";
 import { SpaceItemDialog } from "./SpaceItemDialog";
 import { ConversationIcon } from "./ConversationIcon";
@@ -118,7 +119,7 @@ export function SpaceDialogs() {
         if (!open) setDialog(null);
       }}
     >
-      <DialogContent>
+      <DialogContent closeLabel={appCopy.common.close}>
         {dialog &&
           (dialog.type === "rename" || dialog.type === "delete-project" ? (
             <SpaceItemDialog key={`${dialog.type}-${dialog.id}`} />

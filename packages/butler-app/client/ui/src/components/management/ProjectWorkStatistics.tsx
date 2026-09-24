@@ -22,7 +22,7 @@ export function ProjectWorkStatistics() {
     (b.ageDays ?? -1) - (a.ageDays ?? -1)).slice(0, 5);
   const unknown = cards.filter((card) => card.lane === "other").length;
   const controls = <Tabs value={kind} onValueChange={(value) => { setKind(value as "work" | "task"); setLane(undefined); }}>
-      <TabsList><TabsTrigger value="work">Work</TabsTrigger><TabsTrigger value="task">Task</TabsTrigger></TabsList>
+      <TabsList><TabsTrigger value="work">{appCopy.interfaceStatus.work}</TabsTrigger><TabsTrigger value="task">{appCopy.interfaceStatus.task}</TabsTrigger></TabsList>
     </Tabs>;
   return <Section title={<Typo.PanelTitle>{copy.workOverview}</Typo.PanelTitle>} titleAs="h2" actions={controls} gap="xl" data-test-class="work-statistics-group">
     <div className={styles.weightedPair}>

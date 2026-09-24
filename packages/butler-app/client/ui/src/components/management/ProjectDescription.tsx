@@ -28,7 +28,7 @@ export function ProjectDescription({ projectId, description, revision, onUpdated
       <IconButton label={appCopy.projectSignpost.editDescription} onClick={() => { setDraft(description ?? ""); setOpen(true); }}><Pencil /></IconButton>
     </div>
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent>
+      <DialogContent closeLabel={appCopy.common.close}>
         <DialogHeader><DialogTitle>{appCopy.projectSignpost.description}</DialogTitle></DialogHeader>
         <Textarea aria-label={appCopy.projectSignpost.description} value={draft} maxLength={2000} onChange={(event) => setDraft(event.target.value)} />
         <ButtonContainer size="sm">

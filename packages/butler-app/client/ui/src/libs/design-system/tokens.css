@@ -288,7 +288,8 @@
 
   --font-body:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
+    "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    sans-serif;
   --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-code: var(--font-size-2)/var(--line-height-body)
     var(--font-family-code);

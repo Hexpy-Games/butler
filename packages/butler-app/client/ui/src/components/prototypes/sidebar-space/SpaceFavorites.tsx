@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Button,
@@ -41,7 +42,7 @@ export function SpaceFavorites() {
         ))}
       </NavSection>
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className={styles.favoritesDialog}>
+        <DialogContent closeLabel={appCopy.common.close} className={styles.favoritesDialog}>
           <DialogHeader>
             <DialogTitle>즐겨찾기</DialogTitle>
             <DialogDescription>

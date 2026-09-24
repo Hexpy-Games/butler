@@ -35,7 +35,7 @@ export function ProjectDocumentDialog({
       open={Boolean(document)}
       onOpenChange={(open) => !open && close()}
     >
-      <DialogContent style={{ width: "min(880px, calc(100vw - 32px))", overflow: "hidden" }}>
+      <DialogContent closeLabel={appCopy.common.close} style={{ width: "min(880px, calc(100vw - 32px))", overflow: "hidden" }}>
         {document && view && <DocumentReader
           header={<DialogHeader>
             <DialogDescription>{view.facts[0]?.value}</DialogDescription>

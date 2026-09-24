@@ -17,7 +17,7 @@ export interface CommandPanelProps {
 
 export function CommandPanel({
   query,
-  placeholder = "Search commands",
+  placeholder,
   children,
   onQueryChange,
 }: CommandPanelProps) {

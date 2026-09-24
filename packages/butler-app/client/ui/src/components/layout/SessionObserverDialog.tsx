@@ -50,7 +50,7 @@ export function SessionObserverDialog() {
         if (!open) close();
       }}
     >
-      <DialogContent
+      <DialogContent closeLabel={appCopy.common.close}
         aria-describedby="steward-observer-description"
         className={styles.dialog}
         data-test-class="steward-observer-dialog"

@@ -27,7 +27,7 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
         if (!open && !useOrganization.getState().pending) useOrganization.getState().setDialog(null);
       }}
     >
-      <DialogContent>
+      <DialogContent closeLabel={appCopy.common.close}>
         {dialog?.kind === "create" || dialog?.kind === "rename" || dialog?.kind === "group" ? (
           <SpaceGroupForm key={JSON.stringify(dialog)} dialog={dialog} />
         ) : dialog?.kind === "move" ? (

@@ -37,7 +37,7 @@ export function DocumentTile({
   badge,
   icon,
   actions = [],
-  actionLabel = "Open",
+  actionLabel,
   actionHref,
   actionTarget,
   ariaLabel,

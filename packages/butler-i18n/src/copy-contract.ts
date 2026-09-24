@@ -205,6 +205,8 @@ export interface AppCopy {
   };
   interfacePanels: {
     projectChats: string;
+    messages7d: string;
+    messages30d: string;
     noProjectChats: string;
     noPlans: string;
     noSpecs: string;
@@ -477,6 +479,7 @@ export interface AppCopy {
     read: string;
     review: string;
     phase: string;
+    workerPhase: string;
     branchProject: string;
     branchChat: string;
     branchDescription: string;
@@ -760,6 +763,7 @@ export interface AppCopy {
     back: string;
     confirm: string;
     close: string;
+    open: string;
     more: string;
     refresh: string;
     save: string;

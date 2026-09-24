@@ -1,3 +1,4 @@
+import { appCopy } from "@/app/copy.ts";
 import { useState } from "react";
 import {
   Dialog,
@@ -24,7 +25,7 @@ export function SpaceSettingsButton() {
         onClick={() => setOpen(true)}
       />
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent closeLabel={appCopy.common.close}>
           <DialogHeader>
             <DialogTitle>설정</DialogTitle>
             <DialogDescription>

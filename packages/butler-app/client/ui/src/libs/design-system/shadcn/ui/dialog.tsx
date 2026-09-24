@@ -57,10 +57,13 @@ function DialogContent({
   children,
   glassRadius = "composer",
   showCloseButton = true,
+  closeLabel,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   glassRadius?: TintedGlassRadius;
   showCloseButton?: boolean;
+  /** Localized accessible name for the close button; callers pass app copy. */
+  closeLabel?: string;
 }) {
   return (
     <DialogPortal>
@@ -86,7 +89,7 @@ function DialogContent({
               size="icon-sm"
             >
               <XIcon />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{closeLabel}</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -111,10 +114,13 @@ function DialogHeader({
 function DialogFooter({
   className,
   showCloseButton = false,
+  closeLabel,
   children,
   ...props
 }: React.ComponentPropsWithoutRef<"div"> & {
   showCloseButton?: boolean;
+  /** Localized close button text; callers pass app copy. */
+  closeLabel?: string;
 }) {
   return (
     <div
@@ -128,7 +134,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{closeLabel}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

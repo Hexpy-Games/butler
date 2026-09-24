@@ -46,7 +46,7 @@ export function ProjectRenameDialog({
         if (!open) cancel();
       }}
     >
-      <DialogContent data-test-class="modal-card">
+      <DialogContent closeLabel={appCopy.common.close} data-test-class="modal-card">
         <form
           className="modal-form"
           onSubmit={(event) => {

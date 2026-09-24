@@ -90,7 +90,7 @@ export function ProjectDocumentsPanel({
                                       key={document.id}
                                       title={document.title}
                                       meta={document.status ?? document.safe_path_label}
-                                      onOpen={() => onSelectDocument(document)}
+                                      actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
                                     />
                                   ))
                                 ) : (
@@ -144,7 +144,7 @@ export function ProjectDocumentsPanel({
                       key={document.id}
                       title={document.title}
                       meta={document.safe_path_label}
-                      onOpen={() => onSelectDocument(document)}
+                      actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
                     />
                   ))}
                 </Stack>

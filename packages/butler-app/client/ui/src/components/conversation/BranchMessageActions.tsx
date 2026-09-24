@@ -15,7 +15,7 @@ export function BranchMessageActions({ sessionId, messageId }: { sessionId: stri
       <button type="button" aria-label={appCopy.interfaceStatus.branchProject} onClick={() => setMode("project")}><FolderPlus size={14} /></button>
     </Tooltip>
     <Dialog open={mode !== null} onOpenChange={open => { if (!open && !pending) setMode(null); }}>
-      <DialogContent>
+      <DialogContent closeLabel={appCopy.common.close}>
         {mode && <SessionBranchForm key={mode} sourceSessionId={sessionId} sourceMessageId={messageId}
           project={mode === "project"} onPendingChange={setPending} onClose={() => setMode(null)} />}
       </DialogContent>

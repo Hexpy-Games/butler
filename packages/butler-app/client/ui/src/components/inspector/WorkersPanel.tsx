@@ -93,6 +93,7 @@ export function WorkersPanel({
       description: workerActivityDescription(worker),
       meta: workerActivityMeta(worker),
       phase: worker.semantic_phase ?? worker.phase,
+      phaseRailLabel: appCopy.interfaceStatus.workerPhase,
       depth,
       details: detailBlocks,
       actions,

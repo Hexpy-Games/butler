@@ -77,7 +77,7 @@ export function ProjectCreateDialog({
         else close();
       }}
     >
-      <DialogContent
+      <DialogContent closeLabel={appCopy.common.close}
         aria-describedby={undefined}
         data-test-class="modal-card"
         glassRadius="composer"

@@ -19,6 +19,8 @@ export interface WorkerActivityRowProps {
   details?: ReactNode;
   phase?: WorkerPhase;
   showPhaseRail?: boolean;
+  /** Localized accessible name for the phase rail. */
+  phaseRailLabel?: string;
   compact?: boolean;
   depth?: number;
   expanded?: boolean;
@@ -36,6 +38,7 @@ export function WorkerActivityRow({
   details,
   phase,
   showPhaseRail = true,
+  phaseRailLabel,
   compact = false,
   depth = 0,
   expanded,
@@ -85,7 +88,7 @@ export function WorkerActivityRow({
           ) : null}
         </div>
         {showPhaseRail && phase ? (
-          <ol className={styles.phaseRail} aria-label="Worker phase">
+          <ol className={styles.phaseRail} aria-label={phaseRailLabel}>
             {PUBLIC_PHASES.map((item, index) => (
               <li
                 className={styles.phaseStep}
