@@ -771,6 +771,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     modelLoading: "Checking model",
     modelUnavailable: "Selected model unavailable",
     modelError: "Model state error",
+    modelErrorHint: "Butler couldn't load the model list. Check Models in Settings.",
     gitMissingTitle: "Git is not installed",
     gitMissingMessage:
       "Butler remains usable, but branch, commit, and Ledger commit-evidence features are unavailable.",

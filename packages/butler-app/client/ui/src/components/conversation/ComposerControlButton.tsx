@@ -7,6 +7,7 @@ interface ComposerControlButtonProps
   icon?: ReactNode;
   detail?: ReactNode;
   compact?: "label" | "icon";
+  tone?: "default" | "danger";
 }
 
 export function ComposerControlButton({

@@ -14,18 +14,19 @@ export function ComposerContextControl() {
   const onOpenContext = useComposerStore((store) => store.onOpenContext);
   const settings = useButlerStore((store) => store.settings);
 
+  if (!context) return null;
+
   return (
-    <Popover open={open && Boolean(context)} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <ContextDonutButton
           data-test-class="context-donut-button"
-          ratio={context?.ratio ?? 0}
+          ratio={context.ratio ?? 0}
           onBlur={() => setOpen(false)}
-          onClick={context ? onOpenContext : undefined}
+          onClick={onOpenContext}
           onFocus={() => setOpen(true)}
           onPointerEnter={() => setOpen(true)}
           onPointerLeave={() => setOpen(false)}
-          disabled={!context}
           aria-label={appCopy.composer.contextDetails}
         />
       </PopoverTrigger>
@@ -36,7 +37,7 @@ export function ComposerContextControl() {
         side="top"
         sideOffset={10}
       >
-        <ContextUsagePopover context={context ?? undefined} />
+        <ContextUsagePopover context={context} />
       </PopoverContent>
     </Popover>
   );

@@ -12,6 +12,8 @@ export interface ComposerControlProps
   detail?: ReactNode;
   active?: boolean;
   compact?: "label" | "icon";
+  /** `danger` renders an error state in the danger color. */
+  tone?: "default" | "danger";
   className?: string;
 }
 
@@ -21,6 +23,7 @@ export function ComposerControl({
   detail,
   active = false,
   compact = "label",
+  tone = "default",
   disabled = false,
   onClick,
   className,
@@ -31,6 +34,7 @@ export function ComposerControl({
     <PillButton
       className={cn(styles.control, active && styles.active, className)}
       data-compact={compact}
+      data-tone={tone === "danger" ? "danger" : undefined}
       icon={icon ? <span data-test-class="composer-control-icon">{icon}</span> : undefined}
       disabled={disabled}
       onClick={onClick}

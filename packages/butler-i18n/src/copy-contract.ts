@@ -651,6 +651,7 @@ export interface AppCopy {
     modelLoading: string;
     modelUnavailable: string;
     modelError: string;
+    modelErrorHint: string;
     gitMissingTitle: string;
     gitMissingMessage: string;
     gitInstallAction: string;

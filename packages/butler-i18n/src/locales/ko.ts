@@ -803,6 +803,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     modelLoading: "모델 확인 중",
     modelUnavailable: "선택한 모델 사용 불가",
     modelError: "모델 상태 오류",
+    modelErrorHint: "모델 목록을 불러오지 못했습니다. 설정의 모델에서 확인해 주세요.",
     gitMissingTitle: "Git이 설치되어 있지 않습니다",
     gitMissingMessage:
       "Butler는 계속 사용할 수 있지만 브랜치, 커밋, Ledger 커밋 증거 기능은 사용할 수 없습니다.",

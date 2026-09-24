@@ -35,6 +35,11 @@
   stroke: currentColor;
 }
 
+.control[data-tone="danger"],
+.control[data-tone="danger"] .label {
+  color: var(--danger);
+}
+
 .active {
   background: var(--selection-strong);
 }
