@@ -19,12 +19,15 @@ function findingCodes(repository: FixtureRepository): string[] {
     .findings.map((finding) => finding.code);
 }
 
-function inspect(repository: FixtureRepository) {
+function inspect(
+  repository: FixtureRepository,
+  lineLimitBaseline: Readonly<Record<string, number>> = {},
+) {
   const discovered = discoverSuccessorModulesFromPaths(
     repository.root,
     repository.changedPaths,
   );
-  return verifyDiscoveredSuccessorShape(repository.root, discovered);
+  return verifyDiscoveredSuccessorShape(repository.root, discovered, lineLimitBaseline);
 }
 
 afterEach(() => fixtures.splice(0).forEach((repository) => repository.remove()));
@@ -284,5 +287,55 @@ describe("BTCC successor source shape", () => {
       "line_limit_exceeded",
       "line_limit_exceeded",
     ]);
+  });
+
+  test("baselined oversized files may stay at or below their recorded size", () => {
+    const repository = fixture();
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/index.ts",
+      'export { runTurn } from "./run-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/run-turn.ts",
+      "export const line = 1;\n".repeat(400),
+    );
+
+    expect(inspect(repository, {
+      "packages/butler-agent/src/agent/btcc/run-turn.ts": 410,
+    }).findings).toEqual([]);
+  });
+
+  test("baselined oversized files fail when they grow past their recorded size", () => {
+    const repository = fixture();
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/index.ts",
+      'export { runTurn } from "./run-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/run-turn.ts",
+      "export const line = 1;\n".repeat(411),
+    );
+
+    expect(inspect(repository, {
+      "packages/butler-agent/src/agent/btcc/run-turn.ts": 410,
+    }).findings).toEqual([{
+      code: "line_limit_exceeded",
+      path: "packages/butler-agent/src/agent/btcc/run-turn.ts",
+      message: "411 physical lines exceeds its 410-line baseline (limit 350; shrink it, do not grow it)",
+    }]);
+  });
+
+  test("the baseline does not relax the limit for other files", () => {
+    const repository = fixture();
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/index.ts",
+      'export { runTurn } from "./run-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/run-turn.ts",
+      "export const line = 1;\n".repeat(351),
+    );
+
+    expect(findingCodes(repository)).toEqual(["line_limit_exceeded"]);
   });
 });
