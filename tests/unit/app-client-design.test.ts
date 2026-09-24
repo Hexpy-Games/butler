@@ -1865,7 +1865,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(settingsShellStyles).toContain(".titlebarDragOverlay");
   expect(settingsShellStyles).toContain("height: var(--titlebar-height)");
   expect(settingsShellStyles).toContain("isolation: isolate");
-  expect(settingsShellStyles).toContain("z-index: 100");
+  expect(settingsShellStyles).toContain("z-index: var(--z-drag)");
   expect(settingsShellStyles).toContain(".detailScroll");
   expect(settingsShellStyles).toContain("z-index: 1");
   expect(settingsShellStyles).toContain("-webkit-app-region: drag");

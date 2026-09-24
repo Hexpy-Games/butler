@@ -42,8 +42,24 @@ function focusRingFindings(path: string, rule: CssRule): DesignSystemRuleFinding
   }];
 }
 
+const Z_INDEX_TOKEN_THRESHOLD = 50;
+
+function zIndexFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  return [...rule.body.matchAll(/(?:^|;|\s)z-index\s*:\s*(\d+)\s*(?:;|$)/gu)]
+    .filter((match) => Number(match[1]) >= Z_INDEX_TOKEN_THRESHOLD)
+    .map(() => ({
+      path,
+      line: rule.line,
+      reason: `z-index of ${Z_INDEX_TOKEN_THRESHOLD} or more must use a var(--z-*) layering token`,
+      text: rule.selector,
+    }));
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
-  return cssRules(source).flatMap((rule) => focusRingFindings(path, rule));
+  return cssRules(source).flatMap((rule) => [
+    ...focusRingFindings(path, rule),
+    ...zIndexFindings(path, rule),
+  ]);
 }
 
 function walkCss(dir: string): string[] {

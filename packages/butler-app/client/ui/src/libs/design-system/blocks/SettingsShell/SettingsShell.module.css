@@ -50,7 +50,7 @@
 
 .titlebarDragOverlay {
   position: absolute;
-  z-index: 100;
+  z-index: var(--z-drag);
   top: 0;
   right: 0;
   left: 0;

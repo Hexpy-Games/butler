@@ -72,7 +72,7 @@
 }
 
 .content {
-  z-index: 90;
+  z-index: var(--z-popover);
   max-height: var(--radix-select-content-available-height);
   min-width: 9rem;
   overflow: hidden auto;

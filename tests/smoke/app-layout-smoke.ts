@@ -861,6 +861,9 @@ try {
     sidebarTooltipState.tooltipTop >= sidebarTooltipState.titlebarSafeTop - 1,
     `tooltip should stay below titlebar safe area: ${JSON.stringify(sidebarTooltipState)}`,
   );
+  const tooltipSurfaceClassName = await page
+    .getByRole("tooltip", { name: "Hide sidebar" })
+    .evaluate((element) => element.className);
   await page.mouse.move(260, 120);
   await page
     .getByRole("tooltip", { name: "Hide sidebar" })
@@ -1208,6 +1211,41 @@ try {
   assert(
     dialogTopState.dialogTop >= dialogTopState.titlebarSafeTop - 1,
     `dialog content should stay below titlebar safe area: ${JSON.stringify(dialogTopState)}`,
+  );
+  const dialogTooltipLayer = await page
+    .locator("[role='dialog']")
+    .evaluate((dialog, className) => {
+      const rect = dialog.getBoundingClientRect();
+      const probe = document.createElement("div");
+      probe.className = className;
+      probe.dataset.slot = "tooltip-content";
+      probe.textContent = "Layer probe";
+      Object.assign(probe.style, {
+        position: "fixed",
+        left: `${rect.left + rect.width / 2 - 40}px`,
+        top: `${rect.top + rect.height / 2 - 12}px`,
+        width: "80px",
+        height: "24px",
+        visibility: "visible",
+        opacity: "1",
+      });
+      document.body.append(probe);
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      const result = {
+        tooltipOnTop: Boolean(hit && probe.contains(hit)),
+        tooltipZ: getComputedStyle(probe).zIndex,
+        dialogZ: getComputedStyle(dialog).zIndex,
+      };
+      probe.remove();
+      return result;
+    }, tooltipSurfaceClassName);
+  assert(
+    dialogTooltipLayer.tooltipOnTop &&
+      Number(dialogTooltipLayer.tooltipZ) > Number(dialogTooltipLayer.dialogZ),
+    `tooltips must render above dialog content: ${JSON.stringify(dialogTooltipLayer)}`,
   );
   await page
     .locator(
@@ -4508,6 +4546,7 @@ try {
         "settings-escape-closes",
         "select-liquid-glass-tokenized",
         "dialog-content-titlebar-safe",
+        "tooltip-above-dialog",
         "dark-theme-surfaces-tokenized",
         "dark-titlebar-text-tokenized",
         "dark-permission-menu-tokenized",
@@ -4527,6 +4566,7 @@ try {
         "new-chat-tall-tinted-cards",
         "new-chat-card-ordinals-only",
         "new-chat-scroll-unmasked",
+        "new-chat-suggestion-rail-fade",
         "new-chat-vertical-scroll-absent",
         "new-chat-start-position-high",
         "new-chat-extra-icon-gutter",

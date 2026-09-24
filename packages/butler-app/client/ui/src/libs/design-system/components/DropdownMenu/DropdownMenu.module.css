@@ -3,7 +3,7 @@
 }
 
 .content {
-  z-index: 90;
+  z-index: var(--z-popover);
   min-width: 8rem;
   max-height: var(--radix-dropdown-menu-content-available-height);
   overflow: hidden auto;

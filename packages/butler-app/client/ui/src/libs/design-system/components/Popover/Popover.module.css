@@ -3,7 +3,7 @@
 }
 
 .content {
-  z-index: 90;
+  z-index: var(--z-popover);
   display: flex;
   width: 18rem;
   max-width: calc(100vw - 24px);

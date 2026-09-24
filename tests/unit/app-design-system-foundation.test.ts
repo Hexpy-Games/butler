@@ -222,3 +222,28 @@ describe("design-system rules lint", () => {
     expect(`${result.status}\n${result.stderr}`).toBe("0\n");
   });
 });
+
+describe("design-system layering", () => {
+  test("lint requires z-index tokens for stacking values of 50 and above", () => {
+    const findings = lintDesignSystemRules(
+      "sample.module.css",
+      ".a { z-index: 90; }\n.b { z-index: 12; }\n.c { z-index: var(--z-popover); }\n.d { z-index: calc(var(--z-drawer) - 5); }",
+    );
+    expect(findings.map((finding) => finding.line)).toEqual([1]);
+  });
+
+  test("overlay primitives use the z-scale so tooltips sit above dialogs", () => {
+    const expectations: Array<[string, string]> = [
+      ["libs/design-system/shadcn/ui/tooltip.module.css", "var(--z-tooltip)"],
+      ["libs/design-system/components/Dialog/Dialog.module.css", "var(--z-dialog)"],
+      ["libs/design-system/components/Dialog/Dialog.module.css", "var(--z-overlay)"],
+      ["libs/design-system/components/DropdownMenu/DropdownMenu.module.css", "var(--z-popover)"],
+      ["libs/design-system/components/ContextMenu/ContextMenu.module.css", "var(--z-popover)"],
+      ["libs/design-system/components/Popover/Popover.module.css", "var(--z-popover)"],
+      ["libs/design-system/components/Select/Select.module.css", "var(--z-popover)"],
+    ];
+    for (const [file, token] of expectations) {
+      expect(`${file}: ${read(`${uiSrc}/${file}`).includes(`z-index: ${token}`)}`).toBe(`${file}: true`);
+    }
+  });
+});

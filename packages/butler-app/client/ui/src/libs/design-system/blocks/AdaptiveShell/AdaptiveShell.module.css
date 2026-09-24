@@ -202,7 +202,7 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    z-index: 60;
+    z-index: var(--z-drawer);
     background: var(--adaptive-panel-bg);
     transition:
       transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
@@ -244,7 +244,7 @@
   .scrim {
     position: fixed;
     inset: 0;
-    z-index: 55;
+    z-index: calc(var(--z-drawer) - 5);
     display: block;
     margin: 0;
     padding: 0;
@@ -272,7 +272,7 @@
   .chrome {
     position: fixed;
     inset: 0;
-    z-index: 65;
+    z-index: calc(var(--z-drawer) + 5);
     display: block;
     pointer-events: none;
   }
@@ -313,7 +313,7 @@
     position: fixed;
     top: 0;
     right: 0;
-    z-index: 70;
+    z-index: calc(var(--z-drawer) + 10);
     display: flex;
     width: var(--adaptive-inspector-width);
     height: var(--titlebar-safe-area-top);
