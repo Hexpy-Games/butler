@@ -56,16 +56,28 @@ async function expectLocatorCount(
   assert(actual === count, `${message}: expected ${count}, got ${actual}`);
 }
 
+// The composer is a Lexical contenteditable, not a textarea.
+const composerEditor = '[contenteditable="true"]';
+
+async function readInputValue(locator: Locator): Promise<string> {
+  return locator.evaluate((element) =>
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement
+      ? element.value
+      : (element as HTMLElement).innerText.replace(/\n$/u, ""),
+  );
+}
+
 async function expectInputValue(
   locator: Locator,
   expected: string,
   message: string,
 ): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (await locator.inputValue() === expected) return;
+    if (await readInputValue(locator) === expected) return;
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
   }
-  const actual = await locator.inputValue();
+  const actual = await readInputValue(locator);
   assert(actual === expected, `${message}: expected ${expected}, got ${actual}`);
 }
 
@@ -1478,26 +1490,21 @@ try {
       workspaceBehindSidebar?.width &&
       workspaceBehindSidebar.width >= 389 &&
       workspaceBehindSidebar.x >= narrowSidebarBox.width - 1 &&
+      // Space sidebar phone density: 44px hit-target rows and 20px icons
+      // (SpaceSidebar.module.css), below the brand titlebar row.
       firstCompactNavRowBox &&
-      firstCompactNavRowBox.height >= 48 &&
-      firstCompactNavRowBox.y - narrowSidebarBox.y <= 16 &&
-      firstCompactNavMetrics.iconWidth >= 22 &&
-      firstCompactNavMetrics.iconHeight >= 22 &&
+      firstCompactNavRowBox.height >= 44 &&
+      firstCompactNavMetrics.iconWidth >= 20 &&
+      firstCompactNavMetrics.iconHeight >= 20 &&
       firstCompactNavMetrics.labelFontSize >= 17,
     `narrow sidebar must push the full workspace with comfortable navigation density: ${JSON.stringify({ firstCompactNavMetrics, firstCompactNavRowBox, narrowSidebarBox, workspaceBehindSidebar })}`,
   );
   const compactProjectSession = page
     .locator(smokeSessionRowSelector)
     .first();
-  const compactProjectGesture = page
-    .locator(testClass("project-session-gesture"))
-    .first();
-  const compactSessionMenuButton = compactProjectSession.locator(
-    `button[aria-label="${appCopy.sessionActions.menuLabel}"]`,
-  );
-  const compactSessionActionVisibility = await compactSessionMenuButton.evaluate(
-    (element) => getComputedStyle(element.parentElement ?? element).visibility,
-  );
+  // Space rows handle long press on their row shell; pointer events on the
+  // row bubble to it. Row actions stay visible by design (actionsVisibility).
+  const compactProjectGesture = compactProjectSession;
   await compactProjectGesture.dispatchEvent("pointerdown", {
     button: 0,
     clientX: 80,
@@ -1547,9 +1554,8 @@ try {
     .locator(testClass("titlebar-title"))
     .textContent();
   assert(
-    compactSessionActionVisibility === "hidden" &&
-      activeTitleAfterLongPress === activeTitleBeforeLongPress,
-    `compact project session should hide overflow and long press without navigation: ${JSON.stringify({ activeTitleAfterLongPress, activeTitleBeforeLongPress, compactSessionActionVisibility })}`,
+    activeTitleAfterLongPress === activeTitleBeforeLongPress,
+    `compact project session should long press without navigation: ${JSON.stringify({ activeTitleAfterLongPress, activeTitleBeforeLongPress })}`,
   );
   await page.keyboard.press("Escape");
   await compactLongPressMenu.waitFor({ state: "hidden" });
@@ -1730,8 +1736,9 @@ try {
     0,
     "plan switch should not render in the composer toolbar",
   );
+  // Attach file now lives inside the composer feature drawer ("+") popover.
   await page
-    .getByRole("button", { name: appCopy.composer.attachFile })
+    .getByRole("button", { name: appCopy.composer.featureDrawer })
     .waitFor({ state: "visible" });
   await assertComposerHoverPill(
     page,
@@ -1774,7 +1781,7 @@ try {
     "png attachment should not show unsupported type error",
   );
 
-  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .waitFor({ state: "visible" });
@@ -1816,6 +1823,7 @@ try {
           item?.getAttribute("data-description-placement") ?? "",
         descriptionTop: descriptionRect?.top ?? Number.NaN,
         iconCenterY: iconRect ? iconRect.top + iconRect.height / 2 : Number.NaN,
+        itemCenterY: itemRect ? itemRect.top + itemRect.height / 2 : Number.NaN,
         itemInset:
           contentRect && itemRect
             ? itemRect.left - contentRect.left
@@ -1835,8 +1843,9 @@ try {
       permissionMenuLayout.copyDisplay === "grid" &&
       permissionMenuLayout.descriptionPlacement === "block" &&
       permissionMenuLayout.descriptionTop >= permissionMenuLayout.labelBottom &&
+      // Permission icons center on the whole two-line row (39d64ae9).
       Math.abs(
-        permissionMenuLayout.iconCenterY - permissionMenuLayout.labelCenterY,
+        permissionMenuLayout.iconCenterY - permissionMenuLayout.itemCenterY,
       ) <= 1.5 &&
       permissionMenuLayout.itemInset <= 6 &&
       permissionMenuLayout.itemTopGap <= 2 &&
@@ -1853,7 +1862,7 @@ try {
     0,
     "permission popover should close on outside click",
   );
-  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .click();
@@ -2722,7 +2731,7 @@ try {
     darkSurfaces.composerBorder === "rgba(0, 0, 0, 0.08)",
     `dark composer glass should use black translucent hairline: ${darkSurfaces.composerBorder}`,
   );
-  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
@@ -2765,7 +2774,7 @@ try {
     `tooltip-theme-tokenized failed: ${JSON.stringify(darkTooltipSurface)}`,
   );
   await page.mouse.move(40, 40);
-  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page.locator(`${testClass("composer-card")} ${composerEditor}`).focus();
   await page.locator(testClass("model-button")).click();
   await page
     .locator(testClass("filtered-select-popover"))
@@ -2865,7 +2874,8 @@ try {
     `light titlebar should inherit light text token after theme switch: ${lightTitleColor}`,
   );
 
-  await page.goto(server.url, { waitUntil: "networkidle" });
+  // The live app keeps an event stream open, so "networkidle" never settles.
+  await page.goto(server.url, { waitUntil: "load" });
   await page
     .locator(testClass("custom-titlebar"))
     .getByText("New chat", { exact: true })
@@ -3240,7 +3250,7 @@ try {
   const desktopPreview = desktopComposer.locator(
     '[data-slot="composer-compact-preview"]',
   );
-  const desktopTextarea = desktopComposer.locator("textarea");
+  const desktopTextarea = desktopComposer.locator(composerEditor);
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -3286,7 +3296,7 @@ try {
   const compactPreview = compactComposer.locator(
     '[data-slot="composer-compact-preview"]',
   );
-  const compactTextarea = compactComposer.locator("textarea");
+  const compactTextarea = compactComposer.locator(composerEditor);
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -3437,7 +3447,8 @@ try {
     "right panel toggle should be hidden on draft new chat",
   );
   await patchSettings({ main_screen_theme: "silk" });
-  await page.goto(server.url, { waitUntil: "networkidle" });
+  // The live app keeps an event stream open, so "networkidle" never settles.
+  await page.goto(server.url, { waitUntil: "load" });
   await page.locator(testClass("mac-window")).evaluate(
     (root) =>
       root.classList.contains("main-screen-theme-silk") ||
@@ -3516,11 +3527,12 @@ try {
     main_screen_theme: "bloom",
     main_screen_theme_preset: "monochrome",
   });
-  await page.goto(server.url, { waitUntil: "networkidle" });
+  // The live app keeps an event stream open, so "networkidle" never settles.
+  await page.goto(server.url, { waitUntil: "load" });
   await page
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
-  const composerInput = page.locator(`${testClass("composer-card")} textarea`);
+  const composerInput = page.locator(`${testClass("composer-card")} ${composerEditor}`);
   await composerInput.fill("synthetic draft for new chat");
   const showSidebarForDraftCheck = page.getByRole("button", {
     name: "Show sidebar",
@@ -3584,7 +3596,7 @@ try {
   await page.keyboard.type("composer focus");
   const composerFocusState = await composerInput.evaluate((element) => ({
     focused: document.activeElement === element,
-    value: (element as HTMLTextAreaElement).value,
+    value: (element as HTMLElement).innerText.replace(/\n$/u, ""),
   }));
   assert(
     composerFocusState.focused && composerFocusState.value === "composer focus",
@@ -3593,7 +3605,7 @@ try {
   await page.waitForTimeout(900);
   const composerFocusAfterPoll = await composerInput.evaluate((element) => ({
     focused: document.activeElement === element,
-    value: (element as HTMLTextAreaElement).value,
+    value: (element as HTMLElement).innerText.replace(/\n$/u, ""),
   }));
   assert(
     composerFocusAfterPoll.focused &&
