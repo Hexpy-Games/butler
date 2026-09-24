@@ -45,7 +45,7 @@
   padding: 6px;
 }
 
-.results > button {
+.results [role="option"] {
   display: grid;
   width: 100%;
   min-height: 42px;
@@ -61,8 +61,15 @@
   text-align: left;
 }
 
-.results > button:hover {
+.results [role="option"][aria-selected="true"] {
   background: var(--selection);
+}
+
+.results mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
 }
 
 .results small {

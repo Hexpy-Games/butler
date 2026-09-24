@@ -1,9 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Briefcase,
   Clock3,
   CommandPalettePanel,
   Folder,
+  Notebook,
   PencilLine,
   Settings,
   Button,
@@ -82,7 +84,7 @@ export function CommandPalette({
       ) : undefined}
       items={results.map((result) => ({
         id: `${result.kind}-${result.id}`,
-        title: result.title,
+        title: highlightMatch(result.title, query),
         subtitle: result.subtitle,
         icon: <CommandIcon kind={result.kind} />,
         onSelect: () => {
@@ -97,8 +99,23 @@ export function CommandPalette({
 function CommandIcon({ kind }: { kind: CommandPaletteResult["kind"] }) {
   useAppLocale();
   if (kind === "automation") return <Clock3 size={17} />;
-  if (kind === "project" || kind === "project_session" || kind === "group")
-    return <Folder size={17} />;
+  if (kind === "project") return <Briefcase size={17} />;
+  if (kind === "project_session") return <Notebook size={17} />;
+  if (kind === "group") return <Folder size={17} />;
   if (kind === "settings") return <Settings size={17} />;
   return <PencilLine size={17} />;
+}
+
+function highlightMatch(title: string, query: string): ReactNode {
+  const needle = query.trim().toLocaleLowerCase();
+  const start = needle ? title.toLocaleLowerCase().indexOf(needle) : -1;
+  if (start < 0) return title;
+  const end = start + needle.length;
+  return (
+    <>
+      {title.slice(0, start)}
+      <mark>{title.slice(start, end)}</mark>
+      {title.slice(end)}
+    </>
+  );
 }

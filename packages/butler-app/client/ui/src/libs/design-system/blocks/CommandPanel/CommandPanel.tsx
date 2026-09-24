@@ -1,4 +1,11 @@
-import type { KeyboardEvent, ReactNode, Ref } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Search } from "../../components/Icons";
 import { IconButton } from "../../components/IconButton";
 import { X } from "../../components/Icons";
@@ -69,9 +76,25 @@ export function CommandPalettePanel({
   onClose,
   onQueryChange,
 }: CommandPalettePanelProps) {
+  const listId = useId();
+  const [active, setActive] = useState(0);
+  const activeIndex = Math.min(active, items.length - 1);
+  const optionId = (index: number) => `${listId}-option-${index}`;
+  const activeId = activeIndex >= 0 ? optionId(activeIndex) : undefined;
+
+  useEffect(() => {
+    if (!activeId) return;
+    document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeId]);
+
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") onClose();
-    if (event.key === "Enter") items[0]?.onSelect();
+    if (event.key === "Enter") items[activeIndex]?.onSelect();
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive(Math.max(0, Math.min(items.length - 1, activeIndex + step)));
+    }
   }
 
   return (
@@ -88,9 +111,16 @@ export function CommandPalettePanel({
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => {
+              setActive(0);
+              onQueryChange(event.target.value);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
+            role="combobox"
+            aria-expanded={items.length > 0}
+            aria-controls={listId}
+            aria-activedescendant={activeId}
           />
           <IconButton label={closeLabel} onClick={onClose}>
             <X size={16} />
@@ -98,13 +128,24 @@ export function CommandPalettePanel({
         </div>
         <div className={styles.results}>
           {feedback ? <div role="status" aria-live="polite">{feedback}</div> : null}
-          {items.map((item) => (
-            <button key={item.id} type="button" onClick={item.onSelect}>
-              {item.icon}
-              <span>{item.title}</span>
-              {item.subtitle ? <small>{item.subtitle}</small> : null}
-            </button>
-          ))}
+          <div role="listbox" id={listId} aria-label={label}>
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                id={optionId(index)}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === activeIndex}
+                onClick={item.onSelect}
+                onPointerMove={() => setActive(index)}
+              >
+                {item.icon}
+                <span>{item.title}</span>
+                {item.subtitle ? <small>{item.subtitle}</small> : null}
+              </button>
+            ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -21,7 +21,11 @@ empty or failed-search feedback; results and retry behavior remain domain-owned.
 Command palette containers.
 
 ## Best practice
-Keep keyboard navigation and command execution in the caller.
+`CommandPalettePanel` renders results as a `listbox` of `option` rows and owns
+the active row: it starts at the first result, ArrowDown/ArrowUp move it, Enter
+runs the active item, and the input exposes `aria-activedescendant`. Command
+execution stays in the caller. Callers may pass `<mark>` inside item titles to
+highlight query matches; the panel styles marks through tokens.
 
 ## Wrong use cases
 Do not use it for form search fields without command results. Use `Input`.
