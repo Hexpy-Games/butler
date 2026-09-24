@@ -24,7 +24,9 @@ exclusive open-panel state.
 - The shared `adaptiveDrawerQuery` drives both the shell and panel-state policy.
 - Drawers push the full-width workspace, with a full-cover right sheet in compact.
 - Pass `compactSidebarFullWidth` for navigation that should fully cover the
-  drawer viewport. The default bounded drawer remains available.
+  compact (`width <= 640px`) drawer viewport. Medium drawer widths always use
+  the bounded `--adaptive-drawer-width` (`min(88vw, 320px)`) over the scrim so
+  the workspace stays visible beside the sidebar.
 - The window chrome toggle stays fixed while the workspace moves.
 - Panels animate with transform and honor reduced motion.
 - The always-mounted scrim keeps a promoted compositor layer and animates only

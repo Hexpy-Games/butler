@@ -156,6 +156,22 @@ describe("responsive adaptive design contracts", () => {
     expect(navRow).toContain("font-size: var(--font-size-4)");
   });
 
+  test("limits the full-width sidebar drawer to compact widths", () => {
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const compactStart = shell.indexOf("@media (width <= 640px)");
+    expect(compactStart).toBeGreaterThan(-1);
+    expect(shell.slice(0, compactStart)).not.toContain(
+      "--adaptive-drawer-width: 100vw",
+    );
+    const compact = shell.slice(compactStart);
+    expect(compact).toContain(
+      '[data-panel-layout="drawer"][data-compact-sidebar-full-width="true"]',
+    );
+    expect(compact).toContain("--adaptive-drawer-width: 100vw");
+  });
+
   test("provides animated composer idle and engaged states at every width", () => {
     const composer = read(
       "packages/butler-app/client/ui/src/components/conversation/Composer.tsx",
