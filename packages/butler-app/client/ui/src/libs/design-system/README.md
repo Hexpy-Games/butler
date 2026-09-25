@@ -11,6 +11,33 @@ Butler Design System is the client UI foundation for reusable primitives, tokens
 - Raw shadcn files live under `shadcn/ui`; app code should not import that path directly.
 - Use `Spinner` for indeterminate loading. It owns the official traveling-gap geometry, motion, and reduced-motion behavior; do not animate separate loading icons in product CSS. See [Spinner](components/Spinner/README.md).
 
+## Product Code Constraints
+
+`bun run lint:ds` enforces the DS boundary in product code (everything under
+`client/ui/src` except this folder, tests, fixtures and harness pages) in
+ratchet mode: existing violations are baselined per file and may only shrink.
+
+- Style DS components through their props (`variant`, `size`, `tone`, layout
+  props); do not pass `className` or `style` to them.
+- Use `Button`, `IconButton`, `Clickable`, `Input`, `Textarea`, `Select`,
+  `NativeSelect`, `Switch` and `Slider` instead of raw `<button>`, `<input>`,
+  `<select>`, `<textarea>` or an `<a onClick>` without `href`.
+- Use `Typo` for text instead of `<p>`, `<span>` or `<h1-6>` with a
+  `className`.
+- Product CSS modules are frozen to the current allowlist; new layout goes
+  through `Stack`, `Grid`, `Section`, `Space` and blocks.
+- Product CSS uses tokens (`var(--...)`) for color, spacing, radius, z-index,
+  motion and typography, never targets DS internals (element selectors,
+  `[data-slot]`, `[data-state]`, `:global(.ds-class)`), and never sets DS
+  custom properties such as `--clickable-*`, `--sidebar-*` or `--icon-button-*`.
+
+When the DS cannot express what a screen needs, request a DS capability
+instead of working around it: add a prop, variant or block here (with a
+showcase story, README and tests) or record the gap against
+`SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM`, then migrate the product code
+and run `bun run lint:ds:baseline` to shrink the baseline. See
+`packages/butler-app/scripts/lint/README.md` for the rule details.
+
 ## Responsive Contract
 
 Design system components must be fluid by default. Use intrinsic sizing, `auto-fit` grids, clamp-based padding where needed, and mobile checks around iPhone viewport widths before treating a component as ready.
