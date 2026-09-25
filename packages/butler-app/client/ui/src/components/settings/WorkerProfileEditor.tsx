@@ -80,7 +80,6 @@ export function WorkerProfileEditor({
         <SettingsField
           id={enabledId}
           data-test-class="settings-field"
-          layout="inline"
           label={settingsFields.enabled}
           control={
             <Switch

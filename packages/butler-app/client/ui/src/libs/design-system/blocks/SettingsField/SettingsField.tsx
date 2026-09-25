@@ -14,8 +14,6 @@ export interface SettingsFieldProps extends HTMLAttributes<HTMLDivElement> {
   meta?: ReactNode;
   descriptionId?: string;
   controlWidth?: "default" | "full";
-  /** `inline` places the control right of the label; use it for switches only. */
-  layout?: "stacked" | "inline";
   className?: string;
 }
 
@@ -27,7 +25,6 @@ export function SettingsField({
   control,
   meta,
   controlWidth = "default",
-  layout = "stacked",
   className,
   ...props
 }: SettingsFieldProps) {
@@ -38,7 +35,6 @@ export function SettingsField({
     <Field
       className={cn(styles.field, className)}
       data-control-width={controlWidth}
-      data-layout={layout}
       {...props}
     >
       <Stack gap="xs" className={styles.copy}>

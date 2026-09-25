@@ -39,7 +39,7 @@ export function WorkerProfileControls({
 
   return (
     <>
-      <Stack align="row" cross="center" gap="md" justify="between">
+      <Stack gap="xs" cross="start">
         <Button
           type="button"
           size="sm"

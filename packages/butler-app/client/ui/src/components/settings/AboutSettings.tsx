@@ -104,7 +104,6 @@ export function AboutSettings() {
       />
       <SettingsField
         id="about-developer-mode"
-        layout="inline"
         label={settingsCopy.fields.developerMode}
         description={settingsCopy.descriptions.developerMode}
         descriptionId={developerModeDescriptionId}

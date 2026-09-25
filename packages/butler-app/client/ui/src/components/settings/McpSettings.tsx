@@ -94,8 +94,7 @@ export function McpSettings() {
       description={copy.descriptions.mcpServers}
     >
       <Stack gap="md">
-        <Stack align="row" justify="between" cross="center">
-          <Typo.Caption>{status}</Typo.Caption>
+        <Stack gap="xs" cross="start">
           <Button
             type="button"
             size="sm"
@@ -107,6 +106,7 @@ export function McpSettings() {
           >
             {copy.actions.addMcpServer}
           </Button>
+          {status ? <Typo.Caption>{status}</Typo.Caption> : null}
         </Stack>
         {servers === null ? <SettingsListSkeleton /> : (
         <CardList

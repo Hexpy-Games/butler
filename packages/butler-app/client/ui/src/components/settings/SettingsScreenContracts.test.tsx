@@ -95,10 +95,10 @@ test("appearance exposes exactly one theme control", async () => {
   }
 });
 
-test("switch fields lay out inline while other settings fields stack", () => {
+test("every settings field stacks label, description, then control (no inline layout)", () => {
   const markup = renderToStaticMarkup(
     <div>
-      <SettingsSwitch label="Enabled" checked onChange={() => undefined} />
+      <SettingsSwitch label="Enabled" description="Turn it on" checked onChange={() => undefined} />
       <SettingsSelect
         label="Mode"
         value="safe"
@@ -109,18 +109,40 @@ test("switch fields lay out inline while other settings fields stack", () => {
   );
   const document = new JSDOM(markup).window.document;
   const fields = Array.from(document.querySelectorAll('[data-slot="field"]'));
-  expect(fields.map((field) => field.getAttribute("data-layout"))).toEqual([
-    "inline",
-    "stacked",
-  ]);
+  expect(fields).toHaveLength(2);
+  for (const field of fields) {
+    expect(field.hasAttribute("data-layout")).toBe(false);
+    const label = field.querySelector("label");
+    const control = field.querySelector('button, input, [role="switch"], [role="combobox"]');
+    expect(label).not.toBeNull();
+    expect(control).not.toBeNull();
+    // Label (and description) come before the control in reading order.
+    expect(label!.compareDocumentPosition(control!) & 4).toBe(4);
+  }
   const css = readFileSync(
     resolve(import.meta.dir, "../../libs/design-system/blocks/SettingsField/SettingsField.module.css"),
     "utf8",
   );
-  expect(css).toContain('.field[data-layout="inline"]');
-  const narrow = css.slice(css.indexOf("@media (width < 480px)"));
-  expect(narrow).toContain('.field[data-layout="inline"]');
-  expect(narrow).toContain("flex-direction: column");
+  expect(css).not.toContain("data-layout");
+  expect(css).not.toMatch(/flex-direction:\s*row/u);
+  const component = readFileSync(
+    resolve(import.meta.dir, "../../libs/design-system/blocks/SettingsField/SettingsField.tsx"),
+    "utf8",
+  );
+  expect(component).not.toMatch(/layout\??:/u);
+});
+
+test("settings buttons sit under their text instead of to its right", () => {
+  for (const file of [
+    "BackupModelsSettings.tsx",
+    "ServerSettings.tsx",
+    "McpSettings.tsx",
+    "WorkerProfileControls.tsx",
+  ]) {
+    const source = readFileSync(resolve(import.meta.dir, file), "utf8");
+    expect(source, file).not.toContain('justify="between"');
+    expect(source, file).not.toContain('layout="inline"');
+  }
 });
 
 test("searchable settings select uses the plain select trigger with a left-aligned value", () => {

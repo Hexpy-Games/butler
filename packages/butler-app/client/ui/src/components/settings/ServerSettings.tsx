@@ -2,9 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { Button, Stack } from "@/butler-ds";
-import { Field, FieldLabel } from "@/butler-ds";
-import { FolderPlus } from "@/butler-ds";
+import { Button, FolderPlus, SettingsField } from "@/butler-ds";
 import { SettingsSection, SettingsInput } from "./SettingsFormComponents";
 
 export function ServerSettings() {
@@ -30,12 +28,11 @@ export function ServerSettings() {
         onChange={(value) => setDraft({ ...draft, server_url: value })}
         onBlur={() => update({ server_url: draft.server_url }, setSettings)}
       />
-      <Field
+      <SettingsField
         data-test-class="settings-field"
-      >
-        <FieldLabel>{settingsFields.defaultProjectFolder}</FieldLabel>
-        <Stack align="row" justify="between" cross="center" gap="md" wrap>
-          <strong>{draft.default_project_workspace_label}</strong>
+        label={settingsFields.defaultProjectFolder}
+        description={draft.default_project_workspace_label}
+        control={
           <Button
             type="button"
             variant="outline"
@@ -43,8 +40,8 @@ export function ServerSettings() {
           >
             <FolderPlus size="md" /> {settingsCopy.actions.chooseFolder}
           </Button>
-        </Stack>
-      </Field>
+        }
+      />
     </SettingsSection>
   );
 }
