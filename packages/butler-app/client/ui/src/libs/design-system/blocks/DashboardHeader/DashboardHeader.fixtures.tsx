@@ -8,7 +8,7 @@ export function DashboardHeaderFixture() {
       title="Project dashboard"
       description="Work history and project context"
       meta="12 project chats"
-      action={<Button iconStart={<MessageSquarePlus size={16} />} text="New chat" />}
+      action={<Button iconStart={<MessageSquarePlus size="md" />} text="New chat" />}
     />
   );
 }

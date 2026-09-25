@@ -31,7 +31,7 @@ export function ComposerCardFixture() {
         </ComposerCardExpandedBody>
         <ComposerCardToolbar>
           <IconButton label="Attach file">
-            <Paperclip size={16} />
+            <Paperclip size="md" />
           </IconButton>
           <ComposerCardCompactPreview>
             Draft message preview

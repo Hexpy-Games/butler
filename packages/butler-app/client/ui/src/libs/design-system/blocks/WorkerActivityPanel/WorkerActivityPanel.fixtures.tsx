@@ -45,7 +45,7 @@ export function WorkerActivityPanelFixture() {
       />
       <ComposerCardToolbar>
         <IconButton label="Attach file">
-          <Paperclip size={16} />
+          <Paperclip size="md" />
         </IconButton>
         <ComposerPlanToggle checked label="Plan" onCheckedChange={() => undefined} />
         <ComposerCardToolbarSpacer />

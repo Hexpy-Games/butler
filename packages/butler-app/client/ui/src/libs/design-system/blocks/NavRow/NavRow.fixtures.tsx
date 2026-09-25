@@ -28,7 +28,7 @@ export function NavRowFixture() {
         onClick={() => undefined}
         actions={
           <IconButton label="Add">
-            <Plus size={14} />
+            <Plus size="sm" />
           </IconButton>
         }
         actionsVisibility="hover"
@@ -39,7 +39,7 @@ export function NavRowFixture() {
         icon={<Folder size={17} />}
         label="Recent conversation"
         meta={<span>Project / conversation context · 3 minutes ago</span>}
-        actions={<IconButton label="Add"><Plus size={14} /></IconButton>}
+        actions={<IconButton label="Add"><Plus size="sm" /></IconButton>}
         onClick={() => undefined}
       />
       <NavRow

@@ -9,10 +9,10 @@ export function BranchMessageActions({ sessionId, messageId }: { sessionId: stri
   const [pending, setPending] = useState(false);
   return <>
     <Tooltip label={appCopy.interfaceStatus.branchChat}>
-      <button type="button" aria-label={appCopy.interfaceStatus.branchChat} onClick={() => setMode("topic")}><MessageSquarePlus size={14} /></button>
+      <button type="button" aria-label={appCopy.interfaceStatus.branchChat} onClick={() => setMode("topic")}><MessageSquarePlus size="sm" /></button>
     </Tooltip>
     <Tooltip label={appCopy.interfaceStatus.branchProject}>
-      <button type="button" aria-label={appCopy.interfaceStatus.branchProject} onClick={() => setMode("project")}><FolderPlus size={14} /></button>
+      <button type="button" aria-label={appCopy.interfaceStatus.branchProject} onClick={() => setMode("project")}><FolderPlus size="sm" /></button>
     </Tooltip>
     <Dialog open={mode !== null} onOpenChange={open => { if (!open && !pending) setMode(null); }}>
       <DialogContent closeLabel={appCopy.common.close}>

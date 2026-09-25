@@ -65,7 +65,7 @@ export function SpaceSidebar() {
         {view === "all" && <TreeRootDrop />}
         {view === "running" && (
           <Typo.Caption className={styles.muted}>
-            <Clock3 size={14} /> 확인이 필요한 대화도 포함합니다.
+            <Clock3 size="sm" /> 확인이 필요한 대화도 포함합니다.
           </Typo.Caption>
         )}
       </Stack>

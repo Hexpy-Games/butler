@@ -62,7 +62,7 @@ function ArtifactListRow({ item }: { item: ArtifactListItem }) {
   const content = (
     <>
       <span className={styles.icon} aria-hidden="true">
-        {item.icon ?? <FileText size={20} />}
+        {item.icon ?? <FileText size="lg" />}
       </span>
       <span className={styles.text}>
         <Typo.Body as="span" className={styles.title}>

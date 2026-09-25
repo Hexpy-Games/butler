@@ -53,7 +53,7 @@ export function SettingsSecretRowsFixture() {
         }
         actionControl={
           <IconButton label="Remove secret">
-            <Trash2 size={14} />
+            <Trash2 size="sm" />
           </IconButton>
         }
       />

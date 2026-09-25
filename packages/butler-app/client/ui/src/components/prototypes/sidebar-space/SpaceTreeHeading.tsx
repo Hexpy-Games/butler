@@ -30,12 +30,12 @@ export function SpaceTreeHeading() {
             label="그룹 만들기"
             onClick={() => setDialog({ type: "group" })}
           >
-            <Plus size={16} />
+            <Plus size="md" />
           </IconButton>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <IconButton label="스페이스 설정">
-                <MoreHorizontal size={16} />
+                <MoreHorizontal size="md" />
               </IconButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

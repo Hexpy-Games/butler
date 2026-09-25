@@ -36,12 +36,12 @@ export function SidebarSessionActions({
         onOpenChange={setMenuOpen}
         items={[
           {
-            icon: <PencilLine size={14} />,
+            icon: <PencilLine size="sm" />,
             label: appCopy.sessionActions.rename,
             onSelect: () => onRunAction(session, "rename"),
           },
           {
-            icon: <Archive size={14} />,
+            icon: <Archive size="sm" />,
             label: appCopy.sessionActions.archive,
             onSelect: () => onRunAction(session, "archive"),
           },

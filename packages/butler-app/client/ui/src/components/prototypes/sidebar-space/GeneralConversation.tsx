@@ -28,7 +28,7 @@ export function GeneralConversation() {
         role="assistant"
         footer={
           <MessageFooter>
-            <Clock3 size={14} />
+            <Clock3 size="sm" />
             <span>예약한 아침 브리핑 · 오전 9:00</span>
           </MessageFooter>
         }
@@ -64,14 +64,14 @@ export function GeneralConversation() {
               variant="outline"
               onClick={() => setDialog({ type: "topic" })}
             >
-              <GitBranch size={14} />새 주제대화 시작
+              <GitBranch size="sm" />새 주제대화 시작
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={() => setDialog({ type: "project" })}
             >
-              <FolderPlus size={14} />새 프로젝트 시작
+              <FolderPlus size="sm" />새 프로젝트 시작
             </Button>
           </ButtonContainer>
           {items

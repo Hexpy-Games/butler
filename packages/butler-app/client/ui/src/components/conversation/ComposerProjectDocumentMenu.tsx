@@ -40,7 +40,7 @@ export function ComposerProjectDocumentMenu({
           disabled={!projectId}
           icon={<FileText size={15} />}
           label={appCopy.interfaceDetails.projectDocuments}
-          description={<ChevronRight size={14} />}
+          description={<ChevronRight size="sm" />}
         />
       </PopoverTrigger>
       <PopoverContent

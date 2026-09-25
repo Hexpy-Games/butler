@@ -8,7 +8,7 @@ export function NavSectionFixture() {
     <NavSection
       title="Projects"
       actions={
-        <IconButton label="New project"><Plus size={14} /></IconButton>
+        <IconButton label="New project"><Plus size="sm" /></IconButton>
       }
     >
       <NavRow icon={<Folder size={17} />} label="Project Alpha" />

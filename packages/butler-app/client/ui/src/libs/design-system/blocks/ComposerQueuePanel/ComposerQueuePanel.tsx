@@ -69,13 +69,13 @@ export function ComposerQueuePanel({
             actions={
               <ButtonContainer size="icon-sm">
                 <IconButton label={editLabel} onClick={() => onEdit(item.id)}>
-                  <PencilLine size={14} />
+                  <PencilLine size="sm" />
                 </IconButton>
                 <IconButton
                   label={deleteLabel}
                   onClick={() => onDelete(item.id)}
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size="sm" />
                 </IconButton>
               </ButtonContainer>
             }

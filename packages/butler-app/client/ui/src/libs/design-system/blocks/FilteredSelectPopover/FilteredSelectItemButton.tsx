@@ -31,7 +31,7 @@ export function FilteredSelectItemButton({
           className={styles.check}
           data-slot="filtered-select-check"
         >
-          <CheckIcon size={14} />
+          <CheckIcon size="sm" />
         </span>
       ) : null}
     </button>

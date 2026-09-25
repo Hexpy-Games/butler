@@ -123,7 +123,7 @@ export function CommandPalettePanel({
             aria-activedescendant={activeId}
           />
           <IconButton label={closeLabel} onClick={onClose}>
-            <X size={16} />
+            <X size="md" />
           </IconButton>
         </div>
         <div className={styles.results}>

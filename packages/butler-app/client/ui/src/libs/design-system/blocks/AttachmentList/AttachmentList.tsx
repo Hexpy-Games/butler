@@ -63,7 +63,7 @@ export function AttachmentList({
               data-slot="attachment-icon"
               aria-hidden="true"
             >
-              {item.icon ?? <FileText size={14} />}
+              {item.icon ?? <FileText size="sm" />}
             </span>
           )}
           {item.href ? (

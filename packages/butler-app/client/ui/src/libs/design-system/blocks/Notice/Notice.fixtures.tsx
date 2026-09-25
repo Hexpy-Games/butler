@@ -7,22 +7,22 @@ export function NoticeFixture() {
     <Stack gap="2">
       <Notice
         tone="info"
-        icon={<AlertCircle size={16} />}
+        icon={<AlertCircle size="md" />}
         message="Your session has been saved"
       />
       <Notice
         tone="warning"
-        icon={<CircleAlert size={16} />}
+        icon={<CircleAlert size="md" />}
         message="This action cannot be undone"
       />
       <Notice
         tone="success"
-        icon={<CheckCircle2 size={16} />}
+        icon={<CheckCircle2 size="md" />}
         message="Project created successfully"
       />
       <Notice
         tone="error"
-        icon={<CircleX size={16} />}
+        icon={<CircleX size="md" />}
         message="Failed to connect to server"
       />
     </Stack>

@@ -49,7 +49,7 @@ export function AssistantResponseFooter({
             onClick={onCopy}
             aria-label={appCopy.interfacePanels.copyResponse}
           >
-            <Copy size={14} />
+            <Copy size="sm" />
           </button>
         </Tooltip>
         {actions}

@@ -46,7 +46,7 @@ export function TurnActivityTimeline({
           <Button
             aria-expanded={expanded}
             data-test-class="toggle-turn-activity-disclosure"
-            iconEnd={expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            iconEnd={expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
             onClick={() => setExpanded((value) => !value)}
             text={headerLabel}
             type="button"
@@ -75,7 +75,7 @@ export function TurnActivityTimeline({
             <Stack as="footer" cross="start">
               <Button
                 data-test-class="collapse-turn-activity-history"
-                iconStart={<ListChecks size={14} />}
+                iconStart={<ListChecks size="sm" />}
                 onClick={() => setExpanded(false)}
                 size="xs"
                 text={workCopy.collapseLabel}

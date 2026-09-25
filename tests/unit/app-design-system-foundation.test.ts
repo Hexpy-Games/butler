@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { resolveRepoOrLedgerPath, ledgerTest } from "../support/project-ledger-root.ts";
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { lintDesignSystemRules } from "../../packages/butler-app/scripts/lint/design-system-rules-lint.ts";
@@ -9,6 +10,14 @@ const uiSrc = "packages/butler-app/client/ui/src";
 
 function read(path: string): string {
   return readFileSync(resolveRepoOrLedgerPath(path), "utf8");
+}
+
+function walkUiSources(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) return walkUiSources(path);
+    return /\.(?:tsx?|css)$/u.test(entry) ? [path] : [];
+  });
 }
 
 describe("design-system foundation spec", () => {
@@ -524,5 +533,28 @@ describe("motion tokens", () => {
       expect(start).toBeGreaterThan(-1);
       expect(css.slice(start)).toContain("animation: none");
     }
+  });
+});
+
+describe("icon size tokens", () => {
+  test("tokens define the 14/16/20 icon scale", () => {
+    const tokens = rootTokens();
+    expect(tokens.get("--icon-size-sm")).toBe("14px");
+    expect(tokens.get("--icon-size-md")).toBe("16px");
+    expect(tokens.get("--icon-size-lg")).toBe("20px");
+  });
+
+  test("DS icons use named sizes instead of literal token-scale sizes", () => {
+    const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
+    const names = [...icons.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]);
+    const offenders = walkUiSources(uiSrc)
+      .filter((path) => path.endsWith(".tsx") && !path.endsWith(".test.tsx"))
+      .flatMap((path) => {
+        const text = read(path);
+        return [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(14|16|20)\}/gsu)]
+          .filter((match) => names.includes(match[1]))
+          .map((match) => `${path}: <${match[1]} size={${match[3]}}>`);
+      });
+    expect(offenders).toEqual([]);
   });
 });

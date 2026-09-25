@@ -16,7 +16,7 @@ export function SpaceSessionStatus({ id }: { id: string }) {
       {item.activity === "working" ? (
         <Spinner size={16} />
       ) : (
-        <CircleAlert size={16} />
+        <CircleAlert size="md" />
       )}
     </span>
   );

@@ -9,9 +9,9 @@ export function RowActionClusterFixture() {
     <Stack gap="2">
       <div className={styles.fixtureSurface}>
         <RowActionCluster>
-          <IconButton label="Add"><Plus size={14} /></IconButton>
-          <IconButton label="Edit"><Pencil size={14} /></IconButton>
-          <IconButton label="Delete"><Trash2 size={14} /></IconButton>
+          <IconButton label="Add"><Plus size="sm" /></IconButton>
+          <IconButton label="Edit"><Pencil size="sm" /></IconButton>
+          <IconButton label="Delete"><Trash2 size="sm" /></IconButton>
         </RowActionCluster>
       </div>
     </Stack>

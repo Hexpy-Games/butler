@@ -5,9 +5,9 @@ export function OverflowActionMenuFixture() {
   return (
     <OverflowActionMenu
       items={[
-        { icon: <Pencil size={14} />, label: "Rename", onSelect: () => {} },
-        { icon: <Archive size={14} />, label: "Archive", onSelect: () => {} },
-        { icon: <Trash2 size={14} />, label: "Delete", onSelect: () => {}, variant: "destructive" },
+        { icon: <Pencil size="sm" />, label: "Rename", onSelect: () => {} },
+        { icon: <Archive size="sm" />, label: "Archive", onSelect: () => {} },
+        { icon: <Trash2 size="sm" />, label: "Delete", onSelect: () => {}, variant: "destructive" },
       ]}
     />
   );

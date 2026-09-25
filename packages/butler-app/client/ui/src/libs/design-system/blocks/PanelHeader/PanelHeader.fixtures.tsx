@@ -7,7 +7,7 @@ export function PanelHeaderFixture() {
     <PanelHeader
       title="Context Usage"
       description="View and manage context consumption"
-      actions={<Button iconStart={<Plus size={16} />} text="Add" variant="outline" />}
+      actions={<Button iconStart={<Plus size="md" />} text="Add" variant="outline" />}
     />
   );
 }

@@ -51,7 +51,7 @@ export function DisclosureRow({
       >
         <span className={cn(styles.labelRegion, !icon && styles.noIcon)}>
           <span className={styles.chevron} aria-hidden="true">
-            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {open ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
           </span>
           {icon ? (
             <span

@@ -5,7 +5,7 @@ export function DocumentTileFixture() {
   return (
     <DocumentTile
       badge="Spec"
-      icon={<BookOpenText size={16} />}
+      icon={<BookOpenText size="md" />}
       title="Architecture notes"
       description="Project Ledger document"
       meta="Updated 1h ago"

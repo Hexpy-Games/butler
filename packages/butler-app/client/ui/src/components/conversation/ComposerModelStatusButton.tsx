@@ -17,7 +17,7 @@ export function ComposerModelStatusButton(props: {
           aria-disabled="true"
           aria-label={`${label}. ${hint}`}
           data-test-class="model-button"
-          icon={<AlertCircle size={14} />}
+          icon={<AlertCircle size="sm" />}
           tone="danger"
         >
           <span data-test-class="composer-model-name">{label}</span>

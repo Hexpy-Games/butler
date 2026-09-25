@@ -57,7 +57,7 @@ export function SpaceConversation() {
                   variant="ghost"
                   onClick={() => open(item.source!)}
                 >
-                  <ArrowLeft size={14} />
+                  <ArrowLeft size="sm" />
                   원래 대화로
                 </Button>
               </ButtonContainer>

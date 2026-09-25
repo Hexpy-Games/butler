@@ -7,7 +7,7 @@ export function EmptyLineFixture() {
     <EmptyLine
       icon={<FileText size={32} />}
       message="No sessions yet"
-      action={<Button iconStart={<Plus size={16} />} text="Create Session" />}
+      action={<Button iconStart={<Plus size="md" />} text="Create Session" />}
     />
   );
 }

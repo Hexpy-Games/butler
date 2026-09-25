@@ -8,10 +8,10 @@ export function SelectFixture() {
   const [value, setValue] = useState("local");
   return (
     <Stack align="row" gap="xs" cross="center" justify="center" wrap data-ds-fixture="select">
-      <PillButton surface="glass" icon={<Monitor size={14} />}>Local</PillButton>
+      <PillButton surface="glass" icon={<Monitor size="sm" />}>Local</PillButton>
       <Select value={value} onValueChange={setValue}>
         <SelectPillTrigger aria-label="Workspace"
-          icon={value === "local" ? <Monitor size={14} /> : <GitBranch size={14} />}>
+          icon={value === "local" ? <Monitor size="sm" /> : <GitBranch size="sm" />}>
           <SelectValue>{value === "local" ? "Local" : "Worktree"}</SelectValue>
         </SelectPillTrigger>
         <SelectContent position="popper">

@@ -18,7 +18,7 @@ export function SpaceSettingsButton() {
       <NavRow
         icon={
           <span className={styles.identityIcon}>
-            <Settings size={16} />
+            <Settings size="md" />
           </span>
         }
         label="설정"

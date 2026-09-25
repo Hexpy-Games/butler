@@ -18,7 +18,7 @@ export function SpinnerFixture() {
       <Spinner size={18} label="Loading records" />
       <ButtonContainer size="sm">
         <Button size="sm" disabled={busy} aria-busy={busy || undefined}>
-          {busy ? <Spinner size={14} /> : <CheckIcon size={14} aria-hidden />}
+          {busy ? <Spinner size={14} /> : <CheckIcon size="sm" aria-hidden />}
           {busy ? "Syncing" : "Synced"}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setBusy(!busy)}>

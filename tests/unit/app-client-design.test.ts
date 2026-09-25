@@ -150,23 +150,23 @@ test("dedicated client design foundation uses React and Hugeicons", () => {
   expect(renderer).toContain("PanelRight");
   expect(renderer).toContain("PanelRightClose");
   expect(renderer).toContain("MoreHorizontal");
-  expect(icons).toContain('export const Folder = createIcon("Folder01Icon")');
+  expect(icons).toContain("export const Folder = createIcon(Folder01Icon)");
   expect(icons).toContain(
-    'export const FolderOpen = createIcon("Folder02Icon")',
+    "export const FolderOpen = createIcon(Folder02Icon)",
   );
-  expect(icons).toContain('export const Expand = createIcon("ExpandIcon")');
-  expect(icons).toContain('export const Collapse = createIcon("CollapseIcon")');
+  expect(icons).toContain("export const Expand = createIcon(ExpandIcon)");
+  expect(icons).toContain("export const Collapse = createIcon(CollapseIcon)");
   expect(icons).toContain(
-    'export const PanelLeft = createIcon("PanelLeftIcon")',
-  );
-  expect(icons).toContain(
-    'export const PanelLeftOpen = createIcon("PanelLeftOpenIcon")',
+    "export const PanelLeft = createIcon(PanelLeftIcon)",
   );
   expect(icons).toContain(
-    'export const PanelRight = createIcon("PanelRightIcon")',
+    "export const PanelLeftOpen = createIcon(PanelLeftOpenIcon)",
   );
   expect(icons).toContain(
-    'export const PanelRightClose = createIcon("PanelRightCloseIcon")',
+    "export const PanelRight = createIcon(PanelRightIcon)",
+  );
+  expect(icons).toContain(
+    "export const PanelRightClose = createIcon(PanelRightCloseIcon)",
   );
 });
 

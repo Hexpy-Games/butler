@@ -27,7 +27,7 @@ export function CopyTextButton({ text, label }: { text: string; label: string })
   return (
     <Tooltip label={feedbackLabel}>
       <button type="button" onClick={() => void copy()} aria-label={feedbackLabel}>
-        <Copy size={14} />
+        <Copy size="sm" />
       </button>
     </Tooltip>
   );

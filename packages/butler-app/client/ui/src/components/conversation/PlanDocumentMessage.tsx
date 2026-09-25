@@ -14,7 +14,7 @@ export function PlanDocumentMessage({ plan }: { plan: PlanDocumentRecord }) {
       role="region"
     >
       <header className={styles.header}>
-        <ListChecks aria-hidden="true" size={16} />
+        <ListChecks aria-hidden="true" size="md" />
         <Typo.Label as="span" className={styles.title}>
           {plan.title}
         </Typo.Label>

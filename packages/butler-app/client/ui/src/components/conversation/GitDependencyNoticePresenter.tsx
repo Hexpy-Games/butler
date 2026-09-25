@@ -25,7 +25,7 @@ export function GitDependencyNoticePresenter({
             </a>
           </Button>
           <IconButton label={closeLabel} onClick={onDismiss}>
-            <X size={16} />
+            <X size="md" />
           </IconButton>
         </Stack>
       }

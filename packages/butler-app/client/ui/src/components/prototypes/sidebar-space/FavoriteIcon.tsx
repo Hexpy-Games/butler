@@ -24,7 +24,7 @@ export function FavoriteIcon({ id }: { id: string }) {
           <ConversationIcon id={id} />
         </span>
         <span className={styles.starIcon}>
-          <Sparkles size={16} fill={item.pinned ? "currentColor" : "none"} />
+          <Sparkles size="md" fill={item.pinned ? "currentColor" : "none"} />
         </span>
       </IconButton>
     </span>

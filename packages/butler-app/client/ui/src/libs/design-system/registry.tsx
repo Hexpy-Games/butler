@@ -515,14 +515,14 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     tags: ["action", "control", "borderless"],
     fixture: () => (
       <ButtonContainer size="default">
-        <Button iconStart={<Plus size={16} />} text="Create" />
+        <Button iconStart={<Plus size="md" />} text="Create" />
         <Button
-          iconStart={<Search size={16} />}
+          iconStart={<Search size="md" />}
           text="Search"
           variant="outline"
         />
         <Button
-          iconEnd={<Plus size={16} />}
+          iconEnd={<Plus size="md" />}
           text="Borderless"
           variant="borderless"
         />
@@ -550,7 +550,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
         <Stack align="row" cross="center" justify="between">
           <Typo.Body>Clickable row</Typo.Body>
           <IconButton label="Nested action">
-            <Plus size={16} />
+            <Plus size="md" />
           </IconButton>
         </Stack>
       </Clickable>
@@ -586,7 +586,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     tags: ["action", "icon-only"],
     fixture: () => (
       <IconButton label="Add item">
-        <Plus aria-hidden size={16} />
+        <Plus aria-hidden size="md" />
       </IconButton>
     ),
   },

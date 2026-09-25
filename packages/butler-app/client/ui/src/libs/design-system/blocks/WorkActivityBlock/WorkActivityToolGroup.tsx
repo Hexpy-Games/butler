@@ -27,7 +27,7 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
       >
         <span className={styles.toolGroupSummary}>{toolSummary(tools)}</span>
         <span className={styles.toolGroupChevron} aria-hidden="true">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
         </span>
       </button>
       {expanded ? (

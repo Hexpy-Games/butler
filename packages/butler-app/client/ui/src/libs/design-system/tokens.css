@@ -314,6 +314,9 @@
   --font-weight-strong: 620;
   --line-height-body: 1.45;
   --line-height-document: 1.58;
+  --icon-size-sm: 14px;
+  --icon-size-md: 16px;
+  --icon-size-lg: 20px;
   --sidebar-row-height: 30px;
   --sidebar-action-size: 24px;
   --sidebar-icon-column: 18px;

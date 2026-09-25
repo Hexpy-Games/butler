@@ -53,7 +53,7 @@ export function OverflowActionMenu({
           label={label}
           selected={menuOpen}
         >
-          <MoreHorizontal size={14} />
+          <MoreHorizontal size="sm" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -23,7 +23,7 @@ export function RightPanelOverlayTitlebar() {
         selected
         onClick={() => setRightOpen(false)}
       >
-        <PanelRightClose size={16} />
+        <PanelRightClose size="md" />
       </IconButton>
     </AdaptivePanelTitlebar>
   );

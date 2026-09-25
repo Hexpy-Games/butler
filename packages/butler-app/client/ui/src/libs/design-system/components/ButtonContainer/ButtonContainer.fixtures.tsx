@@ -12,12 +12,12 @@ export function ButtonContainerFixture() {
           가져오기
         </Button>
         <Button size="sm">
-          <Plus size={14} /> 대화해서 만들기
+          <Plus size="sm" /> 대화해서 만들기
         </Button>
       </ButtonContainer>
       <ButtonContainer size="default">
-        <Button iconStart={<Search size={16} />} text="Search" />
-        <Button iconStart={<Plus size={16} />} text="Create" />
+        <Button iconStart={<Search size="md" />} text="Search" />
+        <Button iconStart={<Plus size="md" />} text="Create" />
       </ButtonContainer>
     </Stack>
   );

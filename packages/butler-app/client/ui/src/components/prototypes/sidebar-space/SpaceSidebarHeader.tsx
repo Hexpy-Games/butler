@@ -35,7 +35,7 @@ export function SpaceSidebarHeader() {
         >
           <Typo.AppTitle>Butler</Typo.AppTitle>
           <IconButton label="사이드바 닫기" onClick={toggleSidebar}>
-            <PanelLeft size={16} />
+            <PanelLeft size="md" />
           </IconButton>
         </Stack>
         <nav className={styles.primaryActions} aria-label="대화 시작과 검색">
@@ -60,15 +60,15 @@ export function SpaceSidebarHeader() {
         >
           <TabsList stretch aria-label="대화 보기">
             <TabsTrigger value="all">
-              <ListFilter size={16} />
+              <ListFilter size="md" />
               전체보기
             </TabsTrigger>
             <TabsTrigger value="recent">
-              <Clock3 size={16} />
+              <Clock3 size="md" />
               최신
             </TabsTrigger>
             <TabsTrigger value="running">
-              <Activity size={16} />
+              <Activity size="md" />
               진행중
             </TabsTrigger>
           </TabsList>

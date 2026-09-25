@@ -45,7 +45,7 @@ export function ComposerAttachmentMenu() {
           disabled={uploadingCount > 0}
           label={appCopy.composer.featureDrawer}
         >
-          <Plus size={16} />
+          <Plus size="md" />
         </IconButton>
       </PopoverTrigger>
       <PopoverContent

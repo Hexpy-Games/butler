@@ -18,7 +18,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
     aside={<>
       {decision.pendingCount > 1 ? <Typo.Caption>+{decision.pendingCount - 1}</Typo.Caption> : null}
       <Button type="button" size="sm" variant="borderless" aria-label={appCopy.interfaceDetails.composeLater} title={appCopy.interfaceDetails.composeLater} onClick={decision.onComposeMessage}>
-        <ChevronDown aria-hidden="true" size={16} />
+        <ChevronDown aria-hidden="true" size="md" />
       </Button>
     </>}
     testClass="composer-authority-decision"
@@ -29,7 +29,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" size="sm" className={styles.arrow} disabled={decision.pending || !decision.scope} aria-label={appCopy.interfaceDetails.allowScope}>
-              <ChevronDown aria-hidden="true" size={16} />
+              <ChevronDown aria-hidden="true" size="md" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className={styles.menu}>

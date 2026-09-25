@@ -18,7 +18,7 @@ export function ComposerWorkspaceSelect() {
       <Select value={project ? mode : "local"} disabled={isSending}
         onValueChange={(value) => setMode(value === "worktree" ? "worktree" : "local")}>
         <SelectPillTrigger aria-label={copy.workspace}
-          icon={project && mode === "worktree" ? <GitBranch size={14} /> : <Monitor size={14} />}>
+          icon={project && mode === "worktree" ? <GitBranch size="sm" /> : <Monitor size="sm" />}>
           <SelectValue>{project && mode === "worktree" ? copy.workspaceWorktree : copy.workspaceLocal}</SelectValue>
         </SelectPillTrigger>
         <SelectContent position="popper" side="top">

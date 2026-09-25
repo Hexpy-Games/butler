@@ -29,7 +29,7 @@ export function AutomationTargetsPanel({
               stretch
             >
               <ListRow
-                icon={<Clock3 size={16} />}
+                icon={<Clock3 size="md" />}
                 title={automation.title}
                 meta={automation.interval_label}
               />

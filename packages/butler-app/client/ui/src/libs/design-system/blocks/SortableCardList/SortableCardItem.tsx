@@ -70,7 +70,7 @@ export function SortableCardItem({
             {...sortable.listeners}
             aria-roledescription="sortable"
           >
-            <DragHandle size={16} />
+            <DragHandle size="md" />
           </IconButton>
         )}
         {item.leading && <span className={styles.leading} aria-hidden="true">{item.leading}</span>}
@@ -88,7 +88,7 @@ export function SortableCardItem({
             disabled={disabled}
             onClick={() => onRemove(item.id)}
           >
-            <X size={16} />
+            <X size="md" />
           </IconButton>
         )}
       </Card>

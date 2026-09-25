@@ -80,7 +80,7 @@ export function SpaceRow({
             label={
               <span className={styles.groupLabel} title={item.title}>
                 <span className={interaction.singleTitle}>{item.title}</span>
-                {item.smart && <Sparkles size={14} />}
+                {item.smart && <Sparkles size="sm" />}
               </span>
             }
             actions={

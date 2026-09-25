@@ -65,7 +65,7 @@ export function StewardParentProgress({
                     .finally(() => setResuming(false));
                 }}
               >
-                <Play size={16} />
+                <Play size="md" />
               </IconButton>
             ) : null}
             <IconButton
@@ -74,7 +74,7 @@ export function StewardParentProgress({
               label={appCopy.interfaceDetails.progressDetails}
               onClick={() => openSessionObserver(child.session_id)}
             >
-              <Eye size={16} />
+              <Eye size="md" />
             </IconButton>
           </Stack>
         </Stack>

@@ -60,7 +60,7 @@ export function VirtualMessageRow({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => onCopyContextMenuText({ ...message, text: visibleSystemMessageText(message) })}>
-          <Copy size={14} />
+          <Copy size="sm" />
           <span>{appCopy.common.copy}</span>
         </ContextMenuItem>
       </ContextMenuContent>

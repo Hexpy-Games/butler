@@ -9,7 +9,7 @@ export function TitlebarShellFixture() {
       <TitlebarShell
         className={styles.fixtureTitlebar}
         collapsed
-        leading={<PanelLeft size={16} />}
+        leading={<PanelLeft size="md" />}
         title="Butler"
         subtitle="Project workspace"
         trailing={<Button size="sm" variant="borderless">Settings</Button>}

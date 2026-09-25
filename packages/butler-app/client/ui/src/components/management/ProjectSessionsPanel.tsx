@@ -17,7 +17,7 @@ export function ProjectSessionsPanel({
   return (
     <Section
       gap="sm"
-      icon={<MessageSquarePlus size={16} />}
+      icon={<MessageSquarePlus size="md" />}
       title={appCopy.interfacePanels.projectChats}
     >
       {sessions.length > 0 ? (

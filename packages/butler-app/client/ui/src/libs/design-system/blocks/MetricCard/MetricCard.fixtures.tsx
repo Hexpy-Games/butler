@@ -10,14 +10,14 @@ export function MetricCardFixture() {
         label="Active Sessions"
         trend="up"
         change="+12%"
-        icon={<Activity size={16} />}
+        icon={<Activity size="md" />}
       />
       <MetricCard
         value="42"
         label="Tokens Used (M)"
         trend="down"
         change="-8%"
-        icon={<Activity size={16} />}
+        icon={<Activity size="md" />}
       />
       <MetricCard
         value="156"

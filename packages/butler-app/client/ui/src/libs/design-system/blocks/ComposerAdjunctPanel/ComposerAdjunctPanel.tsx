@@ -63,7 +63,7 @@ export function ComposerAdjunctPanel({
             data-collapsed={collapsed ? "true" : "false"}
             aria-hidden="true"
           >
-            <ChevronDown size={14} />
+            <ChevronDown size="sm" />
           </span>
         </button>
       ) : null}

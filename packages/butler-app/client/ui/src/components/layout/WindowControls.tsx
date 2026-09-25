@@ -26,7 +26,7 @@ export function WindowControls() {
         label={appCopy.titlebar.maximizeWindow}
         onClick={() => void toggleNativeWindowMaximize()}
       >
-        <Square size={14} />
+        <Square size="sm" />
       </IconButton>
       <IconButton
         data-test-class="app-window-close"

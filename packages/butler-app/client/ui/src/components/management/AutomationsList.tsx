@@ -35,7 +35,7 @@ export function AutomationsList({
         meta={copy.scheduledCount(automations.length)}
         action={
           <Button type="button" variant="outline" onClick={onNewAutomation}>
-            <Plus size={16} /> {copy.new}
+            <Plus size="md" /> {copy.new}
           </Button>
         }
       />

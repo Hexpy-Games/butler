@@ -30,7 +30,7 @@ export function ComposerAdjunctPanelFixture() {
       />
       <ComposerCardToolbar>
         <IconButton label="Attach file">
-          <Paperclip size={16} />
+          <Paperclip size="md" />
         </IconButton>
         <ComposerPlanToggle
           checked

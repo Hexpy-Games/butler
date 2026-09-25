@@ -10,8 +10,8 @@ export function InspectorShellFixture() {
       activeTab="summary"
       className={styles.fixture}
       tabs={[
-        { id: "summary", label: "Summary", icon: <ListFilter size={16} /> },
-        { id: "files", label: "Files", icon: <FileText size={16} /> },
+        { id: "summary", label: "Summary", icon: <ListFilter size="md" /> },
+        { id: "files", label: "Files", icon: <FileText size="md" /> },
       ]}
       onTabChange={() => undefined}
     >

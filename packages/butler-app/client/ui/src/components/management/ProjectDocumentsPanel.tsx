@@ -50,7 +50,7 @@ export function ProjectDocumentsPanel({
 
   return (
     <Stack gap="xl">
-      <Section gap="lg" icon={<ListChecks size={16} />} title={appCopy.interfacePanels.plans}>
+      <Section gap="lg" icon={<ListChecks size="md" />} title={appCopy.interfacePanels.plans}>
         {plans.length > 0 ? (
           <Tabs defaultValue="work">
             <TabsList variant="line">
@@ -86,7 +86,7 @@ export function ProjectDocumentsPanel({
                                   lanePlans.map((document) => (
                                     <DocumentTile
                                       badge={projectDocumentBadgeLabel(document)}
-                                      icon={<FileText size={16} />}
+                                      icon={<FileText size="md" />}
                                       key={document.id}
                                       title={document.title}
                                       meta={document.status ?? document.safe_path_label}
@@ -111,7 +111,7 @@ export function ProjectDocumentsPanel({
           <EmptyPanelLine label={appCopy.interfacePanels.noPlans} />
         )}
       </Section>
-      <Section gap="lg" icon={<BookOpenText size={16} />} title={appCopy.interfacePanels.specs}>
+      <Section gap="lg" icon={<BookOpenText size="md" />} title={appCopy.interfacePanels.specs}>
         {specsByCategory.length > 0 ? (
           <SurfacePanel
             elevation="none"
@@ -140,7 +140,7 @@ export function ProjectDocumentsPanel({
                 <Stack gap="sm">
                   {activeSpecs.map((document) => (
                     <DocumentTile
-                      icon={<FileText size={16} />}
+                      icon={<FileText size="md" />}
                       key={document.id}
                       title={document.title}
                       meta={document.safe_path_label}

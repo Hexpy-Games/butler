@@ -53,7 +53,7 @@ export function RegisteredModelRow({
             onClick={onEdit}
             aria-label={copy.editLabel(name)}
           >
-            <Pencil size={14} /> {copy.edit}
+            <Pencil size="sm" /> {copy.edit}
           </Button>
           <Button
             type="button"
@@ -63,7 +63,7 @@ export function RegisteredModelRow({
             onClick={onDelete}
             aria-label={copy.deleteLabel(name)}
           >
-            <Trash2 size={14} /> {copy.delete}
+            <Trash2 size="sm" /> {copy.delete}
           </Button>
         </ButtonContainer>
       </Stack>

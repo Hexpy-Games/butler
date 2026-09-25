@@ -60,7 +60,7 @@ export function ArtifactsPanel({
               actions={artifactCardActions(artifact)}
               clickTarget="tile"
               description={artifactDescription(artifact)}
-              icon={<FileText size={16} />}
+              icon={<FileText size="md" />}
               key={artifact.id}
               meta={artifactMeta(artifact)}
               title={artifact.title}

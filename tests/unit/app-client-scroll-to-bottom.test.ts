@@ -115,7 +115,7 @@ test("scroll-to-bottom button source keeps the control accessible and concise", 
     'data-test-class="scroll-to-bottom-button"',
   );
   expect(conversationShell).toContain("data-unread-messages=");
-  expect(conversationShell).toContain("icon={<ChevronDownIcon size={16} />}");
+  expect(conversationShell).toContain('icon={<ChevronDownIcon size="md" />}');
   expect(copy).toContain("Scroll to the latest message and composer");
   expect(copy).toContain("newMessagesLabel");
 });

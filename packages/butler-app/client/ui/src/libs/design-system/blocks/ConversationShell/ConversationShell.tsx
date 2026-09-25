@@ -113,7 +113,7 @@ export function ConversationScrollToBottomButton({
       surface="glass"
       data-test-class="scroll-to-bottom-button"
       data-unread-messages={hasUnreadMessages ? "true" : "false"}
-      icon={<ChevronDownIcon size={16} />}
+      icon={<ChevronDownIcon size="md" />}
       onClick={onScrollToBottom}
     >
       {children}

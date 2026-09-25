@@ -18,7 +18,7 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
       </span>
       {nested && hasDetails ? (
         <span className={styles.toolDetailChevron} aria-hidden="true">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
         </span>
       ) : null}
     </>

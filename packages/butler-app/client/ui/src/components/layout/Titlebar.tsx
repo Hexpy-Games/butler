@@ -97,7 +97,7 @@ export function Titlebar() {
                   label={appCopy.sessionActions.menuLabel}
                   selected={sessionMenuOpen}
                 >
-                  <MoreHorizontal size={16} />
+                  <MoreHorizontal size="md" />
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -110,7 +110,7 @@ export function Titlebar() {
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "rename")}
                   >
-                    <PencilLine size={14} /> {appCopy.sessionActions.rename}
+                    <PencilLine size="sm" /> {appCopy.sessionActions.rename}
                   </DropdownMenuItem>
                   <SessionFolderMenu
                     disabled={!canOpenSessionFolder}
@@ -119,7 +119,7 @@ export function Titlebar() {
                   <DropdownMenuItem
                     onSelect={() => runSessionAction(activeSession, "archive")}
                   >
-                    <Archive size={14} /> {appCopy.sessionActions.archive}
+                    <Archive size="sm" /> {appCopy.sessionActions.archive}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>

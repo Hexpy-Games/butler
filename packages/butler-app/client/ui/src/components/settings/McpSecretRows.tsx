@@ -146,7 +146,7 @@ export function McpSecretRows({
               label={appCopy.interfaceTemplates.deleteRow(title)}
               onClick={() => deleteRow(row.id)}
             >
-              <Trash2 size={14} />
+              <Trash2 size="sm" />
             </IconButton>
           }
         />

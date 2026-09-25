@@ -148,7 +148,7 @@ export function ComposerSendButton({
       disabled={busy || disabled}
       aria-busy={busy || undefined}
     >
-      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size={14} /> : <SendHorizontal size={16} />)}
+      {busy ? <Spinner size={16} /> : children ?? (mode === "stop" ? <Square size="sm" /> : <SendHorizontal size="md" />)}
     </button>
   );
 }
