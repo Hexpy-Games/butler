@@ -33,6 +33,12 @@ const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel
 const turnActivityTimeoutMs = 5_000;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
+/**
+ * Visible sidebar width: the docked sidebar keeps its full width and slides
+ * out with a transform, so collapsed means its right edge is at the frame edge.
+ */
+const sidebarVisibleWidth = (box: { x: number; width: number } | null) =>
+  box ? Math.max(0, box.x + box.width) : 0;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -874,8 +880,8 @@ try {
     .locator(testClass("sidebar-slot"))
     .boundingBox();
   assert(
-    initiallyCollapsedSidebarBox && initiallyCollapsedSidebarBox.width <= 2,
-    `fresh left sidebar should start collapsed, got ${initiallyCollapsedSidebarBox?.width}`,
+    initiallyCollapsedSidebarBox && sidebarVisibleWidth(initiallyCollapsedSidebarBox) <= 2,
+    `fresh left sidebar should start collapsed, got ${sidebarVisibleWidth(initiallyCollapsedSidebarBox)}`,
   );
   await page.getByRole("button", { name: "Show sidebar" }).click();
   await page.waitForTimeout(320);
@@ -1724,8 +1730,8 @@ try {
     .locator(testClass("sidebar-slot"))
     .boundingBox();
   assert(
-    draggedClosedSidebarBox && draggedClosedSidebarBox.width <= 2,
-    `left-resize-below-min-collapses failed: ${draggedClosedSidebarBox?.width}`,
+    draggedClosedSidebarBox && sidebarVisibleWidth(draggedClosedSidebarBox) <= 2,
+    `left-resize-below-min-collapses failed: ${sidebarVisibleWidth(draggedClosedSidebarBox)}`,
   );
   await page.getByRole("button", { name: "Show sidebar" }).click();
   await page.waitForTimeout(320);
@@ -1739,17 +1745,17 @@ try {
     .boundingBox();
   assert(
     sidebarMidToggleBox &&
-      sidebarMidToggleBox.width > 8 &&
-      sidebarMidToggleBox.width < sidebarWidthBeforeToggle - 8,
-    `left sidebar column should animate while closing: start=${sidebarWidthBeforeToggle} mid=${JSON.stringify(sidebarMidToggleBox)}`,
+      sidebarVisibleWidth(sidebarMidToggleBox) > 8 &&
+      sidebarVisibleWidth(sidebarMidToggleBox) < sidebarWidthBeforeToggle - 8,
+    `left sidebar should slide while closing: start=${sidebarWidthBeforeToggle} mid=${JSON.stringify(sidebarMidToggleBox)}`,
   );
   await page.waitForTimeout(320);
   const sidebarBox = await page
     .locator(testClass("sidebar-slot"))
     .boundingBox();
   assert(
-    sidebarBox && sidebarBox.width <= 2,
-    `sidebar should collapse to 0px, got ${sidebarBox?.width}`,
+    sidebarBox && sidebarVisibleWidth(sidebarBox) <= 2,
+    `sidebar should collapse to 0px, got ${sidebarVisibleWidth(sidebarBox)}`,
   );
   await page.getByRole("button", { name: "Show sidebar" }).click();
   await page.waitForTimeout(320);
@@ -1868,9 +1874,10 @@ try {
       permissionMenuLayout.copyDisplay === "grid" &&
       permissionMenuLayout.descriptionPlacement === "block" &&
       permissionMenuLayout.descriptionTop >= permissionMenuLayout.labelBottom &&
-      // Permission icons center on the whole two-line row (39d64ae9).
+      // Two-line menu items keep the icon on the label line (owner feedback,
+      // supersedes centering on the whole row from 39d64ae9).
       Math.abs(
-        permissionMenuLayout.iconCenterY - permissionMenuLayout.itemCenterY,
+        permissionMenuLayout.iconCenterY - permissionMenuLayout.labelCenterY,
       ) <= 1.5 &&
       permissionMenuLayout.itemInset <= 6 &&
       permissionMenuLayout.itemTopGap <= 2 &&
