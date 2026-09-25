@@ -761,6 +761,13 @@ body {
   letter-spacing: 0;
 }
 
+/* Korean wraps between words, never inside one; long unbroken tokens (paths,
+   URLs) still wrap instead of overflowing. Inherited by every surface. */
+:root:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
 button,
 input,
 select,

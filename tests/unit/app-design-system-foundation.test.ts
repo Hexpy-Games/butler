@@ -571,6 +571,15 @@ describe("motion tokens", () => {
   });
 });
 
+describe("Korean typography", () => {
+  test("Korean text keeps words whole with an overflow-wrap safety net", () => {
+    const tokens = read(`${uiSrc}/libs/design-system/tokens.css`);
+    expect(tokens).toMatch(
+      /:root:lang\(ko\) \{\s*word-break: keep-all;\s*overflow-wrap: break-word;\s*\}/u,
+    );
+  });
+});
+
 describe("icon size tokens", () => {
   test("tokens define the 14/16/20 icon scale", () => {
     const tokens = rootTokens();
