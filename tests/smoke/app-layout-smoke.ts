@@ -2194,8 +2194,9 @@ try {
     testClass("model-button"),
     "model button",
   );
+  // The context ring is not rendered until context usage data exists.
   const contextButton = page.locator(testClass("context-donut-button")).first();
-  if (!(await contextButton.isDisabled())) {
+  if ((await contextButton.count()) > 0) {
     await assertComposerHoverPill(
       page,
       testClass("context-donut-button"),
@@ -2548,11 +2549,13 @@ try {
   const enableSwitchBox = await workerEnableField
     .locator('[role="switch"][data-slot="switch"]')
     .boundingBox();
+  // Switch fields sit inline to the right of their label above 480px.
   assert(
     enableLabelBox &&
       enableSwitchBox &&
-      enableSwitchBox.y > enableLabelBox.y + enableLabelBox.height - 1,
-    "worker profile enable switch should be a vertical SettingsField, not a header action row",
+      enableSwitchBox.x >= enableLabelBox.x + enableLabelBox.width &&
+      enableSwitchBox.y < enableLabelBox.y + enableLabelBox.height,
+    `worker profile enable switch should be an inline SettingsField beside its label: ${JSON.stringify({ enableLabelBox, enableSwitchBox })}`,
   );
   const localBudgetSlider = page
     .locator(testClasses("settings-field", "local-reasoning-budget-field"))
@@ -2893,6 +2896,10 @@ try {
   await page
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
+  // Fresh installs open the sidebar after UI state hydrates at expanded
+  // widths; measure the settled layout, not the opening transition.
+  await page.locator(testClass("app-sidebar")).waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
   const emptyStateLayout = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate(async (element) => {
