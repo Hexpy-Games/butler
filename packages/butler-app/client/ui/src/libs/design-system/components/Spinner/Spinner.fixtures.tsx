@@ -4,14 +4,15 @@ import { Spinner } from "./Spinner";
 
 export function SpinnerFixture() {
   const [busy, setBusy] = useState(true);
+  const [run, setRun] = useState(0);
 
   return (
     <Stack gap="md" data-ds-fixture="spinner">
-      <Stack align="row" gap="lg" cross="center" wrap>
-        {[14, 16, 18, 24, 32].map((size) => (
+      <Stack key={run} align="row" gap="lg" cross="center" wrap>
+        {([["sm", 14], ["md", 16], ["lg", 20], ["xl", 24], ["2xl", 32]] as const).map(([token, size]) => (
           <Stack key={size} gap="sm" cross="center">
             <Spinner size={size} />
-            <Typo.Caption>{size}px</Typo.Caption>
+            <Typo.Caption>{`icon-${token} · ${size}px`}</Typo.Caption>
           </Stack>
         ))}
       </Stack>
@@ -23,6 +24,9 @@ export function SpinnerFixture() {
         </Button>
         <Button size="sm" variant="outline" onClick={() => setBusy(!busy)}>
           {busy ? "Complete loading" : "Load again"}
+        </Button>
+        <Button size="sm" variant="borderless" data-ds-motion="spinner-replay" onClick={() => setRun(run + 1)}>
+          Replay
         </Button>
       </ButtonContainer>
     </Stack>

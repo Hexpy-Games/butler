@@ -98,7 +98,9 @@
   --motion-scale-press: 0.97;
   --adaptive-panel-duration: var(--motion-slow);
   --adaptive-panel-easing: var(--motion-ease-emphasized);
+  /* Spinner: arc grow/shrink cycle and the slower whole-arc rotation. */
   --spinner-duration: 1320ms;
+  --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
   --shimmer-duration: 1400ms;
   --spinner-easing: linear(
