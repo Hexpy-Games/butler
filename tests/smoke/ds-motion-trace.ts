@@ -3,6 +3,8 @@
  * - Chrome traces (CDP tracing) of overlay open/close and 25 chunks/s
  *   streaming; asserts no long task (>50ms) during streaming, CLS ~0, and
  *   reports Layout/Paint work inside overlay animation frames.
+ * - M6: AnimatedNumber keeps its width while counting (tabular sizers) and
+ *   ProgressMeter fills through transform, never width.
  * - Optional `--video`: Playwright recordings of each motion in light and dark.
  *
  * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR]
@@ -141,7 +143,71 @@ const scenarios: Scenario[] = [
       await page.waitForTimeout(2_000);
     },
   },
+  {
+    name: "animated-number",
+    item: "MetricCard",
+    story: "Counting values",
+    run: async (page, scope) => {
+      for (let round = 0; round < 3; round += 1) {
+        await scope.locator('[data-ds-motion="replay"]').click();
+        await page.waitForTimeout(900);
+      }
+    },
+  },
+  {
+    name: "progress-fill",
+    item: "ProgressMeter",
+    story: "Fill change",
+    run: async (page, scope) => {
+      for (let round = 0; round < 3; round += 1) {
+        await scope.locator('[data-ds-motion="replay"]').click();
+        await page.waitForTimeout(800);
+      }
+    },
+  },
+  {
+    name: "worker-complete",
+    item: "WorkerActivityRow",
+    story: "Completes",
+    run: async (page, scope) => {
+      for (let round = 0; round < 2; round += 1) {
+        await scope.locator('[data-ds-motion="replay"]').click();
+        await page.waitForTimeout(1_400);
+      }
+    },
+  },
 ];
+
+/** Samples AnimatedNumber widths while it counts; every sample must match. */
+async function measureNumberAndMeter(page: Page, serverUrl: string, ids: Map<string, string>) {
+  const scope = await openItem(page, serverUrl, ids.get("MetricCard")!, "light", "Counting values");
+  const widths = await scope.evaluate(async (story) => {
+    const numbers = [...story.querySelectorAll('[data-slot="animated-number"]')];
+    (story.querySelector('[data-ds-motion="replay"]') as HTMLElement).click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const samples: number[][] = [];
+    const start = performance.now();
+    while (performance.now() - start < 420) {
+      samples.push(numbers.map((node) => node.getBoundingClientRect().width));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return samples;
+  });
+  const jitter = Math.max(...widths[0]!.map((_, index) => {
+    const column = widths.map((row) => row[index]!);
+    return Math.max(...column) - Math.min(...column);
+  }));
+  const meter = await openItem(page, serverUrl, ids.get("ProgressMeter")!, "light", "Fill change");
+  const fill = await meter.evaluate((story) => {
+    const node = story.querySelector('[data-slot="progress-fill"]') as HTMLElement;
+    const style = getComputedStyle(node);
+    return { transitionProperty: style.transitionProperty, transform: style.transform, inlineWidth: node.style.width };
+  });
+  assert(widths.length > 5, "AnimatedNumber width was not sampled");
+  assert(jitter <= 0.5, `AnimatedNumber width changed by ${jitter}px while counting`);
+  assert(fill.transitionProperty === "transform" && fill.inlineWidth === "", `ProgressMeter fill must animate transform only: ${JSON.stringify(fill)}`);
+  return { animatedNumberWidthJitterPx: Math.round(jitter * 100) / 100, samples: widths.length, progressFill: fill };
+}
 
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
   const context = await browser.newContext({
@@ -322,6 +388,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     // Streamed text reflows as words wrap; the fade itself must add no shift.
     assert(fade.cls - control.cls < 0.01, `chunk fade adds layout shift: ${fade.cls} vs ${control.cls} without it`);
     assert(fade.settledChunkSpans === 0, "settled streamed text should render without chunk spans");
+    results.m6 = await measureNumberAndMeter(page, serverUrl, ids);
   } finally {
     await context.close();
   }

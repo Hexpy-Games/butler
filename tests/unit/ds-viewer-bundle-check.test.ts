@@ -86,6 +86,14 @@ describe("DS Viewer bundle check", () => {
     expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-viewer-bundle-check.ts");
   });
 
+  test("the motion trace has its own script and runs with the design-system smoke", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
+
+    expect(pkg.scripts["app:motion:trace"]).toContain("tests/smoke/ds-motion-trace.ts");
+    expect(pkg.scripts["app:motion:trace"]).toContain("run build");
+    expect(pkg.scripts["app:design-system:smoke"]).toContain("tests/smoke/ds-motion-trace.ts");
+  });
+
   ledgerTest("spec records the lazy, sidebar-based DS Viewer contract", () => {
     const spec = readFileSync(
       resolveRepoOrLedgerPath("project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md"),
