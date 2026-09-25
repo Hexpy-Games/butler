@@ -7,6 +7,7 @@ import type { ArchiveListView } from "@/app/types.ts";
 import { Button, Stack, Typo } from "@/butler-ds";
 import { ArchiveItemRow } from "./ArchiveItemRow";
 import { archiveItems, type ArchiveItem } from "./archiveSettingsUtils";
+import { SettingsListSkeleton } from "./SettingsListSkeleton";
 import { SettingsSection } from "./SettingsSection";
 
 const PAGE_SIZE = 20;
@@ -83,7 +84,9 @@ export function ArchivesSettings() {
   return (
     <SettingsSection title={appCopy.settings.panels.archives}>
       <Stack gap="md">
-        {items.length === 0 ? (
+        {archives === null ? (
+          <SettingsListSkeleton />
+        ) : items.length === 0 ? (
           <Typo.Body>{appCopy.interfaceDetails.archivesEmpty}</Typo.Body>
         ) : (
           <Stack gap="md">

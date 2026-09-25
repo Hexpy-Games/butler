@@ -20,6 +20,7 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { SkillActions } from "./SkillActions";
 import { SkillGroup } from "./SkillGroup";
+import { SettingsListSkeleton } from "./SettingsListSkeleton";
 
 export function SkillsSettings() {
   useAppLocale();
@@ -86,12 +87,14 @@ export function SkillsSettings() {
                 onImport={() => void importSkill()}
                 onCreate={() => void createSkillChat()}
               />
-              <SkillGroup
-                title={appCopy.interfaceDetails.coreSkills}
-                skills={view?.core ?? []}
-                maxVisibleRows={4}
-              />
-              <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view?.user ?? []} />
+              {view === null ? <SettingsListSkeleton /> : <>
+                <SkillGroup
+                  title={appCopy.interfaceDetails.coreSkills}
+                  skills={view.core}
+                  maxVisibleRows={4}
+                />
+                <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view.user} />
+              </>}
             </Stack>
           </TabsContent>
           <TabsContent value="project">

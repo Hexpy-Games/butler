@@ -12,6 +12,7 @@ import { Button, CardList, Stack, Typo } from "@/butler-ds";
 import { SettingsSection } from "./SettingsFormComponents";
 import { McpServerForm } from "./McpServerForm";
 import { McpServerRow } from "./McpServerRow";
+import { SettingsListSkeleton } from "./SettingsListSkeleton";
 import {
   emptyMcpServerForm,
   formFromMcpServer,
@@ -22,7 +23,7 @@ import {
 export function McpSettings() {
   useAppLocale();
   const copy = appCopy.settings;
-  const [servers, setServers] = useState<McpServerView[]>([]);
+  const [servers, setServers] = useState<McpServerView[] | null>(null);
   const [form, setForm] = useState<McpServerFormState>(emptyMcpServerForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
@@ -107,6 +108,7 @@ export function McpSettings() {
             {copy.actions.addMcpServer}
           </Button>
         </Stack>
+        {servers === null ? <SettingsListSkeleton /> : (
         <CardList
           empty={<Typo.Caption>{appCopy.interfaceDetails.noMcp}</Typo.Caption>}
         >
@@ -121,6 +123,7 @@ export function McpSettings() {
             />
           ))}
         </CardList>
+        )}
         {open && (
           <McpServerForm
             form={form}
