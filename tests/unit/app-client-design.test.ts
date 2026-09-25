@@ -2733,7 +2733,7 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("narrow-readable-type-scale");
   expect(smoke).toContain("new-chat-left-radius-preserved");
   expect(smoke).toContain("browser-chrome-traffic-reserve-zero");
-  expect(smoke).toContain("browser-sidebar-toggle-flush-left");
+  expect(smoke).toContain("browser-sidebar-toggle-at-sidebar-inset");
   expect(smoke).toContain("narrow-right-panel-visible");
   expect(smoke).toContain("narrow-right-panel-titlebar-draggable");
   expect(smoke).toContain("narrow-scrim-compositor-stable");

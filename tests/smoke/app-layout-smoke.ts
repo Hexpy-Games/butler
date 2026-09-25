@@ -2552,13 +2552,13 @@ try {
   const enableSwitchBox = await workerEnableField
     .locator('[role="switch"][data-slot="switch"]')
     .boundingBox();
-  // Switch fields sit inline to the right of their label above 480px.
+  // Switch fields stack under their label, left-aligned with it (no inline layout).
   assert(
     enableLabelBox &&
       enableSwitchBox &&
-      enableSwitchBox.x >= enableLabelBox.x + enableLabelBox.width &&
-      enableSwitchBox.y < enableLabelBox.y + enableLabelBox.height,
-    `worker profile enable switch should be an inline SettingsField beside its label: ${JSON.stringify({ enableLabelBox, enableSwitchBox })}`,
+      enableSwitchBox.y >= enableLabelBox.y + enableLabelBox.height &&
+      Math.abs(enableSwitchBox.x - enableLabelBox.x) <= 1,
+    `worker profile enable switch should stack under its label: ${JSON.stringify({ enableLabelBox, enableSwitchBox })}`,
   );
   const localBudgetSlider = page
     .locator(testClasses("settings-field", "local-reasoning-budget-field"))
@@ -4265,7 +4265,7 @@ try {
         "fresh-left-sidebar-collapsed",
         "left-toggle-titlebar-positioned",
         "browser-chrome-traffic-reserve-zero",
-        "browser-sidebar-toggle-flush-left",
+        "browser-sidebar-toggle-at-sidebar-inset",
         "sidebar-hover-highlight",
         "sidebar-unified-row-height",
         "project-session-no-indent",
