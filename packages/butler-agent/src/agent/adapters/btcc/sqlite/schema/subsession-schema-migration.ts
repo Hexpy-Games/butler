@@ -14,7 +14,8 @@ export function migrateSubsessionResultSchema(db: Database): void {
   `).get()?.sql ?? "";
   if (!definition) return;
   if (
-    definition.includes("status IN ('success', 'blocked', 'failed', 'cancelled')") &&
+    definition.includes("status IN ('success', 'blocked', 'incomplete', 'failed', 'cancelled')") &&
+    definition.includes("'needs_user_decision'") && definition.includes("'turn_budget_exhausted'") &&
     definition.includes("'delegation_context_incomplete'") &&
     definition.includes("'worker_work_incomplete'") &&
     definition.includes("'worker_no_progress'") &&

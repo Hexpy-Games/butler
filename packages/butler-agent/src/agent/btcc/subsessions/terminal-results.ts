@@ -125,6 +125,7 @@ export function safeTerminalSummary(
     return "Required project context is not available for this delegated work.";
   }
   if (status === "cancelled") return "The delegated work was stopped.";
+  if (status === "incomplete") return "The delegated session stopped without recording completion or a blocker; the Work remains unfinished.";
   if (status === "blocked") return "The delegated work requires additional input before it can continue.";
   return "A confirmed system failure ended the delegated session.";
 }

@@ -1,6 +1,11 @@
 import { dispositionMaterialFingerprint, type DurableWorkView } from "../work/index.ts";
 
-export type AcceptedWorkResult = { status: "success" | "blocked" };
+/** Child terminal result: incomplete is input for the parent, never completion. */
+export type AcceptedWorkResult = {
+  status: "success" | "blocked" | "incomplete";
+  code?: "needs_user_decision" | "work_abandoned" | "child_closeout_missing";
+  evidence?: string[];
+};
 export type GuidedWorkReportDecision =
   | { status: "report"; result?: AcceptedWorkResult }
   | { status: "continue"; observation: string };

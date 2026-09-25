@@ -66,10 +66,11 @@ test.each([
         return { text: "Partial completion; second file remains.", toolCalls: [] };
       },
       (request) => {
-        expect(request.messages.some((message) => message.content.includes("delegated assignment is still open"))).toBe(true);
+        // One actionable correction names the open Work and the legitimate exits.
+        expect(request.messages.some((message) => message.content.includes("has no terminal disposition"))).toBe(true);
         return { text: "", toolCalls: [] };
       },
-      () => ({ text: "", toolCalls: [] }),
+      // The empty-response recovery is the next observation; the model then resumes work.
       () => toolResponse([toolCall("second", "write_file", { path: "second.txt", content: "MAPLE" })]),
       (request) => {
         expect(lastToolOutput(request, "write_file")).toMatchObject({ ok: true });

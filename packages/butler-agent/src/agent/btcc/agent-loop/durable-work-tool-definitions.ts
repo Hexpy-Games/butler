@@ -293,6 +293,11 @@ const RECORD_WORK_DISPOSITION: FunctionToolDefinition = {
         type: "string",
         minLength: 1,
       },
+      blocked_code: {
+        type: "string",
+        enum: ["external_blocker", "needs_user_decision"],
+        description: "Only with blocked. needs_user_decision when only the user can decide; put the exact question in next_condition.",
+      },
       followups: {
         type: "array",
         items: { type: "string", minLength: 1 },

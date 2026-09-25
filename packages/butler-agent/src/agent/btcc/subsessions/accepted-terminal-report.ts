@@ -35,7 +35,7 @@ export async function resolveParentResultEvidence(input: {
   turns: Pick<SubsessionDelegationDependencies["parentTurns"], "findTurn">;
 }): Promise<{
   synthesisEvidence: string;
-  outcome: "success" | "blocked" | "failed" | "cancelled";
+  outcome: "success" | "blocked" | "incomplete" | "failed" | "cancelled";
   parentWorkId: string;
   changedFiles: ChangedFileDetail[];
   artifacts: BtccFinalArtifact[];
@@ -71,10 +71,15 @@ export async function resolveParentResultEvidence(input: {
   return {
     synthesisEvidence: [
       "Canonical child result synthesis",
-      "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
+      ...(results.some((child) => child.status === "incomplete") ? [] : [
+        "Report completed work, remaining work, and the next action in user terms; do not start Work in this result-report Turn.",
+      ]),
+      ...childResultGuidance(results),
       ...results.map((child) => [
         `Status: ${child.status}`,
+        ...(child.code ? [`Code: ${child.code}`] : []),
         `Summary: ${child.summary}`,
+        ...(child.acceptance_evidence?.length ? [`Evidence: ${child.acceptance_evidence.join("; ")}`] : []),
         `Changed artifacts: ${child.changed_artifacts.join("; ") || "none"}`,
       ].join("\n")),
     ].join("\n"),
@@ -83,6 +88,18 @@ export async function resolveParentResultEvidence(input: {
     changedFiles: results.flatMap((child) => child.changed_files ?? []),
     artifacts: childTurns.flatMap((child) => child?.finalPayload?.artifacts ?? []),
   };
+}
+
+/** Status-specific handling; an incomplete child result is never completion. */
+function childResultGuidance(results: readonly { status: string; code: string | null }[]): string[] {
+  return [
+    ...(results.some((child) => child.status === "incomplete") ? [
+      "An incomplete result means the delegated session stopped without finishing or naming a real blocker. It is not completion: keep the Work open, never record it completed from this result, and re-plan or continue the remaining work (re-delegate with the prior attempt in mind, or do the remaining work directly).",
+    ] : []),
+    ...(results.some((child) => child.code === "needs_user_decision") ? [
+      "needs_user_decision means only the user can decide. Ask the user the specific question from the result and keep the Work open until they answer; do not guess the decision.",
+    ] : []),
+  ];
 }
 
 /** Resolves the accepted child final payload; no transcript or tool payload is accepted. */

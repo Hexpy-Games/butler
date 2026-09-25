@@ -50,9 +50,10 @@ CREATE TABLE IF NOT EXISTS btcc_steward_results (
   task_id TEXT NOT NULL,
   child_session_id TEXT NOT NULL,
   child_turn_id TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'failed', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('success', 'blocked', 'incomplete', 'failed', 'cancelled')),
   code TEXT CHECK (code IS NULL OR code IN (
-    'delegation_context_incomplete',
+    'delegation_context_incomplete', 'needs_user_decision', 'work_abandoned',
+    'child_closeout_missing', 'turn_budget_exhausted',
     'steward_execution_failed', 'steward_cancelled',
     'worker_work_incomplete', 'worker_no_progress'
   )),

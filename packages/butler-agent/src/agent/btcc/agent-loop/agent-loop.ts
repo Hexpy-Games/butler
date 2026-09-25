@@ -203,7 +203,7 @@ export async function runBtccAgentLoop(
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
-        continuationItems.push({ role: "user", content: recoveryObservation });
+        continuationItems.push({ role: "user", content: repetition.nudge("empty_response", recoveryObservation) });
         continue;
       }
       if (input.reviewFinalCandidate) {
@@ -218,7 +218,7 @@ export async function runBtccAgentLoop(
           finalReportRound = false;
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
-          continuationItems.push({ role: "user", content: observation });
+          continuationItems.push({ role: "user", content: repetition.nudge("final_candidate_review", observation) });
           continue;
         }
         return {

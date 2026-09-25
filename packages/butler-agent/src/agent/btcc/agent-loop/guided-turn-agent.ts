@@ -85,7 +85,7 @@ export function createProductionGuidedTurnAgent(
       const workerResultIntegration = policy.role === "steward" &&
         turn.turnId.startsWith("steward-worker-result-") &&
         Boolean(subsessionResultEvidence);
-      const parentResultContinuation = Boolean(subsessionResultEvidence) && !workerResultIntegration;
+      const parentResultContinuation = Boolean(subsessionResultEvidence) && !workerResultIntegration && subsessionResultEvidence?.outcome !== "incomplete";
       const askFirstTurn = policy.accessMode === "ask_first";
       const authorityOwnerSessionId = askFirstTurn &&
           (policy.role === "steward" || policy.role === "worker")
@@ -129,8 +129,9 @@ export function createProductionGuidedTurnAgent(
         input.subsessionDelegation) {
         await ensureSubsessionChildRootWork({ service: input.subsessionDelegation, turn });
       }
-      if (subsessionResultEvidence?.outcome === "success" && parentResultContinuation) {
-        // Reattach the verified Work; child success does not complete parent actions.
+      if ((subsessionResultEvidence?.outcome === "success" && parentResultContinuation) ||
+        (subsessionResultEvidence?.outcome === "incomplete" && !workerResultIntegration)) {
+        // Reattach the Work; child success does not complete parent actions and incomplete keeps it open to re-plan.
         await safeBindOpenWork(input.durableWork, workScope, subsessionResultEvidence.parentWorkId);
       }
 
@@ -392,7 +393,7 @@ export function createProductionGuidedTurnAgent(
         durableWork: input.durableWork, workScope,
         turnId: turn.turnId, originalRequest: turn.originalMessage,
         trackingMode: policy.trackingMode, responseLanguage,
-        requiresTerminalResult: policy.role !== "butler",
+        requiresTerminalResult: policy.role !== "butler", toolJournal: input.toolJournal,
       });
       const delegationRelease = policy.role === "butler" ? createGuidedDelegationTurnRelease({
         reviewFinalCandidate: closeout.reviewFinalCandidate,

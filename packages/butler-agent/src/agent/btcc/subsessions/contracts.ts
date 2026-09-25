@@ -102,13 +102,11 @@ export type DelegationPacket = {
   reasoning_effort: string;
 };
 
-export type StewardResultStatus = "success" | "blocked" | "failed" | "cancelled";
-export type StewardResultCode =
-  | "delegation_context_incomplete"
-  | "steward_execution_failed"
-  | "steward_cancelled"
-  | "worker_work_incomplete"
-  | "worker_no_progress";
+/** incomplete: the child stopped without a terminal disposition; parent input, never completion. */
+export type StewardResultStatus = "success" | "blocked" | "incomplete" | "failed" | "cancelled";
+export type StewardResultCode = "delegation_context_incomplete" | "needs_user_decision" | "work_abandoned" |
+  "child_closeout_missing" | "turn_budget_exhausted" | "steward_execution_failed" | "steward_cancelled" |
+  "worker_work_incomplete" | "worker_no_progress";
 
 export type StewardResultEnvelope = {
   result_id: string;
@@ -247,6 +245,7 @@ export type CompleteStewardResultInput = {
   changedFiles?: ChangedFileDetail[];
   status?: StewardResultStatus;
   code?: StewardResultCode;
+  acceptanceEvidence?: string[];
 };
 
 export type CompleteStewardResultOutcome = {

@@ -45,7 +45,7 @@ export type BtccAgentLoopResult = {
   authorityContinuation?: import("./loop-continuation.ts").AuthorityLoopContinuation;
   route: "direct" | "assisted" | "managed";
   workStatus?: "completed" | "blocked";
-  acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+  acceptedWorkResult?: { status: "success" | "blocked" | "incomplete" | "failed"; code?: string; evidence?: string[] };
   runtimeFailure?: BtccRuntimeFailure;
   artifacts?: BtccFinalArtifact[];
   changedFiles?: ChangedFileDetail[];

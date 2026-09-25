@@ -166,7 +166,7 @@ export type BtccTurnOutcome = (
       messageId: string;
       content: string;
       workStatus?: "completed" | "blocked";
-      acceptedWorkResult?: { status: "success" | "blocked" | "failed" };
+      acceptedWorkResult?: { status: "success" | "blocked" | "incomplete" | "failed"; code?: string; evidence?: string[] };
       runtimeFailure?: BtccRuntimeFailure;
       executionOutcome?: "waiting_for_worker";
       artifacts?: BtccFinalArtifact[];

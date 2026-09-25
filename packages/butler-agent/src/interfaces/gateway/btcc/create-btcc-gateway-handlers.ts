@@ -4,7 +4,7 @@ import type {
   InboundEnvelope,
 } from "../../../gateways/core/contracts.ts";
 import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
-import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
+import { subsessionResultId, type StewardResultCode } from "../../../agent/btcc/subsessions/index.ts";
 import {
   projectChildTerminalReport,
   projectTurnOutcome,
@@ -193,6 +193,9 @@ async function completeAcceptedChildResult(
     resultId: subsessionResultId(route.sessionId, childTurnId),
     summary: report.summary,
     status: result.acceptedWorkResult.status,
+    // The child's recorded code and evidence reach the parent unchanged.
+    ...(result.acceptedWorkResult.code ? { code: result.acceptedWorkResult.code as StewardResultCode } : {}),
+    ...(result.acceptedWorkResult.evidence?.length ? { acceptanceEvidence: result.acceptedWorkResult.evidence } : {}),
     changedArtifacts: report.changedArtifacts,
     changedFiles: report.changedFiles,
   };

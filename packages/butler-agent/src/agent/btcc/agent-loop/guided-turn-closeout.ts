@@ -7,6 +7,9 @@ import { dispositionMaterialFingerprint } from "../work/index.ts";
 import { digest } from "../identity/index.ts";
 import { GuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
 import type { GuidedToolJournal } from "../ports/index.ts";
+import {
+  abandonedChildResult, blockedChildResult, childCloseoutObservation, incompleteChildResult,
+} from "./child-closeout-feedback.ts";
 import { guidedWorkReportDecision, isFreshCurrentDisposition, type AcceptedWorkResult } from "./guided-work-report-decision.ts";
 export { isFreshCurrentDisposition } from "./guided-work-report-decision.ts";
 
@@ -18,6 +21,8 @@ type GuidedTurnCloseoutInput = {
   responseLanguage: string;
   originalRequest: string;
   requiresTerminalResult?: boolean;
+  /** Reads the recorded blocked_code of a child's blocked disposition. */
+  toolJournal?: Pick<GuidedToolJournal, "list">;
 };
 
 type GuidedTurnCloseoutReview =
@@ -69,19 +74,44 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
   reconcileAfterLoop(text: string): Promise<string>;
   acceptedWorkResult(): Promise<AcceptedWorkResult | undefined>;
 } {
+  // A child's second text-only final settles incomplete: parent input, not failure.
+  let settled: ReturnType<typeof incompleteChildResult> | undefined;
+  let unboundCorrectionUsed = false;
+  const reviewChildCandidate = async (text: string): Promise<GuidedTurnCloseoutReview> => {
+    const bound = await loadBoundWork(input);
+    if (bound?.status === "abandoned") {
+      settled = { result: abandonedChildResult(bound), text: text.trim() || `Work ${bound.workId} was abandoned.` };
+      return { status: "accepted", text: settled.text };
+    }
+    if (guidedWorkReportDecision(bound, input.turnId, true).status === "report") return { status: "accepted" };
+    const claimed = bound
+      ? await claimCloseoutCorrection(input, bound.workId)
+      : !unboundCorrectionUsed && (unboundCorrectionUsed = true);
+    if (claimed) {
+      const candidateWorkId = bound ? undefined : await openWorkId(input);
+      return { status: "continue", observation: childCloseoutObservation({ work: bound, candidateWorkId }) };
+    }
+    settled = incompleteChildResult(bound, text);
+    return { status: "accepted", text: settled.text };
+  };
+  const acceptedWorkResult = async (): Promise<AcceptedWorkResult | undefined> => {
+    if (settled) return settled.result;
+    const bound = await loadBoundWork(input);
+    const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
+    if (decision.status !== "report") return undefined;
+    return input.requiresTerminalResult && bound && decision.result?.status === "blocked"
+      ? blockedChildResult(bound, input.toolJournal?.list(input.turnId) ?? [])
+      : decision.result;
+  };
   return {
-    async acceptedWorkResult() {
-      const decision = guidedWorkReportDecision(await loadBoundWork(input), input.turnId, input.requiresTerminalResult ?? false);
-      return decision.status === "report" ? decision.result : undefined;
-    },
+    acceptedWorkResult,
     async reviewFinalCandidate(candidate) {
       try {
-        if (input.trackingMode === "none" && !input.requiresTerminalResult) {
+        if (input.requiresTerminalResult) return await reviewChildCandidate(candidate.text);
+        if (input.trackingMode === "none") {
           return { status: "accepted" as const };
         }
         const bound = await loadBoundWork(input);
-        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
-        if (input.requiresTerminalResult && decision.status === "continue") return decision;
         if (!bound) {
           return { status: "accepted" as const };
         }
@@ -112,13 +142,14 @@ export function createGuidedTurnCloseout(input: GuidedTurnCloseoutInput): {
     async reconcileAfterLoop(text) {
       try {
         if (input.trackingMode === "none" && !input.requiresTerminalResult) return text;
-        const bound = await loadBoundWork(input);
-        const decision = guidedWorkReportDecision(bound, input.turnId, input.requiresTerminalResult ?? false);
-        // The loop must obtain a terminal decision before delivering a child reply.
-        // A missing decision is an execution fault, never a successful partial report.
-        if (input.requiresTerminalResult && decision.status !== "report") {
-          throw new GuidedWorkCloseoutError(new Error("delegated_work_report_without_terminal_result"));
+        // A child reply is either terminal or already settled as incomplete for
+        // the parent; the missing disposition is never a runtime failure.
+        if (input.requiresTerminalResult) {
+          if (settled || await acceptedWorkResult()) return settled?.text ?? text;
+          settled = incompleteChildResult(await loadBoundWork(input), text);
+          return settled.text;
         }
+        const bound = await loadBoundWork(input);
         if (!bound) return text;
         if (isFreshCurrentDisposition(bound, input.turnId)) {
           return bound.latestDisposition?.runtimeOwnedOpen
@@ -145,6 +176,14 @@ async function claimCloseoutCorrection(
     });
   } catch (error) {
     throw new GuidedWorkCloseoutError(error);
+  }
+}
+
+async function openWorkId(input: GuidedTurnCloseoutInput): Promise<string | undefined> {
+  try {
+    return (await input.durableWork.loadContext(input.workScope))?.work.workId;
+  } catch {
+    return undefined;
   }
 }
 
@@ -241,11 +280,11 @@ function closeoutCopy(input: GuidedTurnCloseoutInput): {
     ? {
         summary: "현재 Turn의 완료 상태를 확정하지 못해 Work를 열린 상태로 유지했습니다.",
         nextCondition: "현재 결과와 완료 조건을 확인한 뒤 Work 종료 상태를 다시 기록해야 합니다.",
-        notice: "작업 완료 상태를 확정하지 못해 Work를 열린 상태로 유지했습니다.",
+        notice: "진행 메모: 이 작업은 아직 열려 있으며 이어서 진행할 수 있습니다.",
       }
     : {
         summary: "The current Turn could not confirm completion, so the Work remains open.",
         nextCondition: "Review the current results and completion conditions, then record the Work disposition again.",
-        notice: "Work completion could not be confirmed, so the Work remains open.",
+        notice: "Progress note: this work is still open and can be continued.",
       };
 }

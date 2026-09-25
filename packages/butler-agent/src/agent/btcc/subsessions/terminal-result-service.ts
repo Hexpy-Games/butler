@@ -85,7 +85,7 @@ export async function completeStewardResultForDependencies(
   if (resultInput.summary?.trim()) {
     evidence = {
       summary: safeSummary(resultInput.summary),
-      acceptanceEvidence: [],
+      acceptanceEvidence: resultInput.acceptanceEvidence ?? [],
       changedArtifacts: resultInput.changedArtifacts ?? [],
       changedFiles: resultInput.changedFiles ?? [],
       ...emptyReportDetails(),
@@ -99,7 +99,7 @@ export async function completeStewardResultForDependencies(
     }
     evidence = {
       summary: safeTerminalSummary(terminalStatus, terminalCode),
-      acceptanceEvidence: [],
+      acceptanceEvidence: resultInput.acceptanceEvidence ?? [],
       changedArtifacts: [],
       changedFiles: [],
       ...emptyReportDetails(),
