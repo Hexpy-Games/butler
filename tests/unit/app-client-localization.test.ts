@@ -78,14 +78,14 @@ test("design-system and dashboard labels are localized", () => {
     copy.interfaceStatus.workerPhase,
     copy.common.open,
     copy.common.close,
-    copy.interfaceStatus.work,
-    copy.interfaceStatus.task,
   ];
-  expect(pick(en)).toEqual(["7d messages", "30d messages", "Worker phase", "Open", "Close", "Work", "Task"]);
+  expect(pick(en)).toEqual(["7d messages", "30d messages", "Worker phase", "Open", "Close"]);
   for (const [index, value] of pick(ko).entries()) {
     expect(value.length).toBeGreaterThan(0);
     expect(value).not.toBe(pick(en)[index]);
   }
+  // Work and Task are product terms that stay in English in Korean copy.
+  expect([ko.interfaceStatus.work, ko.interfaceStatus.task]).toEqual(["Work", "Task"]);
 });
 
 test("body font stack prefers Hangul faces before the generic family", () => {
