@@ -26,7 +26,7 @@ function collect() {
       "../blocks/NavRow/README.md": "# NavRow",
     },
     fallbacks: { "components/Button": registryButton, "blocks/NavRow": registryNavRow },
-    legacyCategories: { "components/Toast": "Overlay", "blocks/NavRow": "Navigation" },
+    legacyCategories: { "components/Toast": "Feedback", "blocks/NavRow": "Navigation" },
   });
 }
 
@@ -61,7 +61,7 @@ describe("collectShowcaseEntries", () => {
 
     expect(toast?.origin).toBe("none");
     expect(toast?.stories).toEqual([]);
-    expect(toast?.meta).toEqual({ title: "Toast", category: "Overlay" });
+    expect(toast?.meta).toEqual({ title: "Toast", category: "Feedback" });
     expect(toast?.readme).toBeNull();
   });
 

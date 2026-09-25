@@ -92,6 +92,14 @@ describe("design-system showcase coverage", () => {
     }
   });
 
+  test("transient and inline status surfaces sit in the Feedback group", () => {
+    expect({
+      toast: legacyShowcaseCategories["components/Toast"],
+      notice: legacyShowcaseCategories["blocks/Notice"],
+      emptyLine: legacyShowcaseCategories["blocks/EmptyLine"],
+    }).toEqual({ toast: "Feedback", notice: "Feedback", emptyLine: "Conversation & Activity" });
+  });
+
   test("showcase files export meta and uniquely named stories in a known category", async () => {
     for (const { id, module } of await loadShowcases()) {
       const categories: readonly string[] = id.startsWith("components/")

@@ -16,6 +16,7 @@ export const SHOWCASE_BLOCK_CATEGORIES = [
   "Navigation",
   "Composer",
   "Conversation & Activity",
+  "Feedback",
   "Inspector",
   "Settings & Forms",
   "Dashboard & Metrics",
