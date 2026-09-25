@@ -71,10 +71,7 @@ export function SkillsSettings() {
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
   return (
-    <SettingsSection
-      title={copy.panels.skills}
-      description={copy.descriptions.skills}
-    >
+    <SettingsSection description={copy.descriptions.skills}>
       <Stack gap="md">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>

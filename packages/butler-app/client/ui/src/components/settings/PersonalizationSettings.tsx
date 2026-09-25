@@ -62,7 +62,7 @@ export function PersonalizationSettings() {
     models[0];
 
   return (
-    <SettingsSection title={settingsCopy.sections.personalization}>
+    <SettingsSection>
       <PersonalizationProfileFields
         fields={profileFields}
         profileDraft={profileDraft}

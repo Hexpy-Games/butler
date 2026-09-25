@@ -168,3 +168,30 @@ test("searchable settings select uses the plain select trigger with a left-align
     markupOf(<ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" aria-hidden="true" />),
   );
 });
+
+test("single-section pages do not repeat the page title as a section header", () => {
+  const settingsCopyEn = getAppCopy("en-US").settings;
+  const pages = [
+    ["AppearanceSettings.tsx", "settingsCopy.sections.appearance", "appearance", undefined],
+    ["PersonalizationSettings.tsx", "settingsCopy.sections.personalization", "personalization", undefined],
+    ["ArchivesSettings.tsx", "panels.archives", "archives", "archives"],
+    ["AboutSettings.tsx", "panels.about", "about", "about"],
+    ["UpdatesSettings.tsx", "panels.updates", "updates", "updates"],
+    ["SkillsSettings.tsx", "panels.skills", "skills", "skills"],
+    ["UsageSettings.tsx", "panels.usageMonitor", "usage", "usageMonitor"],
+    ["SystemEventsSettings.tsx", "panels.systemEvents", "system", "systemEvents"],
+  ] as const;
+  for (const [file, titleExpression, pageId, panelId] of pages) {
+    // The panel title really is the page title, so a header would only repeat it.
+    if (panelId) {
+      expect(settingsCopyEn.panels[panelId], file).toBe(settingsCopyEn.sections[pageId]);
+    }
+    const source = readFileSync(resolve(import.meta.dir, file), "utf8");
+    expect(source, file).toContain("<SettingsSection");
+    expect(source, file).not.toContain(titleExpression);
+  }
+  // A section description that repeats the page description is dropped too.
+  const updates = readFileSync(resolve(import.meta.dir, "UpdatesSettings.tsx"), "utf8");
+  expect(settingsCopyEn.descriptions.updates).toBe(settingsCopyEn.sectionDescriptions.updates);
+  expect(updates).not.toContain("descriptions.updates");
+});

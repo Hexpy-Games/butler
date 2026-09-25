@@ -23,7 +23,7 @@ export function AppearanceSettings() {
   if (!draft) return null;
 
   return (
-    <SettingsSection title={settingsCopy.sections.appearance}>
+    <SettingsSection>
       <SettingsSelect
         label={settingsFields.theme}
         value={draft.appearance_theme}

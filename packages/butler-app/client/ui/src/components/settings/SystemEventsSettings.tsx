@@ -51,10 +51,7 @@ export function SystemEventsSettings() {
   const settingsCopy = appCopy.settings;
 
   return (
-    <SettingsSection
-      title={settingsCopy.panels.systemEvents}
-      description={settingsCopy.descriptions.systemEvents}
-    >
+    <SettingsSection description={settingsCopy.descriptions.systemEvents}>
       <Stack gap="md">
         <Stack align="row" justify="end">
           <Button

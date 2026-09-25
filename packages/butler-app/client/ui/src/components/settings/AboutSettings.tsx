@@ -72,7 +72,7 @@ export function AboutSettings() {
   }
 
   return (
-    <SettingsSection title={settingsCopy.panels.about}>
+    <SettingsSection>
       <SettingsField
         label={settingsCopy.fields.appName}
         control={readOnlyValue(info?.name ?? appCopy.firstRun.product)}

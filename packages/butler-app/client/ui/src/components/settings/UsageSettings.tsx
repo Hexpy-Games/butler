@@ -73,10 +73,7 @@ export function UsageSettings() {
   const providerUsage = view?.providerUsage;
 
   return (
-    <SettingsSection
-      title={appCopy.settings.panels.usageMonitor}
-      description={appCopy.settings.descriptions.usageMonitor}
-    >
+    <SettingsSection description={appCopy.settings.descriptions.usageMonitor}>
       <Stack gap="lg">
         <Stack
           align="row"

@@ -1946,10 +1946,10 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain(
     "`/system-events?limit=${PAGE_SIZE}&offset=${offset}`",
   );
-  expect(renderer).toContain("settingsCopy.panels.systemEvents");
+  expect(renderer).toContain("settingsCopy.descriptions.systemEvents");
   expect(renderer).toContain("UsageSettings");
   expect(renderer).toContain('"/usage-monitor"');
-  expect(renderer).toContain("appCopy.settings.panels.usageMonitor");
+  expect(renderer).toContain("appCopy.settings.descriptions.usageMonitor");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/settings/UsageSettings.tsx",

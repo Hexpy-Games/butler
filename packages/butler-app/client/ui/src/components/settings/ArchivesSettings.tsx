@@ -82,7 +82,7 @@ export function ArchivesSettings() {
   const items = archiveItems(archives);
 
   return (
-    <SettingsSection title={appCopy.settings.panels.archives}>
+    <SettingsSection>
       <Stack gap="md">
         {archives === null ? (
           <SettingsListSkeleton />

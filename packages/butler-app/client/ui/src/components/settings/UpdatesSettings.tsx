@@ -77,10 +77,7 @@ export function UpdatesSettings() {
   );
 
   return (
-    <SettingsSection
-      title={copy.panels.updates}
-      description={copy.descriptions.updates}
-    >
+    <SettingsSection>
       <Stack gap="md">
         <Stack align="row" justify="end">
           <Button
