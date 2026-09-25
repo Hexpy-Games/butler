@@ -290,12 +290,14 @@
   --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-code: var(--font-size-2)/var(--line-height-body)
     var(--font-family-code);
-  --font-size-1: 12px;
-  --font-size-2: 13px;
-  --font-size-3: 14px;
-  --font-size-4: 15px;
-  --font-size-5: 18px;
-  --font-size-6: 24px;
+  /* Deprecated numeric scale: aliases of the canonical --typo-* role scale.
+     Prefer the --typo-* role token in new code. */
+  --font-size-1: var(--typo-caption-size);
+  --font-size-2: var(--typo-label-size);
+  --font-size-3: var(--typo-body-size);
+  --font-size-4: var(--typo-app-title-size);
+  --font-size-5: var(--typo-h4-size);
+  --font-size-6: var(--typo-h2-size);
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 560;
@@ -474,12 +476,6 @@
     --typo-section-title-size: 15px;
     --typo-panel-section-title-size: 17px;
     --typo-metric-value-size: 20px;
-    --font-size-1: 14px;
-    --font-size-2: 15px;
-    --font-size-3: 16px;
-    --font-size-4: 17px;
-    --font-size-5: 20px;
-    --font-size-6: 26px;
   }
 }
 

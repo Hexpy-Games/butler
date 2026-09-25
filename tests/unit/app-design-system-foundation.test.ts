@@ -461,3 +461,29 @@ describe("token inventory cleanup", () => {
     }
   });
 });
+
+describe("single type scale", () => {
+  const aliases: Array<[string, string]> = [
+    ["--font-size-1", "--typo-caption-size"],
+    ["--font-size-2", "--typo-label-size"],
+    ["--font-size-3", "--typo-body-size"],
+    ["--font-size-4", "--typo-app-title-size"],
+    ["--font-size-5", "--typo-h4-size"],
+    ["--font-size-6", "--typo-h2-size"],
+  ];
+
+  test("legacy numeric font sizes alias the canonical --typo-* scale", () => {
+    const tokens = rootTokens();
+    for (const [legacy, canonical] of aliases) {
+      expect(tokens.get(legacy)).toBe(`var(${canonical})`);
+    }
+  });
+
+  test("compact widths resize only the canonical scale", () => {
+    const css = read(tokensPath);
+    const mobile = css.slice(css.indexOf("@media (width <= 640px) {"));
+    const block = mobile.slice(0, mobile.indexOf("\n}\n"));
+    expect(block).toContain("--typo-body-size: 16px");
+    expect(block).not.toMatch(/--font-size-\d:/u);
+  });
+});

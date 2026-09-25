@@ -95,10 +95,11 @@ describe("responsive adaptive design contracts", () => {
     expect(tokens).toContain("--typo-body-size: 16px");
     expect(tokens).toContain("--typo-caption-size: 14px");
     expect(tokens).toContain("--typo-label-size: 15px");
-    expect(tokens).toContain("--font-size-1: 14px");
-    expect(tokens).toContain("--font-size-2: 15px");
-    expect(tokens).toContain("--font-size-3: 16px");
-    expect(tokens).toContain("--font-size-4: 17px");
+    expect(tokens).toContain("--typo-app-title-size: 17px");
+    // The numeric --font-size-N scale aliases these role tokens, so it
+    // follows the compact sizes without its own overrides.
+    expect(tokens).toContain("--font-size-1: var(--typo-caption-size)");
+    expect(tokens).toContain("--font-size-3: var(--typo-body-size)");
   });
 
   test("keeps the adaptive scrim on a stable compositor layer", () => {

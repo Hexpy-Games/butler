@@ -178,7 +178,8 @@ test("dedicated client design tokens cover flat sidebar and custom titlebar prim
 
   expect(css).toContain("--sidebar-bg: rgba(255, 255, 255, 0.52);");
   expect(css).toContain("--sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);");
-  expect(css).toContain("--font-size-3: 14px");
+  expect(css).toContain("--typo-body-size: 14px");
+  expect(css).toContain("--font-size-3: var(--typo-body-size)");
   expect(css).toContain("--composer-reserve");
   expect(css).toContain("--composer-glass-bg");
   expect(css).toContain("--composer-glass-control-bg");
