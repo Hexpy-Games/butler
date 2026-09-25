@@ -244,7 +244,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
     const centerY = (rect: DOMRect | null) =>
       rect ? rect.top + rect.height / 2 : Number.NaN;
     const composerButton = document.querySelector(
-      '[data-ds-component="ComposerControl"] [data-slot="button"]',
+      '[data-ds-component="ComposerControl"] [data-ds-fixture-canvas] [data-slot="button"]',
     );
     const activityIcon = document.querySelector(
       '[data-ds-component="ActivityFeed"] [data-ds-fixture-canvas] [data-slot="activity-feed-icon"]',
@@ -301,7 +301,21 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
     const sidebarStyle = chromeSidebar ? getComputedStyle(chromeSidebar) : null;
     const mainStyle = chromeMain ? getComputedStyle(chromeMain) : null;
 
+    // Touch widths keep the visual pill height and extend only the hit area.
+    const composerHitTargetMet = (() => {
+      if (!composerButton) return false;
+      composerButton.scrollIntoView({ block: "center", inline: "center" });
+      const rect = composerButton.getBoundingClientRect();
+      const minTarget = window.innerWidth <= 640 ? 44 : rect.height;
+      const x = rect.left + rect.width / 2;
+      const reach = (minTarget - rect.height) / 2 - 0.5;
+      return [rect.top - reach, rect.bottom + reach].every(
+        (y) => document.elementFromPoint(x, y)?.closest('[data-slot="button"]') === composerButton,
+      );
+    })();
+
     return {
+      composerHitTargetMet,
       composerKeepsButtonHeight:
         Boolean(composerRect) && composerRect!.height >= 24 && composerRect!.height <= 34,
       activityIconTitleAligned:
@@ -332,6 +346,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
     };
   });
   assert(blockPolishState.composerKeepsButtonHeight, `${label}: ComposerControl button is stretching vertically`);
+  assert(blockPolishState.composerHitTargetMet, `${label}: ComposerControl hit target is below 44px on touch widths`);
   assert(blockPolishState.activityIconTitleAligned, `${label}: ActivityFeed icon/title alignment is off`);
   assert(blockPolishState.disclosureGridStable, `${label}: DisclosureRow trigger layout is unstable`);
   assert(blockPolishState.disclosureIconTitleAligned, `${label}: DisclosureRow icon/title alignment is off`);
