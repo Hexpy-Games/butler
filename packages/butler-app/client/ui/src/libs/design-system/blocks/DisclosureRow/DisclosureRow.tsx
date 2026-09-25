@@ -56,7 +56,7 @@ export function DisclosureRow({
           </span>
           {icon ? (
             <span
-              className={cn(styles.icon, description && styles.withDescription)}
+              className={styles.icon}
               data-slot="disclosure-row-icon"
             >
               {icon}
