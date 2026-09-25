@@ -60,9 +60,9 @@ export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { pr
         kind: event.source.kind === "spec" ? "spec" : event.source.kind === "report" ? "report" : "plan",
         document_type: event.source.kind as ProjectDashboardDocument["document_type"], title: event.title,
         markdown: "", safe_path_label: event.source.id, updated_at: event.at })} />
-          {event.session && <Button variant="borderless" size="xs" onClick={() => onOpenSession(event.session!.id)}>
+          {event.session && <div className={styles.session}><Button variant="borderless" size="xs" onClick={() => onOpenSession(event.session!.id)}>
             <MessageSquare /><Typo.Text truncate>{event.session.title}</Typo.Text><ChevronRight />
-          </Button>}
+          </Button></div>}
         </Stack>
       </div>)}</div>
     </Section>)}

@@ -23,3 +23,14 @@
   padding-top: var(--space-md);
   color: var(--text-tertiary);
 }
+
+/* Session link under a history event: indented one step from the event row. */
+.session {
+  min-width: 0;
+  max-width: 100%;
+  padding-inline-start: var(--space-sm);
+}
+
+.session > * {
+  max-width: 100%;
+}
