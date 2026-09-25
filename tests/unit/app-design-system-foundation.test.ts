@@ -433,7 +433,7 @@ describe("design-system syntax highlight tokens", () => {
   });
 
   test("code block highlight classes consume only syntax tokens", () => {
-    const css = read(`${uiSrc}/components/conversation/MarkdownCodeBlock.module.css`);
+    const css = read(`${uiSrc}/libs/design-system/blocks/MarkdownContent/MarkdownContent.module.css`);
     expect(css).toContain('[data-syntax="keyword"]');
     expect(css).not.toContain(":global(");
     const colors = [...css.matchAll(/color:\s*([^;]+);/gu)].map((match) => match[1]);

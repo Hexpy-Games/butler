@@ -159,8 +159,7 @@ test("horizontal scrollers and legacy vertical masks use the shared scroll-fade 
     "libs/design-system/blocks/ChangedLineDiff/ChangedLineDiff.tsx",
     "libs/design-system/blocks/ActivityHeatmap/ActivityHeatmap.tsx",
     "components/management/ProjectWorkBoard.tsx",
-    "components/conversation/MarkdownCodeBlock.tsx",
-    "components/conversation/MessageMarkdown.tsx",
+    "libs/design-system/blocks/MarkdownContent/MarkdownParts.tsx",
   ];
   for (const file of horizontal) {
     expect(`${file}: ${readFileSync(`${ui}/${file}`, "utf8").includes('useScrollEdges("x")')}`).toBe(`${file}: true`);

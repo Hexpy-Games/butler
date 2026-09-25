@@ -2,7 +2,6 @@
   "components/conversation/ComposerAuthorityDecisionSurface.module.css": 1,
   "components/conversation/ComposerDecisionSurface.module.css": 1,
   "components/conversation/ComposerPlanInstructionContext.module.css": 1,
-  "components/conversation/MarkdownCodeBlock.module.css": 1,
   "components/conversation/PlanDocumentMessage.module.css": 1,
   "components/conversation/StewardComposerCapsules.module.css": 1,
   "components/conversation/StewardParentProgress.module.css": 1,

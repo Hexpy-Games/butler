@@ -1,10 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { memo, useMemo, type ComponentProps, type TableHTMLAttributes } from "react";
+import { memo, useMemo, type ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
-import { MarkdownContent, useScrollEdges, useStreamingReveal } from "@/butler-ds";
+import { MarkdownContent, MarkdownTable, useStreamingReveal } from "@/butler-ds";
 import { resolveMarkdownImageSource } from "./messageMedia";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { remarkPunctuationBoldSuffix } from "./remarkPunctuationBoldSuffix";
@@ -14,14 +14,6 @@ const MESSAGE_MARKDOWN_PLUGINS: ComponentProps<typeof ReactMarkdown>["remarkPlug
   [remarkGfm, { singleTilde: false }],
   remarkPunctuationBoldSuffix,
 ];
-
-function MarkdownTable({
-  node: _node,
-  ...props
-}: TableHTMLAttributes<HTMLTableElement> & { node?: unknown }) {
-  const tableFadeRef = useScrollEdges("x");
-  return <table ref={tableFadeRef} {...props} />;
-}
 
 function markdownComponents(attachments: MessageFileRef[]) {
   return {

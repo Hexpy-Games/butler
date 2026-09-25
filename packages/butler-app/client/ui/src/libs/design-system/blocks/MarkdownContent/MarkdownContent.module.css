@@ -29,8 +29,6 @@
 
 .markdown h2 {
   margin-top: var(--space-6);
-  border-bottom: 1px solid var(--line);
-  padding-bottom: var(--space-2);
   font-size: var(--font-size-5);
 }
 
@@ -69,6 +67,7 @@
 }
 
 .markdown blockquote {
+  margin-inline: 0;
   border-left: 2px solid var(--line-strong);
   padding-left: var(--space-4);
   color: var(--text-secondary);
@@ -150,4 +149,78 @@
   from {
     opacity: 0;
   }
+}
+
+/* Fenced code block frame: header bar + faded pre. */
+.codeFrame {
+  min-width: 0;
+  margin-block: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.codeHeader {
+  display: flex;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-4) var(--space-1);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2);
+}
+
+.codeHeader > div {
+  margin-top: 0;
+}
+
+.markdown .codePre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.codePre [data-syntax="keyword"] {
+  color: var(--syntax-keyword);
+}
+
+.codePre [data-syntax="string"] {
+  color: var(--syntax-string);
+}
+
+.codePre [data-syntax="comment"] {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.codePre [data-syntax="number"] {
+  color: var(--syntax-number);
+}
+
+.codePre [data-syntax="title"] {
+  color: var(--syntax-title);
+}
+
+.codePre [data-syntax="type"] {
+  color: var(--syntax-type);
+}
+
+.codePre [data-syntax="variable"] {
+  color: var(--syntax-variable);
+}
+
+.codePre [data-syntax="meta"] {
+  color: var(--syntax-meta);
+}
+
+.codePre [data-syntax="addition"] {
+  color: var(--syntax-addition);
+}
+
+.codePre [data-syntax="deletion"] {
+  color: var(--syntax-deletion);
 }

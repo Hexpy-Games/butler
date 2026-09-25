@@ -4,3 +4,4 @@ export {
   useStreamingReveal,
   type StreamChunk,
 } from "./streamingReveal";
+export * from "./MarkdownParts";
