@@ -104,7 +104,7 @@ describe("responsive adaptive design contracts", () => {
 
   test("keeps the adaptive scrim on a stable compositor layer", () => {
     const component = read(
-      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.tsx",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShellParts.tsx",
     );
     const styles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",

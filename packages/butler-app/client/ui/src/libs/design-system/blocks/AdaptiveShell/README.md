@@ -15,7 +15,13 @@ exclusive open-panel state.
 
 ## Responsive behavior
 
-- Expanded layouts use resizable grid tracks.
+- Expanded layouts use resizable grid tracks. Tracks never interpolate: the
+  docked sidebar slides with a transform while the workspace is
+  FLIP-translated (and clipped) in step. Closing collapses the track at once;
+  opening keeps the collapsed track until the slide ends, so the workspace
+  reflows once. Reduced motion commits at once and the sidebar only fades.
+  The right inspector still interpolates its grid track (S5: move it to the
+  same transform model).
 - The workspace is an inline-size query container. Product resize geometry may
   retain a 320px workspace and give the inspector all remaining width; the shell
   accepts the measured widths and a standard root ref without owning preferences.

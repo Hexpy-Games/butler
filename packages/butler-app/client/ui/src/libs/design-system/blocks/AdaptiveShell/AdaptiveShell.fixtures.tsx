@@ -8,7 +8,7 @@ import {
   AdaptiveShellScrim,
   AdaptiveShellSidebar,
   AdaptiveShellWorkspace,
-} from "./AdaptiveShell";
+} from "./index";
 
 export function AdaptiveShellFixture() {
   const [panel, setPanel] = useState<"left" | "right" | null>("left");
