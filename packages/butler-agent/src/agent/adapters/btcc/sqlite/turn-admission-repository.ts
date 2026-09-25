@@ -16,7 +16,7 @@ import {
   createTurnContinuationBudgetState,
   type TurnContinuationBudgetLimits,
 } from "../../../btcc/turn/index.ts";
-import type { ConversationOriginEvidence } from "../../../conversation/types.ts";
+import type { ConversationOriginEvidence } from "../../../conversation/index.ts";
 
 type InboxRow = {
   inbox_id: string;

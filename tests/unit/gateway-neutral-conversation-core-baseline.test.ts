@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
 const conversationCoreSpecs = [
   {
@@ -121,7 +121,7 @@ function collectRepoLocalPlanningDocs(root: string): string[] {
   return found.sort();
 }
 
-test("gateway-neutral conversation core specs are canonical and reviewable", () => {
+ledgerTest("gateway-neutral conversation core specs are canonical and reviewable", () => {
   const parent = readRepoOrLedgerFile(conversationCoreSpecs[0].path);
 
   for (const spec of conversationCoreSpecs) {
@@ -139,7 +139,7 @@ test("gateway-neutral conversation core specs are canonical and reviewable", () 
   }
 });
 
-test("gateway-neutral conversation implementation work is task-addressable", () => {
+ledgerTest("gateway-neutral conversation implementation work is task-addressable", () => {
   const work = readRepoOrLedgerFile(
     "project-ledger/projects/butler/work/W-GATEWAY-NEUTRAL-CONVERSATION-CORE/work.md",
   );
@@ -163,7 +163,7 @@ test("repo-local planning/spec Markdown artifacts are not reintroduced", () => {
   expect(collectRepoLocalPlanningDocs(process.cwd())).toEqual([]);
 });
 
-test("migrated default-source targets no longer use transcript as the cognition default", () => {
+ledgerTest("migrated default-source targets no longer use transcript as the cognition default", () => {
   const work = readRepoOrLedgerFile(
     "project-ledger/projects/butler/work/W-GATEWAY-NEUTRAL-CONVERSATION-CORE/work.md",
   );

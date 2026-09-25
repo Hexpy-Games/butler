@@ -3,8 +3,7 @@ import type {
   GatewayRoute,
   InboundEnvelope,
 } from "../../../gateways/core/contracts.ts";
-import type { BtccTurnRequest } from "../../../agent/btcc/index.ts";
-import { subsessionResultId } from "../../../agent/btcc/subsessions/index.ts";
+import { subsessionResultId, type BtccTurnRequest } from "../../../agent/btcc/index.ts";
 import {
   projectChildTerminalReport,
   projectTurnOutcome,

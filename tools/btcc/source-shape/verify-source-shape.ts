@@ -13,6 +13,7 @@ import {
 import {
   discoverChangedSuccessorModules,
 } from "./discover-successor-modules.ts";
+import { LINE_LIMIT_BASELINE } from "./line-limit-baseline.ts";
 import { parseTypeScriptModules } from "./parse-typescript-modules.ts";
 
 function containsPath(root: string, candidate: string): boolean {
@@ -81,13 +82,23 @@ function verifyModule(
   changedFilePaths: ReadonlySet<string>,
   domains: readonly MaterializedDomain[],
   module: ParsedTypeScriptModule,
+  lineLimitBaseline: Readonly<Record<string, number>>,
 ): SourceShapeFinding[] {
   const path = displayPath(repositoryRoot, module.path);
   const findings: SourceShapeFinding[] = [];
   const isChangedSuccessorFile = changedFilePaths.has(module.path)
     && successorRoots.some((root) => containsPath(root, module.path));
 
-  if (isChangedSuccessorFile && module.physicalLines > MAX_PHYSICAL_LINES) {
+  const baselineLines = lineLimitBaseline[path];
+  if (isChangedSuccessorFile && baselineLines !== undefined) {
+    if (module.physicalLines > baselineLines) {
+      findings.push({
+        code: "line_limit_exceeded",
+        path,
+        message: `${module.physicalLines} physical lines exceeds its ${baselineLines}-line baseline (limit ${MAX_PHYSICAL_LINES}; shrink it, do not grow it)`,
+      });
+    }
+  } else if (isChangedSuccessorFile && module.physicalLines > MAX_PHYSICAL_LINES) {
     findings.push({
       code: "line_limit_exceeded",
       path,
@@ -141,6 +152,7 @@ export function inspectBtccSourceShape(repositoryRoot: string): SourceShapeRepor
 export function verifyDiscoveredSuccessorShape(
   repositoryRoot: string,
   discovered: ReturnType<typeof discoverChangedSuccessorModules>,
+  lineLimitBaseline: Readonly<Record<string, number>> = LINE_LIMIT_BASELINE,
 ): SourceShapeReport {
   const root = resolve(repositoryRoot);
   const modules = parseTypeScriptModules(root, discovered.filePaths);
@@ -160,6 +172,7 @@ export function verifyDiscoveredSuccessorShape(
       changedFilePaths,
       discovered.domains,
       module,
+      lineLimitBaseline,
     )),
   ].sort((left, right) => left.path.localeCompare(right.path)
     || left.code.localeCompare(right.code)

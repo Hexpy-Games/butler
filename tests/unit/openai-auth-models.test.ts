@@ -902,19 +902,11 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
   });
   expect(calls[2]!.body.model).toBe("glm-5.2");
   expect(calls[2]!.body.reasoning_effort).toBe("low");
-  expect(calls[2]!.body.response_format).toEqual({
-    type: "json_schema",
-    json_schema: {
-      name: "hosted_json_gate",
-      strict: true,
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["ok"],
-        properties: { ok: { type: "string" } },
-      },
-    },
-  });
+  // Z.AI takes json_object plus the schema in the instructions (c259f7e2).
+  expect(calls[2]!.body.response_format).toEqual({ type: "json_object" });
+  expect(JSON.stringify(calls[2]!.body.messages)).toContain(
+    "Return exactly one JSON object matching the following JSON Schema.",
+  );
   expect(attributedRequests).toEqual([0]);
   expect(attributedUsage).toEqual([expect.objectContaining({
     model: "zai/glm-5.2",
@@ -3747,13 +3739,21 @@ test("OpenAI function tool prompts send compact tool schemas to the model", asyn
       type: "object",
       additionalProperties: false,
       properties: {
-        query: { type: "string" },
-        mode: { type: "string", enum: ["quick", "deep"] },
+        query: {
+          type: "string",
+          description: "Nested parameter prose should not be sent to the model.",
+        },
+        mode: {
+          type: "string",
+          description: "Enum prose should not be sent either.",
+          enum: ["quick", "deep"],
+        },
       },
       required: ["query"],
     },
+    // c5018644 sends tool parameters unchanged and non-strict.
+    strict: false,
   }]);
-  expect(JSON.stringify(seenBody.tools)).not.toContain("Nested parameter prose");
 });
 
 test("OpenAI function tool prompt refreshes promoted dynamic schemas between tool rounds", async () => {

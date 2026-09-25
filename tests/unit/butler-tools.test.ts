@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -46,6 +47,8 @@ const startupOnlyToolNames: string[] = [
   "tool_search",
   "tool_describe",
   "tool_call",
+  // Contextual topic conversations (e2fbf03b) are part of the startup surface.
+  "start_topic_conversation",
   "update_todo_list",
   "list_todo_list",
   "recall_memory",
@@ -107,6 +110,7 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "tool_search",
   "tool_describe",
   "tool_call",
+  "start_topic_conversation",
   "update_todo_list",
   "list_todo_list",
   "recall_memory",
@@ -179,6 +183,8 @@ function runProjectLedger(args: string[], projectPath: string): void {
 test("Project Ledger tool wrappers inherit the active workspace when project_path is omitted", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
+  // The Project Ledger child runs with the data home as cwd (d9337582).
+  mkdirSync(butlerData, { recursive: true });
   const workspacePath = join(tempDir, "workspaces", "sandy-bot");
   const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   mkdirSync(workspacePath, { recursive: true });
@@ -269,6 +275,8 @@ test("session-bound executor fails closed when its WorkspaceReference is omitted
 test("Project Ledger tool wrappers resolve bounded project and workspace facts", async () => {
   const butlerHome = join(tempDir, "butler-home");
   const butlerData = join(tempDir, "butler-data");
+  // The Project Ledger child runs with the data home as cwd (d9337582).
+  mkdirSync(butlerData, { recursive: true });
   const workspacePath = join(tempDir, "workspaces", "sandy-folder");
   const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   mkdirSync(workspacePath, { recursive: true });
@@ -761,6 +769,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "transform_public_data_table",
     "run_command",
     "read_file",
+    "read_project_source",
     "write_file",
     "edit_file",
     "grep_files",
@@ -774,6 +783,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "complete_project_work",
     "get_context_monitor",
     "read_operation_results",
+    "list_operation_results",
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "get_usage_monitor",
@@ -786,6 +796,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_mcp_resource",
     "analyze_attached_image",
     "create_automation",
+    "start_topic_conversation",
     "list_automations",
     "delete_automation",
     "run_due_automations",
@@ -806,7 +817,10 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "update_explicit_memory",
     "list_skills",
     "delegate_to_steward",
+    "delegate_to_worker",
     "steer_steward",
+    "steer_worker",
+    "wait_for_worker",
     "cancel_steward",
   ]);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_search")?.concurrencySafe).toBe(true);
@@ -3232,6 +3246,7 @@ test("tool evidence artifact reader schema exposes focused recovery controls", (
     "artifact_id",
     "path",
     "offset_lines",
+    "offset_chars",
     "limit_lines",
     "max_tokens",
   ]);
@@ -3547,26 +3562,29 @@ test("memory quality tool schemas expose health ingestion recall and explicit up
     "project_ids",
     "time",
   ]);
+  // c5018644 rewrote query_memory as an exact canonical-conversation search.
   expect(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.description).toContain(
-    "exact memory/history evidence",
+    "Search canonical conversation scalars exactly",
   );
   expect(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.description).toContain(
-    "Uses canonical conversation messages by default",
+    "read_conversation_session",
   );
   expect(Object.keys(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.parameters.properties ?? {})).toEqual([
     "query",
     "scope",
-    "session_id",
+    "session_ids",
+    "project_filter",
+    "project_ids",
     "speaker",
     "event_kind",
     "order",
     "match_mode",
+    "terms",
+    "case_sensitive",
     "limit",
-    "date_from",
-    "date_to",
+    "time",
+    "cursor",
     "include_internal",
-    "include_placeholders",
-    "include_transcript_recovery",
   ]);
   expect(BUTLER_TOOLS.find((item) => item.name === "update_explicit_memory")?.parameters.required).toEqual([
     "kind",
@@ -4039,9 +4057,9 @@ test("web_read reuses same-turn page evidence for duplicate URL reads", async ()
   expect(second.title).toBe("Evidence Story");
   expect(second.evidence_quality).toBe(first.evidence_quality);
   expect(second.evidence_receipts).toEqual(first.evidence_receipts);
-  expect(second.public_web_evidence_items).toEqual([]);
-  expect(second).not.toHaveProperty("markdown");
-  expect(second).not.toHaveProperty("chunks");
+  // 65f08368 returns the full duplicate observation instead of a compacted one.
+  expect(second.public_web_evidence_items).toEqual(first.public_web_evidence_items);
+  expect(second.markdown).toBe(first.markdown);
 });
 
 test("web_read continues through cached page chunks with start_chunk", async () => {
@@ -5214,11 +5232,32 @@ test("default todo list scope is isolated per app turn", async () => {
 });
 
 test("memory quality tools ingest task outcomes and recall local memory", async () => {
-  const taskDir = join(tempDir, "tasks", "task-memory-tool");
-  mkdirSync(taskDir, { recursive: true });
-  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
-  writeFileSync(join(taskDir, "request.md"), "remember source-backed reports\n", "utf8");
-  writeFileSync(join(taskDir, "result.md"), "Source-backed report workflow was completed.\n", "utf8");
+  // Task memory only ingests reviewed public reports (c5018644).
+  const tasks = new PlannedTaskStore(tempDir);
+  tasks.create({
+    task_id: "task-memory-tool", type: "planned",
+    goal: "remember source-backed reports", project: tempDir,
+    created_at: "2026-04-24T12:00:00.000Z", origin_session_id: "butler/main",
+    origin_event_id: "mock:event:memory-tool", decision_policy: "autonomous",
+    acceptance_criteria: ["report completed"], verification_commands: ["bun test"],
+    review_policy: "review every criterion",
+    repair_policy: { max_attempts: 1, allow_autonomous_repair: true },
+    public_report_policy: "report after review",
+  });
+  tasks.transition("task-memory-tool", "PLANNED_RUNNING");
+  tasks.writeAttemptResult("task-memory-tool", 1, "Source-backed report workflow was completed.");
+  tasks.transition("task-memory-tool", "WORKER_DONE");
+  tasks.transition("task-memory-tool", "REVIEWING");
+  tasks.writeReview({
+    task_id: "task-memory-tool", attempt: 1, verdict: "PASS",
+    reviewed_at: "2026-04-24T12:04:00.000Z",
+    goal_review: { goal: "remember source-backed reports", verdict: "PASS", evidence: "report completed" },
+    criteria: [{ criterion: "report completed", verdict: "PASS", evidence: "test passed" }],
+    missing_evidence: [], repair_recommendation: null,
+  });
+  tasks.transition("task-memory-tool", "REVIEW_PASSED");
+  tasks.transition("task-memory-tool", "PUBLIC_REPORT_READY");
+  tasks.writePublicReport("task-memory-tool", "Source-backed report workflow was completed.");
   const conversation = new AgentConversationStore({ butlerData: tempDir });
   try {
     const turn = conversation.beginTurn({

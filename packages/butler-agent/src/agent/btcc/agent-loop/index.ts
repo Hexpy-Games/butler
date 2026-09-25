@@ -17,3 +17,4 @@ export type {
 export { createProductionGuidedTurnAgent } from "./guided-turn-agent.ts";
 export { isGuidedWorkCloseoutError } from "./guided-work-closeout-error.ts";
 export type { ModelRoundPort } from "../ports/model-round.ts";
+export type { AuthorityLoopContinuation } from "./loop-continuation.ts";

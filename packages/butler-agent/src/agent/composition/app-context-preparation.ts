@@ -1,6 +1,7 @@
-import type { BtccTurnPreparation, BtccTurnRequest, BtccPreparedTurn } from "../btcc/contracts.ts";
+import type { BtccTurnRequest } from "../btcc/index.ts";
+import type { BtccPreparedTurn, BtccTurnPreparation } from "../btcc/turn/index.ts";
 import type { LocalAuthConfig } from "../../gateways/app/interface/server/local-auth.ts";
-import type { TurnStateRepository } from "../btcc/turn/contracts.ts";
+import type { TurnStateRepository } from "../btcc/turn/index.ts";
 
 /** Mandatory production adapter: App and runtime cannot admit different session contexts. */
 export class AppContextPreparation implements BtccTurnPreparation {

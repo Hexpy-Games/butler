@@ -1,11 +1,11 @@
 import type {
   GatewayDispatchResult,
 } from "../../../gateways/core/contracts.ts";
-import type { ChangedFileDetail } from "../../../agent/btcc/index.ts";
 import {
   projectLedgerPlanFromUnknown,
+  type ChangedFileDetail,
   type ProjectLedgerPlan,
-} from "../../../agent/btcc/project-plan.ts";
+} from "../../../agent/btcc/index.ts";
 import type {
   ClaimedInboundEvent,
   NativeInboundQueue,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
+import { resolveRepoOrLedgerPath, ledgerTest } from "../support/project-ledger-root.ts";
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { lintDesignSystemRules } from "../../packages/butler-app/scripts/lint/design-system-rules-lint.ts";
 
@@ -12,7 +12,7 @@ function read(path: string): string {
 }
 
 describe("design-system foundation spec", () => {
-  test("spec records the Phase 1 foundation contracts", () => {
+  ledgerTest("spec records the Phase 1 foundation contracts", () => {
     const spec = read(
       "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
     );
@@ -33,7 +33,7 @@ describe("design-system foundation spec", () => {
     expect(spec).toContain("--z-tooltip");
   });
 
-  test("spec records the Phase 2 screen contracts", () => {
+  ledgerTest("spec records the Phase 2 screen contracts", () => {
     const spec = read(
       "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
     );

@@ -29,3 +29,4 @@ export {
 } from "./identity.ts";
 export { classifyModelRouteFailure } from "./failure-policy.ts";
 export { createModelRoutePort } from "./routed-round.ts";
+export { parseProjectionIdentity } from "./context-projection-rebase.ts";

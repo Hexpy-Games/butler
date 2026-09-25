@@ -361,7 +361,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
     sessionBindings: bindings,
     appServerUrl: app.url,
     appLocalAuth: { required: true, token: authToken },
-    modelRound: { async runRound(request) {
+    modelRound: boundedModelRound({ async runRound(request) {
       const requestBody = request.messages.map((message) => message.content).join("\n");
       const isSynthesis = requestBody.includes("Canonical child result synthesis") ||
         requestBody.includes("Subsession result");
@@ -421,7 +421,7 @@ test("typed Steward terminal results share the outbox and incomplete context blo
         })] };
       }
       return { text: "Unexpected terminal round.", toolCalls: [] };
-    } },
+    } }),
   });
   const queue = new NativeInboundQueue(root);
   const inbound = new BtccInboundDispatcher();
@@ -940,7 +940,7 @@ function recoveryRound(input: {
 }): ModelRoundPort {
   const parentRounds = new Map<string, number>();
   const childRounds = new Map<string, number>();
-  return {
+  return boundedModelRound({
     async runRound(request) {
       const body = request.messages.map((message) => message.content).join("\n");
       const isSynthesis = body.includes("Canonical child result synthesis") ||
@@ -964,7 +964,7 @@ function recoveryRound(input: {
         })] };
         if (round === 2) return { toolCalls: [toolCall("plan-parent-work", "replace_work_plan", {
           objective: "Create and verify one bounded recovery result file.",
-          execution_mode: "direct",
+          execution_mode: "steward",
           governing_refs: [],
           actions: [{ action_key: "delegate-reviewed-recovery-work" }],
           checks: ["recovery-result.txt contains the expected mutation"],
@@ -1032,6 +1032,24 @@ function recoveryRound(input: {
         .match(/guided-effect-receipt-[a-f0-9]+/u)?.[0];
       if (!receiptId) throw new Error("Recovery receipt was not projected to the final report round");
       return { text: recoveryStewardReport(receiptId), toolCalls: [] };
+    },
+  });
+}
+
+// Scripted rounds answer without I/O. If the product keeps re-asking, a
+// zero-latency loop starves the event loop so bun's test timeout never fires;
+// fail once the script is clearly exhausted instead.
+const MAX_SCRIPTED_MODEL_ROUNDS = 200;
+
+function boundedModelRound(port: ModelRoundPort): ModelRoundPort {
+  let rounds = 0;
+  return {
+    async runRound(request) {
+      rounds += 1;
+      if (rounds > MAX_SCRIPTED_MODEL_ROUNDS) {
+        throw new Error(`scripted model round overrun: ${rounds}`);
+      }
+      return port.runRound(request);
     },
   };
 }

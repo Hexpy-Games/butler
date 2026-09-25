@@ -4,7 +4,7 @@ import type {
   ChangedFileDetail,
 } from "../../../agent/btcc/index.ts";
 import { projectBtccFinalReport } from "../../../agent/btcc/index.ts";
-import type { ProjectLedgerPlan } from "../../../agent/btcc/project-plan.ts";
+import type { ProjectLedgerPlan } from "../../../agent/btcc/index.ts";
 
 export function projectTurnOutcome(
   outcome: BtccTurnOutcome,

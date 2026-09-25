@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import {
+  classifyConversationOrigin,
   ConversationAdmissionTurn,
   type ConversationContextStoreReader,
   type ConversationWriter,
 } from "../../conversation/index.ts";
-import { classifyConversationOrigin } from "../../conversation/session-admission.ts";
 import type { ContextAssembly, PromptAssembler } from "../../prompt/prompt-assembler.ts";
 import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";

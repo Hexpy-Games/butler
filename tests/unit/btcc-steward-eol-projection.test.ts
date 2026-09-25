@@ -21,6 +21,8 @@ import { inboundEnvelopeFor } from
   "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn-request.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { admitTurn } from
+  "../../packages/butler-agent/src/agent/btcc/turn/admission/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { snapshotChildProjectContext } from
@@ -202,11 +204,13 @@ test("real child preparation carries own environment and admitted project/feedba
       if (prepared.command.kind !== "run") throw new Error("fresh command required");
       const turn = turnFrom(prepared.command);
       turns.set(turn.turnId, turn);
+      // The Guided round surface reads Work through the admitted Turn row (19da630e).
+      await admitTurn(prepared.command, stores.admission, stores.turns);
       await agent.run({ turn, signal: new AbortController().signal });
       const providerRequest = captured.at(-1)!;
       const text = JSON.stringify(providerRequest);
       for (const expected of ["RUNTIME_CONTRACT_SHARED", "DATA_EOL_V1", "SHARED_USER_RULE",
-        "Asia/Seoul", "User Language: ko", "Assistant Response Language: Korean",
+        "Asia/Seoul", "Interface Language (app labels only): ko", "Assistant Response Language: ko",
         "User Technical Language: English", "Seoul, Korea", "Current Local Time:",
         request.message.timestamp, "PROJECT_MEMORY_SHARED", "PROJECT_HOT_CACHE_SHARED",
         "PARENT_CORRECTION_SHARED", "USER_STYLE_SHARED", request.message.content]) {

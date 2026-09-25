@@ -298,7 +298,10 @@
     width: var(--adaptive-drawer-width);
   }
 
-  .inspector {
+  /* Match the drawer rule's specificity so phone widths keep the full-width
+     inspector (and its titlebar) instead of the tablet 92vw drawer width. */
+  .inspector,
+  .root[data-panel-layout="drawer"] .inspector {
     width: var(--adaptive-inspector-width);
   }
 

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "fs";
 import { join } from "path";
 import commandData from "../../packages/butler-agent/src/interfaces/cli/commands.json";
-import { readRepoOrLedgerFile } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, ledgerTest } from "../support/project-ledger-root.ts";
 
 const root = process.cwd();
 
@@ -41,7 +41,7 @@ test("README normal workflows use the product CLI instead of internal scripts", 
   }
 });
 
-test("CLI reference lists every registry command with availability state", () => {
+ledgerTest("CLI reference lists every registry command with availability state", () => {
   const reference = readRepoOrLedgerFile("project-ledger/projects/butler/references/cli-reference.md");
   const documentedCommands = [...reference.matchAll(/^- `([^`]+)`\s+-\s+(available|planned|deferred)\./gm)]
     .map((match) => ({
@@ -57,7 +57,7 @@ test("CLI reference lists every registry command with availability state", () =>
   }
 });
 
-test("CLI spec defines the user documentation gate", () => {
+ledgerTest("CLI spec defines the user documentation gate", () => {
   const spec = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
 
   expect(spec).toContain("Product Documentation Contract");

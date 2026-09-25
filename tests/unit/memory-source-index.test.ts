@@ -1,5 +1,5 @@
 import { readGenerationHotCache } from "../../packages/butler-agent/src/agent/cognition/continuity/hot-cache-writer.ts";
-import { expect, test } from "bun:test";
+import { expect, test, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +10,11 @@ import { ingestConversationMemory, advanceNextMemoryProjection } from "../../pac
 import { recallSourceBackedMemory } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
 import { OPENAI_PROVIDER_ADAPTER } from "../../packages/butler-agent/src/integrations/providers/openai/adapter.ts";
 import { selectSemanticSeeds } from "../../packages/butler-agent/src/agent/cognition/memory/recall/candidates.ts";
+import { startEmbeddingStub } from "../support/embedding-stub.ts";
+
+let embeddingStub: Awaited<ReturnType<typeof startEmbeddingStub>> | undefined;
+beforeAll(async () => { embeddingStub = await startEmbeddingStub(); });
+afterAll(async () => { await embeddingStub?.stop(); });
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "memory-source-index-"));

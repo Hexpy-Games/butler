@@ -54,13 +54,10 @@ test("SQLite declares one legacy Session semantic schema while Project authority
 });
 
 test("dedicated parity tests contain no skip, todo, only, direct adapter construction, or manual envelope", () => {
-  const files = lines(command([
-    "rg",
-    "--files",
-    "tests/unit",
-    "-g",
-    "btcc-r3-project-work-public-parity*.ts",
-  ]));
+  const files = [...new Bun.Glob("btcc-r3-project-work-public-parity*.ts")
+    .scanSync({ cwd: join(root, "tests/unit") })]
+    .map((name) => `tests/unit/${name}`)
+    .sort();
   expect(files.length).toBeGreaterThanOrEqual(5);
   const behavioralFiles = files.filter((path) => !path.endsWith("-guards.test.ts"));
   const combined = behavioralFiles.map((path) => source(path)).join("\n");
@@ -81,19 +78,11 @@ function matchesInProduct(pattern: string): string[] {
   return matchesInDirectory("packages/butler-agent/src", pattern);
 }
 
+// Pure-TS fixed-string search: the guards must not depend on whichever `rg`
+// binary happens to be on PATH (e.g. an x86_64 build on arm64 fails to spawn).
 function matchesInDirectory(directory: string, pattern: string): string[] {
-  const output = command(["rg", "-l", "-F", pattern, directory], true);
-  return lines(output).sort();
-}
-
-function command(args: string[], allowNoMatches = false): string {
-  const result = Bun.spawnSync(args, { cwd: root, stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode === 0 || (allowNoMatches && result.exitCode === 1)) {
-    return result.stdout.toString();
-  }
-  throw new Error(result.stderr.toString());
-}
-
-function lines(value: string): string[] {
-  return value.split("\n").map((line) => line.trim()).filter(Boolean);
+  return [...new Bun.Glob("**/*").scanSync({ cwd: join(root, directory) })]
+    .map((path) => `${directory}/${path}`)
+    .filter((path) => source(path).includes(pattern))
+    .sort();
 }

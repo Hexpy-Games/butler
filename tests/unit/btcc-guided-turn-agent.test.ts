@@ -7167,7 +7167,7 @@ function createFixture(label: string) {
         durableWork: operational.durableWork ?? stores.durableWork,
         modelRound,
       });
-      return withAdmittedEol(agent, admittedEolRef);
+      return withAdmittedEol(agent, admittedEolRef, stores);
     },
     close() {
       stores.close();
@@ -7179,15 +7179,38 @@ function createFixture(label: string) {
 function withAdmittedEol(
   agent: BtccAgentLoop,
   admittedEolRef: string,
+  stores?: ReturnType<typeof openBtccSqliteStores>,
 ): BtccAgentLoop {
   return {
     async run(input) {
       if (input.turn.context.profileRefs.length === 0) {
         input.turn.context.profileRefs = [admittedEolRef];
       }
+      if (stores) await ensureTurnAdmitted(input.turn, stores);
       return await agent.run(input);
     },
   };
+}
+
+/**
+ * Since 19da630e the Guided round surface reads Work through the admitted
+ * Turn row and no longer tolerates an unreadable Work. Tests that hand-build
+ * a TurnRecord admit an equivalent run command first, as production does.
+ */
+async function ensureTurnAdmitted(
+  turn: TurnRecord,
+  stores: ReturnType<typeof openBtccSqliteStores>,
+): Promise<void> {
+  if (await stores.turns.findTurn(turn.turnId)) return;
+  await admitTurn({
+    kind: "run",
+    turnId: turn.turnId,
+    sessionId: turn.sessionId,
+    triggerKey: turn.triggerKey,
+    message: { messageId: turn.originalMessageId, content: turn.originalMessage },
+    modelSelection: turn.modelSelection,
+    context: turn.context,
+  }, stores.admission, stores.turns);
 }
 
 function runGit(args: string[], cwd: string, gitDir = false): string {

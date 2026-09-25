@@ -21,3 +21,4 @@ export type {
   BtccTurnProgressPublisher,
   BtccWakeCompletionCandidate,
 } from "../contracts.ts";
+export type { GuidedActivitySnapshot } from "./projection.ts";
