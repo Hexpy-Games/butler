@@ -794,6 +794,10 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     failedMessageStatus: "Send failed",
     retryFailedMessage: "Retry message",
     deleteFailedMessage: "Delete failed message",
+    queuedPosition: (position, total) => `Queued · ${position} of ${total}`,
+    queuedSending: "Sending…",
+    sendQueuedNow: "Send now",
+    sendQueuedNowHint: "Stop the current response and send this next",
     contextDetails: "Show context details",
     approval: {
       title: "Command awaiting approval",

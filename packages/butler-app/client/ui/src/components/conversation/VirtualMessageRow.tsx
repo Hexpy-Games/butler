@@ -22,7 +22,7 @@ interface VirtualMessageRowProps {
   topOffset: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   onCopyContextMenuText: (message: MessageRecord) => void;
-  entering?: boolean;
+  entering?: boolean | "delivered";
   children: ReactNode;
 }
 

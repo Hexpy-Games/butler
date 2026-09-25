@@ -673,6 +673,10 @@ export interface AppCopy {
     failedMessageStatus: string;
     retryFailedMessage: string;
     deleteFailedMessage: string;
+    queuedPosition: (position: number, total: number) => string;
+    queuedSending: string;
+    sendQueuedNow: string;
+    sendQueuedNowHint: string;
     contextDetails: string;
     approval: {
       title: string;

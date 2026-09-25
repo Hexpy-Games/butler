@@ -20,12 +20,13 @@ test("Steward UI keeps the neutral capsule and adjunct ordering contract", () =>
 
   expect(adjunct).not.toContain("StewardComposerPanel");
   expect(adjunct).not.toContain("stewardChildren");
+  expect(adjunct.indexOf("<WorkProgressPanel")).toBeGreaterThan(-1);
   expect(adjunct.indexOf("<WorkProgressPanel")).toBeLessThan(
-    adjunct.indexOf("<QueuedComposerPanel"),
-  );
-  expect(adjunct.indexOf("<QueuedComposerPanel")).toBeLessThan(
     adjunct.indexOf("<WorkerComposerPanel"),
   );
+  // Queued follow-ups are shown in the conversation (QueuedMessage), not the composer.
+  expect(adjunct).not.toContain("QueuedComposerPanel");
+  expect(adjunct).not.toContain("queuedMessages");
 });
 
 test("observer UI is read-only, session-addressed, and accessible", () => {

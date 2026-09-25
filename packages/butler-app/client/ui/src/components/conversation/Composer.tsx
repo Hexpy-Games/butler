@@ -89,13 +89,10 @@ export function Composer({ large, onOpenContext, onReserveChange, scope }: Compo
     multilineSendBehavior: session.settings.multiline_send_behavior,
     onSend: session.sendMessage,
   });
-  const queue = useComposerQueue({
+  useComposerQueue({
     enabled: !scope,
     activeChatId: session.activeChatId,
-    files,
-    setText,
     summary: session.summary,
-    textAreaRef,
   });
   const decision = useComposerDecision(isComposing, !scope);
   useReserveHeight(wrapRef, onReserveChange);
@@ -131,11 +128,8 @@ export function Composer({ large, onOpenContext, onReserveChange, scope }: Compo
       floating
       notice={<ComposerNotices summary={session.summary} />}
       adjunct={
-        composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length) ? (
+        composerHasAdjunct(state.workers.length, state.taskRows.length) ? (
           <ComposerAdjunctPanels
-            queuedMessages={queue.sessionQueue}
-            onEditQueued={queue.handleEditQueued}
-            onDeleteQueued={queue.handleDeleteQueued}
             showWorkers={state.workers.length > 0}
             taskRows={state.taskRows}
             taskTurnState={state.taskTurnState}
