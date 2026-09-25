@@ -170,7 +170,7 @@
 
 .phaseStep[data-state="active"] .phaseDot {
   background: var(--worker-active);
-  animation: worker-phase-pulse 1.25s ease-in-out infinite;
+  animation: worker-phase-pulse var(--pulse-duration) ease-in-out infinite;
 }
 
 .phaseStep[data-state="failed"] {

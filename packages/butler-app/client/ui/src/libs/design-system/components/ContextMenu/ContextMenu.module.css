@@ -11,7 +11,7 @@
 }
 
 .content[data-state="open"] {
-  animation: context-menu-open 90ms ease-out;
+  animation: context-menu-open var(--motion-fast) ease-out;
   transform-origin: var(
     --radix-context-menu-content-transform-origin,
     center top
@@ -40,6 +40,12 @@
 
 .item[data-variant="destructive"] {
   color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content[data-state="open"] {
+    animation: none;
+  }
 }
 
 @keyframes context-menu-open {

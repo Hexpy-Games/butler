@@ -18,7 +18,7 @@
   white-space: nowrap;
   pointer-events: none;
   transform: translateX(-50%);
-  animation: tooltip-enter 0.12s ease-out;
+  animation: tooltip-enter var(--motion-fast) var(--motion-ease-enter);
 }
 
 @keyframes tooltip-enter {

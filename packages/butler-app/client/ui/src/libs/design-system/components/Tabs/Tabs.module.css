@@ -75,8 +75,8 @@
   cursor: pointer;
   outline: none;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .trigger:hover {
@@ -128,7 +128,7 @@
 }
 
 .content[data-state="active"] {
-  animation: tabs-content-enter 120ms ease-out;
+  animation: tabs-content-enter var(--motion-fast) ease-out;
 }
 
 @keyframes tabs-content-enter {

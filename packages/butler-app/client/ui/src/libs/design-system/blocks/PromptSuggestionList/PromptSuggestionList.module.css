@@ -184,10 +184,10 @@
   cursor: pointer;
   font: inherit;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-base) ease;
 }
 
 .paletteOption:hover,
@@ -277,9 +277,9 @@
   min-height: 260px;
   scroll-snap-align: start;
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) ease;
 }
 
 .itemFrame:hover:not([data-disabled="true"]) {

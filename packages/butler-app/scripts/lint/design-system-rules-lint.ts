@@ -78,11 +78,28 @@ function rawHeightFindings(path: string, rule: CssRule): DesignSystemRuleFinding
     }));
 }
 
+const MOTION_DECLARATION = /(?:^|;|\s)((?:transition|animation)(?:-duration|-delay|-timing-function)?)\s*:\s*([^;]+)/gu;
+// Any non-zero literal duration (120ms, .2s) or a raw cubic-bezier curve.
+const RAW_MOTION_VALUE = /(?<![\w-])(?:(?!0+ms)\d*\.?\d+ms|\d*\.\d+s|[1-9]\d*s)(?![\w-])|cubic-bezier\(/u;
+
+function rawMotionFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
+  if (path.endsWith("tokens.css")) return [];
+  return [...rule.body.matchAll(MOTION_DECLARATION)]
+    .filter((match) => RAW_MOTION_VALUE.test(match[2]))
+    .map((match) => ({
+      path,
+      line: rule.line,
+      reason: `raw ${match[1]} timing must use --motion-* duration and easing tokens`,
+      text: rule.selector,
+    }));
+}
+
 export function lintDesignSystemRules(path: string, source: string): DesignSystemRuleFinding[] {
   return cssRules(source).flatMap((rule) => [
     ...focusRingFindings(path, rule),
     ...zIndexFindings(path, rule),
     ...rawHeightFindings(path, rule),
+    ...rawMotionFindings(path, rule),
   ]);
 }
 

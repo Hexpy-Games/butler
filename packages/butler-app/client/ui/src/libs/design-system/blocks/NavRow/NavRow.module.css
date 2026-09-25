@@ -11,8 +11,8 @@
   color: var(--text-primary);
   text-align: left;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .row[data-slot="clickable"] {
@@ -156,8 +156,8 @@
   opacity: 1;
   text-align: right;
   transition:
-    max-width 120ms ease,
-    opacity 120ms ease;
+    max-width var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .actions {
@@ -178,8 +178,8 @@
   opacity: 0;
   transform: translate(2px, -50%);
   transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+    opacity var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .hoverActions:focus-within,

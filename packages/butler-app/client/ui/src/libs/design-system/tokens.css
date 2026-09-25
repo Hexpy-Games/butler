@@ -33,9 +33,19 @@
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
-  --adaptive-panel-duration: 220ms;
-  --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Motion scale: fast for hover/press and menus, base for disclosure and
+     card motion, slow for panels and drawers. */
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-slow: 220ms;
+  --motion-ease-standard: ease;
+  --motion-ease-enter: ease-out;
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --adaptive-panel-duration: var(--motion-slow);
+  --adaptive-panel-easing: var(--motion-ease-emphasized);
   --spinner-duration: 1320ms;
+  --pulse-duration: 1250ms;
+  --shimmer-duration: 1400ms;
   --spinner-easing: linear(
     0,
     0.0363,

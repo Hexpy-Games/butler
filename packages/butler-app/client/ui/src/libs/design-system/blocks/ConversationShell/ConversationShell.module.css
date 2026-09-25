@@ -110,10 +110,10 @@
   max-width: calc(100% - 32px);
   transform: translateX(50%);
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .scrollToBottomButton:hover {

@@ -91,7 +91,7 @@
 }
 
 .content[data-state="open"] {
-  animation: select-open 90ms ease-out;
+  animation: select-open var(--motion-fast) ease-out;
   transform-origin: var(--radix-select-content-transform-origin, center top);
 }
 
@@ -146,6 +146,12 @@
   justify-content: center;
   padding: 4px;
   color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content[data-state="open"] {
+    animation: none;
+  }
 }
 
 @keyframes select-open {

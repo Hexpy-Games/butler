@@ -90,7 +90,7 @@
     var(--app-window-radius, 18px);
   background: var(--workspace-bg);
   transition:
-    background 180ms ease,
+    background var(--motion-base) ease,
     transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
 
@@ -156,7 +156,7 @@
   background: var(--line);
   content: "";
   opacity: 0.34;
-  transition: opacity 140ms ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .resizeHandle:hover::after,

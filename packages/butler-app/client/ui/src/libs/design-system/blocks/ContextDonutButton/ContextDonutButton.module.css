@@ -11,8 +11,8 @@
   color: var(--text-primary);
   cursor: pointer;
   transition:
-    background-color 140ms ease,
-    opacity 140ms ease;
+    background-color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .button:not(:disabled):hover,
@@ -53,7 +53,7 @@
   stroke-dasharray: var(--context-circumference);
   stroke-dashoffset: var(--context-offset);
   stroke-linecap: round;
-  transition: stroke-dashoffset 120ms ease;
+  transition: stroke-dashoffset var(--motion-fast) ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

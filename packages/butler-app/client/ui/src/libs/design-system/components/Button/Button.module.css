@@ -25,9 +25,9 @@
   cursor: pointer;
   outline: none;
   transition:
-    background-color 120ms ease,
-    color 120ms ease,
-    transform 120ms ease;
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .button[data-stretch="true"] {

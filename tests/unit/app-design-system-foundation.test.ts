@@ -487,3 +487,42 @@ describe("single type scale", () => {
     expect(block).not.toMatch(/--font-size-\d:/u);
   });
 });
+
+describe("motion tokens", () => {
+  test("define a three-step duration scale and shared easings", () => {
+    const tokens = rootTokens();
+    expect(tokens.get("--motion-fast")).toBe("120ms");
+    expect(tokens.get("--motion-base")).toBe("160ms");
+    expect(tokens.get("--motion-slow")).toBe("220ms");
+    expect(tokens.get("--motion-ease-standard")).toBe("ease");
+    expect(tokens.get("--motion-ease-enter")).toBe("ease-out");
+    expect(tokens.get("--motion-ease-emphasized")).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
+    expect(tokens.get("--adaptive-panel-duration")).toBe("var(--motion-slow)");
+    expect(tokens.get("--adaptive-panel-easing")).toBe("var(--motion-ease-emphasized)");
+  });
+
+  test("lint rejects raw transition and animation timings", () => {
+    const raw = lintDesignSystemRules("x.module.css", ".a { transition: opacity 120ms ease; }");
+    expect(raw.map((finding) => finding.reason).join("\n")).toContain("--motion-");
+    const curve = lintDesignSystemRules(
+      "x.module.css",
+      ".a { transition: transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1); }",
+    );
+    expect(curve).toHaveLength(1);
+    const delayed = lintDesignSystemRules("x.module.css", ".a { transition: visibility 0s linear 120ms; }");
+    expect(delayed).toHaveLength(1);
+    expect(lintDesignSystemRules(
+      "x.module.css",
+      ".a { transition: opacity var(--motion-fast) ease, visibility 0s linear var(--motion-fast); animation: spin var(--spinner-duration) linear infinite; }",
+    )).toEqual([]);
+  });
+
+  test("menu and select animations stop under reduced motion", () => {
+    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
+      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
+      const start = css.indexOf("@media (prefers-reduced-motion: reduce)");
+      expect(start).toBeGreaterThan(-1);
+      expect(css.slice(start)).toContain("animation: none");
+    }
+  });
+});

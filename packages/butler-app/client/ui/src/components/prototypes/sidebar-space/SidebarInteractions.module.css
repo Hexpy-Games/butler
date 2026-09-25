@@ -192,7 +192,7 @@
 @media (width > 640px) and (hover: hover) and (pointer: fine) {
   .menuAction:not([data-has-status]) {
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) ease;
   }
   .rowShell [data-test-class="tree-row"]:is(:hover, :focus-within) .menuAction,
   .menuAction:has([aria-expanded="true"]) {

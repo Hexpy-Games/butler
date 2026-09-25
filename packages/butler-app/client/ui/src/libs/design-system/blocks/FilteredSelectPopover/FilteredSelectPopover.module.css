@@ -59,8 +59,8 @@
   cursor: pointer;
   transform: translateY(-50%);
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .clearButton:hover,
@@ -161,8 +161,8 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .item:not([data-has-icon="true"]) {

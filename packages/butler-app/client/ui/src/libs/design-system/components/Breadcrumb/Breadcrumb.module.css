@@ -31,7 +31,7 @@
   cursor: pointer;
   font: inherit;
   text-decoration: none;
-  transition: color 120ms ease;
+  transition: color var(--motion-fast) ease;
   appearance: none;
 }
 

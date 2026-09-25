@@ -25,8 +25,8 @@
 .item {
   min-width: 0;
   transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+    opacity var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .dropIndicator {
