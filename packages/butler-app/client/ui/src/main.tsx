@@ -13,8 +13,8 @@ const visualMode = typeof window !== "undefined"
 
 // Loaded only when ?visual=design-system asks for it, so the DS Viewer and its
 // showcase fixtures stay out of the main entry chunk.
-const DesignSystemWorkbench = lazy(() => import("@/butler-ds/fixtures/DesignSystemWorkbench.tsx")
-  .then((module) => ({ default: module.DesignSystemWorkbench })));
+const DesignSystemViewer = lazy(() => import("@/butler-ds/viewer/DesignSystemViewer.tsx")
+  .then((module) => ({ default: module.DesignSystemViewer })));
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Butler UI root element is missing.");
@@ -26,7 +26,7 @@ createRoot(rootElement).render(
       : visualMode === "components"
         ? <VisualHarness />
         : visualMode === "design-system"
-          ? <Suspense fallback={null}><DesignSystemWorkbench /></Suspense>
+          ? <Suspense fallback={null}><DesignSystemViewer /></Suspense>
           : <AppShell />}
     <AppConfirmationDialog />
   </ErrorBoundary>,

@@ -56,7 +56,7 @@ describe("collectShowcaseEntries", () => {
     expect(navRow?.stories.map((story) => story.name)).toEqual(["Default"]);
   });
 
-  test("still lists folders without any fixture, using the legacy category map", () => {
+  test("still lists folders that have no fixture yet, using the legacy category map", () => {
     const toast = collect().find((entry) => entry.id === "components/Toast");
 
     expect(toast?.origin).toBe("none");

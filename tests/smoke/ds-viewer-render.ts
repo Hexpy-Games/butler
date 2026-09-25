@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { chromium, type Locator, type Page } from "playwright";
+import { chromium, type Page } from "playwright";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 
 const root = process.cwd();
@@ -29,9 +29,24 @@ const allViewportNames = [
   ...mobileViewportNames,
 ] satisfies ViewportName[];
 
+const themeNames = ["light", "dark", "side-by-side"] as const;
+type ThemeName = (typeof themeNames)[number];
+
 interface RenderOptions {
   componentNames: string[];
   viewports: ViewportName[];
+  themes: ThemeName[];
+}
+
+function parseThemes(value: string): ThemeName[] {
+  if (value === "all") return [...themeNames];
+  const themes = value.split(",").map((theme) => theme.trim());
+  for (const theme of themes) {
+    if (!themeNames.includes(theme as ThemeName)) {
+      throw new Error(`Unknown theme: ${theme}. Use light, dark, side-by-side, or all.`);
+    }
+  }
+  return themes as ThemeName[];
 }
 
 function parseViewport(value: string): ViewportName[] {
@@ -47,6 +62,7 @@ function parseViewport(value: string): ViewportName[] {
 function parseRenderOptions(args: string[]): RenderOptions {
   const names: string[] = [];
   let viewports: ViewportName[] = ["desktop"];
+  let themes: ThemeName[] = ["light"];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -74,6 +90,17 @@ function parseRenderOptions(args: string[]): RenderOptions {
       viewports = parseViewport(arg.slice("--viewport=".length));
       continue;
     }
+    if (arg === "--theme") {
+      const value = args[index + 1];
+      if (!value) throw new Error("--theme requires a value");
+      themes = parseThemes(value);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--theme=")) {
+      themes = parseThemes(arg.slice("--theme=".length));
+      continue;
+    }
     names.push(...arg.split(","));
   }
 
@@ -85,6 +112,7 @@ function parseRenderOptions(args: string[]): RenderOptions {
         ? []
         : componentNames,
     viewports: [...new Set(viewports)],
+    themes: [...new Set(themes)],
   };
 }
 
@@ -97,16 +125,24 @@ function safeFileName(value: string): string {
     .toLowerCase();
 }
 
-async function componentNames(pageLocator: Locator): Promise<string[]> {
-  return pageLocator.evaluateAll((elements) =>
-    elements
-      .map((element) => element.getAttribute("data-ds-component"))
-      .filter((value): value is string => Boolean(value)),
-  );
+function viewerUrl(serverUrl: string, params: Record<string, string>): string {
+  return `${serverUrl}?${new URLSearchParams({ visual: "design-system", ...params }).toString()}`;
 }
 
-async function openViewerTab(page: Page, tab: "primitives" | "blocks") {
-  await page.locator(`[data-ds-view-tab="${tab}"]`).click();
+/** Item ids by component name, read from the Components and Blocks galleries. */
+async function viewerItems(page: Page, serverUrl: string): Promise<Map<string, string>> {
+  const items = new Map<string, string>();
+  for (const gallery of ["components", "blocks"]) {
+    await page.goto(viewerUrl(serverUrl, { page: gallery }), { waitUntil: "networkidle" });
+    await page.locator(`[data-ds-gallery="${gallery}"]`).waitFor({ state: "attached" });
+    const cards = await page.locator("[data-ds-component]").evaluateAll((elements) =>
+      elements.map((element) => [element.getAttribute("data-ds-component"), element.getAttribute("data-ds-item")]),
+    );
+    for (const [name, id] of cards) {
+      if (name && id) items.set(name, id);
+    }
+  }
+  return items;
 }
 
 async function renderViewport(
@@ -114,6 +150,7 @@ async function renderViewport(
   serverUrl: string,
   viewportName: ViewportName,
   requestedNames: string[],
+  themes: ThemeName[],
   useViewportSubdir: boolean,
 ): Promise<string[]> {
   const page = await browser.newPage({
@@ -126,20 +163,8 @@ async function renderViewport(
   mkdirSync(outputDir, { recursive: true });
 
   try {
-    await page.goto(`${serverUrl}?visual=design-system`, {
-      waitUntil: "networkidle",
-    });
-    await page.locator("text=Butler DS Viewer").waitFor({ state: "visible" });
-
-    const namesByTab = new Map<string, "primitives" | "blocks">();
-    for (const tab of ["primitives", "blocks"] as const) {
-      await openViewerTab(page, tab);
-      for (const name of await componentNames(page.locator("[data-ds-component]"))) {
-        namesByTab.set(name, tab);
-      }
-    }
-
-    const availableNames = [...namesByTab.keys()];
+    const items = await viewerItems(page, serverUrl);
+    const availableNames = [...items.keys()];
     const selectedNames =
       requestedNames.length > 0 ? requestedNames : availableNames;
     const availableByLower = new Map(
@@ -158,19 +183,25 @@ async function renderViewport(
     const writtenPaths: string[] = [];
     for (const requestedName of selectedNames) {
       const componentName = availableByLower.get(requestedName.toLowerCase());
-      if (!componentName) continue;
+      const id = componentName ? items.get(componentName) : undefined;
+      if (!componentName || !id) continue;
 
-      await openViewerTab(page, namesByTab.get(componentName) ?? "primitives");
-      const component = page.locator(
-        `[data-ds-component="${componentName.replace(/"/gu, '\\"')}"]`,
-      );
-      await component.scrollIntoViewIfNeeded();
-      const outputPath = join(outputDir, `${safeFileName(componentName)}.png`);
-      await component.screenshot({
-        path: outputPath,
-        animations: "disabled",
-      });
-      writtenPaths.push(outputPath);
+      for (const theme of themes) {
+        // One deep link and one screenshot per item and theme.
+        await page.goto(viewerUrl(serverUrl, { page: id, theme }), { waitUntil: "networkidle" });
+        const component = page.locator(
+          `[data-ds-detail="${componentName.replace(/"/gu, '\\"')}"] [data-ds-examples]`,
+        );
+        await component.waitFor({ state: "visible" });
+        await component.scrollIntoViewIfNeeded();
+        const suffix = themes.length > 1 ? `-${theme}` : "";
+        const outputPath = join(outputDir, `${safeFileName(componentName)}${suffix}.png`);
+        await component.screenshot({
+          path: outputPath,
+          animations: "disabled",
+        });
+        writtenPaths.push(outputPath);
+      }
     }
 
     return writtenPaths;
@@ -187,7 +218,7 @@ if (!existsSync(join(uiRoot, "index.html"))) {
 
 mkdirSync(outputRoot, { recursive: true });
 
-const { componentNames: requestedNames, viewports } = parseRenderOptions(
+const { componentNames: requestedNames, viewports, themes } = parseRenderOptions(
   Bun.argv.slice(2),
 );
 const server = createAppServer({
@@ -208,6 +239,7 @@ try {
         server.url,
         viewportName,
         requestedNames,
+        themes,
         viewports.length > 1 || viewportName !== "desktop",
       )),
     );
@@ -219,6 +251,7 @@ try {
         ok: true,
         outputDir: outputRoot,
         viewports,
+        themes,
         files: writtenPaths.map((path) => relative(outputRoot, path)),
       },
       null,

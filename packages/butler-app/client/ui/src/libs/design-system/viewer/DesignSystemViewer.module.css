@@ -1,0 +1,223 @@
+/* Page shell of the DS Viewer. Everything inside the shell is composed from
+   design-system components; only layout frames and previews live here. */
+
+.viewer {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-3);
+  border-right: 1px solid var(--line);
+  background: var(--sidebar-bg);
+}
+
+.main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--conversation-bg);
+}
+
+.menuToggle {
+  display: none;
+}
+
+.content {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+.card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+}
+
+.preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center stretch;
+  min-width: 0;
+  min-height: 6rem;
+  padding: var(--space-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.canvas {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+}
+
+.canvas > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.frames {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.frames[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.frame {
+  min-width: 0;
+  overflow: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--conversation-bg);
+  color: var(--text-primary);
+}
+
+.width-320,
+.width-375,
+.width-430,
+.width-app,
+.width-wide {
+  margin: 0 auto;
+}
+
+.width-320 {
+  max-width: 320px;
+}
+
+.width-375 {
+  max-width: 375px;
+}
+
+.width-430 {
+  max-width: 430px;
+}
+
+.width-app {
+  max-width: 760px;
+}
+
+.width-wide {
+  max-width: none;
+}
+
+.tokenGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-2);
+}
+
+.tokenPreview {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.token-color {
+  background: var(--token-preview);
+  box-shadow: var(--shadow-control);
+}
+
+.token-space::before {
+  width: var(--token-preview);
+  min-width: 4px;
+  max-width: 28px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  content: "";
+}
+
+.token-radius {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--token-preview);
+}
+
+.token-effect {
+  box-shadow: var(--token-preview);
+}
+
+.token-type {
+  color: var(--text-primary);
+  font-size: var(--token-font-size, var(--font-size-3));
+  font-weight: var(--token-font-weight, var(--font-weight-semibold));
+  line-height: 1;
+}
+
+@media (width <= 900px) {
+  .frames[data-count="2"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 768px) {
+  .viewer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: var(--z-drawer);
+    display: none;
+    width: min(20rem, 88vw);
+    box-shadow: var(--shadow-card);
+  }
+
+  .viewer[data-menu-open="true"] .sidebar {
+    display: flex;
+  }
+
+  .menuToggle {
+    display: inline-flex;
+  }
+
+  .toolbar {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .content {
+    padding: var(--space-4) var(--space-3);
+  }
+}

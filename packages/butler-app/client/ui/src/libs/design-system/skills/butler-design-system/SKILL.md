@@ -30,8 +30,8 @@ domain-coupled blocks, or visually inconsistent UI.
    repeated composition such as a row, section, panel, metric, empty state, or
    composer control.
 4. Read the component or block README before using it.
-5. Check `registry.tsx` and `fixtures/DesignSystemWorkbench.tsx` for rendered
-   examples in DS Viewer.
+5. Check the co-located `<Name>.showcase.tsx` (or, until it exists, the
+   `registry.tsx` fixture) for rendered examples in DS Viewer.
 6. If a primitive exists in `shadcn/ui`, expose it through a component directory
    and the public barrel before using it in app code.
 
@@ -143,7 +143,20 @@ Use it manually:
 
 ```text
 /?visual=design-system
+/?visual=design-system&page=components/Button&theme=side-by-side&locale=ko&width=375
 ```
+
+The viewer is lazy-loaded and has a left sidebar (Overview, Foundations,
+Components, Blocks, Patterns, Icons), search (`/` or Cmd/Ctrl+K), and a toolbar
+for theme (light, dark, side-by-side), example locale (en, ko), and preview
+width (320, 375, 430, app, wide). Every state is a deep link through the `page`,
+`theme`, `locale`, and `width` URL params.
+
+New components and blocks add a co-located `<Name>.showcase.tsx` exporting
+`meta` and `stories`; the viewer collects it automatically and
+`tests/unit/ds-showcase-coverage.test.ts` checks coverage against a shrink-only
+baseline. Remove the folder from `showcase/legacyCategories.ts` and from the
+baseline when you add its showcase file.
 
 Use it from the command line for component screenshots:
 
@@ -152,10 +165,12 @@ bun run render Button NavRow CollapsibleNavGroup
 bun run render Button NavRow --viewport=iphone
 bun run render Button NavRow --viewport=mobile
 bun run render all --viewport=all
+bun run render Button --theme=all
 ```
 
-The render command builds the UI, opens DS Viewer, captures requested component
-fixtures into `.tmp/ds-viewer`, and fails on unknown component names. Use
+The render command builds the UI, opens each requested item in DS Viewer by
+deep link, captures its examples into `.tmp/ds-viewer` (one file per item and
+theme), and fails on unknown component names. Use
 `--viewport=iphone` for the canonical 390px iPhone check, `--viewport=mobile`
 for 320/375/390/430px checks, and `--viewport=all` before claiming visual
 completion for responsive primitive or block changes.

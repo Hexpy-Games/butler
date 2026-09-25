@@ -3443,10 +3443,8 @@ describe("app-client design system foundation", () => {
       join(designSystemRoot, "registry.tsx"),
       "utf8",
     );
-    const workbench = readFileSync(
-      join(designSystemRoot, "fixtures/DesignSystemWorkbench.tsx"),
-      "utf8",
-    );
+    const workbench = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
+      + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
     const indexContent = readFileSync(
       join(designSystemRoot, "index.ts"),
       "utf8",
@@ -3470,7 +3468,7 @@ describe("app-client design system foundation", () => {
 
     expect(workbench).toContain("designSystemBlocks");
     expect(workbench).toContain("Blocks");
-    expect(workbench).toContain("data-ds-component={component.name}");
+    expect(workbench).toContain("data-ds-component={entry.name}");
     expect(blockNames.length).toBeGreaterThanOrEqual(38);
   });
 
@@ -3493,10 +3491,8 @@ describe("app-client design system foundation", () => {
       join(designSystemRoot, "shadcn/ui/separator.tsx"),
       "utf8",
     );
-    const viewer = readFileSync(
-      join(designSystemRoot, "fixtures/DesignSystemWorkbench.tsx"),
-      "utf8",
-    );
+    const viewer = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
+      + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
     const registry = readFileSync(
       join(designSystemRoot, "registry.tsx"),
       "utf8",
@@ -3733,7 +3729,8 @@ describe("app-client design system foundation", () => {
     expect(viewer).toContain("Butler DS Viewer");
     expect(rootPackage.scripts.render).toContain("ds-viewer-render.ts");
     expect(renderScript).toContain("[data-ds-component]");
-    expect(renderScript).toContain("data-ds-view-tab");
+    expect(renderScript).toContain("data-ds-examples");
+    expect(renderScript).toContain("--theme");
     expect(renderScript).toContain(".tmp");
     expect(renderScript).toContain("component.screenshot");
     expect(renderScript).toContain("--viewport");
@@ -3879,17 +3876,20 @@ describe("app-client design system foundation", () => {
     expect(registry).toContain("--context-chart-free");
     expect(registry).toContain('defaultValue="Butler task"');
     expect(registry).toContain('defaultValue="Actual context value"');
-    expect(registry).toContain('<Select defaultValue="one">');
+    expect(read("packages/butler-app/client/ui/src/libs/design-system/components/Select/Select.showcase.tsx"))
+      .toContain("<SelectTrigger");
     expect(registry).toContain("designSystemBlocks");
-    expect(viewer).toContain("Design Tokens");
-    expect(viewer).toContain("ColumnControl");
-    expect(viewer).toContain("DetailPage");
+    expect(viewer).toContain("Foundations");
+    expect(viewer).toContain("ViewerSidebar");
+    expect(viewer).toContain("ItemPage");
     expect(viewer).toContain("MarkdownGuide");
     expect(viewer).toContain("readmeModules");
+    expect(viewer).toContain("history.replaceState");
     expect(viewer).toContain("data-ds-detail");
+    expect(viewer).toContain("data-ds-story");
     expect(viewer).toContain("data-ds-token-name");
     expect(viewer).not.toContain("slice(0, 4)");
-    expect(viewer).toContain("fixtureCanvas");
+    expect(viewer).toContain("data-ds-fixture-canvas");
     expect(tabs).toContain("@radix-ui/react-tabs");
     expect(button).toContain("stretch?: boolean");
     expect(button).toContain('data-stretch={stretch ? "true" : undefined}');
@@ -4172,10 +4172,8 @@ describe("app-client design system foundation", () => {
       join(root, "packages/butler-app/client/electron/preload.cjs"),
       "utf8",
     );
-    const viewer = readFileSync(
-      join(designSystemRoot, "fixtures/DesignSystemWorkbench.tsx"),
-      "utf8",
-    );
+    const viewer = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
+      + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
 
     // Raw palette tokens
     expect(cssContent).toContain("--neutral-white");

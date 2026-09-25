@@ -17,11 +17,8 @@ try {
   for (const width of [375, 430]) {
     const page = await browser.newPage({ ...devices["iPhone 13"], viewport: { width, height: 844 } });
     try {
-      await page.goto(`${server.url}?visual=design-system`, { waitUntil: "networkidle" });
-      await page.locator('[data-ds-view-tab="blocks"]').click();
-      // The AdaptiveShell gallery fixture opens its mobile navigation panel.
-      await page.getByRole("button", { name: "Close", exact: true }).first().click();
-      await page.locator('[data-ds-component="ChangedLineDiff"]').getByRole("button", { name: /Open details/ }).click();
+      await page.goto(`${server.url}?visual=design-system&page=blocks/ChangedLineDiff`, { waitUntil: "networkidle" });
+      await page.locator('[data-ds-detail="ChangedLineDiff"]').waitFor({ state: "visible" });
       const region = page.locator("#changed-line-diff-fixture").first();
       await region.scrollIntoViewIfNeeded();
       const metrics = await region.evaluate((element) => {

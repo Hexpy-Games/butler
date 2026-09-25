@@ -12,11 +12,21 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-async function assertWorkbench(page: Page, label: string): Promise<void> {
-  await page.locator("text=Butler DS Viewer").waitFor({ state: "visible" });
-  await page.getByRole("tab", { name: "Design Tokens" }).waitFor({
-    state: "visible",
+async function openViewerPage(page: Page, baseUrl: string, pageId: string): Promise<void> {
+  await page.goto(`${baseUrl}?visual=design-system&page=${encodeURIComponent(pageId)}`, {
+    waitUntil: "networkidle",
   });
+  await page.locator(`[data-ds-page="${pageId}"]`).waitFor({ state: "attached" });
+}
+
+async function assertNoHorizontalOverflow(page: Page, label: string): Promise<void> {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert(overflow <= 1, `${label}: viewer has horizontal overflow of ${overflow}px`);
+}
+
+async function assertWorkbench(page: Page, baseUrl: string, label: string): Promise<void> {
+  await openViewerPage(page, baseUrl, "foundations");
+  await page.locator("[data-ds-foundations]").waitFor({ state: "visible" });
   const tokenInventory = await page.evaluate(() => {
     const names = Array.from(
       document.querySelectorAll<HTMLElement>("[data-ds-token-name]"),
@@ -37,18 +47,16 @@ async function assertWorkbench(page: Page, label: string): Promise<void> {
   assert(tokenInventory.hasSemantic, `${label}: semantic color tokens are missing`);
   assert(tokenInventory.hasAppAlias, `${label}: app alias color tokens are missing`);
   assert(tokenInventory.hasContext, `${label}: context color tokens are missing`);
-  await page.getByRole("tab", { name: "Primitives" }).click();
-  const primitiveCount = await page.locator("[data-ds-component]").count();
-  await page.getByRole("tab", { name: "Blocks" }).click();
+  await assertNoHorizontalOverflow(page, `${label} foundations`);
+  await openViewerPage(page, baseUrl, "blocks");
   const blockCount = await page.locator("[data-ds-component]").count();
+  await assertNoHorizontalOverflow(page, `${label} blocks`);
+  await openViewerPage(page, baseUrl, "components");
+  const primitiveCount = await page.locator("[data-ds-component]").count();
   const itemCount = primitiveCount + blockCount;
   assert(itemCount >= 60, `${label}: expected primitive and expanded block fixtures to render`);
-  await page.locator('[aria-label="List columns"]').getByRole("button", { name: "4" }).click();
-  await page.locator('[aria-label="List columns"]').getByRole("button", { name: "2" }).click();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert(overflow <= 1, `${label}: workbench has horizontal overflow of ${overflow}px`);
+  await assertNoHorizontalOverflow(page, `${label} components`);
 
-  await page.getByRole("tab", { name: "Primitives" }).click();
   const visualState = await page.evaluate(() => {
     const rectOf = (element: Element | null) =>
       element?.getBoundingClientRect().toJSON() ?? null;
@@ -63,7 +71,7 @@ async function assertWorkbench(page: Page, label: string): Promise<void> {
     const inputPlaceholder = document.querySelector('[data-ds-component="Input"] [aria-label="Placeholder input"]') as HTMLInputElement | null;
     const textarea = document.querySelector('[data-ds-component="Textarea"] [data-slot="textarea"]') as HTMLTextAreaElement | null;
     const selectTrigger = document.querySelector('[data-ds-component="Select"] [data-slot="select-trigger"]');
-    const clickableFixture = document.querySelector('[data-ds-component="Clickable"] [class*="fixture"]');
+    const clickableFixture = document.querySelector('[data-ds-component="Clickable"] [data-ds-fixture-canvas]')?.parentElement ?? null;
     const clickable = clickableFixture?.querySelector('[data-slot="clickable"]') ?? null;
     const pillCanvas = document.querySelector('[data-ds-component="PillButton"] [data-ds-fixture-canvas]');
     const pillButton = pillCanvas?.querySelector('[data-slot="button"]') ?? null;
@@ -163,7 +171,7 @@ async function assertWorkbench(page: Page, label: string): Promise<void> {
   assert(visualState.tabsStyled, `${label}: tabs primitive is not Butler-styled`);
   assert(visualState.fixtureCanvasStretches, `${label}: fixture preview does not stretch with card width`);
 
-  await page.getByRole("tab", { name: "Blocks" }).click();
+  await openViewerPage(page, baseUrl, "blocks");
   const blocksVisible = await page.evaluate(() =>
     ["NavRow", "Notice", "DashboardHeader", "SettingsField", "ComposerControl"].every((name) =>
       Boolean(document.querySelector(`[data-ds-component="${name}"]`)?.getBoundingClientRect().height),
@@ -339,9 +347,10 @@ async function assertWorkbench(page: Page, label: string): Promise<void> {
 
   await page.locator('[data-ds-component="DashboardHeader"]').getByRole("button", { name: "Open details" }).click();
   await page.locator('[data-ds-detail="DashboardHeader"]').waitFor({ state: "visible" });
-  await page.getByText("Guidance").waitFor({ state: "visible" });
-  await page.getByRole("button", { name: "Back to list" }).click();
-  await page.locator('[data-ds-component="DashboardHeader"]').waitFor({ state: "visible" });
+  await page.getByText("Guidance", { exact: true }).first().waitFor({ state: "visible" });
+  await page.locator('[data-ds-detail="DashboardHeader"] [data-ds-story] [data-ds-fixture-canvas]').first().waitFor({ state: "visible" });
+  const detailUrl = new URL(page.url());
+  assert(detailUrl.searchParams.get("page") === "blocks/DashboardHeader", `${label}: Open details did not deep-link the item page`);
 }
 
 assert(
@@ -370,10 +379,7 @@ try {
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
     });
-    await page.goto(`${server.url}?visual=design-system`, {
-      waitUntil: "networkidle",
-    });
-    await assertWorkbench(page, viewport.label);
+    await assertWorkbench(page, server.url, viewport.label);
     await page.close();
   }
   console.log("app-design-system-smoke: ok");
