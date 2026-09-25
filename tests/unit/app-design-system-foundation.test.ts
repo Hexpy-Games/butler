@@ -196,6 +196,33 @@ describe("design-system theme parity", () => {
   });
 });
 
+function compositeOver(rgba: string, backgroundHex: string, coverage = 1): string {
+  const match = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/u.exec(rgba);
+  if (!match) throw new Error(`expected rgba(), got ${rgba}`);
+  const alpha = Number(match[4]) * coverage;
+  const background = [1, 3, 5].map((index) => Number.parseInt(backgroundHex.slice(index, index + 2), 16));
+  return `#${background.map((channel, index) =>
+    Math.round(alpha * Number(match[index + 1]) + (1 - alpha) * channel).toString(16).padStart(2, "0")).join("")}`;
+}
+
+describe("dark placeholder contrast", () => {
+  test("dark placeholder text keeps 4.5:1 contrast on base, input and panel surfaces", () => {
+    const dark = themeTokens(".theme-dark");
+    const placeholder = resolveToken("--placeholder", dark);
+    const base = resolveToken("--color-surface-base", dark);
+    expect(placeholder).toMatch(/^#[0-9a-f]{6}$/u);
+    const surfaces = [
+      base,
+      // Input and Textarea paint surface-raised at 92% over the base.
+      compositeOver(resolveToken("--color-surface-raised", dark), base, 0.92),
+      compositeOver(resolveToken("--settings-panel-bg", dark), base),
+    ];
+    for (const surface of surfaces) {
+      expect(contrast(placeholder, surface)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
 describe("design-system focus ring", () => {
   test("focus ring color keeps 3:1 contrast on base surfaces in both themes", () => {
     for (const theme of [themeTokens(".theme-light"), themeTokens(".theme-dark")]) {
