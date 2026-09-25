@@ -112,6 +112,46 @@ async function patchSettings(settings: Record<string, unknown>): Promise<void> {
   );
 }
 
+/**
+ * Closing the model menu by an outside click folds the composer and unmounts
+ * the anchor mid-exit; the closing popover must keep shrinking toward the
+ * model button instead of jumping to the viewport origin.
+ */
+async function assertModelMenuExitStaysAnchored(page: Page): Promise<void> {
+  await page.locator(testClass("model-button")).click();
+  await page.locator(testClass("filtered-select-popover")).waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
+  const sampling = page.evaluate(async () => {
+    const content = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    if (!content) return { open: null, frames: [] as Array<{ right: number; bottom: number }> };
+    const box = content.getBoundingClientRect();
+    const frames: Array<{ right: number; bottom: number }> = [];
+    await new Promise<void>((resolve) => {
+      const started = performance.now();
+      const tick = () => {
+        if (!content.isConnected || performance.now() - started > 600) return resolve();
+        if (content.dataset.state === "closed") {
+          const rect = content.getBoundingClientRect();
+          frames.push({ right: rect.right, bottom: rect.bottom });
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    return { open: { right: box.right, bottom: box.bottom }, frames };
+  });
+  await clickConversationAwayFromMenus(page);
+  const { open, frames } = await sampling;
+  assert(open && frames.length > 0, "model menu exit should be sampled while closing");
+  const drift = Math.max(...frames.map((frame) => Math.max(Math.abs(frame.right - open.right), Math.abs(frame.bottom - open.bottom))));
+  assert(
+    drift <= 24,
+    `model menu exit should shrink toward its anchor, not move away (drift ${drift.toFixed(1)}px): ${JSON.stringify({ open, frames })}`,
+  );
+  await page.waitForTimeout(300);
+  await closeBlockingOverlays(page);
+}
+
 async function clickConversationAwayFromMenus(page: Page): Promise<void> {
   const box = await page.locator(testClass("conversation")).boundingBox();
   assert(box, "conversation area is missing");
@@ -2139,6 +2179,7 @@ try {
     0,
     "model popover should close on Escape",
   );
+  await assertModelMenuExitStaysAnchored(page);
   await page.locator(testClass("model-button")).click();
   await page
     .locator(testClass("filtered-select-popover"))

@@ -1,5 +1,5 @@
-@import url("./overlay-exit.css");
 @import url("./scroll-fade.css");
+@import url("./overlay-exit.css");
 
 :root {
   color-scheme: light;
