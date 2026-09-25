@@ -48,6 +48,21 @@ Pass titlebar, fixed header, scroll content, and footer slots. Keep direct
 navigation in the fixed header. Put project/session and chat sections in the
 scroll content so only session-related navigation scrolls.
 
+## Header row
+
+The `titlebar` slot is the sidebar header row: `--titlebar-height` tall, its
+content vertically centered and starting at `--sidebar-titlebar-leading`,
+after the floating sidebar toggle (`ChromeFloatingToggleLayer`). The toggle is
+a standard `IconButton` (`--chrome-floating-toggle-size`,
+`--control-height-md`) centered in the row. Its left edge is
+`--traffic-controls-width + --chrome-toggle-inset`: in a browser it lines up
+with the sidebar rows (`--sidebar-padding-inline`, 14px); on macOS Electron it
+sits after the 72px traffic-light reserve. `AdaptiveShell` picks the reserve
+from its `data-chrome-environment`/`data-platform` attributes, and the toggle
+keeps its place whether the sidebar is open or closed. Pass
+`SidebarTrafficSpace` when the row has no brand. Product CSS never offsets the
+brand or the toggle.
+
 ## Who can use this component
 
 Frontend agents building Butler app chrome or sidebar variants.

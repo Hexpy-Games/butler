@@ -72,12 +72,33 @@
   --adaptive-panel-bg: var(--neutral-white);
   --windows-sidebar-overlay-filter: saturate(1.3) blur(24px);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
-  --chrome-floating-toggle-top: 10px;
+  /* Sidebar header row: the floating sidebar toggle is a standard IconButton
+     centered in the titlebar row. It starts at the sidebar content inset,
+     after the native traffic-light reserve (72px on macOS Electron: lights at
+     x 20, three 12px buttons, 8px gaps; 0px elsewhere, set by AdaptiveShell).
+     The derived offsets are re-declared on AdaptiveShell's root so platform
+     overrides of the reserve flow into them. */
+  --chrome-floating-toggle-size: var(--control-height-md);
+  --chrome-floating-toggle-icon-size: var(--icon-size-md);
+  --chrome-floating-toggle-top: calc(
+    var(--safe-area-top) +
+      ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
+  );
+  --sidebar-padding-inline: 14px;
+  --chrome-toggle-inset: var(--sidebar-padding-inline);
+  --traffic-controls-width: 72px;
   --chrome-floating-toggle-left: calc(
-    var(--traffic-controls-width) + var(--space-2)
+    var(--traffic-controls-width) + var(--chrome-toggle-inset)
+  );
+  --sidebar-titlebar-leading: calc(
+    var(--chrome-floating-toggle-left) - var(--sidebar-padding-inline) +
+      var(--chrome-floating-toggle-size) + var(--space-sm)
+  );
+  --titlebar-collapsed-left-padding: calc(
+    var(--chrome-floating-toggle-left) + var(--chrome-floating-toggle-size) +
+      var(--space-md)
   );
   --sidebar-width: 304px;
-  --traffic-controls-width: 78px;
   --right-panel-width: 376px;
   --composer-reserve: 260px;
   /* Semantic spacing tokens */
@@ -509,10 +530,8 @@
 @media (width <= 640px) {
   :root {
     --titlebar-height: 56px;
-    --chrome-floating-toggle-top: calc(
-      var(--safe-area-top) +
-        ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
-    );
+    /* The 52px touch target carries its own inset. */
+    --chrome-toggle-inset: 0px;
     --chrome-floating-toggle-size: 52px;
     --chrome-floating-toggle-icon-size: 22px;
     --titlebar-action-size: 52px;

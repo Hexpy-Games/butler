@@ -199,7 +199,7 @@ test("dedicated client design tokens cover flat sidebar and custom titlebar prim
     "backdrop-filter: var(--composer-glass-filter)",
   );
   expect(css).toContain("--titlebar-height: 48px");
-  expect(css).toContain("--chrome-floating-toggle-top: 10px");
+  expect(css).toContain("--chrome-floating-toggle-top: calc(");
   expect(css).toContain("--chrome-floating-toggle-left: calc(");
   expect(css).toContain("-webkit-app-region: drag");
   expect(componentCss).toContain(".root[data-transparent-workspace=\"true\"]");
@@ -270,9 +270,9 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   expect(main).not.toContain("onToggleLeft");
   expect(main).toContain('data-test-class="app-sidebar"');
   expect(main).toContain("SidebarTrafficSpace");
-  expect(tokens).toContain("--traffic-controls-width: 78px");
+  expect(tokens).toContain("--traffic-controls-width: 72px");
   expect(collapseWhitespace(tokens)).toContain(
-    "--chrome-floating-toggle-left: calc( var(--traffic-controls-width) + var(--space-2) );",
+    "--chrome-floating-toggle-left: calc( var(--traffic-controls-width) + var(--chrome-toggle-inset) );",
   );
   expect(chromeEnvironment).toContain('return window.butlerApp ? "electron"');
   expect(chromeEnvironment).toContain('"electron-chrome"');
@@ -280,18 +280,18 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   expect(appShell).toContain("chromeEnvironment={chromeEnvironment()}");
   expect(visualHarness).toContain("chromeEnvironment={chromeEnvironment()}");
   expect(tokens).toContain("--titlebar-height: 48px");
-  expect(tokens).toContain("--chrome-floating-toggle-top: 10px");
+  expect(tokens).toContain("--chrome-floating-toggle-top: calc(");
   expect(tokens).toContain("--sidebar-width");
   expect(adaptiveShellStyles).toContain('[data-left-open="false"]');
   expect(adaptiveShellStyles).toContain('[data-resizing="true"]');
   expect(adaptiveShellStyles).toContain('[data-chrome-environment="browser"]');
   expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
-  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 0px");
+  expect(adaptiveShellStyles).not.toContain("--chrome-floating-toggle-left: 0px");
   expect(adaptiveShellStyles).toContain('[data-platform="linux"]');
   expect(collapseWhitespace(adaptiveShellStyles)).toContain(
-    "--titlebar-collapsed-left-padding: calc( var(--chrome-floating-toggle-left) + 44px )",
+    "--titlebar-collapsed-left-padding: calc( var(--chrome-floating-toggle-left) + var(--chrome-floating-toggle-size) + var(--space-md) )",
   );
-  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");
+  expect(adaptiveShellStyles).not.toContain("--chrome-floating-toggle-left: 10px");
   expect(adaptiveShellStyles).toMatch(
     /grid-template-columns:\s*minmax\(\s*0,\s*var\(--adaptive-left-track\)\s*\)\s*minmax\(\s*0,\s*1fr\s*\)\s*minmax\(\s*0,\s*var\(--adaptive-right-track\)\s*\);/,
   );
@@ -1155,7 +1155,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   );
   expect(adaptiveShellStyles).toContain("--window-controls-width");
   expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
-  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");
+  expect(adaptiveShellStyles).not.toContain("--chrome-floating-toggle-left: 10px");
   expect(adaptiveShellStyles).toContain("border-radius: var(--app-window-radius");
   expect(adaptiveShellStyles).toContain("padding: var(--app-window-frame-inset");
   expect(titlebarShellStyles).toContain(

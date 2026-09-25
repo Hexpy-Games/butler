@@ -10,7 +10,7 @@
   min-width: 0;
   height: var(--adaptive-viewport-block-size);
   flex-direction: column;
-  padding: 0 14px var(--space-lg);
+  padding: 0 var(--sidebar-padding-inline) var(--space-lg);
   overflow: hidden;
 }
 
@@ -18,25 +18,30 @@
   .shell {
     width: 100%;
     padding: max(var(--safe-area-top), var(--space-sm))
-      max(14px, var(--safe-area-right))
+      max(var(--sidebar-padding-inline), var(--safe-area-right))
       max(var(--space-lg), var(--safe-area-bottom))
-      max(14px, var(--safe-area-left));
+      max(var(--sidebar-padding-inline), var(--safe-area-left));
   }
 }
 
+/* Header row: titlebar height, content centered, starting after the
+   floating sidebar toggle (and the traffic lights on macOS Electron). */
 .titlebar {
   display: flex;
   height: var(--titlebar-height);
   flex: none;
   align-items: center;
   gap: var(--space-2);
+  padding-inline-start: var(--sidebar-titlebar-leading);
   user-select: none;
   app-region: drag;
   -webkit-app-region: drag;
 }
 
+/* Keeps the titlebar row (drag region) when it has no brand; the reserve
+   itself is part of --sidebar-titlebar-leading. */
 .trafficSpace {
-  width: var(--traffic-controls-width);
+  width: 0;
   height: 100%;
   flex: none;
 }

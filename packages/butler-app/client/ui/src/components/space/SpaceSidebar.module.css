@@ -53,14 +53,12 @@
 
 .brand {
   min-height: var(--titlebar-height);
-  padding-inline-start: calc(var(--control-hit-target) + var(--space-sm));
 }
 .sidebarHeader {
   padding-bottom: var(--space-2xl);
 }
 .sidebarHeader .brand {
   min-height: var(--control-hit-target);
-  padding-inline-start: 0;
 }
 .primaryActions {
   display: grid;

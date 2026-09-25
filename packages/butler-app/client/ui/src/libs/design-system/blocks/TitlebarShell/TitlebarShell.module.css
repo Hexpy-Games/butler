@@ -21,10 +21,7 @@
 
 .collapsed {
   left: 0;
-  padding-left: var(
-    --titlebar-collapsed-left-padding,
-    calc(var(--traffic-controls-width) + 54px)
-  );
+  padding-left: var(--titlebar-collapsed-left-padding);
 }
 
 .identity,

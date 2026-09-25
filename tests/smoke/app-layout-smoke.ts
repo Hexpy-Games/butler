@@ -845,13 +845,14 @@ try {
   assert(toggleBox, "left sidebar toggle is missing");
   assert(
     browserChromeState.chromeEnvironment === "browser" &&
-      browserChromeState.trafficControlsWidth === "0px" &&
-      browserChromeState.floatingToggleLeft === "0px",
+      browserChromeState.trafficControlsWidth === "0px",
     `browser chrome should not reserve native traffic-light space: ${JSON.stringify(browserChromeState)}`,
   );
+  // Without traffic lights the toggle starts at the sidebar content inset (14px) and is centered in the 48px row.
   assert(
-    toggleBox.x >= 0 && toggleBox.x <= 12,
-    `browser left sidebar toggle should sit flush to the window edge, got x=${toggleBox.x}`,
+    Math.abs(toggleBox.x - 14) <= 1 &&
+      Math.abs(toggleBox.y + toggleBox.height / 2 - 24) <= 1,
+    `browser left sidebar toggle should sit at the sidebar inset, centered in the titlebar row, got ${JSON.stringify(toggleBox)}`,
   );
   assert(
     toggleBox.y > 8 && toggleBox.y < 34,

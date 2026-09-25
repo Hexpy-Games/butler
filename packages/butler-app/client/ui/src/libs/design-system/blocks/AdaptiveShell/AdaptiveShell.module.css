@@ -1,6 +1,17 @@
 .root {
   --adaptive-left-track: var(--sidebar-width);
   --adaptive-right-track: 0px;
+  --chrome-floating-toggle-left: calc(
+    var(--traffic-controls-width) + var(--chrome-toggle-inset)
+  );
+  --sidebar-titlebar-leading: calc(
+    var(--chrome-floating-toggle-left) - var(--sidebar-padding-inline) +
+      var(--chrome-floating-toggle-size) + var(--space-sm)
+  );
+  --titlebar-collapsed-left-padding: calc(
+    var(--chrome-floating-toggle-left) + var(--chrome-floating-toggle-size) +
+      var(--space-md)
+  );
 
   position: relative;
   display: grid;
@@ -20,7 +31,6 @@
 
 .root[data-chrome-environment="browser"] {
   --traffic-controls-width: 0px;
-  --chrome-floating-toggle-left: 0px;
 }
 
 .root[data-chrome-environment="electron"][data-platform="darwin"] {
@@ -31,10 +41,6 @@
 .root[data-chrome-environment="electron"][data-platform="win32"] {
   --traffic-controls-width: 0px;
   --window-controls-width: 138px;
-  --chrome-floating-toggle-left: 10px;
-  --titlebar-collapsed-left-padding: calc(
-    var(--chrome-floating-toggle-left) + 44px
-  );
 }
 
 .root[data-chrome-environment="electron"][data-platform="win32"] {
