@@ -23,12 +23,13 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
   return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
 }
 
-function element(box: DOMRect, padding = { left: 10, top: 6 }): HTMLElement {
+function element(box: DOMRect, padding = { left: 10, top: 6, right: 10 }): HTMLElement {
   const node = document.createElement("div");
   document.body.append(node);
   node.getBoundingClientRect = () => box;
   node.style.paddingLeft = `${padding.left}px`;
   node.style.paddingTop = `${padding.top}px`;
+  node.style.paddingRight = `${padding.right}px`;
   (node as unknown as { animate: unknown }).animate = (keyframes: Keyframe[], options: KeyframeAnimationOptions) => {
     const call: Call = { keyframes, options, cancelled: false };
     calls.push(call);
@@ -64,8 +65,10 @@ afterEach(() => {
   }
 });
 
-test("a recorded send origin flies the next bubble from the composer text with translate only", () => {
-  recordSendOrigin(element(rect(100, 700, 600, 24)));
+test("a recorded send origin flies the next bubble up from the composer with translate only", () => {
+  // The composer's text box spans the column (content edge 410..1070); the
+  // user bubble is right-aligned (text edge ..1050).
+  recordSendOrigin(element(rect(400, 700, 680, 24)));
   expect(hasSendOrigin()).toBe(true);
   const bubble = element(rect(760, 420, 300, 36));
 
@@ -74,8 +77,10 @@ test("a recorded send origin flies the next bubble from the composer text with t
   expect(flight).not.toBeNull();
   expect(calls).toHaveLength(1);
   const [call] = calls;
-  // Bubble text (inside 10/6px padding) starts where the composer text started.
-  expect(call!.keyframes[0]).toEqual({ translate: "-670px 274px" });
+  // The bubble starts right-aligned to the composer text box, with its text
+  // top where the composer text sat: mostly vertical travel, never a slide
+  // from the composer's left edge.
+  expect(call!.keyframes[0]).toEqual({ translate: "20px 274px" });
   expect(call!.keyframes[1]).toEqual({ translate: "0px 0px" });
   expect(Object.keys(call!.keyframes[0]!)).toEqual(["translate"]);
   expect(call!.options.easing).toContain("cubic-bezier(0, 0, 0, 1)");
@@ -126,11 +131,13 @@ test("a layout change after mount keeps the bubble where it is seen and finishes
   const bubble = element(box);
   bubble.getBoundingClientRect = () => box;
   flySendBubble(bubble);
-  // The list scrolls the row up by 80px in the same commit; no translate is computed in jsdom.
+  // The list scrolls the row up by 80px after the flight started (jsdom
+  // computes no translate, so the bubble was drawn at its old layout box).
   box = rect(760, 340, 300, 36);
   await Promise.resolve();
   expect(calls[0]!.cancelled).toBe(true);
-  expect(calls[1]!.keyframes[0]).toEqual({ translate: "0px 0px" });
+  // The scroll does not drag the bubble: it continues from where it was drawn.
+  expect(calls[1]!.keyframes[0]).toEqual({ translate: "0px 80px" });
 });
 
 test("a long message (tall origin text or tall bubble) uses the regular insert", () => {

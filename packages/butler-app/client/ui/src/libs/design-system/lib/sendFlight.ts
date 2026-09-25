@@ -3,8 +3,11 @@ import { animateMotion, motionDistance, prefersReducedMotion } from "./motion";
 
 /**
  * Send flight (DS spec Motion Contract, M7): the composer records where its
- * text sat when the user sent, and the next user bubble that enters flies
- * from there to its place with `translate` only. When no fresh origin exists,
+ * text box sat when the user sent, and the next user bubble that enters flies
+ * from there to its place with `translate` only. User bubbles are
+ * right-aligned, so the flight starts with the bubble's right edge on the
+ * composer text box's right edge (text top on the composer text top): the
+ * travel is mostly vertical instead of a slide from the composer's left. When no fresh origin exists,
  * the message is long (origin text or bubble taller than
  * SEND_FLIGHT_MAX_HEIGHT_RATIO of the viewport), the bubble is off screen or
  * reduced motion is on, callers keep the regular insert animation.
@@ -20,7 +23,8 @@ const LONG_TRAVEL_PX = 240;
 const RETARGET_FRAMES = 8;
 
 interface SendOrigin {
-  left: number;
+  /** Right edge of the composer's text box (content edge, inside padding). */
+  right: number;
   top: number;
   /** Full height of the sent text, before clipping to the editor box. */
   height: number;
@@ -51,8 +55,9 @@ export function recordSendOrigin(element: Element | null | undefined): void {
     return;
   }
   const visible = element.getBoundingClientRect();
+  const paddingRight = px(window.getComputedStyle(element).paddingRight);
   origin = {
-    left: Math.max(box.left, visible.left),
+    right: visible.right - paddingRight,
     top: Math.max(box.top, visible.top, 0),
     height: box.height,
     at: Date.now(),
@@ -107,10 +112,11 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   if (box.width <= 0 || box.height <= 0) return null;
   if (tooTall(from.height) || tooTall(box.height)) return null;
   const style = window.getComputedStyle(target);
-  // The bubble text (inside its padding) starts where the composer text did.
-  const startLeft = from.left - px(style.paddingLeft);
+  // Right-align the bubble's text edge to the composer text box and put its
+  // text top where the composer text sat.
+  const startRight = from.right + px(style.paddingRight);
   const startTop = from.top - px(style.paddingTop);
-  const dx = Math.round(startLeft - box.left);
+  const dx = Math.round(startRight - box.right);
   const dy = Math.round(startTop - box.top);
   if (Math.abs(dy) > window.innerHeight * 3) return null;
   const duration = Math.hypot(dx, dy) > LONG_TRAVEL_PX ? "deliberate" : "slow";
@@ -119,9 +125,10 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   let animation = fly(dx, dy);
   if (!animation) return null;
 
-  // The list scrolls to the new row (in the same commit) and re-measures it
-  // during the next frames. Follow the new layout position without a visual
-  // jump: keep where the bubble is seen and finish the remaining time there.
+  // The list scrolls to the new row (in the same commit or a later frame) and
+  // re-measures it during the next frames. Follow the new layout position
+  // without a visual jump: keep the bubble where it was drawn before the
+  // scroll moved it, and finish the remaining time toward the new place.
   // A bubble that ends outside the viewport uses the regular insert instead.
   let layoutLeft = box.left;
   let layoutTop = box.top;
@@ -143,6 +150,11 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
       return;
     }
     if (Math.abs(left - layoutLeft) > 0.5 || Math.abs(top - layoutTop) > 0.5) {
+      // Where the bubble was on screen before the list moved it: the scroll
+      // shifts the element (and its translate) with the content, so the
+      // position seen after the scroll is not where the flight was drawn.
+      const drawnLeft = layoutLeft + tx;
+      const drawnTop = layoutTop + ty;
       layoutLeft = left;
       layoutTop = top;
       const elapsed = animation.currentTime;
@@ -150,7 +162,7 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
       const remaining = 1 - (animation.effect?.getComputedTiming().progress ?? 0);
       if (remaining > 0.05) {
         animation.cancel();
-        animation = fly(Math.round((seen.left - left) / remaining), Math.round((seen.top - top) / remaining));
+        animation = fly(Math.round((drawnLeft - left) / remaining), Math.round((drawnTop - top) / remaining));
         if (animation && elapsed !== null) animation.currentTime = elapsed;
       }
     }
