@@ -45,10 +45,7 @@ export function UsageBucketPanel({
                     {formatCount(bucket.outputTokens)}
                   </Typo.Caption>
                 </Stack>
-                <Typo.Body
-                  as="div"
-                  style={{ textAlign: "right", whiteSpace: "nowrap" }}
-                >
+                <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
                   {formatCount(bucket.totalTokens)}
                 </Typo.Body>
               </Stack>

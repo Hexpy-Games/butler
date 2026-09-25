@@ -9,14 +9,6 @@
   border-radius: var(--radius-control);
   min-width: 0;
 }
-.title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
 .sources {
   border-top: 1px solid var(--line);
   padding-top: var(--space-md);

@@ -70,8 +70,8 @@ export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpda
   return <Stack gap="xl">
     {groups.filter((group) => group.documents.length > 0).map((group) => <Section key={group.title} title={group.title || undefined}>
       <div className={styles.rows}>{group.documents.map((document) => <NavRow key={`${document.document_type}:${document.id}`} multiline icon={<FileText />}
-        label={<span className={styles.title}>{document.unavailable ? appCopy.projectSignpost.missingSource : document.title}</span>}
-        meta={<Typo.Caption className={styles.summary}>{[projectDocumentBadgeLabel(document), document.updated_at && new Date(document.updated_at).toLocaleDateString(locale)].filter(Boolean).join(" · ")}</Typo.Caption>}
+        label={<Typo.Text lineClamp={2} wrap="anywhere">{document.unavailable ? appCopy.projectSignpost.missingSource : document.title}</Typo.Text>}
+        meta={<Typo.Caption tone="secondary">{[projectDocumentBadgeLabel(document), document.updated_at && new Date(document.updated_at).toLocaleDateString(locale)].filter(Boolean).join(" · ")}</Typo.Caption>}
         disabled={document.unavailable} onClick={() => onSelect(document)} actions={<ButtonContainer size="sm">
           {preferences && !onShowAll && <IconButton label={isPinned(document) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin}
             onClick={(event) => { event.stopPropagation(); void togglePin(document); }}><Pin /></IconButton>}

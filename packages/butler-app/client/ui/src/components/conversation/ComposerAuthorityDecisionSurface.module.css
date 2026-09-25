@@ -21,9 +21,3 @@
   gap: var(--space-1);
   min-width: 0;
 }
-.scope {
-  color: var(--text-secondary);
-  font-size: var(--font-size-1);
-  white-space: normal;
-  overflow-wrap: anywhere;
-}

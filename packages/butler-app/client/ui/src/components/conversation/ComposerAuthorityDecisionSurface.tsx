@@ -36,8 +36,8 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
             <DropdownMenuItem onSelect={decision.onAllowConversation}>
               <span className={styles.option}>
                 <span>{appCopy.interfaceDetails.allowConversation}</span>
-                <span className={styles.scope}>{decision.scope?.description}</span>
-                <span className={styles.scope}>{appCopy.interfaceDetails.allowDescription}</span>
+                <Typo.Caption tone="secondary" wrap="anywhere">{decision.scope?.description}</Typo.Caption>
+                <Typo.Caption tone="secondary" wrap="anywhere">{appCopy.interfaceDetails.allowDescription}</Typo.Caption>
               </span>
             </DropdownMenuItem>
           </DropdownMenuContent>

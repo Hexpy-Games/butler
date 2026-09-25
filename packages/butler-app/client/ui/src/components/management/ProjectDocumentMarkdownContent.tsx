@@ -38,10 +38,10 @@ export function ProjectDocumentMarkdownContent({
                 key={entry.key}
                 style={projectDocumentDialogLayout.metadataRow}
               >
-                <Typo.Caption style={projectDocumentDialogLayout.metadataLabel}>
+                <Typo.Caption tone="tertiary">
                   {entry.label}
                 </Typo.Caption>
-                <Typo.Caption style={projectDocumentDialogLayout.metadataValue}>
+                <Typo.Caption tone="secondary" wrap="anywhere">
                   {entry.value}
                 </Typo.Caption>
               </div>

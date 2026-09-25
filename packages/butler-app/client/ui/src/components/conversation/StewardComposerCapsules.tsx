@@ -3,7 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { StewardSessionSummaryView } from "@/app/types.ts";
 import type { ReactNode } from "react";
 import { useButlerStore } from "@/app/store.ts";
-import { PillButton, Stack } from "@/butler-ds";
+import { PillButton, Stack, Typo } from "@/butler-ds";
 import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
 import {
   activeStewardChildren,
@@ -111,16 +111,16 @@ function StewardProgressCapsule({
           <span className={styles.taskTitle} data-test-class="steward-capsule-task">
             {taskTitle}
           </span>
-          <span aria-hidden="true" className={styles.separator}>·</span>
+          <Typo.Text aria-hidden="true" tone="tertiary" wrap="nowrap">·</Typo.Text>
           <span className={styles.activityTitle} data-test-class="steward-capsule-activity">
             {activityTitle}
           </span>
           {progress ? (
             <>
-              <span aria-hidden="true" className={styles.separator}>·</span>
-              <span className={styles.progress} data-test-class="steward-capsule-progress">
+              <Typo.Text aria-hidden="true" tone="tertiary" wrap="nowrap">·</Typo.Text>
+              <Typo.Text data-test-class="steward-capsule-progress" numeric="tabular" tone="tertiary" wrap="nowrap">
                 {progress}
-              </span>
+              </Typo.Text>
             </>
           ) : null}
         </span>

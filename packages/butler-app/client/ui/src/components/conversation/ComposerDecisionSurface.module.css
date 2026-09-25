@@ -50,7 +50,5 @@
   border-radius: var(--adaptive-composer-radius);
 }
 .error {
-  color: var(--text-secondary);
   padding-inline: var(--space-4);
-  font-size: var(--font-size-1);
 }

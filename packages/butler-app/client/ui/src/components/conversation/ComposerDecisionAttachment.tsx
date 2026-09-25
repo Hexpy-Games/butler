@@ -7,8 +7,8 @@ export function ComposerDecisionAttachment({ title, label, onShowDecision }: {
   return <div className={styles.wrap}>
     <button className={styles.document} onClick={onShowDecision} type="button" aria-label={title}>
       <FileText aria-hidden="true" size="sm" />
-      <span className={styles.title}>{title}</span>
-      <Typo.Caption className={styles.status}>{label}</Typo.Caption>
+      <Typo.Label as="span" weight="regular" tone="primary" truncate>{title}</Typo.Label>
+      <Typo.Caption tone="tertiary" wrap="nowrap">{label}</Typo.Caption>
     </button>
   </div>;
 }

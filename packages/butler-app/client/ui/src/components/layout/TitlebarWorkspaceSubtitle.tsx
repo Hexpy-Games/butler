@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { GitBranch } from "@/butler-ds";
+import { GitBranch, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
 import styles from "./TitlebarWorkspaceSubtitle.module.css";
@@ -36,7 +36,7 @@ export function TitlebarWorkspaceSubtitle({
           title={workspaceLabel}
         >
           <GitBranch size="xs" aria-hidden="true" />
-          <span className={styles.worktreeLabel}>{workspaceLabel}</span>
+          <Typo.Text truncate>{workspaceLabel}</Typo.Text>
         </span>
       ) : null}
     </span>

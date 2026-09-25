@@ -1,7 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { NavRow, Space } from "@/butler-ds";
+import { NavRow, Space, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import styles from "./SidebarSessionLoadMore.module.css";
 
 interface SidebarSessionLoadMoreProps {
   remainingCount: number;
@@ -25,7 +24,7 @@ export function SidebarSessionLoadMore({
       ariaLabel={label}
       dataTestClass="sidebar-load-more"
       icon={<Space direction="horizontal" size="lg" style={{ width: "var(--sidebar-icon-size, 17px)" }} />}
-      label={<span className={styles.label}>{label}</span>}
+      label={<Typo.Text tone="secondary">{label}</Typo.Text>}
       onClick={onClick}
     />
   );

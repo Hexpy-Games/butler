@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useState } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
@@ -7,11 +7,6 @@ import { useButlerStore } from "@/app/store.ts";
 import type { AppInfoView, SettingsView } from "@/app/types.ts";
 import { SettingsField, Switch, Typo } from "@/butler-ds";
 import { SettingsSection } from "./SettingsFormComponents";
-
-const readOnlyValueStyle: CSSProperties = {
-  color: "var(--text-primary)",
-  overflowWrap: "anywhere",
-};
 
 export function AboutSettings() {
   useAppLocale();
@@ -92,7 +87,7 @@ export function AboutSettings() {
         label={settingsCopy.fields.appRepository}
         control={
           info?.repository_url ? (
-            <Typo.Body as="span" style={readOnlyValueStyle}>
+            <Typo.Body as="span" tone="primary" wrap="anywhere">
               <a href={info.repository_url}>{info.repository_url}</a>
             </Typo.Body>
           ) : (
@@ -130,7 +125,7 @@ export function AboutSettings() {
 
 function readOnlyValue(value: string) {
   return (
-    <Typo.Body as="span" style={readOnlyValueStyle}>
+    <Typo.Body as="span" tone="primary" wrap="anywhere">
       {value}
     </Typo.Body>
   );

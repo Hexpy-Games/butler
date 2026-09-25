@@ -4388,7 +4388,9 @@ describe("app-client design system foundation", () => {
     expect(typoStyles).toContain("font-size: var(--typo-caption-size)");
     expect(typoStyles).toContain("word-break: keep-all");
     expect(typoStyles).toContain("overflow-wrap: break-word");
-    expect(typoStyles).not.toMatch(/^\s*color\s*:/m);
+    // Variants never set color; only an explicit tone prop opts into a text token.
+    const variantStyles = typoStyles.replace(/\.typo\[data-tone="[\w-]+"\]\s*\{[^}]*\}/gu, "");
+    expect(variantStyles).not.toMatch(/^\s*color\s*:/m);
     expect(typoComponent).toContain('| "div"');
   });
 

@@ -23,14 +23,6 @@
   margin-top: 0;
 }
 
-.language {
-  min-width: 0;
-  overflow: hidden;
-  font: var(--font-code);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .block .pre {
   margin: 0;
   border: 0;

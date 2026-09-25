@@ -6,6 +6,6 @@
   "components/layout/TitlebarWorkspaceSubtitle.module.css": 1,
   "components/management/ProjectInformation.module.css": 1,
   "components/management/ProjectStatisticsPanel.module.css": 2,
-  "components/space/SpaceInteractions.module.css": 7,
+  "components/space/SpaceInteractions.module.css": 6,
   "components/space/SpaceSidebar.module.css": 2
 }

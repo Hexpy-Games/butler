@@ -24,12 +24,12 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
     <span className={interaction.rowMeta}>
       <Typo.Caption title={row.location}>{row.location}</Typo.Caption>
       {tab === "recent" ? (
-        <time dateTime={row.updatedAt} title={new Date(row.updatedAt).toLocaleString(locale)}>
+        <Typo.Text as="time" dateTime={row.updatedAt} numeric="tabular" title={new Date(row.updatedAt).toLocaleString(locale)} wrap="nowrap">
           {relativeAge(row.updatedAt)}
-        </time>
+        </Typo.Text>
       ) : (
         <Typo.Caption className={interaction.statusText} title={`${status}${progressText}`}>
-          <span className={interaction.statusLabel}>{status}</span>
+          <Typo.Text truncate>{status}</Typo.Text>
           {progressText && <span className={interaction.statusProgress}>{progressText}</span>}
         </Typo.Caption>
       )}

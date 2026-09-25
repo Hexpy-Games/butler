@@ -58,10 +58,7 @@ export function UsageProviderRow({
           {appCopy.interfaceDetails.billingLabel}{provider.billing.available ? appCopy.interfaceStatus.confirmed : provider.billing.reason}
         </Typo.Caption>
       </Stack>
-      <Typo.Body
-        as="div"
-        style={{ textAlign: "right", whiteSpace: "nowrap" }}
-      >
+      <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
         {formatCompact(provider.totalTokens)}
       </Typo.Body>
     </Stack>

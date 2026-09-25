@@ -19,8 +19,10 @@ export function ComposerPlanInstructionContext({
         type="button"
       >
         <FileText aria-hidden="true" size="sm" />
-        <span className={styles.title}>{decision.planTitle}</span>
-        <Typo.Caption className={styles.status}>
+        <Typo.Label as="span" weight="regular" tone="primary" truncate>
+          {decision.planTitle}
+        </Typo.Label>
+        <Typo.Caption tone="tertiary" wrap="nowrap">
           {appCopy.composer.planInstructionActive}
         </Typo.Caption>
       </button>

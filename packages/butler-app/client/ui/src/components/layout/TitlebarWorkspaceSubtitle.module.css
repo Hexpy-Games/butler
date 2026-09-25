@@ -5,16 +5,12 @@
   gap: var(--space-sm);
 }
 
-.projectSubtitle,
-.worktreeLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .projectSubtitle {
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .worktree {
@@ -29,8 +25,4 @@
 
 .worktree svg {
   flex: 0 0 auto;
-}
-
-.worktreeLabel {
-  min-width: 0;
 }

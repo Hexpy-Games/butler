@@ -51,11 +51,6 @@ export const projectDocumentDialogLayout = {
     gap: "var(--space-sm)",
     alignItems: "baseline",
   },
-  metadataLabel: { color: "var(--text-tertiary)" },
-  metadataValue: {
-    color: "var(--text-secondary)",
-    overflowWrap: "anywhere",
-  },
   scroller: {
     height: "min(66vh, 680px)",
     minHeight: "20rem",

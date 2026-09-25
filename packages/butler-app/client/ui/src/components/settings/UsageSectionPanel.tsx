@@ -45,7 +45,7 @@ export function UsageSectionPanel({
                     {appCopy.interfaceDetails.requests}{formatCount(bucket.requestCount)} {appCopy.interfaceDetails.characters}{formatCount(bucket.chars)}
                   </Typo.Caption>
                 </Stack>
-                <Typo.Body as="div" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
                   {formatCount(bucket.estimatedTokens)}
                 </Typo.Body>
               </Stack>

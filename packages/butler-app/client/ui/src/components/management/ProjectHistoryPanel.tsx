@@ -4,7 +4,6 @@ import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/pr
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ChevronRight, CheckCircle2, FileText, MessageSquare, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
 import styles from "./ProjectHistoryPanel.module.css";
-import information from "./ProjectInformation.module.css";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardHistoryPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 
@@ -54,15 +53,15 @@ export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { pr
       <div className={styles.timeline}>{events.map((event) => <div key={event.id} className={styles.event}>
         <span className={styles.marker}>{event.action === "completed" ? <CheckCircle2 /> : event.session ? <MessageSquare /> : <FileText />}</span>
         <Stack gap="xs">
-          <NavRow label={<span className={information.title}>{event.title}</span>} multiline actions={<ChevronRight />}
-      meta={<Typo.Caption className={information.summary}>{[new Date(event.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" }), event.action === "completed" ? copy.recordedCompletion : copy[event.action],
+          <NavRow label={<Typo.Text lineClamp={2} wrap="anywhere">{event.title}</Typo.Text>} multiline actions={<ChevronRight />}
+      meta={<Typo.Caption tone="secondary">{[new Date(event.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" }), event.action === "completed" ? copy.recordedCompletion : copy[event.action],
         event.artifactCount ? copy.linkedResults(event.artifactCount) : null].filter(Boolean).join(" · ")}</Typo.Caption>}
       onClick={() => onSelect({ id: event.source.id, revision: event.source.revision, project_id: projectId,
         kind: event.source.kind === "spec" ? "spec" : event.source.kind === "report" ? "report" : "plan",
         document_type: event.source.kind as ProjectDashboardDocument["document_type"], title: event.title,
         markdown: "", safe_path_label: event.source.id, updated_at: event.at })} />
           {event.session && <Button variant="borderless" size="xs" className={styles.session} onClick={() => onOpenSession(event.session!.id)}>
-            <MessageSquare /><span className={styles.sessionTitle}>{event.session.title}</span><ChevronRight />
+            <MessageSquare /><Typo.Text truncate>{event.session.title}</Typo.Text><ChevronRight />
           </Button>}
         </Stack>
       </div>)}</div>

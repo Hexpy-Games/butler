@@ -16,7 +16,6 @@ import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
 import { useSpaceDrag } from "@/app/space/drag";
-import styles from "./SpaceSidebar.module.css";
 import interaction from "./SpaceInteractions.module.css";
 
 export const SpaceRow = memo(function SpaceRow({
@@ -84,11 +83,7 @@ export const SpaceRow = memo(function SpaceRow({
             expanded={expanded}
             onToggle={() => toggle(row.node.key)}
             icon={<SpaceGlyph row={row} />}
-            label={
-              <span className={styles.groupLabel}>
-                {label}
-              </span>
-            }
+            label={label}
             actions={actions}
           >
             {children.slice(0, limit).map((child) => (

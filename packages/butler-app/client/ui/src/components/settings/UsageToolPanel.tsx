@@ -41,10 +41,7 @@ export function UsageToolPanel({
                     {formatCount(bucket.failures)}
                   </Typo.Caption>
                 </Stack>
-                <Typo.Body
-                  as="div"
-                  style={{ textAlign: "right", whiteSpace: "nowrap" }}
-                >
+                <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
                   {formatCount(bucket.calls)}
                 </Typo.Body>
               </Stack>

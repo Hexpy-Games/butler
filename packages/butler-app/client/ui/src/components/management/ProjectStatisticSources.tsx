@@ -18,7 +18,7 @@ export function ProjectStatisticSources({ sourceKeys }: { sourceKeys: string[] }
       const date = new Date(source.at);
       const time = !source.source && Number.isFinite(date.getTime()) ? date.toLocaleDateString(locale, { timeZone: data.timezone, month: "short", day: "numeric" }) : "";
       return <NavRow key={key} multiline icon={source.source ? <FileText /> : <MessageSquare />}
-        label={<span className={styles.title}>{source.title}</span>} actions={<ChevronRight />}
+        label={<Typo.Text lineClamp={2} wrap="anywhere">{source.title}</Typo.Text>} actions={<ChevronRight />}
         meta={<Typo.Caption>{[source.session?.title !== source.title ? source.session?.title : null, time,
           source.durationMs === undefined ? null : new Intl.NumberFormat(locale, { style: "unit", unit: "second", maximumFractionDigits: 0 }).format(source.durationMs / 1000)].filter(Boolean).join(" · ")}</Typo.Caption>}
         onClick={() => openSource(key)} />;

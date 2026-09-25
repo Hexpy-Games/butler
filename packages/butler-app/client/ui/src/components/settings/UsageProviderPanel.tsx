@@ -28,7 +28,7 @@ export function UsageProviderPanel({
                 : appCopy.settings.descriptions.usageMonitorEmpty}
             </Typo.Caption>
           </Stack>
-          <Typo.Body as="div" style={{ textAlign: "right" }}>
+          <Typo.Body as="div" align="end" numeric="tabular">
             {formatCount(providers.length)}
           </Typo.Body>
         </Stack>

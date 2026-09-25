@@ -31,18 +31,3 @@
 .document > svg {
   color: var(--text-tertiary);
 }
-
-.title {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: var(--font-size-2);
-  line-height: var(--line-height-compact);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.status {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-1);
-  white-space: nowrap;
-}

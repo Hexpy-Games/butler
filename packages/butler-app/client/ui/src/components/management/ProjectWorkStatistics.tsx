@@ -46,7 +46,7 @@ export function ProjectWorkStatistics() {
     <Section title={copy.aging} description={copy.agingHelp}>
       <div className={styles.agingCards}>
         {!old.length && <Typo.Caption>{appCopy.projectSignpost.noRemaining}</Typo.Caption>}
-        {old.map((card) => <NavRow key={card.id} multiline label={<span className={styles.title}>{card.title}</span>}
+        {old.map((card) => <NavRow key={card.id} multiline label={<Typo.Text lineClamp={2} wrap="anywhere">{card.title}</Typo.Text>}
           actions={<ChevronRight />} onClick={() => openSource(card.sourceKey)}
           meta={<Stack gap="xs"><Typo.Caption>{copy.labels[card.lane]} · {card.ageDays === null ? copy.labels.unknown : copy.age(card.ageDays)}</Typo.Caption>
             {card.ageDays !== null && <span className={styles.track}><span className={styles.fill} style={{ width: `${card.ageDays / Math.max(1, ...old.map((item) => item.ageDays ?? 0)) * 100}%` }} /></span>}

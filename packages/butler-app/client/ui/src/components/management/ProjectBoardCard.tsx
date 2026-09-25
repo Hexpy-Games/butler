@@ -18,7 +18,7 @@ export function ProjectBoardCard({ card, running, onOpen, onOpenSession }: {
       {card.session && <Button variant="borderless" size="xs" className={styles.session}
         onClick={(event) => { event.stopPropagation(); onOpenSession(); }}>
         {running ? <Spinner /> : <MessageSquare />}
-        <span className={styles.sessionTitle}>{card.session.title}</span>
+        <Typo.Text truncate>{card.session.title}</Typo.Text>
       </Button>}
     </Stack>
   </Clickable>;

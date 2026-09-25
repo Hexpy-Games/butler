@@ -45,7 +45,7 @@ export function ProjectActivityStatistics() {
       <Stack gap="sm" className={styles.surface}>
         {!activity.length && <Typo.Caption>{data.ledgerHistoryAvailable ? copy.empty : copy.unavailable}</Typo.Caption>}
         {activity.slice(0, limit).map((item) => <NavRow key={item.sourceKey} multiline onClick={() => openSource(item.sourceKey)}
-          label={<span className={styles.title}>{data.sources[item.sourceKey]?.title}</span>} actions={<ChevronRight />}
+          label={<Typo.Text lineClamp={2} wrap="anywhere">{data.sources[item.sourceKey]?.title}</Typo.Text>} actions={<ChevronRight />}
           meta={<Stack gap="xs"><Typo.Caption>{copy.changes(item.changes)}</Typo.Caption>
             <span className={styles.track}><span className={styles.fill} style={{ width: `${item.changes / Math.max(1, activity[0]!.changes) * 100}%` }} /></span>
             <span className={styles.activityDates} aria-label={item.dates.map(dayLabel).join(", ")}>

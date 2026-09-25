@@ -62,8 +62,8 @@ export function ProjectResultsPanel({ projectId, preferences, onUpdated, onSelec
         onClick={() => { setCursor(undefined); setPage(null); setAttempt((value) => value + 1); }}>{appCopy.feedback.retry}</Button>} />}
       {!page && loading && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
       {!!page?.items.length && <div className={styles.rows}>{page.items.map((item) => <NavRow key={`${item.message_id}:${item.file_id}`}
-        icon={<FileText />} label={<span className={styles.title}>{item.title}</span>} multiline
-        meta={<Typo.Caption className={styles.summary}>{item.session_title} · {new Date(item.created_at).toLocaleDateString(locale)}</Typo.Caption>}
+        icon={<FileText />} label={<Typo.Text lineClamp={2} wrap="anywhere">{item.title}</Typo.Text>} multiline
+        meta={<Typo.Caption tone="secondary">{item.session_title} · {new Date(item.created_at).toLocaleDateString(locale)}</Typo.Caption>}
         onClick={() => onSelect({ id: item.id, project_id: projectId, revision: item.revision,
           document_type: "artifact", kind: "report", title: item.title, markdown: "", safe_path_label: item.title, updated_at: item.created_at })}
         actions={<ButtonContainer size="sm">

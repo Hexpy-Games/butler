@@ -33,8 +33,3 @@
 .session {
   max-width: 100%;
 }
-.sessionTitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

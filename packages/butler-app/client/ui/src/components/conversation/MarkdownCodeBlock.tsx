@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { Children, isValidElement, type ReactNode } from "react";
-import { MessageFooter, useScrollEdges } from "@/butler-ds";
+import { MessageFooter, Typo, useScrollEdges } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { CopyTextButton } from "./CopyTextButton";
 import { useSyntaxHighlight } from "./useSyntaxHighlight";
@@ -32,7 +32,7 @@ export function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
   return (
     <div className={styles.block} data-test-class="code-block">
       <div className={styles.header} data-test-class="code-block-header">
-        <span className={styles.language}>{language ?? ""}</span>
+        <Typo.Code as="span" truncate>{language ?? ""}</Typo.Code>
         <MessageFooter dataTestClass="code-block-copy">
           <CopyTextButton text={code} label={appCopy.conversation.messageActions.copyCode} />
         </MessageFooter>

@@ -79,12 +79,6 @@
 .context {
   white-space: pre-line;
 }
-.groupLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 0;
-}
 .browseActions {
   gap: var(--space-action-gap);
   margin-inline-end: calc(-1 * var(--nav-section-heading-inset));
