@@ -600,7 +600,9 @@ try {
   await page.waitForTimeout(160);
   assert(
     assistantFooterText.includes("Worked for") &&
-      /\d{2}:\d{2}/u.test(assistantFooterText),
+      // One clock format for user messages and replies: "1:25 PM", no zero-padded hour.
+      /(?<!\d)\d{1,2}:\d{2}/u.test(assistantFooterText) &&
+      !/(?<!\d)0\d:\d{2}/u.test(assistantFooterText),
     `assistant footer should show worked duration and time: ${assistantFooterText}`,
   );
   assert(

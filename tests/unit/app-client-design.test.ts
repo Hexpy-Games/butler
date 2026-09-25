@@ -4896,7 +4896,7 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/libs/design-system/blocks/FormSection/FormSection.module.css",
       ),
-    ).toContain("gap: var(--space-xl)");
+    ).toContain("gap: var(--settings-field-gap)");
   });
 });
 
