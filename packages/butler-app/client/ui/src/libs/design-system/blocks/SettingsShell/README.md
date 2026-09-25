@@ -21,6 +21,13 @@ navigation. Use `NavSection` headings for search and category groups so their
 indentation and typography stay consistent. The scrolling list must be outside
 Electron drag regions and keep its last item reachable in short windows.
 
+### Spacing
+
+The detail content stacks settings sections with `--settings-section-gap`
+(32px; 24px when the shell is single-pane at 760px and below). It stays at least
+1.5x `--settings-field-gap`, the gap between fields inside a `FormSection`, so
+section boundaries remain visible.
+
 ## Who can use this component
 Butler client settings containers and design-system fixtures.
 

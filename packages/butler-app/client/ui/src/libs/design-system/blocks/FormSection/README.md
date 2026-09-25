@@ -34,6 +34,14 @@ import { FormSection, FormRow } from "@/butler-ds";
 </FormSection>
 ```
 
+## Spacing
+
+Fields inside a FormSection are `--settings-field-gap` (16px) apart. Sections
+stacked in a settings page are separated by `--settings-section-gap`, which the
+page container (for example `SettingsShell`) owns and which stays at least 1.5x
+the field gap (32px, 24px on compact screens), so each box reads as its own
+group. Do not add margins or gaps between sections or fields in product code.
+
 ## Accessibility
 
 - Uses semantic section element

@@ -16,5 +16,5 @@
 }
 
 .fields {
-  gap: var(--space-xl);
+  gap: var(--settings-field-gap);
 }

@@ -88,6 +88,7 @@
   --space-lg: 16px;
   --space-xl: 20px;
   --space-2xl: 24px;
+  --space-3xl: 32px;
 
   /* Legacy numeric aliases for backwards compatibility */
   --space-1: var(--space-xs);
@@ -96,6 +97,11 @@
   --space-4: var(--space-lg);
   --space-5: var(--space-xl);
   --space-6: var(--space-2xl);
+
+  /* Settings rhythm: sections sit at least 1.5x further apart than the
+     fields inside them so each settings box reads as its own group. */
+  --settings-field-gap: var(--space-lg);
+  --settings-section-gap: var(--space-3xl);
 
   /* Border widths: hairline rules and offsets, strong emphasis borders. */
   --border-hairline: 1px;
@@ -474,6 +480,13 @@
 @media (width <= 640px), (pointer: coarse) {
   :root {
     --control-hit-target: 44px;
+  }
+}
+
+/* Compact settings (single-pane SettingsShell) keep the 1.5x ratio. */
+@media (width <= 760px) {
+  :root {
+    --settings-section-gap: var(--space-2xl);
   }
 }
 

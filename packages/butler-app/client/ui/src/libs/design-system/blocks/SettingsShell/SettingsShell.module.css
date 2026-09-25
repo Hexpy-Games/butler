@@ -63,7 +63,7 @@
 .detailContent {
   display: grid;
   max-width: 760px;
-  gap: var(--space-lg);
+  gap: var(--settings-section-gap);
   padding-bottom: 60px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
