@@ -7,6 +7,7 @@ import {
   Circle,
   CircleAlert,
   CircleX,
+  ICON_SIZE,
   InspectorPanel,
   KeyValueRow,
   Spinner,
@@ -147,9 +148,9 @@ function progressStateTone(state?: string): string {
 
 function progressStateIcon(state?: string): ReactElement {
   const tone = progressStateTone(state);
-  if (tone === "complete") return <CheckCircle2 size={18} />;
-  if (tone === "failed") return <CircleAlert size={18} />;
-  if (tone === "cancelled") return <CircleX size={18} />;
-  if (tone === "running") return <Spinner size={18} />;
-  return <Circle size={18} />;
+  if (tone === "complete") return <CheckCircle2 size="lg" />;
+  if (tone === "failed") return <CircleAlert size="lg" />;
+  if (tone === "cancelled") return <CircleX size="lg" />;
+  if (tone === "running") return <Spinner size={ICON_SIZE.lg} />;
+  return <Circle size="lg" />;
 }

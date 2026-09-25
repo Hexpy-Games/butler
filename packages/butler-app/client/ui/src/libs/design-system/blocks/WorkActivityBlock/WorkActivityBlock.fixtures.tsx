@@ -7,21 +7,21 @@ export function WorkActivityBlockFixture() {
   const tools = [
     {
       id: "search",
-      icon: <Search size={15} />,
+      icon: <Search size="md" />,
       title: "검색: gemma 연결 정보",
       summaryLabel: "검색",
       details: "환경 변수와 설정 파일을 읽어 연결 후보를 찾습니다.",
     },
     {
       id: "command",
-      icon: <Terminal size={15} />,
+      icon: <Terminal size="md" />,
       title: "Bash: env | grep -Ei \"CODEX|GEMMA\"",
       summaryLabel: "Bash",
       details: "명령 결과는 안전한 요약으로만 표시합니다.",
     },
     {
       id: "tool",
-      icon: <Wrench size={15} />,
+      icon: <Wrench size="md" />,
       title: "검증된 결과를 최종 응답에 반영",
       summaryLabel: "검토",
     },

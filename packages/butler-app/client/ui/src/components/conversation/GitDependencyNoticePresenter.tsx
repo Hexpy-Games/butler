@@ -29,7 +29,7 @@ export function GitDependencyNoticePresenter({
           </IconButton>
         </Stack>
       }
-      icon={<CircleAlert size={18} />}
+      icon={<CircleAlert size="lg" />}
       message={message}
       title={title}
       tone="warning"

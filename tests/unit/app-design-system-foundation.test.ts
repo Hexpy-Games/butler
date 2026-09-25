@@ -571,18 +571,36 @@ describe("icon size tokens", () => {
     expect(tokens.get("--icon-size-lg")).toBe("20px");
   });
 
-  test("DS icons use named sizes instead of literal token-scale sizes", () => {
+  test("DS icons use named sizes instead of literal 13-20px sizes", () => {
     const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
     const names = [...icons.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]);
     const offenders = walkUiSources(uiSrc)
       .filter((path) => path.endsWith(".tsx") && !path.endsWith(".test.tsx"))
       .flatMap((path) => {
         const text = read(path);
-        return [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(14|16|20)\}/gsu)]
+        const props = [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(1[3-8]|20)\}/gsu)]
           .filter((match) => names.includes(match[1]))
           .map((match) => `${path}: <${match[1]} size={${match[3]}}>`);
+        const clones = [...text.matchAll(/cloneElement\([^)]*\{\s*size:\s*(1[3-8]|20)\b/gsu)]
+          .map((match) => `${path}: cloneElement size ${match[1]}`);
+        return [...props, ...clones];
       });
     expect(offenders).toEqual([]);
+  });
+
+  test("icon defaults and CSS icon fallbacks use the md token", () => {
+    const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
+    expect(icons).toContain('size = "md"');
+    expect(icons).not.toMatch(/size = 1[3-8]\b/u);
+    for (const file of [
+      "blocks/NavRow/NavRow.module.css",
+      "blocks/TitlebarShell/TitlebarShell.module.css",
+      "components/Clickable/Clickable.module.css",
+    ]) {
+      const css = read(`${uiSrc}/libs/design-system/${file}`);
+      expect(css).not.toMatch(/icon-size, (min\()?1[3-8]px/u);
+      expect(css).toContain("var(--icon-size-md)");
+    }
   });
 });
 

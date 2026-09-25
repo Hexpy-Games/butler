@@ -25,7 +25,7 @@ export function AutomationRow({
   return (
     <div className={styles.row}>
       <ListRow
-        icon={<Clock3 size={15} />}
+        icon={<Clock3 size="md" />}
         title={title}
         description={[schedule, description].filter(Boolean).join(" · ")}
       />

@@ -56,7 +56,7 @@ export function TodoProgressPanel({
       className={cn(styles.panel, className)}
       aria-label={ariaLabel ?? heading}
       heading={heading}
-      icon={<ListChecks size={15} />}
+      icon={<ListChecks size="md" />}
       collapsedSummary={collapsedSummary}
       {...props}
     >

@@ -46,7 +46,7 @@ export function ModelManagementPage() {
       <SettingsSection title={copy.registeredTitle}>
         <Stack gap="md">
           <Button type="button" onClick={openAdd} size="sm">
-            <Plus size={15} /> {copy.addButton}
+            <Plus size="md" /> {copy.addButton}
           </Button>
           {models.length === 0 ? (
             <Typo.Caption>{copy.emptyRegistered}</Typo.Caption>

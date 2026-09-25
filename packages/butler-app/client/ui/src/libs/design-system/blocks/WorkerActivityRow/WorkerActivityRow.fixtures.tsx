@@ -6,7 +6,7 @@ export function WorkerActivityRowFixture() {
   return (
     <WorkerActivityRow
       id="worker"
-      icon={<Activity size={15} />}
+      icon={<Activity size="md" />}
       title="Implementation worker"
       description="Running validation"
       actions={[<Button size="xs" variant="borderless" key="stop">Stop</Button>]}

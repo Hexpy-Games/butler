@@ -90,7 +90,7 @@ export function UpdatesSettings() {
             disabled={loading}
             onClick={() => void check()}
           >
-            <RefreshCcw size={15} /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
+            <RefreshCcw size="md" /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
           </Button>
         </Stack>
         <Stack gap="sm">

@@ -52,7 +52,7 @@ export function ModelSettingsTitle({
         onClick={onBack}
         aria-label={copy.back}
       >
-        <ArrowLeft size={15} />
+        <ArrowLeft size="md" />
       </Button>
       <Breadcrumb>
         <BreadcrumbList>

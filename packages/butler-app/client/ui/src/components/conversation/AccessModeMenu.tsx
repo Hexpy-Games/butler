@@ -47,7 +47,7 @@ export function AccessModeMenu() {
           aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}${permissions.length ? ` · ${appCopy.interfaceTemplates.allowedCount(permissions.length)}` : ""}`}
           compact={permissions.length ? "label" : "icon"}
           data-test-class="access-button"
-          icon={accessModeIcon(accessMode, 16)}
+          icon={accessModeIcon(accessMode)}
           style={accessModeStyle(accessMode)}
         >
           <span data-test-class="composer-control-label">

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
-import { ShieldCheck, ShieldQuestion, Eye } from "@/butler-ds";
+import { ShieldCheck, ShieldQuestion, Eye, type IconSize } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
 
@@ -32,7 +32,7 @@ export function accessModeTone(
   return "default";
 }
 
-export function accessModeIcon(mode: AccessMode, size = 15): ReactElement {
+export function accessModeIcon(mode: AccessMode, size: IconSize = "md"): ReactElement {
   if (mode === "full_access") return <ShieldCheck size={size} />;
   if (mode === "ask_first") return <ShieldQuestion size={size} />;
   return <Eye size={size} />;

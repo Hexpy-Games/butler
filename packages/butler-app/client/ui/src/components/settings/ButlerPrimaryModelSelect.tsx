@@ -47,7 +47,7 @@ export function ButlerPrimaryModelSelect({
           data-test-class="settings-model-management-button"
           onClick={onManage}
         >
-          <Settings size={15} /> {settingsCopy.modelManagement.manageButton}
+          <Settings size="md" /> {settingsCopy.modelManagement.manageButton}
         </Button>
       }
       onChange={(value) => {

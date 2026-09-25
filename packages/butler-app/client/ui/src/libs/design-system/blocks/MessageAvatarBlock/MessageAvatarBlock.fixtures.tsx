@@ -5,7 +5,7 @@ import { MessageAvatarBlock } from "./MessageAvatarBlock";
 export function MessageAvatarBlockFixture() {
   return (
     <Stack align="row" gap="sm">
-      <MessageAvatarBlock active><Sparkles size={15} /></MessageAvatarBlock>
+      <MessageAvatarBlock active><Sparkles size="md" /></MessageAvatarBlock>
       <MessageAvatarBlock role="user" />
       <MessageAvatarBlock role="system" />
     </Stack>

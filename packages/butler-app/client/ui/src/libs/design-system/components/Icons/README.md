@@ -19,6 +19,24 @@ Import from the public design-system alias:
 import { Icons } from "@/butler-ds";
 ```
 
+Size icons with the named scale, which mirrors `--icon-size-sm|md|lg` in
+`tokens.css` and is exported as `ICON_SIZE`:
+
+| Size | px | Use |
+| --- | --- | --- |
+| `sm` | 14 | Dense rows, inline badges, small buttons |
+| `md` | 16 | Default for controls, menus, nav rows and toolbars |
+| `lg` | 20 | Status marks, back arrows, prominent headers |
+
+```tsx
+<Plus />            // md (16px) by default
+<Search size="lg" />
+```
+
+Do not pass literal 13-20px sizes; pick the nearest named size. Numeric sizes
+are reserved for illustrations outside the icon scale (for example 24/32px
+empty-state glyphs).
+
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
 ## Who can use this component

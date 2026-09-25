@@ -34,7 +34,7 @@ export interface IconProps extends Omit<HugeiconsIconProps, "icon" | "size"> {
 
 // Helper to create icon component
 function createIcon(icon: IconSvgElement) {
-  return ({ size = 15, ...props }: IconProps) => (
+  return ({ size = "md", ...props }: IconProps) => (
     <HugeiconsIcon
       icon={icon}
       size={typeof size === "string" ? ICON_SIZE[size] : size}

@@ -25,5 +25,9 @@ test("named icon sizes render the token scale", () => {
   expect(renderToStaticMarkup(<Plus size="sm" />)).toContain('width="14"');
   expect(renderToStaticMarkup(<Plus size="md" />)).toContain('width="16"');
   expect(renderToStaticMarkup(<Plus size="lg" />)).toContain('width="20"');
-  expect(renderToStaticMarkup(<Plus size={15} />)).toContain('width="15"');
+  expect(renderToStaticMarkup(<Plus size={32} />)).toContain('width="32"');
+});
+
+test("icons default to the md size", () => {
+  expect(renderToStaticMarkup(<Plus />)).toContain('width="16"');
 });

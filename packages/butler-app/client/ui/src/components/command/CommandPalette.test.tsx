@@ -111,9 +111,9 @@ test("palette results are a keyboard listbox with highlighted matches and kind i
     expect(options[0]!.querySelector("mark")?.textContent).toBe("Desk");
     expect(options[2]!.querySelector("mark")?.textContent).toBe("desk");
     const iconMarkup = (option: HTMLElement) => option.querySelector("svg")!.outerHTML;
-    expect(iconMarkup(options[0]!)).toBe(renderToStaticMarkup(<Briefcase size={17} />));
-    expect(iconMarkup(options[1]!)).toBe(renderToStaticMarkup(<Notebook size={17} />));
-    expect(iconMarkup(options[2]!)).toBe(renderToStaticMarkup(<Folder size={17} />));
+    expect(iconMarkup(options[0]!)).toBe(renderToStaticMarkup(<Briefcase size="md" />));
+    expect(iconMarkup(options[1]!)).toBe(renderToStaticMarkup(<Notebook size="md" />));
+    expect(iconMarkup(options[2]!)).toBe(renderToStaticMarkup(<Folder size="md" />));
   } finally {
     await act(async () => root.unmount());
     await new Promise((resolve) => setTimeout(resolve, 0));

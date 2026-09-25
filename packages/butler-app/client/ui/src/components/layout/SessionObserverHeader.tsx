@@ -23,7 +23,7 @@ export function SessionObserverHeader() {
             title={appCopy.common.back}
             onClick={goBack}
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size="lg" />
           </Button>
         ) : null}
         <DialogTitle>{title}</DialogTitle>

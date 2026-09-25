@@ -5,7 +5,7 @@ import { DisclosureRow } from "./DisclosureRow";
 export function DisclosureRowFixture() {
   return (
     <DisclosureRow
-      icon={<Wrench size={15} />}
+      icon={<Wrench size="md" />}
       title="Search"
       description="Project files"
       open

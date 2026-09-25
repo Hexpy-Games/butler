@@ -98,12 +98,12 @@ export function CommandPalette({
 
 function CommandIcon({ kind }: { kind: CommandPaletteResult["kind"] }) {
   useAppLocale();
-  if (kind === "automation") return <Clock3 size={17} />;
-  if (kind === "project") return <Briefcase size={17} />;
-  if (kind === "project_session") return <Notebook size={17} />;
-  if (kind === "group") return <Folder size={17} />;
-  if (kind === "settings") return <Settings size={17} />;
-  return <PencilLine size={17} />;
+  if (kind === "automation") return <Clock3 size="md" />;
+  if (kind === "project") return <Briefcase size="md" />;
+  if (kind === "project_session") return <Notebook size="md" />;
+  if (kind === "group") return <Folder size="md" />;
+  if (kind === "settings") return <Settings size="md" />;
+  return <PencilLine size="md" />;
 }
 
 function highlightMatch(title: string, query: string): ReactNode {

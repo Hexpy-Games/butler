@@ -47,7 +47,7 @@ export function SidebarProjectsMenu({
         }
         onClick={onToggleCollapse}
       >
-        {projectsCollapsed ? <Expand size={15} /> : <Collapse size={15} />}
+        {projectsCollapsed ? <Expand size="md" /> : <Collapse size="md" />}
       </IconButton>
       <DropdownMenu
         key="new"
@@ -56,7 +56,7 @@ export function SidebarProjectsMenu({
       >
         <DropdownMenuTrigger asChild>
           <IconButton label={sidebarCopy.newProject} selected={projectMenuOpen}>
-            <FolderPlus size={15} />
+            <FolderPlus size="md" />
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent

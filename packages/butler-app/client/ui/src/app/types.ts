@@ -1637,6 +1637,6 @@ export interface AuthorityApprovalProjection {
   permissions?: ConversationPermissionView[];
 }
 
-export type IconElement = ReactElement<{ size?: number }>;
+export type IconElement = ReactElement<{ size?: number | "sm" | "md" | "lg" }>;
 export type ChildrenProps = { children?: ReactNode };
 import type { InterfaceContentReferences, InterfaceTextReference } from "../../../../../butler-i18n/src/index.ts";

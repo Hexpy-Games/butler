@@ -4,7 +4,7 @@ import { InspectorPanel } from "./InspectorPanel";
 
 export function InspectorPanelFixture() {
   return (
-    <InspectorPanel title="Inspector" description="Context summary" icon={<Activity size={15} />}>
+    <InspectorPanel title="Inspector" description="Context summary" icon={<Activity size="md" />}>
       <KeyValueRow label="Tokens" value="18,240" meta="62%" />
       <KeyValueRow label="Files" value="8" />
     </InspectorPanel>

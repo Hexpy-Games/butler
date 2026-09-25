@@ -75,7 +75,7 @@ export function LocalModelConfigForm({
         size="sm"
         onClick={() => setAdvancedOpen(!advancedOpen)}
       >
-        <SlidersHorizontal size={15} />{" "}
+        <SlidersHorizontal size="md" />{" "}
         {advancedOpen ? copy.hideAdvanced : copy.showAdvanced}
       </Button>
       {advancedOpen ? (

@@ -32,7 +32,7 @@ export function CommandPanel({
     <SurfacePanel elevation="high" className={styles.panel}>
       <Stack gap="sm">
         <label className={styles.search}>
-          <Search size={15} aria-hidden="true" />
+          <Search size="md" aria-hidden="true" />
           <Input
             value={query}
             placeholder={placeholder}
@@ -107,7 +107,7 @@ export function CommandPalettePanel({
       >
         <DialogTitle className="sr-only">{label}</DialogTitle>
         <div className={styles.inputRow}>
-          <Search size={18} aria-hidden="true" />
+          <Search size="lg" aria-hidden="true" />
           <input
             ref={inputRef}
             value={query}

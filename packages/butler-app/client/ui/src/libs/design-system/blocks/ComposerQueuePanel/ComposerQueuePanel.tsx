@@ -50,7 +50,7 @@ export function ComposerQueuePanel({
         ariaLabel ?? (typeof heading === "string" ? heading : undefined)
       }
       heading={heading}
-      icon={<ListChecks size={15} />}
+      icon={<ListChecks size="md" />}
       {...props}
     >
       <div className={styles.list}>
