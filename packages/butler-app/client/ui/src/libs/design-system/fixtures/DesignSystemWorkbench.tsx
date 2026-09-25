@@ -17,6 +17,7 @@ import {
   designSystemTokenGroups,
 } from "@/butler-ds";
 import styles from "./DesignSystemWorkbench.module.css";
+import { DS_VIEWER_BUNDLE_MARKER } from "../viewer/bundleMarker";
 
 type WorkbenchTheme = "system" | "light" | "dark";
 type ViewerTab = "tokens" | "primitives" | "blocks";
@@ -359,6 +360,7 @@ export function DesignSystemWorkbench() {
       as="main"
       className={`${styles.workbench} ${themeClass} sidebar-translucent`}
       data-ds-workbench
+      data-ds-viewer={DS_VIEWER_BUNDLE_MARKER}
       gap="2xl"
     >
       <WorkbenchHeader theme={theme} onThemeChange={setTheme} />
