@@ -77,7 +77,8 @@ export function createSubsessionToolHandlers(input: {
         ...(safeTitle ? { safe_title: safeTitle } : {}),
         ...(profileId ? { profile_id: profileId } : {}),
       });
-      return repeatedAssignmentResult(created, actionKey) ?? { ok: true, status: "queued" };
+      return repeatedAssignmentResult(created, actionKey) ?? { ok: true, status: "queued",
+        ...(created?.prior_attempts?.length ? { prior_attempts: created.prior_attempts } : {}) };
     },
     [steerStewardToolDefinition.name]: async (call: ButlerToolCall) => {
       const identity = requireParentIdentity(input);

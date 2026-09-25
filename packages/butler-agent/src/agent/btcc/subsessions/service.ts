@@ -41,9 +41,9 @@ export function createSubsessionDelegationService(
     replayDispatchIntent(input, childQueue, relationId, intent);
   }
   const parentInputSink: ParentInputSink = input.parentInputSink;
-  const controls = createSubsessionControlService(input, childQueue);
   const completeResult = (resultInput: Parameters<SubsessionDelegationService["completeStewardResult"]>[0]) =>
     completeStewardResultForDependencies(input, parentInputSink, resultInput);
+  const controls = createSubsessionControlService(input, childQueue, completeResult);
   const ensureRootWork = async (child: Parameters<SubsessionDelegationService["ensureChildRootWork"]>[0]): Promise<string> => {
     const relation = input.store.relationByChildSessionId(child.childSessionId);
     if (!relation) throw new Error("subsession_relation_missing");

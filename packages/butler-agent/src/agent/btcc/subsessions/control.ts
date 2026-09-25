@@ -9,6 +9,8 @@ import type {
 } from "./contracts.ts";
 import { activeParentDelegations } from "./active-parent-delegation.ts";
 import { resolveStewardFollowup } from "./steward-followup.ts";
+import { enforceRelationTurnBudget } from "./turn-budget.ts";
+import { completeWorkerResultForDependencies } from "./worker-result.ts";
 
 type ControlService = Pick<
   SubsessionDelegationService,
@@ -19,6 +21,7 @@ type ControlService = Pick<
 export function createSubsessionControlService(
   input: SubsessionDelegationDependencies,
   childQueue: NativeInboundQueue,
+  completeStewardResult?: SubsessionDelegationService["completeStewardResult"],
 ): ControlService & { recoverPendingDirections(): Promise<void> } {
   const activeChildCancellationTarget: ControlService["activeChildCancellationTarget"] = async (childSessionId) => {
     const relation = input.store.relationByChildSessionId(childSessionId);
@@ -52,6 +55,17 @@ export function createSubsessionControlService(
       const instruction = requiredBoundedDirection(directionInput.instruction);
       const active = await resolveStewardFollowup(input, directionInput)
         ?? await resolveActiveRelation(input, directionInput);
+      const latestChildTurn = await input.parentTurns.findLatestTurnForSession(
+        active.relation.child_session_id,
+      ) ?? await input.parentTurns.findTurn(active.child_turn_id);
+      // Only a direction that would start a new child Turn consumes the budget check.
+      if (latestChildTurn && (latestChildTurn.semanticState !== "admitted" || latestChildTurn.suspension)) {
+        const role = input.sessionBindings.getBySessionId(active.relation.child_session_id)?.role === "worker" ? "worker" : "steward";
+        await enforceRelationTurnBudget({ store: input.store, relation: active.relation, role, childTurn: latestChildTurn,
+          commitIncomplete: (result) => role === "worker"
+            ? completeWorkerResultForDependencies(input, childQueue, result)
+            : completeStewardResult?.(result) ?? Promise.resolve() });
+      }
       const instructionId = `steward-direction-${digest(stableJson({
         relation_id: active.relation.relation_id,
         source_message_id: directionInput.sourceMessageId,
@@ -68,9 +82,7 @@ export function createSubsessionControlService(
       if (direction.instruction_id !== instructionId || direction.instruction !== instruction) {
         throw new Error("steward_direction_identity_conflict");
       }
-      const childTurn = await input.parentTurns.findLatestTurnForSession(
-        active.relation.child_session_id,
-      ) ?? await input.parentTurns.findTurn(active.child_turn_id);
+      const childTurn = latestChildTurn;
       if (childTurn && (childTurn.semanticState !== "admitted" || childTurn.suspension)) {
         await enqueueDirectionContinuation(input, childQueue, active.relation, direction);
       }

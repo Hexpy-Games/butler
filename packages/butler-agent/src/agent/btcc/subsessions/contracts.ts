@@ -209,7 +209,7 @@ export type CreatedDelegation = {
   child_turn_id: string;
   root_work_id: string;
   child_workspace_path: string;
-  reused?: "active" | "settled"; // an existing assignment was returned, not a new child
+  reused?: "active" | "settled"; prior_attempts?: import("./prior-attempts.ts").PriorAttempt[];
 };
 
 export type SubsessionDispatchIntent = {

@@ -6,6 +6,7 @@ import {
   SUBSESSION_READ_ONLY_TOOLS_AND_EFFECTS,
 } from "./scope.ts";
 import { renderWorkerInput } from "./worker-input.ts";
+import { priorWorkerAttempts } from "./prior-attempts.ts";
 import { ActionableRejectionError } from "../agent-loop/actionable-rejection.ts";
 import { subsessionRootWorkId } from "./identities.ts";
 import { snapshotChildProjectContext } from "./project-context.ts";
@@ -49,6 +50,8 @@ export async function delegateReviewedWorker(
     documents: input.contextDocuments,
   });
   if (!input.workerProfiles) throw new Error("worker_profiles_unavailable");
+  const priorAttempts = priorWorkerAttempts(input.store, { parentSessionId: request.parent_session_id,
+    parentWorkId: reviewed.parent_work_ref.work_id, actionKey: request.action_key });
   const profile = await input.workerProfiles.read(request.profile_id);
   const identity = stableJson({
     parent_session_id: request.parent_session_id,
@@ -173,7 +176,7 @@ export async function delegateReviewedWorker(
     sender: { id: "butler-worker-dispatch", displayName: "Butler Worker" },
     message: {
       id: `worker-message:${delegationId}`,
-      text: renderWorkerInput(packet, profile.prompt),
+      text: renderWorkerInput(packet, profile.prompt, priorAttempts),
       timestamp: now,
     },
     routingHints: { sessionId: childSessionId, turnId: childTurnId },
@@ -209,6 +212,7 @@ export async function delegateReviewedWorker(
     child_turn_id: childTurnId,
     root_work_id: rootWorkId,
     child_workspace_path: parent.workspacePath,
+    ...(priorAttempts.length ? { prior_attempts: priorAttempts } : {}),
   };
 }
 

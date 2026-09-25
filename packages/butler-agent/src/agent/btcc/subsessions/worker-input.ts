@@ -1,6 +1,9 @@
 import type { DelegationPacket } from "./contracts.ts";
+import { renderPriorAttempts, type PriorAttempt } from "./prior-attempts.ts";
 
-export function renderWorkerInput(packet: DelegationPacket, profilePrompt?: string): string {
+export function renderWorkerInput(
+  packet: DelegationPacket, profilePrompt?: string, priorAttempts: readonly PriorAttempt[] = [],
+): string {
   if (!packet.plan_action) throw new Error("worker_plan_action_context_missing");
   return [
     "Worker role contract: run the normal BTCC lifecycle for this one bounded Task, then report factual output to the Steward.",
@@ -23,6 +26,7 @@ export function renderWorkerInput(packet: DelegationPacket, profilePrompt?: stri
     ...(packet.implementation_brief
       ? [`implementation_brief:\n${packet.implementation_brief}`]
       : []),
+    ...renderPriorAttempts(priorAttempts),
     ...(profilePrompt?.trim() ? [`worker_profile_instruction: ${profilePrompt.trim()}`] : []),
   ].join("\n");
 }
