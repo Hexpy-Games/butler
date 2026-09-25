@@ -34,6 +34,27 @@ test("Korean catalog uses Korean for generic UI words", () => {
   expect(ko.conversation.work.webSearchDetail("butler")).toBe("웹 검색: butler");
 });
 
+test("Korean copy keeps the Work, Task, Worker and Custom product terms consistent", () => {
+  const ko = getAppCopy("ko-KR");
+  const strings: string[] = [];
+  const collect = (value: unknown): void => {
+    if (typeof value === "string") strings.push(value);
+    else if (typeof value === "function" && value.length === 0) collect((value as () => unknown)());
+    else if (value && typeof value === "object") Object.values(value).forEach(collect);
+  };
+  collect(ko);
+  expect(strings.filter((text) => /워커|작업자/u.test(text))).toEqual([]);
+  expect(ko.interfaceStatus.work).toBe("Work");
+  expect(ko.interfaceStatus.task).toBe("Task");
+  expect(ko.inspector.tabs.workers).toBe("Worker");
+  expect(ko.interfaceStatus.workerCall).toBe("Worker 호출");
+  expect(ko.projectSignpost.work).toBe("Work");
+  expect(ko.projectSignpost.parentWork).toBe("상위 Work");
+  expect(ko.projectSignpost.tasks).toBe("하위 Task");
+  expect(ko.projectStatistics.labels.work).toBe("Work 변경");
+  expect(ko.settings.localModels.customOpenAiCompatible).toBe("Custom OpenAI 호환");
+});
+
 test("worked durations use locale units", () => {
   const en = getAppCopy("en-US").interfaceTemplates.workedDuration;
   const ko = getAppCopy("ko-KR").interfaceTemplates;
