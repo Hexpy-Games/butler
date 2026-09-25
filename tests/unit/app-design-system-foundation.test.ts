@@ -527,6 +527,7 @@ describe("single type scale", () => {
 describe("motion tokens", () => {
   test("define a three-step duration scale and shared easings", () => {
     const tokens = rootTokens();
+    expect(tokens.get("--motion-menu")).toBe("90ms");
     expect(tokens.get("--motion-fast")).toBe("120ms");
     expect(tokens.get("--motion-base")).toBe("160ms");
     expect(tokens.get("--motion-slow")).toBe("220ms");
@@ -551,6 +552,13 @@ describe("motion tokens", () => {
       "x.module.css",
       ".a { transition: opacity var(--motion-fast) ease, visibility 0s linear var(--motion-fast); animation: spin var(--spinner-duration) linear infinite; }",
     )).toEqual([]);
+  });
+
+  test("menus and selects open with the 90ms menu motion token", () => {
+    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
+      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
+      expect(css).toMatch(/animation: [\w-]+-open var\(--motion-menu\) ease-out;/u);
+    }
   });
 
   test("menu and select animations stop under reduced motion", () => {

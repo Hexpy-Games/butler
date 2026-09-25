@@ -12,7 +12,7 @@
 }
 
 .content[data-state="open"] {
-  animation: menu-open var(--motion-fast) ease-out;
+  animation: menu-open var(--motion-menu) ease-out;
   transform-origin: var(
     --radix-dropdown-menu-content-transform-origin,
     center top

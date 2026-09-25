@@ -33,8 +33,10 @@
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
-  /* Motion scale: fast for hover/press and menus, base for disclosure and
-     card motion, slow for panels and drawers. */
+  /* Motion scale: menu for dropdown/context/select entrance, fast for
+     hover/press and tooltips, base for disclosure and card motion, slow for
+     panels and drawers. */
+  --motion-menu: 90ms;
   --motion-fast: 120ms;
   --motion-base: 160ms;
   --motion-slow: 220ms;

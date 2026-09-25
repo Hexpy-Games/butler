@@ -91,7 +91,7 @@
 }
 
 .content[data-state="open"] {
-  animation: select-open var(--motion-fast) ease-out;
+  animation: select-open var(--motion-menu) ease-out;
   transform-origin: var(--radix-select-content-transform-origin, center top);
 }
 
