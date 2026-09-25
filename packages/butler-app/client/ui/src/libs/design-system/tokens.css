@@ -168,10 +168,12 @@
   /* Settings hierarchy ramp, tightest to widest (proximity): label to
      description, description to control, section header to first field,
      field to field, section to section. The section gap stays at least 1.5x
-     the field gap so each settings box reads as its own group. */
-  --settings-field-copy-gap: var(--space-xs);
-  --settings-field-control-gap: var(--space-sm);
-  --settings-section-header-gap: var(--space-md);
+     the field gap so each settings box reads as its own group. The copy gap
+     is the one half step (6px) between xs and sm: label and description read
+     as one block without touching. */
+  --settings-field-copy-gap: 6px;
+  --settings-field-control-gap: var(--space-md);
+  --settings-section-header-gap: var(--space-lg);
   --settings-field-gap: var(--space-xl);
   --settings-section-gap: var(--space-3xl);
   --settings-section-padding: var(--space-2xl);

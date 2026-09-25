@@ -51,9 +51,9 @@ test("settings sections sit clearly further apart than the fields inside them", 
 });
 
 test("the settings spacing ramp tightens from section to field to copy", () => {
-  expect(px("--settings-field-copy-gap")).toBe(4);
-  expect(px("--settings-field-control-gap")).toBe(8);
-  expect(px("--settings-section-header-gap")).toBe(12);
+  expect(px("--settings-field-copy-gap")).toBe(6);
+  expect(px("--settings-field-control-gap")).toBe(12);
+  expect(px("--settings-section-header-gap")).toBe(16);
   for (const media of [undefined, COMPACT]) {
     const ramp = [
       "--settings-field-copy-gap",
