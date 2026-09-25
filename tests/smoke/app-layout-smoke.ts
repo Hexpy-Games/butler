@@ -121,28 +121,31 @@ async function assertModelMenuExitStaysAnchored(page: Page): Promise<void> {
   await page.locator(testClass("model-button")).click();
   await page.locator(testClass("filtered-select-popover")).waitFor({ state: "visible" });
   await waitForMotionToSettle(page);
-  const sampling = page.evaluate(async () => {
+  const open = await page.evaluate(() => {
     const content = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
-    if (!content) return { open: null, frames: [] as Array<{ right: number; bottom: number }> };
-    const box = content.getBoundingClientRect();
+    if (!content) return null;
     const frames: Array<{ right: number; bottom: number }> = [];
-    await new Promise<void>((resolve) => {
-      const started = performance.now();
-      const tick = () => {
-        if (!content.isConnected || performance.now() - started > 600) return resolve();
-        if (content.dataset.state === "closed") {
-          const rect = content.getBoundingClientRect();
-          frames.push({ right: rect.right, bottom: rect.bottom });
-        }
-        requestAnimationFrame(tick);
-      };
+    (window as unknown as { __modelMenuExitFrames: typeof frames }).__modelMenuExitFrames = frames;
+    const tick = () => {
+      if (!content.isConnected) return;
+      if (content.dataset.state === "closed") {
+        const rect = content.getBoundingClientRect();
+        frames.push({ right: rect.right, bottom: rect.bottom });
+      }
       requestAnimationFrame(tick);
-    });
-    return { open: { right: box.right, bottom: box.bottom }, frames };
+    };
+    requestAnimationFrame(tick);
+    const box = content.getBoundingClientRect();
+    return { right: box.right, bottom: box.bottom };
   });
-  await clickConversationAwayFromMenus(page);
-  const { open, frames } = await sampling;
-  assert(open && frames.length > 0, "model menu exit should be sampled while closing");
+  // Outside the menu (the conversation center can sit under it).
+  const conversation = await page.locator(testClass("conversation")).boundingBox();
+  assert(conversation, "conversation area is missing");
+  await page.mouse.click(conversation.x + 24, conversation.y + 24);
+  await page.waitForTimeout(500);
+  const frames = await page.evaluate(() =>
+    (window as unknown as { __modelMenuExitFrames?: Array<{ right: number; bottom: number }> }).__modelMenuExitFrames ?? []);
+  assert(open && frames.length > 0, `model menu exit should be sampled while closing: ${JSON.stringify({ open, frames })}`);
   const drift = Math.max(...frames.map((frame) => Math.max(Math.abs(frame.right - open.right), Math.abs(frame.bottom - open.bottom))));
   assert(
     drift <= 24,
@@ -150,6 +153,10 @@ async function assertModelMenuExitStaysAnchored(page: Page): Promise<void> {
   );
   await page.waitForTimeout(300);
   await closeBlockingOverlays(page);
+  // The outside click folded the composer; expand it again for later steps.
+  const preview = page.locator('[data-slot="composer-compact-preview"]');
+  if (await preview.count()) await preview.first().click();
+  await page.locator(testClass("model-button")).waitFor({ state: "visible" });
 }
 
 async function clickConversationAwayFromMenus(page: Page): Promise<void> {

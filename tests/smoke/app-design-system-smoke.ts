@@ -224,7 +224,8 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
         Math.abs(groupHeaderRect!.right - groupChildRect!.right) <= 1,
       groupContentAnimated:
         Boolean(groupContentStyle) &&
-        groupContentStyle!.transitionProperty.includes("grid-template-rows"),
+        groupContentStyle!.transitionProperty.includes("height") &&
+        groupContentStyle!.getPropertyValue("interpolate-size") === "allow-keywords",
       groupHasNoChevron: !document.querySelector(
         '[data-ds-component="CollapsibleNavGroup"] [class*="chevron"]',
       ),
