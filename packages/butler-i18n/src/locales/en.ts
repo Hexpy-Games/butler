@@ -1516,6 +1516,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     empty: "No matches. Try another name or title.",
     failed: "Could not search. Check your connection and try again.",
     kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Automation", settings: "Settings" },
+    settingsSections: { general: "General", appearance: "Appearance", "server-bridge": "Server/Bridge", "models-access": "Models/Access", "privacy-data": "Privacy/Data", diagnostics: "Diagnostics", "system-events": "System events", archived: "Archived" },
   },
   feedback: {
     retry: "Try again",

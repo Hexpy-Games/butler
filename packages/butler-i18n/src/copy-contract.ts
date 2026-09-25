@@ -1310,6 +1310,8 @@ export interface AppCopy {
     empty: string;
     failed: string;
     kindLabels: Record<"chat" | "project" | "project_session" | "group" | "automation" | "settings", string>;
+    /** Keyed by the stable settings result id suffix (`settings:<key>`). */
+    settingsSections: Record<string, string>;
   };
   feedback: {
     retry: string;

@@ -17,7 +17,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
 import { useOrganization } from "@/app/space/organization";
-import { commandResultSubtitle } from "./commandPaletteLabels";
+import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
 
 export function CommandPalette({
   onClose,
@@ -85,7 +85,7 @@ export function CommandPalette({
       ) : undefined}
       items={results.map((result) => ({
         id: `${result.kind}-${result.id}`,
-        title: highlightMatch(result.title, query),
+        title: highlightMatch(commandResultTitle(result), query),
         subtitle: commandResultSubtitle(result),
         icon: <CommandIcon kind={result.kind} />,
         onSelect: () => {

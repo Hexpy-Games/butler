@@ -1547,6 +1547,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     empty: "일치하는 항목이 없습니다. 다른 이름이나 제목으로 검색해 보세요.",
     failed: "검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
     kindLabels: { chat: "대화", project: "프로젝트", project_session: "프로젝트 대화", group: "스페이스", automation: "자동화", settings: "설정" },
+    settingsSections: { general: "일반", appearance: "화면", "server-bridge": "서버 / 브리지", "models-access": "모델 / 접근 권한", "privacy-data": "개인정보 / 데이터", diagnostics: "진단", "system-events": "시스템 이벤트", archived: "아카이브" },
   },
   feedback: {
     retry: "다시 시도",
