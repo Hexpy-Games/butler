@@ -18,6 +18,7 @@ import { pendingAuthority, unexecutedAuthorityCall } from "./loop-continuation.t
 import { nextTurnAfterToolBatch, throwIfAgentLoopAborted } from "./agent-loop-round.ts";
 import { createAgentLoopModelRound } from "./agent-loop-model-round.ts";
 import { createFailureRepetitionTracker } from "./failure-repetition.ts";
+import { textToolCallFeedback, uniqueTextToolCallNames } from "./text-tool-call-feedback.ts";
 export async function runBtccAgentLoop(
   input: BtccAgentLoopInput,
 ): Promise<BtccAgentLoopOutput> {
@@ -158,27 +159,14 @@ export async function runBtccAgentLoop(
       });
       ({ text, calls } = appendAssistantResponse(messages, response));
     }
-    if (calls.length === 0 && response?.textToolCallNames?.length) {
-      const lastMessage = messages.at(-1);
-      if (lastMessage?.role === "assistant") messages.pop();
-    }
-    const textToolCallNames = [
-      ...(response?.textToolCallNames ?? []),
-    ].filter((name, index, names) => names.indexOf(name) === index);
-    if (textToolCallNames.length > 0 && input.onTextToolCalls) {
-      const disposition = await input.onTextToolCalls({
-        names: textToolCallNames,
-        toolCalls: calls,
-        text,
-        iteration: currentIteration,
+    const textToolCallNames = uniqueTextToolCallNames(response?.textToolCallNames);
+    if (textToolCallNames.length > 0 && (calls.length === 0 || input.onTextToolCalls)) {
+      // Keep what the model wrote; tell it nothing ran and how to call tools.
+      const disposition = await input.onTextToolCalls?.({
+        names: textToolCallNames, toolCalls: calls, text, iteration: currentIteration,
       });
-      if (disposition.status === "fail") {
-        if (disposition.error instanceof Error) throw disposition.error;
-        throw new Error(String(disposition.error ?? "btcc_text_tool_call_rejected"));
-      }
-      const observation = disposition.observation.trim();
-      if (!observation) throw new Error("btcc_text_tool_call_observation_missing");
-      continuationItems.push({ role: "user", content: observation });
+      continuationItems.push({ role: "user",
+        content: repetition.nudge("text_tool_call", textToolCallFeedback(textToolCallNames, disposition)) });
       continue;
     }
 

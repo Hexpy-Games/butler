@@ -1993,14 +1993,16 @@ test("registered local function tool prompts repair standalone pseudo tool calls
       rawArguments: "{\"query\":\"status source\"}",
     }]);
     expect(logs).toContain("local model wrote a tool call as visible text; requesting required structured tool-call repair");
-    expect(JSON.stringify(seenBodies[1]!.messages)).not.toContain("web_search(query=");
+    // The pseudo call stays in history so the model sees what it wrote; the
+    // repair observation (checked by the server above) says it was not executed.
+    expect(JSON.stringify(seenBodies[1]!.messages)).toContain("web_search(query=");
     expect(seenBodies).toHaveLength(4);
   } finally {
     localServer.stop(true);
   }
 });
 
-test("registered local function tool prompts fail closed when pseudo tool calls repeat", async () => {
+test("registered local function tool prompts keep feeding back repeated pseudo tool calls", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let executed = false;
   const localServer = Bun.serve({
@@ -2014,11 +2016,15 @@ test("registered local function tool prompts fail closed when pseudo tool calls 
       }
       const body = await request.json();
       seenBodies.push(body);
+      // The scripted model bounds itself; the runtime never terminates on repetition.
+      if (seenBodies.length > 6) throw new Error("scripted local model exceeded 6 rounds");
       return Response.json({
         choices: [{
           message: {
             role: "assistant",
-            content: "`web_search(query=\"status source\")`",
+            content: seenBodies.length < 3
+              ? "`web_search(query=\"status source\")`"
+              : finalEnvelope("I could not verify the current status."),
           },
         }],
       });
@@ -2027,7 +2033,7 @@ test("registered local function tool prompts fail closed when pseudo tool calls 
   writeLocalModelConfig(localServer.url.toString(), "gemma-repeated-pseudo-call");
 
   try {
-    await expect(runFunctionToolPromptText({
+    const result = await runFunctionToolPromptText({
       model: "local/gemma-repeated-pseudo-call",
       prompt: "find current status",
       tools: [{
@@ -2047,11 +2053,14 @@ test("registered local function tool prompts fail closed when pseudo tool calls 
         executed = true;
         return { ok: true };
       },
-    })).rejects.toThrow("structured tool-call channel");
+    });
 
+    expect(result).toContain("could not verify");
     expect(executed).toBe(false);
-    expect(seenBodies).toHaveLength(2);
     expect(seenBodies[1]?.tool_choice).toBe("required");
+    const repeatedFeedback = JSON.stringify(seenBodies[2]?.messages.at(-1));
+    expect(repeatedFeedback).toContain("not executed");
+    expect(repeatedFeedback).toContain("has been given 2 times");
   } finally {
     localServer.stop(true);
   }
