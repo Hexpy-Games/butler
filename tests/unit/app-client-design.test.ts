@@ -2951,7 +2951,9 @@ test("app client production component structure enforces boundary rules", () => 
 
   for (const file of componentFiles) {
     const content = read(file);
-    const lines = content.split("\n");
+    // Count lines like component-line-count-lint: a trailing newline ends the
+    // last line rather than starting a new one.
+    const lines = content.replace(/\n$/u, "").split("\n");
 
     // Check for >160 line production components
     if (lines.length > 160) {
