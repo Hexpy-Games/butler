@@ -78,5 +78,8 @@ test("Collapsible reveals height with interpolate-size and fades only under redu
   expect(css).toMatch(/@starting-style \{\s*\.collapsible\[data-enter="true"\]\[data-state="open"\] \{\s*height: 0;\s*opacity: 0;/u);
   expect(css).toMatch(/\.collapsible\[data-state="closed"\] \{[^}]*height: 0;[^}]*opacity: 0;[^}]*var\(--motion-exit-base\)/u);
   const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
-  expect(reduced).toMatch(/transition-property: opacity;/u);
+  // Reduced motion never animates height: it snaps, but only after the
+  // content has faded out, so closing still gives visible feedback.
+  expect(reduced).toMatch(/\.collapsible \{\s*transition:\s*height 0s,\s*opacity var\(--motion-fast\)/u);
+  expect(reduced).toMatch(/\.collapsible\[data-state="closed"\] \{\s*transition:\s*opacity var\(--motion-exit-base\) var\(--motion-ease-accelerate\),\s*height 0s var\(--motion-exit-base\);/u);
 });

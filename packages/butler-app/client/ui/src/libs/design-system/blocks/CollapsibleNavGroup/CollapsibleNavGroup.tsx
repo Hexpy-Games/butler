@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { NavRow } from "../NavRow";
 import { cn } from "../../lib/utils";
 import styles from "./CollapsibleNavGroup.module.css";
@@ -64,19 +65,16 @@ export function CollapsibleNavGroup({
         dataTestClass={dataTestClass}
         ariaExpanded={expanded}
       />
-      <div
-        className={cn(styles.content, !expanded && styles.collapsed)}
+      <Collapsible
+        open={expanded}
+        className={styles.content}
         data-test-class={contentDataTestClass}
-        data-state={expanded ? "open" : "closed"}
         data-sticky-clip={stickyDepth !== undefined ? "branch" : undefined}
-        aria-hidden={!expanded}
       >
-        <div className={styles.inner}>
-          <div className={cn(styles.items, indented && styles.indented)}>
-            {children}
-          </div>
+        <div className={cn(styles.items, indented && styles.indented)}>
+          {children}
         </div>
-      </div>
+      </Collapsible>
     </div>
   );
 }

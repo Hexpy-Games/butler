@@ -28,7 +28,8 @@ import { Collapsible } from "@/butler-ds";
 ## Best practice
 - Enter uses `--motion-base`/standard; collapse uses `--motion-exit-base` with
   accelerate. Content that starts open does not replay the reveal.
-- Reduced motion keeps the opacity fade; the height changes instantly.
+- Reduced motion never animates height: opening snaps open and fades in;
+  closing fades out first, then snaps shut, so the collapse stays visible.
 - Keep the toggle (`aria-expanded`, `aria-controls`) on the trigger.
 
 ## Wrong use cases

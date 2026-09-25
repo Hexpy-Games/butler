@@ -24,8 +24,19 @@
   transition-timing-function: var(--motion-ease-accelerate);
 }
 
+/* Reduced motion: height never animates. Opening snaps open and fades in;
+   closing fades out first and only then snaps shut, so the collapse still
+   reads as feedback instead of an instant jump. */
 @media (prefers-reduced-motion: reduce) {
   .collapsible {
-    transition-property: opacity;
+    transition:
+      height 0s,
+      opacity var(--motion-fast) var(--motion-ease-standard);
+  }
+
+  .collapsible[data-state="closed"] {
+    transition:
+      opacity var(--motion-exit-base) var(--motion-ease-accelerate),
+      height 0s var(--motion-exit-base);
   }
 }
