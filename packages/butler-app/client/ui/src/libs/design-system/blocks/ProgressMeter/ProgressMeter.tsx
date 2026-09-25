@@ -5,12 +5,15 @@ import { cn } from "../../lib/utils";
 import styles from "./ProgressMeter.module.css";
 
 export interface ProgressMeterProps {
-  label: ReactNode;
+  /** Visible label; omit only with `bare`. */
+  label?: ReactNode;
   value: number;
   meta?: ReactNode;
   ariaLabel?: string;
   tone?: "default" | "success" | "warning" | "danger";
   className?: string;
+  /** Track only (4px), no label row; name it with `ariaLabel`. */
+  bare?: boolean;
 }
 
 export function ProgressMeter({
@@ -20,8 +23,24 @@ export function ProgressMeter({
   ariaLabel,
   tone = "default",
   className,
+  bare = false,
 }: ProgressMeterProps) {
   const normalized = Math.max(0, Math.min(100, value));
+  const track = (
+    <div
+      className={styles.track}
+      role="progressbar"
+      aria-label={ariaLabel}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={normalized}
+    >
+      <span className={cn(styles.fill, styles[tone])} style={{ width: `${normalized}%` }} />
+    </div>
+  );
+  if (bare) {
+    return <div className={cn(styles.root, className)} data-bare="true">{track}</div>;
+  }
 
   return (
     <Stack gap="xs" className={cn(styles.root, className)}>
@@ -29,16 +48,7 @@ export function ProgressMeter({
         <Typo.Caption className={styles.label}>{label}</Typo.Caption>
         <Typo.Caption className={styles.meta}>{meta ?? `${normalized}%`}</Typo.Caption>
       </Stack>
-      <div
-        className={styles.track}
-        role="progressbar"
-        aria-label={ariaLabel}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={normalized}
-      >
-        <span className={cn(styles.fill, styles[tone])} style={{ width: `${normalized}%` }} />
-      </div>
+      {track}
     </Stack>
   );
 }

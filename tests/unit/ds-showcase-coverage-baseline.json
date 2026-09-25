@@ -45,7 +45,6 @@
     "blocks/OverflowActionMenu",
     "blocks/PanelHeader",
     "blocks/PercentInputControl",
-    "blocks/ProgressMeter",
     "blocks/ProgressStepper",
     "blocks/PromptSuggestionList",
     "blocks/ResourceSummary",
@@ -96,7 +95,6 @@
     "components/Spinner",
     "components/Switch",
     "components/Tabs",
-    "components/Tag",
     "components/Textarea",
     "components/TintedGlass",
     "components/Toast",
@@ -106,7 +104,6 @@
     "components/ColorSwatchInput",
     "components/RollingStatusLine",
     "components/RollingSwap",
-    "components/Tag",
     "components/Toast"
   ],
   "placeholderStories": []

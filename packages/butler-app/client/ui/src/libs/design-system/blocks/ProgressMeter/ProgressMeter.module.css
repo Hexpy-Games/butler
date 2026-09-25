@@ -33,3 +33,7 @@
 .danger {
   background: var(--color-danger);
 }
+
+.root[data-bare="true"] .track {
+  height: var(--space-xs);
+}

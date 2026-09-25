@@ -39,6 +39,7 @@ export * from "./components/Space";
 export * from "./components/Stack";
 export * from "./components/Inline";
 export * from "./components/Layout";
+export * from "./components/Box";
 export * from "./components/Typo";
 export * from "./components/Icons";
 export * from "./components/IconButton";
