@@ -1,23 +1,31 @@
 import type { ReactNode } from "react";
-import { Clickable } from "../../components/Clickable";
-import { MessageSquarePlus } from "../../components/Icons";
-import { cn } from "../../lib/utils";
-import { ListRow } from "../ListRow";
-import { RowActionCluster } from "../RowActionCluster";
+import { MessageSquare } from "../../components/Icons";
+import { Typo } from "../../components/Typo";
+import { NavRow } from "../NavRow";
 import styles from "./SessionRow.module.css";
 
 export interface SessionRowProps {
   title: string;
+  /** Second line (location, preview); switches the row to the two-line layout. */
   description?: string;
+  /** Short status or time, joined after the description on the second line. */
   meta?: string;
   active?: boolean;
+  /** Row actions (pin, menu); shown on hover like the sidebar. */
   actions?: ReactNode;
   card?: boolean;
   dataTestClass?: string;
   showIcon?: boolean;
+  /** Session glyph; defaults to the sidebar conversation glyph. */
+  icon?: ReactNode;
   onSelect?: () => void;
 }
 
+/**
+ * The sidebar session row as a block: NavRow with the session glyph, a
+ * truncated title and, when there is a second line, the flat-list layout
+ * (two-line title clamp plus a caption line) used by Recent and Running.
+ */
 export function SessionRow({
   title,
   description,
@@ -27,24 +35,25 @@ export function SessionRow({
   card = false,
   dataTestClass,
   showIcon = true,
+  icon,
   onSelect,
 }: SessionRowProps) {
-  return (
-    <Clickable
-      aria-current={active ? "page" : undefined}
-      className={cn(styles.row, active && styles.active, card && styles.card)}
-      data-test-class={dataTestClass}
+  const secondLine = [description, meta].filter(Boolean).join(" · ");
+  const row = (
+    <NavRow
+      dataTestClass={dataTestClass}
+      icon={showIcon ? (icon ?? <MessageSquare />) : undefined}
+      label={secondLine
+        ? <Typo.Text lineClamp={2} wrap="anywhere" title={title}>{title}</Typo.Text>
+        : <Typo.Text truncate title={title}>{title}</Typo.Text>}
+      multiline={Boolean(secondLine)}
+      meta={secondLine ? <Typo.Caption tone="secondary">{secondLine}</Typo.Caption> : undefined}
+      active={active}
+      ariaLabel={title}
+      actions={actions}
+      actionsVisibility="hover"
       onClick={onSelect}
-      role={onSelect ? "button" : undefined}
-      stretch
-    >
-      <ListRow
-        icon={showIcon ? <MessageSquarePlus size="md" /> : undefined}
-        title={title}
-        description={description}
-        meta={meta}
-      />
-      {actions ? <RowActionCluster>{actions}</RowActionCluster> : null}
-    </Clickable>
+    />
   );
+  return card ? <div className={styles.card}>{row}</div> : row;
 }

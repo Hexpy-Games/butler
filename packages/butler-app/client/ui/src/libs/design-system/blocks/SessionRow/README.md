@@ -10,7 +10,9 @@ Use it for recent chats, project sessions, and session search results.
 Use it in dashboards, sidebars, and command surfaces.
 
 ## Why to use this component
-It composes `ListRow` and row actions for consistent session lists.
+It is the sidebar session row (`NavRow` with the session glyph, a truncated
+title and hover actions). With a description or meta it switches to the flat
+Recent/Running layout: a two-line title clamp over a caption line.
 
 ## How to use this component
 Pass formatted title, description, metadata, and optional actions.
