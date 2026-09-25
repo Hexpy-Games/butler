@@ -2,14 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
-import { CopyButton } from "../../components/CopyButton";
 import { Spinner } from "../../components/Spinner";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { useEnteringKeys } from "../../lib/useEnteringKeys";
 import { MarkdownContent, useStreamingReveal } from "../MarkdownContent";
-import { MessageRowFixture } from "./MessageRow.fixtures";
-import { MessageFooter, MessageRow, MessageStatusLabel, MessageStatusRow } from "./MessageRow";
+import { AssistantFooterSample, MESSAGE_FOOTER_LABELS, MessageRowFixture, UserFooterSample } from "./MessageRow.fixtures";
+import { MessageRow, MessageStatusLabel, MessageStatusRow } from "./MessageRow";
 
 export const meta: ShowcaseMeta = {
   title: "MessageRow",
@@ -23,8 +22,7 @@ const labels = {
     send: "Send",
     question: "Summarize the motion system.",
     thinking: "Thinking",
-    copy: "Copy message",
-    copied: "Copied",
+    footer: MESSAGE_FOOTER_LABELS,
     answer: [
       "## Motion system",
       "",
@@ -41,8 +39,8 @@ const labels = {
     send: "보내기",
     question: "모션 시스템을 요약해 줘.",
     thinking: "생각하는 중",
-    copy: "메시지 복사",
-    copied: "복사됨",
+    footer: { copy: "메시지 복사", copied: "복사됨", branchChat: "새 대화로 분기",
+      branchProject: "프로젝트로 분기", completed: "응답 완료", workedFor: "9초 동안 작업" },
     answer: [
       "## 모션 시스템",
       "",
@@ -66,7 +64,11 @@ const CHUNK_INTERVAL_MS = 40;
 const CHUNK_SIZE = 4;
 const THINKING_MS = 900;
 
-type Turn = { id: string; role: "user" | "assistant"; text: string; streaming: boolean; thinking: boolean };
+type Turn = { id: string; role: "user" | "assistant"; text: string; streaming: boolean; thinking: boolean; time: string };
+
+function clockLabel(date: Date): string {
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
 
 /** `?ds-stream-reveal=off` renders the stream without the chunk fade (perf control run). */
 function streamRevealEnabled(): boolean {
@@ -94,12 +96,12 @@ function SendAndStream({ context }: { context: ShowcaseRenderContext }) {
     const assistantId = `assistant-${stamp}`;
     setTurns((current) => [
       ...current.slice(-2),
-      { id: `user-${stamp}`, role: "user", text: copy.question, streaming: false, thinking: false },
+      { id: `user-${stamp}`, role: "user", text: copy.question, streaming: false, thinking: false, time: clockLabel(new Date(stamp)) },
     ]);
     const schedule = (delay: number, run: () => void) => { timers.current.push(window.setTimeout(run, delay)); };
     schedule(160, () => setTurns((current) => [
       ...current,
-      { id: assistantId, role: "assistant", text: "", streaming: true, thinking: true },
+      { id: assistantId, role: "assistant", text: "", streaming: true, thinking: true, time: clockLabel(new Date(stamp)) },
     ]));
     const total = Math.ceil(copy.answer.length / CHUNK_SIZE);
     for (let index = 1; index <= total; index += 1) {
@@ -115,7 +117,12 @@ function SendAndStream({ context }: { context: ShowcaseRenderContext }) {
       <Button data-ds-motion="send" text={copy.send} onClick={send} />
       <div>
         {turns.map((turn) => turn.role === "user" ? (
-          <MessageRow key={turn.id} role="user" entering={entering.has(turn.id)}>
+          <MessageRow
+            key={turn.id}
+            role="user"
+            entering={entering.has(turn.id)}
+            footer={<UserFooterSample text={turn.text} time={turn.time} labels={copy.footer} />}
+          >
             {turn.text}
           </MessageRow>
         ) : (
@@ -130,9 +137,7 @@ function SendAndStream({ context }: { context: ShowcaseRenderContext }) {
               <StreamingMarkdown value={turn.text} streaming={turn.streaming} />
             )}
             {!turn.thinking && !turn.streaming ? (
-              <MessageFooter>
-                <CopyButton text={turn.text} label={copy.copy} copiedLabel={copy.copied} />
-              </MessageFooter>
+              <AssistantFooterSample text={turn.text} time={turn.time} labels={copy.footer} />
             ) : null}
           </MessageRow>
         ))}
