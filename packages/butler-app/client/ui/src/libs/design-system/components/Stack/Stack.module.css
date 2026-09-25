@@ -47,6 +47,35 @@
   gap: var(--space-2xl);
 }
 
+/* Row gap between wrapped lines; overrides the row part of gap. */
+.stack[data-row-gap="none"] {
+  row-gap: var(--space-none);
+}
+
+.stack[data-row-gap="xs"] {
+  row-gap: var(--space-xs);
+}
+
+.stack[data-row-gap="sm"] {
+  row-gap: var(--space-sm);
+}
+
+.stack[data-row-gap="md"] {
+  row-gap: var(--space-md);
+}
+
+.stack[data-row-gap="lg"] {
+  row-gap: var(--space-lg);
+}
+
+.stack[data-row-gap="xl"] {
+  row-gap: var(--space-xl);
+}
+
+.stack[data-row-gap="2xl"] {
+  row-gap: var(--space-2xl);
+}
+
 /* Main axis alignment */
 .justify-start {
   justify-content: flex-start;

@@ -18,7 +18,12 @@ import { Inline, Tag, Typo } from "@/butler-ds";
 <Inline gap="xs" wrap={false}><GitBranch size="xs" /><Typo.Caption truncate>{branch}</Typo.Caption></Inline>
 ```
 
-Inline accepts every Stack prop except `align`, including layout item props (`grow`, `basis`, `minWidth`).
+Inline accepts every Stack prop except `align`, including layout item props (`grow`, `basis`, `minWidth`)
+and `rowGap`, which spaces wrapped lines separately from `gap`:
+
+```tsx
+<Inline gap="lg" rowGap="sm">{counts}</Inline>
+```
 
 ## Best practice
 - Prefer Inline over a styled `div` with `display: flex; flex-wrap: wrap`.

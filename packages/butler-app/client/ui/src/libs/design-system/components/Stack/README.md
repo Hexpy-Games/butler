@@ -24,6 +24,8 @@ Prefer token-backed spacing and responsive composition. Validate the fixture in 
 ### Item props and Stack.Item
 
 `gap` takes named spacing only (`none`..`2xl`; the numeric aliases were removed).
+`rowGap` (same scale) sets the gap between wrapped lines separately, so a
+wrapping row can space items `lg` apart and wrapped lines `sm` apart.
 Stack accepts layout item props (`grow`, `shrink`, `basis`, `minWidth`,
 `alignSelf`) for its place in a parent Stack, and `Stack.Item` wraps any other
 child with them, so rows never need `style={{ flex: ... }}` or a wrapper class:

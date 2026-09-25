@@ -98,3 +98,18 @@ test("numeric gap aliases are gone from UI source", () => {
     expect(source).not.toMatch(/\|\s*"1"\s*\|\s*"2"/u);
   }
 });
+
+test("Stack and Inline take a separate rowGap on the named spacing scale", () => {
+  const inline = render(<Inline gap="lg" rowGap="sm">x</Inline>);
+  expect(inline.getAttribute("data-row-gap")).toBe("sm");
+  expect(render(<Inline gap="lg">x</Inline>).hasAttribute("data-row-gap")).toBe(false);
+  expect(render(<Stack rowGap="xs">x</Stack>).getAttribute("data-row-gap")).toBe("xs");
+  const stackCss = readFileSync(new URL("../Stack/Stack.module.css", import.meta.url), "utf8");
+  for (const step of ["none", "xs", "sm", "md", "lg", "xl", "2xl"]) {
+    const escaped = `.stack[data-row-gap="${step}"]`.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, "u").exec(stackCss);
+    expect(match?.[1], step).toContain(`row-gap: var(--space-${step})`);
+  }
+  // Row gaps are declared after the gap shorthand so they win at equal specificity.
+  expect(stackCss.indexOf("[data-row-gap=")).toBeGreaterThan(stackCss.indexOf(".gap-2xl"));
+});

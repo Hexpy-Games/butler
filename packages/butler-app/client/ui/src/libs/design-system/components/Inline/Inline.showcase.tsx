@@ -48,6 +48,15 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    name: "Separate row gap",
+    widths: ["320", "375"],
+    render: (context) => (
+      <Inline gap="lg" rowGap="sm">
+        {text(context).chips.map((chip) => <Typo.Body key={chip}>{chip}</Typo.Body>)}
+      </Inline>
+    ),
+  },
+  {
     name: "No wrap",
     widths: ["320", "375"],
     render: (context) => (

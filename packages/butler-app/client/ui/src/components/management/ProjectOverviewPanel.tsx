@@ -18,7 +18,7 @@ export function ProjectOverviewPanel({ overview, projectId, onSelect, onShowAll,
   }
   return <Stack gap="xl" data-test-class="project-overview-facts">
     <Stack gap="xs">
-      <Inline gap="lg" cross="stretch">
+      <Inline gap="lg" rowGap="sm" cross="stretch">
         <Typo.Body>{copy.completed} {overview.progress.completed}</Typo.Body>
         <Typo.Body>{copy.open} {overview.progress.open}</Typo.Body>
         <Typo.Body>{copy.blocked} {overview.progress.blocked}</Typo.Body>
