@@ -108,7 +108,7 @@ export function WorkersPanel({
   return (
     <InspectorPanel
       title={appCopy.inspector.tabs.workers}
-      icon={<Activity size={15} />}
+      icon={<Activity size="md" />}
     >
       {workers.length > 0 ? (
         <WorkerActivityPanel items={items} />

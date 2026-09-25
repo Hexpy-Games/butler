@@ -11,9 +11,9 @@ export function NavSectionFixture() {
         <IconButton label="New project"><Plus size="sm" /></IconButton>
       }
     >
-      <NavRow icon={<Folder size={17} />} label="Project Alpha" />
-      <NavRow icon={<Folder size={17} />} label="Project Beta" active />
-      <NavRow icon={<Folder size={17} />} label="Project Gamma" />
+      <NavRow icon={<Folder size="md" />} label="Project Alpha" />
+      <NavRow icon={<Folder size="md" />} label="Project Beta" active />
+      <NavRow icon={<Folder size="md" />} label="Project Gamma" />
     </NavSection>
   );
 }

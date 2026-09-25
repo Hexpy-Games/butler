@@ -38,7 +38,7 @@ export function ComposerProjectDocumentMenu({
       <PopoverTrigger asChild>
         <OptionMenuItem
           disabled={!projectId}
-          icon={<FileText size={15} />}
+          icon={<FileText size="md" />}
           label={appCopy.interfaceDetails.projectDocuments}
           description={<ChevronRight size="sm" />}
         />

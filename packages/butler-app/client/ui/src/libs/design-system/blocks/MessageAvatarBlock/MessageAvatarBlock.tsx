@@ -23,7 +23,7 @@ export function MessageAvatarBlock({
       data-role={role}
       {...props}
     >
-      {children ?? (role === "user" ? <UserRound size={15} /> : <Bot size={15} />)}
+      {children ?? (role === "user" ? <UserRound size="md" /> : <Bot size="md" />)}
     </span>
   );
 }

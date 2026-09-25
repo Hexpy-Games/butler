@@ -73,7 +73,7 @@ export function ComposerAttachmentMenu() {
               />
             ) : null}
             <OptionMenuItem
-              icon={<Paperclip size={15} />}
+              icon={<Paperclip size="md" />}
               label={appCopy.composer.attachFile}
               onClick={() => {
                 openAttachmentPicker();
@@ -83,7 +83,7 @@ export function ComposerAttachmentMenu() {
           </OptionMenuSection>
           <OptionMenuSection title={appCopy.composer.responseMode}>
             <OptionMenuItem
-              icon={<MessageSquarePlus size={15} />}
+              icon={<MessageSquarePlus size="md" />}
               label={appCopy.composer.normal}
               selected={!planMode}
               onClick={() => {
@@ -93,7 +93,7 @@ export function ComposerAttachmentMenu() {
             />
             {projectId ? (
               <OptionMenuItem
-                icon={<ListChecks size={15} />}
+                icon={<ListChecks size="md" />}
                 label={appCopy.composer.plan}
                 selected={planMode}
                 onClick={() => {

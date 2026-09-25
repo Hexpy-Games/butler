@@ -453,10 +453,10 @@ test("dedicated client keeps complete work history and session management contro
     "effectiveCollapsed ? <Folder /> : <FolderOpen />",
   );
   expect(sidebarProjectsMenu).toContain("projectsCollapsed");
-  expect(sidebarProjectsMenu).toContain("<Expand size={15} />");
-  expect(sidebarProjectsMenu).toContain("<Collapse size={15} />");
+  expect(sidebarProjectsMenu).toContain('<Expand size="md" />');
+  expect(sidebarProjectsMenu).toContain('<Collapse size="md" />');
   expect(sidebarChatsSection).toContain(
-    "chatsCollapsed ? <Expand size={15} />",
+    'chatsCollapsed ? <Expand size="md" />',
   );
   expect(useSidebarProjectCollapse).toContain("Set<string>");
   expect(sidebarProjectsSection).toContain("collapsedProjectIds");
@@ -478,7 +478,7 @@ test("dedicated client keeps complete work history and session management contro
   ).toContain("rightOpen ? (");
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Titlebar.tsx"),
-  ).toContain("<PanelRightClose size={17} />");
+  ).toContain('<PanelRightClose size="md" />');
   expect(
     read("packages/butler-app/client/ui/src/components/layout/Titlebar.tsx"),
   ).toContain('data-test-class="titlebar-right-panel-toggle"');

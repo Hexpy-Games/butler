@@ -7,23 +7,23 @@ export function NavRowFixture() {
   return (
     <Stack gap="2" style={{ width: "100%" }}>
       <NavRow
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="Project Alpha"
         onClick={() => undefined}
       />
       <NavRow
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="Active Project"
         active
         onClick={() => undefined}
       />
       <NavRow
-        icon={<Settings size={17} />}
+        icon={<Settings size="md" />}
         label="Settings with a very long navigation label that should truncate before it reaches the control region"
         badge="3"
       />
       <NavRow
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="With action"
         onClick={() => undefined}
         actions={
@@ -33,10 +33,10 @@ export function NavRowFixture() {
         }
         actionsVisibility="hover"
       />
-      <NavRow icon={<Folder size={17} />} label="Disabled state" disabled />
+      <NavRow icon={<Folder size="md" />} label="Disabled state" disabled />
       <NavRow
         multiline
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="Recent conversation"
         meta={<span>Project / conversation context · 3 minutes ago</span>}
         actions={<IconButton label="Add"><Plus size="sm" /></IconButton>}
@@ -44,7 +44,7 @@ export function NavRowFixture() {
       />
       <NavRow
         multiline
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label={
           <>
             Multi-line navigation title

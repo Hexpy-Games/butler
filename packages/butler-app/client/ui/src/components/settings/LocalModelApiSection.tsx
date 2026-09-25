@@ -54,7 +54,7 @@ export function LocalModelApiSection({
           disabled={!canDiscover}
           onClick={onDiscover}
         >
-          <RefreshCcw size={15} />{" "}
+          <RefreshCcw size="md" />{" "}
           {discovering ? copy.discovering : copy.discoverModels}
         </Button>
       </Stack>

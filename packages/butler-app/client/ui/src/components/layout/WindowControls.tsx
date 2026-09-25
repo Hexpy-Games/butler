@@ -19,7 +19,7 @@ export function WindowControls() {
         label={appCopy.titlebar.minimizeWindow}
         onClick={() => void minimizeNativeWindow()}
       >
-        <Minus size={15} />
+        <Minus size="md" />
       </IconButton>
       <IconButton
         data-test-class="app-window-maximize"
@@ -33,7 +33,7 @@ export function WindowControls() {
         label={appCopy.titlebar.closeWindow}
         onClick={() => void closeNativeWindow()}
       >
-        <X size={15} />
+        <X size="md" />
       </IconButton>
     </ButtonContainer>
   );

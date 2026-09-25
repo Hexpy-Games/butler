@@ -17,6 +17,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { CommandPaletteResult } from "@/app/types.ts";
 import { useOrganization } from "@/app/space/organization";
+import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
 
 export function CommandPalette({
   onClose,
@@ -84,8 +85,8 @@ export function CommandPalette({
       ) : undefined}
       items={results.map((result) => ({
         id: `${result.kind}-${result.id}`,
-        title: highlightMatch(result.title, query),
-        subtitle: result.subtitle,
+        title: highlightMatch(commandResultTitle(result), query),
+        subtitle: commandResultSubtitle(result),
         icon: <CommandIcon kind={result.kind} />,
         onSelect: () => {
           if (result.kind === "group") { useOrganization.getState().reveal(`g:${result.id}`); close(); }
@@ -98,12 +99,12 @@ export function CommandPalette({
 
 function CommandIcon({ kind }: { kind: CommandPaletteResult["kind"] }) {
   useAppLocale();
-  if (kind === "automation") return <Clock3 size={17} />;
-  if (kind === "project") return <Briefcase size={17} />;
-  if (kind === "project_session") return <Notebook size={17} />;
-  if (kind === "group") return <Folder size={17} />;
-  if (kind === "settings") return <Settings size={17} />;
-  return <PencilLine size={17} />;
+  if (kind === "automation") return <Clock3 size="md" />;
+  if (kind === "project") return <Briefcase size="md" />;
+  if (kind === "project_session") return <Notebook size="md" />;
+  if (kind === "group") return <Folder size="md" />;
+  if (kind === "settings") return <Settings size="md" />;
+  return <PencilLine size="md" />;
 }
 
 function highlightMatch(title: string, query: string): ReactNode {

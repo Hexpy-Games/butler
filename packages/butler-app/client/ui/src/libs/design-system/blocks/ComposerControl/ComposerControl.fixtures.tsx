@@ -7,8 +7,8 @@ export function ComposerControlFixture() {
   return (
     <div className={styles.fixture}>
       <Stack align="row" gap="sm" wrap>
-        <ComposerControl icon={<Search size={15} />} label="Ask" detail="workspace" active />
-        <ComposerControl icon={<SlidersHorizontal size={15} />} label="Reasoning" detail="medium" />
+        <ComposerControl icon={<Search size="md" />} label="Ask" detail="workspace" active />
+        <ComposerControl icon={<SlidersHorizontal size="md" />} label="Reasoning" detail="medium" />
         <ComposerControl icon={<ShieldCheck size="md" />} label="Full access" compact="icon" />
       </Stack>
     </div>

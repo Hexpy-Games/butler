@@ -12,24 +12,24 @@ export function CollapsibleNavGroupFixture() {
     <Stack gap="2" style={{ width: "100%" }}>
       <CollapsibleNavGroup
         indented
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="Interactive Group"
         expanded={expanded}
         onToggle={() => setExpanded((value) => !value)}
       >
-        <NavRow icon={<FileText size={17} />} label="Item 1" />
-        <NavRow icon={<FileText size={17} />} label="Item 2" active />
-        <NavRow icon={<FileText size={17} />} label="Item 3" />
+        <NavRow icon={<FileText size="md" />} label="Item 1" />
+        <NavRow icon={<FileText size="md" />} label="Item 2" active />
+        <NavRow icon={<FileText size="md" />} label="Item 3" />
       </CollapsibleNavGroup>
 
       <CollapsibleNavGroup
-        icon={<Folder size={17} />}
+        icon={<Folder size="md" />}
         label="Collapsed Group"
         expanded={collapsedExpanded}
         onToggle={() => setCollapsedExpanded((value) => !value)}
       >
-        <NavRow icon={<FileText size={17} />} label="Hidden 1" />
-        <NavRow icon={<FileText size={17} />} label="Hidden 2" />
+        <NavRow icon={<FileText size="md" />} label="Hidden 1" />
+        <NavRow icon={<FileText size="md" />} label="Hidden 2" />
       </CollapsibleNavGroup>
     </Stack>
   );

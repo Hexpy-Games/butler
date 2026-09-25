@@ -39,7 +39,7 @@ export function SessionRow({
       stretch
     >
       <ListRow
-        icon={showIcon ? <MessageSquarePlus size={15} /> : undefined}
+        icon={showIcon ? <MessageSquarePlus size="md" /> : undefined}
         title={title}
         description={description}
         meta={meta}

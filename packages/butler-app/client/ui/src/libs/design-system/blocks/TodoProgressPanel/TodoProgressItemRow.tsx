@@ -48,12 +48,12 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
 );
 
 function itemIcon(state: TodoProgressPanelItemState) {
-  if (state === "completed") return <CheckCircle2 size={15} />;
-  if (state === "blocked") return <CircleAlert size={15} />;
-  if (state === "skipped") return <Minus size={15} />;
+  if (state === "completed") return <CheckCircle2 size="md" />;
+  if (state === "blocked") return <CircleAlert size="md" />;
+  if (state === "skipped") return <Minus size="md" />;
   if (state === "correction-required" || state === "stopped")
-    return <CircleX size={15} />;
+    return <CircleX size="md" />;
   if (state === "running" || state === "reviewing")
-    return <Spinner size={15} />;
-  return <Circle size={15} />;
+    return <Spinner />;
+  return <Circle size="md" />;
 }

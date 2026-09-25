@@ -94,7 +94,7 @@ export function McpSecretRows({
             >
               {appCopy.interfaceDetails.applyAllSources}</Button>
             <Button type="button" size="xs" variant="outline" onClick={addRow}>
-              <Plus size={13} />
+              <Plus size="sm" />
               {addLabel}
             </Button>
           </ButtonContainer>

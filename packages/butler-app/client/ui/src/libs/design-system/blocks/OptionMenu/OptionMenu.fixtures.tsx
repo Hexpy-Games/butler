@@ -9,12 +9,12 @@ export function OptionMenuFixture() {
       <OptionMenuSection title="Model">
         <OptionMenuItem
           selected
-          icon={<Bot size={15} />}
+          icon={<Bot size="md" />}
           label="GPT-5.5"
           description="OpenAI / 1.05M API context"
         />
         <OptionMenuItem
-          icon={<Sparkles size={15} />}
+          icon={<Sparkles size="md" />}
           label="Gemma 4 31B it"
           description="Local / 16k API context"
         />
@@ -26,21 +26,21 @@ export function OptionMenuFixture() {
       </OptionMenuSection>
       <Separator line />
       <OptionMenuItem
-        icon={<ShieldCheck size={15} />}
+        icon={<ShieldCheck size="md" />}
         tone="warning"
         label="Full access"
         description="Read, write, and run commands"
         descriptionPlacement="block"
       />
       <OptionMenuItem
-        icon={<ShieldQuestion size={15} />}
+        icon={<ShieldQuestion size="md" />}
         tone="accent"
         label="Ask first"
         description="Approval before edits"
         descriptionPlacement="block"
       />
       <OptionMenuItem
-        icon={<Eye size={15} />}
+        icon={<Eye size="md" />}
         label="Read only"
         description="Read files only"
         descriptionPlacement="block"

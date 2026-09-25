@@ -19,7 +19,7 @@ export function SpaceActivity({ session, overlay = true }: { session?: SessionSu
       }
     >
       {activity === "working" ? (
-        <Spinner size={15} />
+        <Spinner />
       ) : (
         <CircleAlert />
       )}

@@ -83,7 +83,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
     "기본 모델과 연결 방식을 설정하세요.",
   );
   expect(rendered.container.querySelector("select")).toBeNull();
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   expect(
     rendered.container.querySelector('[data-test-class="settings-model-route-nav"]'),
@@ -358,7 +358,7 @@ test("first-run model setup waits for a newly added model before completion", as
     { settings: { ...EMPTY_SETTINGS, model: "missing/model" } },
   );
 
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   await addHostedModelAndFinish(rendered);
   expect(rendered.settingsPatches.some((patch) =>
@@ -519,7 +519,7 @@ test("first-run model setup retries default-save failure after adding a model", 
     },
   );
 
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   await clickButton(rendered.container, "추가");
   await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
   expect(rendered.calls).toContain("registerHostedModel");
@@ -839,7 +839,7 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
 async function addHostedModelAndFinish(
   rendered: RenderedFirstRun,
 ): Promise<void> {
-  await waitForText(rendered.container, "API key");
+  await waitForText(rendered.container, "API 키");
   await clickButton(rendered.container, "추가");
   expect(rendered.calls).toContain("registerHostedModel");
   await waitForCompletion(rendered);

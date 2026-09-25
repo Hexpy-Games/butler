@@ -41,7 +41,7 @@ export function ServerSettings() {
             variant="outline"
             onClick={() => chooseDefaultProjectFolder(setSettings)}
           >
-            <FolderPlus size={15} /> {settingsCopy.actions.chooseFolder}
+            <FolderPlus size="md" /> {settingsCopy.actions.chooseFolder}
           </Button>
         </Stack>
       </Field>

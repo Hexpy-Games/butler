@@ -70,7 +70,7 @@ export function SettingsSidebar({
         <NavRow
           ariaLabel={backLabel}
           className="settings-back-button no-drag"
-          icon={<ArrowLeft size={18} />}
+          icon={<ArrowLeft size="lg" />}
           label={backLabel}
           onClick={onClose}
         />

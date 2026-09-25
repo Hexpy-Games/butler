@@ -24,7 +24,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 /** Icon size scale; mirrors --icon-size-sm/md/lg in tokens.css. */
-export const ICON_SIZE = { sm: 14, md: 16, lg: 20 } as const;
+export const ICON_SIZE = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32 } as const;
 export type IconSize = keyof typeof ICON_SIZE;
 
 // Icon component props extending Hugeicons with simplified API
@@ -34,7 +34,7 @@ export interface IconProps extends Omit<HugeiconsIconProps, "icon" | "size"> {
 
 // Helper to create icon component
 function createIcon(icon: IconSvgElement) {
-  return ({ size = 15, ...props }: IconProps) => (
+  return ({ size = "md", ...props }: IconProps) => (
     <HugeiconsIcon
       icon={icon}
       size={typeof size === "string" ? ICON_SIZE[size] : size}

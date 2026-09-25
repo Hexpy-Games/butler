@@ -558,6 +558,7 @@ describe("single type scale", () => {
 describe("motion tokens", () => {
   test("define a three-step duration scale and shared easings", () => {
     const tokens = rootTokens();
+    expect(tokens.get("--motion-menu")).toBe("90ms");
     expect(tokens.get("--motion-fast")).toBe("120ms");
     expect(tokens.get("--motion-base")).toBe("160ms");
     expect(tokens.get("--motion-slow")).toBe("220ms");
@@ -584,6 +585,13 @@ describe("motion tokens", () => {
     )).toEqual([]);
   });
 
+  test("menus and selects open with the 90ms menu motion token", () => {
+    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
+      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
+      expect(css).toMatch(/animation: [\w-]+-open var\(--motion-menu\) ease-out;/u);
+    }
+  });
+
   test("menu and select animations stop under reduced motion", () => {
     for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
       const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
@@ -594,26 +602,56 @@ describe("motion tokens", () => {
   });
 });
 
+describe("Korean typography", () => {
+  test("Korean text keeps words whole with an overflow-wrap safety net", () => {
+    const tokens = read(`${uiSrc}/libs/design-system/tokens.css`);
+    expect(tokens).toMatch(
+      /:root:lang\(ko\) \{\s*word-break: keep-all;\s*overflow-wrap: break-word;\s*\}/u,
+    );
+  });
+});
+
 describe("icon size tokens", () => {
-  test("tokens define the 14/16/20 icon scale", () => {
+  test("tokens define the 12/14/16/20/24/32 icon scale", () => {
     const tokens = rootTokens();
+    expect(tokens.get("--icon-size-xs")).toBe("12px");
     expect(tokens.get("--icon-size-sm")).toBe("14px");
     expect(tokens.get("--icon-size-md")).toBe("16px");
     expect(tokens.get("--icon-size-lg")).toBe("20px");
+    expect(tokens.get("--icon-size-xl")).toBe("24px");
+    expect(tokens.get("--icon-size-2xl")).toBe("32px");
   });
 
-  test("DS icons use named sizes instead of literal token-scale sizes", () => {
+  test("DS icons use named sizes instead of literal 11-32px sizes", () => {
     const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
     const names = [...icons.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]);
     const offenders = walkUiSources(uiSrc)
       .filter((path) => path.endsWith(".tsx") && !path.endsWith(".test.tsx"))
       .flatMap((path) => {
         const text = read(path);
-        return [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(14|16|20)\}/gsu)]
+        const props = [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(1[1-8]|2[0-4]|32)\}/gsu)]
           .filter((match) => names.includes(match[1]))
           .map((match) => `${path}: <${match[1]} size={${match[3]}}>`);
+        const clones = [...text.matchAll(/cloneElement\([^)]*\{\s*size:\s*(1[1-8]|2[0-4]|32)\b/gsu)]
+          .map((match) => `${path}: cloneElement size ${match[1]}`);
+        return [...props, ...clones];
       });
     expect(offenders).toEqual([]);
+  });
+
+  test("icon defaults and CSS icon fallbacks use the md token", () => {
+    const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
+    expect(icons).toContain('size = "md"');
+    expect(icons).not.toMatch(/size = 1[3-8]\b/u);
+    for (const file of [
+      "blocks/NavRow/NavRow.module.css",
+      "blocks/TitlebarShell/TitlebarShell.module.css",
+      "components/Clickable/Clickable.module.css",
+    ]) {
+      const css = read(`${uiSrc}/libs/design-system/${file}`);
+      expect(css).not.toMatch(/icon-size, (min\()?1[3-8]px/u);
+      expect(css).toContain("var(--icon-size-md)");
+    }
   });
 });
 

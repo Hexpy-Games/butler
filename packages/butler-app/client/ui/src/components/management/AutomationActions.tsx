@@ -51,7 +51,7 @@ export function AutomationActions({
           onClick={onBack}
           aria-label={copy.backLabel}
         >
-          <ArrowLeft size={15} />
+          <ArrowLeft size="md" />
         </Button>
         <Breadcrumb>
           <BreadcrumbList>
@@ -75,24 +75,24 @@ export function AutomationActions({
         {!isNew && (
           <>
             <Button type="button" variant="outline" onClick={onRun}>
-              <Play size={15} /> {copy.runNow}
+              <Play size="md" /> {copy.runNow}
             </Button>
             {state === "paused" ? (
               <Button type="button" variant="outline" onClick={onResume}>
-                <RotateCcw size={15} /> {copy.resume}
+                <RotateCcw size="md" /> {copy.resume}
               </Button>
             ) : (
               <Button type="button" variant="outline" onClick={onPause}>
-                <Clock3 size={15} /> {copy.pause}
+                <Clock3 size="md" /> {copy.pause}
               </Button>
             )}
             <Button type="button" variant="destructive" onClick={onDelete}>
-              <Trash2 size={15} /> {appCopy.common.delete}
+              <Trash2 size="md" /> {appCopy.common.delete}
             </Button>
           </>
         )}
         <Button type="submit" disabled={saving}>
-          <Save size={15} /> {appCopy.common.save}
+          <Save size="md" /> {appCopy.common.save}
         </Button>
       </ButtonContainer>
     </Stack>

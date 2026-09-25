@@ -17,7 +17,7 @@ export function ComposerAdjunctPanelFixture() {
       adjunct={
         <ComposerAdjunctPanel
           heading="Attached panel"
-          icon={<ListChecks size={15} />}
+          icon={<ListChecks size="md" />}
         >
           <span>Panel content follows the same composer inset rhythm.</span>
         </ComposerAdjunctPanel>

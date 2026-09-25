@@ -18,7 +18,7 @@ export function ComposerPlanInstructionContext({
         onClick={decision.onShowDecision}
         type="button"
       >
-        <FileText aria-hidden="true" size={13} />
+        <FileText aria-hidden="true" size="sm" />
         <span className={styles.title}>{decision.planTitle}</span>
         <Typo.Caption className={styles.status}>
           {appCopy.composer.planInstructionActive}

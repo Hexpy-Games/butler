@@ -67,7 +67,7 @@ export function LocalModelInfoSection({
           setManualContext={setManualContext}
         />
         <Button type="button" disabled={!canRegister} onClick={onRegister}>
-          <Save size={15} />{" "}
+          <Save size="md" />{" "}
           {registering
             ? copy.saving
             : isEditing

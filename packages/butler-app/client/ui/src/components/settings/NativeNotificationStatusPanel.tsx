@@ -96,7 +96,7 @@ export function NativeNotificationStatusPanel() {
             disabled={busy}
             onClick={() => void runTestNotification()}
           >
-            <ShieldQuestion size={15} />
+            <ShieldQuestion size="md" />
             {appCopy.interfaceStatus.test}</Button>
           {status?.can_open_settings ? (
             <Button
@@ -106,7 +106,7 @@ export function NativeNotificationStatusPanel() {
               disabled={busy}
               onClick={() => void openSystemSettings()}
             >
-              <Settings size={15} />
+              <Settings size="md" />
               {nativeNotificationSettingsLabel(status.settings_target ?? null) ?? copy.settings.fallback}
             </Button>
           ) : null}

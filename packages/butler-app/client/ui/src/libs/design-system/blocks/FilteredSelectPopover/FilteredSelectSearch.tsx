@@ -36,7 +36,7 @@ export function FilteredSelectSearch({
             data-test-class="filtered-select-clear"
             onClick={() => onChange("")}
           >
-            <X size={13} />
+            <X size="sm" />
           </button>
         ) : null}
       </span>

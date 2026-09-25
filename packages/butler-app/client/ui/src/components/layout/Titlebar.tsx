@@ -136,9 +136,9 @@ export function Titlebar() {
               onClick={() => setRightOpen((value) => !value)}
             >
               {rightOpen ? (
-                <PanelRightClose size={17} />
+                <PanelRightClose size="md" />
               ) : (
-                <PanelRight size={17} />
+                <PanelRight size="md" />
               )}
             </IconButton>
           )}

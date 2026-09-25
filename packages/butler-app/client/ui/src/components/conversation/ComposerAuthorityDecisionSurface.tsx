@@ -11,7 +11,7 @@ import styles from "./ComposerAuthorityDecisionSurface.module.css";
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
   return <ComposerDecisionSurface
-    icon={<ShieldCheck aria-hidden="true" size={18} />}
+    icon={<ShieldCheck aria-hidden="true" size="lg" />}
     title={decision.title}
     onOpen={decision.onOpenSource}
     error={decision.error}

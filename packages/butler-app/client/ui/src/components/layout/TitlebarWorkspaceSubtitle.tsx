@@ -35,7 +35,7 @@ export function TitlebarWorkspaceSubtitle({
           data-test-class="titlebar-workspace"
           title={workspaceLabel}
         >
-          <GitBranch size={12} aria-hidden="true" />
+          <GitBranch size="xs" aria-hidden="true" />
           <span className={styles.worktreeLabel}>{workspaceLabel}</span>
         </span>
       ) : null}

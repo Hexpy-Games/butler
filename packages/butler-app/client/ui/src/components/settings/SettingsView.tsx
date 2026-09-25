@@ -117,7 +117,7 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
           label={settingsCopy.back}
           onClick={() => setCompactPane("master")}
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size="lg" />
         </IconButton>
       }
       sidebar={

@@ -36,7 +36,8 @@
 
 .meta[data-has-icon] {
   padding-inline-start: calc(
-    var(--sidebar-icon-size, 17px) + var(--sidebar-row-gap, var(--space-sm))
+    var(--sidebar-icon-size, var(--icon-size-md)) +
+      var(--sidebar-row-gap, var(--space-sm))
   );
 }
 
@@ -107,8 +108,8 @@
 }
 
 .icon svg {
-  width: var(--sidebar-icon-size, 17px);
-  height: var(--sidebar-icon-size, 17px);
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
 }
 
 .label {

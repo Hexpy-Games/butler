@@ -7,9 +7,9 @@ export function TabsFixture() {
   return (
     <Tabs defaultValue="summary" data-ds-fixture="tabs">
       <TabsList stretch aria-label="Inspector sections">
-        <TabsTrigger value="summary"><Command size={15} />Summary</TabsTrigger>
-        <TabsTrigger value="files"><FileText size={15} />Files</TabsTrigger>
-        <TabsTrigger value="workers"><Blocks size={15} />Workers</TabsTrigger>
+        <TabsTrigger value="summary"><Command size="md" />Summary</TabsTrigger>
+        <TabsTrigger value="files"><FileText size="md" />Files</TabsTrigger>
+        <TabsTrigger value="workers"><Blocks size="md" />Workers</TabsTrigger>
       </TabsList>
       <TabsContent value="summary">
         <Stack gap="1">

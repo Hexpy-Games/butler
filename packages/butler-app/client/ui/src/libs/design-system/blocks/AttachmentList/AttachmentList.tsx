@@ -93,7 +93,7 @@ export function AttachmentList({
               type="button"
               onClick={() => onRemove(item.id)}
             >
-              <X size={13} />
+              <X size="sm" />
             </Button>
           ) : null}
           {item.meta ? (

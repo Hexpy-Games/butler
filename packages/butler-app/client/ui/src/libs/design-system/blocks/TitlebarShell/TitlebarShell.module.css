@@ -92,8 +92,8 @@
 }
 
 .trailing button svg {
-  width: var(--titlebar-action-icon-size, 17px);
-  height: var(--titlebar-action-icon-size, 17px);
+  width: var(--titlebar-action-icon-size, var(--icon-size-md));
+  height: var(--titlebar-action-icon-size, var(--icon-size-md));
 }
 
 .windowControls {

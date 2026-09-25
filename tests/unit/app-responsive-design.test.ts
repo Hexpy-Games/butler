@@ -153,8 +153,19 @@ describe("responsive adaptive design contracts", () => {
     expect(shell).toContain('&[data-left-open="true"] .workspace');
     expect(tokens).toContain("--sidebar-row-height: 48px");
     expect(tokens).toContain("--sidebar-icon-size: 22px");
-    expect(navRow).toContain("var(--sidebar-icon-size, 17px)");
+    expect(navRow).toContain("var(--sidebar-icon-size, var(--icon-size-md))");
     expect(navRow).toContain("font-size: var(--font-size-4)");
+  });
+
+  test("narrows the medium-width workspace beside an open drawer instead of clipping it", () => {
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const mediumStart = shell.indexOf("@media (width > 640px)");
+    expect(mediumStart).toBeGreaterThan(-1);
+    const medium = shell.slice(mediumStart, shell.indexOf("\n}\n", mediumStart));
+    expect(medium).toContain('.root[data-panel-layout="drawer"][data-left-open="true"] .workspace');
+    expect(medium).toContain("width: calc(100% - var(--adaptive-drawer-width));");
   });
 
   test("limits the full-width sidebar drawer to compact widths", () => {
