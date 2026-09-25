@@ -22,6 +22,10 @@ function text({ locale }: ShowcaseRenderContext) {
 
 export const stories: ShowcaseStory[] = [
   {
+    name: "Inspector sections (default, stretch)",
+    render: () => <TabsFixture />,
+  },
+  {
     name: "Page navigation (line)",
     states: ["active", "hover", "focus"],
     widths: ["375", "app", "wide"],
@@ -45,9 +49,5 @@ export const stories: ShowcaseStory[] = [
         </Tabs>
       );
     },
-  },
-  {
-    name: "Inspector sections (default, stretch)",
-    render: () => <TabsFixture />,
   },
 ];

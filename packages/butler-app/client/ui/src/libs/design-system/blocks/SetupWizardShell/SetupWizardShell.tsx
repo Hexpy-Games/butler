@@ -17,6 +17,8 @@ interface SetupWizardShellProps
   windowControls?: ReactNode;
   /** Resolved appearance theme for the fluid backdrop. */
   tone?: "light" | "dark";
+  /** Contain the full-screen layers in the element (DS Viewer previews). */
+  embedded?: boolean;
 }
 
 interface SetupWizardContentProps {
@@ -32,12 +34,13 @@ export function SetupWizardShell({
   title,
   windowControls,
   tone = "light",
+  embedded = false,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
 
   return (
-    <main className={styles.screen} data-tone={tone} {...props}>
+    <main className={styles.screen} data-tone={tone} data-embedded={embedded ? "true" : undefined} {...props}>
       <PromptFluidBackground variant="bloom" tone={tone} />
       <div
         aria-hidden="true"

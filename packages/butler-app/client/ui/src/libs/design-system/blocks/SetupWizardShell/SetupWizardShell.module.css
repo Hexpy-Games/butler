@@ -10,6 +10,13 @@
   isolation: isolate;
 }
 
+/* Previews: paint containment makes the fixed backdrop and drag lane
+   relative to the shell instead of the viewport. */
+.screen[data-embedded="true"] {
+  min-height: var(--page-container-narrow);
+  contain: layout paint;
+}
+
 .shell {
   --setup-wizard-inset: var(--space-lg);
 

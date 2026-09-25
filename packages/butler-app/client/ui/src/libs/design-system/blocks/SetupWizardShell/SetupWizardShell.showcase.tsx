@@ -31,7 +31,7 @@ function text({ locale }: ShowcaseRenderContext) {
 function Wizard({ context, tone }: { context: ShowcaseRenderContext; tone: "light" | "dark" }) {
   const copy = text(context);
   return (
-    <SetupWizardShell activeIndex={1} title="Butler" tone={tone} steps={copy.steps.map((label) => ({ id: label, label }))}>
+    <SetupWizardShell embedded activeIndex={1} title="Butler" tone={tone} steps={copy.steps.map((label) => ({ id: label, label }))}>
       <SetupWizardContent>
         <Typo.H3 as="h1">{copy.title}</Typo.H3>
         <Typo.Body>{copy.body}</Typo.Body>

@@ -51,8 +51,10 @@ export const stories: ShowcaseStory[] = [
           <Grid columns={{ base: "2", wide: "4" }} gap="sm">
             {[3, 7, 1, 12].map((value, index) => (
               <Card key={index}>
-                <Typo.MetricValue numeric="tabular">{value}</Typo.MetricValue>
-                <Typo.Caption tone="secondary">{text(context).metric}</Typo.Caption>
+                <Stack gap="xs">
+                  <Typo.MetricValue numeric="tabular">{value}</Typo.MetricValue>
+                  <Typo.Caption tone="secondary">{text(context).metric}</Typo.Caption>
+                </Stack>
               </Card>
             ))}
           </Grid>
