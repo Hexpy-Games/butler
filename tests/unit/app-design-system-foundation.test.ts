@@ -622,11 +622,77 @@ describe("motion tokens", () => {
     )).toEqual([]);
   });
 
-  test("menus and selects open with the 90ms menu motion token", () => {
+  test("menus and selects open with the 90ms menu motion token and decelerate", () => {
     for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
       const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
-      expect(css).toMatch(/animation: [\w-]+-open var\(--motion-menu\)/u);
+      expect(css).toMatch(/animation: [\w-]+-enter var\(--motion-menu\)\s+var\(--motion-ease-decelerate\)/u);
     }
+  });
+
+  test("menu and select animations keep a pure fade under reduced motion", () => {
+    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
+      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
+      expect(css).not.toContain("animation: none");
+      const keyframes = css.slice(css.indexOf("@keyframes"));
+      expect(keyframes).toContain("var(--motion-scale-menu)");
+      expect(keyframes).not.toMatch(/translate[XY]?\(\s*-?\d/u);
+    }
+  });
+
+  const dsComponent = (file: string) => read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
+
+  test("Radix overlays exit on [data-state=closed] with faster exit tokens and accelerate", () => {
+    for (const [file, exit] of [
+      ["DropdownMenu/DropdownMenu", "--motion-exit-menu"],
+      ["ContextMenu/ContextMenu", "--motion-exit-menu"],
+      ["Popover/Popover", "--motion-exit-fast"],
+      ["Dialog/Dialog", "--motion-exit-fast"],
+    ] as const) {
+      const css = dsComponent(file);
+      expect(css).toMatch(new RegExp(`\\[data-state="closed"\\] \\{[^}]*animation: [\\w-]+-exit var\\(${exit}\\)\\s+var\\(--motion-ease-accelerate\\)`, "u"));
+    }
+    const dialog = dsComponent("Dialog/Dialog");
+    expect(dialog).toMatch(/\.overlay\[data-state="closed"\] \{[^}]*animation: dialog-overlay-exit/u);
+    expect(dialog).toContain("var(--motion-scale-dialog)");
+  });
+
+  test("popper overlays enter from their Radix transform origin with a side-aware distance", () => {
+    for (const [file, origin] of [
+      ["DropdownMenu/DropdownMenu", "--radix-dropdown-menu-content-transform-origin"],
+      ["ContextMenu/ContextMenu", "--radix-context-menu-content-transform-origin"],
+      ["Select/Select", "--radix-select-content-transform-origin"],
+      ["Popover/Popover", "--radix-popover-content-transform-origin"],
+    ] as const) {
+      const css = dsComponent(file);
+      expect(css).toMatch(new RegExp(`var\\(\\s*${origin}`, "u"));
+      for (const side of ["top", "bottom", "left", "right"]) expect(css).toContain(`[data-side="${side}"]`);
+      expect(css).toContain("var(--motion-distance-");
+    }
+  });
+
+  test("the tooltip fades out through Presence on the exit token", () => {
+    const css = read(`${uiSrc}/libs/design-system/shadcn/ui/tooltip.module.css`);
+    expect(css).toMatch(/\.tooltip\[data-state="closed"\] \{[^}]*animation: tooltip-exit var\(--motion-exit-fast\)/u);
+    expect(css).not.toContain("animation: none");
+    const tsx = read(`${uiSrc}/libs/design-system/shadcn/ui/tooltip.tsx`);
+    expect(tsx).toContain("usePresence");
+  });
+
+  test("buttons, icon buttons and clickables press to the press scale unless disabled", () => {
+    const button = dsComponent("Button/Button");
+    expect(button).toMatch(/\.button:active:not\(:disabled\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\);[^}]*transition-duration: var\(--motion-instant\)/u);
+    const iconButton = dsComponent("IconButton/IconButton");
+    expect(iconButton).toMatch(/\.moduleScope:active:not\(:disabled\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\)/u);
+    expect(iconButton).toMatch(/transition:[^;]*transform var\(--motion-fast\)/u);
+    const clickable = dsComponent("Clickable/Clickable");
+    expect(clickable).toMatch(/\.clickable:active:not\(\[data-disabled="true"\], \[data-stretch="true"\]\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\)/u);
+  });
+
+  test("the switch thumb moves on the spring easing and stops under reduced motion", () => {
+    const css = dsComponent("Switch/Switch");
+    expect(css).toMatch(/\.thumb \{[^}]*transition: transform var\(--motion-base\) var\(--motion-ease-spring\)/u);
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reduced).toMatch(/\.thumb \{\s*transition: none;/u);
   });
 });
 

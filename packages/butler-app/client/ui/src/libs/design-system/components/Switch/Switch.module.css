@@ -40,7 +40,7 @@
   border-radius: 50%;
   background: var(--switch-thumb);
   box-shadow: var(--shadow-control);
-  transition: transform var(--motion-fast) var(--motion-ease-standard);
+  transition: transform var(--motion-base) var(--motion-ease-spring);
 }
 
 .switch[data-size="sm"] .thumb {

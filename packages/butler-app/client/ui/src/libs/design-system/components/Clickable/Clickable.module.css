@@ -11,6 +11,7 @@
   border-radius: var(--radius-control);
   cursor: pointer;
   outline: none;
+  transition: transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .clickable[data-disabled="true"] {
@@ -27,6 +28,13 @@
 
 .clickable:active:not([data-disabled="true"]) {
   background: var(--selection-strong);
+}
+
+/* Compact clickables press in; stretched rows keep only the pressed fill so
+   wide rows do not visibly shrink. */
+.clickable:active:not([data-disabled="true"], [data-stretch="true"]) {
+  transform: scale(var(--motion-scale-press));
+  transition-duration: var(--motion-instant);
 }
 
 .clickable:focus-visible {

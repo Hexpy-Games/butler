@@ -10,7 +10,13 @@
 }
 
 .overlay[data-state="open"] {
-  animation: dialog-fade-open var(--motion-fast) var(--motion-ease-decelerate);
+  animation: dialog-overlay-enter var(--motion-fast)
+    var(--motion-ease-decelerate);
+}
+
+.overlay[data-state="closed"] {
+  animation: dialog-overlay-exit var(--motion-exit-fast)
+    var(--motion-ease-accelerate) forwards;
 }
 
 .content {
@@ -45,7 +51,12 @@
 }
 
 .content[data-state="open"] {
-  animation: dialog-open var(--motion-fast) var(--motion-ease-decelerate);
+  animation: dialog-enter var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.content[data-state="closed"] {
+  animation: dialog-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
+    forwards;
 }
 
 .content[data-project-ledger-modal="true"] {
@@ -102,31 +113,29 @@
   background-clip: content-box;
 }
 
-@keyframes dialog-fade-open {
+@keyframes dialog-overlay-enter {
   from {
     opacity: 0;
   }
+}
 
+@keyframes dialog-overlay-exit {
   to {
-    opacity: 1;
+    opacity: 0;
   }
 }
 
-@keyframes dialog-open {
+@keyframes dialog-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -48%) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, calc(-50% + var(--motion-distance-sm)))
+      scale(var(--motion-scale-dialog));
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .overlay[data-state="open"],
-  .content[data-state="open"] {
-    animation: none;
+@keyframes dialog-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-dialog));
   }
 }

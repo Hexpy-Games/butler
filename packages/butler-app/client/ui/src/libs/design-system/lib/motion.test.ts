@@ -9,11 +9,15 @@ import {
   reducedMotionKeyframes,
 } from "./motion";
 
-const saved = {
-  window: (globalThis as Record<string, unknown>).window,
-  document: (globalThis as Record<string, unknown>).document,
-  getComputedStyle: (globalThis as Record<string, unknown>).getComputedStyle,
-};
+const GLOBAL_KEYS = ["window", "document", "getComputedStyle"] as const;
+const saved = GLOBAL_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+
+function restoreGlobals() {
+  for (const [key, descriptor] of saved) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else delete (globalThis as Record<string, unknown>)[key];
+  }
+}
 
 function installEnvironment({ reduce, tokens }: { reduce: boolean; tokens: Record<string, string> }) {
   const style = { getPropertyValue: (name: string) => tokens[name] ?? "" };
@@ -39,9 +43,7 @@ function fakeElement() {
   return { element, calls };
 }
 
-afterEach(() => {
-  Object.assign(globalThis, saved);
-});
+afterEach(restoreGlobals);
 
 test("motion durations and easings come from the tokens", () => {
   installEnvironment({

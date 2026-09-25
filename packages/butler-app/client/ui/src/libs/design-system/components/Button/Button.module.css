@@ -43,6 +43,13 @@
   background: var(--selection);
 }
 
+/* Press feedback: a quick press-in, released on --motion-fast. The scale
+   token is 1 under reduced motion. */
+.button:active:not(:disabled) {
+  transform: scale(var(--motion-scale-press));
+  transition-duration: var(--motion-instant);
+}
+
 .button:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);

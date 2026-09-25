@@ -8,10 +8,9 @@
   overflow: hidden;
   padding: 6px;
   color: var(--text-primary);
-}
 
-.content[data-state="open"] {
-  animation: context-menu-open var(--motion-menu) var(--motion-ease-decelerate);
+  --context-menu-enter-x: 0px;
+  --context-menu-enter-y: calc(-1 * var(--motion-distance-xs));
   transform-origin: var(
     --radix-context-menu-content-transform-origin,
     center top
@@ -42,20 +41,47 @@
   color: var(--danger);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .content[data-state="open"] {
-    animation: none;
+.content[data-side="bottom"] {
+  --context-menu-enter-y: calc(-1 * var(--motion-distance-xs));
+}
+
+.content[data-side="top"] {
+  --context-menu-enter-y: var(--motion-distance-xs);
+}
+
+.content[data-side="left"] {
+  --context-menu-enter-x: var(--motion-distance-xs);
+  --context-menu-enter-y: 0px;
+}
+
+.content[data-side="right"] {
+  --context-menu-enter-x: calc(-1 * var(--motion-distance-xs));
+  --context-menu-enter-y: 0px;
+}
+
+.content[data-state="open"] {
+  animation: context-menu-enter var(--motion-menu) var(--motion-ease-decelerate);
+}
+
+.content[data-state="closed"] {
+  animation: context-menu-exit var(--motion-exit-menu)
+    var(--motion-ease-accelerate) forwards;
+}
+
+@keyframes context-menu-enter {
+  from {
+    opacity: 0;
+    transform: translate(
+        var(--context-menu-enter-x),
+        var(--context-menu-enter-y)
+      )
+      scale(var(--motion-scale-menu));
   }
 }
 
-@keyframes context-menu-open {
-  from {
-    opacity: 0;
-    transform: translateY(-2px) scale(0.985);
-  }
-
+@keyframes context-menu-exit {
   to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    opacity: 0;
+    transform: scale(var(--motion-scale-menu));
   }
 }

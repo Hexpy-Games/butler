@@ -10,6 +10,15 @@
   border: 0;
   place-items: center;
   display: inline-grid;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.moduleScope:active:not(:disabled) {
+  transform: scale(var(--motion-scale-press));
+  transition-duration: var(--motion-instant);
 }
 .moduleScope:hover:not(:disabled) {
   background: var(--icon-button-surface, var(--selection));

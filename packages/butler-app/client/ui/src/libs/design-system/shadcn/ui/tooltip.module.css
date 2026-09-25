@@ -18,23 +18,23 @@
   white-space: nowrap;
   pointer-events: none;
   transform: translateX(-50%);
-  animation: tooltip-enter var(--motion-fast) var(--motion-ease-enter);
+  animation: tooltip-enter var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+.tooltip[data-state="closed"] {
+  animation: tooltip-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
+    forwards;
 }
 
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, 4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(-50%);
+    transform: translate(-50%, var(--motion-distance-sm));
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tooltip {
-    animation: none;
+@keyframes tooltip-exit {
+  to {
+    opacity: 0;
   }
 }
