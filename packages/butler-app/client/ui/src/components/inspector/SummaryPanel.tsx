@@ -8,6 +8,7 @@ import {
   CircleAlert,
   CircleX,
   ICON_SIZE,
+  InspectorInset,
   InspectorPanel,
   KeyValueRow,
   Spinner,
@@ -16,7 +17,6 @@ import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
 import { contextTooltip } from "@/app/utils.ts";
 import { summaryProgressRows } from "@/app/conversation-progress";
 import type { SessionSummaryView, StatusPill } from "@/app/types.ts";
-import { inspectorInset } from "./inspectorLayout.ts";
 
 export function SummaryPanel({
   status,
@@ -32,17 +32,18 @@ export function SummaryPanel({
   const skillsUsed = summary?.skills_used ?? [];
   return (
     <>
-      <ActivityFeed
-        data-test-class="summary-progress-panel"
-        title={appCopy.interfacePanels.progress}
-        emptyLabel={appCopy.interfacePanels.noProgress}
-        style={inspectorInset}
-        items={progressRows.map((item, index) => ({
-          id: `${item.id}:${index}`,
-          icon: progressStateIcon(item.state),
-          title: item.safe_label,
-        }))}
-      />
+      <InspectorInset>
+        <ActivityFeed
+          data-test-class="summary-progress-panel"
+          title={appCopy.interfacePanels.progress}
+          emptyLabel={appCopy.interfacePanels.noProgress}
+          items={progressRows.map((item, index) => ({
+            id: `${item.id}:${index}`,
+            icon: progressStateIcon(item.state),
+            title: item.safe_label,
+          }))}
+        />
+      </InspectorInset>
       <InspectorPanel title={appCopy.interfacePanels.branchDetails}>
         <KeyValueRow label={appCopy.interfacePanels.gateway} value={status.label} />
         <KeyValueRow

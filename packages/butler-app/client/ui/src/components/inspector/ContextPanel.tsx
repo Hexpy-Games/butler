@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
-import { KeyValueRow, ScrollArea, Section, Stack } from "@/butler-ds";
+import { InspectorInset, KeyValueRow, ScrollArea, Section, Stack } from "@/butler-ds";
 import { ChartContainer } from "@/butler-ds";
 import type { ContextDetailsView } from "@/app/types.ts";
 import { ContextCategoryRow } from "./ContextCategoryRow.tsx";
@@ -10,7 +10,6 @@ import { buildContextChart, formatTokenCount } from "./contextPanelUtils.ts";
 import {
   contextLegendContent,
   contextLegendFrame,
-  contextSectionInset,
 } from "./inspectorLayout.ts";
 
 export function ContextPanel({ context }: { context?: ContextDetailsView }) {
@@ -32,89 +31,90 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
     ),
   );
   return (
-    <Section
-      title={appCopy.interfacePanels.contextDetails}
-      gap="md"
-      fill
-      contentFill
-      style={contextSectionInset}
-    >
-      {context && contextChart ? (
-        <Stack gap="md" fill>
-          <Stack gap="sm" data-test-class="context-overview">
-            <KeyValueRow
-              label={appCopy.interfacePanels.contextWindow}
-              value={appCopy.interfaceTemplates.contextMetric("full", usedPercent)}
-              description={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_tokens))}
-              meta={appCopy.interfaceTemplates.contextMetric("budget", formatTokenCount(context.budget_tokens))}
-              valueTextSize="caption"
-            />
-            {context.available_working_context_tokens !== undefined &&
-            context.used_working_context_tokens !== undefined ? (
+    <InspectorInset fill>
+      <Section
+        title={appCopy.interfacePanels.contextDetails}
+        gap="md"
+        fill
+        contentFill
+      >
+        {context && contextChart ? (
+          <Stack gap="md" fill>
+            <Stack gap="sm" data-test-class="context-overview">
               <KeyValueRow
-                label={appCopy.interfacePanels.workingContext}
-                value={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_working_context_tokens))}
-                description={appCopy.interfaceTemplates.contextMetric("available", formatTokenCount(context.available_working_context_tokens))}
-                detailLayout="stack"
-                meta={
-                  context.auto_compact_at_tokens
-                    ? appCopy.interfaceTemplates.contextMetric("compact", formatTokenCount(context.auto_compact_at_tokens))
-                    : undefined
-                }
+                label={appCopy.interfacePanels.contextWindow}
+                value={appCopy.interfaceTemplates.contextMetric("full", usedPercent)}
+                description={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_tokens))}
+                meta={appCopy.interfaceTemplates.contextMetric("budget", formatTokenCount(context.budget_tokens))}
                 valueTextSize="caption"
               />
-            ) : null}
-            <ChartContainer
-              aria-label={appCopy.interfacePanels.contextChart}
-              config={contextChart.config}
-              data-density="compact"
-              initialDimension={{ width: 320, height: 36 }}
-              role="img"
-            >
-              <BarChart
-                accessibilityLayer
-                barSize={20}
-                data={contextChart.data}
-                layout="vertical"
-                margin={{ bottom: 0, left: 0, right: 0, top: 0 }}
+              {context.available_working_context_tokens !== undefined &&
+              context.used_working_context_tokens !== undefined ? (
+                <KeyValueRow
+                  label={appCopy.interfacePanels.workingContext}
+                  value={appCopy.interfaceTemplates.contextMetric("used", formatTokenCount(context.used_working_context_tokens))}
+                  description={appCopy.interfaceTemplates.contextMetric("available", formatTokenCount(context.available_working_context_tokens))}
+                  detailLayout="stack"
+                  meta={
+                    context.auto_compact_at_tokens
+                      ? appCopy.interfaceTemplates.contextMetric("compact", formatTokenCount(context.auto_compact_at_tokens))
+                      : undefined
+                  }
+                  valueTextSize="caption"
+                />
+              ) : null}
+              <ChartContainer
+                aria-label={appCopy.interfacePanels.contextChart}
+                config={contextChart.config}
+                data-density="compact"
+                initialDimension={{ width: 320, height: 36 }}
+                role="img"
               >
-                <XAxis domain={[0, context.budget_tokens]} hide type="number" />
-                <YAxis dataKey="name" hide type="category" />
-                {contextChart.segments.map((segment) => (
-                  <Bar
-                    dataKey={segment.key}
-                    fill={`var(--color-${segment.key})`}
-                    isAnimationActive={false}
-                    key={segment.key}
-                    radius={segment.radius}
-                    stackId="context"
+                <BarChart
+                  accessibilityLayer
+                  barSize={20}
+                  data={contextChart.data}
+                  layout="vertical"
+                  margin={{ bottom: 0, left: 0, right: 0, top: 0 }}
+                >
+                  <XAxis domain={[0, context.budget_tokens]} hide type="number" />
+                  <YAxis dataKey="name" hide type="category" />
+                  {contextChart.segments.map((segment) => (
+                    <Bar
+                      dataKey={segment.key}
+                      fill={`var(--color-${segment.key})`}
+                      isAnimationActive={false}
+                      key={segment.key}
+                      radius={segment.radius}
+                      stackId="context"
+                    />
+                  ))}
+                </BarChart>
+              </ChartContainer>
+            </Stack>
+            <ScrollArea
+              contentStyle={contextLegendContent}
+              dataSlot="context-legend-scroll"
+              dataTestClass="context-legend-scroll"
+              fill
+              style={contextLegendFrame}
+            >
+              <Stack gap="sm" data-test-class="context-legend">
+                {sortedCategories.map((category) => (
+                  <ContextCategoryRow
+                    category={category}
+                    key={category.id}
+                    swatchColor={chartColorByCategoryId.get(category.id)}
+                    totalTokens={context.budget_tokens}
                   />
                 ))}
-              </BarChart>
-            </ChartContainer>
+              </Stack>
+            </ScrollArea>
           </Stack>
-          <ScrollArea
-            contentStyle={contextLegendContent}
-            dataSlot="context-legend-scroll"
-            dataTestClass="context-legend-scroll"
-            fill
-            style={contextLegendFrame}
-          >
-            <Stack gap="sm" data-test-class="context-legend">
-              {sortedCategories.map((category) => (
-                <ContextCategoryRow
-                  category={category}
-                  key={category.id}
-                  swatchColor={chartColorByCategoryId.get(category.id)}
-                  totalTokens={context.budget_tokens}
-                />
-              ))}
-            </Stack>
-          </ScrollArea>
-        </Stack>
-      ) : (
-        <EmptyPanelLine label={appCopy.interfacePanels.contextUnavailable} />
-      )}
-    </Section>
+        ) : (
+          <EmptyPanelLine label={appCopy.interfacePanels.contextUnavailable} />
+        )}
+      </Section>
+    </InspectorInset>
   );
 }

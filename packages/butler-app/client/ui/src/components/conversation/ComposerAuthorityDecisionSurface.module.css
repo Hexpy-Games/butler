@@ -16,8 +16,3 @@
 .menu {
   max-width: calc(100vw - var(--space-6));
 }
-.option {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}

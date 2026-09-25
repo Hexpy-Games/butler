@@ -1,7 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
-import { Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { Fragment } from "react";
+import { Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
 import { UsageProviderRow } from "./UsageProviderRow";
 import { formatCount } from "./usageSettingsFormat";
 
@@ -20,7 +21,7 @@ export function UsageProviderPanel({
     <SurfacePanel elevation="none">
       <Stack gap="md">
         <Stack align="row" justify="between" cross="start" gap="md" wrap>
-          <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 260px" }}>
+          <Stack gap="xs" grow basis="md" minWidth="0">
             <Typo.Body as="div">{appCopy.interfaceDetails.apiProviderUsage}</Typo.Body>
             <Typo.Caption>
               {activeProviderId
@@ -39,11 +40,10 @@ export function UsageProviderPanel({
         ) : (
           <Stack gap="xs">
             {providers.map((provider, index) => (
-              <UsageProviderRow
-                key={provider.providerId}
-                provider={provider}
-                divider={index > 0}
-              />
+              <Fragment key={provider.providerId}>
+                {index > 0 ? <Separator space="md" /> : null}
+                <UsageProviderRow provider={provider} />
+              </Fragment>
             ))}
           </Stack>
         )}

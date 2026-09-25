@@ -16,28 +16,12 @@ import { formatCompact, formatCount } from "./usageSettingsFormat";
 
 type UsageProvider = UsageMonitorView["providerUsage"]["providers"][number];
 
-export function UsageProviderRow({
-  provider,
-  divider,
-}: {
-  provider: UsageProvider;
-  divider: boolean;
-}) {
+export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
   useAppLocale();
   const quota = provider.remaining;
   return (
-    <Stack
-      align="row"
-      justify="between"
-      cross="start"
-      gap="md"
-      wrap
-      style={{
-        paddingBlock: "var(--space-sm)",
-        borderTop: divider ? "1px solid var(--line)" : 0,
-      }}
-    >
-      <Stack gap="xs" style={{ minWidth: 0, flex: "1 1 280px" }}>
+    <Stack align="row" justify="between" cross="start" gap="md" wrap>
+      <Stack gap="xs" grow basis="md" minWidth="0">
         <Typo.Body as="div">{provider.providerId}</Typo.Body>
         <Typo.Caption>
           {provider.source === "provider_adapter"

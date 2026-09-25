@@ -1,6 +1,5 @@
 {
   "components/common/ButlerThinkingMark.tsx": 1,
-  "components/conversation/ComposerAuthorityDecisionSurface.tsx": 1,
   "components/conversation/ComposerPlanModeBadge.tsx": 1,
   "components/conversation/StewardComposerCapsules.tsx": 3,
   "components/inspector/WorkersPanel.tsx": 1,

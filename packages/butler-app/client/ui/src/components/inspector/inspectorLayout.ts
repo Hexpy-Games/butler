@@ -2,15 +2,6 @@ import type { CSSProperties } from "react";
 
 const inspectorInlinePadding = "var(--inspector-inline-padding, 18px)";
 
-export const inspectorInset = {
-  marginInline: inspectorInlinePadding,
-  width: `calc(100% - ${inspectorInlinePadding} - ${inspectorInlinePadding})`,
-} as CSSProperties;
-
-export const contextSectionInset = {
-  paddingInline: inspectorInlinePadding,
-} as CSSProperties;
-
 export const contextLegendFrame = {
   "--scroll-area-frame-width": `calc(100% + ${inspectorInlinePadding})`,
   "--scroll-area-content-width": "100%",

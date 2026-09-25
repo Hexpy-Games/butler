@@ -12,22 +12,6 @@ const rowStyle = {
   padding: "0 0 0 var(--space-6)",
 } as const;
 
-const summaryStyle = {
-  minWidth: 0,
-  margin: 0,
-  overflowWrap: "anywhere",
-  color: "var(--text-primary)",
-  fontWeight: "var(--font-weight-medium)",
-} as const;
-
-const detailStyle = {
-  minWidth: 0,
-  margin: 0,
-  overflowWrap: "anywhere",
-  color: "var(--text-secondary)",
-  fontWeight: "var(--font-weight-regular)",
-} as const;
-
 export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
   useAppLocale();
   const details = [decision.rationale, decision.nextStep].filter(
@@ -44,7 +28,9 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
     >
       <Typo.Body
         as="p"
-        style={summaryStyle}
+        tone="primary"
+        weight="medium"
+        wrap="anywhere"
         data-test-class="turn-decision-summary"
       >
         {decision.summary}
@@ -52,7 +38,9 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
       {details.map((line, index) => (
         <Typo.Body
           as="p"
-          style={detailStyle}
+          tone="secondary"
+          weight="regular"
+          wrap="anywhere"
           data-test-class="turn-decision-detail"
           key={`${decision.summary}:detail:${index}`}
         >

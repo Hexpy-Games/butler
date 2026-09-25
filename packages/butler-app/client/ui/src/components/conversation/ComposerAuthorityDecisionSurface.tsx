@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
   Button, ButtonContainer, ChevronDown, DropdownMenu, DropdownMenuContent,
-  DropdownMenuItem, DropdownMenuTrigger, ShieldCheck, Typo,
+  DropdownMenuItem, DropdownMenuTrigger, ShieldCheck, Stack, Typo,
 } from "@/butler-ds";
 import { ComposerDecisionSurface } from "./ComposerDecisionSurface";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
@@ -34,11 +34,11 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className={styles.menu}>
             <DropdownMenuItem onSelect={decision.onAllowConversation}>
-              <span className={styles.option}>
+              <Stack as="span" gap="xs">
                 <span>{appCopy.interfaceDetails.allowConversation}</span>
                 <Typo.Caption tone="secondary" wrap="anywhere">{decision.scope?.description}</Typo.Caption>
                 <Typo.Caption tone="secondary" wrap="anywhere">{appCopy.interfaceDetails.allowDescription}</Typo.Caption>
-              </span>
+              </Stack>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

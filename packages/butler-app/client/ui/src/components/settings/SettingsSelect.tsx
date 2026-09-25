@@ -5,6 +5,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Inline,
   SettingsField,
   Stack,
 } from "@/butler-ds";
@@ -94,20 +95,10 @@ export function SettingsSelect({
     </Select>
   );
   const control = action ? (
-    <Stack
-      align="row"
-      cross="center"
-      gap="sm"
-      wrap
-      style={{ width: "100%", maxWidth: "100%" }}
-    >
-      <div
-        style={{ flex: "0 1 460px", width: "min(100%, 460px)", minWidth: 0 }}
-      >
-        {selectControl}
-      </div>
-      <div style={{ flex: "0 0 auto" }}>{action}</div>
-    </Stack>
+    <Inline>
+      <Stack.Item basis="lg" minWidth="0">{selectControl}</Stack.Item>
+      <Stack.Item shrink={false}>{action}</Stack.Item>
+    </Inline>
   ) : (
     selectControl
   );

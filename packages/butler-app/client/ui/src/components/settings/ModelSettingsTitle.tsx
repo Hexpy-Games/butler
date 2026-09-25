@@ -3,7 +3,7 @@ import {
   ArrowLeft,
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -57,21 +57,13 @@ export function ModelSettingsTitle({
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <button type="button" onClick={onRoot}>
-                {copy.sections.models}
-              </button>
-            </BreadcrumbLink>
+            <BreadcrumbButton onClick={onRoot}>{copy.sections.models}</BreadcrumbButton>
           </BreadcrumbItem>
           {modelRoute.page === "add" || modelRoute.page === "edit" ? (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <button type="button" onClick={onManagement}>
-                    {copy.modelManagement.title}
-                  </button>
-                </BreadcrumbLink>
+                <BreadcrumbButton onClick={onManagement}>{copy.modelManagement.title}</BreadcrumbButton>
               </BreadcrumbItem>
             </>
           ) : null}

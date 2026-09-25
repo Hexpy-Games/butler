@@ -109,7 +109,7 @@ export function SkillsSettings() {
                   />
                 ))}
               </Stack>
-              <Stack gap="md" style={{ flex: 1 }}>
+              <Stack gap="md" grow basis="0">
                 <SkillActions
                   onImport={() => void importSkill(selectedProject?.id)}
                   onCreate={() => void createSkillChat(selectedProject)}
