@@ -359,7 +359,7 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
 }
 
 async function addHostedModelAndFinish(container: HTMLElement): Promise<void> {
-  await waitForText(container, "API key");
+  await waitForText(container, "API 키");
   expect(buttonByLabel(container, "저장하고 시작")).toBeUndefined();
   await clickButton(container, "추가");
   await waitForText(container, "Workspace");
