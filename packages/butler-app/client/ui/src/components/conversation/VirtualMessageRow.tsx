@@ -22,6 +22,7 @@ interface VirtualMessageRowProps {
   topOffset: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   onCopyContextMenuText: (message: MessageRecord) => void;
+  entering?: boolean;
   children: ReactNode;
 }
 
@@ -31,6 +32,7 @@ export function VirtualMessageRow({
   topOffset,
   rowVirtualizer,
   onCopyContextMenuText,
+  entering = false,
   children,
 }: VirtualMessageRowProps) {
   useAppLocale();
@@ -44,6 +46,7 @@ export function VirtualMessageRow({
           tone={messageTone(message)}
           footer={message.role === "user" ? <UserMessageFooter message={message} /> : undefined}
           compactionEvent={isCompactionEvent}
+          entering={entering}
           avatar={
             <MessageAvatar
               role={message.role}

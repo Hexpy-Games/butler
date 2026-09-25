@@ -32,6 +32,7 @@ export function AssistantStatusLabel({
           )}
         </span>
       }
+      shimmer={state === "active"}
       title={label}
     >
       {children}

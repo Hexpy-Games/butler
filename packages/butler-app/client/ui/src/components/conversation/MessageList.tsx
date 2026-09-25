@@ -10,6 +10,7 @@ import { useMessageList } from "./hooks/useMessageList";
 import { useMessageVirtualizer } from "./hooks/useMessageVirtualizer";
 import { useConversationAutoScroll } from "./hooks/useConversationAutoScroll";
 import { ConversationScroll, MessageListSurface } from "@/butler-ds";
+import { useEnteringMessageIds } from "./hooks/useEnteringMessageIds";
 
 interface MessageListProps {
   messages: MessageRecord[];
@@ -54,6 +55,8 @@ function MessageListComponent({
     assistantFooterMetaById,
     anchoredStewardProgress,
   } = useMessageList(messages, summary, turnProgress, isSending);
+
+  const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
 
   const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
     useMessageVirtualizer({
@@ -121,6 +124,7 @@ function MessageListComponent({
                 virtualRow={virtualRow}
                 topOffset={topOffset}
                 copied={copiedMessageId === message.id}
+                entering={enteringIds.has(message.id)}
                 footerMeta={assistantFooterMetaById.get(message.id) ?? null}
                 onCopyAssistantMessage={copyAssistantMessage}
                 onCopyContextMenuText={copyContextMenuText}

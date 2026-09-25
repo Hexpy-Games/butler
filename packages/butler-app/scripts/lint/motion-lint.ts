@@ -42,6 +42,13 @@ const ALLOWED_PROPERTIES = new Set([
   "stroke-dashoffset",
 ]);
 const DISCRETE_PROPERTIES = new Set(["display", "overlay", "content-visibility"]);
+/**
+ * Paint-only loops allowed in named DS keyframes: the thinking-label text
+ * shimmer moves a background-clip:text gradient on a single short label.
+ */
+const PAINT_LOOP_KEYFRAMES: Record<string, readonly string[]> = {
+  "libs/design-system/blocks/MessageRow/MessageRow.module.css": ["background-position"],
+};
 /** Registered paint-only custom properties (the shared scroll-fade mask). */
 const ALLOWED_CUSTOM_PROPERTY = /^--scroll-fade-/u;
 
@@ -159,7 +166,8 @@ export function lintMotionCss(path: string, source: string): MotionFinding[] {
   for (const decl of decls) {
     const inKeyframes = decl.parents.some((parent) => /^@(?:-\w+-)?keyframes\b/u.test(parent));
     if (inKeyframes) {
-      if (!decl.prop.startsWith("--") && !propertyAllowed(path, decl.prop, decl.value, source) && decl.prop !== "offset") {
+      const paintLoop = PAINT_LOOP_KEYFRAMES[path]?.includes(decl.prop) ?? false;
+      if (!decl.prop.startsWith("--") && !paintLoop && !propertyAllowed(path, decl.prop, decl.value, source)) {
         const rule = decl.prop === "animation-timing-function" ? null : "transition-property";
         if (rule) {
           findings.push({

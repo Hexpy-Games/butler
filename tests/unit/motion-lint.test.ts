@@ -91,6 +91,12 @@ describe("motion lint rules", () => {
       .toEqual(["transition-property", "transition-property"]);
   });
 
+  test("only the named text shimmer may loop background-position", () => {
+    const shimmer = "@keyframes s { from { background-position: 100% 0; } to { background-position: 0% 0; } }";
+    expect(lintMotionCss("libs/design-system/blocks/MessageRow/MessageRow.module.css", shimmer)).toEqual([]);
+    expect(rules(lintMotionCss(DS, shimmer))).toEqual(["transition-property", "transition-property"]);
+  });
+
   test("waapi-outside-helper rejects element.animate and startViewTransition outside the helper", () => {
     const code = "element.animate([{ opacity: 0 }], 120); document.startViewTransition(() => {});";
     expect(rules(lintMotionScript("components/settings/ModelRouteFrame.tsx", code)))

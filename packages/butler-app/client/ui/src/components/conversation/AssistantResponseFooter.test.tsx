@@ -31,7 +31,8 @@ test("delivered assistant footer keeps completion in a separate bottom row", () 
 
   expect(metadataRow).toContain("Copy");
   expect(metadataRow).not.toContain("<span>Copy</span>");
-  expect(metadataRow).toMatch(/<button[^>]*><svg[\s\S]*?<\/svg><\/button>/u);
+  // Icon-only copy button: the copy and check glyphs share one hidden wrapper.
+  expect(metadataRow).toMatch(/<button[^>]*><span[^>]*aria-hidden="true"[^>]*><svg[\s\S]*?<\/svg><\/span><\/button>/u);
   expect(metadataRow).toContain("Worked for 12초");
   expect(metadataRow).toContain("오전 1:23");
   expect(metadataRow).not.toContain("assistant-status-label");

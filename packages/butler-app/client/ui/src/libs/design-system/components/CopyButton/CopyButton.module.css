@@ -1,0 +1,28 @@
+/* Copy -> check morph (DS spec Motion Contract): both icons share one grid
+   cell and crossfade with a slight scale; reduced motion keeps the fade
+   because the scale is a token. */
+.icons {
+  display: inline-grid;
+  place-items: center;
+}
+
+.icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
+}
+
+.button[data-copied="true"] .copyIcon {
+  opacity: 0;
+  transform: scale(var(--motion-scale-menu));
+}
+
+.button[data-copied="false"] .checkIcon {
+  opacity: 0;
+  transform: scale(var(--motion-scale-menu));
+}
+
+.button[data-copied="true"] .checkIcon {
+  color: var(--text-primary);
+}

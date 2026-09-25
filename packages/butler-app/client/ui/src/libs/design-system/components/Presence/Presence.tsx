@@ -17,17 +17,19 @@ export type PresenceState = "open" | "closed";
 /** Extra wait after the computed exit animation before unmounting anyway. */
 const EXIT_GRACE_MS = 50;
 
+/** Longest time in a computed CSS time list such as "0.16s, 0.11s". */
 function cssTimeMs(value: string | undefined): number {
-  const first = (value ?? "").split(",")[0]?.trim() ?? "";
-  const match = /^(-?\d*\.?\d+)(ms|s)$/u.exec(first);
-  if (!match) return 0;
-  return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
+  return Math.max(0, ...(value ?? "").split(",").map((part) => {
+    const match = /^(-?\d*\.?\d+)(ms|s)$/u.exec(part.trim());
+    return match ? Number(match[1]) * (match[2] === "s" ? 1000 : 1) : 0;
+  }));
 }
 
 /**
  * Keeps an element mounted through its exit animation. While `present` is
  * false the element carries `data-state="closed"`; it unmounts when its CSS
- * exit animation ends (immediately when it has none).
+ * exit animation (or, without one, its exit transition) ends, immediately
+ * when it has neither.
  */
 export function usePresence(present: boolean): {
   mounted: boolean;
@@ -43,24 +45,25 @@ export function usePresence(present: boolean): {
     const node = nodeRef.current;
     const style = node ? window.getComputedStyle(node) : null;
     const animationName = style?.animationName ?? "none";
-    if (!node || !animationName || animationName === "none") {
+    const animated = Boolean(animationName) && animationName !== "none";
+    const transitionMs = cssTimeMs(style?.transitionDuration) + cssTimeMs(style?.transitionDelay);
+    if (!node || (!animated && transitionMs <= 0)) {
       setMounted(false);
       return undefined;
     }
+    const endEvents = animated ? ["animationend", "animationcancel"] : ["transitionend", "transitioncancel"];
     const finish = (event?: Event) => {
       if (event && event.target !== node) return;
       setMounted(false);
     };
-    const timer = window.setTimeout(
-      finish,
-      cssTimeMs(style?.animationDuration) + cssTimeMs(style?.animationDelay) + EXIT_GRACE_MS,
-    );
-    node.addEventListener("animationend", finish);
-    node.addEventListener("animationcancel", finish);
+    const waitMs = animated
+      ? cssTimeMs(style?.animationDuration) + cssTimeMs(style?.animationDelay)
+      : transitionMs;
+    const timer = window.setTimeout(finish, waitMs + EXIT_GRACE_MS);
+    for (const type of endEvents) node.addEventListener(type, finish);
     return () => {
       window.clearTimeout(timer);
-      node.removeEventListener("animationend", finish);
-      node.removeEventListener("animationcancel", finish);
+      for (const type of endEvents) node.removeEventListener(type, finish);
     };
   }, [present, mounted]);
 

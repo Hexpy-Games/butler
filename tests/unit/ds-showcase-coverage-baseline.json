@@ -35,7 +35,6 @@
     "blocks/ManagementPage",
     "blocks/MarkdownContent",
     "blocks/MessageAvatarBlock",
-    "blocks/MessageRow",
     "blocks/MetricCard",
     "blocks/MetricGrid",
     "blocks/NavRow",

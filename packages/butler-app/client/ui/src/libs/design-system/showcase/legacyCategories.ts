@@ -70,7 +70,6 @@ export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "blocks/ManagementPage": "Shell",
   "blocks/MarkdownContent": "Documents & Artifacts",
   "blocks/MessageAvatarBlock": "Conversation & Activity",
-  "blocks/MessageRow": "Conversation & Activity",
   "blocks/MetricCard": "Dashboard & Metrics",
   "blocks/MetricGrid": "Dashboard & Metrics",
   "blocks/NavRow": "Navigation",

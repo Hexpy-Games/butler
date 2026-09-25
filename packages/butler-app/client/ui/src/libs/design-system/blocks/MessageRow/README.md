@@ -42,6 +42,14 @@ Long user text is folded by the conversation container at five rendered lines;
 attachments remain outside the folded text. Neither folding nor copying changes
 the stored message.
 
+Motion: pass `entering` for a row that was just sent or just arrived (the
+list decides with `useEnteringKeys`, so opening a chat or scrolling a
+virtualized list never replays it); the row fades in with a
+`--motion-distance-sm` rise on the `translate` property, because the
+virtualizer positions rows with `transform`. `MessageStatusLabel shimmer`
+sweeps a highlight across in-progress labels such as "Thinking"; reduced
+motion shows static text.
+
 ## Wrong use cases
 
 Do not use this for activity lists or inspector rows. Use `ActivityFeed`,

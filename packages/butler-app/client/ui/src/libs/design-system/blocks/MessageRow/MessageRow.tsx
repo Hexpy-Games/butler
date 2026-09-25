@@ -29,6 +29,8 @@ export interface MessageRowProps extends Omit<
   tone?: MessageRowTone;
   compactionEvent?: boolean;
   activity?: boolean;
+  /** Newly inserted row (sent or just arrived): fades in with a small rise. */
+  entering?: boolean;
   index?: number;
   style?: CSSProperties;
   rowRef?: Ref<HTMLElement>;
@@ -57,6 +59,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       tone = "complete",
       compactionEvent = false,
       activity = false,
+      entering = false,
       index,
       style,
       rowRef,
@@ -80,6 +83,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
           className,
         )}
         data-test-class={dataTestClass}
+        data-enter={entering ? "true" : undefined}
         data-index={index}
         ref={(node) => {
           assignRef(rowRef, node);
@@ -125,11 +129,14 @@ export function MessageStatusLabel({
   children,
   dataTestClass,
   mark,
+  shimmer = false,
   title,
 }: {
   children: ReactNode;
   dataTestClass?: string;
   mark: ReactNode;
+  /** In-progress label (thinking, working): the text shimmers. */
+  shimmer?: boolean;
   title?: string;
 }) {
   return (
@@ -141,7 +148,9 @@ export function MessageStatusLabel({
       <span aria-hidden="true" className={styles.statusMark}>
         {mark}
       </span>
-      <div className={styles.statusContent}>{children}</div>
+      <div className={styles.statusContent} data-shimmer={shimmer ? "true" : undefined}>
+        {children}
+      </div>
     </div>
   );
 }

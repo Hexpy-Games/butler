@@ -8,6 +8,8 @@ export interface MessageItemProps {
   virtualRow: VirtualItem;
   topOffset: number;
   copied: boolean;
+  /** Newly inserted row; see useEnteringKeys. */
+  entering?: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage: (message: MessageRecord) => void;
   onCopyContextMenuText: (message: MessageRecord) => void;

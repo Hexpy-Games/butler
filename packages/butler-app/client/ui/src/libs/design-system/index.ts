@@ -2,6 +2,7 @@
 export * from "./lib/floatingConstraints";
 export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
 export * from "./lib/motion";
+export { useEnteringKeys, ENTER_WINDOW_MS } from "./lib/useEnteringKeys";
 export * from "./responsive";
 export * from "./components/Breadcrumb";
 export * from "./components/Button";
@@ -9,6 +10,8 @@ export * from "./components/ButtonContainer";
 export * from "./components/Card";
 export * from "./components/Chart";
 export * from "./components/Clickable";
+export * from "./components/Collapsible";
+export * from "./components/CopyButton";
 export * from "./components/InlineReference";
 export * from "./components/ColorSwatchInput";
 export * from "./components/ContextMenu";

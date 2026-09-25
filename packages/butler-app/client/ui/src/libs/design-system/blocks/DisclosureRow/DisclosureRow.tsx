@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Clickable } from "../../components/Clickable";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -68,7 +69,11 @@ export function DisclosureRow({
         </span>
         {meta ? <Typo.Caption className={styles.meta}>{meta}</Typo.Caption> : null}
       </Clickable>
-      {open && children ? <div className={styles.panel}>{children}</div> : null}
+      {children ? (
+        <Collapsible open={open}>
+          <div className={styles.panel}>{children}</div>
+        </Collapsible>
+      ) : null}
     </div>
   );
 }

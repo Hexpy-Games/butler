@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -35,14 +36,16 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
             {content}
           </button>
         ) : <div className={className}>{content}</div>}
-        {expanded ? (
-          <Typo.Caption
-            className={`${styles.toolDetails} ${styles.toolDetailText}`}
-            data-slot="work-activity-tool-details"
-            data-test-class="turn-work-tool-detail-text"
-          >
-            {tool.details}
-          </Typo.Caption>
+        {hasDetails ? (
+          <Collapsible open={expanded}>
+            <Typo.Caption
+              className={`${styles.toolDetails} ${styles.toolDetailText}`}
+              data-slot="work-activity-tool-details"
+              data-test-class="turn-work-tool-detail-text"
+            >
+              {tool.details}
+            </Typo.Caption>
+          </Collapsible>
         ) : null}
       </Stack>
     </div>

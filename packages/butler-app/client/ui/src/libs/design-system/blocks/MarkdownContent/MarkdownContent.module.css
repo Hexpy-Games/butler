@@ -138,3 +138,16 @@
   background: var(--selection);
   font-weight: var(--font-weight-medium);
 }
+
+/* Streaming reveal: recently appended chunks fade in; opacity only, so the
+   inline span never shifts layout. */
+.streamChunk {
+  animation: markdown-stream-chunk var(--motion-base)
+    var(--motion-ease-standard) both;
+}
+
+@keyframes markdown-stream-chunk {
+  from {
+    opacity: 0;
+  }
+}

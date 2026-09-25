@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageFileRef } from "@/app/types.ts";
-import { MarkdownContent, useScrollEdges } from "@/butler-ds";
+import { MarkdownContent, useScrollEdges, useStreamingReveal } from "@/butler-ds";
 import { resolveMarkdownImageSource } from "./messageMedia";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { remarkPunctuationBoldSuffix } from "./remarkPunctuationBoldSuffix";
@@ -59,13 +59,17 @@ function markdownComponents(attachments: MessageFileRef[]) {
 interface MessageMarkdownProps {
   attachments?: MessageFileRef[];
   text: string;
+  /** Streaming text fades in chunk by chunk. */
+  streaming?: boolean;
 }
 
 function MessageMarkdownComponent({
   attachments = EMPTY_ATTACHMENTS,
   text,
+  streaming = false,
 }: MessageMarkdownProps) {
   useAppLocale();
+  const rehypePlugins = useStreamingReveal(text, streaming);
   const components = useMemo(
     () => markdownComponents(attachments),
     [attachments],
@@ -76,7 +80,7 @@ function MessageMarkdownComponent({
       data-test-class="turn-result-section"
     >
       <MarkdownContent data-test-class="markdown-document">
-        <ReactMarkdown components={components} remarkPlugins={MESSAGE_MARKDOWN_PLUGINS}>
+        <ReactMarkdown components={components} rehypePlugins={rehypePlugins} remarkPlugins={MESSAGE_MARKDOWN_PLUGINS}>
           {text}
         </ReactMarkdown>
       </MarkdownContent>

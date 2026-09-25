@@ -1,0 +1,31 @@
+/* Height reveal (DS spec Motion Contract): interpolate-size lets height
+   transition to auto; overflow: clip keeps the reveal contained. */
+.collapsible {
+  interpolate-size: allow-keywords;
+  overflow: clip;
+  height: auto;
+  opacity: 1;
+  transition:
+    height var(--motion-base) var(--motion-ease-standard),
+    opacity var(--motion-base) var(--motion-ease-standard);
+}
+
+@starting-style {
+  .collapsible[data-enter="true"][data-state="open"] {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+.collapsible[data-state="closed"] {
+  height: 0;
+  opacity: 0;
+  transition-duration: var(--motion-exit-base);
+  transition-timing-function: var(--motion-ease-accelerate);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsible {
+    transition-property: opacity;
+  }
+}

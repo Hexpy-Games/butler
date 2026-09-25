@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { WorkActivityToolRow } from "./WorkActivityToolRow";
@@ -30,11 +31,11 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
           {expanded ? <ChevronDown size="sm" /> : <ChevronRight size="sm" />}
         </span>
       </button>
-      {expanded ? (
+      <Collapsible open={expanded}>
         <div className={styles.toolDetailList} data-test-class="turn-activity-details turn-work-tool-detail-list">
           {tools.map((tool) => <WorkActivityToolRow key={tool.id} tool={tool} nested />)}
         </div>
-      ) : null}
+      </Collapsible>
       {tools.filter((tool) => tool.after).map((tool) => (
         <div key={tool.id} className={styles.toolAttachment}>{tool.after}</div>
       ))}
