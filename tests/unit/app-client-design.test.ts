@@ -4484,7 +4484,7 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/libs/design-system/blocks/Notice/Notice.module.css",
       ),
-    ).toContain("color: var(--blue-07)");
+    ).toContain("color: var(--color-info-text)");
     expect(
       read(
         "packages/butler-app/client/ui/src/components/management/AutomationsList.tsx",

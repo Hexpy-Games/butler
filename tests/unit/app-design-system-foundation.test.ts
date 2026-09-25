@@ -223,6 +223,37 @@ describe("dark placeholder contrast", () => {
   });
 });
 
+describe("notice tones follow the theme", () => {
+  const noticeCss = () => read(`${uiSrc}/libs/design-system/blocks/Notice/Notice.module.css`);
+  const toneToken = (block: string, property: string) => {
+    const match = new RegExp(`(?<![\\w-])${property}:\\s*var\\((--[\\w-]+)\\);`, "u").exec(block);
+    if (!match) throw new Error(`missing ${property} token`);
+    return match[1];
+  };
+
+  test("notice tones use semantic status tokens, not raw palette steps", () => {
+    expect(noticeCss()).not.toMatch(/var\(--(?:blue|green|red|amber)-\d+\)/u);
+  });
+
+  test("each tone is overridden in both themes and stays dark with 4.5:1 text in dark", () => {
+    const dark = themeTokens(".theme-dark");
+    const light = themeTokens(".theme-light");
+    const base = resolveToken("--color-surface-base", dark);
+    for (const tone of ["info", "warning", "error", "success"]) {
+      const block = tokenBlock(noticeCss(), `.tone-${tone}`);
+      const tokens = ["background", "border-color", "color"].map((property) => toneToken(block, property));
+      for (const name of tokens) {
+        expect({ tone, name, dark: dark.has(name), light: light.has(name) })
+          .toEqual({ tone, name, dark: true, light: true });
+      }
+      const background = compositeOver(resolveToken(tokens[0], dark), base);
+      const text = resolveToken(tokens[2], dark);
+      expect(luminance(background)).toBeLessThan(0.05);
+      expect(contrast(text, background)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
 describe("design-system focus ring", () => {
   test("focus ring color keeps 3:1 contrast on base surfaces in both themes", () => {
     for (const theme of [themeTokens(".theme-light"), themeTokens(".theme-dark")]) {

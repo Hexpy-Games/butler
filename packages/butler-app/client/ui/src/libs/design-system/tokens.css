@@ -186,6 +186,15 @@
   --color-warning-bg: var(--amber-01);
   --color-danger: var(--red-07);
   --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--color-success);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-08);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
 
   --color-border-default: var(--grayscale-03);
   --color-border-strong: var(--grayscale-04);
@@ -509,6 +518,15 @@
   --color-warning-bg: rgba(230, 176, 0, 0.12);
   --color-danger: var(--red-06);
   --color-danger-bg: rgba(190, 56, 54, 0.16);
+  --color-success-border: rgba(42, 159, 72, 0.32);
+  --color-success-text: var(--green-04);
+  --color-warning-border: rgba(230, 176, 0, 0.32);
+  --color-warning-text: var(--amber-05);
+  --color-danger-border: rgba(190, 56, 54, 0.4);
+  --color-danger-text: var(--red-05);
+  --color-info-bg: rgba(0, 122, 255, 0.14);
+  --color-info-border: rgba(0, 122, 255, 0.32);
+  --color-info-text: var(--blue-04);
 
   --color-border-default: rgba(255, 255, 255, 0.1);
   --color-border-strong: rgba(255, 255, 255, 0.16);
@@ -625,6 +643,21 @@
 
 .theme-light {
   color-scheme: light;
+  --color-success: var(--green-06);
+  --color-success-bg: var(--green-01);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: var(--amber-01);
+  --color-danger: var(--red-07);
+  --color-danger-bg: var(--red-01);
+  --color-success-border: var(--green-02);
+  --color-success-text: var(--color-success);
+  --color-warning-border: var(--amber-02);
+  --color-warning-text: var(--amber-08);
+  --color-danger-border: var(--red-02);
+  --color-danger-text: var(--color-danger);
+  --color-info-bg: var(--blue-01);
+  --color-info-border: var(--blue-02);
+  --color-info-text: var(--blue-07);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
   --color-text-primary: var(--neutral-light-text-primary);
