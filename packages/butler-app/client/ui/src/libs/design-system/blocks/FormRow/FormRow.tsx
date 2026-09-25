@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Stack } from "../../components/Stack";
 import { Label } from "../../components/Label";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -20,6 +19,11 @@ export interface FormRowProps {
   className?: string;
 }
 
+/**
+ * Label over control on the settings field ramp: label to control uses the
+ * control gap, help/error stay attached to the control with the copy gap,
+ * and rows are spaced by their container (FormSection uses the field gap).
+ */
 export function FormRow({
   label,
   children,
@@ -31,15 +35,17 @@ export function FormRow({
   const hasError = !!error;
 
   return (
-    <Stack gap="xs" className={cn(styles.row, className)}>
+    <div className={cn(styles.row, className)} data-slot="form-row">
       <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-      {help && !hasError && (
-        <Typo.Caption className={styles.help}>{help}</Typo.Caption>
-      )}
-      {hasError && (
-        <Typo.Caption className={styles.error}>{error}</Typo.Caption>
-      )}
-    </Stack>
+      <div className={styles.control}>
+        {children}
+        {help && !hasError && (
+          <Typo.Caption className={styles.help}>{help}</Typo.Caption>
+        )}
+        {hasError && (
+          <Typo.Caption className={styles.error}>{error}</Typo.Caption>
+        )}
+      </div>
+    </div>
   );
 }

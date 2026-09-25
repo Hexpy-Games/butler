@@ -43,6 +43,10 @@ import { FormRow } from "@/butler-ds";
 
 ## Responsive behavior
 
+- Spacing follows the settings field ramp: label to control uses
+  `--settings-field-control-gap`, help/error hug the control with
+  `--settings-field-copy-gap`. Stack rows in `FormSection` (or any container
+  using `--settings-field-gap`) so each row reads as a separate field.
 - Stack layout adapts to width
 - Text wraps appropriately
 - Mobile-friendly spacing
