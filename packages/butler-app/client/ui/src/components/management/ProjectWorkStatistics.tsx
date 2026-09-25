@@ -34,9 +34,9 @@ export function ProjectWorkStatistics() {
     <Section title={copy.remaining} description={copy.remainingHelp}>
       <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="sm">
         {lanes.map((stage, index) => <Button key={stage} variant="borderless" className={styles.distribution} onClick={() => setLane(stage)}>
-          <span>{copy.labels[stage]}</span>
-          <ProgressMeter bare ariaLabel={`${copy.labels[stage]} ${counts[index]}`} value={Math.round(counts[index]! / maximum * 100)} />
-          <span>{counts[index]}</span><ChevronRight />
+          <ProgressMeter label={copy.labels[stage]} meta={counts[index]} ariaLabel={`${copy.labels[stage]} ${counts[index]}`}
+            value={Math.round(counts[index]! / maximum * 100)} />
+          <ChevronRight />
         </Button>)}
         {unknown > 0 && <Typo.Caption>{copy.labels.other} · {unknown}</Typo.Caption>}
         {lane && <ProjectStatisticSources key={`${kind}:${lane}`} sourceKeys={cards.filter((card) => card.lane === lane).map((card) => card.sourceKey)} />}

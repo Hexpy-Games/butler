@@ -19,7 +19,8 @@
 }
 .distribution {
   display: grid;
-  grid-template-columns: 4em minmax(0, 1fr) 3ch auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: var(--space-sm);
   width: 100%;
   text-align: left;
