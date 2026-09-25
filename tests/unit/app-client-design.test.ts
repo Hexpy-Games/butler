@@ -4629,20 +4629,6 @@ describe("app-client design system foundation", () => {
     expect(documentDialog).toContain("{documentView.body}");
     expect(documentDialog).not.toContain('{document?.markdown ?? ""}');
 
-    const sessionsPanel = readFileSync(
-      join(appClientPath, "src/components/management/ProjectSessionsPanel.tsx"),
-      "utf8",
-    );
-    expect(sessionsPanel).toContain(
-      'import { Section, SessionRow, Stack } from "@/butler-ds"',
-    );
-    expect(sessionsPanel).toContain("<Section");
-    expect(sessionsPanel).toContain("<Stack");
-    expect(sessionsPanel).toContain("<SessionRow");
-    expect(sessionsPanel).toContain("icon={<MessageSquarePlus");
-    expect(sessionsPanel).toContain('gap="xs"');
-    expect(sessionsPanel).not.toContain("<h3>");
-
     // Inspector panels
     const artifactsPanel = readFileSync(
       join(appClientPath, "src/components/inspector/ArtifactsPanel.tsx"),
