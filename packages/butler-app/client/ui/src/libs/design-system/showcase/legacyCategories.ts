@@ -50,7 +50,6 @@ export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "blocks/ComposerAdjunctPanel": "Composer",
   "blocks/ComposerCard": "Composer",
   "blocks/ComposerControl": "Composer",
-  "blocks/ComposerQueuePanel": "Composer",
   "blocks/ContextDonutButton": "Composer",
   "blocks/ConversationShell": "Conversation & Activity",
   "blocks/DashboardHeader": "Dashboard & Metrics",

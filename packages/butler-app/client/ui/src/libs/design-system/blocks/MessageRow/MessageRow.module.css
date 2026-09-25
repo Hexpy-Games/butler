@@ -179,6 +179,26 @@
   }
 }
 
+/* A delivered queued message resolves from the QueuedMessage bubble (dashed
+   hairline outline, subdued fill and text) into the solid user bubble. */
+.row[data-enter="delivered"] .body {
+  outline: var(--border-hairline) dashed transparent;
+  outline-offset: calc(var(--border-hairline) * -1);
+  animation: message-delivered var(--motion-slow) var(--motion-ease-decelerate);
+}
+
+@keyframes message-delivered {
+  from {
+    outline-color: var(--line-strong);
+    background-color: color-mix(
+      in srgb,
+      var(--user-message-bg) 40%,
+      transparent
+    );
+    color: var(--text-secondary);
+  }
+}
+
 /* Thinking shimmer: a highlight band sweeps across the label text. */
 .statusContent[data-shimmer="true"] > * {
   background: linear-gradient(

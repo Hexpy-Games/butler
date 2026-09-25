@@ -78,9 +78,9 @@ import { FilteredSelectPopoverFixture } from "./blocks/FilteredSelectPopover/Fil
 import { ContextDonutButtonFixture } from "./blocks/ContextDonutButton/ContextDonutButton.fixtures";
 import { ComposerCardFixture } from "./blocks/ComposerCard/ComposerCard.fixtures";
 import { ComposerAdjunctPanelFixture } from "./blocks/ComposerAdjunctPanel/ComposerAdjunctPanel.fixtures";
-import { ComposerQueuePanelFixture } from "./blocks/ComposerQueuePanel/ComposerQueuePanel.fixtures";
 import { AttachmentListFixture } from "./blocks/AttachmentList/AttachmentList.fixtures";
 import { MessageRowFixture } from "./blocks/MessageRow/MessageRow.fixtures";
+import { QueuedMessageFixture } from "./blocks/QueuedMessage/QueuedMessage.fixtures";
 import { MessageAvatarBlockFixture } from "./blocks/MessageAvatarBlock/MessageAvatarBlock.fixtures";
 import { ActivityFeedFixture } from "./blocks/ActivityFeed/ActivityFeed.fixtures";
 import { WorkActivityBlockFixture } from "./blocks/WorkActivityBlock/WorkActivityBlock.fixtures";
@@ -1032,12 +1032,6 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     fixture: ComposerAdjunctPanelFixture,
   },
   {
-    name: "ComposerQueuePanel",
-    path: "blocks/ComposerQueuePanel",
-    tags: ["composer", "queue", "follow-up"],
-    fixture: ComposerQueuePanelFixture,
-  },
-  {
     name: "AttachmentList",
     path: "blocks/AttachmentList",
     tags: ["attachment", "file", "message"],
@@ -1048,6 +1042,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/MessageRow",
     tags: ["message", "chat", "timeline"],
     fixture: MessageRowFixture,
+  },
+  {
+    name: "QueuedMessage",
+    path: "blocks/QueuedMessage",
+    tags: ["conversation", "queue", "pending"],
+    fixture: QueuedMessageFixture,
   },
   {
     name: "MessageAvatarBlock",

@@ -1723,6 +1723,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           startedAt,
         }
       : null;
+    // A follow-up sent while a turn runs is shown as a queued record (in the
+    // conversation, after the running turn) until the server queues it.
+    const optimisticQueue = !optimisticStart && controls.queuePolicy === "enqueue_if_busy";
     set((state) => ({
       isSending: true,
       sendingChatId: optimisticStart?.id ?? initialChatId,
@@ -1778,7 +1781,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             worker_activity: [],
             work_streams: [],
           }
-        : state.summary
+        : state.summary && !optimisticQueue
         ? {
             ...state.summary,
             turn_state: "thinking",
@@ -1856,7 +1859,32 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         // Publish the persisted placement before waiting for message admission.
         await get().refreshNavigation();
       }
-      if (!optimisticStart) {
+      if (optimisticQueue) {
+        const settings = get().settings;
+        set((state) => ({
+          sessionQueue: [
+            ...state.sessionQueue,
+            {
+              id: clientMessageId,
+              client_message_id: clientMessageId,
+              chat_id: targetChatId,
+              text,
+              attachments,
+              content_parts: controls.contentParts,
+              controls: {
+                model: controls.model ?? settings.model,
+                reasoning_effort: controls.reasoningEffort ?? settings.reasoning_effort,
+                access_mode: controls.accessMode ?? settings.access_mode,
+                plan_mode: controls.planMode ?? false,
+              },
+              state: "queued",
+              cursor: Number.MAX_SAFE_INTEGER,
+              created_at: startedAt,
+              updated_at: startedAt,
+            },
+          ],
+        }));
+      } else if (!optimisticStart) {
         const optimisticCursor =
           Math.max(
             0,
@@ -1911,7 +1939,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           messages: state.messages.filter(
             (message) => message.id !== clientMessageId,
           ),
-          sessionQueue: [...state.sessionQueue, result.queued!],
+          sessionQueue: [
+            ...state.sessionQueue.filter((record) => record.id !== clientMessageId),
+            result.queued!,
+          ],
         }));
         await get().refreshSessionQueue(targetChatId);
         set({ status: { label: "ready", tone: "ok" } });
@@ -1959,6 +1990,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
             ? state.turnProgress
             : prunedTurnProgress,
           ...(completedSendState ?? {}),
+          ...(optimisticQueue
+            ? { sessionQueue: state.sessionQueue.filter((record) => record.id !== clientMessageId) }
+            : {}),
         };
       });
       await get().refreshNavigation();
@@ -1980,6 +2014,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           : state.navigation,
         messages: state.messages.filter(
           (message) => message.id !== clientMessageId,
+        ),
+        sessionQueue: state.sessionQueue.filter(
+          (record) => record.id !== clientMessageId,
         ),
         summary:
           optimisticStart && state.summary?.session_id === optimisticStart.id

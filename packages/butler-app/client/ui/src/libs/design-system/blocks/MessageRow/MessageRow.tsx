@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useRef } from "react";
 import type {
   CSSProperties,
   HTMLAttributes,
@@ -6,6 +6,7 @@ import type {
   ReactNode,
   Ref,
 } from "react";
+import { useSendFlight } from "../../lib/sendFlight";
 import { cn } from "../../lib/utils";
 import styles from "./MessageRow.module.css";
 
@@ -29,8 +30,9 @@ export interface MessageRowProps extends Omit<
   tone?: MessageRowTone;
   compactionEvent?: boolean;
   activity?: boolean;
-  /** Newly inserted row (sent or just arrived): fades in with a small rise. */
-  entering?: boolean;
+  /** Newly inserted row: fades in with a small rise (a just-sent user bubble flies
+   * in from the composer); "delivered" resolves a QueuedMessage bubble in place. */
+  entering?: boolean | "delivered";
   index?: number;
   style?: CSSProperties;
   rowRef?: Ref<HTMLElement>;
@@ -69,6 +71,8 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
     },
     forwardedRef,
   ) {
+    const bodyRef = useRef<HTMLDivElement | null>(null);
+    const flying = useSendFlight(bodyRef, entering === true && role === "user");
     return (
       <article
         {...props}
@@ -83,7 +87,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
           className,
         )}
         data-test-class={dataTestClass}
-        data-enter={entering ? "true" : undefined}
+        data-enter={flying && entering === true ? "fly" : entering === "delivered" ? "delivered" : entering ? "true" : undefined}
         data-index={index}
         ref={(node) => {
           assignRef(rowRef, node);
@@ -92,7 +96,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
         style={style}
       >
         {avatar}
-        <div className={styles.body} data-test-class="message-body">
+        <div className={styles.body} data-test-class="message-body" ref={bodyRef}>
           {children}
         </div>
         {footer && <div className={styles.rowFooter}>{footer}</div>}

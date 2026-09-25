@@ -16,7 +16,6 @@
     "blocks/ComposerAdjunctPanel",
     "blocks/ComposerCard",
     "blocks/ComposerControl",
-    "blocks/ComposerQueuePanel",
     "blocks/ContextDonutButton",
     "blocks/ConversationShell",
     "blocks/DashboardHeader",

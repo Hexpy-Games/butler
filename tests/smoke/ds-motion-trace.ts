@@ -5,6 +5,8 @@
  *   reports Layout/Paint work inside overlay animation frames.
  * - M6: AnimatedNumber keeps its width while counting (tabular sizers) and
  *   ProgressMeter fills through transform, never width.
+ * - M7: the send flight (QueuedMessage "Send flight" story) travels with a
+ *   translate animation whose frames run no Layout and no long task.
  * - Optional `--video`: Playwright recordings of each motion in light and dark.
  *
  * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR]
@@ -166,6 +168,26 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: "send-flight",
+    item: "QueuedMessage",
+    story: "Send flight",
+    run: async (page, scope) => {
+      for (const trigger of ["send-flight", "send-flight-queued", "send-flight-fallback"]) {
+        await scope.locator(`[data-ds-motion="${trigger}"]`).click();
+        await page.waitForTimeout(900);
+      }
+    },
+  },
+  {
+    name: "queued-delivery",
+    item: "QueuedMessage",
+    story: "Delivery",
+    run: async (page, scope) => {
+      await scope.locator('[data-ds-motion="replay"]').click();
+      await page.waitForTimeout(1_400);
+    },
+  },
+  {
     name: "worker-complete",
     item: "WorkerActivityRow",
     story: "Completes",
@@ -207,6 +229,52 @@ async function measureNumberAndMeter(page: Page, serverUrl: string, ids: Map<str
   assert(jitter <= 0.5, `AnimatedNumber width changed by ${jitter}px while counting`);
   assert(fill.transitionProperty === "transform" && fill.inlineWidth === "", `ProgressMeter fill must animate transform only: ${JSON.stringify(fill)}`);
   return { animatedNumberWidthJitterPx: Math.round(jitter * 100) / 100, samples: widths.length, progressFill: fill };
+}
+
+/**
+ * M7 send flight: the sent bubble flies from the composer with a WAAPI
+ * translate. Its travel frames (after the mount and retarget frames) must stay
+ * on the compositor: no long task, no Layout or Paint, and it must travel.
+ */
+async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string, string>) {
+  const browser = page.context().browser()!;
+  const scope = await openItem(page, serverUrl, ids.get("QueuedMessage")!, "light", "Send flight");
+  const rounds = 3;
+  const { events, thread } = await traced(browser, page, async () => {
+    for (let round = 0; round < rounds; round += 1) {
+      await markNow(page, `flight-${round}`);
+      // A programmatic click keeps the pointer (and the send tooltip) out of the frames.
+      await scope.evaluate((story) => (story.querySelector('[data-ds-motion="send-flight"]') as HTMLElement).click());
+      await page.waitForTimeout(700);
+    }
+    return {};
+  });
+  const travel = await scope.evaluate(async (story) => {
+    const button = story.querySelector('[data-ds-motion="send-flight"]') as HTMLElement;
+    button.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const bubbles = story.querySelectorAll('[data-ds-motion="send-flight-list"] [data-test-class="message-body"]');
+    const bubble = bubbles[bubbles.length - 1] as HTMLElement;
+    const first = bubble.getBoundingClientRect();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const last = bubble.getBoundingClientRect();
+    return {
+      flying: bubble.closest("article")?.getAttribute("data-enter") ?? null,
+      travelledPx: Math.round(Math.hypot(first.left - last.left, first.top - last.top)),
+    };
+  });
+  const windows = Array.from({ length: rounds }, (_, round) => {
+    const start = markTs(events, `flight-${round}`);
+    // Skip the input, mount and retarget frames; judge the travel frames of the
+    // --motion-deliberate (320ms) flight before its settle frame.
+    return windowStats(events, thread, start + 80_000, start + 280_000);
+  });
+  const whole = windowStats(events, thread, markTs(events, "flight-0"), markTs(events, `flight-${rounds - 1}`) + 700_000);
+  const mainThreadFrames = windows.reduce((sum, stats) => sum + stats.layouts + stats.paints, 0);
+  assert(whole.longTasks === 0, `send flight produced ${whole.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${whole.maxTaskMs}ms)`);
+  assert(mainThreadFrames === 0, `send flight travel frames ran Layout/Paint ${mainThreadFrames} time(s); it must run on the compositor`);
+  assert(travel.flying === "fly" && travel.travelledPx > 20, `send flight did not run: ${JSON.stringify(travel)}`);
+  return { animationFrames: windows, whole, travel };
 }
 
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
@@ -389,6 +457,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     assert(fade.cls - control.cls < 0.01, `chunk fade adds layout shift: ${fade.cls} vs ${control.cls} without it`);
     assert(fade.settledChunkSpans === 0, "settled streamed text should render without chunk spans");
     results.m6 = await measureNumberAndMeter(page, serverUrl, ids);
+    results.sendFlight = await measureSendFlight(page, serverUrl, ids);
   } finally {
     await context.close();
   }

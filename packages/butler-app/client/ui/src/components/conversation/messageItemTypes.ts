@@ -9,7 +9,7 @@ export interface MessageItemProps {
   topOffset: number;
   copied: boolean;
   /** Newly inserted row; see useEnteringKeys. */
-  entering?: boolean;
+  entering?: boolean | "delivered";
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage: (message: MessageRecord) => void;
   onCopyContextMenuText: (message: MessageRecord) => void;
