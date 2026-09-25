@@ -6,7 +6,7 @@ import { Stack } from "../Stack";
 
 export function ClickableFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <Clickable onClick={() => undefined}>Clickable row</Clickable>
       <Clickable
         onClick={() => undefined}

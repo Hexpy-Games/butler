@@ -3,7 +3,7 @@ import { Slider } from "./Slider";
 
 export function SliderFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <Slider
         aria-label="Context limit"
         min={1000}

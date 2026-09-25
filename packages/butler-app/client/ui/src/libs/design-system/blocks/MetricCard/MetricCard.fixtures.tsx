@@ -4,7 +4,7 @@ import { Activity } from "../../components/Icons";
 
 export function MetricCardFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <MetricCard
         value="87"
         label="Active Sessions"

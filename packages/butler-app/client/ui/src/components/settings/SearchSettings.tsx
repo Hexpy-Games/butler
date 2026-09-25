@@ -88,7 +88,7 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
           description={descriptions.searchProviderApiKey(apiKeyEnvVar)}
           descriptionId={apiKeyDescriptionId}
           control={(
-            <Stack align="row" gap="2" wrap>
+            <Stack align="row" gap="sm" wrap>
               <Input
                 id={apiKeyId}
                 aria-describedby={apiKeyDescriptionId}

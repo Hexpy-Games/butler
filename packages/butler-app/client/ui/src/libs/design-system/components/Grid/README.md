@@ -21,6 +21,15 @@ import { Grid } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
+### Grid.Item
+
+`gap` takes named spacing only. `Grid.Item` places a cell with layout item
+props; `span` (`1`, `2`, `3`, `full`) controls how many columns it covers:
+
+```tsx
+<Grid columns="3"><Grid.Item span="2">{wide}</Grid.Item>{cell}</Grid>
+```
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

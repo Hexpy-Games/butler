@@ -9,7 +9,7 @@ export function CollapsibleNavGroupFixture() {
   const [collapsedExpanded, setCollapsedExpanded] = useState(false);
 
   return (
-    <Stack gap="2" style={{ width: "100%" }}>
+    <Stack gap="sm" style={{ width: "100%" }}>
       <CollapsibleNavGroup
         indented
         icon={<Folder size="md" />}

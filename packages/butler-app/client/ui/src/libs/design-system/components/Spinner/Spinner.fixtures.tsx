@@ -6,10 +6,10 @@ export function SpinnerFixture() {
   const [busy, setBusy] = useState(true);
 
   return (
-    <Stack gap="3" data-ds-fixture="spinner">
-      <Stack align="row" gap="4" cross="center" wrap>
+    <Stack gap="md" data-ds-fixture="spinner">
+      <Stack align="row" gap="lg" cross="center" wrap>
         {[14, 16, 18, 24, 32].map((size) => (
-          <Stack key={size} gap="2" cross="center">
+          <Stack key={size} gap="sm" cross="center">
             <Spinner size={size} />
             <Typo.Caption>{size}px</Typo.Caption>
           </Stack>

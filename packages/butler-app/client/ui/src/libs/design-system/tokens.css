@@ -107,6 +107,12 @@
   --border-hairline: 1px;
   --border-width-strong: 2px;
 
+  /* Flex-basis scale for layout item props (Stack/Inline children). */
+  --layout-basis-xs: 160px;
+  --layout-basis-sm: 200px;
+  --layout-basis-md: 260px;
+  --layout-basis-lg: 460px;
+
   /* Page max-width scale: forms, reading columns, dashboards. */
   --page-max-width-narrow: 38rem;
   --page-max-width-reading: 760px;

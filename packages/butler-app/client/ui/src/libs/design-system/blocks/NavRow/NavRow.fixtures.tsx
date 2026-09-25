@@ -5,7 +5,7 @@ import { IconButton } from "../../components/IconButton";
 
 export function NavRowFixture() {
   return (
-    <Stack gap="2" style={{ width: "100%" }}>
+    <Stack gap="sm" style={{ width: "100%" }}>
       <NavRow
         icon={<Folder size="md" />}
         label="Project Alpha"

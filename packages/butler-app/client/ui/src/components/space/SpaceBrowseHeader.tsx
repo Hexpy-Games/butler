@@ -29,8 +29,8 @@ export function SpaceBrowseHeader() {
     s.navigation.chats.some((c) => c.id === "general"),
   );
   return (
-    <Stack gap={tab === "all" ? "2" : "4"} className={styles.browseHeader}>
-      <Stack gap="3">
+    <Stack gap={tab === "all" ? "sm" : "lg"} className={styles.browseHeader}>
+      <Stack gap="md">
         <Tabs
           value={tab}
           onValueChange={(value) => setTab(value as typeof tab)}

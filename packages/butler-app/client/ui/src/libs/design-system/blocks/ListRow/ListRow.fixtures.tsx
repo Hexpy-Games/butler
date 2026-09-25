@@ -4,7 +4,7 @@ import { FileText } from "../../components/Icons";
 
 export function ListRowFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <ListRow
         icon={<FileText size="md" />}
         title="Document Title"

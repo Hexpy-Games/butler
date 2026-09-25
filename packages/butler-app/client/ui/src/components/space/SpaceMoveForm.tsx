@@ -34,7 +34,7 @@ export function SpaceMoveForm({
       canDrop(rows, sourceKey, r.node.key, "inside"),
   );
   return (
-    <Stack gap="4">
+    <Stack gap="lg">
       <DialogHeader>
         <DialogTitle>{appCopy.space.moveDestination}</DialogTitle>
         <DialogDescription>
@@ -46,7 +46,7 @@ export function SpaceMoveForm({
         onChange={(e) => setQuery(e.target.value)}
       />
       <ScrollArea>
-        <Stack gap="1">
+        <Stack gap="xs">
           {canDrop(rows, sourceKey, null, "inside") && (
             <NavRow
               label={appCopy.space.root}

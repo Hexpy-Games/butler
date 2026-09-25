@@ -35,7 +35,7 @@ function Segmented<T extends string>({ label, options, labels, value, onChange }
   return (
     <Stack align="row" cross="center" gap="sm" role="group" aria-label={label} data-ds-toolbar={label.toLowerCase()}>
       <Typo.Caption>{label}</Typo.Caption>
-      <Stack align="row" gap="1" wrap>
+      <Stack align="row" gap="xs" wrap>
         {options.map((option) => (
           <Button
             aria-pressed={value === option}

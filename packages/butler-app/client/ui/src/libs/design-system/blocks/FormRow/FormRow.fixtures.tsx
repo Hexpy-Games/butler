@@ -5,7 +5,7 @@ import { Stack } from "../../components/Stack";
 
 export function FormRowFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <FormRow
         label="Project name"
         help="Choose a unique name for your project"

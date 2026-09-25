@@ -55,7 +55,7 @@ export function SettingsTokenInput({
       description={description}
       descriptionId={descriptionId}
       control={
-        <Stack gap="2">
+        <Stack gap="sm">
           <Input
             id={inputId}
             value={text}

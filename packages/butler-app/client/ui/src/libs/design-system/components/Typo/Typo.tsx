@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Typo.module.css";
 
 type TypoElement =
@@ -43,7 +44,7 @@ export interface TypoTextProps {
   numeric?: TypoNumeric;
 }
 
-export interface TypoProps extends HTMLAttributes<HTMLElement>, TypoTextProps {
+export interface TypoProps extends HTMLAttributes<HTMLElement>, TypoTextProps, Omit<LayoutItemProps, "span"> {
   children: ReactNode;
   as?: TypoElement;
   htmlFor?: string;
@@ -55,22 +56,24 @@ function classNames(...values: Array<string | undefined>): string {
 }
 
 function createTypo(defaultAs: TypoElement, variantClassName: string) {
-  return function TypoVariant({
-    as: Component = defaultAs,
-    className,
-    children,
-    tone,
-    weight,
-    align,
-    truncate,
-    lineClamp,
-    wrap,
-    numeric,
-    ...props
-  }: TypoProps) {
+  return function TypoVariant(allProps: TypoProps) {
+    const [item, {
+      as: Component = defaultAs,
+      className,
+      children,
+      tone,
+      weight,
+      align,
+      truncate,
+      lineClamp,
+      wrap,
+      numeric,
+      ...props
+    }] = splitLayoutItemProps(allProps);
+    const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
     return (
       <Component
-        className={classNames(styles.typo, variantClassName, className)}
+        className={classNames(styles.typo, variantClassName, itemClassName, className)}
         data-tone={tone}
         data-weight={weight}
         data-align={align}
@@ -78,6 +81,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
         data-line-clamp={lineClamp}
         data-wrap={wrap}
         data-numeric={numeric}
+        {...itemAttributes}
         {...props}
       >
         {children}

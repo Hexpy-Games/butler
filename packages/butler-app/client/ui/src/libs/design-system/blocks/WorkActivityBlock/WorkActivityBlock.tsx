@@ -48,7 +48,7 @@ export function WorkActivityBlock({
       data-test-class={`turn-work-block${running ? " turn-work-block-running" : ""}`}
       {...props}
     >
-      <Stack gap={density === "compact" ? "1" : "sm"}>
+      <Stack gap={density === "compact" ? "xs" : "sm"}>
         <div className={styles.header}>
           {icon ? (
             <span className={styles.icon} data-slot="work-activity-icon">

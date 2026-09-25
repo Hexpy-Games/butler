@@ -21,6 +21,22 @@ import { Stack } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
+### Item props and Stack.Item
+
+`gap` takes named spacing only (`none`..`2xl`; the numeric aliases were removed).
+Stack accepts layout item props (`grow`, `shrink`, `basis`, `minWidth`,
+`alignSelf`) for its place in a parent Stack, and `Stack.Item` wraps any other
+child with them, so rows never need `style={{ flex: ... }}` or a wrapper class:
+
+```tsx
+<Stack align="row" gap="sm" cross="center">
+  <Stack gap="none" grow minWidth="0"><Typo.Body truncate>{title}</Typo.Body></Stack>
+  <Stack.Item shrink={false}><Button size="sm" text={action} /></Stack.Item>
+</Stack>
+```
+
+Use `Inline` for wrapping, centered rows.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

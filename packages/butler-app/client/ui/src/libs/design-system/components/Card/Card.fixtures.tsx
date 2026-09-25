@@ -4,7 +4,7 @@ import { Card } from "./Card";
 
 export function CardFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <Card>
         <Typo.Body>Default card container</Typo.Body>
         <Typo.Caption>Matches DocumentTile and ResourceTile surface styling.</Typo.Caption>

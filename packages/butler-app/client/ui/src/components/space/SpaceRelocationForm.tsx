@@ -9,7 +9,7 @@ export function SpaceRelocationForm({ dialog, rows }: { dialog: Extract<SpaceDia
   const pending = useOrganization(s => s.pending);
   const source = rows.get(dialog.sourceKey);
   const target = dialog.targetKey ? rows.get(dialog.targetKey) : undefined;
-  return <Stack gap="4">
+  return <Stack gap="lg">
     <DialogHeader>
       <DialogTitle>{appCopy.space.relocationTitle}</DialogTitle>
       <DialogDescription>

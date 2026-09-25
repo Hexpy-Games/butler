@@ -6,7 +6,7 @@ import styles from "./ButtonContainer.module.css";
 
 export function ButtonContainerFixture() {
   return (
-    <Stack className={styles.fixture} gap="3">
+    <Stack className={styles.fixture} gap="md">
       <ButtonContainer size="sm">
         <Button size="sm" variant="outline">
           가져오기

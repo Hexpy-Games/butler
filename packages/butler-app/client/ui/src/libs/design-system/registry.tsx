@@ -595,7 +595,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Input",
     tags: ["form", "text-entry"],
     fixture: () => (
-      <Stack gap="2">
+      <Stack gap="sm">
         <Field>
           <Label htmlFor="ds-input">Input</Label>
           <Input
@@ -754,12 +754,12 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Separator",
     tags: ["layout", "structure"],
     fixture: () => (
-      <Stack gap="2">
+      <Stack gap="sm">
         <Typo.Body>Line</Typo.Body>
         <Separator line tone="default" />
         <Typo.Body>Spacing only</Typo.Body>
         <Separator line={false} space="md" />
-        <Stack align="row" cross="center" gap="2">
+        <Stack align="row" cross="center" gap="sm">
           <Typo.Body>Vertical</Typo.Body>
           <Separator orientation="vertical" tone="accent" />
           <Typo.Body>Accent</Typo.Body>
@@ -772,7 +772,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Stack",
     tags: ["layout", "responsive"],
     fixture: () => (
-      <Stack gap="2">
+      <Stack gap="sm">
         <Typo.Body>One-dimensional layout</Typo.Body>
         <Typo.Caption>Use ButtonContainer for adjacent buttons.</Typo.Caption>
       </Stack>
@@ -783,7 +783,7 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Grid",
     tags: ["layout", "responsive"],
     fixture: () => (
-      <Grid gap="2">
+      <Grid gap="sm">
         <Typo.Body>A</Typo.Body>
         <Typo.Body>B</Typo.Body>
       </Grid>
@@ -818,12 +818,12 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/Typo",
     tags: ["typography", "hierarchy"],
     fixture: () => (
-      <Stack gap="2">
+      <Stack gap="sm">
         {typographyRows.map(([name, sample]) => (
           <Stack
             align="row"
             cross="center"
-            gap="3"
+            gap="md"
             justify="between"
             key={name}
           >

@@ -1,20 +1,9 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Stack.module.css";
 
-type GapToken =
-  | "none"
-  | "xs"
-  | "sm"
-  | "md"
-  | "lg"
-  | "xl"
-  | "2xl"
-  | "1"
-  | "2"
-  | "3"
-  | "4"
-  | "5"
-  | "6";
+/** Named spacing only; the numeric aliases "1".."6" were removed. */
+export type StackGap = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 type JustifyAlign =
   | "start"
   | "center"
@@ -23,7 +12,7 @@ type JustifyAlign =
   | "around"
   | "evenly";
 type CrossAlign = "start" | "center" | "end" | "stretch" | "baseline";
-type LayoutElement =
+export type LayoutElement =
   | "div"
   | "section"
   | "header"
@@ -34,32 +23,39 @@ type LayoutElement =
   | "footer"
   | "span"
   | "ul"
-  | "ol";
+  | "ol"
+  | "li";
 
-export interface StackProps extends HTMLAttributes<HTMLElement> {
+export interface StackProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItemProps, "span"> {
   children: ReactNode;
   as?: LayoutElement;
   align?: "row" | "column";
-  gap?: GapToken;
+  gap?: StackGap;
   justify?: JustifyAlign;
   cross?: CrossAlign;
   fill?: boolean;
   wrap?: boolean;
 }
 
-export function Stack({
-  as: Component = "div",
-  children,
-  align = "column",
-  gap = "md",
-  justify = "start",
-  cross = "stretch",
-  fill = false,
-  wrap = false,
-  className,
-  ...props
-}: StackProps) {
-  const classes = [
+function join(...values: Array<string | false | undefined>): string {
+  return values.filter(Boolean).join(" ");
+}
+
+function StackRoot(allProps: StackProps) {
+  const [item, {
+    as: Component = "div",
+    children,
+    align = "column",
+    gap = "md",
+    justify = "start",
+    cross = "stretch",
+    fill = false,
+    wrap = false,
+    className,
+    ...props
+  }] = splitLayoutItemProps(allProps);
+  const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
+  const classes = join(
     styles.stack,
     styles[`align-${align}`],
     styles[`gap-${gap}`],
@@ -67,16 +63,33 @@ export function Stack({
     styles[`cross-${cross}`],
     fill && styles.fill,
     wrap && styles.wrap,
+    itemClassName,
     className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  );
 
   return (
-    <Component className={classes} {...props}>
+    <Component className={classes} {...itemAttributes} {...props}>
       {children}
     </Component>
   );
 }
+
+export interface StackItemProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItemProps, "span"> {
+  children?: ReactNode;
+  as?: LayoutElement;
+}
+
+/** Wraps any child of a Stack with item props instead of a styled wrapper div. */
+function StackItem(allProps: StackItemProps) {
+  const [item, { as: Component = "div", className, children, ...props }] = splitLayoutItemProps(allProps);
+  const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
+  return (
+    <Component className={join(itemClassName, className) || undefined} {...itemAttributes} {...props}>
+      {children}
+    </Component>
+  );
+}
+
+export const Stack = Object.assign(StackRoot, { Item: StackItem });
 
 export default Stack;

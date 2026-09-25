@@ -101,7 +101,7 @@ export function SpaceSidebar() {
         stickyHeader={<SpaceBrowseHeader />}
         footer={<SidebarSettingsItem />}
       >
-        <Stack gap="1" as="nav" aria-label={appCopy.space.conversationList}>
+        <Stack gap="xs" as="nav" aria-label={appCopy.space.conversationList}>
           {roots
             .slice(
               0,

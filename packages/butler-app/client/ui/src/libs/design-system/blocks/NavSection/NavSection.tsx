@@ -37,7 +37,7 @@ export function NavSection({
         aria-hidden={collapsed}
       >
         <div className={styles.contentInner}>
-          <Stack align="column" gap="1">
+          <Stack align="column" gap="xs">
             {children}
           </Stack>
         </div>

@@ -50,7 +50,7 @@ export function SettingsPercentInput({
       label={label}
       description={description}
       descriptionId={descriptionId}
-      control={<Stack gap="2">
+      control={<Stack gap="sm">
         <Input
           id={inputId}
           aria-label={`${label} percent value`}

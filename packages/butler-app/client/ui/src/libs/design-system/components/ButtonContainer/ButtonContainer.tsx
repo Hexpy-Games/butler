@@ -19,9 +19,9 @@ interface ButtonContainerProps extends Omit<StackProps, "children" | "gap"> {
 }
 
 function gapForButtonSize(size: ButtonContainerSize): StackProps["gap"] {
-  if (size === "xs" || size === "icon-xs") return "1";
-  if (size === "lg" || size === "icon-lg") return "3";
-  return "2";
+  if (size === "xs" || size === "icon-xs") return "xs";
+  if (size === "lg" || size === "icon-lg") return "md";
+  return "sm";
 }
 
 export function ButtonContainer({

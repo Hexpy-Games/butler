@@ -6,7 +6,7 @@ import styles from "./RowActionCluster.module.css";
 
 export function RowActionClusterFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <div className={styles.fixtureSurface}>
         <RowActionCluster>
           <IconButton label="Add"><Plus size="sm" /></IconButton>

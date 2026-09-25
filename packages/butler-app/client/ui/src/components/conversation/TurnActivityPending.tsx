@@ -29,7 +29,7 @@ export function TurnActivityPending({
         aria-label={pendingLabel}
         aria-live="polite"
         data-test-class="turn-activity-panel turn-activity-pending-skeleton"
-        gap="2"
+        gap="sm"
         style={{ width: SKELETON_WIDTH }}
       >
         <AssistantStatusLabel

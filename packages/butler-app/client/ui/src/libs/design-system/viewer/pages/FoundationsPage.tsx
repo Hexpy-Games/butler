@@ -17,12 +17,12 @@ function previewStyle(token: Token): CSSProperties {
 
 function TokenRow({ token }: { token: Token }) {
   return (
-    <Stack align="row" cross="center" gap="3" data-ds-token-kind={token.kind} data-ds-token-name={token.name}>
+    <Stack align="row" cross="center" gap="md" data-ds-token-kind={token.kind} data-ds-token-name={token.name}>
       <span aria-hidden="true" className={`${styles.tokenPreview} ${styles[`token-${token.kind}`] ?? ""}`}
         style={previewStyle(token)}>
         {token.kind === "type" ? "Aa" : null}
       </span>
-      <Stack gap="1">
+      <Stack gap="xs">
         <Typo.Code>{token.name}</Typo.Code>
         <Typo.Caption>{token.value}</Typo.Caption>
       </Stack>

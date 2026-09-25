@@ -12,7 +12,7 @@ export function TabsFixture() {
         <TabsTrigger value="workers"><Blocks size="md" />Workers</TabsTrigger>
       </TabsList>
       <TabsContent value="summary">
-        <Stack gap="1">
+        <Stack gap="xs">
           <Typo.PanelSectionTitle>Summary</Typo.PanelSectionTitle>
           <Typo.Caption>Right-panel style tab surface.</Typo.Caption>
         </Stack>

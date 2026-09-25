@@ -4,7 +4,7 @@ import { Folder, FileText } from "../../components/Icons";
 
 export function ResourceTileFixture() {
   return (
-    <Grid gap="2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+    <Grid gap="sm" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
       <ResourceTile
         icon={<Folder size="xl" />}
         title="Project Alpha"

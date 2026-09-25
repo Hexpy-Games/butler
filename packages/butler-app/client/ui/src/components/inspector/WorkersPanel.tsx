@@ -60,7 +60,7 @@ export function WorkersPanel({
       </Button>
     ) : null;
     const detailBlocks = expanded && blocks.length > 0 ? (
-      <Stack gap="1" id={detailsId}>
+      <Stack gap="xs" id={detailsId}>
         {blocks.map((block, index) => (
           <WorkActivityBlock
             data-work-block-id={block.id}

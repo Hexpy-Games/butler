@@ -66,6 +66,22 @@ function BreadcrumbLink({
   );
 }
 
+/** A breadcrumb step that navigates in-app (no URL): a real button styled as a link. */
+function BreadcrumbButton({
+  className,
+  type = "button",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      data-slot="breadcrumb-link"
+      type={type}
+      className={cn(styles.link, className)}
+      {...props}
+    />
+  );
+}
+
 function BreadcrumbPage({
   className,
   ...props
@@ -123,6 +139,7 @@ export {
   BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbPage,
   BreadcrumbSeparator,
   BreadcrumbEllipsis,

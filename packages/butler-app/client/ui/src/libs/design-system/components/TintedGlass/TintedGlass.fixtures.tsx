@@ -16,7 +16,7 @@ export function TintedGlassFixture() {
         <span className={`${styles.mark} ${styles.markTwo}`} />
         <span className={`${styles.mark} ${styles.markThree}`} />
       </div>
-      <Stack className={styles.stack} gap="2">
+      <Stack className={styles.stack} gap="sm">
         <TintedGlass className={styles.demo} padding="lg" radius="composer">
           <Typo.PanelSectionTitle>Composer surface</Typo.PanelSectionTitle>
           <Typo.Body>

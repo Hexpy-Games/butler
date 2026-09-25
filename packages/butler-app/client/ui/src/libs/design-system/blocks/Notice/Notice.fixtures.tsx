@@ -4,7 +4,7 @@ import { AlertCircle, CircleAlert, CheckCircle2, CircleX } from "../../component
 
 export function NoticeFixture() {
   return (
-    <Stack gap="2">
+    <Stack gap="sm">
       <Notice
         tone="info"
         icon={<AlertCircle size="md" />}

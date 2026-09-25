@@ -52,7 +52,7 @@ export function SpaceGroupForm({
         );
       }}
     >
-      <Stack gap="4">
+      <Stack gap="lg">
         <DialogHeader>
           <DialogTitle>
             {dialog.kind === "rename" ? appCopy.space.renameGroup : appCopy.space.createGroup}

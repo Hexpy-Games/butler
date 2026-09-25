@@ -39,7 +39,7 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
         ) : dialog?.kind === "relocate" ? (
           <SpaceRelocationForm dialog={dialog} rows={rows} />
         ) : dialog?.kind === "favorites" ? (
-          <Stack gap="4">
+          <Stack gap="lg">
             <DialogHeader>
               <DialogTitle>{appCopy.space.favorites}</DialogTitle>
               <DialogDescription>

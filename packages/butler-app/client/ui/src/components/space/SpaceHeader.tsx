@@ -24,8 +24,8 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
   const active = useButlerStore((s) => s.activeChatId);
   const favorites = [...rows.values()].filter((r) => r.pinned);
   return (
-    <Stack gap="6" className={styles.sidebarHeader}>
-      <Stack gap="1">
+    <Stack gap="2xl" className={styles.sidebarHeader}>
+      <Stack gap="xs">
         {window.butlerApp && <SpaceBrand />}
         <nav className={styles.primaryActions} aria-label={appCopy.space.primaryActions}>
           <NavRow
@@ -41,9 +41,9 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
           />
         </nav>
       </Stack>
-      <Stack gap="2">
+      <Stack gap="sm">
         <NavSectionHeading title={appCopy.space.favorites} />
-        <Stack gap="1">
+        <Stack gap="xs">
           {favorites.slice(0, 2).map((row) => (
             <SpaceRow key={row.node.key} rowKey={row.node.key} shortcut />
           ))}
