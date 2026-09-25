@@ -4,7 +4,7 @@ import type {
   ProviderQuotaResultView,
   UsageMonitorView,
 } from "@/app/types.ts";
-import { Stack, Typo } from "@/butler-ds";
+import { MetaList, Stack, Typo } from "@/butler-ds";
 import {
   formatQuotaTimestamp,
   planLabel,
@@ -23,24 +23,25 @@ export function UsageProviderRow({ provider }: { provider: UsageProvider }) {
     <Stack align="row" justify="between" cross="start" gap="md" wrap>
       <Stack gap="xs" grow basis="md" minWidth="0">
         <Typo.Body as="div">{provider.providerId}</Typo.Body>
-        <Typo.Caption>
-          {provider.source === "provider_adapter"
+        <MetaList items={[
+          { value: provider.source === "provider_adapter"
             ? appCopy.interfaceStatus.providerAdapter
-            : appCopy.interfaceStatus.localTelemetry} {" "}
-          {appCopy.interfaceDetails.requestsLabel}{formatCount(provider.requestCount)} {appCopy.interfaceDetails.inputLabel}{" "}
-          {formatCompact(provider.promptTokens)} {appCopy.interfaceDetails.outputLabel}{" "}
-          {formatCompact(provider.outputTokens)}
-        </Typo.Caption>
+            : appCopy.interfaceStatus.localTelemetry },
+          { label: appCopy.interfaceDetails.requestsLabel, value: formatCount(provider.requestCount) },
+          { label: appCopy.interfaceDetails.inputLabel, value: formatCompact(provider.promptTokens) },
+          { label: appCopy.interfaceDetails.outputLabel, value: formatCompact(provider.outputTokens) },
+        ]} />
         {quota.available && quota.stale ? (
           <Typo.Caption>{appCopy.interfaceStatus.staleQuota}</Typo.Caption>
         ) : null}
         {!quota.available ? (
-          <Typo.Caption>{appCopy.interfaceDetails.quotaLabel}{quotaReasonLabel(quota.reason?.code)}</Typo.Caption>
+          <MetaList items={[{ label: appCopy.interfaceDetails.quotaLabel, value: quotaReasonLabel(quota.reason?.code) }]} />
         ) : null}
         {renderQuotaDetails(quota)}
-        <Typo.Caption>
-          {appCopy.interfaceDetails.billingLabel}{provider.billing.available ? appCopy.interfaceStatus.confirmed : provider.billing.reason}
-        </Typo.Caption>
+        <MetaList items={[{
+          label: appCopy.interfaceDetails.billingLabel,
+          value: provider.billing.available ? appCopy.interfaceStatus.confirmed : provider.billing.reason,
+        }]} />
       </Stack>
       <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
         {formatCompact(provider.totalTokens)}
@@ -53,13 +54,17 @@ function renderQuotaDetails(quota: ProviderQuotaResultView) {
   if (!quota.available) return null;
   return (
     <Stack gap="xs">
-      <Typo.Caption>
-        {appCopy.interfaceDetails.planLabel}{planLabel(quota.planKind, quota.planName)} {appCopy.interfaceDetails.sourceLabel}{sourceLabel(quota.sourceKind)}
-      </Typo.Caption>
-      <Typo.Caption>
-        {appCopy.interfaceDetails.fetchedLabel}{quota.fetchedAt ? formatQuotaTimestamp(quota.fetchedAt) : appCopy.interfaceStatus.unknown}
-        {quota.stale ? ` · ${quotaReasonLabel(quota.reason?.code)}` : ""}
-      </Typo.Caption>
+      <MetaList items={[
+        { label: appCopy.interfaceDetails.planLabel, value: planLabel(quota.planKind, quota.planName) },
+        { label: appCopy.interfaceDetails.sourceLabel, value: sourceLabel(quota.sourceKind) },
+      ]} />
+      <MetaList items={[
+        {
+          label: appCopy.interfaceDetails.fetchedLabel,
+          value: quota.fetchedAt ? formatQuotaTimestamp(quota.fetchedAt) : appCopy.interfaceStatus.unknown,
+        },
+        ...(quota.stale ? [{ value: quotaReasonLabel(quota.reason?.code) }] : []),
+      ]} />
       {quota.windows.map((window) => (
         <ProviderQuotaGauge key={window.id} window={window} />
       ))}

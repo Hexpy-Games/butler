@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { UsageMonitorView } from "@/app/types.ts";
 import { Fragment } from "react";
-import { Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { MetaList, Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
 import { formatCount } from "./usageSettingsFormat";
 
 export function UsageToolPanel({
@@ -27,11 +27,11 @@ export function UsageToolPanel({
                 <Stack align="row" justify="between" cross="start" gap="md" wrap>
                   <Stack gap="xs" grow basis="md" minWidth="0">
                     <Typo.Body as="div">{name}</Typo.Body>
-                    <Typo.Caption>
-                      {appCopy.interfaceDetails.results}{formatCount(bucket.results)} {appCopy.interfaceDetails.success}{" "}
-                      {formatCount(bucket.successes)} {appCopy.interfaceDetails.failures}{" "}
-                      {formatCount(bucket.failures)}
-                    </Typo.Caption>
+                    <MetaList items={[
+                      { label: appCopy.interfaceDetails.results, value: formatCount(bucket.results) },
+                      { label: appCopy.interfaceDetails.success, value: formatCount(bucket.successes) },
+                      { label: appCopy.interfaceDetails.failures, value: formatCount(bucket.failures) },
+                    ]} />
                   </Stack>
                   <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
                     {formatCount(bucket.calls)}

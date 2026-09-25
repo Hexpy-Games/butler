@@ -1,7 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import { Fragment } from "react";
-import { Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { MetaList, Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
 import {
   formatCount,
   type UsageNamedBucket,
@@ -31,11 +31,11 @@ export function UsageBucketPanel({
                 <Stack align="row" justify="between" cross="start" gap="md" wrap>
                   <Stack gap="xs" grow basis="md" minWidth="0">
                     <Typo.Body as="div">{name}</Typo.Body>
-                    <Typo.Caption>
-                      {appCopy.interfaceDetails.input}{formatCount(bucket.promptTokens)} {appCopy.interfaceDetails.cache}{" "}
-                      {formatCount(bucket.cachedTokens)} {appCopy.interfaceDetails.outputLabel}{" "}
-                      {formatCount(bucket.outputTokens)}
-                    </Typo.Caption>
+                    <MetaList items={[
+                      { label: appCopy.interfaceDetails.input, value: formatCount(bucket.promptTokens) },
+                      { label: appCopy.interfaceDetails.cache, value: formatCount(bucket.cachedTokens) },
+                      { label: appCopy.interfaceDetails.outputLabel, value: formatCount(bucket.outputTokens) },
+                    ]} />
                   </Stack>
                   <Typo.Body as="div" align="end" numeric="tabular" wrap="nowrap">
                     {formatCount(bucket.totalTokens)}
