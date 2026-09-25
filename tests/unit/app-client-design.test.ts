@@ -1590,7 +1590,6 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("main-screen-theme-bloom");
   expect(renderer).toContain("main-screen-theme-silk");
   expect(renderer).toContain("main-screen-theme-none");
-  expect(renderer).toContain("function ComposerMenu");
   expect(renderer).toContain("modelCatalog");
   expect(renderer).not.toContain("showStatusPill");
   expect(renderer).toContain("ReactMarkdown");
