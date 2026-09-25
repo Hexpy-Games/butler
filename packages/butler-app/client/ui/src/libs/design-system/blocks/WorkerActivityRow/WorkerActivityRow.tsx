@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { RowActionCluster } from "../RowActionCluster";
@@ -47,6 +47,7 @@ export function WorkerActivityRow({
 }: WorkerActivityRowProps) {
   const currentPhase = phaseIndex(phase);
   const terminal = isTerminalPhase(phase);
+  const completedNow = useCompletedNow(phase);
   const hasIcon = Boolean(icon);
   const heading = (
     <span className={styles.primaryLine}>
@@ -64,6 +65,8 @@ export function WorkerActivityRow({
       className={cn(styles.root, compact && styles.compact, !hasIcon && styles.noIcon)}
       data-depth={depth > 0 ? String(depth) : undefined}
       data-terminal={terminal ? "true" : undefined}
+      data-completed-now={completedNow.active ? "true" : undefined}
+      onAnimationEnd={completedNow.active ? completedNow.clear : undefined}
       data-worker-phase={phase}
       id={id}
     >
@@ -105,6 +108,17 @@ export function WorkerActivityRow({
       </div>
     </article>
   );
+}
+
+/** True once when `phase` turns "complete" after mount; cleared when the pulse ends. */
+function useCompletedNow(phase?: WorkerPhase) {
+  const previous = useRef(phase);
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    if (phase === "complete" && previous.current !== undefined && previous.current !== "complete") setActive(true);
+    previous.current = phase;
+  }, [phase]);
+  return { active, clear: () => setActive(false) };
 }
 
 function phaseIndex(phase?: WorkerPhase): number {

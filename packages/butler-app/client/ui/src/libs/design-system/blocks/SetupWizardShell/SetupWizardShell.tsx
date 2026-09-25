@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from "react";
+import { PageContainer } from "../../components/PageContainer";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
@@ -14,6 +15,8 @@ interface SetupWizardShellProps
   title: ReactNode;
   progressLabel?: string;
   windowControls?: ReactNode;
+  /** Resolved appearance theme for the fluid backdrop. */
+  tone?: "light" | "dark";
 }
 
 interface SetupWizardContentProps {
@@ -28,13 +31,14 @@ export function SetupWizardShell({
   steps,
   title,
   windowControls,
+  tone = "light",
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
 
   return (
-    <main className={styles.screen} {...props}>
-      <PromptFluidBackground variant="bloom" />
+    <main className={styles.screen} data-tone={tone} {...props}>
+      <PromptFluidBackground variant="bloom" tone={tone} />
       <div
         aria-hidden="true"
         className={`${styles.dragLane} drag-region`}
@@ -45,10 +49,11 @@ export function SetupWizardShell({
           {windowControls}
         </div>
       ) : null}
-      <Stack
+      <PageContainer
         as="section"
+        width="narrow"
+        gutter="none"
         className={styles.shell}
-        gap="lg"
         aria-label={regionLabel}
       >
         <Stack className={`${styles.header} drag-region`} gap="sm">
@@ -62,7 +67,7 @@ export function SetupWizardShell({
         <TintedGlass
           as="section"
           className={styles.body}
-          padding="lg"
+          padding="none"
           radius="panel"
         >
           <ScrollArea
@@ -73,7 +78,7 @@ export function SetupWizardShell({
             {children}
           </ScrollArea>
         </TintedGlass>
-      </Stack>
+      </PageContainer>
     </main>
   );
 }

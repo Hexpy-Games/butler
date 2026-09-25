@@ -1,4 +1,5 @@
 import type { CSSProperties, FormHTMLAttributes, ReactNode, Ref } from "react";
+import { PageContainer, type PageContainerWidth } from "../../components/PageContainer";
 import { cn } from "../../lib/utils";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./ManagementPage.module.css";
@@ -13,6 +14,8 @@ export interface ManagementPageProps extends FormHTMLAttributes<HTMLFormElement>
   scrollRef?: Ref<HTMLDivElement>;
   as?: ManagementPageElement;
   dataTestClass?: string;
+  /** Page width of the content (PageContainer); default caps at 72rem. */
+  width?: PageContainerWidth;
 }
 
 export function ManagementPage({
@@ -25,6 +28,7 @@ export function ManagementPage({
   className,
   dataTestClass,
   style,
+  width = "default",
   ...props
 }: ManagementPageProps) {
   return (
@@ -39,7 +43,9 @@ export function ManagementPage({
         className={styles.scrollArea}
         contentClassName={styles.content}
       >
-        {children}
+        <PageContainer width={width} className={styles.pageContent}>
+          {children}
+        </PageContainer>
       </ScrollArea>
       {footer && (footerPlacement === "overlay" ? footer : <div className={styles.footer}>{footer}</div>)}
     </Component>

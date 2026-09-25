@@ -190,6 +190,9 @@
   --page-max-width-narrow: 38rem;
   --page-max-width-reading: 760px;
   --page-max-width-wide: 72rem;
+  --page-container-narrow: var(--page-max-width-reading);
+  --page-container-default: var(--page-max-width-wide);
+  --page-container-gutter: clamp(var(--space-lg), 3vw, 40px);
 
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;

@@ -225,3 +225,35 @@
     transform: scaleY(1.35);
   }
 }
+
+/* Success state: one pulse when a worker completes while visible. */
+.root[data-completed-now="true"] .icon {
+  color: var(--color-success-text);
+  animation: worker-complete var(--motion-deliberate)
+    var(--motion-ease-decelerate) 1;
+}
+
+.root[data-completed-now="true"] .phaseStep:last-child .phaseDot {
+  animation: worker-complete var(--motion-deliberate)
+    var(--motion-ease-decelerate) 1;
+}
+
+@keyframes worker-complete {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-scale-menu));
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion: the scale token is 1, so the pulse is a short fade. */
+@media (prefers-reduced-motion: reduce) {
+  .root[data-completed-now="true"] .icon,
+  .root[data-completed-now="true"] .phaseStep:last-child .phaseDot {
+    animation-duration: var(--motion-fast);
+  }
+}

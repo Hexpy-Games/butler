@@ -4,13 +4,21 @@ import styles from "./Grid.module.css";
 
 /** Named spacing only; the numeric aliases "1".."6" were removed. */
 type GapToken = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
-type ColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill";
+export type GridColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill" | "main-aside";
+/**
+ * Responsive columns keyed to the enclosing PageContainer: `base` always
+ * applies, `wide` from `@container page (min-width: 48rem)`.
+ */
+export interface GridResponsiveColumns {
+  base: GridColumnPreset;
+  wide?: GridColumnPreset;
+}
 type LayoutElement = "div" | "section" | "main" | "ul" | "ol" | "li" | "article";
 
 export interface GridProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode;
   as?: LayoutElement;
-  columns?: ColumnPreset;
+  columns?: GridColumnPreset | GridResponsiveColumns;
   gap?: GapToken;
 }
 
@@ -22,9 +30,11 @@ function GridRoot({
   className,
   ...props
 }: GridProps) {
+  const responsive = typeof columns === "object";
+  const base = responsive ? columns.base : columns;
   const classes = [
     styles.grid,
-    styles[`columns-${columns}`],
+    responsive ? styles.responsive : styles[`columns-${base}`],
     styles[`gap-${gap}`],
     className,
   ]
@@ -32,7 +42,12 @@ function GridRoot({
     .join(" ");
 
   return (
-    <Component className={classes} {...props}>
+    <Component
+      className={classes}
+      data-columns={base}
+      data-columns-wide={responsive ? columns.wide : undefined}
+      {...props}
+    >
       {children}
     </Component>
   );

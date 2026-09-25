@@ -1,5 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Card } from "../Card";
+import { PageContainer } from "../PageContainer";
 import { Typo } from "../Typo";
 import { Grid } from "./Grid";
 
@@ -11,8 +12,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { cell: "Cell", wide: "Spans two columns", full: "Spans the full row" },
-  "ko-KR": { cell: "셀", wide: "두 칸 차지", full: "한 줄 전체 차지" },
+  "en-US": { cell: "Cell", wide: "Spans two columns", full: "Spans the full row", main: "Main content", aside: "Aside" },
+  "ko-KR": { cell: "셀", wide: "두 칸 차지", full: "한 줄 전체 차지", main: "주요 내용", aside: "보조 영역" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -44,6 +45,18 @@ export const stories: ShowcaseStory[] = [
         <Cell>{`${text(context).cell} 3`}</Cell>
         <Cell>{`${text(context).cell} 4`}</Cell>
       </Grid>
+    ),
+  },
+  {
+    name: "Responsive columns (page container)",
+    widths: ["375", "app", "wide"],
+    render: (context) => (
+      <PageContainer gutter="none">
+        <Grid columns={{ base: "1", wide: "main-aside" }} gap="md">
+          <Cell>{text(context).main}</Cell>
+          <Cell>{text(context).aside}</Cell>
+        </Grid>
+      </PageContainer>
     ),
   },
 ];

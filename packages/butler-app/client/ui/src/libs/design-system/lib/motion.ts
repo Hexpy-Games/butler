@@ -115,3 +115,30 @@ export function animateMotion(
     ...(fill === undefined ? {} : { fill }),
   });
 }
+
+function cubicBezier(x1: number, y1: number, x2: number, y2: number, t: number): number {
+  const sample = (a: number, b: number, s: number) => 3 * a * s * (1 - s) ** 2 + 3 * b * s ** 2 * (1 - s) + s ** 3;
+  // Solve x(s) = t by bisection; 24 steps are far below a pixel of error.
+  let low = 0;
+  let high = 1;
+  for (let step = 0; step < 24; step += 1) {
+    const mid = (low + high) / 2;
+    if (sample(x1, x2, mid) < t) low = mid;
+    else high = mid;
+  }
+  return sample(y1, y2, (low + high) / 2);
+}
+
+/**
+ * Eased progress (0..1) for a time fraction, from the --motion-ease-* token.
+ * For JS-driven motion that is not an element animation, such as counting a
+ * number; `linear()` curves fall back to linear progress.
+ */
+export function easeProgress(name: MotionEasingName, t: number): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  if (clamped === 0 || clamped === 1) return clamped;
+  const match = /cubic-bezier\(([^)]+)\)/u.exec(motionEasing(name));
+  const points = match?.[1]!.split(",").map(Number);
+  if (!points || points.length !== 4 || points.some(Number.isNaN)) return clamped;
+  return cubicBezier(points[0]!, points[1]!, points[2]!, points[3]!, clamped);
+}

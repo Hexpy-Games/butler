@@ -11,9 +11,12 @@
 }
 
 .shell {
+  --setup-wizard-inset: var(--space-lg);
+
   position: relative;
   z-index: 1;
-  width: min(880px, 100%);
+  display: grid;
+  gap: var(--space-lg);
   max-height: calc(var(--adaptive-viewport-block-size) - var(--space-2xl) * 2);
 }
 
@@ -35,7 +38,10 @@
   app-region: no-drag;
 }
 
+/* The title and stepper start where the body content starts: the body's
+   inset plus its hairline border. */
 .header {
+  padding-inline: calc(var(--setup-wizard-inset) + var(--border-hairline));
   color: var(--text-primary);
 }
 
@@ -70,8 +76,12 @@
   height: 100%;
 }
 
+/* The scroll area fills the glass body to its bottom edge; the inset lives
+   inside the scrolling content. */
 .scrollContent {
+  box-sizing: border-box;
   min-height: 100%;
+  padding: var(--setup-wizard-inset);
 }
 
 .content {

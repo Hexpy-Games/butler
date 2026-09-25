@@ -2,6 +2,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   animateMotion,
+  easeProgress,
   motionDistance,
   motionDuration,
   motionEasing,
@@ -101,4 +102,17 @@ test("animateMotion fades only under reduced motion and skips transform-only mot
 test("animateMotion is a no-op without WAAPI", () => {
   installEnvironment({ reduce: false, tokens: {} });
   expect(animateMotion({} as HTMLElement, [{ opacity: 0 }, { opacity: 1 }])).toBeNull();
+});
+
+test("easeProgress samples the token cubic-bezier curves and clamps to 0..1", () => {
+  installEnvironment({ reduce: false, tokens: { "--motion-ease-decelerate": "cubic-bezier(0, 0, 0, 1)" } });
+  expect(easeProgress("decelerate", 0)).toBe(0);
+  expect(easeProgress("decelerate", 1)).toBe(1);
+  expect(easeProgress("decelerate", -1)).toBe(0);
+  expect(easeProgress("decelerate", 2)).toBe(1);
+  // Decelerate front-loads the travel.
+  expect(easeProgress("decelerate", 0.25)).toBeGreaterThan(0.6);
+  expect(easeProgress("decelerate", 0.5)).toBeGreaterThan(easeProgress("decelerate", 0.25));
+  expect(easeProgress("linear", 0.5)).toBeCloseTo(0.5, 5);
+  restoreGlobals();
 });

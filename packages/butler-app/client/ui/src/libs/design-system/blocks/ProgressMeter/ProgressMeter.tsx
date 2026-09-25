@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -35,7 +35,11 @@ export function ProgressMeter({
       aria-valuemax={100}
       aria-valuenow={normalized}
     >
-      <span className={cn(styles.fill, styles[tone])} style={{ width: `${normalized}%` }} />
+      <span
+        className={cn(styles.fill, styles[tone])}
+        data-slot="progress-fill"
+        style={{ "--progress-scale": normalized / 100 } as CSSProperties}
+      />
     </div>
   );
   if (bare) {

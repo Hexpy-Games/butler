@@ -41,3 +41,6 @@ bars inside rows and statistics lists. Name it with `ariaLabel`:
 
 Product code must not rebuild bars with `track`/`fill` spans and inline widths.
 
+
+## Motion
+The fill spans the track and scales with `transform: scaleX(value)` from the inline start over `--motion-deliberate` (decelerate), so value changes never animate `width`. Reduced motion changes it instantly.

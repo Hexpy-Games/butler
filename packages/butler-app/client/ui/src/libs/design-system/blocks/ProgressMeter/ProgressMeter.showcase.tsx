@@ -1,4 +1,7 @@
+import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { Button } from "../../components/Button";
+import { Inline } from "../../components/Inline";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { ProgressMeter } from "./ProgressMeter";
@@ -11,15 +14,34 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { context: "Context window", full: "42% full", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed" },
-  "ko-KR": { context: "컨텍스트 창", full: "42% 사용", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패" },
+  "en-US": { replay: "Replay", context: "Context window", full: "42% full", tasks: "Tasks", changes: "Changes", done: "Done", blocked: "Blocked", failed: "Failed" },
+  "ko-KR": { replay: "다시 재생", context: "컨텍스트 창", full: "42% 사용", tasks: "Task", changes: "변경", done: "완료", blocked: "막힘", failed: "실패" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
+function FillChange({ context }: { context: ShowcaseRenderContext }) {
+  const [round, setRound] = useState(0);
+  const value = [18, 64, 92, 35][round % 4]!;
+  return (
+    <Stack gap="md">
+      <ProgressMeter label={text(context).context} meta={`${value}%`} value={value} />
+      <ProgressMeter bare ariaLabel={text(context).changes} value={100 - value} tone="success" />
+      <Inline>
+        <Button size="sm" variant="outline" data-ds-motion="replay" onClick={() => setRound((current) => current + 1)}>{text(context).replay}</Button>
+      </Inline>
+    </Stack>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  {
+    name: "Fill change",
+    states: ["changing"],
+    render: (context) => <FillChange context={context} />,
+  },
   {
     name: "Default",
     render: (context) => <ProgressMeter label={text(context).context} meta={text(context).full} value={42} />,
