@@ -23,11 +23,11 @@
   display: flex;
   min-height: var(--menu-item-height);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
   padding: 0 9px;
   padding-block: var(--menu-item-padding-block);
   line-height: var(--menu-item-line-height);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   cursor: pointer;
   outline: none;

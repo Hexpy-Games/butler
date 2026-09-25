@@ -53,7 +53,7 @@
   align-items: center;
   gap: 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-panel);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;

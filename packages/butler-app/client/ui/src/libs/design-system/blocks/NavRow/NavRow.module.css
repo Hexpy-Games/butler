@@ -1,11 +1,11 @@
 .row {
   width: 100%;
   min-height: var(--sidebar-row-height, 32px);
-  padding: 0 var(--space-2, 8px);
+  padding: 0 var(--space-2, var(--space-sm));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--sidebar-row-gap, 8px);
+  gap: var(--sidebar-row-gap, var(--space-sm));
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
@@ -17,7 +17,7 @@
 
 .row[data-slot="clickable"] {
   display: grid;
-  padding: 0 var(--space-2, 8px);
+  padding: 0 var(--space-2, var(--space-sm));
 }
 
 .interactive {
@@ -36,7 +36,7 @@
 
 .meta[data-has-icon] {
   padding-inline-start: calc(
-    var(--sidebar-icon-size, 17px) + var(--sidebar-row-gap, 8px)
+    var(--sidebar-icon-size, 17px) + var(--sidebar-row-gap, var(--space-sm))
   );
 }
 
@@ -95,7 +95,7 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--sidebar-row-gap, 8px);
+  gap: var(--sidebar-row-gap, var(--space-sm));
 }
 
 .icon {

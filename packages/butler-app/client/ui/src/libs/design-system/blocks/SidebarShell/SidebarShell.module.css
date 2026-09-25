@@ -10,7 +10,7 @@
   min-width: 0;
   height: var(--adaptive-viewport-block-size);
   flex-direction: column;
-  padding: 0 14px 16px;
+  padding: 0 14px var(--space-lg);
   overflow: hidden;
 }
 
@@ -18,7 +18,8 @@
   .shell {
     width: 100%;
     padding: max(var(--safe-area-top), var(--space-sm))
-      max(14px, var(--safe-area-right)) max(16px, var(--safe-area-bottom))
+      max(14px, var(--safe-area-right))
+      max(var(--space-lg), var(--safe-area-bottom))
       max(14px, var(--safe-area-left));
   }
 }

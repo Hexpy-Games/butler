@@ -7,7 +7,7 @@
   min-height: var(--control-height-lg);
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-sm);
   width: 100%;
   padding: 0 9px;
   border: 1px solid var(--line);
@@ -101,7 +101,7 @@
 }
 
 .label {
-  padding: 4px 8px;
+  padding: var(--space-xs) var(--space-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-1);
 }
@@ -111,11 +111,11 @@
   display: flex;
   min-height: var(--menu-item-height);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
   padding: 0 30px 0 9px;
   padding-block: var(--menu-item-padding-block);
   line-height: var(--menu-item-line-height);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   cursor: pointer;
   outline: none;
@@ -136,7 +136,7 @@
 
 .separator {
   height: 1px;
-  margin: 4px -4px;
+  margin: var(--space-xs) -4px;
   background: var(--line);
 }
 
@@ -144,7 +144,7 @@
   z-index: 1;
   display: flex;
   justify-content: center;
-  padding: 4px;
+  padding: var(--space-xs);
   color: var(--text-secondary);
 }
 

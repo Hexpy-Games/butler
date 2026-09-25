@@ -558,3 +558,26 @@ describe("icon size tokens", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("spacing and radius lint", () => {
+  const lint = (css: string, path = "libs/design-system/blocks/New/New.module.css") =>
+    lintDesignSystemRules(path, css).map((finding) => finding.reason);
+
+  test("on-scale raw spacing and radius must use tokens", () => {
+    expect(lint(".a { padding: 8px var(--space-md); }").join("\n")).toContain("--space-");
+    expect(lint(".a { gap: 16px; }")).toHaveLength(1);
+    expect(lint(".a { border-radius: 8px; }").join("\n")).toContain("--radius-");
+  });
+
+  test("off-scale values need an allow-listed justification", () => {
+    expect(lint(".a { margin-top: 10px; }").join("\n")).toContain("off-scale");
+    expect(lint(".a { border-radius: 18px; }").join("\n")).toContain("off-scale");
+  });
+
+  test("hairline offsets and token values pass", () => {
+    expect(lint(".a { gap: 2px; margin: 0; padding: 1px 3px; }")).toEqual([]);
+    expect(lint(
+      ".a { padding: var(--space-sm) var(--space-lg); border-radius: var(--radius-control); }",
+    )).toEqual([]);
+  });
+});

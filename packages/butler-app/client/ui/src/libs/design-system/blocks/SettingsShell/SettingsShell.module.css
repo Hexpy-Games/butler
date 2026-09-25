@@ -139,7 +139,7 @@
 
   .detailContent {
     max-width: none;
-    padding-bottom: max(60px, calc(var(--safe-area-bottom) + 24px));
+    padding-bottom: max(60px, calc(var(--safe-area-bottom) + var(--space-2xl)));
   }
 
   .titlebarDragOverlay {

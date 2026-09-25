@@ -33,7 +33,7 @@
 
 .trigger[data-size="sm"] {
   min-height: 30px;
-  border-radius: min(var(--radius-control), 10px);
+  border-radius: min(var(--radius-control), var(--radius-panel));
 }
 
 .value {

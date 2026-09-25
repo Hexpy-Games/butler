@@ -23,7 +23,7 @@
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: var(--space-xs);
   width: max-content;
   max-width: 100%;
 }
@@ -37,7 +37,7 @@
 .badge {
   width: max-content;
   max-width: 100%;
-  padding: 0 4px;
+  padding: 0 var(--space-xs);
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   color: var(--text-secondary);

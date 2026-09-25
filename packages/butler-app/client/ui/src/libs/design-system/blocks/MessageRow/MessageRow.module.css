@@ -1,7 +1,7 @@
 .row {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-md);
   align-items: start;
   padding-bottom: 18px;
 }
@@ -26,7 +26,7 @@
 
 .compactionEvent {
   grid-template-columns: minmax(0, 1fr);
-  padding: 20px 0 28px;
+  padding: var(--space-xl) 0 28px;
 }
 
 .user {
@@ -56,7 +56,7 @@
 }
 
 .assistant .body {
-  padding: 2px 0 4px;
+  padding: 2px 0 var(--space-xs);
   color: var(--text-primary);
   white-space: normal;
 }
