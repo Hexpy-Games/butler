@@ -9,7 +9,7 @@ import { ConversationScroll } from "../blocks/ConversationShell";
 
 async function renderInDom(node: React.ReactNode) {
   const dom = new JSDOM('<div id="root"></div>');
-  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "MutationObserver", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "MutationObserver", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as unknown as Record<string, unknown>)[key]]));
   class Observer { observe() {} unobserve() {} disconnect() {} }
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, ResizeObserver: Observer, MutationObserver: dom.window.MutationObserver,

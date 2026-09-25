@@ -9,7 +9,7 @@ const ROW_HEIGHT = 32;
 
 async function renderInDom(node: React.ReactNode) {
   const dom = new JSDOM('<div id="root"></div>');
-  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "MutationObserver", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "MutationObserver", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as unknown as Record<string, unknown>)[key]]));
   class Observer { observe() {} unobserve() {} disconnect() {} }
   // Lay rows out top to bottom inside a 200px-tall results scroller at y=100.
   dom.window.HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
