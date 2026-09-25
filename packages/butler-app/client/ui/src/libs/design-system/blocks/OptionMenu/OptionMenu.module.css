@@ -78,6 +78,11 @@
     color var(--motion-fast) var(--motion-ease-standard);
 }
 
+/* Two-line items keep the icon on the label line (the icon box is 1lh). */
+.item[data-description-placement="block"] {
+  align-items: start;
+}
+
 .item:not([data-has-icon="true"]) {
   grid-template-columns: minmax(0, 1fr);
 }
