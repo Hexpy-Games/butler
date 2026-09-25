@@ -3,7 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
 import { Card } from "../../components/Card";
 import { IconButton } from "../../components/IconButton";
-import { DragHandle, X } from "../../components/Icons";
+import { GripVertical, X } from "../../components/Icons";
 import { Separator } from "../../components/Separator";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -70,7 +70,7 @@ export function SortableCardItem({
             {...sortable.listeners}
             aria-roledescription="sortable"
           >
-            <DragHandle size="md" />
+            <GripVertical size="md" />
           </IconButton>
         )}
         {item.leading && <span className={styles.leading} aria-hidden="true">{item.leading}</span>}
