@@ -428,3 +428,36 @@ describe("documents, artifacts, and briefing titles", () => {
     expect(title).toContain("text-wrap: balance");
   });
 });
+
+describe("token inventory cleanup", () => {
+  const retired = [
+    "--color-action-primary-hover",
+    "--color-action-primary-active",
+    "--color-surface-sunken",
+    "--shadow-command",
+    "--font-size-display",
+    "--accent-foreground",
+    "--automation-details-bg",
+    "--worker-title-bg",
+  ];
+
+  test("retired tokens are neither defined nor listed in the DS registry", () => {
+    const css = read(tokensPath);
+    const registry = read(`${uiSrc}/libs/design-system/registry.tsx`);
+    for (const name of retired) {
+      expect(css).not.toMatch(new RegExp(`${name}:`, "u"));
+      expect(registry).not.toContain(`"${name}"`);
+    }
+  });
+
+  test("legacy surface aliases reference the semantic surface layer in every theme", () => {
+    for (const tokens of [rootTokens(), themeTokens(".theme-light"), themeTokens(".theme-dark")]) {
+      expect(tokens.get("--surface-raised")).toBe("var(--color-surface-raised)");
+      expect(tokens.get("--popover")).toBe("var(--color-surface-overlay)");
+    }
+    for (const theme of [".theme-light", ".theme-dark"] as const) {
+      expect(themeTokens(theme).get("--color-surface-raised")).toBeDefined();
+      expect(themeTokens(theme).get("--color-surface-overlay")).toBeDefined();
+    }
+  });
+});

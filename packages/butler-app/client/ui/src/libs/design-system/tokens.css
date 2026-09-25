@@ -169,8 +169,6 @@
   --color-text-inverse: var(--neutral-white);
 
   --color-action-primary: var(--blue-06);
-  --color-action-primary-hover: var(--blue-07);
-  --color-action-primary-active: var(--blue-08);
 
   --color-success: var(--green-06);
   --color-success-bg: var(--green-01);
@@ -186,7 +184,6 @@
   --color-surface-base: var(--grayscale-01);
   --color-surface-raised: rgba(255, 255, 255, 0.96);
   --color-surface-overlay: rgba(255, 255, 255, 0.98);
-  --color-surface-sunken: var(--grayscale-02);
 
   --color-disabled-bg: var(--grayscale-02);
   --color-disabled-fg: var(--grayscale-05);
@@ -299,7 +296,6 @@
   --font-size-4: 15px;
   --font-size-5: 18px;
   --font-size-6: 24px;
-  --font-size-display: clamp(28px, 3vw, 40px);
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 560;
@@ -316,7 +312,7 @@
   --radius-composer: 22px;
   --radius-pill: 999px;
   --surface: rgba(255, 255, 255, 0.9);
-  --surface-raised: rgba(255, 255, 255, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);
   --conversation-bg: linear-gradient(
@@ -351,8 +347,6 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  --worker-title-bg: rgba(0, 0, 0, 0.14);
-  --automation-details-bg: rgba(248, 248, 247, 0.9);
   /* Tuned for macOS light-mode translucency over Electron under-window material. */
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
@@ -401,10 +395,9 @@
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
-  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.16);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(255, 255, 255, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
@@ -412,7 +405,6 @@
   --secondary-foreground: var(--text-primary);
   --muted: rgba(32, 35, 39, 0.06);
   --muted-foreground: var(--text-secondary);
-  --accent-foreground: var(--text-primary);
   --destructive: var(--danger);
   --border: var(--line);
   --input: var(--line);
@@ -501,8 +493,6 @@
   --color-text-inverse: var(--grayscale-11);
 
   --color-action-primary: var(--blue-06);
-  --color-action-primary-hover: var(--blue-05);
-  --color-action-primary-active: var(--blue-04);
 
   --color-success: var(--green-05);
   --color-success-bg: rgba(42, 159, 72, 0.12);
@@ -518,7 +508,6 @@
   --color-surface-base: var(--grayscale-11);
   --color-surface-raised: rgba(35, 36, 39, 0.96);
   --color-surface-overlay: rgba(37, 38, 41, 0.98);
-  --color-surface-sunken: var(--grayscale-12);
 
   --color-disabled-bg: rgba(255, 255, 255, 0.08);
   --color-disabled-fg: var(--neutral-dark-text-disabled);
@@ -530,7 +519,7 @@
   --surface: rgba(30, 31, 34, 0.9);
   --adaptive-panel-bg: var(--grayscale-11);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
-  --surface-raised: rgba(35, 36, 39, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(26, 27, 30, 0.94);
   --titlebar-bg: rgba(26, 27, 30, 0.76);
   --conversation-bg: linear-gradient(
@@ -573,8 +562,6 @@
   --danger-bg: rgba(190, 56, 54, 0.16);
   --danger-banner-bg: rgba(190, 56, 54, 0.18);
   --worker-panel-bg: rgba(37, 38, 41, 0.96);
-  --worker-title-bg: rgba(255, 255, 255, 0.08);
-  --automation-details-bg: rgba(255, 255, 255, 0.05);
   --sidebar-bg: rgba(36, 37, 40, 0.72);
   --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
@@ -604,10 +591,9 @@
   --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
   --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
   --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.28);
-  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.42);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(37, 38, 41, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
@@ -630,6 +616,8 @@
 
 .theme-light {
   color-scheme: light;
+  --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-overlay: rgba(255, 255, 255, 0.98);
   --color-text-primary: var(--neutral-light-text-primary);
   --color-text-secondary: var(--neutral-light-text-secondary);
   --color-text-tertiary: var(--grayscale-07);
@@ -644,7 +632,7 @@
   --surface: rgba(255, 255, 255, 0.9);
   --adaptive-panel-bg: var(--neutral-white);
   --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
-  --surface-raised: rgba(255, 255, 255, 0.96);
+  --surface-raised: var(--color-surface-raised);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);
   --conversation-bg: linear-gradient(
@@ -679,8 +667,6 @@
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
-  --worker-title-bg: rgba(0, 0, 0, 0.14);
-  --automation-details-bg: rgba(248, 248, 247, 0.9);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
   --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
@@ -709,7 +695,7 @@
   --color-mix-light: var(--neutral-white);
   --background: var(--surface-raised);
   --foreground: var(--text-primary);
-  --popover: rgba(255, 255, 255, 0.98);
+  --popover: var(--color-surface-overlay);
   --popover-foreground: var(--text-primary);
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
