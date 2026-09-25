@@ -20,6 +20,13 @@
   --menu-item-line-height: calc(
     var(--menu-item-height) - 2 * var(--menu-item-padding-block)
   );
+  /* Menu group labels (dropdown, option menu, filtered select): the
+     sidebar section-label voice, quieter and smaller than body-size items. */
+  --menu-group-label-size: var(--typo-section-title-size);
+  --menu-group-label-weight: var(--font-weight-medium);
+  --menu-group-label-color: var(--text-tertiary);
+  --menu-group-label-line-height: var(--line-height-compact);
+  --menu-group-label-padding: var(--space-sm) var(--space-2) var(--space-xs);
   --scroll-fade-size: 14px;
   --focus-ring-width: 2px;
   /* Layering scale: tooltips and popovers opened inside dialogs stay above them. */

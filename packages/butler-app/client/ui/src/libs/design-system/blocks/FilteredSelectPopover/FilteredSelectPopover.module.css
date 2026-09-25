@@ -14,15 +14,25 @@
   max-width: min(320px, calc(100vw - 32px));
 }
 
-.title,
-.groupTitle,
-.footerTitle {
+.title {
   min-width: 0;
   padding: 3px var(--space-2) var(--space-xs);
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-compact);
+}
+
+/* Group and footer titles label the options below them: the shared menu
+   group-label voice, below the popover title and the body-size items. */
+.groupTitle,
+.footerTitle {
+  min-width: 0;
+  padding: var(--menu-group-label-padding);
+  color: var(--menu-group-label-color);
+  font-size: var(--menu-group-label-size);
+  font-weight: var(--menu-group-label-weight);
+  line-height: var(--menu-group-label-line-height);
 }
 
 .searchLabel {

@@ -51,10 +51,11 @@
 }
 
 .label {
-  padding: var(--space-xs) var(--space-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-1);
-  font-weight: var(--font-weight-medium);
+  padding: var(--menu-group-label-padding);
+  color: var(--menu-group-label-color);
+  font-size: var(--menu-group-label-size);
+  font-weight: var(--menu-group-label-weight);
+  line-height: var(--menu-group-label-line-height);
 }
 
 .separator {
