@@ -168,6 +168,7 @@ export const enUsCopy: AppCopy = {
     reportQuestion: "Ask about this report and its unverified points",
     parentWork: "Parent Work", allWork: "All Work",
     periodDays: (days) => `Last ${days} days`, statisticsZone: (zone) => `Calendar days in ${zone}`,
+    boardKind: "Board type", period: "Period", statisticsKind: "Count by", materialsView: "Materials view",
     briefing: "From the project records", suggestions: "Worth exploring next", briefingPending: "Summarizing the selected records. You can keep browsing or start a conversation.",
     briefingUnavailable: "A summary is unavailable. The project records and conversation composer are still available.",
     summarized: "Summary of selected records, not a new verification", addToComposer: "Ask about this",

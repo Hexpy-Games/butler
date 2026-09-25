@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { ActivityHeatmap, Button, ChevronRight, NavRow, Section, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
+import { ActivityHeatmap, Button, ChevronRight, Grid, NavRow, Section, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
@@ -15,7 +15,7 @@ export function ProjectActivityStatistics() {
   const bucket = data.activity.buckets.find((day) => day.label === selected);
   const start = new Date(`${data.days[0]!.date}T12:00:00`).getDay();
   const activity = data.work?.activity ?? [];
-  return <div className={styles.pair}>
+  return <Grid columns={{ base: "1", wide: "2" }} gap="xl">
     <Section title={copy.calendar}>
       <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
@@ -55,5 +55,5 @@ export function ProjectActivityStatistics() {
         {activity.length > limit && <Button variant="inline" onClick={() => setLimit((value) => value + 10)}>{appCopy.projectSignpost.loadMore}</Button>}
       </Stack></Box>
     </Section>
-  </div>;
+  </Grid>;
 }

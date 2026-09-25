@@ -191,6 +191,7 @@ export const koKrCopy: AppCopy = {
     reportQuestion: "이 보고의 내용과 미검증 사항에 관해 확인하기",
     parentWork: "상위 Work", allWork: "모든 Work",
     periodDays: (days) => `최근 ${days}일`, statisticsZone: (zone) => `${zone} 날짜 기준`,
+    boardKind: "보드 종류", period: "기간", statisticsKind: "집계 기준", materialsView: "자료 보기",
     briefing: "프로젝트 기록에서", suggestions: "다음으로 살펴볼 만한 일", briefingPending: "선정된 기록을 요약하고 있습니다. 자료를 살펴보거나 대화를 시작하실 수 있습니다.",
     briefingUnavailable: "요약을 불러올 수 없습니다. 프로젝트 기록과 대화 입력은 계속 사용할 수 있습니다.",
     summarized: "선정된 기록의 요약이며 새로 검증한 결과가 아닙니다", addToComposer: "이 내용으로 질문하기",

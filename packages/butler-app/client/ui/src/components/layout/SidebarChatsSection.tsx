@@ -40,7 +40,7 @@ export function SidebarChatsSection() {
           </IconButton>
           <IconButton
             key="new"
-            label={sidebarCopy.newChat}
+            label={appCopy.space.newChat}
             onClick={openNewChat}
           >
             <MessageSquarePlus size="md" />

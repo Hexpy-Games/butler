@@ -6,23 +6,3 @@
   overflow-x: auto;
   padding-bottom: var(--space-md);
 }
-.lane {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  padding: var(--space-md);
-  align-self: start;
-  align-content: start;
-}
-.card {
-  display: block;
-  width: 100%;
-  padding: var(--space-md);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--surface-raised);
-  text-align: left;
-}
-.session {
-  max-width: 100%;
-}

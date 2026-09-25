@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, Card, Section, Stack, Typo } from "@/butler-ds";
+import { Button, Card, Grid, Section, Stack, Typo } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { ProjectSourceLinks } from "./ProjectSourceLinks.tsx";
-import styles from "./ProjectInformation.module.css";
 
 export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated, section = "position" }: {
   projectId: string; briefing?: DashboardBriefingView; onSelect: (source: ProjectDashboardDocument) => void;
@@ -51,7 +50,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
       </Stack>}
     </Section>}
     {section === "suggestions" && status === "ready" && briefing.content && briefing.content.suggestions.length > 0 && <Section title={copy.suggestions}>
-      <div className={styles.cards}>{briefing.content.suggestions.slice(0, 3).map((item) => <Card key={item.candidateId}><Stack gap="md">
+      <Grid columns="auto-fit" gap="md">{briefing.content.suggestions.slice(0, 3).map((item) => <Card key={item.candidateId}><Stack gap="md">
         <Typo.Body>{item.title}</Typo.Body><Typo.Caption tone="secondary">{item.reason}</Typo.Caption>
         <Button variant="outline" onClick={() => {
           const candidate = briefing.candidates.find((candidate) => candidate.id === item.candidateId);
@@ -62,7 +61,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
           void composer.addProjectDocument(documentFor(selected), item.title);
         }}>{copy.addToComposer}</Button>
         <ProjectSourceLinks ids={item.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} />
-      </Stack></Card>)}</div>
+      </Stack></Card>)}</Grid>
     </Section>}
   </Stack>;
 }

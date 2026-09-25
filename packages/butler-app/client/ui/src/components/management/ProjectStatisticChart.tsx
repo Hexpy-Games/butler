@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo, Box } from "@/butler-ds";
+import { Button, ChartContainer, ChartTooltip, ChartTooltipContent, Inline, Section, Stack, Typo, Box } from "@/butler-ds";
 import type { DashboardStatisticSeries } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
@@ -27,9 +27,9 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
   return <Section title={title} description={description} actions={actions}>
     <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
       {!hasData ? <Typo.Caption>{keys.length ? copy.empty : copy.unavailable}</Typo.Caption> : <>
-        <div className={styles.legend}>{keys.map((key) => <Typo.Caption key={key}>
+        <Inline gap="lg" rowGap="sm">{keys.map((key) => <Typo.Caption key={key}>
           <span className={styles.swatch} style={{ background: config[key]!.color }} />{copy.labels[key] ?? key}
-        </Typo.Caption>)}</div>
+        </Typo.Caption>)}</Inline>
         <ChartContainer className={styles.chart} config={config} aria-label={title}
           onKeyDownCapture={(event) => {
             if (event.key === "ArrowRight") select(Math.min(rows.length - 1, (selected ?? -1) + 1));
@@ -47,18 +47,18 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
             </Bar>)}
           </BarChart>
         </ChartContainer>
-        <ButtonContainer size="sm" className={styles.legend}>
+        <Inline gap="sm" rowGap="sm">
           <Button size="sm" variant="inline" aria-label={`${copy.selected} −1`} onClick={() => select(Math.max(0, (selected ?? rows.length) - 1))}>←</Button>
           <Button size="sm" variant="inline" aria-label={`${copy.selected} +1`} onClick={() => select(Math.min(rows.length - 1, (selected ?? -1) + 1))}>→</Button>
           <Typo.Caption>{selection ? label(selection.label) : copy.selected}</Typo.Caption>
-        </ButtonContainer>
+        </Inline>
         {selection && <>
-          <ButtonContainer size="sm" className={styles.legend}>
+          <Inline gap="sm" rowGap="sm">
             <Button size="sm" variant={metric ? "borderless" : "outline"} onClick={() => setMetric(undefined)}>{copy.all}</Button>
             {keys.map((key) => <Button size="sm" key={key} variant={metric === key ? "outline" : "borderless"} onClick={() => setMetric(key)}>
               {copy.labels[key] ?? key} {selection.values[key]?.length ?? 0}
             </Button>)}
-          </ButtonContainer>
+          </Inline>
           <ProjectStatisticSources key={`${selected}:${metric}`} sourceKeys={metric ? selection.values[metric] ?? [] : Object.values(selection.values).flat()} />
         </>}
       </>}

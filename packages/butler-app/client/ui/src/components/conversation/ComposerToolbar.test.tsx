@@ -118,3 +118,17 @@ test("model status error uses the danger tone, an alert icon, and a tooltip hint
   expect(loading.getAttribute("data-tone")).toBeNull();
   expect(loading.hasAttribute("disabled")).toBe(true);
 });
+
+test("the workspace chip sits in the toolbar after the access control, never floating above the card", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
+  const toolbar = read("./ComposerToolbar.tsx");
+  const access = toolbar.indexOf("<AccessModeMenu />");
+  const workspace = toolbar.indexOf("<ComposerWorkspaceSelect />");
+  const spacer = toolbar.indexOf("<ComposerCardToolbarSpacer />");
+  expect(access).toBeGreaterThan(0);
+  expect(workspace).toBeGreaterThan(access);
+  expect(workspace).toBeLessThan(spacer);
+  expect(read("./ComposerWorkspaceSelect.tsx")).toContain('data-test-class="composer-workspace-select"');
+  expect(read("./ComposerNotices.tsx")).not.toContain("ComposerWorkspaceSelect");
+});

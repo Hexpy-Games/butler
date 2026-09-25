@@ -28,7 +28,7 @@ export function ProjectDashboardHeader({
           variant="outline"
           onClick={() => onNewProjectChat(project.id)}
         >
-          <MessageSquarePlus size="md" /> {appCopy.interfaceFeedback.newChat}</Button>
+          <MessageSquarePlus size="md" /> {appCopy.space.newChat}</Button>
       ) : undefined}
     />
   );

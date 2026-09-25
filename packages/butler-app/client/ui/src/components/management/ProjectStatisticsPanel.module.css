@@ -3,12 +3,6 @@
   min-width: 0;
   width: 100%;
 }
-.legend {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-sm) var(--space-lg);
-}
 .swatch {
   display: inline-block;
   width: var(--space-sm);
@@ -16,14 +10,6 @@
   border-radius: var(--radius-control);
   margin-right: var(--space-xs);
   background: var(--text-tertiary);
-}
-.distribution {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-sm);
-  width: 100%;
-  text-align: left;
 }
 .swatch[data-kind="conversations"] {
   background: var(--context-chart-1);
@@ -46,34 +32,4 @@
 }
 .activityDates > span[data-active="true"] {
   background: var(--context-chart-1);
-}
-
-.pair,
-.weightedPair {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-xl);
-  align-items: start;
-}
-.pair > *,
-.weightedPair > * {
-  min-width: 0;
-}
-.agingCards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  gap: var(--space-md);
-}
-.agingCards > * {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  padding: var(--space-md);
-}
-@container project-dashboard (min-width: 48rem) {
-  .pair {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .weightedPair {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  }
 }

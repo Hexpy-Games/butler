@@ -116,6 +116,7 @@ export interface AppCopy {
     reportQuestion: string;
     parentWork: string; allWork: string;
     periodDays: (days: number) => string; statisticsZone: (zone: string) => string;
+    boardKind: string; period: string; statisticsKind: string; materialsView: string;
     briefing: string; suggestions: string; briefingPending: string; briefingUnavailable: string; summarized: string; addToComposer: string;
     briefingCoverage: (works: number, total: number, documents: number, reports: number, excluded: number) => string;
     conversationTarget: string; newProjectConversation: string; pendingConversation: string; sourceQuestion: string;

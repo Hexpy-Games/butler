@@ -25,7 +25,7 @@ export function OverviewPage({ entries, onOpen }: {
           reopen the same item, theme, locale, and preview width.
         </Typo.Body>
       </Stack>
-      <MetricGrid columns={4}>
+      <MetricGrid columns="4">
         <MetricCard label="Components" value={components} />
         <MetricCard label="Blocks" value={blocks} />
         <MetricCard label="Showcase files" value={`${showcases} / ${entries.length}`} />

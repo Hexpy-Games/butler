@@ -262,6 +262,20 @@ test("AppShell applies the resolved theme while first-run setup is pending", asy
   await act(async () => rendered.root.unmount());
 });
 
+test("first-run keeps the workspace chrome unmounted and gives the wizard the resolved dark backdrop", async () => {
+  systemPrefersDarkForTest = true;
+  const rendered = await renderAppShell({
+    [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
+  });
+
+  expect(rendered.container.textContent).not.toContain("Sidebar");
+  expect(rendered.container.textContent).not.toContain("Titlebar");
+  const wizard = rendered.container.querySelector('[data-test-class="first-run-setup"]')!;
+  expect(wizard.getAttribute("data-tone")).toBe("dark");
+
+  await act(async () => rendered.root.unmount());
+});
+
 async function renderAppShell(
   storageValues: Record<string, string>,
 ): Promise<{ container: HTMLElement; root: Root }> {

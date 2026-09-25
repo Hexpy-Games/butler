@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ChevronRight, NavRow, Section, Stack, Tabs, TabsList, TabsTrigger, Typo, Box, ProgressMeter } from "@/butler-ds";
+import { Button, ChevronRight, Grid, NavRow, Section, SegmentedControl, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
-import styles from "./ProjectStatisticsPanel.module.css";
 
 export function ProjectWorkStatistics() {
   useAppLocale();
@@ -21,11 +20,11 @@ export function ProjectWorkStatistics() {
   const old = [...remaining].sort((a, b) => Number(b.lane === "blocked") - Number(a.lane === "blocked") ||
     (b.ageDays ?? -1) - (a.ageDays ?? -1)).slice(0, 5);
   const unknown = cards.filter((card) => card.lane === "other").length;
-  const controls = <Tabs value={kind} onValueChange={(value) => { setKind(value as "work" | "task"); setLane(undefined); }}>
-      <TabsList><TabsTrigger value="work">{appCopy.interfaceStatus.work}</TabsTrigger><TabsTrigger value="task">{appCopy.interfaceStatus.task}</TabsTrigger></TabsList>
-    </Tabs>;
+  const controls = <SegmentedControl size="sm" ariaLabel={appCopy.projectSignpost.statisticsKind} value={kind}
+    onValueChange={(value) => { setKind(value as "work" | "task"); setLane(undefined); }}
+    options={[{ value: "work", label: appCopy.interfaceStatus.work }, { value: "task", label: appCopy.interfaceStatus.task }]} />;
   return <Section title={<Typo.PanelTitle>{copy.workOverview}</Typo.PanelTitle>} titleAs="h2" actions={controls} gap="xl" data-test-class="work-statistics-group">
-    <div className={styles.weightedPair}>
+    <Grid columns={{ base: "1", wide: "main-aside" }} gap="xl">
     <Stack gap="sm">
     {data.ledgerHistoryAvailable ? <ProjectStatisticChart key={kind} title={copy.flow} description={kind === "task" ? copy.taskCompletionUnavailable : copy.flowHelp} series={data.work[kind]} />
       : <Section title={copy.flow}><Typo.Caption>{copy.historyUnavailable}</Typo.Caption></Section>}
@@ -33,7 +32,7 @@ export function ProjectWorkStatistics() {
     </Stack>
     <Section title={copy.remaining} description={copy.remainingHelp}>
       <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="sm">
-        {lanes.map((stage, index) => <Button key={stage} variant="borderless" className={styles.distribution} onClick={() => setLane(stage)}>
+        {lanes.map((stage, index) => <Button key={stage} variant="borderless" stretch onClick={() => setLane(stage)}>
           <ProgressMeter label={copy.labels[stage]} meta={counts[index]} ariaLabel={`${copy.labels[stage]} ${counts[index]}`}
             value={Math.round(counts[index]! / maximum * 100)} />
           <ChevronRight />
@@ -42,17 +41,17 @@ export function ProjectWorkStatistics() {
         {lane && <ProjectStatisticSources key={`${kind}:${lane}`} sourceKeys={cards.filter((card) => card.lane === lane).map((card) => card.sourceKey)} />}
       </Stack></Box>
     </Section>
-    </div>
+    </Grid>
     <Section title={copy.aging} description={copy.agingHelp}>
-      <div className={styles.agingCards}>
+      <Grid columns="auto-fit" gap="md">
         {!old.length && <Typo.Caption>{appCopy.projectSignpost.noRemaining}</Typo.Caption>}
-        {old.map((card) => <NavRow key={card.id} multiline label={<Typo.Text lineClamp={2} wrap="anywhere">{card.title}</Typo.Text>}
+        {old.map((card) => <Box key={card.id} border="hairline" radius="control" padding="md"><NavRow multiline label={<Typo.Text lineClamp={2} wrap="anywhere">{card.title}</Typo.Text>}
           actions={<ChevronRight />} onClick={() => openSource(card.sourceKey)}
           meta={<Stack gap="xs"><Typo.Caption>{copy.labels[card.lane]} · {card.ageDays === null ? copy.labels.unknown : copy.age(card.ageDays)}</Typo.Caption>
             {card.ageDays !== null && <ProgressMeter bare ariaLabel={copy.age(card.ageDays)}
               value={Math.round(card.ageDays / Math.max(1, ...old.map((item) => item.ageDays ?? 0)) * 100)} />}
-          </Stack>} />)}
-      </div>
+          </Stack>} /></Box>)}
+      </Grid>
     </Section>
   </Section>;
 }

@@ -6,15 +6,22 @@ import styles from "./Tabs.module.css";
 
 type TabsListVariant = "default" | "line";
 
+type TabsGap = "sm" | "md" | "lg" | "xl" | "2xl";
+
 function Tabs({
   className,
   orientation = "horizontal",
+  gap,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>) {
+}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root> & {
+  /** Space between the tab list and its panels. */
+  gap?: TabsGap;
+}) {
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
       data-orientation={orientation}
+      data-gap={gap}
       className={cn(
         styles.root,
         styles[`orientation-${orientation}`],

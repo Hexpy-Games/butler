@@ -2,14 +2,13 @@ import { useState } from "react";
 import { useProjectStatistics } from "@/hooks/useProjectStatistics.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { Button, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo, Box } from "@/butler-ds";
+import { Button, Grid, Notice, Section, SegmentedControl, Stack, Typo, Box } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { ProjectStatisticsContext } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
 import { ProjectWorkStatistics } from "./ProjectWorkStatistics.tsx";
 import { ProjectActivityStatistics } from "./ProjectActivityStatistics.tsx";
 import { ProjectMaterialStatistics } from "./ProjectMaterialStatistics.tsx";
-import styles from "./ProjectStatisticsPanel.module.css";
 
 export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
   projectId: string; revision?: string; onSelect: (document: ProjectDashboardDocument) => void;
@@ -31,9 +30,9 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
   };
   return <Stack gap="xl" data-test-class="project-statistics">
     <Stack gap="sm">
-      <Tabs value={String(period)} onValueChange={(value) => setPeriod(Number(value) as 7 | 30 | 90)}>
-        <TabsList>{[7, 30, 90].map((days) => <TabsTrigger key={days} value={String(days)}>{appCopy.projectSignpost.periodDays(days)}</TabsTrigger>)}</TabsList>
-      </Tabs>
+      <SegmentedControl ariaLabel={appCopy.projectSignpost.period} value={String(period)}
+        onValueChange={(value) => setPeriod(Number(value) as 7 | 30 | 90)}
+        options={[7, 30, 90].map((days) => ({ value: String(days), label: appCopy.projectSignpost.periodDays(days) }))} />
       <Typo.Caption>{appCopy.projectSignpost.statisticsZone(timezone)} · {copy.partialDay}</Typo.Caption>
     </Stack>
     {error && <Notice tone="error" message={copy.loadFailed}
@@ -44,10 +43,10 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
       <ProjectActivityStatistics />
       <ProjectMaterialStatistics />
       {data.sessionHistoryAvailable ? <>
-      <div className={styles.pair}>
+      <Grid columns={{ base: "1", wide: "2" }} gap="xl">
       <ProjectStatisticChart title={copy.outcomes} description={copy.outcomesHelp} series={data.execution.outcomes} stacked />
       <ProjectStatisticChart title={copy.duration} description={copy.durationHelp} series={data.execution.duration} stacked horizontal />
-      </div>
+      </Grid>
       {data.execution.excluded > 0 && <Typo.Caption>{copy.excluded(data.execution.excluded)}</Typo.Caption>}
       </> : <Section title={copy.outcomes}><Typo.Caption>{copy.sessionUnavailable}</Typo.Caption></Section>}
       <Section title={copy.usage}><Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Typo.Caption>{copy.usageHelp}</Typo.Caption></Box></Section>

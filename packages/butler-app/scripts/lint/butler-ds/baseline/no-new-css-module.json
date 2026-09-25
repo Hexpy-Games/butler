@@ -9,7 +9,6 @@
   "components/conversation/UserMessageText.module.css": 1,
   "components/layout/SessionObserverDialog.module.css": 1,
   "components/layout/TitlebarWorkspaceSubtitle.module.css": 1,
-  "components/management/ProjectDashboardView.module.css": 1,
   "components/management/ProjectHistoryPanel.module.css": 1,
   "components/management/ProjectInformation.module.css": 1,
   "components/management/ProjectStatisticsPanel.module.css": 1,

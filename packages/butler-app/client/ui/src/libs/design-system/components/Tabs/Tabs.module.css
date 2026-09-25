@@ -5,6 +5,26 @@
   gap: var(--space-3);
 }
 
+.root[data-gap="sm"] {
+  gap: var(--space-sm);
+}
+
+.root[data-gap="md"] {
+  gap: var(--space-md);
+}
+
+.root[data-gap="lg"] {
+  gap: var(--space-lg);
+}
+
+.root[data-gap="xl"] {
+  gap: var(--space-xl);
+}
+
+.root[data-gap="2xl"] {
+  gap: var(--space-2xl);
+}
+
 .orientation-horizontal {
   flex-direction: column;
 }
@@ -96,6 +116,7 @@
 }
 
 .variant-line .trigger {
+  flex-shrink: 0;
   border-radius: 0;
   transition:
     color var(--motion-fast) var(--motion-ease-standard),

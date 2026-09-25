@@ -23,9 +23,3 @@
   padding-top: var(--space-md);
   color: var(--text-tertiary);
 }
-.session {
-  justify-self: start;
-  max-width: 100%;
-  width: fit-content;
-  margin-left: var(--space-sm);
-}

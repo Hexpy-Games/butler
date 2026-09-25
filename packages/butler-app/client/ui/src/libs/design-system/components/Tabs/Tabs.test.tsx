@@ -17,3 +17,11 @@ test("line tabs mark the active trigger with a paint-only accent underline", () 
   expect(rule).toMatch(/box-shadow:\s*inset 0 calc\(-1 \* var\(--border-width-strong\)\) 0 var\(--accent\)/u);
   expect(rule).toMatch(/background:\s*transparent/u);
 });
+
+test("Tabs gap separates the list from panels with named spacing; line triggers never shrink", () => {
+  const markup = renderToStaticMarkup(<Tabs defaultValue="a" gap="2xl"><TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList></Tabs>);
+  const root = new JSDOM(markup).window.document.querySelector('[data-slot="tabs"]')!;
+  expect(root.getAttribute("data-gap")).toBe("2xl");
+  expect(css).toMatch(/\.root\[data-gap="2xl"\]\s*\{\s*gap:\s*var\(--space-2xl\)/u);
+  expect(/\.variant-line \.trigger\s*\{([^}]*)\}/u.exec(css)![1]).toMatch(/flex-shrink:\s*0/u);
+});

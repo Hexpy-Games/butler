@@ -1,32 +1,3 @@
-.overviewPair {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-xl);
-  align-items: start;
-}
-.overviewPair > * {
-  min-width: 0;
-}
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-  gap: var(--space-md);
-  align-items: start;
-}
-.workCard.workCard {
-  display: block;
-  white-space: normal;
-  height: auto;
-  width: 100%;
-  text-align: left;
-  padding: var(--space-md);
-  color: var(--text-primary);
-}
-@container project-dashboard (min-width: 48rem) {
-  .overviewPair {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  }
-}
 .summary {
   color: var(--text-secondary);
 }
