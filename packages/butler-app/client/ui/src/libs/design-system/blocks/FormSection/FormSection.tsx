@@ -15,9 +15,11 @@ export interface FormSectionProps {
 }
 
 /**
- * Titled settings card. The title is one step above field labels (H4 vs the
- * medium body-size Label) and sits `--settings-section-header-gap` above the
- * first field, closer than fields sit to each other.
+ * Titled settings card. The header block (H4 title + 13px secondary
+ * description, max 60ch) is closed by a hairline and sits
+ * `--settings-section-header-gap` above the first field. Hierarchy: title
+ * (18) > field label (14 medium) > section description (13) > field
+ * description (12).
  */
 export function FormSection({
   title,

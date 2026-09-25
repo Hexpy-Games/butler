@@ -91,3 +91,19 @@ test("FormSection fields and SettingsShell sections consume the settings gap tok
   expect(detailContentRules[0]).toMatch(/gap:\s*var\(--settings-section-gap\)/u);
   for (const rule of detailContentRules) expect(rule).not.toMatch(/gap:\s*var\(--space-/u);
 });
+
+test("a section header reads as its own block above the fields (title > field label > descriptions)", () => {
+  // Header block: hairline divider under title + description, then the header gap.
+  expect(formSection).toMatch(/\.header\s*\{[^}]*padding-bottom:\s*var\(--space-lg\)/u);
+  expect(formSection).toMatch(/\.header\s*\{[^}]*border-bottom:\s*var\(--border-hairline\) solid var\(--line\)/u);
+  // Section description: secondary, one step below the body-size field label, limited measure.
+  const description = /\.description\s*\{([^}]*)\}/u.exec(formSection)?.[1] ?? "";
+  expect(description).toMatch(/font-size:\s*var\(--font-size-2\)/u);
+  expect(description).toMatch(/max-width:\s*60ch/u);
+  expect(description).toMatch(/color:\s*var\(--text-secondary\)/u);
+  // Ramp by size: H4 title 18 > field Label 14 (medium) > section description 13 > field description 12.
+  const size = (token: string) => Number(/(\d+)px/u.exec(rootTokens().get(token) ?? "")?.[1]);
+  expect(size("--typo-h4-size")).toBeGreaterThan(size("--typo-body-size"));
+  expect(size("--typo-body-size")).toBeGreaterThan(size("--typo-label-size"));
+  expect(size("--typo-label-size")).toBeGreaterThan(size("--typo-caption-size"));
+});

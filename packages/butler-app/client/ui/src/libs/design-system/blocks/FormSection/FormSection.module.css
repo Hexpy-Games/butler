@@ -18,8 +18,13 @@
   min-width: 0;
 }
 
+/* Section header block (GitHub Subhead / Vercel / Stripe settings pattern):
+   title + short secondary description closed by a hairline, so the section's
+   own copy never reads as one more field. */
 .header {
   gap: var(--settings-field-copy-gap);
+  padding-bottom: var(--space-lg);
+  border-bottom: var(--border-hairline) solid var(--line);
 }
 
 .fields {
@@ -30,6 +35,10 @@
   color: var(--text-primary);
 }
 
+/* One step below the body-size field label, above field descriptions. */
 .description {
+  max-width: 60ch;
   color: var(--text-secondary);
+  font-size: var(--font-size-2);
+  line-height: var(--typo-label-line-height);
 }

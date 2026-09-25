@@ -42,7 +42,7 @@ A settings page reads page title -> section -> field -> description:
 | --- | --- | --- |
 | Page title (`SettingsHeader`) | `Typo.H2` 24px / 620 | primary |
 | Section title (FormSection) | `Typo.H4` as `h3`, 18px / 560 | primary |
-| Section description | `Typo.Body` 14px | secondary |
+| Section description | `Typo.Body` at 13px (`--font-size-2`), max 60ch | secondary |
 | Field label (`SettingsField`) | `Label` 14px / 500 | primary |
 | Field description | `Typo.Caption` 12px | secondary |
 
@@ -50,14 +50,17 @@ Spacing follows a proximity ramp (tokens, tightest to widest):
 
 | Token | Value | Between |
 | --- | --- | --- |
-| `--settings-field-copy-gap` | 4px | label and description (also section title and description) |
-| `--settings-field-control-gap` | 8px | description and control, control and meta |
-| `--settings-section-header-gap` | 12px | section header and first field |
+| `--settings-field-copy-gap` | 6px | label and description (also section title and description) |
+| `--settings-field-control-gap` | 12px | description and control, control and meta |
+| `--settings-section-header-gap` | 16px | header divider and first field |
 | `--settings-field-gap` | 20px | fields |
 | `--settings-section-gap` | 32px | sections (owned by `SettingsShell`) |
 
 The card inset is `--settings-section-padding` (24px; 16px at 760px and
-below). There are no separators between fields: stacked fields at a 20px gap
+below). The section header (title + description) is its own block: it ends
+with `--space-lg` padding and a hairline divider, so the section's copy never
+reads as another field (the GitHub Subhead / Vercel / Stripe settings
+pattern). There are no separators between fields: stacked fields at a 20px gap
 are grouped by proximity alone. Do not add margins or gaps between sections or
 fields in product code.
 
