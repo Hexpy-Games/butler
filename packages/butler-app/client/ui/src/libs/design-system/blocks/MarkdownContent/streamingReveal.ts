@@ -2,13 +2,15 @@ import { useMemo, useRef } from "react";
 import styles from "./MarkdownContent.module.css";
 
 /**
- * Streaming text reveal (DS spec Motion Contract). Recently appended chunks
- * of the markdown source are wrapped in spans that fade in; a span re-created
- * by a later render resumes through a negative animation-delay, so there is
- * no flicker and no layout work beyond the inline span.
+ * Streaming text reveal (DS spec Motion Contract). Every appended chunk of the
+ * markdown source gets its own inline span while the message streams, so
+ * React keeps reusing the same span for the same text (no moved text, no
+ * layout shift); only recent chunks carry the fade class, and a span
+ * re-created by a markdown restructure resumes through a negative
+ * animation-delay. Settled messages render plain markdown.
  */
 
-/** Chunks older than this render as plain text (fade duration + margin). */
+/** Chunks younger than this fade (fade duration + margin). */
 export const STREAM_REVEAL_WINDOW_MS = 400;
 
 export interface StreamChunk {
@@ -33,19 +35,19 @@ export interface HastNode {
 }
 
 export function trackStreamChunks(previous: StreamState, text: string, now: number): StreamState {
-  const fresh = (chunk: StreamChunk) => now - chunk.at <= STREAM_REVEAL_WINDOW_MS;
-  if (text === previous.text) return { text, chunks: previous.chunks.filter(fresh) };
+  if (text === previous.text) return previous;
   if (!text.startsWith(previous.text)) return { text, chunks: [] };
-  return { text, chunks: [...previous.chunks.filter(fresh), { start: previous.text.length, at: now }] };
+  return { text, chunks: [...previous.chunks, { start: previous.text.length, at: now }] };
 }
 
 const SKIPPED_ELEMENTS = new Set(["pre", "code", "script", "style"]);
 
 function chunkSpan(value: string, chunk: StreamChunk, now: number, className: string): HastNode {
+  const age = Math.max(0, Math.round(now - chunk.at));
   return {
     type: "element",
     tagName: "span",
-    properties: { className: [className], style: `animation-delay:-${Math.max(0, Math.round(now - chunk.at))}ms` },
+    properties: age <= STREAM_REVEAL_WINDOW_MS ? { className: [className], style: `animation-delay:-${age}ms` } : {},
     children: [{ type: "text", value }],
   };
 }
@@ -77,7 +79,7 @@ function splitText(node: HastNode, chunks: StreamChunk[], now: number, className
   return parts;
 }
 
-/** Wraps recent chunks in fade spans; mutates and returns the hast tree. */
+/** Wraps each chunk in a span (recent ones fade); mutates and returns the hast tree. */
 export function revealStreamChunks(tree: HastNode, chunks: StreamChunk[], now: number, className: string): HastNode {
   const visit = (node: HastNode) => {
     if (!node.children || (node.type === "element" && SKIPPED_ELEMENTS.has(node.tagName ?? ""))) return;

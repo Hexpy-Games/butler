@@ -68,8 +68,13 @@ const THINKING_MS = 900;
 
 type Turn = { id: string; role: "user" | "assistant"; text: string; streaming: boolean; thinking: boolean };
 
+/** `?ds-stream-reveal=off` renders the stream without the chunk fade (perf control run). */
+function streamRevealEnabled(): boolean {
+  return typeof window === "undefined" || new URLSearchParams(window.location.search).get("ds-stream-reveal") !== "off";
+}
+
 function StreamingMarkdown({ value, streaming }: { value: string; streaming: boolean }) {
-  const rehypePlugins = useStreamingReveal(value, streaming);
+  const rehypePlugins = useStreamingReveal(value, streaming && streamRevealEnabled());
   return (
     <MarkdownContent data-ds-motion="stream">
       <ReactMarkdown rehypePlugins={rehypePlugins}>{value}</ReactMarkdown>
@@ -143,16 +148,5 @@ export const stories: ShowcaseStory[] = [
     states: ["enter", "streaming", "thinking"],
     widths: ["375", "app", "wide"],
     render: (context) => <SendAndStream context={context} />,
-  },
-  {
-    name: "Thinking",
-    states: ["thinking"],
-    render: (context) => (
-      <MessageStatusRow>
-        <MessageStatusLabel mark={<Spinner size={14} />} shimmer>
-          <Typo.Body as="span">{text(context).thinking}</Typo.Body>
-        </MessageStatusLabel>
-      </MessageStatusRow>
-    ),
   },
 ];

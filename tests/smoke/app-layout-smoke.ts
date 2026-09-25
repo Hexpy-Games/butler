@@ -38,6 +38,13 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+/** Waits until finite (enter/exit) animations settle so geometry is read at rest. */
+async function waitForMotionToSettle(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((animation) =>
+      animation.effect?.getTiming().iterations === Infinity || animation.playState !== "running"));
+}
+
 async function screenshot(page: Page, name: string): Promise<string> {
   const path = join(screenshotDir, name);
   await page.screenshot({ path, fullPage: false });
@@ -52,7 +59,12 @@ async function expectLocatorCount(
   count: number,
   message: string,
 ): Promise<void> {
-  const actual = await page.locator(selector).count();
+  // Overlays keep their node through the exit animation, so poll briefly.
+  let actual = await page.locator(selector).count();
+  for (let attempt = 0; actual !== count && attempt < 20; attempt += 1) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    actual = await page.locator(selector).count();
+  }
   assert(actual === count, `${message}: expected ${count}, got ${actual}`);
 }
 
@@ -1961,6 +1973,7 @@ try {
   await page
     .locator(testClass("filtered-select-popover"))
     .waitFor({ state: "visible" });
+  await waitForMotionToSettle(page);
   const modelMenuLayout = await page
     .locator(testClass("filtered-select-popover"))
     .evaluate((menu) => {
