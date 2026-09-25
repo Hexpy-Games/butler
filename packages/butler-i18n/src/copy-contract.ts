@@ -267,6 +267,7 @@ export interface AppCopy {
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
+    emptyLane: (label: string) => string;
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
     pendingApprovals: (count: number) => string;

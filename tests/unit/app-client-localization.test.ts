@@ -115,3 +115,14 @@ test("localized components carry no hardcoded English labels", () => {
     expect(readFileSync(`${ui}/${file}`, "utf8")).not.toMatch(/>\s*(?:Close|Work|Task)\s*<|"(?:7d|30d) messages"|"Worker phase"|"Search commands"|actionLabel = "Open"/u);
   }
 });
+
+test("empty project plan lanes use localized copy", () => {
+  expect(getAppCopy("en-US").interfaceTemplates.emptyLane("Plan")).toBe("No plan items");
+  expect(getAppCopy("ko-KR").interfaceTemplates.emptyLane("계획")).toBe("계획 항목이 없습니다.");
+  const panel = readFileSync(
+    "packages/butler-app/client/ui/src/components/management/ProjectDocumentsPanel.tsx",
+    "utf8",
+  );
+  expect(panel).not.toContain("items`");
+  expect(panel).toContain("interfaceTemplates.emptyLane(tab.label)");
+});

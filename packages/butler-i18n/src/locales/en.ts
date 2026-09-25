@@ -329,6 +329,7 @@ export const enUsCopy: AppCopy = {
   interfaceTemplates: {
     relativeAge: seconds => seconds < 60 ? "now" : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : seconds < 86400 ? `${Math.floor(seconds / 3600)}h` : `${Math.floor(seconds / 86400)}d`,
     workedFor: duration => `Worked for ${duration}`,
+    emptyLane: label => `No ${label.toLowerCase()} items`,
     contextMetric: (kind, value) => ({ full: `${value}% full`, used: `${value} used`, budget: `${value} budget`, available: `${value} available before compaction pressure`, compact: `auto compact at ${value}` })[kind],
     activityHistory: (live, label, count) => `${live ? "Current" : "Activity"} · ${label} · ${count} ${count === 1 ? "record" : "records"}`,
     pendingApprovals: count => `${count} pending ${count === 1 ? "approval" : "approvals"}`, allowedCount: count => `${count} allowed`, revoke: title => `${title} — Revoke`,

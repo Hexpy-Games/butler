@@ -352,6 +352,7 @@ export const koKrCopy: AppCopy = {
   interfaceTemplates: {
     relativeAge: seconds => seconds < 60 ? "지금" : seconds < 3600 ? `${Math.floor(seconds / 60)}분` : seconds < 86400 ? `${Math.floor(seconds / 3600)}시간` : `${Math.floor(seconds / 86400)}일`,
     workedFor: duration => `${duration} 동안 작업`,
+    emptyLane: label => `${label} 항목이 없습니다.`,
     contextMetric: (kind, value) => ({ full: `${value}% 사용`, used: `${value} 사용`, budget: `${value} 한도`, available: `압축 전 ${value} 사용 가능`, compact: `${value}에서 자동 압축` })[kind],
     activityHistory: (live, label, count) => `${live ? "현재" : "활동"} · ${label} · ${count}개 기록`,
     pendingApprovals: count => `허용 대기 ${count}개`, allowedCount: count => `허용 ${count}개`, revoke: title => `${title} — 해제`,

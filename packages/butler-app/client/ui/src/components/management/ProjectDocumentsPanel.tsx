@@ -94,7 +94,7 @@ export function ProjectDocumentsPanel({
                                     />
                                   ))
                                 ) : (
-                                  <EmptyPanelLine label={`No ${tab.label.toLowerCase()} items`} />
+                                  <EmptyPanelLine label={appCopy.interfaceTemplates.emptyLane(tab.label)} />
                                 )}
                               </Stack>
                             </ScrollArea>
