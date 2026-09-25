@@ -12,10 +12,9 @@ import {
   TabsList,
   TabsTrigger,
   Typo,
-  designSystemBlocks,
-  designSystemComponents,
   designSystemTokenGroups,
 } from "@/butler-ds";
+import { showcaseEntries } from "../showcase/loader";
 import styles from "./DesignSystemWorkbench.module.css";
 import { DS_VIEWER_BUNDLE_MARKER } from "../viewer/bundleMarker";
 
@@ -29,6 +28,20 @@ type FixtureItem = {
   tags: string[];
   fixture: () => ReactNode;
 };
+
+function fixtureItems(kind: "component" | "block"): FixtureItem[] {
+  return showcaseEntries
+    .filter((entry) => entry.kind === kind && entry.stories.length > 0)
+    .map((entry) => ({
+      name: entry.name,
+      path: entry.id,
+      tags: entry.meta.tags ?? [],
+      fixture: () => entry.stories[0].render({ locale: "en-US" }),
+    }));
+}
+
+const designSystemComponents = fixtureItems("component");
+const designSystemBlocks = fixtureItems("block");
 
 type SelectedItem =
   | { type: "tokens"; name: string }
