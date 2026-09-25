@@ -77,6 +77,10 @@
 }
 
 .footer {
+  /* Footer icon actions keep the 26px footer row and control radius. */
+  --icon-button-size: 26px;
+  --icon-button-radius: var(--radius-control);
+
   display: flex;
   flex-wrap: wrap;
   align-items: center;

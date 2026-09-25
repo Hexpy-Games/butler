@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Dialog, DialogContent, FolderPlus, MessageSquarePlus, Tooltip } from "@/butler-ds";
+import { Dialog, DialogContent, FolderPlus, IconButton, MessageSquarePlus } from "@/butler-ds";
 import { SessionBranchForm } from "./SessionBranchForm";
 
 export function BranchMessageActions({ sessionId, messageId }: { sessionId: string; messageId: string }) {
@@ -8,12 +8,12 @@ export function BranchMessageActions({ sessionId, messageId }: { sessionId: stri
   const [mode, setMode] = useState<"topic" | "project" | null>(null);
   const [pending, setPending] = useState(false);
   return <>
-    <Tooltip label={appCopy.interfaceStatus.branchChat}>
-      <button type="button" aria-label={appCopy.interfaceStatus.branchChat} onClick={() => setMode("topic")}><MessageSquarePlus size="sm" /></button>
-    </Tooltip>
-    <Tooltip label={appCopy.interfaceStatus.branchProject}>
-      <button type="button" aria-label={appCopy.interfaceStatus.branchProject} onClick={() => setMode("project")}><FolderPlus size="sm" /></button>
-    </Tooltip>
+    <IconButton label={appCopy.interfaceStatus.branchChat} onClick={() => setMode("topic")}>
+      <MessageSquarePlus size="sm" />
+    </IconButton>
+    <IconButton label={appCopy.interfaceStatus.branchProject} onClick={() => setMode("project")}>
+      <FolderPlus size="sm" />
+    </IconButton>
     <Dialog open={mode !== null} onOpenChange={open => { if (!open && !pending) setMode(null); }}>
       <DialogContent closeLabel={appCopy.common.close}>
         {mode && <SessionBranchForm key={mode} sourceSessionId={sessionId} sourceMessageId={messageId}

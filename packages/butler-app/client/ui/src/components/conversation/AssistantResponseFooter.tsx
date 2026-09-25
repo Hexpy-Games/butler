@@ -1,5 +1,5 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { Copy, MessageFooter, MessageStatusRow, Tooltip, Typo } from "@/butler-ds";
+import { Copy, IconButton, MessageFooter, MessageStatusRow, Typo } from "@/butler-ds";
 import type { ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
@@ -40,18 +40,15 @@ export function AssistantResponseFooter({
   return (
     <>
       <MessageFooter>
-        <Tooltip label={copied
-          ? appCopy.conversation.messageActions.copied
-          : appCopy.conversation.messageActions.copyMessage}
+        <IconButton
+          label={copied
+            ? appCopy.conversation.messageActions.copied
+            : appCopy.conversation.messageActions.copyMessage}
+          aria-label={appCopy.interfacePanels.copyResponse}
+          onClick={onCopy}
         >
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label={appCopy.interfacePanels.copyResponse}
-          >
-            <Copy size="sm" />
-          </button>
-        </Tooltip>
+          <Copy size="sm" />
+        </IconButton>
         {actions}
         {meta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(meta.durationLabel)}</span>}
         {meta?.timeLabel && (
