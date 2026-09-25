@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { ActivityHeatmap, Button, ChevronRight, NavRow, Section, Stack, Typo } from "@/butler-ds";
+import { ActivityHeatmap, Button, ChevronRight, NavRow, Section, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
@@ -17,7 +17,7 @@ export function ProjectActivityStatistics() {
   const activity = data.work?.activity ?? [];
   return <div className={styles.pair}>
     <Section title={copy.calendar}>
-      <Stack gap="md" className={styles.surface}>
+      <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
         {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
         {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
         <ActivityHeatmap ariaLabel={copy.calendar} startWeekday={start}
@@ -39,21 +39,21 @@ export function ProjectActivityStatistics() {
           <Typo.Caption>{data.activity.keys.map((key) => `${copy.labels[key]} ${bucket.values[key]!.length}`).join(" · ")}</Typo.Caption>
           <ProjectStatisticSources key={bucket.label} sourceKeys={Object.values(bucket.values).flat()} />
         </>}
-      </Stack>
+      </Stack></Box>
     </Section>
     <Section title={copy.focus}>
-      <Stack gap="sm" className={styles.surface}>
+      <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="sm">
         {!activity.length && <Typo.Caption>{data.ledgerHistoryAvailable ? copy.empty : copy.unavailable}</Typo.Caption>}
         {activity.slice(0, limit).map((item) => <NavRow key={item.sourceKey} multiline onClick={() => openSource(item.sourceKey)}
           label={<Typo.Text lineClamp={2} wrap="anywhere">{data.sources[item.sourceKey]?.title}</Typo.Text>} actions={<ChevronRight />}
           meta={<Stack gap="xs"><Typo.Caption>{copy.changes(item.changes)}</Typo.Caption>
-            <span className={styles.track}><span className={styles.fill} style={{ width: `${item.changes / Math.max(1, activity[0]!.changes) * 100}%` }} /></span>
+            <ProgressMeter bare ariaLabel={copy.changes(item.changes)} value={Math.round(item.changes / Math.max(1, activity[0]!.changes) * 100)} />
             <span className={styles.activityDates} aria-label={item.dates.map(dayLabel).join(", ")}>
               {data.days.map((day) => <span key={day.date} data-active={item.dates.includes(day.date)} title={dayLabel(day.date)} />)}
             </span>
           </Stack>} />)}
         {activity.length > limit && <Button variant="inline" onClick={() => setLimit((value) => value + 10)}>{appCopy.projectSignpost.loadMore}</Button>}
-      </Stack>
+      </Stack></Box>
     </Section>
   </div>;
 }

@@ -11,10 +11,10 @@
 .event:not(:last-child)::before {
   content: "";
   position: absolute;
-  left: 11px;
-  top: 32px;
+  left: calc(var(--space-md) - var(--border-hairline));
+  top: var(--space-3xl);
   bottom: calc(-1 * var(--space-md));
-  width: 1px;
+  width: var(--border-hairline);
   background: var(--line);
 }
 .marker {

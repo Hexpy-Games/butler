@@ -23,13 +23,6 @@
   background: var(--surface-raised);
   text-align: left;
 }
-.cardTitle {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
 .session {
   max-width: 100%;
 }

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo, Box } from "@/butler-ds";
 import type { DashboardStatisticSeries } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
@@ -25,7 +25,7 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
   const selection = selected === undefined ? undefined : series.buckets[selected];
   const select = (index: number) => { if (index >= 0 && index < rows.length) { setSelected(index); setMetric(undefined); } };
   return <Section title={title} description={description} actions={actions}>
-    <Stack gap="md" className={styles.surface}>
+    <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
       {!hasData ? <Typo.Caption>{keys.length ? copy.empty : copy.unavailable}</Typo.Caption> : <>
         <div className={styles.legend}>{keys.map((key) => <Typo.Caption key={key}>
           <span className={styles.swatch} style={{ background: config[key]!.color }} />{copy.labels[key] ?? key}
@@ -62,6 +62,6 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
           <ProjectStatisticSources key={`${selected}:${metric}`} sourceKeys={metric ? selection.values[metric] ?? [] : Object.values(selection.values).flat()} />
         </>}
       </>}
-    </Stack>
+    </Stack></Box>
   </Section>;
 }

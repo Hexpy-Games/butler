@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ChevronRight, FileText, MessageSquare, NavRow, Stack, Typo } from "@/butler-ds";
+import { Button, ChevronRight, FileText, MessageSquare, NavRow, Stack, Typo, Separator } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
-import styles from "./ProjectStatisticsPanel.module.css";
 
 export function ProjectStatisticSources({ sourceKeys }: { sourceKeys: string[] }) {
   const { data, openSource } = useProjectStatistics();
@@ -10,7 +9,7 @@ export function ProjectStatisticSources({ sourceKeys }: { sourceKeys: string[] }
   const [limit, setLimit] = useState(5);
   const keys = [...new Set(sourceKeys)];
   const copy = appCopy.projectStatistics;
-  return <Stack gap="xs" className={styles.sources}>
+  return <Stack gap="md"><Separator space="none" /><Stack gap="xs">
     <Typo.Caption aria-live="polite">{copy.sources(keys.length)}</Typo.Caption>
     {keys.slice(0, limit).map((key) => {
       const source = data.sources[key];
@@ -24,5 +23,5 @@ export function ProjectStatisticSources({ sourceKeys }: { sourceKeys: string[] }
         onClick={() => openSource(key)} />;
     })}
     {keys.length > limit && <Button variant="inline" onClick={() => setLimit((value) => value + 10)}>{appCopy.projectSignpost.loadMore}</Button>}
-  </Stack>;
+  </Stack></Stack>;
 }

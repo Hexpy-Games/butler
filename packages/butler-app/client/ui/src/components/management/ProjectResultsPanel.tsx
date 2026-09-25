@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChevronRight, FileText, IconButton, MessageSquarePlus, NavRow, Pin, Notice, Section, Stack, Typo } from "@/butler-ds";
-import styles from "./ProjectInformation.module.css";
+import { Button, ButtonContainer, ChevronRight, FileText, IconButton, MessageSquarePlus, NavRow, Pin, Notice, Section, Stack, Typo, Box } from "@/butler-ds";
 import type { DashboardArtifactPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
@@ -61,7 +60,7 @@ export function ProjectResultsPanel({ projectId, preferences, onUpdated, onSelec
       {error && <Notice tone="error" message={appCopy.feedback.dashboardRetry} action={<Button variant="outline"
         onClick={() => { setCursor(undefined); setPage(null); setAttempt((value) => value + 1); }}>{appCopy.feedback.retry}</Button>} />}
       {!page && loading && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
-      {!!page?.items.length && <div className={styles.rows}>{page.items.map((item) => <NavRow key={`${item.message_id}:${item.file_id}`}
+      {!!page?.items.length && <Box border="hairline" radius="control" padding="xs"><Stack gap="xs">{page.items.map((item) => <NavRow key={`${item.message_id}:${item.file_id}`}
         icon={<FileText />} label={<Typo.Text lineClamp={2} wrap="anywhere">{item.title}</Typo.Text>} multiline
         meta={<Typo.Caption tone="secondary">{item.session_title} · {new Date(item.created_at).toLocaleDateString(locale)}</Typo.Caption>}
         onClick={() => onSelect({ id: item.id, project_id: projectId, revision: item.revision,
@@ -71,7 +70,7 @@ export function ProjectResultsPanel({ projectId, preferences, onUpdated, onSelec
           {preferences && <IconButton label={pinned(item.id) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin}
             onClick={(event) => { event.stopPropagation(); void togglePin(item); }}><Pin /></IconButton>}
           <ChevronRight />
-        </ButtonContainer>} />)}</div>}
+        </ButtonContainer>} />)}</Stack></Box>}
       {page?.items.length === 0 && <Typo.Body>{appCopy.projectSignpost.noResults}</Typo.Body>}
       {page?.nextCursor && <Button variant="borderless" disabled={loading} onClick={() => setCursor(page.nextCursor!)}>{appCopy.projectSignpost.loadMore}</Button>}
     </Stack>

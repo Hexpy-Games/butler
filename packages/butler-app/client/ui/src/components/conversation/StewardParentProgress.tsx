@@ -45,11 +45,7 @@ export function StewardParentProgress({
     >
       <Stack gap="sm">
         <Stack align="row" cross="start" gap="sm" justify="between">
-          <Typo.Label
-            as="span"
-            className={styles.title}
-            title={child.title}
-          >
+          <Typo.Label as="span" minWidth="0" title={child.title} truncate>
             {child.title}
           </Typo.Label>
           <Stack align="row" gap="xs">
@@ -88,8 +84,8 @@ export function StewardParentProgress({
           gap="xs"
           wrap
         >
-          <Typo.Caption className={styles.toolLabel}>{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
-          <Typo.Caption className={styles.toolSummary}>
+          <Typo.Caption tone="tertiary">{appCopy.interfaceDetails.toolUsage}</Typo.Caption>
+          <Typo.Caption tone="secondary">
             {toolSummary || appCopy.interfaceDetails.noHistory}
           </Typo.Caption>
         </Stack>

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { ProjectDashboardDocument, ProjectDashboardView } from "@/app/types.ts";
-import { Button, Card, Section, Stack, Typo, Circle, AlertCircle } from "@/butler-ds";
+import { Button, Card, Section, Stack, Typo, Circle, AlertCircle, Inline } from "@/butler-ds";
 import styles from "./ProjectInformation.module.css";
 
 export function ProjectOverviewPanel({ overview, projectId, onSelect, onShowAll, aside }: {
@@ -18,12 +18,12 @@ export function ProjectOverviewPanel({ overview, projectId, onSelect, onShowAll,
   }
   return <Stack gap="xl" data-test-class="project-overview-facts">
     <Stack gap="xs">
-      <div className={styles.numbers}>
+      <Inline gap="lg" cross="stretch">
         <Typo.Body>{copy.completed} {overview.progress.completed}</Typo.Body>
         <Typo.Body>{copy.open} {overview.progress.open}</Typo.Body>
         <Typo.Body>{copy.blocked} {overview.progress.blocked}</Typo.Body>
-      </div>
-      <Typo.Caption className={styles.summary}>{copy.recorded} · {copy.registered} {overview.totalWorks}
+      </Inline>
+      <Typo.Caption tone="secondary">{copy.recorded} · {copy.registered} {overview.totalWorks}
         {overview.progress.abandoned > 0 && ` · ${copy.abandoned} ${overview.progress.abandoned}`}
         {overview.progress.unknown > 0 && ` · ${copy.unknown} ${overview.progress.unknown}`}</Typo.Caption>
     </Stack>
@@ -34,10 +34,12 @@ export function ProjectOverviewPanel({ overview, projectId, onSelect, onShowAll,
           revision: work.revision ?? overview.sourceRevision, kind: "plan", document_type: "work", title: work.title,
           markdown: "", safe_path_label: work.id, updated_at: work.updatedAt })}>
           <Stack gap="md">
-            <Typo.Body className={styles.title}>{work.title}</Typo.Body>
-            <Typo.Caption className={styles.workMeta}>
-              {work.executionStatus === "blocked" ? <AlertCircle /> : <Circle />}
-              {copy[work.executionStatus]}{work.taskProgress && ` · ${copy.tasks} ${work.taskProgress.done}/${work.taskProgress.total}`}
+            <Typo.Body lineClamp={2} wrap="anywhere">{work.title}</Typo.Body>
+            <Typo.Caption as="div" tone="secondary">
+              <Inline as="span" gap="xs">
+                {work.executionStatus === "blocked" ? <AlertCircle size="md" /> : <Circle size="md" />}
+                {copy[work.executionStatus]}{work.taskProgress && ` · ${copy.tasks} ${work.taskProgress.done}/${work.taskProgress.total}`}
+              </Inline>
             </Typo.Caption>
           </Stack>
         </Button>

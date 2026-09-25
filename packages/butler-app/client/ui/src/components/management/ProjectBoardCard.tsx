@@ -10,7 +10,7 @@ export function ProjectBoardCard({ card, running, onOpen, onOpenSession }: {
   const copy = appCopy.projectSignpost;
   return <Clickable className={styles.card} aria-label={card.title} onClick={onOpen}>
     <Stack gap="md">
-      <Typo.Body className={styles.cardTitle}>{card.title}</Typo.Body>
+      <Typo.Body lineClamp={2} wrap="anywhere">{card.title}</Typo.Body>
       {(card.taskProgress || card.actionProgress) && <Typo.Caption>
         {[card.taskProgress && `${copy.tasks} ${card.taskProgress.done}/${card.taskProgress.total}`,
           card.actionProgress && `${appCopy.composer.plan} ${card.actionProgress.done}/${card.actionProgress.total}`].filter(Boolean).join(" · ")}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ChevronRight, NavRow, Section, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { Button, ChevronRight, NavRow, Section, Stack, Tabs, TabsList, TabsTrigger, Typo, Box, ProgressMeter } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
@@ -32,15 +32,15 @@ export function ProjectWorkStatistics() {
     {data.work.excluded > 0 && <Typo.Caption>{copy.excluded(data.work.excluded)}</Typo.Caption>}
     </Stack>
     <Section title={copy.remaining} description={copy.remainingHelp}>
-      <Stack gap="sm" className={styles.surface}>
+      <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="sm">
         {lanes.map((stage, index) => <Button key={stage} variant="borderless" className={styles.distribution} onClick={() => setLane(stage)}>
           <span>{copy.labels[stage]}</span>
-          <span className={styles.track}><span className={styles.fill} style={{ width: `${counts[index]! / maximum * 100}%` }} /></span>
+          <ProgressMeter bare ariaLabel={`${copy.labels[stage]} ${counts[index]}`} value={Math.round(counts[index]! / maximum * 100)} />
           <span>{counts[index]}</span><ChevronRight />
         </Button>)}
         {unknown > 0 && <Typo.Caption>{copy.labels.other} · {unknown}</Typo.Caption>}
         {lane && <ProjectStatisticSources key={`${kind}:${lane}`} sourceKeys={cards.filter((card) => card.lane === lane).map((card) => card.sourceKey)} />}
-      </Stack>
+      </Stack></Box>
     </Section>
     </div>
     <Section title={copy.aging} description={copy.agingHelp}>
@@ -49,7 +49,8 @@ export function ProjectWorkStatistics() {
         {old.map((card) => <NavRow key={card.id} multiline label={<Typo.Text lineClamp={2} wrap="anywhere">{card.title}</Typo.Text>}
           actions={<ChevronRight />} onClick={() => openSource(card.sourceKey)}
           meta={<Stack gap="xs"><Typo.Caption>{copy.labels[card.lane]} · {card.ageDays === null ? copy.labels.unknown : copy.age(card.ageDays)}</Typo.Caption>
-            {card.ageDays !== null && <span className={styles.track}><span className={styles.fill} style={{ width: `${card.ageDays / Math.max(1, ...old.map((item) => item.ageDays ?? 0)) * 100}%` }} /></span>}
+            {card.ageDays !== null && <ProgressMeter bare ariaLabel={copy.age(card.ageDays)}
+              value={Math.round(card.ageDays / Math.max(1, ...old.map((item) => item.ageDays ?? 0)) * 100)} />}
           </Stack>} />)}
       </div>
     </Section>

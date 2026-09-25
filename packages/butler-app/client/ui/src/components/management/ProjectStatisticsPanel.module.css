@@ -3,16 +3,6 @@
   min-width: 0;
   width: 100%;
 }
-.surface {
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  min-width: 0;
-}
-.sources {
-  border-top: 1px solid var(--line);
-  padding-top: var(--space-md);
-}
 .legend {
   display: flex;
   align-items: center;
@@ -33,19 +23,6 @@
   gap: var(--space-sm);
   width: 100%;
   text-align: left;
-}
-.track {
-  display: block;
-  height: var(--space-xs);
-  background: var(--line);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-}
-.fill {
-  display: block;
-  height: 100%;
-  background: var(--context-chart-1);
-  border-radius: inherit;
 }
 .swatch[data-kind="conversations"] {
   background: var(--context-chart-1);
@@ -68,11 +45,6 @@
 }
 .activityDates > span[data-active="true"] {
   background: var(--context-chart-1);
-}
-@media (width <= 640px) {
-  .surface {
-    padding: var(--space-md);
-  }
 }
 
 .pair,

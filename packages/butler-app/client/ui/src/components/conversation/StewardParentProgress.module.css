@@ -1,20 +1,5 @@
-.title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.toolLabel {
-  color: var(--text-tertiary);
-}
-
-.toolSummary {
-  color: var(--text-secondary);
-}
-
 .observerAction {
-  --steward-observer-icon-size: 16px;
+  --steward-observer-icon-size: var(--icon-size-md);
   --steward-observer-hit-size: var(--icon-button-size, 30px);
   transform: translate(
     calc(

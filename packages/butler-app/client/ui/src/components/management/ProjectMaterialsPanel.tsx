@@ -5,8 +5,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentBadgeLabel } from "@/app/projectDocuments.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import { Button, ButtonContainer, ChevronRight, FileText, IconButton, Pin, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
-import styles from "./ProjectInformation.module.css";
+import { Button, ButtonContainer, ChevronRight, FileText, IconButton, Pin, NavRow, Notice, Section, Stack, Typo, Box } from "@/butler-ds";
 import type { DashboardMaterialsPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 
 export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpdated, limit = 8, onShowAll }: {
@@ -69,14 +68,14 @@ export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpda
   ];
   return <Stack gap="xl">
     {groups.filter((group) => group.documents.length > 0).map((group) => <Section key={group.title} title={group.title || undefined}>
-      <div className={styles.rows}>{group.documents.map((document) => <NavRow key={`${document.document_type}:${document.id}`} multiline icon={<FileText />}
+      <Box border="hairline" radius="control" padding="xs"><Stack gap="xs">{group.documents.map((document) => <NavRow key={`${document.document_type}:${document.id}`} multiline icon={<FileText />}
         label={<Typo.Text lineClamp={2} wrap="anywhere">{document.unavailable ? appCopy.projectSignpost.missingSource : document.title}</Typo.Text>}
         meta={<Typo.Caption tone="secondary">{[projectDocumentBadgeLabel(document), document.updated_at && new Date(document.updated_at).toLocaleDateString(locale)].filter(Boolean).join(" · ")}</Typo.Caption>}
         disabled={document.unavailable} onClick={() => onSelect(document)} actions={<ButtonContainer size="sm">
           {preferences && !onShowAll && <IconButton label={isPinned(document) ? appCopy.projectSignpost.unpin : appCopy.projectSignpost.pin}
             onClick={(event) => { event.stopPropagation(); void togglePin(document); }}><Pin /></IconButton>}
           <ChevronRight />
-        </ButtonContainer>} />)}</div>
+        </ButtonContainer>} />)}</Stack></Box>
     </Section>)}
     {page.documents.length === 0 && <Typo.Body>{appCopy.interfaceDetails.noDocuments}</Typo.Body>}
     {page.nextCursor && <Button variant="borderless" disabled={loading} onClick={onShowAll ?? (() => setCursor(page.nextCursor!))}>{appCopy.projectSignpost.loadMore}</Button>}

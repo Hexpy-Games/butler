@@ -44,7 +44,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
     {section === "position" && <Section title={copy.position}>
       {status === "ready" && briefing.content ? <Stack gap="sm">
         <Typo.H3>{briefing.content.position.title}</Typo.H3>
-        <Typo.Body className={styles.summary}>{briefing.content.position.body}</Typo.Body>
+        <Typo.Body tone="secondary">{briefing.content.position.body}</Typo.Body>
         <ProjectSourceLinks ids={briefing.content.position.sourceIds} briefing={briefing} projectId={projectId} onSelect={onSelect} coverage />
       </Stack> : <Stack gap="sm"><Typo.Body role="status">{status === "unavailable" ? copy.briefingUnavailable : copy.briefingPending}</Typo.Body>
         {status === "unavailable" && briefing.sources.length > 0 && <Button variant="outline" onClick={() => void request(true)}>{appCopy.feedback.retry}</Button>}
@@ -52,7 +52,7 @@ export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated,
     </Section>}
     {section === "suggestions" && status === "ready" && briefing.content && briefing.content.suggestions.length > 0 && <Section title={copy.suggestions}>
       <div className={styles.cards}>{briefing.content.suggestions.slice(0, 3).map((item) => <Card key={item.candidateId}><Stack gap="md">
-        <Typo.Body>{item.title}</Typo.Body><Typo.Caption className={styles.summary}>{item.reason}</Typo.Caption>
+        <Typo.Body>{item.title}</Typo.Body><Typo.Caption tone="secondary">{item.reason}</Typo.Caption>
         <Button variant="outline" onClick={() => {
           const candidate = briefing.candidates.find((candidate) => candidate.id === item.candidateId);
           const selected = candidate && source(candidate.sourceId);

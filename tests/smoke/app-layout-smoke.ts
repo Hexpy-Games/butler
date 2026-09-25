@@ -653,7 +653,7 @@ try {
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
-  await page.getByText(/Context window:/u).waitFor({ state: "visible" });
+  await page.locator(testClass("context-popover")).getByText(/Context window/u).first().waitFor({ state: "visible" });
   const contextPopoverGlass = await page
     .locator(testClass("context-popover"))
     .evaluate((element) => {
@@ -2750,7 +2750,7 @@ try {
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
-  await page.getByText(/Context window:/u).waitFor({ state: "visible" });
+  await page.locator(testClass("context-popover")).getByText(/Context window/u).first().waitFor({ state: "visible" });
   const darkContextPopoverBg = await page
     .locator(testClass("context-popover"))
     .evaluate((element) => getComputedStyle(element).backgroundColor);

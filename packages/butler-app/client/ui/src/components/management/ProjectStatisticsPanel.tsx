@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useProjectStatistics } from "@/hooks/useProjectStatistics.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { Button, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo } from "@/butler-ds";
+import { Button, Notice, Section, Stack, Tabs, TabsList, TabsTrigger, Typo, Box } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { ProjectStatisticsContext } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
@@ -50,7 +50,7 @@ export function ProjectStatisticsPanel({ projectId, revision, onSelect }: {
       </div>
       {data.execution.excluded > 0 && <Typo.Caption>{copy.excluded(data.execution.excluded)}</Typo.Caption>}
       </> : <Section title={copy.outcomes}><Typo.Caption>{copy.sessionUnavailable}</Typo.Caption></Section>}
-      <Section title={copy.usage}><div className={styles.surface}><Typo.Caption>{copy.usageHelp}</Typo.Caption></div></Section>
+      <Section title={copy.usage}><Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Typo.Caption>{copy.usageHelp}</Typo.Caption></Box></Section>
     </ProjectStatisticsContext.Provider>}
   </Stack>;
 }
