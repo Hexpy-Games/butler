@@ -65,8 +65,9 @@ export function SendFlightStory({ context }: { context: ShowcaseRenderContext })
   const [draft, setDraft] = useState<string>(copy.sent);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const entering = useEnteringKeys(items.map((item) => item.id), "send-flight");
-  const send = (mode: "fly" | "queued" | "fallback") => {
-    const value = draft.trim() || copy.sent;
+  const send = (mode: "fly" | "queued" | "fallback" | "long") => {
+    const value = mode === "long" ? `${copy.long}\n\n${copy.token}\n\n${copy.long}` : draft.trim() || copy.sent;
+    if (mode === "long") setDraft(value);
     if (mode === "fallback") clearSendOrigin();
     else recordSendOrigin(textareaRef.current);
     setItems((current) => [...current.slice(-3), { id: `sent-${Date.now()}`, text: value, queued: mode === "queued" }]);
@@ -95,6 +96,9 @@ export function SendFlightStory({ context }: { context: ShowcaseRenderContext })
         </Button>
         <Button size="sm" variant="outline" data-ds-motion="send-flight-fallback" onClick={() => send("fallback")}>
           {copy.sendFallback}
+        </Button>
+        <Button size="sm" variant="outline" data-ds-motion="send-flight-long" onClick={() => send("long")}>
+          {copy.sendLong}
         </Button>
       </Inline>
     </Stack>

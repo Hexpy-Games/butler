@@ -5,12 +5,15 @@ import { animateMotion, motionDistance, prefersReducedMotion } from "./motion";
  * Send flight (DS spec Motion Contract, M7): the composer records where its
  * text sat when the user sent, and the next user bubble that enters flies
  * from there to its place with `translate` only. When no fresh origin exists,
- * the bubble is off screen or reduced motion is on, callers keep the regular
- * insert animation.
+ * the message is long (origin text or bubble taller than
+ * SEND_FLIGHT_MAX_HEIGHT_RATIO of the viewport), the bubble is off screen or
+ * reduced motion is on, callers keep the regular insert animation.
  */
 
 /** An origin older than this no longer belongs to the bubble that enters. */
 export const SEND_ORIGIN_MAX_AGE_MS = 800;
+/** A long message (taller than this share of the viewport) never flies. */
+export const SEND_FLIGHT_MAX_HEIGHT_RATIO = 0.35;
 /** Travel beyond this uses --motion-deliberate instead of --motion-slow. */
 const LONG_TRAVEL_PX = 240;
 /** Frames in which the list may still scroll or re-measure the new row. */
@@ -19,6 +22,8 @@ const RETARGET_FRAMES = 8;
 interface SendOrigin {
   left: number;
   top: number;
+  /** Full height of the sent text, before clipping to the editor box. */
+  height: number;
   at: number;
   claimedBy: Element | null;
 }
@@ -38,10 +43,25 @@ function textRect(element: Element): DOMRect | null {
   return box.width > 0 && box.height > 0 ? box : null;
 }
 
-/** Remember where the sent text sat (the composer editor). */
+/** Remember where the sent text sat (the composer editor), clipped to what was visible. */
 export function recordSendOrigin(element: Element | null | undefined): void {
   const box = element ? textRect(element) : null;
-  origin = box ? { left: box.left, top: box.top, at: Date.now(), claimedBy: null } : null;
+  if (!element || !box) {
+    origin = null;
+    return;
+  }
+  const visible = element.getBoundingClientRect();
+  origin = {
+    left: Math.max(box.left, visible.left),
+    top: Math.max(box.top, visible.top, 0),
+    height: box.height,
+    at: Date.now(),
+    claimedBy: null,
+  };
+}
+
+function tooTall(height: number): boolean {
+  return height > window.innerHeight * SEND_FLIGHT_MAX_HEIGHT_RATIO;
 }
 
 export function clearSendOrigin(): void {
@@ -85,6 +105,7 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   if (!from) return null;
   const box = target.getBoundingClientRect();
   if (box.width <= 0 || box.height <= 0) return null;
+  if (tooTall(from.height) || tooTall(box.height)) return null;
   const style = window.getComputedStyle(target);
   // The bubble text (inside its padding) starts where the composer text did.
   const startLeft = from.left - px(style.paddingLeft);

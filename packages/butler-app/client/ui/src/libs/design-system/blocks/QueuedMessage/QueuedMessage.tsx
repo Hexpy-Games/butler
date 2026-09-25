@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { MutableRefObject, ReactNode, Ref } from "react";
 import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
@@ -21,6 +21,9 @@ export interface QueuedMessageProps {
   onEdit: () => void;
   deleteLabel: string;
   onDelete: () => void;
+  /** Long text clamps to five lines behind this toggle (as a sent user message does). */
+  showMoreLabel?: string;
+  showLessLabel?: string;
   /** Offered only for the message that would be sent next. */
   sendNowLabel?: string;
   sendNowHint?: string;
@@ -52,6 +55,8 @@ export function QueuedMessage({
   sendNowLabel,
   sendNowHint,
   onSendNow,
+  showMoreLabel,
+  showLessLabel,
   entering = false,
   ariaLabel,
   offsetY,
@@ -84,7 +89,7 @@ export function QueuedMessage({
         <span>{status}</span>
       </Typo.Caption>
       <div className={styles.bubble} data-test-class="queued-message-bubble" ref={bubbleRef}>
-        {children}
+        <ClampedText showMoreLabel={showMoreLabel} showLessLabel={showLessLabel}>{children}</ClampedText>
       </div>
       <div className={styles.controls}>
         {sendNow && sendNowHint ? <Tooltip label={sendNowHint}>{sendNow}</Tooltip> : sendNow}
@@ -96,5 +101,46 @@ export function QueuedMessage({
         </IconButton>
       </div>
     </article>
+  );
+}
+
+const CLAMP_LINES = 5;
+
+function ClampedText({ children, showMoreLabel, showLessLabel }: {
+  children: ReactNode;
+  showMoreLabel?: string;
+  showLessLabel?: string;
+}) {
+  const id = useId();
+  const textRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const clamp = Boolean(showMoreLabel && showLessLabel);
+  useLayoutEffect(() => {
+    const node = textRef.current;
+    if (!clamp || !node) return;
+    const measure = () => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(node).lineHeight);
+      setOverflowing(node.scrollHeight > lineHeight * CLAMP_LINES + 1);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [clamp, children]);
+  return (
+    <>
+      <div id={id} ref={textRef} className={styles.text} data-test-class="queued-message-text"
+        data-clamped={clamp ? String(!expanded) : undefined}>
+        {children}
+      </div>
+      {clamp && overflowing ? (
+        <Button type="button" variant="inline" aria-controls={id} aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}>
+          {expanded ? showLessLabel : showMoreLabel}
+        </Button>
+      ) : null}
+    </>
   );
 }

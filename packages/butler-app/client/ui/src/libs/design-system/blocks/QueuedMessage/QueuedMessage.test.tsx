@@ -91,3 +91,34 @@ test("the pending bubble reuses the user bubble tokens with a dashed hairline ou
   expect(css).toMatch(/\.row\[data-enter="true"\] \{\s*animation: queued-enter var\(--motion-base\)\s+var\(--motion-ease-decelerate\)/u);
   expect(css).toMatch(/@keyframes queued-enter \{\s*from \{\s*opacity: 0;\s*translate: 0 var\(--motion-distance-sm\);/u);
 });
+
+test("long queued text clamps to five lines with a show more toggle, like a sent message", async () => {
+  const dom = new JSDOM('<div id="root"></div>');
+  Object.assign(globalThis, {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement, Node: dom.window.Node, IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  (dom.window as unknown as { ResizeObserver: unknown }).ResizeObserver = class { observe() {} disconnect() {} };
+  Object.defineProperty(dom.window.HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 400 });
+  const getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+  dom.window.getComputedStyle = ((node: Element) => ({ ...getComputedStyle(node), lineHeight: "24px" })) as typeof dom.window.getComputedStyle;
+  root = createRoot(dom.window.document.getElementById("root")!);
+  await act(async () => root!.render(
+    <QueuedMessage status="Queued" {...labels} showMoreLabel="Show more" showLessLabel="Show less"
+      onEdit={() => undefined} onDelete={() => undefined}>
+      {"line\n".repeat(40)}
+    </QueuedMessage>,
+  ));
+  const text = dom.window.document.querySelector('[data-test-class="queued-message-text"]')!;
+  expect(text.getAttribute("data-clamped")).toBe("true");
+  const toggle = [...dom.window.document.querySelectorAll("button")].find((button) => button.textContent === "Show more")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => toggle.click());
+  expect(text.getAttribute("data-clamped")).toBe("false");
+  expect(toggle.textContent).toBe("Show less");
+});
+
+test("the clamp and long-token wrapping live in the block CSS", () => {
+  expect(css).toMatch(/\.text\[data-clamped="true"\] \{[^}]*-webkit-line-clamp: 5;/u);
+  expect(css).toMatch(/\.bubble \{[^}]*overflow-wrap: anywhere;/u);
+});

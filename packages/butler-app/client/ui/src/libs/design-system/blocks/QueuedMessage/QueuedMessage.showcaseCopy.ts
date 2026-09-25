@@ -16,6 +16,10 @@ const labels = {
     send: "Send",
     sendBusy: "Send while busy",
     sendFallback: "Send (no flight)",
+    sendLong: "Send a long message",
+    showMore: "Show more",
+    showLess: "Show less",
+    token: "Check https://example.com/releases/2026-09-25/artifacts/butler-desktop-universal-build-0123456789abcdef0123456789abcdef/manifest.json?download=true&signature=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 before shipping.",
     placeholder: "Ask Butler",
     messages: [
       "Add screenshots to the final report before sending.",
@@ -40,6 +44,10 @@ const labels = {
     send: "보내기",
     sendBusy: "작업 중에 보내기",
     sendFallback: "보내기 (비행 없음)",
+    sendLong: "긴 메시지 보내기",
+    showMore: "더 보기",
+    showLess: "접기",
+    token: "배포 전에 https://example.com/releases/2026-09-25/artifacts/butler-desktop-universal-build-0123456789abcdef0123456789abcdef/manifest.json?download=true&signature=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 를 확인해 줘.",
     placeholder: "Butler에게 물어보기",
     messages: [
       "보내기 전에 최종 보고서에 스크린샷을 추가해 줘.",

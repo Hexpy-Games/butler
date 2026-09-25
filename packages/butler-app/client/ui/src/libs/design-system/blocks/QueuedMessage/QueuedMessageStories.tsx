@@ -33,6 +33,8 @@ export function ShowcaseQueued({ copy, children, status, first = false, tone, on
       deleteLabel={failed ? copy.removeFailed : copy.remove}
       sendNowLabel={copy.sendNow}
       sendNowHint={copy.sendNowHint}
+      showMoreLabel={copy.showMore}
+      showLessLabel={copy.showLess}
       onSendNow={first && !failed ? onSendNow ?? (() => undefined) : undefined}
       onEdit={onEdit ?? (() => undefined)}
       onDelete={onDelete ?? (() => undefined)}

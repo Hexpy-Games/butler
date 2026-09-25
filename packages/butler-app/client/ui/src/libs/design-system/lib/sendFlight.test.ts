@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import {
+  SEND_FLIGHT_MAX_HEIGHT_RATIO,
   SEND_ORIGIN_MAX_AGE_MS,
   clearSendOrigin,
   flySendBubble,
@@ -130,6 +131,19 @@ test("a layout change after mount keeps the bubble where it is seen and finishes
   await Promise.resolve();
   expect(calls[0]!.cancelled).toBe(true);
   expect(calls[1]!.keyframes[0]).toEqual({ translate: "0px 0px" });
+});
+
+test("a long message (tall origin text or tall bubble) uses the regular insert", () => {
+  // Composer text taller than 35% of the 800px viewport.
+  recordSendOrigin(element(rect(100, 300, 600, 420)));
+  expect(flySendBubble(element(rect(760, 420, 300, 36)))).toBeNull();
+  // Bubble taller than 35% of the viewport.
+  recordSendOrigin(element(rect(100, 700, 600, 24)));
+  expect(flySendBubble(element(rect(760, 200, 300, 300)))).toBeNull();
+  // Just under the threshold still flies.
+  recordSendOrigin(element(rect(100, 500, 600, 270)));
+  expect(flySendBubble(element(rect(760, 200, 300, 270)))).not.toBeNull();
+  expect(SEND_FLIGHT_MAX_HEIGHT_RATIO).toBe(0.35);
 });
 
 test("without a measurable origin nothing is recorded", () => {

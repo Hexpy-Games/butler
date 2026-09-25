@@ -31,6 +31,8 @@ export function QueuedMessageItem({
       ariaLabel={copy.queuedMessage}
       editLabel={failed ? copy.retryFailedMessage : copy.editQueuedMessage}
       deleteLabel={failed ? copy.deleteFailedMessage : copy.deleteQueuedMessage}
+      showMoreLabel={appCopy.conversation.messageActions.showMore}
+      showLessLabel={appCopy.conversation.messageActions.showLess}
       onEdit={() => edit(item)}
       onDelete={() => remove(item)}
       offsetY={virtualRow.start + topOffset}

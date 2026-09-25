@@ -24,7 +24,15 @@ export const stories: ShowcaseStory[] = [
     widths: ["320", "375", "app"],
     render: (context) => {
       const copy = queuedShowcaseCopy(context);
-      return <ShowcaseQueued copy={copy} first status={copy.queued}>{copy.long}</ShowcaseQueued>;
+      return <ShowcaseQueued copy={copy} first status={copy.queued}>{`${copy.long}\n\n${copy.long}`}</ShowcaseQueued>;
+    },
+  },
+  {
+    name: "Long unbroken token",
+    widths: ["320", "375", "app"],
+    render: (context) => {
+      const copy = queuedShowcaseCopy(context);
+      return <ShowcaseQueued copy={copy} first status={copy.queued}>{copy.token}</ShowcaseQueued>;
     },
   },
   { name: "Editing", states: ["edit"], render: (context) => <EditingStory context={context} /> },

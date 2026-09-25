@@ -34,6 +34,19 @@
   line-height: var(--line-height-document);
 }
 
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Same five-line clamp as a sent user message (UserMessageText). */
+.text[data-clamped="true"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+
 .row[data-tone="failed"] .bubble {
   outline-color: var(--danger-line-strong);
 }
