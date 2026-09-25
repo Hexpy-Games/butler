@@ -43,4 +43,4 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 navigation, view-switching, density
 
 ## Line variant and secondary choices
-`TabsList variant="line"` is the page-level navigation style: the active trigger gets an accent underline (inset box-shadow, paint-only) instead of a filled pill. A screen shows at most one tab bar; choices that change what the current panel shows (period, dataset, mode) use `SegmentedControl`.
+`TabsList variant="line"` is the page-level navigation style: the active trigger gets an accent underline instead of a filled pill. The underline is one `TabsIndicator` per list that slides to the active trigger with `translateX`/`scaleX` (decelerate, `--motion-base`; reduced motion jumps), sitting `--tabs-line-indicator-gap` below the label. Before it is measured, an inset box-shadow on the active trigger stands in. A screen shows at most one tab bar; choices that change what the current panel shows (period, dataset, mode) use `SegmentedControl`.

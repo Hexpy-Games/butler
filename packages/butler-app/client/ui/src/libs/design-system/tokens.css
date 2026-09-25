@@ -165,6 +165,9 @@
   --space-5: var(--space-xl);
   --space-6: var(--space-2xl);
 
+  /* Line tabs: space between a tab label and its sliding underline. */
+  --tabs-line-indicator-gap: var(--space-md);
+
   /* Settings hierarchy ramp, tightest to widest (proximity): label to
      description, description to control, section header to first field,
      field to field, section to section. The section gap stays at least 1.5x

@@ -3,6 +3,7 @@ import type * as React from "react";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./Tabs.module.css";
+import { TabsIndicator } from "./TabsIndicator";
 
 type TabsListVariant = "default" | "line";
 
@@ -43,6 +44,7 @@ function TabsList({
   className,
   variant = "default",
   stretch = false,
+  children,
   ...props
 }: React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & {
   variant?: TabsListVariant;
@@ -60,7 +62,10 @@ function TabsList({
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {variant === "line" ? <TabsIndicator /> : null}
+    </TabsPrimitive.List>
   );
 }
 

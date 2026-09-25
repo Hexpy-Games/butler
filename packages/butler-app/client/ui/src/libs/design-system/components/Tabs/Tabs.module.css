@@ -69,10 +69,38 @@
 }
 
 .variant-line {
+  position: relative;
   min-height: 30px;
   padding: 0;
   border-radius: 0;
   background: transparent;
+}
+
+/* Sliding underline: a 1px bar moved with translateX and sized with scaleX
+   (see TabsIndicator), so tab switches never animate layout. */
+.indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: var(--border-width-strong);
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: left center;
+  transition: transform var(--motion-base) var(--motion-ease-decelerate);
+}
+
+.variant-line:not([data-indicator-ready]) .indicator {
+  transition: none;
+}
+
+.variant-line[data-indicator-ready] .indicator {
+  opacity: 1;
+}
+
+.variant-line[data-indicator-ready] .trigger[data-state="active"] {
+  box-shadow: none;
 }
 
 .trigger {
@@ -117,6 +145,7 @@
 
 .variant-line .trigger {
   flex-shrink: 0;
+  padding-block: var(--space-xs) var(--tabs-line-indicator-gap);
   border-radius: 0;
   transition:
     color var(--motion-fast) var(--motion-ease-standard),
@@ -187,6 +216,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .trigger,
+  .indicator,
   .content[data-state="active"] {
     animation: none;
     transition: none;
