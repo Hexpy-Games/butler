@@ -35,8 +35,13 @@
   appearance: none;
 }
 
-.link:hover {
+.link:hover,
+.link:focus-visible {
   color: var(--text-primary);
+}
+
+.link:active {
+  color: var(--text-secondary);
 }
 
 .separator svg {

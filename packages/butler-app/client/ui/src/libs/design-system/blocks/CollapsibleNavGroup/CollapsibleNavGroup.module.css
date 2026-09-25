@@ -55,6 +55,13 @@
     var(--nav-sticky-surface, var(--color-surface-base));
 }
 
+/* Keep the sticky header opaque while pressed so rows never show through. */
+.stickyGroup > .header[data-slot="clickable"]:active {
+  background:
+    linear-gradient(var(--selection-strong), var(--selection-strong)),
+    var(--nav-sticky-surface, var(--color-surface-base));
+}
+
 .stickyGroup > .content:not(.collapsed),
 .stickyGroup > .content > .inner {
   overflow: visible;

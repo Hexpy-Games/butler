@@ -282,7 +282,8 @@
     transform var(--motion-base) ease;
 }
 
-.itemFrame:hover:not([data-disabled="true"]) {
+.itemFrame:hover:not([data-disabled="true"]),
+.itemFrame:has(.item:focus-visible) {
   --tinted-glass-bg: color-mix(in srgb, var(--surface-raised) 68%, transparent);
   --tinted-glass-border: color-mix(
     in srgb,
@@ -291,6 +292,10 @@
   );
 
   transform: translateY(-2px);
+}
+
+.itemFrame:has(.item:active) {
+  transform: none;
 }
 
 .item {
@@ -416,7 +421,8 @@
     transform: none;
   }
 
-  .itemFrame:hover:not([data-disabled="true"]) {
+  .itemFrame:hover:not([data-disabled="true"]),
+  .itemFrame:has(.item:focus-visible) {
     transform: none;
   }
 }

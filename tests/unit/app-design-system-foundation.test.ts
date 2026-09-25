@@ -581,3 +581,27 @@ describe("spacing and radius lint", () => {
     )).toEqual([]);
   });
 });
+
+describe("keyboard and pressed states mirror hover", () => {
+  const css = (file: string) => read(`${uiSrc}/libs/design-system/${file}`);
+
+  test("clickable rows show a pressed state", () => {
+    expect(css("components/Clickable/Clickable.module.css")).toMatch(
+      /\.clickable:active:not\(\[data-disabled="true"\]\) \{\s*background: var\(--selection-strong\);/u,
+    );
+    const sticky = css("blocks/CollapsibleNavGroup/CollapsibleNavGroup.module.css");
+    expect(sticky).toContain('.stickyGroup > .header[data-slot="clickable"]:active');
+  });
+
+  test("breadcrumb links respond to keyboard focus and press", () => {
+    const breadcrumb = css("components/Breadcrumb/Breadcrumb.module.css");
+    expect(breadcrumb).toContain(".link:focus-visible");
+    expect(breadcrumb).toContain(".link:active");
+  });
+
+  test("suggestion cards lift for keyboard focus and settle when pressed", () => {
+    const list = css("blocks/PromptSuggestionList/PromptSuggestionList.module.css");
+    expect(list).toContain(".itemFrame:has(.item:focus-visible)");
+    expect(list).toContain(".itemFrame:has(.item:active)");
+  });
+});

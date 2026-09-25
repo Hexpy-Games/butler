@@ -25,6 +25,10 @@
   background: var(--selection);
 }
 
+.clickable:active:not([data-disabled="true"]) {
+  background: var(--selection-strong);
+}
+
 .clickable:focus-visible {
   box-shadow: var(--focus-ring);
 }
