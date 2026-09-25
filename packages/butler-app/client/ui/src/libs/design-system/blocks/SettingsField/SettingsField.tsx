@@ -1,7 +1,6 @@
 import { useId, type HTMLAttributes, type ReactNode } from "react";
 import { Field } from "../../components/Field";
 import { Label } from "../../components/Label";
-import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./SettingsField.module.css";
@@ -37,7 +36,7 @@ export function SettingsField({
       data-control-width={controlWidth}
       {...props}
     >
-      <Stack gap="xs" className={styles.copy}>
+      <div className={styles.copy}>
         <Label htmlFor={id}>{label}</Label>
         {description ? (
           <Typo.Caption
@@ -47,13 +46,13 @@ export function SettingsField({
             {description}
           </Typo.Caption>
         ) : null}
-      </Stack>
-      <Stack gap="xs" className={styles.control}>
+      </div>
+      <div className={styles.control}>
         {control}
         {meta ? (
           <Typo.Caption className={styles.meta}>{meta}</Typo.Caption>
         ) : null}
-      </Stack>
+      </div>
     </Field>
   );
 }

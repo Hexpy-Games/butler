@@ -1,10 +1,29 @@
 .section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-section-header-gap);
   width: 100%;
-  padding: var(--space-lg);
-  border: 1px solid var(--line);
+  min-width: 0;
+  padding: var(--settings-section-padding);
+  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--settings-panel-bg);
   color: var(--text-primary);
+}
+
+.header,
+.fields {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  gap: var(--settings-field-copy-gap);
+}
+
+.fields {
+  gap: var(--settings-field-gap);
 }
 
 .title {
@@ -13,8 +32,4 @@
 
 .description {
   color: var(--text-secondary);
-}
-
-.fields {
-  gap: var(--settings-field-gap);
 }

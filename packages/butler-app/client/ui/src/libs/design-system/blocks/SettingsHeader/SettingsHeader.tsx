@@ -22,7 +22,7 @@ export function SettingsHeader({
   return (
     <header className={cn(styles.header, className)}>
       <Stack gap="xs" className={styles.copy}>
-        <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>
+        <Typo.H2 as="h2" className={styles.title}>{title}</Typo.H2>
         {description ? (
           <Typo.Body className={styles.description}>{description}</Typo.Body>
         ) : null}

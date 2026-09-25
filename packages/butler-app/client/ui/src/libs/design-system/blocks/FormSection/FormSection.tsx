@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./FormSection.module.css";
@@ -15,6 +14,11 @@ export interface FormSectionProps {
   className?: string;
 }
 
+/**
+ * Titled settings card. The title is one step above field labels (H4 vs the
+ * medium body-size Label) and sits `--settings-section-header-gap` above the
+ * first field, closer than fields sit to each other.
+ */
 export function FormSection({
   title,
   description,
@@ -22,16 +26,16 @@ export function FormSection({
   className,
 }: FormSectionProps) {
   return (
-    <Stack as="section" gap="md" className={cn(styles.section, className)}>
-      <Stack gap="xs">
-        <Typo.PanelTitle as="h3" className={styles.title}>{title}</Typo.PanelTitle>
+    <section className={cn(styles.section, className)}>
+      <div className={styles.header}>
+        <Typo.H4 as="h3" className={styles.title}>{title}</Typo.H4>
         {description && (
-          <Typo.Caption className={styles.description}>{description}</Typo.Caption>
+          <Typo.Body className={styles.description}>{description}</Typo.Body>
         )}
-      </Stack>
-      <Stack gap="md" className={styles.fields}>
+      </div>
+      <div className={styles.fields}>
         {children}
-      </Stack>
-    </Stack>
+      </div>
+    </section>
   );
 }

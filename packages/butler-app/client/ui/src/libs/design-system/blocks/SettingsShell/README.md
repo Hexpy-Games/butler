@@ -24,9 +24,10 @@ Electron drag regions and keep its last item reachable in short windows.
 ### Spacing
 
 The detail content stacks settings sections with `--settings-section-gap`
-(32px; 24px when the shell is single-pane at 760px and below). It stays at least
-1.5x `--settings-field-gap`, the gap between fields inside a `FormSection`, so
-section boundaries remain visible.
+(32px at every width). It is the widest step of the settings spacing ramp
+(see `FormSection`) and stays at least 1.5x `--settings-field-gap` (20px), the
+gap between fields inside a `FormSection`, so section boundaries remain
+visible.
 
 ## Who can use this component
 Butler client settings containers and design-system fixtures.
