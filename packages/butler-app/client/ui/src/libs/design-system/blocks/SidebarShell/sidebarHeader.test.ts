@@ -52,3 +52,13 @@ test("sidebar and workspace titlebars reserve the toggle through tokens", () => 
   expect(titlebarShell).toMatch(/\.collapsed \{[^}]*padding-left: var\(--titlebar-collapsed-left-padding\);/u);
   expect(spaceSidebar).not.toMatch(/\.brand \{[^}]*padding-inline-start/u);
 });
+
+test("the sticky header's fade cover only paints while the header is stuck", () => {
+  const component = read("./SidebarShell.tsx");
+  // The cover is a child so it can query the sticky header's scroll state.
+  expect(component).toContain('<div className={styles.stickyCover} aria-hidden="true" />');
+  expect(sidebarShell).toContain(".stickyHeader { container-type: scroll-state;");
+  expect(sidebarShell).not.toContain(".stickyHeader::before");
+  expect(sidebarShell).toMatch(/\.stickyCover \{[^}]*bottom: 100%;[^}]*visibility: hidden;/u);
+  expect(sidebarShell).toMatch(/@container scroll-state\(stuck: top\) \{ \.stickyCover \{ visibility: visible; \} \}/u);
+});

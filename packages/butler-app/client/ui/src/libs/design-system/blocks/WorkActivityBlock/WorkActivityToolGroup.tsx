@@ -10,7 +10,8 @@ export interface WorkActivityToolItem {
   icon?: ReactNode;
   title: ReactNode;
   details?: ReactNode;
-  summaryLabel?: string;
+  /** Localized group noun counted in the collapsed summary ("2 Search"); supplied by the caller. */
+  summaryLabel: string;
   /** Always-visible footer below the containing disclosure and its expanded list. */
   after?: ReactNode;
 }
@@ -46,8 +47,8 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
 function toolSummary(tools: WorkActivityToolItem[]): string {
   const counts = new Map<string, number>();
   for (const tool of tools) {
-    const label = tool.summaryLabel?.trim() || "도구";
+    const label = tool.summaryLabel.trim();
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return [...counts.entries()].map(([label, count]) => `${count} ${label}`).join(", ");
+  return [...counts.entries()].map(([label, count]) => `${count} ${label}`.trim()).join(", ");
 }

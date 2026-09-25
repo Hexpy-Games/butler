@@ -1,10 +1,10 @@
 .root {
   --prompt-content-width: var(--conversation-content-width, min(760px, 86%));
   --prompt-title-icon-size: var(--new-chat-title-icon-size, 54px);
-  --prompt-title-icon-gap: var(--new-chat-title-icon-gap, 0px);
+  --prompt-title-icon-gap: var(--new-chat-title-icon-gap, var(--space-md));
   --prompt-edge-gutter: var(
     --new-chat-title-edge-gutter,
-    var(--prompt-title-icon-size)
+    calc(var(--prompt-title-icon-size) + var(--prompt-title-icon-gap))
   );
   --prompt-content-inset: max(
     var(--prompt-edge-gutter),

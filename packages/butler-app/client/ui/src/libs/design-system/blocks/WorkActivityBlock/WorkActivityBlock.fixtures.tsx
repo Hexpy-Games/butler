@@ -42,7 +42,7 @@ export function WorkActivityBlockFixture() {
       />
       <WorkActivityBlock
         title="조사 작업 위임"
-        tools={[{ id: "assignment", title: "워커 호출", details: "작업을 전달했습니다.",
+        tools={[{ id: "assignment", title: "워커 호출", summaryLabel: "작업", details: "작업을 전달했습니다.",
           after: <Button variant="outline" shape="pill" text="Juno · 2/3 · 파일 수정 중" /> }]}
       />
     </Stack>

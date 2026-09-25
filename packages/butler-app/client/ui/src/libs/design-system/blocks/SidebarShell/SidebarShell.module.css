@@ -125,6 +125,7 @@
 }
 
 .stickyHeader {
+  container-type: scroll-state;
   position: sticky;
   top: var(--sidebar-scroll-fade-size);
   z-index: 30;
@@ -140,14 +141,23 @@
   clip-path: inset(var(--sticky-clip-top, 0) 0 0);
 }
 
-.stickyHeader::before {
-  content: "";
+/* Covers rows that scroll under the top fade while the header is stuck. At
+   rest it would paint over the row just above the header, so it only shows
+   once the header is actually stuck. */
+.stickyCover {
   position: absolute;
   inset-inline: 0;
   bottom: 100%;
   height: var(--sidebar-scroll-fade-size);
-  background: inherit;
+  background: var(--nav-sticky-surface, var(--color-surface-base));
   pointer-events: none;
+  visibility: hidden;
+}
+
+@container scroll-state(stuck: top) {
+  .stickyCover {
+    visibility: visible;
+  }
 }
 
 .scroll::-webkit-scrollbar {

@@ -89,6 +89,7 @@ export function SidebarShell({
                   className={styles.stickyHeader}
                   data-test-class="sidebar-sticky-header"
                 >
+                  <div className={styles.stickyCover} aria-hidden="true" />
                   {stickyHeader}
                 </div>
               ) : null}
