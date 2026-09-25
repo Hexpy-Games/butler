@@ -1,6 +1,7 @@
 // Primitives
 export * from "./lib/floatingConstraints";
 export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
+export * from "./lib/motion";
 export * from "./responsive";
 export * from "./components/Breadcrumb";
 export * from "./components/Button";

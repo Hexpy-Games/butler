@@ -6,8 +6,8 @@
   max-width: 920px;
   margin: 0 auto;
   transition:
-    bottom var(--motion-base) ease,
-    max-width var(--motion-base) ease;
+    bottom var(--motion-base) var(--motion-ease-standard),
+    max-width var(--motion-base) var(--motion-ease-standard);
 }
 
 .floating {
@@ -71,7 +71,7 @@
   transition:
     grid-template-rows var(--adaptive-panel-duration)
       var(--adaptive-panel-easing),
-    opacity var(--motion-base) ease,
+    opacity var(--motion-base) var(--motion-ease-standard),
     transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
 
@@ -192,8 +192,8 @@
   font-size: var(--font-size-2);
   cursor: pointer;
   transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .planToggle:hover {
@@ -213,8 +213,8 @@
   color: var(--send-fg);
   cursor: pointer;
   transition:
-    background-color var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .sendButton:disabled {

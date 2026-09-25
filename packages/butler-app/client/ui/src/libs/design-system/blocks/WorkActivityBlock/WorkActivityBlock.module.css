@@ -201,7 +201,7 @@
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: background-color var(--motion-fast) ease;
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .compact .tool {
@@ -214,7 +214,7 @@
 
 button.tool {
   cursor: pointer;
-  transition: background-color var(--motion-fast) ease;
+  transition: background-color var(--motion-fast) var(--motion-ease-standard);
 }
 
 button.tool:hover,

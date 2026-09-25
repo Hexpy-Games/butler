@@ -33,6 +33,28 @@ changes). Inline `eslint-disable` / `stylelint-disable` comments are ignored.
 `no-raw-length-custom-prop` is a warning rule: product CSS custom properties
 whose values carry raw lengths are printed by `lint:ds` but not ratcheted yet.
 
+## Motion Lint (ratchet)
+
+`motion-lint.ts` (`bun run lint:motion`, part of `lint:design`) enforces the
+DS spec Motion Contract over all of `client/ui/src` (design system included,
+tests excluded) with shrink-only baselines in `motion/baseline/<rule>.json`
+(`bun run lint:motion:baseline` records shrinkage and refuses growth).
+
+- `motion-outside-ds`: `transition`, `animation` or `@keyframes` outside
+  `libs/design-system` (`none` is allowed).
+- `keyword-easing`: `ease`, `ease-in`, `ease-out`, `ease-in-out`, `linear`
+  and step keywords in motion declarations; use `var(--motion-ease-*)`
+  (`--motion-ease-linear` for loops). `linear()` curves pass.
+- `transition-property`: transitions and keyframes may only move `opacity`,
+  `transform`/`translate`/`scale`/`rotate`, `filter`, paint properties
+  (`color`, `background(-color)`, `border-color`, `box-shadow`,
+  `outline-color`, `stroke-dashoffset`), `visibility`, the registered
+  `--scroll-fade-*` mask properties, and `display`/`overlay` with
+  `allow-discrete`. `height`/`block-size` pass only in DS reveal components
+  (`components/Collapsible`) that set `interpolate-size: allow-keywords`.
+- `waapi-outside-helper`: `.animate(` and `startViewTransition` outside
+  `libs/design-system/lib/motion.ts` (use `animateMotion`).
+
 ## Boundaries
 
 These checks protect Butler App UI quality contracts. Agent runtime behavior

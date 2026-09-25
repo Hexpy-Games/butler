@@ -57,9 +57,9 @@
   gap: var(--sidebar-region-gap, 10px);
   overflow: visible;
   transition:
-    opacity var(--motion-base) ease,
+    opacity var(--motion-base) var(--motion-ease-standard),
     transform var(--motion-slow) var(--motion-ease-emphasized),
-    visibility 0s linear;
+    visibility 0s var(--motion-ease-linear);
 }
 
 .contentCollapsed {
@@ -68,9 +68,9 @@
   pointer-events: none;
   transform: translateX(-18px);
   transition:
-    opacity var(--motion-fast) ease,
+    opacity var(--motion-fast) var(--motion-ease-standard),
     transform var(--motion-base) var(--motion-ease-emphasized),
-    visibility 0s linear var(--motion-fast);
+    visibility 0s var(--motion-ease-linear) var(--motion-fast);
 }
 
 .header {

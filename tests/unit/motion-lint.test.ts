@@ -1,0 +1,101 @@
+import { describe, expect, test } from "bun:test";
+import {
+  MOTION_RULES,
+  lintMotionCss,
+  lintMotionScript,
+  type MotionFinding,
+} from "../../packages/butler-app/scripts/lint/motion-lint.ts";
+
+const DS = "libs/design-system/components/Example/Example.module.css";
+const PRODUCT = "components/example/Example.module.css";
+
+function rules(findings: MotionFinding[]): string[] {
+  return findings.map((finding) => finding.rule);
+}
+
+describe("motion lint rules", () => {
+  test("exposes the four ratcheted motion rules", () => {
+    expect([...MOTION_RULES]).toEqual([
+      "motion-outside-ds",
+      "keyword-easing",
+      "transition-property",
+      "waapi-outside-helper",
+    ]);
+  });
+
+  test("motion-outside-ds rejects transitions, animations and keyframes in product CSS", () => {
+    const css = `
+      .a { transition: opacity var(--motion-fast) var(--motion-ease-standard); }
+      .b { animation: fade var(--motion-fast) var(--motion-ease-decelerate); }
+      @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    `;
+    expect(rules(lintMotionCss(PRODUCT, css)).filter((rule) => rule === "motion-outside-ds")).toHaveLength(3);
+    expect(rules(lintMotionCss(DS, css))).not.toContain("motion-outside-ds");
+    expect(rules(lintMotionCss(PRODUCT, ".a { transition: none; animation: none; }"))).toEqual([]);
+  });
+
+  test("keyword-easing rejects keyword easings but accepts tokens and linear() curves", () => {
+    for (const easing of ["ease", "ease-in", "ease-out", "ease-in-out", "linear"]) {
+      expect(rules(lintMotionCss(DS, `.a { transition: opacity var(--motion-fast) ${easing}; }`)))
+        .toEqual(["keyword-easing"]);
+    }
+    expect(rules(lintMotionCss(DS, ".a { animation: spin var(--spinner-duration) linear infinite; }")))
+      .toEqual(["keyword-easing"]);
+    expect(lintMotionCss(DS, ".a { transition: opacity var(--motion-fast) var(--motion-ease-standard); }")).toEqual([]);
+    expect(lintMotionCss(DS, ".a { animation: spin var(--spinner-duration) var(--motion-ease-linear) infinite; }"))
+      .toEqual([]);
+    expect(lintMotionCss(DS, ".a { animation-timing-function: linear(0, 0.5, 1); }")).toEqual([]);
+    expect(lintMotionCss("libs/design-system/tokens.css", ":root { --motion-ease-linear: linear; }")).toEqual([]);
+  });
+
+  test("transition-property allows compositor and paint properties only", () => {
+    const allowed = [
+      "opacity", "transform", "translate", "scale", "rotate", "filter", "color", "background-color",
+      "border-color", "box-shadow", "outline-color", "visibility",
+    ];
+    for (const property of allowed) {
+      expect(lintMotionCss(DS, `.a { transition: ${property} var(--motion-fast) var(--motion-ease-standard); }`))
+        .toEqual([]);
+    }
+    for (const property of ["width", "left", "top", "margin", "grid-template-columns", "grid-template-rows", "min-height", "all"]) {
+      expect(rules(lintMotionCss(DS, `.a { transition: ${property} var(--motion-fast) var(--motion-ease-standard); }`)))
+        .toEqual(["transition-property"]);
+    }
+    expect(rules(lintMotionCss(DS, ".a { transition-property: opacity, width; }"))).toEqual(["transition-property"]);
+    expect(rules(lintMotionCss(DS, `.a {
+      transition:
+        opacity var(--motion-fast) var(--motion-ease-standard),
+        left var(--motion-slow) var(--motion-ease-emphasized);
+    }`))).toEqual(["transition-property"]);
+  });
+
+  test("discrete display/overlay transitions need allow-discrete", () => {
+    expect(lintMotionCss(DS, ".a { transition: display var(--motion-fast) allow-discrete; }")).toEqual([]);
+    expect(rules(lintMotionCss(DS, ".a { transition: display var(--motion-fast); }"))).toEqual(["transition-property"]);
+  });
+
+  test("height reveals are allowed only in DS reveal components with interpolate-size", () => {
+    const reveal = "libs/design-system/components/Collapsible/Collapsible.module.css";
+    const css = ".a { interpolate-size: allow-keywords; transition: height var(--motion-base) var(--motion-ease-standard); }";
+    expect(lintMotionCss(reveal, css)).toEqual([]);
+    expect(rules(lintMotionCss(DS, css))).toEqual(["transition-property"]);
+    expect(rules(lintMotionCss(reveal, ".a { transition: block-size var(--motion-base) var(--motion-ease-standard); }")))
+      .toEqual(["transition-property"]);
+    expect(lintMotionCss(reveal, ".a { interpolate-size: allow-keywords; transition: block-size var(--motion-base) var(--motion-ease-standard); }"))
+      .toEqual([]);
+  });
+
+  test("keyframes may only animate allowlisted properties", () => {
+    expect(lintMotionCss(DS, "@keyframes a { from { opacity: 0; transform: scale(0.97); } }")).toEqual([]);
+    expect(rules(lintMotionCss(DS, "@keyframes a { from { width: 0; } to { width: 10px; } }")))
+      .toEqual(["transition-property", "transition-property"]);
+  });
+
+  test("waapi-outside-helper rejects element.animate and startViewTransition outside the helper", () => {
+    const code = "element.animate([{ opacity: 0 }], 120); document.startViewTransition(() => {});";
+    expect(rules(lintMotionScript("components/settings/ModelRouteFrame.tsx", code)))
+      .toEqual(["waapi-outside-helper", "waapi-outside-helper"]);
+    expect(lintMotionScript("libs/design-system/lib/motion.ts", code)).toEqual([]);
+    expect(lintMotionScript("components/x.tsx", "animateMotion(element, 'enter');")).toEqual([]);
+  });
+});

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { animateMotion, motionDistance } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 
 interface ModelRouteFrameProps {
@@ -12,17 +13,12 @@ export function ModelRouteFrame({ title, children }: ModelRouteFrameProps) {
 
   useEffect(() => {
     const element = ref.current;
-    if (!element || typeof element.animate !== "function") return;
-    element.animate([
-      {
-        opacity: 0,
-        transform: `translateX(${direction === "forward" ? 28 : -28}px)`,
-      },
+    if (!element) return;
+    const travel = motionDistance("lg") * (direction === "forward" ? 1 : -1);
+    animateMotion(element, [
+      { opacity: 0, transform: `translateX(${travel}px)` },
       { opacity: 1, transform: "translateX(0)" },
-    ], {
-      duration: 180,
-      easing: "ease-out",
-    });
+    ], { duration: "base", easing: "decelerate" });
   }, [direction, title]);
 
   return (

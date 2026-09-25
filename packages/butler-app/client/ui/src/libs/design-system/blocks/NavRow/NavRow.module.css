@@ -11,8 +11,8 @@
   color: var(--text-primary);
   text-align: left;
   transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .row[data-slot="clickable"] {
@@ -157,8 +157,8 @@
   opacity: 1;
   text-align: right;
   transition:
-    max-width var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+    max-width var(--motion-fast) var(--motion-ease-standard),
+    opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .actions {
@@ -179,8 +179,8 @@
   opacity: 0;
   transform: translate(2px, -50%);
   transition:
-    opacity var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .hoverActions:focus-within,

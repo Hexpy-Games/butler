@@ -556,17 +556,54 @@ describe("single type scale", () => {
 });
 
 describe("motion tokens", () => {
-  test("define a three-step duration scale and shared easings", () => {
+  test("define the duration scale, exit durations and shared easings", () => {
     const tokens = rootTokens();
+    expect(tokens.get("--motion-instant")).toBe("60ms");
     expect(tokens.get("--motion-menu")).toBe("90ms");
     expect(tokens.get("--motion-fast")).toBe("120ms");
     expect(tokens.get("--motion-base")).toBe("160ms");
     expect(tokens.get("--motion-slow")).toBe("220ms");
-    expect(tokens.get("--motion-ease-standard")).toBe("ease");
-    expect(tokens.get("--motion-ease-enter")).toBe("ease-out");
+    expect(tokens.get("--motion-deliberate")).toBe("320ms");
+    expect(tokens.get("--motion-exit-menu")).toBe("60ms");
+    expect(tokens.get("--motion-exit-fast")).toBe("90ms");
+    expect(tokens.get("--motion-exit-base")).toBe("110ms");
+    expect(tokens.get("--motion-exit-slow")).toBe("150ms");
+    expect(tokens.get("--motion-ease-standard")).toBe("cubic-bezier(0.2, 0, 0, 1)");
+    expect(tokens.get("--motion-ease-decelerate")).toBe("cubic-bezier(0, 0, 0, 1)");
+    expect(tokens.get("--motion-ease-accelerate")).toBe("cubic-bezier(0.3, 0, 1, 1)");
     expect(tokens.get("--motion-ease-emphasized")).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
+    expect(tokens.get("--motion-ease-enter")).toBe("var(--motion-ease-decelerate)");
+    expect(tokens.get("--motion-ease-exit")).toBe("var(--motion-ease-accelerate)");
+    expect(tokens.get("--motion-ease-linear")).toBe("linear");
     expect(tokens.get("--adaptive-panel-duration")).toBe("var(--motion-slow)");
     expect(tokens.get("--adaptive-panel-easing")).toBe("var(--motion-ease-emphasized)");
+  });
+
+  test("the spring easing overshoots by about 3% and settles at 1", () => {
+    const spring = rootTokens().get("--motion-ease-spring") ?? "";
+    expect(spring.startsWith("linear(")).toBe(true);
+    const points = spring.slice("linear(".length, -1).split(",").map((point) => Number(point.trim()));
+    expect(points[0]).toBe(0);
+    expect(points.at(-1)).toBe(1);
+    const peak = Math.max(...points);
+    expect(peak).toBeGreaterThan(1.02);
+    expect(peak).toBeLessThan(1.04);
+  });
+
+  test("distance and scale tokens collapse to a pure fade under reduced motion", () => {
+    const tokens = rootTokens();
+    expect(tokens.get("--motion-distance-xs")).toBe("2px");
+    expect(tokens.get("--motion-distance-sm")).toBe("4px");
+    expect(tokens.get("--motion-distance-md")).toBe("8px");
+    expect(tokens.get("--motion-distance-lg")).toBe("24px");
+    expect(tokens.get("--motion-scale-menu")).toBe("0.97");
+    expect(tokens.get("--motion-scale-dialog")).toBe("0.96");
+    expect(tokens.get("--motion-scale-press")).toBe("0.97");
+    const css = read(tokensPath);
+    const media = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    const reduced = parseTokens(tokenBlock(media, ":root"));
+    for (const name of ["xs", "sm", "md", "lg"]) expect(reduced.get(`--motion-distance-${name}`)).toBe("0px");
+    for (const name of ["menu", "dialog", "press"]) expect(reduced.get(`--motion-scale-${name}`)).toBe("1");
   });
 
   test("lint rejects raw transition and animation timings", () => {
@@ -581,23 +618,14 @@ describe("motion tokens", () => {
     expect(delayed).toHaveLength(1);
     expect(lintDesignSystemRules(
       "x.module.css",
-      ".a { transition: opacity var(--motion-fast) ease, visibility 0s linear var(--motion-fast); animation: spin var(--spinner-duration) linear infinite; }",
+      ".a { transition: opacity var(--motion-fast) var(--motion-ease-standard), visibility 0s var(--motion-ease-linear) var(--motion-fast); animation: spin var(--spinner-duration) var(--motion-ease-linear) infinite; }",
     )).toEqual([]);
   });
 
   test("menus and selects open with the 90ms menu motion token", () => {
     for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
       const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
-      expect(css).toMatch(/animation: [\w-]+-open var\(--motion-menu\) ease-out;/u);
-    }
-  });
-
-  test("menu and select animations stop under reduced motion", () => {
-    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
-      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
-      const start = css.indexOf("@media (prefers-reduced-motion: reduce)");
-      expect(start).toBeGreaterThan(-1);
-      expect(css.slice(start)).toContain("animation: none");
+      expect(css).toMatch(/animation: [\w-]+-open var\(--motion-menu\)/u);
     }
   });
 });

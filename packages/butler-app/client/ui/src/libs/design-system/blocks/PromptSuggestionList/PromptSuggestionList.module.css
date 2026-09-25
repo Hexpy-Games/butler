@@ -184,10 +184,10 @@
   cursor: pointer;
   font: inherit;
   transition:
-    background var(--motion-base) ease,
-    border-color var(--motion-base) ease,
-    color var(--motion-base) ease,
-    transform var(--motion-base) ease;
+    background var(--motion-base) var(--motion-ease-standard),
+    border-color var(--motion-base) var(--motion-ease-standard),
+    color var(--motion-base) var(--motion-ease-standard),
+    transform var(--motion-base) var(--motion-ease-standard);
 }
 
 .paletteOption:hover,
@@ -277,9 +277,9 @@
   min-height: 260px;
   scroll-snap-align: start;
   transition:
-    border-color var(--motion-base) ease,
-    box-shadow var(--motion-base) ease,
-    transform var(--motion-base) ease;
+    border-color var(--motion-base) var(--motion-ease-standard),
+    box-shadow var(--motion-base) var(--motion-ease-standard),
+    transform var(--motion-base) var(--motion-ease-standard);
 }
 
 .itemFrame:hover:not([data-disabled="true"]),

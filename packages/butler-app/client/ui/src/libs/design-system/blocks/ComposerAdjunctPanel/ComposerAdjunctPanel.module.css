@@ -20,8 +20,8 @@
   padding: var(--space-2) var(--composer-inner-padding-inline);
   text-align: left;
   transition:
-    opacity var(--motion-fast) ease,
-    background-color var(--motion-fast) ease;
+    opacity var(--motion-fast) var(--motion-ease-standard),
+    background-color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .header[data-has-icon="false"] {
@@ -76,7 +76,7 @@
   place-items: center;
   color: var(--text-tertiary);
   transform-origin: center;
-  transition: transform var(--motion-base) ease;
+  transition: transform var(--motion-base) var(--motion-ease-standard);
 }
 
 .chevron[data-collapsed="true"] {
@@ -92,7 +92,7 @@
     var(--composer-inner-padding-block);
   transition:
     grid-template-rows var(--motion-base) var(--motion-ease-emphasized),
-    opacity var(--motion-fast) ease,
+    opacity var(--motion-fast) var(--motion-ease-standard),
     padding-block var(--motion-base) var(--motion-ease-emphasized);
 }
 

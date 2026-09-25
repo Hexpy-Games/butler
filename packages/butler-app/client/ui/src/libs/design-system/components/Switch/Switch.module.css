@@ -40,7 +40,7 @@
   border-radius: 50%;
   background: var(--switch-thumb);
   box-shadow: var(--shadow-control);
-  transition: transform var(--motion-fast) ease;
+  transition: transform var(--motion-fast) var(--motion-ease-standard);
 }
 
 .switch[data-size="sm"] .thumb {
@@ -54,6 +54,12 @@
 
 .switch[data-size="sm"][data-state="checked"] .thumb {
   transform: translateX(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb {
+    transition: none;
+  }
 }
 
 @media (width <= 640px), (pointer: coarse) {

@@ -33,16 +33,62 @@
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
-  /* Motion scale: menu for dropdown/context/select entrance, fast for
-     hover/press and tooltips, base for disclosure and card motion, slow for
-     panels and drawers. */
+  /* Motion scale ("Linear-crisp", see the DS spec Motion Contract): instant
+     for press feedback, menu for dropdown/context/select, fast for hover,
+     tooltips, popovers and dialogs, base for disclosure, message insert and
+     route motion, slow for panels and drawers, deliberate for rare large
+     surfaces. Exits run at about 0.7x on the exit tokens. */
+  --motion-instant: 60ms;
   --motion-menu: 90ms;
   --motion-fast: 120ms;
   --motion-base: 160ms;
   --motion-slow: 220ms;
-  --motion-ease-standard: ease;
-  --motion-ease-enter: ease-out;
+  --motion-deliberate: 320ms;
+  --motion-exit-menu: 60ms;
+  --motion-exit-fast: 90ms;
+  --motion-exit-base: 110ms;
+  --motion-exit-slow: 150ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --motion-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
   --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Damped spring with about 3% overshoot; reserved for the Switch thumb. */
+  --motion-ease-spring: linear(
+    0,
+    0.0855,
+    0.2683,
+    0.472,
+    0.6547,
+    0.7991,
+    0.9021,
+    0.9686,
+    1.0067,
+    1.0247,
+    1.0299,
+    1.028,
+    1.0227,
+    1.0166,
+    1.011,
+    1.0065,
+    1.0033,
+    1.0011,
+    0.9999,
+    0.9993,
+    1
+  );
+  /* Loops (spinner, shimmer) only. */
+  --motion-ease-linear: linear;
+  --motion-ease-enter: var(--motion-ease-decelerate);
+  --motion-ease-exit: var(--motion-ease-accelerate);
+  /* Travel and scale are tokens so reduced motion can zero them globally and
+     every token-driven animation becomes a pure opacity fade. */
+  --motion-distance-xs: 2px;
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+  --motion-distance-lg: 24px;
+  --motion-scale-menu: 0.97;
+  --motion-scale-dialog: 0.96;
+  --motion-scale-press: 0.97;
   --adaptive-panel-duration: var(--motion-slow);
   --adaptive-panel-easing: var(--motion-ease-emphasized);
   --spinner-duration: 1320ms;
@@ -516,6 +562,20 @@
 @media (width <= 640px), (pointer: coarse) {
   :root {
     --control-hit-target: 44px;
+  }
+}
+
+/* Reduced motion is an opacity fade, not zero motion: zeroing travel and
+   scale turns every token-driven transform animation into a pure fade. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-distance-xs: 0px;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-scale-menu: 1;
+    --motion-scale-dialog: 1;
+    --motion-scale-press: 1;
   }
 }
 

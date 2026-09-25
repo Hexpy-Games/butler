@@ -26,7 +26,7 @@
   opacity: 1;
   transition:
     grid-template-rows var(--motion-base) var(--motion-ease-emphasized),
-    opacity var(--motion-fast) ease;
+    opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .contentCollapsed {

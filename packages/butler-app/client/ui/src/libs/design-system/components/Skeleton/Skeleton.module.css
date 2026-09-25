@@ -11,7 +11,8 @@
   inset: 0;
   content: "";
   transform: translateX(-100%);
-  animation: skeleton-shimmer var(--shimmer-duration) linear infinite;
+  animation: skeleton-shimmer var(--shimmer-duration) var(--motion-ease-linear)
+    infinite;
   background: linear-gradient(
     90deg,
     transparent,

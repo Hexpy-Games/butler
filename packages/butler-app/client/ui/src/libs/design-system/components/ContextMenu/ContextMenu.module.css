@@ -11,7 +11,7 @@
 }
 
 .content[data-state="open"] {
-  animation: context-menu-open var(--motion-menu) ease-out;
+  animation: context-menu-open var(--motion-menu) var(--motion-ease-decelerate);
   transform-origin: var(
     --radix-context-menu-content-transform-origin,
     center top

@@ -96,7 +96,7 @@
     var(--app-window-radius, 18px);
   background: var(--workspace-bg);
   transition:
-    background var(--motion-base) ease,
+    background var(--motion-base) var(--motion-ease-standard),
     transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
     width var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
@@ -163,7 +163,7 @@
   background: var(--line);
   content: "";
   opacity: 0.34;
-  transition: opacity var(--motion-fast) ease;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .resizeHandle:hover::after,
@@ -209,7 +209,7 @@
     background: var(--adaptive-panel-bg);
     transition:
       transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
-      visibility 0s linear var(--adaptive-panel-duration);
+      visibility 0s var(--motion-ease-linear) var(--adaptive-panel-duration);
     visibility: hidden;
     will-change: transform;
   }

@@ -62,8 +62,8 @@
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 @media (width <= 640px), (pointer: coarse) {

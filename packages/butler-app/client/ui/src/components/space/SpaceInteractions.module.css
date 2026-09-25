@@ -227,7 +227,7 @@
 @media (width > 640px) and (hover: hover) and (pointer: fine) {
   .menuAction:not([data-has-status]) {
     opacity: 0;
-    transition: opacity var(--motion-fast) ease;
+    transition: opacity var(--motion-fast) var(--motion-ease-standard);
   }
   .rowShell
     [data-test-class="tree-row"]:is(

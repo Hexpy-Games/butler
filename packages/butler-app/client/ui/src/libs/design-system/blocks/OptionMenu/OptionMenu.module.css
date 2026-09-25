@@ -70,8 +70,8 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .item:not([data-has-icon="true"]) {

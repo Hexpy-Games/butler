@@ -1,5 +1,5 @@
 {
   "components/conversation/ComposerPlanInstructionContext.module.css": 1,
   "components/management/ProjectStatisticsPanel.module.css": 1,
-  "components/space/SpaceInteractions.module.css": 4
+  "components/space/SpaceInteractions.module.css": 3
 }

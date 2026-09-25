@@ -92,7 +92,7 @@
 @media (prefers-reduced-motion: no-preference) {
   [data-scroll-fade] {
     transition:
-      --scroll-fade-start var(--motion-base) ease-out,
-      --scroll-fade-end var(--motion-base) ease-out;
+      --scroll-fade-start var(--motion-base) var(--motion-ease-decelerate),
+      --scroll-fade-end var(--motion-base) var(--motion-ease-decelerate);
   }
 }

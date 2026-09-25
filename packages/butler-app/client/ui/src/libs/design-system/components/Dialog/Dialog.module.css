@@ -10,7 +10,7 @@
 }
 
 .overlay[data-state="open"] {
-  animation: dialog-fade-open var(--motion-fast) ease-out;
+  animation: dialog-fade-open var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 .content {
@@ -45,7 +45,7 @@
 }
 
 .content[data-state="open"] {
-  animation: dialog-open var(--motion-fast) ease-out;
+  animation: dialog-open var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 .content[data-project-ledger-modal="true"] {
