@@ -52,7 +52,9 @@ export function AssistantResponseFooter({
         {actions}
         {meta?.durationLabel && <span>{appCopy.interfaceTemplates.workedFor(meta.durationLabel)}</span>}
         {meta?.timeLabel && (
-          <time dateTime={meta.completedAtIso ?? undefined}>{meta.timeLabel}</time>
+          <Typo.Text as="time" dateTime={meta.completedAtIso ?? undefined} numeric="tabular">
+            {meta.timeLabel}
+          </Typo.Text>
         )}
       </MessageFooter>
       {terminalStatus && !suppressTerminalStatus ? (

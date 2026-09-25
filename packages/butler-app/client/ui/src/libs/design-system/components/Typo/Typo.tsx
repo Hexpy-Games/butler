@@ -12,12 +12,42 @@ type TypoElement =
   | "p"
   | "span"
   | "label"
-  | "code";
+  | "code"
+  | "time";
 
-export interface TypoProps extends HTMLAttributes<HTMLElement> {
+export type TypoTone =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "disabled"
+  | "danger"
+  | "success"
+  | "warning"
+  | "inherit";
+export type TypoWeight = "regular" | "medium" | "semibold";
+export type TypoAlign = "start" | "center" | "end";
+export type TypoLineClamp = 2 | 3 | 4;
+export type TypoWrap = "normal" | "nowrap" | "anywhere";
+export type TypoNumeric = "tabular";
+
+/** Text props shared by every Typo variant. None of them change the type scale. */
+export interface TypoTextProps {
+  /** Semantic text color. Omit to inherit the container color. */
+  tone?: TypoTone;
+  weight?: TypoWeight;
+  align?: TypoAlign;
+  /** One line with an ellipsis; the element becomes a block with `min-width: 0`. */
+  truncate?: boolean;
+  lineClamp?: TypoLineClamp;
+  wrap?: TypoWrap;
+  numeric?: TypoNumeric;
+}
+
+export interface TypoProps extends HTMLAttributes<HTMLElement>, TypoTextProps {
   children: ReactNode;
   as?: TypoElement;
   htmlFor?: string;
+  dateTime?: string;
 }
 
 function classNames(...values: Array<string | undefined>): string {
@@ -29,10 +59,27 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
     as: Component = defaultAs,
     className,
     children,
+    tone,
+    weight,
+    align,
+    truncate,
+    lineClamp,
+    wrap,
+    numeric,
     ...props
   }: TypoProps) {
     return (
-      <Component className={classNames(variantClassName, className)} {...props}>
+      <Component
+        className={classNames(styles.typo, variantClassName, className)}
+        data-tone={tone}
+        data-weight={weight}
+        data-align={align}
+        data-truncate={truncate ? "true" : undefined}
+        data-line-clamp={lineClamp}
+        data-wrap={wrap}
+        data-numeric={numeric}
+        {...props}
+      >
         {children}
       </Component>
     );
@@ -49,6 +96,8 @@ export const Body = createTypo("p", styles.body);
 export const Caption = createTypo("span", styles.caption);
 export const Label = createTypo("label", styles.label);
 export const Code = createTypo("code", styles.code);
+/** Inherits the container's font size, weight and line-height; applies text props only. */
+export const Text = createTypo("span", styles.text);
 
 export const AppTitle = createTypo("span", styles["app-title"]);
 export const PanelTitle = createTypo("span", styles["panel-title"]);
@@ -71,6 +120,7 @@ export const Typo = {
   Caption,
   Label,
   Code,
+  Text,
   AppTitle,
   PanelTitle,
   DashboardTitle,

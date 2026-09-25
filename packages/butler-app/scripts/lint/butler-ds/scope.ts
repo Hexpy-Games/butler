@@ -17,6 +17,9 @@ export const DS_STYLELINT_RULES = [
   "no-ds-custom-prop-override",
 ] as const;
 
+/** Reported as warnings by lint:ds; not part of the ratchet baselines. */
+export const DS_WARNING_RULES = ["no-raw-length-custom-prop"] as const;
+
 export const DS_CONSTRAINT_RULES = [
   ...DS_ESLINT_RULES,
   "no-new-css-module",

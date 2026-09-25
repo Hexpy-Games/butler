@@ -27,8 +27,11 @@ refuses to record increases (`--allow-growth` is reserved for owner-approved
 changes). Inline `eslint-disable` / `stylelint-disable` comments are ignored.
 
 `token-only-values` exceptions: `0`, `auto`, percentages, global keywords,
-`calc()`/`env()` around tokens, `1px` hairline offsets in spacing (no hairline
-token exists), `linear` easing for loops, and `line-height: 1 | normal`.
+`calc()`/`env()` around tokens, `linear` easing for loops, and
+`line-height: 1 | normal`. Hairline offsets use `var(--border-hairline)`.
+
+`no-raw-length-custom-prop` is a warning rule: product CSS custom properties
+whose values carry raw lengths are printed by `lint:ds` but not ratcheted yet.
 
 ## Boundaries
 

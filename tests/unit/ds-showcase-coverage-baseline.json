@@ -102,8 +102,7 @@
     "components/Textarea",
     "components/TintedGlass",
     "components/Toast",
-    "components/Tooltip",
-    "components/Typo"
+    "components/Tooltip"
   ],
   "missingReadme": [
     "components/ColorSwatchInput",

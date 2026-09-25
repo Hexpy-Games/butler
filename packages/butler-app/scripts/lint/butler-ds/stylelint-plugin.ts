@@ -75,8 +75,8 @@ export function rawValueCategory(property: string, value: string): string | null
   if (prop.startsWith("--")) return RAW_COLOR.test(raw) ? "color" : null;
   if (COLOR_PROPERTY.test(prop) && RAW_COLOR.test(raw)) return "color";
   if (SPACING_PROPERTY.test(prop)) {
-    // Exceptions: 0, auto, percentages, and 1px hairline offsets (no hairline token exists).
-    return rawLengths(raw, (amount, unit) => amount === 0 || (unit === "px" && Math.abs(amount) === 1)) ? "spacing" : null;
+    // Exceptions: 0, auto and percentages. Hairline offsets use var(--border-hairline).
+    return rawLengths(raw, (amount) => amount === 0) ? "spacing" : null;
   }
   if (RADIUS_PROPERTY.test(prop)) return rawLengths(raw, (amount) => amount === 0) ? "radius" : null;
   if (prop === "z-index") return onlyKeywords(raw, ["auto", "0"]) ? null : "z-index";
@@ -215,4 +215,26 @@ const noDsCustomPropOverride = defineRule(
   },
 );
 
-export const butlerDsStylelintPlugins = [tokenOnlyValues, noDsInternalSelector, noDsCustomPropOverride];
+/** True when a custom property value carries a raw, non-zero length outside var()/env(). */
+export function hasRawLengthCustomProperty(property: string, value: string): boolean {
+  if (!property.startsWith("--")) return false;
+  return rawLengths(stripTokenCalls(value), (amount) => amount === 0);
+}
+
+// Warning only: reported by lint:ds but not ratcheted yet (ratchet planned for roadmap step 4 S5).
+const noRawLengthCustomProp = defineRule(
+  "no-raw-length-custom-prop",
+  {
+    rejected: (property, value) =>
+      `Custom property "${property}: ${value}" hides a raw length; derive it from design tokens or request a DS capability`,
+  },
+  (root, result, messages) => {
+    root.walkDecls(/^--/u, (decl) => {
+      if (hasRawLengthCustomProperty(decl.prop, decl.value)) {
+        reportOn(decl, result, "butler-ds/no-raw-length-custom-prop", messages.rejected(decl.prop, decl.value));
+      }
+    });
+  },
+);
+
+export const butlerDsStylelintPlugins = [tokenOnlyValues, noDsInternalSelector, noDsCustomPropOverride, noRawLengthCustomProp];

@@ -9,6 +9,7 @@ import {
   DS_CONSTRAINT_RULES,
   DS_ESLINT_RULES,
   DS_STYLELINT_RULES,
+  DS_WARNING_RULES,
   UI_SOURCE_ROOT,
   listProductFiles,
   type DsConstraintRule,
@@ -34,10 +35,12 @@ function bump(counts: FileCounts, file: string): void {
   counts[file] = (counts[file] ?? 0) + 1;
 }
 
-async function collect(): Promise<{ counts: Counts; errors: string[] }> {
+async function collect(): Promise<{ counts: Counts; errors: string[]; warnings: string[] }> {
   const { scripts, styles } = listProductFiles(root);
   const counts = emptyCounts();
   const errors: string[] = [];
+  const warnings: string[] = [];
+  const warningRules = new Set<string>(DS_WARNING_RULES);
 
   const eslint = new ESLint({
     cwd: sourceRoot,
@@ -70,13 +73,17 @@ async function collect(): Promise<{ counts: Counts; errors: string[] }> {
     ignoreDisables: true,
     config: {
       plugins: butlerDsStylelintPlugins,
-      rules: Object.fromEntries(DS_STYLELINT_RULES.map((rule) => [`butler-ds/${rule}`, true])),
+      rules: Object.fromEntries([...DS_STYLELINT_RULES, ...DS_WARNING_RULES].map((rule) => [`butler-ds/${rule}`, true])),
     },
   });
   for (const result of lint.results) {
     const file = (result.source ?? "").slice(sourceRoot.length + 1);
     for (const warning of result.warnings) {
       const rule = warning.rule.replace(/^butler-ds\//u, "") as DsConstraintRule;
+      if (warningRules.has(rule)) {
+        warnings.push(`${file}:${warning.line}: ${warning.text}`);
+        continue;
+      }
       if (!(rule in counts)) {
         errors.push(`${file}:${warning.line}: ${warning.text}`);
         continue;
@@ -84,7 +91,7 @@ async function collect(): Promise<{ counts: Counts; errors: string[] }> {
       bump(counts[rule], file);
     }
   }
-  return { counts, errors };
+  return { counts, errors, warnings };
 }
 
 function baselinePath(rule: DsConstraintRule): string {
@@ -106,11 +113,16 @@ function total(counts: FileCounts): { files: number; violations: number } {
   return { files: values.length, violations: values.reduce((sum, value) => sum + value, 0) };
 }
 
-const { counts, errors } = await collect();
+const { counts, errors, warnings } = await collect();
 if (errors.length > 0) {
   console.error("DS constraint lint could not check every file:");
   for (const error of errors) console.error(`  ${error}`);
   process.exit(1);
+}
+
+if (warnings.length > 0 && !process.argv.includes("--silent")) {
+  console.warn(`DS constraint lint warning: ${warnings.length} raw-length custom propert${warnings.length === 1 ? "y" : "ies"} in product CSS (butler-ds/no-raw-length-custom-prop; not ratcheted yet).`);
+  if (verbose) for (const warning of warnings) console.warn(`  ${warning}`);
 }
 
 if (summary) {

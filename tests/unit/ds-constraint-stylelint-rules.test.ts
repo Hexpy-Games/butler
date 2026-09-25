@@ -19,7 +19,7 @@ describe("butler-ds/token-only-values", () => {
     ".a { color: var(--text); background: transparent; border: 1px solid var(--line); }",
     ".a { color: currentcolor; fill: none; outline: none; }",
     ".a { padding: 0; margin: auto; margin-inline: auto; gap: var(--space-2) var(--space-4); }",
-    ".a { inset: 0; top: 50%; left: calc(100% - var(--space-2)); margin-top: -1px; }",
+    ".a { inset: 0; top: 50%; left: calc(100% - var(--space-2)); margin-top: calc(-1 * var(--border-hairline)); }",
     ".a { padding: calc(var(--space-2) * 2); padding-block: env(safe-area-inset-top); }",
     ".a { border-radius: 50%; border-radius: var(--radius-control); border-radius: 0; }",
     ".a { z-index: auto; z-index: var(--z-popover); z-index: 0; }",
@@ -43,6 +43,9 @@ describe("butler-ds/token-only-values", () => {
     [".a { --local-tint: #123456; }", /color/u],
     [".a { padding: 12px; }", /spacing/u],
     [".a { gap: 2px; }", /spacing/u],
+    // The 1px hairline exception is gone now that --border-hairline exists.
+    [".a { margin-top: -1px; }", /spacing/u],
+    [".a { padding: 1px var(--space-2); }", /spacing/u],
     [".a { top: 32px; }", /spacing/u],
     [".a { padding-block: max(8px, var(--space-2)); }", /spacing/u],
     [".a { margin-inline-end: 0.5rem; }", /spacing/u],
@@ -64,6 +67,38 @@ describe("butler-ds/token-only-values", () => {
       expect(found[0]).toContain("(butler-ds/token-only-values)");
     });
   }
+});
+
+describe("butler-ds/no-raw-length-custom-prop (warning)", () => {
+  for (const code of [
+    ".a { --local-size: var(--space-2); }",
+    ".a { --local-ratio: 1.5; --local-name: ok; }",
+    ".a { --local-offset: calc(var(--space-2) * 2); }",
+    ".a { width: 16px; }",
+  ]) {
+    test(`accepts ${code}`, async () => {
+      expect(await warnings("no-raw-length-custom-prop", code)).toEqual([]);
+    });
+  }
+
+  for (const code of [
+    ".a { --local-size: 12px; }",
+    ".a { --local-width: min(34vw, 240px); }",
+    ".a { --local-gap: calc(var(--space-2) + 0.5rem); }",
+  ]) {
+    test(`reports ${code}`, async () => {
+      const found = await warnings("no-raw-length-custom-prop", code);
+      expect(found).toHaveLength(1);
+      expect(found[0]).toContain("(butler-ds/no-raw-length-custom-prop)");
+    });
+  }
+
+  test("is a warning rule and not part of the ratcheted rule set", async () => {
+    const scope = "../../packages/butler-app/scripts/lint/butler-ds/scope.ts";
+    const { DS_STYLELINT_RULES, DS_WARNING_RULES } = await import(scope);
+    expect(DS_WARNING_RULES).toContain("no-raw-length-custom-prop");
+    expect(DS_STYLELINT_RULES as readonly string[]).not.toContain("no-raw-length-custom-prop");
+  });
 });
 
 describe("butler-ds/no-ds-internal-selector", () => {

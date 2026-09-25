@@ -1,4 +1,5 @@
 import { getAppCopy, getAppLocale, type AppLocale } from "@/app/copy.ts";
+import { formatClock } from "@/app/formatClock";
 import type { MessageRecord } from "@/app/types.ts";
 
 export interface AssistantFooterMeta {
@@ -35,7 +36,7 @@ function assistantFooterMeta(
       completedAt && startedAt
         ? formatWorkedDuration(completedAt.getTime() - startedAt.getTime(), locale)
         : null,
-    timeLabel: completedAt ? formatMessageClock(completedAt) : null,
+    timeLabel: completedAt ? formatClock(completedAt, locale) : null,
     completedAtIso: completedAt?.toISOString() ?? null,
   };
 }
@@ -62,11 +63,4 @@ function parseMessageDate(value?: string): Date | null {
 function formatWorkedDuration(milliseconds: number, locale: AppLocale): string {
   const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
   return getAppCopy(locale).interfaceTemplates.workedDuration(totalSeconds);
-}
-
-function formatMessageClock(date: Date): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
 }

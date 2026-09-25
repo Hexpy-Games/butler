@@ -97,6 +97,15 @@
   --space-5: var(--space-xl);
   --space-6: var(--space-2xl);
 
+  /* Border widths: hairline rules and offsets, strong emphasis borders. */
+  --border-hairline: 1px;
+  --border-width-strong: 2px;
+
+  /* Page max-width scale: forms, reading columns, dashboards. */
+  --page-max-width-narrow: 38rem;
+  --page-max-width-reading: 760px;
+  --page-max-width-wide: 72rem;
+
   /* Source color literals. Semantic tokens below must reference these. */
   --neutral-white: #ffffff;
   --neutral-light-text-primary: #222326;
@@ -323,6 +332,9 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 560;
   --font-weight-strong: 620;
+  --line-height-none: 1;
+  --line-height-tight: 1.2;
+  --line-height-snug: 1.35;
   --line-height-body: 1.45;
   --line-height-document: 1.58;
   --icon-size-xs: 12px;

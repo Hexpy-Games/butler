@@ -38,7 +38,6 @@ export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "components/TintedGlass": "Layout",
   "components/Toast": "Feedback",
   "components/Tooltip": "Overlay",
-  "components/Typo": "Data display",
   "blocks/ActivityFeed": "Conversation & Activity",
   "blocks/ActivityHeatmap": "Dashboard & Metrics",
   "blocks/AdaptiveShell": "Shell",
