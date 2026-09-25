@@ -1,0 +1,7 @@
+{
+  "components/conversation/ComposerPlanInstructionContext.module.css": 1,
+  "components/management/ProjectHistoryPanel.module.css": 2,
+  "components/management/ProjectInformation.module.css": 1,
+  "components/management/ProjectStatisticsPanel.module.css": 1,
+  "components/space/SpaceInteractions.module.css": 4
+}

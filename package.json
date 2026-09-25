@@ -16,7 +16,9 @@
   "scripts": {
     "setup": "${BUTLER_BUN:-bun} run packages/butler-agent/scripts/setup.ts",
     "lint": "eslint . && ${BUTLER_BUN:-bun} run --silent lint:design && ${BUTLER_BUN:-bun} run --silent lint:css",
-    "lint:design": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/design-token-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/design-system-rules-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/app-client-copy-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/component-line-count-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/css-module-global-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/prop-boundary-lint.ts",
+    "lint:design": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/design-token-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/design-system-rules-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/app-client-copy-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/component-line-count-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/css-module-global-lint.ts && ${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/prop-boundary-lint.ts && ${BUTLER_BUN:-bun} run --silent lint:ds",
+    "lint:ds": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/ds-constraint-lint.ts",
+    "lint:ds:baseline": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/lint/ds-constraint-lint.ts --update-baseline --verbose",
     "lint:css": "${BUTLER_BUN:-bun} run --silent format:css:check && stylelint \"packages/butler-app/client/ui/src/**/*.css\"",
     "lint:fix": "eslint . --fix",
     "format": "${BUTLER_BUN:-bun} run lint:fix && ${BUTLER_BUN:-bun} run format:css",
