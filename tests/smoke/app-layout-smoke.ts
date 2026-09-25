@@ -2539,6 +2539,50 @@ try {
   await page
     .getByText(appCopy.settings.panels.workerProfiles)
     .waitFor({ state: "visible" });
+  // Grouped settings: each section header sits above its card (outside the
+  // surface, no divider), close to it, and far from the previous card.
+  const settingsSectionGeometry = await page.evaluate(() => {
+    const sections = [...document.querySelectorAll('[data-slot="form-section"]')].slice(0, 2);
+    return sections.map((section) => {
+      const title = section.querySelector(':scope > [data-slot="form-section-header"] h3');
+      const header = section.querySelector('[data-slot="form-section-header"]');
+      const card = section.querySelector(':scope > [data-slot="form-section-card"]');
+      const titleBox = title?.getBoundingClientRect();
+      const headerBox = header?.getBoundingClientRect();
+      const cardBox = card?.getBoundingClientRect();
+      return {
+        title: title?.textContent ?? null,
+        titleLeft: titleBox?.left ?? null,
+        headerTop: headerBox?.top ?? null,
+        headerBottom: headerBox?.bottom ?? null,
+        headerBorder: header ? getComputedStyle(header).borderBottomWidth : null,
+        cardLeft: cardBox?.left ?? null,
+        cardTop: cardBox?.top ?? null,
+        cardBottom: cardBox?.bottom ?? null,
+        headingsInCard: card?.querySelectorAll(":scope > h3, :scope > p").length ?? -1,
+      };
+    });
+  });
+  const [modelSection, workerSection] = settingsSectionGeometry;
+  assert(
+    modelSection?.title === appCopy.settings.panels.butlerModel &&
+      workerSection?.title === appCopy.settings.panels.workerProfiles &&
+      settingsSectionGeometry.every(
+        (section) =>
+          section.headerBottom !== null &&
+          section.cardTop !== null &&
+          section.cardTop - section.headerBottom >= 8 &&
+          section.cardTop - section.headerBottom <= 14 &&
+          Math.abs((section.titleLeft ?? -99) - (section.cardLeft ?? 99)) <= 1 &&
+          section.headerBorder === "0px" &&
+          section.headingsInCard === 0,
+      ) &&
+      workerSection.headerTop! - modelSection.cardBottom! >= 32 &&
+      workerSection.headerTop! - modelSection.cardBottom! <= 44 &&
+      workerSection.headerTop! - modelSection.cardBottom! >=
+        3 * (workerSection.cardTop! - workerSection.headerBottom!),
+    `settings section headers should sit above their cards, close to them and far from the previous card: ${JSON.stringify(settingsSectionGeometry)}`,
+  );
   const workerProfilePanels = page.locator(testClass("worker-profile"));
   assert(
     (await workerProfilePanels.count()) >= 1,

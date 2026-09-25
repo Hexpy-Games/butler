@@ -166,6 +166,7 @@
   --space-xl: 20px;
   --space-2xl: 24px;
   --space-3xl: 32px;
+  --space-4xl: 40px;
 
   /* Legacy numeric aliases for backwards compatibility */
   --space-1: var(--space-xs);
@@ -178,17 +179,19 @@
   /* Line tabs: space between a tab label and its sliding underline. */
   --tabs-line-indicator-gap: var(--space-md);
 
-  /* Settings hierarchy ramp, tightest to widest (proximity): label to
-     description, description to control, section header to first field,
-     field to field, section to section. The section gap stays at least 1.5x
-     the field gap so each settings box reads as its own group. The copy gap
-     is the one half step (6px) between xs and sm: label and description read
-     as one block without touching. */
+  /* Settings hierarchy (proximity). Grouped settings: the section header
+     sits above its card, so header -> card (12) is far tighter than card ->
+     next section header (40, at least 3x). Inside the card the field ramp
+     runs label -> description (6), description -> control (12), field ->
+     field (20); the section gap stays at least 1.5x the field gap. The copy
+     gap is the one half step (6px) between xs and sm: label and description
+     (and section title and description) read as one block without
+     touching. */
   --settings-field-copy-gap: 6px;
   --settings-field-control-gap: var(--space-md);
-  --settings-section-header-gap: var(--space-lg);
+  --settings-section-header-gap: var(--space-md);
   --settings-field-gap: var(--space-xl);
-  --settings-section-gap: var(--space-3xl);
+  --settings-section-gap: var(--space-4xl);
   --settings-section-padding: var(--space-2xl);
 
   /* Border widths: hairline rules and offsets, strong emphasis borders. */

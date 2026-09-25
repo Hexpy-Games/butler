@@ -43,22 +43,39 @@ const COMPACT = "(width <= 760px)";
 
 test("settings sections sit clearly further apart than the fields inside them", () => {
   expect(px("--settings-field-gap")).toBe(20);
-  expect(px("--settings-section-gap")).toBe(32);
+  expect(px("--settings-section-gap")).toBe(40);
   for (const media of [undefined, COMPACT]) {
     expect(px("--settings-section-gap", media)).toBeGreaterThanOrEqual(32);
     expect(px("--settings-section-gap", media)).toBeGreaterThanOrEqual(1.5 * px("--settings-field-gap", media));
   }
 });
 
-test("the settings spacing ramp tightens from section to field to copy", () => {
+test("a section header belongs to the card below it (header -> card far tighter than card -> next header)", () => {
+  expect(px("--settings-field-copy-gap")).toBe(6);
+  expect(px("--settings-section-header-gap")).toBe(12);
+  for (const media of [undefined, COMPACT]) {
+    const copy = px("--settings-field-copy-gap", media);
+    const headerToCard = px("--settings-section-header-gap", media);
+    const cardToNextHeader = px("--settings-section-gap", media);
+    // Title -> description < header -> card < card -> next section header.
+    expect(copy).toBeLessThan(headerToCard);
+    expect(headerToCard).toBeLessThan(cardToNextHeader);
+    expect(headerToCard).toBeGreaterThanOrEqual(8);
+    expect(headerToCard).toBeLessThanOrEqual(12);
+    expect(cardToNextHeader).toBeGreaterThanOrEqual(32);
+    expect(cardToNextHeader).toBeLessThanOrEqual(40);
+    expect(cardToNextHeader).toBeGreaterThanOrEqual(3 * headerToCard);
+  }
+});
+
+test("the field ramp inside the card tightens from field to copy", () => {
   expect(px("--settings-field-copy-gap")).toBe(6);
   expect(px("--settings-field-control-gap")).toBe(12);
-  expect(px("--settings-section-header-gap")).toBe(16);
+  expect(px("--settings-field-gap")).toBe(20);
   for (const media of [undefined, COMPACT]) {
     const ramp = [
       "--settings-field-copy-gap",
       "--settings-field-control-gap",
-      "--settings-section-header-gap",
       "--settings-field-gap",
       "--settings-section-gap",
     ].map((token) => px(token, media));
@@ -76,8 +93,9 @@ test("settings blocks consume the ramp and the type hierarchy", () => {
   expect(settingsField).toMatch(/\.copy\s*\{[^}]*gap:\s*var\(--settings-field-copy-gap\)/u);
   expect(settingsField).toMatch(/\.control\s*\{[^}]*gap:\s*var\(--settings-field-control-gap\)/u);
   expect(settingsField).toMatch(/\.description\s*\{[^}]*color:\s*var\(--text-secondary\)/u);
-  expect(formSection).toMatch(/\.section\s*\{[^}]*padding:\s*var\(--settings-section-padding\)/u);
+  expect(formSection).toMatch(/\.card\s*\{[^}]*padding:\s*var\(--settings-section-padding\)/u);
   expect(formSection).toMatch(/\.section\s*\{[^}]*gap:\s*var\(--settings-section-header-gap\)/u);
+  expect(formSection).toMatch(/\.header\s*\{[^}]*gap:\s*var\(--settings-field-copy-gap\)/u);
   expect(formSectionComponent).toContain('<Typo.H4 as="h3"');
   expect(formSectionComponent).toContain("<Typo.Body className={styles.description}");
   expect(formSection).toMatch(/\.description\s*\{[^}]*color:\s*var\(--text-secondary\)/u);
@@ -85,17 +103,30 @@ test("settings blocks consume the ramp and the type hierarchy", () => {
   expect(settingsFieldComponent).toContain("<Typo.Caption");
 });
 
-test("FormSection fields and SettingsShell sections consume the settings gap tokens", () => {
-  expect(formSection).toMatch(/\.fields\s*\{[^}]*gap:\s*var\(--settings-field-gap\)/u);
+test("FormSection cards and SettingsShell sections consume the settings gap tokens", () => {
+  expect(formSection).toMatch(/\.card\s*\{[^}]*gap:\s*var\(--settings-field-gap\)/u);
   const detailContentRules = [...settingsShell.matchAll(/\.detailContent\s*\{([^}]*)\}/gu)].map((match) => match[1]);
   expect(detailContentRules[0]).toMatch(/gap:\s*var\(--settings-section-gap\)/u);
   for (const rule of detailContentRules) expect(rule).not.toMatch(/gap:\s*var\(--space-/u);
 });
 
-test("a section header reads as its own block above the fields (title > field label > descriptions)", () => {
-  // Header block: hairline divider under title + description, then the header gap.
-  expect(formSection).toMatch(/\.header\s*\{[^}]*padding-bottom:\s*var\(--space-lg\)/u);
-  expect(formSection).toMatch(/\.header\s*\{[^}]*border-bottom:\s*var\(--border-hairline\) solid var\(--line\)/u);
+test("the section header sits outside the card: only the card has a surface, no divider", () => {
+  const rule = (name: string) => new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`, "u").exec(formSection)?.[1] ?? "";
+  // Card surface (border, radius, panel background) lives on the card, not on the section or header.
+  expect(rule("card")).toMatch(/border:\s*var\(--border-hairline\) solid var\(--line\)/u);
+  expect(rule("card")).toMatch(/background:\s*var\(--settings-panel-bg\)/u);
+  for (const name of ["section", "header"]) {
+    expect(rule(name)).not.toMatch(/border|background|padding/u);
+  }
+  expect(formSection).not.toMatch(/border-bottom/u);
+  // Header copy precedes the card and is not inside it.
+  const header = formSectionComponent.indexOf("styles.header");
+  const card = formSectionComponent.indexOf("styles.card");
+  expect(header).toBeGreaterThan(-1);
+  expect(card).toBeGreaterThan(header);
+});
+
+test("section copy follows the type ramp (title > field label > section description > field description)", () => {
   // Section description: secondary, one step below the body-size field label, limited measure.
   const description = /\.description\s*\{([^}]*)\}/u.exec(formSection)?.[1] ?? "";
   expect(description).toMatch(/font-size:\s*var\(--font-size-2\)/u);
@@ -103,6 +134,7 @@ test("a section header reads as its own block above the fields (title > field la
   expect(description).toMatch(/color:\s*var\(--text-secondary\)/u);
   // Ramp by size: H4 title 18 > field Label 14 (medium) > section description 13 > field description 12.
   const size = (token: string) => Number(/(\d+)px/u.exec(rootTokens().get(token) ?? "")?.[1]);
+  expect(size("--typo-h4-size")).toBe(18);
   expect(size("--typo-h4-size")).toBeGreaterThan(size("--typo-body-size"));
   expect(size("--typo-body-size")).toBeGreaterThan(size("--typo-label-size"));
   expect(size("--typo-label-size")).toBeGreaterThan(size("--typo-caption-size"));

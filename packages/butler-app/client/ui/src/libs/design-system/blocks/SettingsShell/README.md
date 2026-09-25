@@ -24,10 +24,11 @@ Electron drag regions and keep its last item reachable in short windows.
 ### Spacing
 
 The detail content stacks settings sections with `--settings-section-gap`
-(32px at every width). It is the widest step of the settings spacing ramp
-(see `FormSection`) and stays at least 1.5x `--settings-field-gap` (20px), the
-gap between fields inside a `FormSection`, so section boundaries remain
-visible.
+(40px at every width): the space from one card to the next section header.
+It is at least 3x the header -> card gap (`--settings-section-header-gap`,
+12px), so each section header visibly belongs to the card below it (see
+`FormSection`), and at least 1.5x `--settings-field-gap` (20px), the gap
+between fields inside a card.
 
 ## Who can use this component
 Butler client settings containers and design-system fixtures.

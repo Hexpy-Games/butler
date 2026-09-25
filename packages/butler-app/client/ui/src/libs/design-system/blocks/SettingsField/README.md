@@ -23,8 +23,10 @@ Use real labels and keep validation state in the caller. Keep label,
 description, and control in a vertical rhythm so translations and narrow
 viewports do not separate the label from its field.
 The label is the medium body-size `Label`, the description a secondary-tone
-caption `--settings-field-copy-gap` (4px) below it, and the control
-`--settings-field-control-gap` (8px) below the description.
+caption `--settings-field-copy-gap` (6px) below it, and the control
+`--settings-field-control-gap` (12px) below the description. Fields sit
+`--settings-field-gap` (20px) apart inside a `FormSection` card; the card
+holds only fields, and the section header sits above it.
 Every control, switches included, stacks under its copy: label, then
 description, then control. There is no inline layout; a control beside its
 label breaks the reading flow. Buttons that act on the field (add, choose)

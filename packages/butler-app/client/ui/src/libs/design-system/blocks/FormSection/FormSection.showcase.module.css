@@ -1,0 +1,5 @@
+/* Stacked sections as SettingsShell lays them out: card -> next header. */
+.stack {
+  display: grid;
+  gap: var(--settings-section-gap);
+}

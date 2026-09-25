@@ -179,6 +179,31 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   );
   assert(blocksVisible, `${label}: block fixtures are not visible`);
 
+  const formSectionState = await page.evaluate(() => {
+    const section = document.querySelector('[data-ds-component="FormSection"] [data-slot="form-section"]');
+    const header = section?.querySelector(':scope > [data-slot="form-section-header"]');
+    const card = section?.querySelector(':scope > [data-slot="form-section-card"]');
+    if (!section || !header || !card) return null;
+    const headerBox = header.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    return {
+      gap: cardBox.top - headerBox.bottom,
+      headerBorder: getComputedStyle(header).borderBottomWidth,
+      headerBackground: getComputedStyle(header).backgroundColor,
+      cardBorder: getComputedStyle(card).borderTopWidth,
+      titleInCard: Boolean(card.querySelector(":scope > h3")),
+    };
+  });
+  assert(
+    formSectionState &&
+      formSectionState.gap >= 8 &&
+      formSectionState.gap <= 14 &&
+      formSectionState.headerBorder === "0px" &&
+      formSectionState.cardBorder === "1px" &&
+      !formSectionState.titleInCard,
+    `${label}: FormSection header should sit above its card, outside the surface: ${JSON.stringify(formSectionState)}`,
+  );
+
   const navAndGroupState = await page.evaluate(() => {
     const navRow = document.querySelector('[data-ds-component="NavRow"] [data-slot="clickable"]');
     const activeNavRow = document.querySelector('[data-ds-component="NavRow"] [aria-current="page"]');

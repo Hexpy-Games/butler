@@ -1,34 +1,34 @@
+/* Grouped settings section: header outside the card, card holds only fields.
+   Header -> card is tight (--settings-section-header-gap) so the header
+   belongs to the card below it; the wider card -> next header gap is the
+   SettingsShell section gap. */
 .section {
   display: flex;
   flex-direction: column;
   gap: var(--settings-section-header-gap);
   width: 100%;
   min-width: 0;
+  color: var(--text-primary);
+}
+
+/* Flush with the card's outer edge (and the page title): an 18px heading
+   anchors to the same left edge as the surface it names. */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-field-copy-gap);
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--settings-field-gap);
+  min-width: 0;
   padding: var(--settings-section-padding);
   border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--settings-panel-bg);
-  color: var(--text-primary);
-}
-
-.header,
-.fields {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-/* Section header block (GitHub Subhead / Vercel / Stripe settings pattern):
-   title + short secondary description closed by a hairline, so the section's
-   own copy never reads as one more field. */
-.header {
-  gap: var(--settings-field-copy-gap);
-  padding-bottom: var(--space-lg);
-  border-bottom: var(--border-hairline) solid var(--line);
-}
-
-.fields {
-  gap: var(--settings-field-gap);
 }
 
 .title {
