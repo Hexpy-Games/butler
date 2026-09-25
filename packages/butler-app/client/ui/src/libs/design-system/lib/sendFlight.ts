@@ -1,0 +1,167 @@
+import { useLayoutEffect, useState, type RefObject } from "react";
+import { animateMotion, motionDistance, prefersReducedMotion } from "./motion";
+
+/**
+ * Send flight (DS spec Motion Contract, M7): the composer records where its
+ * text sat when the user sent, and the next user bubble that enters flies
+ * from there to its place with `translate` only. When no fresh origin exists,
+ * the bubble is off screen or reduced motion is on, callers keep the regular
+ * insert animation.
+ */
+
+/** An origin older than this no longer belongs to the bubble that enters. */
+export const SEND_ORIGIN_MAX_AGE_MS = 800;
+/** Travel beyond this uses --motion-deliberate instead of --motion-slow. */
+const LONG_TRAVEL_PX = 240;
+/** Frames in which the list may still scroll or re-measure the new row. */
+const RETARGET_FRAMES = 8;
+
+interface SendOrigin {
+  left: number;
+  top: number;
+  at: number;
+  claimedBy: Element | null;
+}
+
+let origin: SendOrigin | null = null;
+
+function textRect(element: Element): DOMRect | null {
+  try {
+    const range = element.ownerDocument.createRange();
+    range.selectNodeContents(element);
+    const box = typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
+    if (box && box.width > 0 && box.height > 0) return box;
+  } catch {
+    // Fall back to the element box.
+  }
+  const box = element.getBoundingClientRect();
+  return box.width > 0 && box.height > 0 ? box : null;
+}
+
+/** Remember where the sent text sat (the composer editor). */
+export function recordSendOrigin(element: Element | null | undefined): void {
+  const box = element ? textRect(element) : null;
+  origin = box ? { left: box.left, top: box.top, at: Date.now(), claimedBy: null } : null;
+}
+
+export function clearSendOrigin(): void {
+  origin = null;
+}
+
+export function hasSendOrigin(): boolean {
+  return Boolean(origin && Date.now() - origin.at <= SEND_ORIGIN_MAX_AGE_MS);
+}
+
+function claimOrigin(target: Element): SendOrigin | null {
+  if (!origin || !hasSendOrigin()) return null;
+  if (origin.claimedBy && origin.claimedBy !== target) return null;
+  origin.claimedBy = target;
+  return origin;
+}
+
+function px(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function currentTranslate(target: HTMLElement): [number, number] {
+  const value = window.getComputedStyle(target).translate || "";
+  if (!value || value === "none") return [0, 0];
+  const [x = "0", y = "0"] = value.split(/\s+/u);
+  return [px(x), px(y)];
+}
+
+export interface SendFlight {
+  cancel: () => void;
+}
+
+/**
+ * Fly `target` (the bubble) from the recorded origin to where it is laid out.
+ * Returns null when the caller should use the regular insert instead.
+ */
+export function flySendBubble(target: HTMLElement): SendFlight | null {
+  if (prefersReducedMotion()) return null;
+  const from = claimOrigin(target);
+  if (!from) return null;
+  const box = target.getBoundingClientRect();
+  if (box.width <= 0 || box.height <= 0) return null;
+  const style = window.getComputedStyle(target);
+  // The bubble text (inside its padding) starts where the composer text did.
+  const startLeft = from.left - px(style.paddingLeft);
+  const startTop = from.top - px(style.paddingTop);
+  const dx = Math.round(startLeft - box.left);
+  const dy = Math.round(startTop - box.top);
+  if (Math.abs(dy) > window.innerHeight * 3) return null;
+  const duration = Math.hypot(dx, dy) > LONG_TRAVEL_PX ? "deliberate" : "slow";
+  const fly = (x: number, y: number) =>
+    animateMotion(target, [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }], { duration, easing: "decelerate" });
+  let animation = fly(dx, dy);
+  if (!animation) return null;
+
+  // The list scrolls to the new row (in the same commit) and re-measures it
+  // during the next frames. Follow the new layout position without a visual
+  // jump: keep where the bubble is seen and finish the remaining time there.
+  // A bubble that ends outside the viewport uses the regular insert instead.
+  let layoutLeft = box.left;
+  let layoutTop = box.top;
+  let frames = 0;
+  let frame = 0;
+  const check = () => {
+    frame = 0;
+    if (!animation || !target.isConnected) return;
+    const seen = target.getBoundingClientRect();
+    const [tx, ty] = currentTranslate(target);
+    const left = seen.left - tx;
+    const top = seen.top - ty;
+    if (frames === 0 && (top + seen.height <= 0 || top >= window.innerHeight)) {
+      animation.cancel();
+      animation = animateMotion(target, [
+        { opacity: 0, translate: `0px ${motionDistance("sm")}px` },
+        { opacity: 1, translate: "0px 0px" },
+      ], { duration: "base", easing: "decelerate" });
+      return;
+    }
+    if (Math.abs(left - layoutLeft) > 0.5 || Math.abs(top - layoutTop) > 0.5) {
+      layoutLeft = left;
+      layoutTop = top;
+      const elapsed = animation.currentTime;
+      // The computed progress already has the decelerate easing applied.
+      const remaining = 1 - (animation.effect?.getComputedTiming().progress ?? 0);
+      if (remaining > 0.05) {
+        animation.cancel();
+        animation = fly(Math.round((seen.left - left) / remaining), Math.round((seen.top - top) / remaining));
+        if (animation && elapsed !== null) animation.currentTime = elapsed;
+      }
+    }
+    frames += 1;
+    if (animation && frames < RETARGET_FRAMES) frame = window.requestAnimationFrame(check);
+  };
+  // After the commit (the list's scroll to the new row) and before paint.
+  queueMicrotask(check);
+
+  return {
+    cancel: () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
+      animation?.cancel();
+      animation = null;
+    },
+  };
+}
+
+/**
+ * Runs the send flight on `ref` when `enabled` (a just-inserted user bubble).
+ * Returns true while the flight replaces the regular insert animation.
+ */
+export function useSendFlight(ref: RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [flying, setFlying] = useState(false);
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!enabled || !node) return;
+    const flight = flySendBubble(node);
+    if (!flight) return;
+    setFlying(true);
+    return () => flight.cancel();
+  }, [enabled, ref]);
+  return flying;
+}

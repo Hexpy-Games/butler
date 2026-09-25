@@ -81,6 +81,7 @@ import { ComposerAdjunctPanelFixture } from "./blocks/ComposerAdjunctPanel/Compo
 import { ComposerQueuePanelFixture } from "./blocks/ComposerQueuePanel/ComposerQueuePanel.fixtures";
 import { AttachmentListFixture } from "./blocks/AttachmentList/AttachmentList.fixtures";
 import { MessageRowFixture } from "./blocks/MessageRow/MessageRow.fixtures";
+import { QueuedMessageFixture } from "./blocks/QueuedMessage/QueuedMessage.fixtures";
 import { MessageAvatarBlockFixture } from "./blocks/MessageAvatarBlock/MessageAvatarBlock.fixtures";
 import { ActivityFeedFixture } from "./blocks/ActivityFeed/ActivityFeed.fixtures";
 import { WorkActivityBlockFixture } from "./blocks/WorkActivityBlock/WorkActivityBlock.fixtures";
@@ -1048,6 +1049,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/MessageRow",
     tags: ["message", "chat", "timeline"],
     fixture: MessageRowFixture,
+  },
+  {
+    name: "QueuedMessage",
+    path: "blocks/QueuedMessage",
+    tags: ["conversation", "queue", "pending"],
+    fixture: QueuedMessageFixture,
   },
   {
     name: "MessageAvatarBlock",

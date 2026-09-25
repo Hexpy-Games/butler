@@ -1,0 +1,59 @@
+/* QueuedMessage: a user-side bubble that is not sent yet. The bubble box
+   matches the MessageRow user bubble (same width rule, radius, padding and
+   type) so a delivered message resolves in place; the dashed hairline
+   outline sits inside the box. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-1);
+  justify-items: end;
+  padding-bottom: var(--space-lg);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.bubble {
+  width: fit-content;
+  max-width: min(440px, 68%);
+  min-width: 0;
+  border-radius: 14px;
+  outline: var(--border-hairline) dashed var(--line-strong);
+  outline-offset: calc(var(--border-hairline) * -1);
+  background-color: color-mix(in srgb, var(--user-message-bg) 40%, transparent);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  padding: 6px 10px;
+  white-space: pre-wrap;
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-document);
+}
+
+.row[data-tone="failed"] .bubble {
+  outline-color: var(--danger-line-strong);
+}
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Motion (DS spec Motion Contract, M7). A just-queued row fades in with a
+   small rise unless the send flight moves its bubble; rows are positioned by
+   the virtualizer through transform, so the rise uses translate. */
+.row[data-enter="true"] {
+  animation: queued-enter var(--motion-base) var(--motion-ease-decelerate);
+}
+
+@keyframes queued-enter {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-distance-sm);
+  }
+}
