@@ -509,7 +509,7 @@ async function main(): Promise<void> {
 
   await waitForHeading(cdp, "모델 설정");
   await waitForHeading(cdp, "모델 추가");
-  await waitForText(cdp, "API key");
+  await waitForText(cdp, "API 키");
   await expectNoForbiddenCopy(cdp, new Set(["이름"]));
   assert(
     await evaluateBoolean(

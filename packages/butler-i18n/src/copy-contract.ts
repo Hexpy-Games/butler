@@ -267,6 +267,7 @@ export interface AppCopy {
   interfaceTemplates: {
     relativeAge: (seconds: number) => string;
     workedFor: (duration: string) => string;
+    workedDuration: (totalSeconds: number) => string;
     emptyLane: (label: string) => string;
     contextMetric: (kind: "full" | "used" | "budget" | "available" | "compact", value: string | number) => string;
     activityHistory: (live: boolean, label: string, count: number) => string;
@@ -1308,6 +1309,7 @@ export interface AppCopy {
     loading: string;
     empty: string;
     failed: string;
+    kindLabels: Record<"chat" | "project" | "project_session" | "group" | "automation" | "settings", string>;
   };
   feedback: {
     retry: string;
