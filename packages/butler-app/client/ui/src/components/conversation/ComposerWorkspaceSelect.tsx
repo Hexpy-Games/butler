@@ -1,4 +1,4 @@
-import { Select, SelectPillTrigger, SelectContent, SelectItem, SelectValue, Monitor, GitBranch } from "@/butler-ds";
+import { ComposerSelectControl, Select, SelectContent, SelectItem, SelectValue, Monitor, GitBranch } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { isDraftChatId, parseDraftChatId } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore.ts";
@@ -17,10 +17,10 @@ export function ComposerWorkspaceSelect() {
   return (
     <Select value={project ? mode : "local"} disabled={isSending}
       onValueChange={(value) => setMode(value === "worktree" ? "worktree" : "local")}>
-      <SelectPillTrigger aria-label={copy.workspace} data-test-class="composer-workspace-select"
+      <ComposerSelectControl aria-label={copy.workspace} data-test-class="composer-workspace-select"
         icon={project && mode === "worktree" ? <GitBranch size="sm" /> : <Monitor size="sm" />}>
         <SelectValue>{project && mode === "worktree" ? copy.workspaceWorktree : copy.workspaceLocal}</SelectValue>
-      </SelectPillTrigger>
+      </ComposerSelectControl>
       <SelectContent position="popper" side="top">
         <SelectItem value="local">{copy.workspaceLocal}</SelectItem>
         <SelectItem value="worktree" disabled={!project}>{copy.workspaceWorktree}</SelectItem>
