@@ -7,6 +7,12 @@ import {
   SILK_FRAGMENT_SHADER,
   VERTEX_SHADER,
 } from "./promptFluidShaders";
+import { fluidShaderTime, type FluidVariant } from "./promptFluidTime";
+export {
+  FLUID_TIME_PERIOD_SECONDS,
+  fluidShaderTime,
+  type FluidVariant,
+} from "./promptFluidTime";
 export {
   DEFAULT_PROMPT_FLUID_PALETTE,
   INDIGO_COLOR,
@@ -27,7 +33,6 @@ type FluidRenderer = {
   draw: (time?: number) => void;
 };
 export type FluidTone = "dark" | "light";
-export type FluidVariant = "bloom" | "silk";
 
 export const VISIBLE_LIQUID_SATURATION = 24;
 const MAX_FLUID_CANVAS_PIXELS = 1_400_000;
@@ -138,7 +143,7 @@ export function createFluidRenderer(
     draw: (frameTime = performance.now()) => {
       resizeCanvas(canvas, gl);
       gl.useProgram(program);
-      gl.uniform1f(time, frameTime);
+      gl.uniform1f(time, fluidShaderTime(frameTime, variant));
       gl.uniform1f(dark, tone === "dark" ? 1 : 0);
       gl.uniform2f(resolution, canvas.width, canvas.height);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
