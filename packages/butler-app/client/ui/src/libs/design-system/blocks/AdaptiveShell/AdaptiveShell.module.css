@@ -91,7 +91,8 @@
   background: var(--workspace-bg);
   transition:
     background var(--motion-base) ease,
-    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
+    width var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
 
 .workspace > :not([data-test-class~="custom-titlebar"]) {
@@ -275,6 +276,15 @@
 
   &[data-right-open="true"] .chrome {
     display: none;
+  }
+}
+
+/* Medium widths keep the workspace beside the open drawer: it narrows to the
+   remaining width so content reflows instead of being pushed off-screen.
+   Compact widths keep the full push. */
+@media (width > 640px) {
+  .root[data-panel-layout="drawer"][data-left-open="true"] .workspace {
+    width: calc(100% - var(--adaptive-drawer-width));
   }
 }
 
