@@ -18,12 +18,15 @@ export function createGuidedToolBatchTransition(input: {
     if (batch.toolResults.some((result) => result.name === "wait_for_worker" &&
       result.ok && result.output && typeof result.output === "object" &&
       Reflect.get(result.output, "status") === "waiting")) return "wait";
-    // A queued assignment permits another management round for additional
-    // bounded assignments. Finished management yields to existing result delivery.
-    const handledWorkerManagement = batch.toolResults.some((result) =>
-      result.name === "delegate_to_worker" || result.name === "steer_worker",
+    // A newly queued assignment permits another management round, and a
+    // rejected management call must reach the model. A repeated assignment or
+    // an accepted steer changes nothing to manage now, so it yields to waiting.
+    const managementNeedsModel = batch.toolResults.some((result) =>
+      (result.name === "delegate_to_worker" || result.name === "steer_worker") && (!result.ok ||
+        (result.name === "delegate_to_worker" && result.output && typeof result.output === "object" &&
+          Reflect.get(result.output, "status") === "queued")),
     );
-    if (handledWorkerManagement) return "continue";
+    if (managementNeedsModel) return "continue";
     if (await input.shouldWaitForWorker()) return "wait";
     if (!hasSuccessfulDisposition(batch.toolCalls, batch.toolResults)) {
       return "continue";

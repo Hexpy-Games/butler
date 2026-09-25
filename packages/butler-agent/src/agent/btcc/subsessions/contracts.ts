@@ -211,6 +211,7 @@ export type CreatedDelegation = {
   child_turn_id: string;
   root_work_id: string;
   child_workspace_path: string;
+  reused?: "active" | "settled"; // an existing assignment was returned, not a new child
 };
 
 export type SubsessionDispatchIntent = {

@@ -1,5 +1,5 @@
 import type { SubsessionDelegationService } from "../../btcc/subsessions/index.ts";
-import { ActionableRejectionError, rejectionFromError } from "../../btcc/subsessions/index.ts";
+import { ActionableRejectionError, rejection, rejectionFromError } from "../../btcc/subsessions/index.ts";
 import type { ButlerToolHandler } from "../tool-execution-contracts.ts";
 import type { ButlerToolCall } from "../types.ts";
 import {
@@ -67,7 +67,7 @@ export function createSubsessionToolHandlers(input: {
       const implementationBrief = requiredString(call.args.implementation_brief, "implementation_brief");
       const safeTitle = optionalSafeTitle(call.args.safe_title);
       const profileId = optionalString(call.args.profile_id);
-      await input.service!.delegateWorkerReviewed({
+      const created = await input.service!.delegateWorkerReviewed({
         ...identity,
         ...(context?.effectOccurrenceId ? { source_tool_call_id: context.effectOccurrenceId } : {}),
         action_key: actionKey,
@@ -77,7 +77,7 @@ export function createSubsessionToolHandlers(input: {
         ...(safeTitle ? { safe_title: safeTitle } : {}),
         ...(profileId ? { profile_id: profileId } : {}),
       });
-      return { ok: true, status: "queued" };
+      return repeatedAssignmentResult(created, actionKey) ?? { ok: true, status: "queued" };
     },
     [steerStewardToolDefinition.name]: async (call: ButlerToolCall) => {
       const identity = requireParentIdentity(input);
@@ -110,6 +110,7 @@ export function createSubsessionToolHandlers(input: {
         instruction_id: direction.instruction_id,
         revision: direction.revision,
         status: direction.status,
+        message: "The direction is recorded for the running Worker and applies at its next safe boundary. Call wait_for_worker to receive its result.",
       };
     },
     [cancelStewardToolDefinition.name]: async (call: ButlerToolCall) => {
@@ -124,6 +125,30 @@ export function createSubsessionToolHandlers(input: {
         status: result.status,
       };
     },
+  });
+}
+
+/** Repeating an assignment never starts a second child; it says what to do instead. */
+function repeatedAssignmentResult(
+  created: { relation?: { relation_id: string }; reused?: "active" | "settled" } | undefined,
+  actionKey: string,
+) {
+  if (!created?.reused || !created.relation) return undefined;
+  if (created.reused === "active") {
+    return {
+      ok: true, status: "already_delegated", relation_id: created.relation.relation_id,
+      message: `Plan action "${actionKey}" is already assigned to a running Worker (${created.relation.relation_id}). No new Worker was started. Call wait_for_worker to receive its result, or steer_worker to change its direction.`,
+    };
+  }
+  return rejection({
+    code: "identical_assignment_already_settled",
+    reason: `An identical assignment for Plan action "${actionKey}" already finished and its result was delivered. No new Worker was started.`,
+    alternatives: [
+      "integrate or review the delivered result",
+      "delegate_to_worker with a changed objective or implementation_brief that addresses the prior result",
+      "replace_work_plan if the action must be restructured",
+    ],
+    state: { action_key: actionKey, relation_id: created.relation.relation_id },
   });
 }
 

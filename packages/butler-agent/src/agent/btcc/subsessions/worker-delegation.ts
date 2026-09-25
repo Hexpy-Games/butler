@@ -263,6 +263,7 @@ function existingWorker(
     child_turn_id: childTurnId,
     root_work_id: rootWorkId,
     child_workspace_path: child.workspacePath,
+    reused: input.store.resultByRelationId(relation.relation_id) ? "settled" : "active",
   };
 }
 

@@ -2,7 +2,7 @@ export {
   createSubsessionDelegationService,
 } from "./service.ts";
 export { createAppParentInputSink } from "./app-parent-input-sink.ts";
-export { ActionableRejectionError, rejectionFromError } from "../agent-loop/actionable-rejection.ts";
+export { ActionableRejectionError, rejection, rejectionFromError } from "../agent-loop/actionable-rejection.ts";
 export { createWorkerProfileReader } from "./worker-profile.ts";
 export { resolveSubsessionAuthorityOwner } from "./authority-owner.ts";
 export { subsessionParentResultRefs } from "./accepted-terminal-report.ts";
