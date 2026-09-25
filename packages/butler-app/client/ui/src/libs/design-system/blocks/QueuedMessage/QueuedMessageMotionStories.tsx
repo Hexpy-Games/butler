@@ -15,6 +15,7 @@ import {
 import { MessageRow } from "../MessageRow";
 import { queuedShowcaseCopy } from "./QueuedMessage.showcaseCopy";
 import { ShowcaseQueued } from "./QueuedMessageStories";
+import styles from "./QueuedMessage.showcase.module.css";
 
 type Phase = "queued" | "sending" | "delivered";
 
@@ -74,7 +75,7 @@ export function SendFlightStory({ context }: { context: ShowcaseRenderContext })
   };
   return (
     <Stack gap="md">
-      <div data-ds-motion="send-flight-list">
+      <div className={styles.flightList} data-ds-motion="send-flight-list">
         {items.map((item) => item.queued ? (
           <ShowcaseQueued key={item.id} copy={copy} first status={copy.queued} entering={entering.has(item.id)}>
             {item.text}

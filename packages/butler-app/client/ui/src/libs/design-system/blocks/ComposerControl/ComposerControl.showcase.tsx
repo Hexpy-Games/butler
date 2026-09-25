@@ -47,11 +47,19 @@ export const stories: ShowcaseStory[] = [
             <ComposerControl icon={<Search size="md" />} label={text.ask} detail={text.workspace} active />
             <ComposerControl icon={<SlidersHorizontal size="md" />} label={text.reasoning} detail={text.medium} />
             <ComposerControl icon={<ShieldCheck size="md" />} label={text.access} compact="icon" />
-            <ComposerControl icon={<AlertCircle size="md" />} label={text.modelError} tone="danger" />
           </Stack>
         </div>
       );
     },
+  },
+  {
+    name: "Error tone",
+    states: ["error"],
+    render: ({ locale }) => (
+      <div className={styles.fixture}>
+        <ComposerControl icon={<AlertCircle size="md" />} label={copy[locale].modelError} tone="danger" />
+      </div>
+    ),
   },
   {
     name: "Select trigger (workspace chip)",

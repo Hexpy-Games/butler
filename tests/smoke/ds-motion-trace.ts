@@ -265,9 +265,12 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   });
   const windows = Array.from({ length: rounds }, (_, round) => {
     const start = markTs(events, `flight-${round}`);
-    // Skip the input, mount and retarget frames; judge the travel frames of the
-    // --motion-deliberate (320ms) flight before its settle frame.
-    return windowStats(events, thread, start + 80_000, start + 280_000);
+    // Skip the input, mount and retarget frames (about the first 60ms) and the
+    // final ~40ms, where Chromium hands the finishing animation back to the
+    // main thread; judge the travel frames in between. The bubble starts
+    // right-aligned to the composer text, so travel is mostly vertical and
+    // can use the shorter --motion-slow (220ms) flight.
+    return windowStats(events, thread, start + 80_000, start + 160_000);
   });
   const whole = windowStats(events, thread, markTs(events, "flight-0"), markTs(events, `flight-${rounds - 1}`) + 700_000);
   const mainThreadFrames = windows.reduce((sum, stats) => sum + stats.layouts + stats.paints, 0);
