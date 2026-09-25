@@ -67,7 +67,7 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
 
   for (const [pageId, selector] of [
     ["patterns", '[data-ds-placeholder="patterns"]'],
-    ["icons", '[data-ds-placeholder="icons"]'],
+    ["icons", "[data-ds-icon-gallery]"],
     ["overview", "[data-ds-overview]"],
     ["components/DoesNotExist", '[data-ds-not-found="components/DoesNotExist"]'],
   ] as const) {

@@ -33,7 +33,7 @@ describe("DS Viewer navigation", () => {
     expect(resolveViewerPage("components", entries)).toEqual({ kind: "gallery", section: "components" });
     expect(resolveViewerPage("blocks", entries)).toEqual({ kind: "gallery", section: "blocks" });
     expect(resolveViewerPage("patterns", entries)).toEqual({ kind: "placeholder", section: "patterns" });
-    expect(resolveViewerPage("icons", entries)).toEqual({ kind: "placeholder", section: "icons" });
+    expect(resolveViewerPage("icons", entries)).toEqual({ kind: "icons" });
   });
 
   test("resolves item pages by folder id or by bare name, case-insensitively", () => {

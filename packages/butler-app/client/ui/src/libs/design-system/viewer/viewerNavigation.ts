@@ -6,13 +6,14 @@ import {
 import type { ShowcaseEntry, ShowcaseKind } from "../showcase/collectShowcaseEntries";
 
 export type GallerySection = "components" | "blocks";
-export type PlaceholderSection = "patterns" | "icons";
+export type PlaceholderSection = "patterns";
 
 export type ViewerPage =
   | { kind: "overview" }
   | { kind: "foundations" }
   | { kind: "gallery"; section: GallerySection }
   | { kind: "placeholder"; section: PlaceholderSection }
+  | { kind: "icons" }
   | { kind: "item"; entry: ShowcaseEntry }
   | { kind: "not-found"; id: string };
 
@@ -25,7 +26,8 @@ export function resolveViewerPage(pageId: string, entries: ShowcaseEntry[]): Vie
   if (pageId === "overview") return { kind: "overview" };
   if (pageId === "foundations") return { kind: "foundations" };
   if (pageId === "components" || pageId === "blocks") return { kind: "gallery", section: pageId };
-  if (pageId === "patterns" || pageId === "icons") return { kind: "placeholder", section: pageId };
+  if (pageId === "patterns") return { kind: "placeholder", section: pageId };
+  if (pageId === "icons") return { kind: "icons" };
   const lower = pageId.toLowerCase();
   const entry = entries.find((item) => item.id === pageId)
     ?? entries.find((item) => item.id.toLowerCase() === lower || item.name.toLowerCase() === lower);

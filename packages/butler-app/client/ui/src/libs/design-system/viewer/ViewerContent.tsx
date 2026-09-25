@@ -1,6 +1,7 @@
 import type { ShowcaseEntry } from "../showcase/collectShowcaseEntries";
 import { FoundationsPage } from "./pages/FoundationsPage";
 import { GalleryPage } from "./pages/GalleryPage";
+import { IconsPage } from "./pages/IconsPage";
 import { ItemPage } from "./pages/ItemPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { NotFoundPage, PlaceholderPage } from "./pages/PlaceholderPage";
@@ -24,6 +25,8 @@ export function ViewerContent({ page, entries, state, themes, onOpen }: {
       return <GalleryPage entries={entries} locale={state.locale} onOpen={onOpen} section={page.section} />;
     case "item":
       return <ItemPage entry={page.entry} key={page.entry.id} state={state} themes={themes} />;
+    case "icons":
+      return <IconsPage />;
     case "placeholder":
       return <PlaceholderPage section={page.section} />;
     case "not-found":

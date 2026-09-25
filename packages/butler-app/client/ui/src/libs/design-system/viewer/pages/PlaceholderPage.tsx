@@ -7,7 +7,6 @@ import type { PlaceholderSection } from "../viewerNavigation";
 
 const COPY: Record<PlaceholderSection, { title: string; message: string }> = {
   patterns: { title: "Patterns", message: "Composition patterns will be documented here." },
-  icons: { title: "Icons", message: "The icon gallery will be generated here." },
 };
 
 export function PlaceholderPage({ section }: { section: PlaceholderSection }) {

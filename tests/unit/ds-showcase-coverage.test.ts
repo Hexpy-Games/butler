@@ -92,9 +92,10 @@ describe("design-system showcase coverage", () => {
     }
   });
 
-  test("transient and inline status surfaces sit in the Feedback group", () => {
+  test("transient and inline status surfaces sit in the Feedback group", async () => {
+    const toast = (await import(showcasePath("components/Toast"))) as ShowcaseModule;
     expect({
-      toast: legacyShowcaseCategories["components/Toast"],
+      toast: toast.meta.category,
       notice: legacyShowcaseCategories["blocks/Notice"],
       emptyLine: legacyShowcaseCategories["blocks/EmptyLine"],
     }).toEqual({ toast: "Feedback", notice: "Feedback", emptyLine: "Conversation & Activity" });
@@ -133,5 +134,18 @@ describe("design-system showcase coverage", () => {
     }
 
     expectShrinkOnly("placeholderStories", placeholders, baseline.placeholderStories);
+  });
+  test("English stories render no Korean copy (example text follows the viewer locale)", async () => {
+    const requireFromUi = createRequire(join(uiRoot, "package.json"));
+    const { createElement } = requireFromUi("react") as { createElement: (type: () => unknown) => unknown };
+    const { renderToStaticMarkup } = requireFromUi("react-dom/server") as { renderToStaticMarkup: (node: unknown) => string };
+    const korean: string[] = [];
+    for (const { id, module } of await loadShowcases()) {
+      for (const story of module.stories) {
+        const markup = renderToStaticMarkup(createElement(() => story.render({ locale: "en-US" })));
+        if (/[\uAC00-\uD7A3]/u.test(markup.replace(/<[^>]*>/gu, " "))) korean.push(`${id}#${story.name}`);
+      }
+    }
+    expect(korean).toEqual([]);
   });
 });

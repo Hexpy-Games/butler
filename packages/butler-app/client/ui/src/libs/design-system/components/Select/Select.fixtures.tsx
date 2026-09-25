@@ -1,24 +1,19 @@
 import { useState } from "react";
-import { Select, SelectContent, SelectItem, SelectPillTrigger, SelectValue } from "./Select";
-import { PillButton } from "../PillButton";
-import { Monitor, GitBranch } from "../Icons";
-import { Stack } from "../Stack";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
 
+/** Registry fixture: a plain form select. The composer's Local/Worktree chip
+ * is a ComposerSelectControl (see the ComposerControl showcase). */
 export function SelectFixture() {
-  const [value, setValue] = useState("local");
+  const [value, setValue] = useState("one");
   return (
-    <Stack align="row" gap="xs" cross="center" justify="center" wrap data-ds-fixture="select">
-      <PillButton surface="glass" icon={<Monitor size="sm" />}>Local</PillButton>
-      <Select value={value} onValueChange={setValue}>
-        <SelectPillTrigger aria-label="Workspace"
-          icon={value === "local" ? <Monitor size="sm" /> : <GitBranch size="sm" />}>
-          <SelectValue>{value === "local" ? "Local" : "Worktree"}</SelectValue>
-        </SelectPillTrigger>
-        <SelectContent position="popper">
-          <SelectItem value="local">Local</SelectItem>
-          <SelectItem value="worktree">Worktree</SelectItem>
-        </SelectContent>
-      </Select>
-    </Stack>
+    <Select value={value} onValueChange={setValue}>
+      <SelectTrigger aria-label="Example select" data-ds-fixture="select">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="one">One</SelectItem>
+        <SelectItem value="two">Two</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }

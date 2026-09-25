@@ -19,9 +19,11 @@ Import from the public design-system alias:
 import { Select } from "@/butler-ds";
 ```
 
-Use `SelectPillTrigger` for a floating composer selector. It renders the same
-`PillButton surface="glass"` used by active-work and jump-to-latest capsules,
-with an optional icon and the selected label. Its styling stays owned by PillButton.
+A select inside the composer toolbar (the Local / Worktree workspace chip) uses
+`ComposerSelectControl` from the ComposerControl block, so it matches the other
+composer controls; see the ComposerControl showcase. `SelectPillTrigger` (a
+glass `PillButton` trigger) remains for floating selectors outside the
+composer toolbar.
 
 Use `SelectButton` for a select-looking trigger that opens a custom popover,
 such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,

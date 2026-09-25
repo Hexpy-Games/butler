@@ -11,26 +11,20 @@
   isolation: isolate;
 }
 
+/* A block of readable body text fills the stage behind the glass, so the
+   sample shows blur over text instead of oversized words cut at the edges. */
 .backgroundText {
   position: absolute;
-  inset: var(--space-3);
+  inset: var(--space-lg);
   z-index: -2;
   display: grid;
   align-content: center;
-  gap: var(--space-2);
-  color: color-mix(in srgb, var(--text-primary) 55%, transparent);
-  font-size: var(--typo-dashboard-title-size);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-compact);
-  text-transform: uppercase;
-}
-
-.backgroundText span:nth-child(2) {
-  justify-self: end;
-}
-
-.backgroundText span:nth-child(3) {
-  justify-self: center;
+  gap: var(--space-xs);
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text-primary) 60%, transparent);
+  font-size: var(--font-size-3);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
 }
 
 .pictureMarks {
@@ -80,6 +74,7 @@
 
 .demo {
   display: grid;
+  width: min(100%, 360px);
   gap: var(--space-2);
 }
 

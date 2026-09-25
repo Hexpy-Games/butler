@@ -1,7 +1,6 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Stack } from "../Stack";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
-import { SelectFixture } from "./Select.fixtures";
 
 export const meta: ShowcaseMeta = {
   title: "Select",
@@ -41,7 +40,17 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    name: "Pill trigger",
-    render: () => <SelectFixture />,
+    name: "Disabled",
+    states: ["disabled"],
+    render: ({ locale }) => (
+      <Select disabled defaultValue="one">
+        <SelectTrigger aria-label="Disabled select">
+          <SelectValue placeholder={labels[locale].choose} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="one">{labels[locale].one}</SelectItem>
+        </SelectContent>
+      </Select>
+    ),
   },
 ];
