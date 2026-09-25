@@ -894,11 +894,10 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   expect(contextPanel).toContain('dataTestClass="context-legend-scroll"');
   expect(contextPanel).toContain('data-test-class="context-legend"');
   expect(contextPanel).toContain("inspectorLayout.ts");
-  expect(contextPanel).toContain("style={contextSectionInset}");
+  expect(contextPanel).toContain("<InspectorInset fill>");
   expect(contextPanel).toContain("style={contextLegendFrame}");
   expect(contextPanel).toContain("contentStyle={contextLegendContent}");
   expect(inspectorLayout).toContain("contextLegendFrame");
-  expect(inspectorLayout).toContain("width: `calc(100% -");
   expect(inspectorLayout).toContain('"--scroll-area-frame-width"');
   expect(inspectorLayout).toContain('"--scroll-area-content-width": "100%"');
   expect(inspectorLayout).toContain("paddingInlineEnd");
@@ -4732,7 +4731,7 @@ describe("app-client design system foundation", () => {
     );
 
     expect(workBlock).toContain('density?: "normal" | "compact"');
-    expect(workBlock).toContain('gap={density === "compact" ? "1" : "sm"}');
+    expect(workBlock).toContain('gap={density === "compact" ? "xs" : "sm"}');
     expect(workBlock).toContain("<Typo.Body");
     expect(workBlock).not.toContain("<Typo.PanelSectionTitle");
     expect(workBlockStyles).toContain(".compact");
@@ -4749,7 +4748,9 @@ describe("app-client design system foundation", () => {
     expect(inspectorShellStyles).toContain(
       "padding: 0 var(--inspector-inline-padding)",
     );
-    expect(inspectorLayout).toContain("width: `calc(100% -");
+    // Full-width inspector content is inset by the DS InspectorInset.
+    expect(inspectorShellStyles).toContain("padding-inline: var(--inspector-inline-padding)");
+    expect(summaryPanel).toContain("<InspectorInset>");
     expect(summaryPanel).toContain('data-test-class="summary-progress-panel"');
     expect(surfacePanelStyles).toContain("box-sizing: border-box");
     expect(surfacePanelStyles).toContain("min-width: 0");

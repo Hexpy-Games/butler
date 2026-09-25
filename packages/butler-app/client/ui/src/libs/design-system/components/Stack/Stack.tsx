@@ -79,7 +79,7 @@ export interface StackItemProps extends HTMLAttributes<HTMLElement>, Omit<Layout
   as?: LayoutElement;
 }
 
-/** Wraps any child of a Stack with item props instead of a styled wrapper div. */
+/** Wraps one child of a Stack with item props instead of a styled wrapper div. */
 function StackItem(allProps: StackItemProps) {
   const [item, { as: Component = "div", className, children, ...props }] = splitLayoutItemProps(allProps);
   const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
