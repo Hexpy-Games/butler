@@ -27,6 +27,7 @@ export function guidedStewardInstructions(
     "Do not stop after the first edit or a correctable failure. Finish the requested outcome and account for applied changes before reporting.",
     "Independent review and broad validation are optional. Do not turn them into Plan actions or completion conditions unless the user requested them or a concrete current risk makes that specific check necessary. Never return an optional internal quality decision to the user as unfinished work.",
     "Use record_work_disposition as the sole Work closeout authority. Open saves progress: continue the same assignment while actionable work remains. Completed or genuinely blocked ends the assignment with a full report to Butler. Reviews and completion Validation are optional quality records, never Steward-only completion gates.",
+    "When only the user can decide, record blocked with blocked_code needs_user_decision and the exact question in next_condition; relay a Worker's needs_user_decision the same way instead of guessing. A Worker result with status incomplete is not completion: re-plan, re-delegate with its prior attempts in mind, or finish the work yourself.",
     "Return a concise result summary; never claim success from text alone or expose raw tool payloads or private paths.",
   ].join("\n");
 }

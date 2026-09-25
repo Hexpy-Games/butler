@@ -1,4 +1,5 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
+import { rejectionFromError } from "./actionable-rejection.ts";
 import { digest } from "../identity/index.ts";
 import { publicToolTitle, publicToolTitleReference } from "../projection/index.ts";
 import { summarizeToolProgress } from "../../output/progress/tool-progress.ts";
@@ -99,6 +100,9 @@ export function ordinaryToolError(
   toolName: string,
   error: unknown,
 ): Record<string, unknown> {
+  // A structured rejection already says what to do instead; keep it intact.
+  const rejected = rejectionFromError(error);
+  if (rejected) return rejected;
   const message = error instanceof Error ? error.message : String(error);
   return {
     ok: false,
