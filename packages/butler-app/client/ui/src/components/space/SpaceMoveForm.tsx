@@ -14,7 +14,7 @@ import {
 import { requestSpaceMove } from "@/app/space/move";
 import { canDrop } from "@/app/space/drag";
 import type { SpaceRowData } from "@/app/space/projection";
-import { SpaceGlyph } from "./SpaceIdentity";
+import { SpaceGlyph } from "./SpaceGlyph";
 
 export function SpaceMoveForm({
   sourceKey,
