@@ -10,7 +10,11 @@ Use it for document cards and project knowledge surfaces.
 Use it in project dashboards and document pickers.
 
 ## Why to use this component
-It composes `ResourceTile` with document-specific action placement.
+It is a Card with the document icon on the title line, a medium two-line
+title, one caption line (optional `Tag` badge, then description · meta) and
+actions at the top right. `clickTarget="tile"` makes the whole card the
+open button (inspector artifacts); otherwise `actionLabel` + `onOpen` render
+a trailing Open button (dashboard plan and spec lists).
 
 ## How to use this component
 Pass display-ready document title, description, metadata, and either an open
