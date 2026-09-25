@@ -12,7 +12,7 @@ export function ComposerPlanModeBadge() {
   if (!planMode) return null;
   return (
     <span className={styles.badge} data-test-class="composer-plan-mode-badge">
-      <ListChecks aria-hidden="true" size={11} />
+      <ListChecks aria-hidden="true" size="xs" />
       <Typo.Caption className={styles.label}>
         {appCopy.composer.plan}
       </Typo.Caption>
@@ -22,7 +22,7 @@ export function ComposerPlanModeBadge() {
         variant="inline"
         onClick={() => setPlanMode(false)}
       >
-        <X size={11} />
+        <X size="xs" />
       </Button>
     </span>
   );

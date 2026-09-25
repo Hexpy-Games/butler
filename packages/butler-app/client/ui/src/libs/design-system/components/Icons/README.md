@@ -24,18 +24,20 @@ Size icons with the named scale, which mirrors `--icon-size-sm|md|lg` in
 
 | Size | px | Use |
 | --- | --- | --- |
+| `xs` | 12 | Micro badges and chips (plan-mode badge, branch chip) |
 | `sm` | 14 | Dense rows, inline badges, small buttons |
 | `md` | 16 | Default for controls, menus, nav rows and toolbars |
 | `lg` | 20 | Status marks, back arrows, prominent headers |
+| `xl` | 24 | Resource tiles and summary illustrations |
+| `2xl` | 32 | Empty-state illustrations |
 
 ```tsx
 <Plus />            // md (16px) by default
 <Search size="lg" />
 ```
 
-Do not pass literal 13-20px sizes; pick the nearest named size. Numeric sizes
-are reserved for illustrations outside the icon scale (for example 24/32px
-empty-state glyphs).
+Do not pass literal 11-32px sizes; pick the nearest named size. Numeric sizes
+are reserved for artwork outside the icon scale.
 
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 

@@ -581,24 +581,27 @@ describe("Korean typography", () => {
 });
 
 describe("icon size tokens", () => {
-  test("tokens define the 14/16/20 icon scale", () => {
+  test("tokens define the 12/14/16/20/24/32 icon scale", () => {
     const tokens = rootTokens();
+    expect(tokens.get("--icon-size-xs")).toBe("12px");
     expect(tokens.get("--icon-size-sm")).toBe("14px");
     expect(tokens.get("--icon-size-md")).toBe("16px");
     expect(tokens.get("--icon-size-lg")).toBe("20px");
+    expect(tokens.get("--icon-size-xl")).toBe("24px");
+    expect(tokens.get("--icon-size-2xl")).toBe("32px");
   });
 
-  test("DS icons use named sizes instead of literal 13-20px sizes", () => {
+  test("DS icons use named sizes instead of literal 11-32px sizes", () => {
     const icons = read(`${uiSrc}/libs/design-system/components/Icons/Icons.tsx`);
     const names = [...icons.matchAll(/^export const (\w+) =/gmu)].map((match) => match[1]);
     const offenders = walkUiSources(uiSrc)
       .filter((path) => path.endsWith(".tsx") && !path.endsWith(".test.tsx"))
       .flatMap((path) => {
         const text = read(path);
-        const props = [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(1[3-8]|20)\}/gsu)]
+        const props = [...text.matchAll(/<(\w+)\b([^<>]*?)\bsize=\{(1[1-8]|2[0-4]|32)\}/gsu)]
           .filter((match) => names.includes(match[1]))
           .map((match) => `${path}: <${match[1]} size={${match[3]}}>`);
-        const clones = [...text.matchAll(/cloneElement\([^)]*\{\s*size:\s*(1[3-8]|20)\b/gsu)]
+        const clones = [...text.matchAll(/cloneElement\([^)]*\{\s*size:\s*(1[1-8]|2[0-4]|32)\b/gsu)]
           .map((match) => `${path}: cloneElement size ${match[1]}`);
         return [...props, ...clones];
       });

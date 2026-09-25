@@ -5,7 +5,7 @@ import { FileText, Plus } from "../../components/Icons";
 export function EmptyLineFixture() {
   return (
     <EmptyLine
-      icon={<FileText size={32} />}
+      icon={<FileText size="2xl" />}
       message="No sessions yet"
       action={<Button iconStart={<Plus size="md" />} text="Create Session" />}
     />
