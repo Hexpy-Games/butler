@@ -36,9 +36,6 @@ export function ItemPage({ entry, state, themes }: {
   return (
     <Stack gap="2xl" data-ds-component={entry.name} data-ds-detail={entry.name}>
       <ItemHeader entry={entry} />
-      <Section title="Guidance" titleAs="h2">
-        {entry.readme ? <MarkdownGuide markdown={entry.readme} /> : <EmptyLine message="No README yet." />}
-      </Section>
       <Section title="Examples" titleAs="h2" data-ds-examples={entry.name}>
         {entry.stories.length === 0 ? <EmptyLine message="No showcase yet." /> : null}
         {entry.stories.map((story) => (
@@ -47,6 +44,9 @@ export function ItemPage({ entry, state, themes }: {
             <StoryFrames locale={state.locale} story={story} themes={themes} width={state.width} />
           </Section>
         ))}
+      </Section>
+      <Section title="Guidance" titleAs="h2">
+        {entry.readme ? <MarkdownGuide markdown={entry.readme} /> : <EmptyLine message="No README yet." />}
       </Section>
     </Stack>
   );

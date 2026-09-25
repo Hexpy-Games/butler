@@ -35,6 +35,13 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
       canvasesKorean: canvases.length > 0 && canvases.every((canvas) => canvas.lang === "ko"),
       maxCanvasWidth: Math.max(...canvases.map((canvas) => canvas.getBoundingClientRect().width)),
       importLine: document.querySelector("[data-ds-import]")?.textContent ?? "",
+      examplesBeforeReadme: (() => {
+        const examples = document.querySelector('[data-ds-detail="Button"] [data-ds-examples]');
+        const guidance = [...document.querySelectorAll('[data-ds-detail="Button"] h2')]
+          .find((heading) => heading.textContent?.trim() === "Guidance");
+        return Boolean(examples && guidance) &&
+          Boolean(examples!.compareDocumentPosition(guidance!) & Node.DOCUMENT_POSITION_FOLLOWING);
+      })(),
       pressed,
     };
   });
@@ -43,6 +50,7 @@ async function assertDeepLinks(page: Page, baseUrl: string, label: string): Prom
   assert(item.canvasesKorean, `${label}: locale=ko deep link did not reach example canvases`);
   assert(item.maxCanvasWidth <= 375, `${label}: width=375 deep link rendered ${item.maxCanvasWidth}px canvases`);
   assert(item.importLine.includes('import { Button } from "@/butler-ds"'), `${label}: import line is missing`);
+  assert(item.examplesBeforeReadme, `${label}: item page must show examples before the README`);
   assert(["Dark", "KO", "375"].every((value) => item.pressed.includes(value)), `${label}: toolbar does not reflect the deep link`);
 
   await page.goto(viewerUrl(baseUrl, { page: "navrow", theme: "side-by-side" }), { waitUntil: "networkidle" });
