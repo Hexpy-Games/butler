@@ -197,6 +197,8 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
     const groupHeaderRect = groupHeader?.getBoundingClientRect().toJSON() ?? null;
     const groupChildRect = groupChild?.getBoundingClientRect().toJSON() ?? null;
     const groupContentStyle = groupContent ? getComputedStyle(groupContent) : null;
+    const groupItems = groupChild?.parentElement ?? null;
+    const treeIndent = groupItems ? Number.parseFloat(getComputedStyle(groupItems).paddingInlineStart) : Number.NaN;
 
     return {
       navRowAnimated:
@@ -213,10 +215,13 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
         labelRect!.left < controlRect!.left &&
         getComputedStyle(labelText!).textOverflow === "ellipsis",
       groupOpen: Boolean(groupContent),
-      groupChildrenNotIndented:
+      // The fixture opts into `indented` (tree mode): children inset by
+      // --nav-tree-indent and keep the group row's right edge.
+      groupChildrenTreeIndented:
         Boolean(groupHeaderRect && groupChildRect) &&
-        Math.abs(groupHeaderRect!.left - groupChildRect!.left) <= 1 &&
-        Math.abs(groupHeaderRect!.width - groupChildRect!.width) <= 1,
+        treeIndent > 0 &&
+        Math.abs(groupChildRect!.left - groupHeaderRect!.left - treeIndent) <= 1 &&
+        Math.abs(groupHeaderRect!.right - groupChildRect!.right) <= 1,
       groupContentAnimated:
         Boolean(groupContentStyle) &&
         groupContentStyle!.transitionProperty.includes("grid-template-rows"),
@@ -229,7 +234,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   assert(navAndGroupState.activeHasNoShadow, `${label}: NavRow active state has shadow or outline`);
   assert(navAndGroupState.navRowTwoRegions, `${label}: NavRow does not use label/control regions correctly`);
   assert(navAndGroupState.groupOpen, `${label}: CollapsibleNavGroup open state is not visible`);
-  assert(navAndGroupState.groupChildrenNotIndented, `${label}: CollapsibleNavGroup children are indented`);
+  assert(navAndGroupState.groupChildrenTreeIndented, `${label}: CollapsibleNavGroup indented children are not inset by --nav-tree-indent`);
   assert(navAndGroupState.groupContentAnimated, `${label}: CollapsibleNavGroup content transition is missing`);
   assert(navAndGroupState.groupHasNoChevron, `${label}: CollapsibleNavGroup should not render a caret chevron`);
 
