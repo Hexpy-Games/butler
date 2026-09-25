@@ -355,6 +355,9 @@
   --line-height-snug: 1.35;
   --line-height-body: 1.45;
   --line-height-document: 1.58;
+  /* Role alias: compact single-line UI labels (menu and filtered-select
+     section titles, attachment chips, composer decision rows). */
+  --line-height-compact: var(--line-height-snug);
   --icon-size-xs: 12px;
   --icon-size-sm: 14px;
   --icon-size-md: 16px;

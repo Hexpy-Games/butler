@@ -223,7 +223,7 @@
   font-size: var(--font-size-2);
   font-weight: var(--typo-label-weight);
   letter-spacing: 0;
-  line-height: var(--line-height-label);
+  line-height: var(--typo-label-line-height);
   white-space: nowrap;
 }
 
