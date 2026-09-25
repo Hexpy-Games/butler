@@ -19,7 +19,7 @@ export function QueuedMessageItem({
   rowVirtualizer,
   queue,
 }: QueuedMessageItemProps) {
-  const { sendNow, edit, remove } = queue.actions;
+  const { edit, remove } = queue.actions;
   useAppLocale();
   const copy = appCopy.composer;
   const failed = item.tone === "failed";
@@ -31,9 +31,6 @@ export function QueuedMessageItem({
       ariaLabel={copy.queuedMessage}
       editLabel={failed ? copy.retryFailedMessage : copy.editQueuedMessage}
       deleteLabel={failed ? copy.deleteFailedMessage : copy.deleteQueuedMessage}
-      sendNowLabel={copy.sendQueuedNow}
-      sendNowHint={copy.sendQueuedNowHint}
-      onSendNow={item.canSendNow ? () => sendNow(item) : undefined}
       onEdit={() => edit(item)}
       onDelete={() => remove(item)}
       offsetY={virtualRow.start + topOffset}
@@ -48,7 +45,6 @@ export function QueuedMessageItem({
 function queuedStatus(item: QueuedConversationItem): string {
   const copy = appCopy.composer;
   if (item.tone === "failed") return copy.failedMessageStatus;
-  if (item.tone === "sending") return copy.queuedSending;
   return item.total > 1 ? copy.queuedPosition(item.position, item.total) : copy.queuedMessageStatus;
 }
 

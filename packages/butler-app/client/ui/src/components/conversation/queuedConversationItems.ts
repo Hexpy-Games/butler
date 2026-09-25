@@ -1,6 +1,6 @@
 import type { MessageRecord, QueuedMessageRecord } from "@/app/types.ts";
 
-export type QueuedConversationTone = "queued" | "sending" | "failed";
+export type QueuedConversationTone = "queued" | "failed";
 
 export interface QueuedConversationItem {
   key: string;
@@ -10,8 +10,6 @@ export interface QueuedConversationItem {
   position: number;
   /** Number of waiting (not failed) messages. */
   total: number;
-  /** Stop the running turn so this message goes next (the queue head only). */
-  canSendNow: boolean;
 }
 
 /** Stable across the optimistic record and the server record of one send. */
@@ -19,17 +17,17 @@ export function queuedMessageKey(record: QueuedMessageRecord): string {
   return record.client_message_id ?? record.id;
 }
 
-/** Queue records shown in the conversation after the messages, in queue order. */
+/**
+ * Queue records shown in the conversation after the messages, in queue order.
+ * "Send now" is not offered until the gateway can dispatch a queued message
+ * immediately (owner decision; the DS QueuedMessage keeps the capability).
+ */
 export function queuedConversationItems({
   queue,
   messages,
-  activeTurn,
-  sendingNowKey,
 }: {
   queue: readonly QueuedMessageRecord[];
   messages: readonly MessageRecord[];
-  activeTurn: boolean;
-  sendingNowKey: string | null;
 }): QueuedConversationItem[] {
   const shown = new Set(messages.map((message) => message.id));
   const visible = queue.filter((record) =>
@@ -40,17 +38,8 @@ export function queuedConversationItems({
   let position = 0;
   return visible.map((record) => {
     const key = queuedMessageKey(record);
-    if (record.state === "failed") {
-      return { key, record, tone: "failed", position: 0, total, canSendNow: false };
-    }
+    if (record.state === "failed") return { key, record, tone: "failed", position: 0, total };
     position += 1;
-    return {
-      key,
-      record,
-      tone: sendingNowKey === key ? "sending" : "queued",
-      position,
-      total,
-      canSendNow: activeTurn && position === 1,
-    };
+    return { key, record, tone: "queued", position, total };
   });
 }

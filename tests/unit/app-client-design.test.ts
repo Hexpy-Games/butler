@@ -3221,7 +3221,6 @@ describe("app-client design system foundation", () => {
     "Notice",
     "ComposerControl",
     "ComposerAdjunctPanel",
-    "ComposerQueuePanel",
     "AttachmentList",
     "MessageAvatarBlock",
     "ActivityFeed",
@@ -3307,9 +3306,8 @@ describe("app-client design system foundation", () => {
     expect(indexContent).toContain(
       'export * from "./blocks/ComposerAdjunctPanel"',
     );
-    expect(indexContent).toContain(
-      'export * from "./blocks/ComposerQueuePanel"',
-    );
+    expect(indexContent).toContain('export * from "./blocks/QueuedMessage"');
+    expect(indexContent).not.toContain("ComposerQueuePanel");
     expect(indexContent).toContain('export * from "./blocks/CardList"');
     expect(indexContent).toContain('export * from "./blocks/ResourceSummary"');
     expect(indexContent).toContain('export * from "./blocks/SettingsField"');

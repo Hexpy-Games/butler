@@ -827,9 +827,6 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     retryFailedMessage: "다시 작성",
     deleteFailedMessage: "실패 메시지 삭제",
     queuedPosition: (position, total) => `대기 중 · ${total}개 중 ${position}번째`,
-    queuedSending: "보내는 중…",
-    sendQueuedNow: "바로 반영",
-    sendQueuedNowHint: "현재 응답을 멈추고 이 메시지를 바로 보냅니다",
     contextDetails: "컨텍스트 세부정보 표시",
     approval: {
       title: "승인 대기 중인 명령",

@@ -82,7 +82,6 @@ export * from "./blocks/FilteredSelectPopover";
 export * from "./blocks/ContextDonutButton";
 export * from "./blocks/ComposerCard";
 export * from "./blocks/ComposerAdjunctPanel";
-export * from "./blocks/ComposerQueuePanel";
 export * from "./blocks/AttachmentList";
 export * from "./blocks/MessageRow";
 export * from "./blocks/QueuedMessage";

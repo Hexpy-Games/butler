@@ -48,7 +48,7 @@ function MessageListComponent({
     progressRows,
     turnState,
     turnStartedAt, turnId,
-    showTurnActivity, activeTurn, itemCount: messageItemCount,
+    showTurnActivity, itemCount: messageItemCount,
     copiedMessageId,
     copyAssistantMessage,
     copyContextMenuText,
@@ -57,7 +57,7 @@ function MessageListComponent({
   } = useMessageList(messages, summary, turnProgress, isSending);
 
   const enteringIds = useEnteringMessageIds(visibleMessages, activeChatId);
-  const queue = useQueuedConversation(visibleMessages, activeChatId, activeTurn);
+  const queue = useQueuedConversation(visibleMessages, activeChatId);
   const itemCount = messageItemCount + queue.items.length;
   const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
     useMessageVirtualizer({
