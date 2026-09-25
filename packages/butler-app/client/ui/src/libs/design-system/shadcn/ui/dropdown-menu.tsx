@@ -4,6 +4,7 @@ import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 
 import { cn } from "../../lib/utils";
+import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { CheckIcon, ChevronRightIcon } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
@@ -43,13 +44,18 @@ function DropdownMenuTrigger({
 
 function DropdownMenuContent({
   className,
+  ref,
   align = "start",
   sideOffset = 4,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>) {
+}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  const contentRef = usePopperExitFreezeRef(ref);
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
+        ref={contentRef}
         data-slot="dropdown-menu-content"
         data-glass="popover"
         data-radius="popover"

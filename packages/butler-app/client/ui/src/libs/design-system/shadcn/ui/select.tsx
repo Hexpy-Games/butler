@@ -2,6 +2,7 @@ import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 
 import { cn } from "../../lib/utils";
+import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import {
   ChevronDownIcon,
@@ -102,14 +103,19 @@ function SelectPillTrigger({
 
 function SelectContent({
   className,
+  ref,
   children,
   position = "item-aligned",
   align = "center",
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>) {
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  const contentRef = usePopperExitFreezeRef(ref);
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
+        ref={contentRef}
         data-slot="select-content"
         data-glass="popover"
         data-radius="popover"

@@ -4,6 +4,7 @@ import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 
 import { cn } from "../../lib/utils";
+import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/ContextMenu/ContextMenu.module.css";
@@ -24,11 +25,16 @@ function ContextMenuTrigger({
 
 function ContextMenuContent({
   className,
+  ref,
   ...props
-}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>) {
+}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content> & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  const contentRef = usePopperExitFreezeRef(ref);
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
+        ref={contentRef}
         data-slot="context-menu-content"
         data-glass="popover"
         data-radius="popover"

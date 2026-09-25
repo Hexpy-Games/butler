@@ -2,6 +2,7 @@ import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { cn } from "../../lib/utils";
+import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/Popover/Popover.module.css";
@@ -20,15 +21,20 @@ function PopoverTrigger({
 
 function PopoverContent({
   className,
+  ref,
   align = "center",
   sideOffset = 4,
   onCloseAutoFocus,
   onOpenAutoFocus,
   ...props
-}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>) {
+}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  const contentRef = usePopperExitFreezeRef(ref);
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        ref={contentRef}
         data-slot="popover-content"
         data-glass="popover"
         data-radius="popover"
