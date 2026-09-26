@@ -7,9 +7,7 @@
   "components/management/ProjectHistoryPanel.tsx": 1,
   "components/management/ProjectStatisticChart.tsx": 1,
   "components/space/SpaceActivity.tsx": 1,
-  "components/space/SpaceDragRow.tsx": 1,
   "components/space/SpaceGlyph.tsx": 1,
   "components/space/SpaceIdentity.tsx": 3,
-  "components/space/SpaceRowActions.tsx": 1,
   "components/space/SpaceRowMeta.tsx": 2
 }

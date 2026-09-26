@@ -33,6 +33,8 @@ export interface StackProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItem
   gap?: StackGap;
   /** Gap between wrapped lines when it differs from `gap` (which then only spaces items in a line). */
   rowGap?: StackGap;
+  /** Gap on phone widths (640px and below) when it differs from `gap`. */
+  compactGap?: StackGap;
   justify?: JustifyAlign;
   cross?: CrossAlign;
   fill?: boolean;
@@ -50,6 +52,7 @@ function StackRoot(allProps: StackProps) {
     align = "column",
     gap = "md",
     rowGap,
+    compactGap,
     justify = "start",
     cross = "stretch",
     fill = false,
@@ -71,7 +74,7 @@ function StackRoot(allProps: StackProps) {
   );
 
   return (
-    <Component className={classes} data-row-gap={rowGap} {...itemAttributes} {...props}>
+    <Component className={classes} data-row-gap={rowGap} data-compact-gap={compactGap} {...itemAttributes} {...props}>
       {children}
     </Component>
   );

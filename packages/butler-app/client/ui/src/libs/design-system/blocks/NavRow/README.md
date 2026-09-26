@@ -10,8 +10,15 @@ can share a consistent trailing alignment. Nested identity controls may opt into
 Clickable's declared action/icon sizing; see Clickable's README.
 Use `meta` for a second line that spans the full row: the first-line actions do
 not consume its trailing space. Metadata aligns with the label after the icon.
-`--nav-action-edge-offset` may cancel the row inset for internally padded action
-targets; text metadata keeps its normal trailing inset.
+Inside a `SidebarShell` the shell cancels the row inset for internally padded
+action targets; text metadata keeps its normal trailing inset.
+`density` (`compact`, `comfortable`, `touch`) sizes a standalone row; inside a
+`SidebarShell` rows follow the shell's density. `reserveIcon` keeps an empty
+icon column so a label-only row (for example "More (12)") aligns with iconned
+rows. `NavRowSwap` is a trailing slot that shows its `rest` content (an
+activity status, a disclosure chevron) at rest and swaps in row actions (a row
+menu) on row hover, keyboard focus or while `open`; phones keep the rest
+content and open row menus with a long press.
 
 ## What is this block
 

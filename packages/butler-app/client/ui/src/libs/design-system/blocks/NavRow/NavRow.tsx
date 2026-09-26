@@ -3,6 +3,7 @@ import { Clickable } from "../../components/Clickable";
 import { cn } from "../../lib/utils";
 import styles from "./NavRow.module.css";
 import { NavRowContent } from "./NavRowContent";
+import type { SidebarDensity } from "../SidebarShell/SidebarShell";
 
 export interface NavRowProps {
   /** Icon element to display at the start */
@@ -37,6 +38,10 @@ export interface NavRowProps {
   ariaLabel?: string;
   /** Expanded state for tree-like navigation rows */
   ariaExpanded?: boolean;
+  /** Row density; omit inside a SidebarShell to follow the shell's density. */
+  density?: SidebarDensity;
+  /** Keep an empty icon column so the label aligns with iconned rows. */
+  reserveIcon?: boolean;
 }
 
 export function NavRow({
@@ -56,10 +61,12 @@ export function NavRow({
   onContextMenu,
   ariaLabel,
   ariaExpanded,
+  density,
+  reserveIcon = false,
 }: NavRowProps) {
   const hasHoverActions = Boolean(actions && actionsVisibility !== "visible");
   const content = (
-    <NavRowContent icon={icon} iconInteractive={iconInteractive} label={label}
+    <NavRowContent icon={icon} reserveIcon={reserveIcon} iconInteractive={iconInteractive} label={label}
       badge={badge} actions={actions} actionsVisibility={actionsVisibility} meta={meta} />
   );
 
@@ -84,6 +91,7 @@ export function NavRow({
         className={rowClassName}
         data-has-hover-actions={hasHoverActions ? "true" : undefined}
         data-test-class={dataTestClass}
+        data-sidebar-density={density}
         title={accessibleLabel}
         aria-expanded={ariaExpanded}
         stretch
@@ -99,6 +107,7 @@ export function NavRow({
     <div
       className={rowClassName}
       data-test-class={dataTestClass}
+      data-sidebar-density={density}
       title={accessibleLabel}
       aria-disabled={disabled}
       aria-expanded={ariaExpanded}

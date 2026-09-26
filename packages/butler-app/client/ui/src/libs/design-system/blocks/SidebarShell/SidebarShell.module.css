@@ -1,23 +1,74 @@
 .shell {
   --sidebar-scrollbar-offset: 10px;
   --sidebar-scroll-fade-size: var(--scroll-fade-size);
-  --sidebar-scroll-edge-padding: var(--sidebar-content-inset, 16px);
+  --sidebar-scroll-edge-padding: 0px;
+  /* The sidebar surface. Density tokens (data-sidebar-density, tokens.css)
+     size rows, icons and action targets; these adapt the shared blocks. */
+  --clickable-action-size: var(--sidebar-action-size);
+  --clickable-action-icon-size: var(--sidebar-icon-size);
+  --icon-button-surface: radial-gradient(
+      circle closest-side,
+      var(--selection) 98%,
+      transparent 100%
+    )
+    center / var(--sidebar-icon-surface-size) var(--sidebar-icon-surface-size)
+    no-repeat;
+  --icon-button-radius: var(--radius-control);
+  --nav-action-edge-offset: calc(-1 * var(--space-sm));
+  --nav-sticky-surface: transparent;
+  --nav-sticky-filter: none;
+  --selection-strong: color-mix(in srgb, var(--selection) 75%, transparent);
+  --nav-tree-indent: var(--space-sm);
+  --nav-section-heading-inset: var(--space-xs);
+  --nav-section-heading-min-height: var(--sidebar-action-size);
+  --nav-section-actions-edge-offset: calc(-1 * var(--space-xs));
 
   display: flex;
   position: relative;
-  width: var(--sidebar-width);
+  width: 100%;
   max-width: 100%;
   min-width: 0;
-  height: var(--adaptive-viewport-block-size);
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   padding: 0 var(--sidebar-padding-inline) var(--space-lg);
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Icons in the sidebar share the density icon size and optical offset. */
+.shell svg {
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
+  translate: 0 var(--sidebar-icon-optical-offset);
+}
+
+/* Icon action clusters (row actions, heading actions) sit tight. */
+.shell [data-slot="button-container"][data-button-size^="icon"] {
+  gap: calc(var(--space-xs) / 2);
+}
+
+.brand {
+  display: flex;
+  min-height: var(--sidebar-action-size);
+  align-items: center;
+}
+
+.titlebar .brand {
+  min-height: var(--titlebar-height);
+}
+
+.scrollContent[data-sticky-header] > .scrollHeader {
+  padding-bottom: var(--space-2xl);
 }
 
 @media (width <= 640px) {
   .shell {
     width: 100%;
-    padding: max(var(--safe-area-top), var(--space-sm))
+    flex-basis: 100%;
+    padding: var(--safe-area-top)
       max(var(--sidebar-padding-inline), var(--safe-area-right))
       max(var(--space-lg), var(--safe-area-bottom))
       max(var(--sidebar-padding-inline), var(--safe-area-left));
@@ -54,7 +105,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--sidebar-region-gap, 10px);
+  gap: var(--space-xs);
   overflow: visible;
   transition:
     opacity var(--motion-base) var(--motion-ease-standard),
@@ -180,7 +231,6 @@
   max-width: 100%;
   min-width: 0;
   flex: none;
-  border-top: var(--sidebar-footer-border-width, 1px) solid var(--line);
   padding-top: 10px;
 }
 
@@ -189,12 +239,12 @@
   width: 100%;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: var(--sidebar-row-spacing, var(--space-xs));
 }
 
 @media (width <= 640px) {
-  .titlebar {
-    display: var(--sidebar-compact-titlebar-display, none);
+  .brand {
+    --typo-app-title-size: var(--font-size-6);
   }
 
   .trafficSpace {

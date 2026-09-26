@@ -12,6 +12,8 @@
   --titlebar-height: 48px;
   --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--safe-area-top));
   --control-hit-target: 30px;
+  /* Fixed touch target (the touch sidebar density, phone rows). */
+  --touch-target: 44px;
   --control-height-xs: 24px;
   --control-height-sm: 28px;
   --control-height-md: 30px;
@@ -38,6 +40,9 @@
   --z-popover: 100;
   --z-tooltip: 110;
   --z-drag: 120;
+  /* Sidebar tree drag feedback, above sticky group headers (20 - depth). */
+  --z-drop-indicator: 30;
+  --z-drop-hint: 31;
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
   --adaptive-composer-radius: 30px;
@@ -586,6 +591,55 @@
 @media (width <= 640px), (pointer: coarse) {
   :root {
     --control-hit-target: 44px;
+  }
+}
+
+/* Sidebar density (SidebarShell / NavRow / SessionRow `density`): row height,
+   inline padding, icon size, label gap, row spacing and trailing action
+   target. The shell sets the attribute on its root; a row may override it. */
+[data-sidebar-density="compact"] {
+  --sidebar-row-height: var(--control-height-sm);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-sm);
+  --sidebar-row-gap: var(--space-sm);
+  --sidebar-row-spacing: calc(var(--space-xs) / 2);
+  --sidebar-action-size: var(--control-height-xs);
+  --sidebar-icon-surface-size: var(--space-lg);
+  --sidebar-icon-optical-offset: 0px;
+}
+
+[data-sidebar-density="comfortable"] {
+  --sidebar-row-height: var(--control-height-md);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-md);
+  --sidebar-row-gap: 10px;
+  --sidebar-row-spacing: var(--space-xs);
+  --sidebar-action-size: var(--control-hit-target);
+  --sidebar-icon-surface-size: var(--space-xl);
+  --sidebar-icon-optical-offset: 0px;
+}
+
+[data-sidebar-density="touch"] {
+  --sidebar-row-height: var(--touch-target);
+  --sidebar-row-padding-inline: var(--space-sm);
+  --sidebar-icon-size: var(--icon-size-lg);
+  --sidebar-row-gap: var(--space-md);
+  --sidebar-row-spacing: var(--space-sm);
+  --sidebar-action-size: var(--touch-target);
+  --sidebar-icon-surface-size: var(--control-height-xs);
+  --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
+}
+
+/* Comfortable is the touch density on phones and coarse pointers. */
+@media (width <= 640px), (pointer: coarse) {
+  [data-sidebar-density="comfortable"] {
+    --sidebar-row-height: var(--touch-target);
+    --sidebar-icon-size: var(--icon-size-lg);
+    --sidebar-row-gap: var(--space-md);
+    --sidebar-row-spacing: var(--space-sm);
+    --sidebar-action-size: var(--touch-target);
+    --sidebar-icon-surface-size: var(--control-height-xs);
+    --sidebar-icon-optical-offset: calc(var(--font-size-4) * -0.03);
   }
 }
 

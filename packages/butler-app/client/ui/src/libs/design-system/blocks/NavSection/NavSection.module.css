@@ -16,6 +16,8 @@
 
 .actions {
   --icon-button-size: var(--sidebar-action-size);
+
+  margin-inline-end: var(--nav-section-actions-edge-offset, 0);
 }
 
 .content {

@@ -3,10 +3,9 @@
 Use `NavSectionHeading` in a shell's fixed header when its corresponding list
 scrolls separately. It is the same heading composition used by `NavSection`.
 
-Set `--nav-section-heading-inset: 0` on a containing navigation surface when
-section headings should align with its outer content edge. Default is 8px.
-Use `--nav-section-heading-min-height` to align headings with and without actions
-to a shared row height. This keeps the heading-to-first-item rhythm identical.
+Inside a `SidebarShell` the shell sets the heading inset, aligns headings with
+and without actions to the density's action height, and pulls heading actions
+to the row edge; product code does not set `--nav-section-*` properties.
 
 ## What is this block
 

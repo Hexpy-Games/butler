@@ -3,6 +3,11 @@
 ## What is this component
 Stack is a Butler design-system component for building consistent client UI without reaching into domain components or raw implementation details.
 
+### Phone gap
+
+`compactGap` replaces `gap` at 640px and below, for a group that needs more
+air on touch layouts (the sidebar browse header).
+
 ## When to use this component
 Use Stack when the interface needs the behavior implied by its name and when a shared Butler token, spacing, interaction, or accessibility contract should stay consistent across the app.
 

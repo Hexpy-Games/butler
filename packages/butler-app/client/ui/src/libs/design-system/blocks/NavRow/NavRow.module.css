@@ -1,7 +1,7 @@
 .row {
   width: 100%;
   min-height: var(--sidebar-row-height, 32px);
-  padding: 0 var(--space-2, var(--space-sm));
+  padding: 0 var(--sidebar-row-padding-inline, var(--space-sm));
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -17,7 +17,7 @@
 
 .row[data-slot="clickable"] {
   display: grid;
-  padding: 0 var(--space-2, var(--space-sm));
+  padding: 0 var(--sidebar-row-padding-inline, var(--space-sm));
 }
 
 .interactive {
@@ -69,12 +69,12 @@
   font-size: var(--font-size-2);
 }
 
-.interactive:not(.disabled):hover {
+.interactive:where(:not(.disabled)):hover {
   background: color-mix(in srgb, var(--selection) 60%, transparent);
 }
 
 .active,
-.interactive.active:not(.disabled):hover {
+.interactive.active:where(:not(.disabled)):hover {
   background: var(--selection-strong);
   color: var(--text-primary);
 }
@@ -105,6 +105,10 @@
   place-items: center;
   color: currentColor;
   opacity: 0.82;
+}
+
+.iconReserve {
+  width: var(--sidebar-icon-size, var(--icon-size-md));
 }
 
 .icon svg {
@@ -217,5 +221,46 @@
 
   .label {
     font-size: var(--font-size-4);
+  }
+}
+
+/* NavRowSwap: rest content at rest, row actions on hover or keyboard focus. */
+.swap {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+}
+
+.swapRest,
+.swapReveal {
+  display: inline-grid;
+  grid-area: 1 / 1;
+  place-items: center;
+}
+
+/* Kept in keyboard order: focus inside reveals it. */
+.swapReveal {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
+}
+
+@media (width > 640px) {
+  .row:is(:hover, :focus-visible, :has(:focus-visible)) .swapReveal,
+  .swap[data-open] > .swapReveal {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .row:is(:hover, :focus-visible, :has(:focus-visible)) .swapRest,
+  .swap[data-open] > .swapRest {
+    visibility: hidden;
+  }
+}
+
+@media (width > 640px) and (not ((hover: hover) and (pointer: fine))) {
+  .swap:not([data-has-rest]) > .swapReveal {
+    opacity: 1;
+    pointer-events: auto;
   }
 }

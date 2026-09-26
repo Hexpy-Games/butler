@@ -452,12 +452,13 @@ describe("navigation row selection", () => {
 
   test("selected rows are clearly stronger than hover", () => {
     const source = css();
-    const hover = rule(source, ".interactive:hover");
+    // Disabled rows never take the hover fill (DS disabled tone).
+    const hover = rule(source, ".interactive:where(:not(.disabled)):hover");
     const hoverMix = /var\(--selection\)\s+(\d+)%/u.exec(hover);
     expect(hoverMix).not.toBeNull();
     expect(Number(hoverMix![1])).toBeLessThanOrEqual(60);
 
-    const active = rule(source, ".active,\n.interactive.active:hover");
+    const active = rule(source, ".active,\n.interactive.active:where(:not(.disabled)):hover");
     expect(active).toContain("background: var(--selection-strong)");
     expect(active).toContain("color: var(--text-primary)");
     expect(rule(source, ".active .label")).toContain(

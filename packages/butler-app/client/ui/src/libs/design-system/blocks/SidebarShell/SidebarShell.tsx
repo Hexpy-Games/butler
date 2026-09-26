@@ -5,7 +5,15 @@ import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./SidebarShell.module.css";
 import { useStickyClipping } from "./hooks/useStickyClipping";
 
+export type SidebarDensity = "compact" | "comfortable" | "touch";
+
 export interface SidebarShellProps {
+  /**
+   * Row height, inline padding, icon size, gaps and action targets of every
+   * NavRow inside (tokens in tokens.css). Comfortable becomes touch on phones
+   * and coarse pointers.
+   */
+  density?: SidebarDensity;
   titlebar?: ReactNode;
   header?: ReactNode;
   scrollHeader?: ReactNode;
@@ -31,6 +39,7 @@ export function SidebarShell({
   className,
   scrollFade = true,
   scrollRef,
+  density = "comfortable",
 }: SidebarShellProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const edgesRef = useScrollEdges("y", scrollFade);
@@ -55,6 +64,7 @@ export function SidebarShell({
     <aside
       className={cn(styles.shell, className)}
       data-collapsed={collapsed ? "true" : undefined}
+      data-sidebar-density={density}
       data-has-titlebar={Boolean(titlebar) || undefined}
       data-test-class="app-sidebar"
       aria-label={ariaLabel}
@@ -82,7 +92,11 @@ export function SidebarShell({
               className={styles.scrollContent}
               data-sticky-header={stickyHeader ? "true" : undefined}
             >
-              {scrollHeader}
+              {scrollHeader ? (
+                <div className={styles.scrollHeader} data-slot="sidebar-scroll-header">
+                  {scrollHeader}
+                </div>
+              ) : null}
               {stickyHeader ? (
                 <div
                   ref={stickyRef}
@@ -111,6 +125,12 @@ export function SidebarTrafficSpace() {
   return <div className={styles.trafficSpace} aria-hidden="true" />;
 }
 
-export function SidebarNav({ children }: { children: ReactNode }) {
-  return <nav className={styles.nav}>{children}</nav>;
+/** A list of sidebar rows; rows are spaced by the density's --sidebar-row-spacing. */
+export function SidebarNav({ children, ariaLabel }: { children: ReactNode; ariaLabel?: string }) {
+  return <nav className={styles.nav} aria-label={ariaLabel}>{children}</nav>;
+}
+
+/** The product title row: titlebar height in the titlebar, action height in the header. */
+export function SidebarBrand({ children }: { children: ReactNode }) {
+  return <div className={styles.brand} data-slot="sidebar-brand">{children}</div>;
 }

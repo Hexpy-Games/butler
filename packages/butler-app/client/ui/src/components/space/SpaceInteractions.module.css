@@ -1,11 +1,11 @@
+/* Favorite toggle over the row glyph; sizes follow the sidebar density. */
 .iconSlot {
   position: relative;
   display: inline-block;
-  width: var(--space-tree-icon-size, var(--space-lg));
-  height: var(--space-tree-icon-size, var(--space-lg));
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
 }
 .favorite {
-  --clickable-action-icon-size: var(--space-tree-icon-size, var(--space-lg));
   flex: none;
   min-width: var(--control-hit-target);
   max-width: none;
@@ -15,23 +15,13 @@
   transform: translate(-50%, -50%);
   color: inherit;
 }
-.favorite .normalIcon svg,
-.favorite .starIcon svg {
-  width: var(--space-tree-icon-size, var(--space-lg));
-  height: var(--space-tree-icon-size, var(--space-lg));
-}
 .identityIcon {
-  --sidebar-icon-size: var(--space-tree-icon-size, var(--space-lg));
   display: inline-grid;
   place-items: center;
-  width: var(--space-tree-icon-size, var(--space-lg));
-  height: var(--space-tree-icon-size, var(--space-lg));
+  width: var(--sidebar-icon-size, var(--icon-size-md));
+  height: var(--sidebar-icon-size, var(--icon-size-md));
   color: inherit;
   flex: none;
-}
-.identityIcon svg {
-  width: var(--space-tree-icon-size, var(--space-lg));
-  height: var(--space-tree-icon-size, var(--space-lg));
 }
 .normalIcon,
 .starIcon {
@@ -48,60 +38,6 @@
 .favorite:hover .normalIcon,
 .favorite:focus-visible .normalIcon {
   opacity: 0;
-}
-.dragItem {
-  position: relative;
-}
-.dragItem[data-dragging="true"] {
-  opacity: 0.5;
-}
-.dragItem[data-drop]::before,
-.dragItem[data-drop="after"]::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  pointer-events: none;
-  z-index: 30;
-  border-radius: 0;
-}
-.dragItem[data-drop="before"]::before {
-  top: var(--drop-row-top);
-  height: 2px;
-  background: var(--accent);
-}
-.dragItem[data-drop="after"]::after {
-  top: calc(var(--drop-row-top) + var(--drop-row-height) - 2px);
-  height: 2px;
-  background: var(--accent);
-}
-.dragItem[data-drop="inside"]::before,
-.dragItem[data-drop="group"]::before {
-  top: var(--drop-row-top);
-  height: var(--drop-row-height);
-  border: 2px solid var(--accent);
-  border-radius: var(--radius-control);
-}
-.groupHint {
-  position: absolute;
-  inset-inline-end: var(--space-sm);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  color: var(--accent);
-  pointer-events: none;
-  z-index: 31;
-}
-.rootDrop {
-  padding: var(--space-md);
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-control);
-  color: var(--text-secondary);
-}
-.rootDrop[data-active="true"] {
-  border-color: var(--accent);
-  background: var(--selection);
 }
 
 .rowMeta {
@@ -131,138 +67,12 @@
   flex: none;
   white-space: pre;
 }
-.titleLine {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  min-width: 0;
-}
-.menuAction,
-.groupActions {
-  flex: none;
-}
-.groupActions {
-  gap: var(--space-action-gap);
-}
-.menuAction {
-  position: relative;
-}
-.menuStatus {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-}
-.menuAction[data-has-status] .menuButton {
-  opacity: 0;
-}
-@media (width > 640px) {
-  .rowShell
-    [data-test-class="tree-row"]:is(:focus-visible, :has(:focus-visible))
-    .menuButton,
-  .menuAction[data-menu-open] .menuButton {
-    opacity: 1;
-  }
-  .rowShell
-    [data-test-class="tree-row"]:is(:focus-visible, :has(:focus-visible))
-    .menuStatus,
-  .menuAction[data-menu-open] .menuStatus {
-    visibility: hidden;
-  }
-}
-.menuButton,
-.dashboardButton,
-.collapseButton {
-  flex: none;
-  min-width: var(--control-hit-target);
-  width: var(--control-hit-target);
-  height: var(--control-hit-target);
-  min-height: var(--control-hit-target);
-}
-.menuButton svg,
-.dashboardButton svg,
-.collapseButton svg {
-  width: var(--space-tree-icon-size, var(--space-lg));
-  height: var(--space-tree-icon-size, var(--space-lg));
-}
-.disclosureSlot {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-}
-.disclosureSlot > .menuAction {
-  position: absolute;
-  inset: 0;
-  /* Keep the trigger in keyboard navigation; visibility:hidden would prevent focus from revealing it. */
-  opacity: 0;
-  pointer-events: none;
-}
-@media (width > 640px) {
-  .rowShell
-    [data-test-class="tree-row"]:is(
-      :hover,
-      :focus-visible,
-      :has(:focus-visible)
-    )
-    .disclosureSlot
-    > .menuAction,
-  .disclosureSlot[data-menu-open] > .menuAction {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .rowShell
-    [data-test-class="tree-row"]:is(
-      :hover,
-      :focus-visible,
-      :has(:focus-visible)
-    )
-    .disclosureSlot
-    > .collapseButton,
-  .disclosureSlot[data-menu-open] > .collapseButton {
-    visibility: hidden;
-  }
-}
-@media (width > 640px) and (hover: hover) and (pointer: fine) {
-  .menuAction:not([data-has-status]) {
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--motion-ease-standard);
-  }
-  .rowShell
-    [data-test-class="tree-row"]:is(
-      :hover,
-      :focus-visible,
-      :has(:focus-visible)
-    )
-    .menuAction,
-  .menuAction:has([aria-expanded="true"]) {
-    opacity: 1;
-  }
-}
-@media (width > 640px) and (hover: hover) and (pointer: fine) {
-  .rowShell [data-test-class="tree-row"]:hover .menuButton {
-    opacity: 1;
-  }
-  .rowShell [data-test-class="tree-row"]:hover .menuStatus {
-    visibility: hidden;
-  }
-}
-@media (width <= 640px) {
-  .menuButton {
-    visibility: hidden;
-    pointer-events: none;
-  }
-}
+/* Activity status in the row's trailing slot (the row menu replaces it on hover). */
 .activity {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   flex: none;
-  width: var(--space-tree-icon-size, var(--space-lg));
+  width: var(--sidebar-icon-size, var(--icon-size-md));
   min-height: 1lh;
-  color: var(--text-secondary);
-}
-.activity[data-attention="true"] {
-  color: var(--text-primary);
+  pointer-events: none;
 }

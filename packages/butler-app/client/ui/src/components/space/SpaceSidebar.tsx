@@ -18,7 +18,6 @@ import { SpaceDialogs } from "./SpaceDialogs";
 import { SpaceRootDrop } from "./SpaceRootDrop";
 import { SidebarSettingsItem } from "../layout/SidebarSettingsItem";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
-import styles from "./SpaceSidebar.module.css";
 
 export function SpaceSidebar() {
   const locale = useAppLocale();
@@ -94,7 +93,6 @@ export function SpaceSidebar() {
             <SidebarTrafficSpace />
           ) : <SpaceBrand />
         }
-        className={styles.sidebar}
         scrollRef={scrollRef}
         ariaLabel={appCopy.space.navigation}
         scrollHeader={<SpaceHeader rows={rows} />}

@@ -1,7 +1,8 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Clock3, PencilLine, Search, Settings } from "../../components/Icons";
 import { NavRow } from "../NavRow";
-import { SidebarNav, SidebarShell, SidebarTrafficSpace } from "./SidebarShell";
+import { Stack } from "../../components/Stack";
+import { SidebarBrand, SidebarNav, SidebarShell, SidebarTrafficSpace, type SidebarDensity } from "./SidebarShell";
 import styles from "./SidebarShell.showcase.module.css";
 
 export const meta: ShowcaseMeta = {
@@ -22,15 +23,16 @@ const copy = {
   },
 } as const;
 
-function Sidebar({ locale, rows }: ShowcaseRenderContext & { rows: number }) {
+function Sidebar({ locale, rows, density, brand }: ShowcaseRenderContext & { rows: number; density?: SidebarDensity; brand?: boolean }) {
   const text = copy[locale];
   return (
     <div className={styles.showcaseFrame}>
       <SidebarShell
-        titlebar={<SidebarTrafficSpace />}
+        density={density}
+        titlebar={brand ? <SidebarBrand>{density ?? "comfortable"}</SidebarBrand> : <SidebarTrafficSpace />}
         footer={<NavRow icon={<Settings />} label={text.settings} />}
         scrollHeader={
-          <SidebarNav>
+          <SidebarNav ariaLabel={text.aria}>
             <NavRow icon={<PencilLine />} label={text.newChat} active />
             <NavRow icon={<Search />} label={text.search} />
             <NavRow icon={<Clock3 />} label={text.automations} />
@@ -50,4 +52,19 @@ function Sidebar({ locale, rows }: ShowcaseRenderContext & { rows: number }) {
 export const stories: ShowcaseStory[] = [
   { name: "Default", render: (context) => <Sidebar {...context} rows={4} /> },
   { name: "Scrolling list with sticky filter", states: ["scroll", "sticky"], render: (context) => <Sidebar {...context} rows={10} /> },
+  {
+    // Row height, padding, icon size, gaps and action targets per density;
+    // comfortable becomes touch on phones and coarse pointers.
+    name: "Densities (compact, comfortable, touch)",
+    widths: ["app", "wide"],
+    render: (context) => (
+      <Stack align="row" gap="lg" cross="start">
+        {(["compact", "comfortable", "touch"] as const).map((density) => (
+          <Stack.Item key={density} grow basis="0" minWidth="0">
+            <Sidebar {...context} rows={5} density={density} brand />
+          </Stack.Item>
+        ))}
+      </Stack>
+    ),
+  },
 ];

@@ -57,6 +57,7 @@ export * from "./components/IconButton";
 // Blocks
 export * from "./blocks/AdaptiveShell";
 export * from "./blocks/NavRow";
+export * from "./blocks/NavDropTarget";
 export * from "./blocks/NavSection";
 export * from "./blocks/CollapsibleNavGroup";
 export * from "./blocks/RowActionCluster";

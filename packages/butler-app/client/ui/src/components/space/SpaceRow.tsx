@@ -16,7 +16,6 @@ import { SpaceRowActions } from "./SpaceRowActions";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceDragRow } from "./SpaceDragRow";
 import { useSpaceDrag } from "@/app/space/drag";
-import interaction from "./SpaceInteractions.module.css";
 
 export const SpaceRow = memo(function SpaceRow({
   rowKey,
@@ -63,7 +62,6 @@ export const SpaceRow = memo(function SpaceRow({
     <SpaceDragRow row={row} enabled={!flat && !shortcut}>
       <div
         ref={rowRef}
-        className={interaction.rowShell}
         {...longPress}
         onPointerDown={(e) => {
           e.stopPropagation();

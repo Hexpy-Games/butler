@@ -126,3 +126,28 @@
 .wrap {
   flex-wrap: wrap;
 }
+
+/* Phone-width gap (compactGap). */
+@media (width <= 640px) {
+  .stack[data-compact-gap="none"] {
+    gap: var(--space-none);
+  }
+  .stack[data-compact-gap="xs"] {
+    gap: var(--space-xs);
+  }
+  .stack[data-compact-gap="sm"] {
+    gap: var(--space-sm);
+  }
+  .stack[data-compact-gap="md"] {
+    gap: var(--space-md);
+  }
+  .stack[data-compact-gap="lg"] {
+    gap: var(--space-lg);
+  }
+  .stack[data-compact-gap="xl"] {
+    gap: var(--space-xl);
+  }
+  .stack[data-compact-gap="2xl"] {
+    gap: var(--space-2xl);
+  }
+}

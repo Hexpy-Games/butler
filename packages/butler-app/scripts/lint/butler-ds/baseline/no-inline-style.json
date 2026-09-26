@@ -12,7 +12,6 @@
   "components/inspector/ContextPanel.tsx": 1,
   "components/inspector/inspectorLayout.ts": 2,
   "components/layout/SidebarProjectSessionItem.tsx": 1,
-  "components/layout/SidebarSessionLoadMore.tsx": 1,
   "components/management/ProjectDocumentDialog.tsx": 1,
   "components/management/ProjectDocumentMarkdownContent.tsx": 2,
   "components/management/ProjectDocumentsPanel.tsx": 9,
@@ -20,7 +19,6 @@
   "components/settings/DeveloperLogRawBlock.tsx": 3,
   "components/settings/ModelSettingsTitle.tsx": 1,
   "components/settings/SettingsListSkeleton.tsx": 1,
-  "components/space/SpaceDragRow.tsx": 2,
   "hooks/usePanelResize.ts": 1,
   "pages/AppShell.tsx": 1
 }

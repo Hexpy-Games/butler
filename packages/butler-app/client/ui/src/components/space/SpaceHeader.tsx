@@ -1,12 +1,14 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import {
+  Box,
   Button,
   ButtonContainer,
   NavRow,
   NavSectionHeading,
   PencilLine,
   Search,
+  SidebarNav,
   Stack,
   Typo,
 } from "@/butler-ds";
@@ -15,7 +17,6 @@ import { useOrganization } from "@/app/space/organization";
 import type { SpaceRowData } from "@/app/space/projection";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceBrand } from "./SpaceBrand";
-import styles from "./SpaceSidebar.module.css";
 
 /** These entry actions and shortcuts scroll away before the browse tabs stick. */
 export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
@@ -24,10 +25,10 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
   const active = useButlerStore((s) => s.activeChatId);
   const favorites = [...rows.values()].filter((r) => r.pinned);
   return (
-    <Stack gap="2xl" className={styles.sidebarHeader}>
+    <Stack gap="2xl">
       <Stack gap="xs">
         {window.butlerApp && <SpaceBrand />}
-        <nav className={styles.primaryActions} aria-label={appCopy.space.primaryActions}>
+        <SidebarNav ariaLabel={appCopy.space.primaryActions}>
           <NavRow
             icon={<PencilLine />}
             label={appCopy.space.newChat}
@@ -39,7 +40,7 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
             label={appCopy.space.search}
             onClick={() => useButlerStore.getState().setCommandOpen(true)}
           />
-        </nav>
+        </SidebarNav>
       </Stack>
       <Stack gap="sm">
         <NavSectionHeading title={appCopy.space.favorites} />
@@ -48,8 +49,9 @@ export function SpaceHeader({ rows }: { rows: Map<string, SpaceRowData> }) {
             <SpaceRow key={row.node.key} rowKey={row.node.key} shortcut />
           ))}
           {!favorites.length && (
-            <Typo.Caption className={styles.emptyFavorites}>
-              {appCopy.space.favoritesHint}</Typo.Caption>
+            <Box paddingX="sm">
+              <Typo.Caption as="p" tone="secondary">{appCopy.space.favoritesHint}</Typo.Caption>
+            </Box>
           )}
           {favorites.length > 2 && (
             <ButtonContainer size="sm">

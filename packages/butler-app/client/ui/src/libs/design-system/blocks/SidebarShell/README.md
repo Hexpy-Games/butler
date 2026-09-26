@@ -1,24 +1,29 @@
 # SidebarShell
 
-The shell accepts `--sidebar-region-gap` and `--sidebar-content-inset` CSS
-variables for token-based section spacing. Defaults preserve existing layouts.
-Set `--sidebar-footer-border-width: 0` for a spacing-only footer separation.
+`density` (`compact`, `comfortable` (default), `touch`) sets row height, inline
+padding, icon size, label gap, row spacing and trailing action targets for every
+`NavRow` inside through tokens (`[data-sidebar-density]` in `tokens.css`:
+`--sidebar-row-height`, `--sidebar-row-padding-inline`, `--sidebar-icon-size`,
+`--sidebar-row-gap`, `--sidebar-row-spacing`, `--sidebar-action-size`).
+Comfortable becomes touch on phones and coarse pointers. A single `NavRow` or
+`SessionRow` may take its own `density`.
+
+The shell owns the sidebar surface: icon actions sized by the density with a
+round hover surface, tight icon clusters, a transparent sticky header, heading
+insets, tree indent, a spacing-only footer, and the `SidebarBrand` title row.
+Product CSS never sets `--sidebar-*`, `--clickable-*`, `--icon-button-*` or
+`--nav-*` properties; request a density or a shell prop instead.
 Set `scrollFade={false}` when the scrolling content has opaque sticky headers
 that should not fade at the viewport edge. The default fade remains unchanged.
 For an all-menu scroll, put entry actions in `scrollHeader` and browse controls
 in `stickyHeader`. Both use the same scrollbar as children. The sticky slot sits
 below the fade and publishes its measured height as `--nav-sticky-offset` for
 nested tree headers. No wheel interception or second scrollbar is needed.
-The sticky header owns an 8px trailing gap; the all-menu scroll removes its
-legacy inter-section gap to avoid doubling that space. Sticky material accepts
-`--nav-sticky-surface` and `--nav-sticky-filter`. Transparent surfaces do not
-need extra blur: the shell clips the child paint/hit-test area below the sticky
+The shell clips the child paint/hit-test area below the transparent sticky
 header, including nested CollapsibleNavGroup branches. One passive scroll/RAF
 measurement updates CSS variables, without React state or a second scrollbar.
 Resize/structural changes refresh the boundaries; keyboard focus reveals a
 clipped row through the same scrollbar. Native sticky owns branch push-off.
-Set `--sidebar-compact-titlebar-display: flex` when a compact sidebar needs its
-brand titlebar alongside fixed window chrome. The default remains hidden.
 
 ## What is this component
 

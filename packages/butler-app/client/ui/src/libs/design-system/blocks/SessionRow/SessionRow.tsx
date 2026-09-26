@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MessageSquare } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { NavRow } from "../NavRow";
+import type { SidebarDensity } from "../SidebarShell/SidebarShell";
 import styles from "./SessionRow.module.css";
 
 export interface SessionRowProps {
@@ -19,6 +20,8 @@ export interface SessionRowProps {
   /** Session glyph; defaults to the sidebar conversation glyph. */
   icon?: ReactNode;
   onSelect?: () => void;
+  /** Row density; omit inside a SidebarShell to follow the shell's density. */
+  density?: SidebarDensity;
 }
 
 /**
@@ -37,6 +40,7 @@ export function SessionRow({
   showIcon = true,
   icon,
   onSelect,
+  density,
 }: SessionRowProps) {
   const secondLine = [description, meta].filter(Boolean).join(" · ");
   const row = (
@@ -53,6 +57,7 @@ export function SessionRow({
       actions={actions}
       actionsVisibility="hover"
       onClick={onSelect}
+      density={density}
     />
   );
   return card ? <div className={styles.card}>{row}</div> : row;

@@ -9,7 +9,6 @@ const tokens = flat(read("../../tokens.css"));
 const adaptiveShell = flat(read("../AdaptiveShell/AdaptiveShell.module.css"));
 const sidebarShell = flat(read("./SidebarShell.module.css"));
 const titlebarShell = flat(read("../TitlebarShell/TitlebarShell.module.css"));
-const spaceSidebar = flat(read("../../../../components/space/SpaceSidebar.module.css"));
 const baseRoot = /:root \{([^}]*)\}/u.exec(tokens)?.[1] ?? "";
 const compactRoot = /@media \(width <= 640px\) \{ :root \{([^}]*)\}/u.exec(tokens)?.[1] ?? "";
 
@@ -50,7 +49,8 @@ test("sidebar and workspace titlebars reserve the toggle through tokens", () => 
   expect(sidebarShell).toMatch(/\.titlebar \{[^}]*padding-inline-start: var\(--sidebar-titlebar-leading\);/u);
   expect(sidebarShell).toMatch(/\.titlebar \{[^}]*height: var\(--titlebar-height\);[^}]*align-items: center;/u);
   expect(titlebarShell).toMatch(/\.collapsed \{[^}]*padding-left: var\(--titlebar-collapsed-left-padding\);/u);
-  expect(spaceSidebar).not.toMatch(/\.brand \{[^}]*padding-inline-start/u);
+  // The brand row (SidebarBrand) never offsets itself; the titlebar owns the leading reserve.
+  expect(sidebarShell).not.toMatch(/\.brand \{[^}]*padding-inline-start/u);
 });
 
 test("the sticky header's fade cover only paints while the header is stuck", () => {

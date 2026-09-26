@@ -21,13 +21,7 @@
   "components/management/ProjectDescription.tsx": 1,
   "components/management/ProjectStatisticChart.tsx": 1,
   "components/settings/SettingsSidebar.tsx": 3,
-  "components/space/SpaceBrand.tsx": 1,
-  "components/space/SpaceBrowseHeader.tsx": 2,
-  "components/space/SpaceHeader.tsx": 2,
   "components/space/SpaceIdentity.tsx": 1,
-  "components/space/SpaceRowActions.tsx": 3,
-  "components/space/SpaceRowMenu.tsx": 2,
   "components/space/SpaceRowMeta.tsx": 1,
-  "components/space/SpaceSidebar.tsx": 1,
   "pages/AppShell.tsx": 4
 }

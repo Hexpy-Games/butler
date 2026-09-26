@@ -267,10 +267,10 @@ describe("responsive adaptive design contracts", () => {
       "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
     );
     expect(prompt).toContain(".fluidBackground {\n    border-radius: 0;");
-    expect(sidebar).toContain(
-      "padding: max(var(--safe-area-top), var(--space-sm))",
-    );
-    expect(sidebar).toContain("display: var(--sidebar-compact-titlebar-display, none)");
+    // Phones: the shell starts at the safe area and keeps its titlebar row
+    // (the brand row) instead of a product override.
+    expect(sidebar).toContain("padding: var(--safe-area-top)");
+    expect(sidebar).not.toContain("--sidebar-compact-titlebar-display");
   });
 
   test("enlarges the compact shell toggle and omits titlebar new chat", () => {

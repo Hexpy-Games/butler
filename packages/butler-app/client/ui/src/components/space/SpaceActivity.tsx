@@ -5,13 +5,13 @@ import { spaceActivity } from "@/app/space/activity";
 import type { SessionSummary } from "@/app/types";
 import styles from "./SpaceInteractions.module.css";
 
-export function SpaceActivity({ session, overlay = true }: { session?: SessionSummary; overlay?: boolean }) {
+export function SpaceActivity({ session }: { session?: SessionSummary }) {
   useAppLocale();
   const activity = spaceActivity(session);
   if (!activity) return null;
   return (
     <span
-      className={overlay ? styles.menuStatus : styles.activity}
+      className={styles.activity}
       role="status"
       aria-label={
         interfaceProgressLabel({ safe_label: session?.safe_status_label ?? "", interface_content: session?.safe_status_content, interface_label_key: session?.safe_status_label_key, interface_label_parameters: session?.safe_status_label_parameters }) ||

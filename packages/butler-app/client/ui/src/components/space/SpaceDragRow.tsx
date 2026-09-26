@@ -3,7 +3,6 @@ import { appCopy } from "@/app/copy.ts";
 import {
   useId,
   useState,
-  type CSSProperties,
   type ReactNode,
   type DragEvent,
 } from "react";
@@ -16,8 +15,7 @@ import { useOrganization } from "@/app/space/organization";
 import { requestSpaceMove } from "@/app/space/move";
 import { projectSpace, type SpaceRowData } from "@/app/space/projection";
 import { useButlerStore } from "@/app/store";
-import { Typo } from "@/butler-ds";
-import styles from "./SpaceInteractions.module.css";
+import { NavDropTarget } from "@/butler-ds";
 
 export function SpaceDragRow({
   row,
@@ -71,18 +69,13 @@ export function SpaceDragRow({
     drag.over(possible ? { key: row.node.key, instance, position } : null);
   }
   return (
-    <div
-      className={styles.dragItem}
+    <NavDropTarget
       data-tree-item={row.node.key}
       data-drag-instance={instance}
-      data-drop={placement}
-      data-dragging={dragging || undefined}
-      style={
-        {
-          "--drop-row-top": `${bounds.top}px`,
-          "--drop-row-height": `${bounds.height}px`,
-        } as CSSProperties
-      }
+      drop={placement}
+      dragging={dragging}
+      indicator={bounds}
+      hint={appCopy.space.groupTogether}
       draggable={enabled || row.node.kind === "session"}
       onDragOver={over}
       onDragStart={(e) => {
@@ -129,11 +122,6 @@ export function SpaceDragRow({
       }}
     >
       {children}
-      {placement === "group" && (
-        <span className={styles.groupHint}>
-          <Typo.Caption>{appCopy.space.groupTogether}</Typo.Caption>
-        </span>
-      )}
-    </div>
+    </NavDropTarget>
   );
 }
