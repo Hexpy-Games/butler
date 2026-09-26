@@ -162,9 +162,9 @@ pub(crate) fn slice_tool_artifact_text(
     let text = ExactText::from_slice(&exact);
     let newline_count = exact
         .code_units()
-        .filter(|unit| *unit == b'\n' as u16)
+        .filter(|unit| *unit == u16::from(b'\n'))
         .count();
-    let last_newline = exact.code_units().last() == Some(b'\n' as u16);
+    let last_newline = exact.code_units().last() == Some(u16::from(b'\n'));
     Ok(ToolArtifactTextSlice {
         text,
         start_line: input.text[..utf16_byte_ceil(input.text, start)]

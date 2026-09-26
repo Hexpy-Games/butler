@@ -32,7 +32,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
         match args[index].to_string_lossy().as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with('-') => return false,
             command => {
@@ -84,7 +84,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     .await
     {
         Ok(Ok(count)) if count > 0 => {
-            eprintln!("MCP startup cleanup removed {count} terminal task(s).")
+            eprintln!("MCP startup cleanup removed {count} terminal task(s).");
         }
         Ok(Ok(_)) => {}
         Ok(Err(error)) => eprintln!("MCP startup cleanup unavailable: {error}"),
@@ -118,7 +118,7 @@ fn parse(args: &[OsString]) -> Result<Options, String> {
                 return Err("--home is unsupported; use --data for writable state".into());
             }
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with('-') => {
                 return Err(format!("unsupported MCP option: {value}"));

@@ -100,7 +100,7 @@ async fn canonical_store_reader_matches_bun_scalars_and_rereads_fresh_parts() {
     assert_eq!(scalar_for_part(&message.parts[1], "/03/text"), Some("same"));
     assert_eq!(scalar_for_part(&message.parts[1], "/+1/text"), None);
     for scalar in &scalars {
-        assert!(std::ptr::eq(scalar.message, &message));
+        assert!(std::ptr::eq(scalar.message, &raw const message));
         assert!(
             message
                 .parts

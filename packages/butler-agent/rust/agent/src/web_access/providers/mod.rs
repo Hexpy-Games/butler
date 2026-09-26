@@ -311,7 +311,7 @@ impl SearchProvider for FallbackSearchProvider {
 struct MockSearchProvider;
 
 impl SearchProvider for MockSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "mock"
     }
 
@@ -342,7 +342,7 @@ impl SearchProvider for MockSearchProvider {
 struct DisabledSearchProvider;
 
 impl SearchProvider for DisabledSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "disabled"
     }
 

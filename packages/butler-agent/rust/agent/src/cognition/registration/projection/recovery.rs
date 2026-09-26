@@ -47,8 +47,8 @@ impl CognitionRegistrationService {
             request.cancellation = Some(cancellation.clone());
             let acquired = tokio::select! {
                 biased;
-                _ = shutdown.cancelled() => Err(write_aborted()),
-                _ = cancellation.cancelled() => Err(write_aborted()),
+                () = shutdown.cancelled() => Err(write_aborted()),
+                () = cancellation.cancelled() => Err(write_aborted()),
                 result = coordinator.acquire(request, CognitionWaitClass::Background) =>
                     result.map_err(coordination_error).and_then(|lease|
                         lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))),

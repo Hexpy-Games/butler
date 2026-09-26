@@ -135,7 +135,7 @@ fn hosted_registration(value: &Value) -> bool {
         let key = nonempty_string(input.get("api_key"));
         hosted_provider(provider)
             && model.is_some_and(|value| !value.trim().is_empty())
-            && matches!(auth, Some("api_key") | Some("codex_oauth"))
+            && matches!(auth, Some("api_key" | "codex_oauth"))
             && !(auth == Some("codex_oauth") && provider.and_then(Value::as_str) != Some("openai"))
             && (auth != Some("api_key") || credential || key)
             && optional_string(input.get("display_name"))

@@ -179,7 +179,7 @@ async fn run_native_oauth_login_with_data(
     };
     tokio::select! {
         result = callback => result,
-        _ = cancellation() => Err("OAuth login cancelled".into()),
+        () = cancellation() => Err("OAuth login cancelled".into()),
     }
 }
 
@@ -202,8 +202,8 @@ async fn open_browser(url: &str) -> Result<bool, String> {
     };
     let result = tokio::select! {
         result = child.wait() => Some(Ok(result.is_ok_and(|status| status.success()))),
-        _ = cancellation() => Some(Err("OAuth login cancelled".into())),
-        _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => None,
+        () = cancellation() => Some(Err("OAuth login cancelled".into())),
+        () = tokio::time::sleep(std::time::Duration::from_secs(3)) => None,
     };
     if let Some(Ok(opened)) = &result {
         return Ok(*opened);

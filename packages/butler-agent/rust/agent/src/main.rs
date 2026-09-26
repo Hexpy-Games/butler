@@ -133,7 +133,7 @@ fn is_skills_command(args: &[std::ffi::OsString]) -> bool {
         match args[index].to_string_lossy().as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             command => return command == "skills",
         }

@@ -54,13 +54,13 @@ pub(super) fn single(args: &Map<String, Value>) -> Result<ExactEdit, Value> {
             "old_text and new_text are identical, so no file change was requested.",
         ));
     }
-    let start_line = arguments::start_line(args.get("start_line")).map_err(|_| {
+    let start_line = arguments::start_line(args.get("start_line")).map_err(|()| {
         super::invalid(
             "start_line must be a positive integer.",
             "Retry with a one-based line number or omit start_line.",
         )
     })?;
-    let expected_sha256 = arguments::sha256(args.get("expected_sha256")).map_err(|_| {
+    let expected_sha256 = arguments::sha256(args.get("expected_sha256")).map_err(|()| {
         super::invalid(
             "expected_sha256 must be a 64-character hexadecimal SHA-256 digest when supplied.",
             "Retry with the complete current lowercase or uppercase SHA-256 or omit it.",
@@ -142,7 +142,7 @@ pub(super) fn batch(value: &Value) -> Result<Vec<ExactEdit>, Value> {
                 "edits[{index}] has identical old_text and new_text, so no file change was requested."
             )));
         }
-        let start_line = arguments::start_line(item.get("start_line")).map_err(|_| {
+        let start_line = arguments::start_line(item.get("start_line")).map_err(|()| {
             super::invalid(
                 format!("edits[{index}].start_line must be a positive integer."),
                 "Retry with one-based line hints or omit them.",

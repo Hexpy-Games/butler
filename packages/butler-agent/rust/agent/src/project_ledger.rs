@@ -221,7 +221,7 @@ impl NativeProjectLedger {
         id: String,
     ) -> Result<Vec<String>, ProjectLedgerReadError> {
         self.run(move |data_root, _| {
-            commands::canonical_record_kinds(data_root, &project_root, &id).map_err(|_| {
+            commands::canonical_record_kinds(data_root, &project_root, &id).map_err(|()| {
                 ProjectLedgerReadError::RecordShow("project_ledger_record_kinds_unavailable")
             })
         })
@@ -406,7 +406,7 @@ impl NativeProjectLedger {
             .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_closed"))?;
         {
             let mut state = self.owner.state.lock();
-            if state.closing && IN_PUBLICATION.try_with(|_| ()).is_err() {
+            if state.closing && IN_PUBLICATION.try_with(|()| ()).is_err() {
                 return Err(ProjectLedgerReadError::Owner("project_ledger_closed"));
             }
             state.active += 1;

@@ -225,7 +225,7 @@ pub(super) fn record_error(
                 clock(),
                 effect_id,
                 revision,
-                failed as i64
+                i64::from(failed)
             ],
         )
         .map_err(sql)?;

@@ -304,20 +304,20 @@ async fn execute(
                     None => streams_done = true,
                 }
             }
-            _ = tokio::time::sleep_until(deadline), if !timeout_fired => {
+            () = tokio::time::sleep_until(deadline), if !timeout_fired => {
                 timeout_fired = true;
                 request_termination(host, &pids, &mut first_termination);
             }
-            _ = input.abort.cancelled(), if !cancelled => {
+            () = input.abort.cancelled(), if !cancelled => {
                 cancelled = true;
                 request_termination(host, &pids, &mut first_termination);
             }
-            _ = shutdown.cancelled(), if !closing => {
+            () = shutdown.cancelled(), if !closing => {
                 cancelled = true;
                 closing = true;
                 request_termination(host, &pids, &mut first_termination);
             }
-            _ = tokio::time::sleep(Duration::from_millis(10)) => {},
+            () = tokio::time::sleep(Duration::from_millis(10)) => {},
         }
         if let Some(when) = first_termination {
             if !forced && tokio::time::Instant::now() >= when + TERMINATION_GRACE {
@@ -358,13 +358,13 @@ async fn execute(
                 stream_error = Some(CommandError::new(
                     "command_stream_failed",
                     error.to_string(),
-                ))
+                ));
             }
             Err(error) => {
                 stream_error = Some(CommandError::new(
                     "command_stream_failed",
                     error.to_string(),
-                ))
+                ));
             }
         }
     }

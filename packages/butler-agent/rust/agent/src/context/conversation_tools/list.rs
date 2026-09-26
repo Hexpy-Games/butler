@@ -189,10 +189,10 @@ fn read(
             result["sessions"][0]["recent_messages"][0]["text"] =
                 json!(truncate(text, (length * 3 / 4).max(1)));
         }
-        if envelope_bytes(&result)? > 24 * 1024 {
-            if let Some(preview) = result["sessions"][0]["recent_messages"].as_array_mut() {
-                preview.clear();
-            }
+        if envelope_bytes(&result)? > 24 * 1024
+            && let Some(preview) = result["sessions"][0]["recent_messages"].as_array_mut()
+        {
+            preview.clear();
         }
         set_cursor(&mut result, parsed, revision, &rows, &selected, has_more);
     }

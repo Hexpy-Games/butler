@@ -4,7 +4,7 @@ use tz::TimeZone;
 
 use super::super::providers::contracts::SearchInput;
 
-const INSTRUCTIONS: &str = r#"You are Butler's Smart Search Planning layer.
+const INSTRUCTIONS: &str = r"You are Butler's Smart Search Planning layer.
 Plan web search queries before the actual search provider is called.
 Use the original user request or current-turn context as the primary source for intent, scope, depth, risk, and decomposition when it is provided.
 Use the model-selected web_search query as a retrieval seed, not as a replacement for the original request.
@@ -42,7 +42,7 @@ For consequential decision-support, include separate searches for current state,
 For rankings, candidates, or discovery tasks, include at least one source-discovery query for the official table, dataset, or curated source itself before queries that name likely answers.
 If the request contains a date, period, version, release window, or other temporal constraint, preserve that exact constraint in the planned queries and prefer official or primary sources.
 Avoid topic-soup queries that merely concatenate many section labels, avoid fragile search operators such as wildcard site: patterns, and avoid overloading one query with too many source names.
-Return only one valid JSON object matching the requested schema."#;
+Return only one valid JSON object matching the requested schema.";
 
 pub(super) fn instructions() -> &'static str {
     INSTRUCTIONS

@@ -254,7 +254,7 @@ fn positionals_without_common_options(args: &[OsString]) -> Vec<String> {
                 }
             }
             "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive" | "--verbose" => {
-                index += 1
+                index += 1;
             }
             _ => {
                 values.push(value.into_owned());

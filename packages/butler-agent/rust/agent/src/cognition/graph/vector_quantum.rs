@@ -130,7 +130,7 @@ pub(super) fn claim(
         };
         let changed = tx.execute(
             "UPDATE memory_vector_units SET state='running',error_code=NULL,attempt_count=attempt_count+1,owner_pid=?1,owner_nonce=?2,started_at=?3,next_attempt_at=NULL,provider_invoked=0,outcome_known=1,invocation_ref=NULL WHERE unit_id=?4 AND state='pending'",
-            params![std::process::id() as i64,nonce,now,unit_id],
+            params![i64::from(std::process::id()),nonce,now,unit_id],
         ).map_err(db_error)?;
         if changed != 1 {
             return Err(error("memory_vector_unit_changed"));
@@ -372,7 +372,8 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
     drop(statement);
     let mut jobs = HashSet::new();
     for (id, job, pid, invoked, known) in rows {
-        let abandoned = pid.is_none_or(|pid| pid == std::process::id() as i64 || !pid_alive(pid));
+        let abandoned =
+            pid.is_none_or(|pid| pid == i64::from(std::process::id()) || !pid_alive(pid));
         if !abandoned {
             continue;
         }

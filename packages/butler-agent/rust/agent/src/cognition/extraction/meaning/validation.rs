@@ -169,7 +169,7 @@ fn condition(
             return Err(error("memory_extract_invalid_condition"));
         }
         for child in children {
-            condition(Some(child), entities, depth + 1, atoms)?
+            condition(Some(child), entities, depth + 1, atoms)?;
         }
     }
     Ok(())

@@ -72,7 +72,7 @@ fn public_text(value: &str) -> String {
         }
         if space {
             output.push(' ');
-            space = false
+            space = false;
         }
         output.push(character);
     }

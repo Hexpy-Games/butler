@@ -309,7 +309,7 @@ pub(super) fn consolidate(
             write_record(&db, &candidate)?;
             promoted += 1;
         } else {
-            skipped += 1
+            skipped += 1;
         }
     }
     let rejected = expire_old_candidates(&db, now, now_ms)?;
@@ -324,9 +324,9 @@ pub(super) fn consolidate(
             || !value.caution_hints.is_empty()
     });
     if let Some(generated) = written {
-        storage::write_projection(data_root, generated)?
+        storage::write_projection(data_root, generated)?;
     } else {
-        storage::delete_projection(data_root)?
+        storage::delete_projection(data_root)?;
     }
     Ok(ProfileConsolidationResult {
         profiling_enabled: true,

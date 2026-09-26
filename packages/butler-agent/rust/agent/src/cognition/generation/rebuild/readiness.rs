@@ -138,7 +138,7 @@ pub(crate) async fn record(
         manifest["registered_source_count"] = readiness["registered"].clone();
         manifest["unaccounted_source_count"] = readiness["unaccounted"].clone();
         if changed {
-            manifest["required_acceptance_passed"] = Value::Bool(false)
+            manifest["required_acceptance_passed"] = Value::Bool(false);
         }
         durable::write_json(&manifest_path, &manifest)?;
         Ok(readiness)

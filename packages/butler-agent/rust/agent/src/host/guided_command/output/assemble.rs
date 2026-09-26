@@ -102,7 +102,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
             let mut kinds = Vec::new();
             for artifact in artifacts {
                 if !kinds.contains(&artifact.artifact_kind) {
-                    kinds.push(artifact.artifact_kind)
+                    kinds.push(artifact.artifact_kind);
                 }
             }
             append_value(&mut encoded, "written_files", &serde_json::json!(labels))?;

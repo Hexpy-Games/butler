@@ -156,7 +156,7 @@ fn node_membership(
     let source = scope::source(input, "s", "c");
     let event = scope::event_episode(input, "j.episode_id");
     let sql = format!(
-        r#"
+        r"
         SELECT j.episode_id,j.revision,u.source_ids_json,COALESCE(c.project_id,''),
           s.origin_kind,s.source_kind,s.conversation_session_id,s.observed_at
         FROM memory_vector_units u
@@ -171,7 +171,7 @@ fn node_membership(
           AND EXISTS(SELECT 1 FROM json_each(json_extract(u.receipt_json,'$.vector_keys')) keys
             WHERE keys.value=?) AND {} {}
         ORDER BY julianday(s.observed_at),s.source_id,j.episode_id LIMIT 1
-    "#,
+    ",
         source.sql, event.sql
     );
     let mut args = vec![
@@ -206,7 +206,7 @@ fn episode_receipt(
 ) -> CognitionResult<bool> {
     let mut statement = db
         .prepare(
-            r#"
+            r"
         SELECT COALESCE(u.project_id,''),u.origin_kind,c.conversation_session_id,
           (SELECT ordered.observed_at FROM memory_chunk_sources ordered
            WHERE ordered.episode_id=c.memory_chunk_id AND ordered.revision=c.current_revision
@@ -225,7 +225,7 @@ fn episode_receipt(
           AND EXISTS(SELECT 1 FROM json_each(json_extract(u.receipt_json,'$.vector_keys')) keys
             WHERE keys.value=?5)
         ORDER BY u.unit_id
-    "#,
+    ",
         )
         .map_err(db_error)?;
     let mut rows = statement

@@ -257,7 +257,7 @@ fn stage(
             .elapsed()
             .unwrap_or_default()
             .as_millis()
-            .min(u64::MAX as u128) as u64;
+            .min(u128::from(u64::MAX)) as u64;
         let _ = generation_id;
         Ok(Staged {
             source_inventory_hash: live.hash,

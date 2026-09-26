@@ -58,7 +58,7 @@ pub(super) fn apply(
                     return Err(LedgerEffectError::Uncertain);
                 }
                 if let Some(journal) = journal.as_ref() {
-                    evidence::cleanup_prepared(&paths, journal)?
+                    evidence::cleanup_prepared(&paths, journal)?;
                 }
                 evidence::write_not_applied(&paths, occurrence, attempt)?;
                 Err(LedgerEffectError::NotApplied)

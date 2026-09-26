@@ -76,7 +76,7 @@ fn visit(
             return Err(invalid());
         }
         for child in children {
-            visit(child, refs, depth + 1, atoms)?
+            visit(child, refs, depth + 1, atoms)?;
         }
     }
     Ok(())

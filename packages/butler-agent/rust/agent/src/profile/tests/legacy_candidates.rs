@@ -119,7 +119,7 @@ fn insert(
 ) {
     db.execute(
         "INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status)VALUES(?1,?2,?3,?4,?5,?6,?7,?7,?7,?8,'candidate')",
-        params![id, category, payload.to_string(), source, confidence, sensitive as i64, updated, expires],
+        params![id, category, payload.to_string(), source, confidence, i64::from(sensitive), updated, expires],
     )
     .unwrap();
 }

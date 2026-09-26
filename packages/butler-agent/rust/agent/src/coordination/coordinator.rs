@@ -105,13 +105,13 @@ impl CognitionWriteCoordinator {
             };
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {
-                    _ = cancellation.cancelled() => {
+                    () = cancellation.cancelled() => {
                         return Err(CoordinationError::new(
                             "memory_write_aborted",
                             "Memory writer acquisition was aborted",
                         ));
                     }
-                    _ = tokio::time::sleep(wait) => {}
+                    () = tokio::time::sleep(wait) => {}
                 }
             } else if wait.is_zero() {
                 tokio::task::yield_now().await;

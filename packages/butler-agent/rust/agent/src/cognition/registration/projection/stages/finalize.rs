@@ -112,7 +112,7 @@ pub(super) async fn finish(
                         failure.stage,
                         settlement_deadline,
                     )
-                    .await
+                    .await;
                 }
                 Err(error) => {
                     mark_registration_error(
@@ -122,7 +122,7 @@ pub(super) async fn finish(
                         VectorRegistrationStage::Episode,
                         settlement_deadline,
                     )
-                    .await
+                    .await;
                 }
             }
         }
@@ -134,7 +134,7 @@ pub(super) async fn finish(
                 VectorRegistrationStage::Episode,
                 settlement_deadline,
             )
-            .await
+            .await;
         }
     }
     operation

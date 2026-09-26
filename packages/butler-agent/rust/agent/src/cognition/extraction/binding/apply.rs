@@ -144,7 +144,7 @@ pub(in crate::cognition) fn apply(
         let claim = &mut output.claims[claim_index];
         for quote in &evidence {
             if !claim.evidence.contains(quote) {
-                claim.evidence.push(quote.clone())
+                claim.evidence.push(quote.clone());
             }
         }
         let previous = meta

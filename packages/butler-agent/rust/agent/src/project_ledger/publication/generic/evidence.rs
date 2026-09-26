@@ -151,7 +151,7 @@ pub(super) fn reconcile(
         return if receipt.status == ReceiptStatus::Observed {
             let journal = read_journal(&paths, occurrence, attempt)?;
             if let Some(journal) = journal.as_ref() {
-                cleanup_applied(&paths, journal)?
+                cleanup_applied(&paths, journal)?;
             }
             Ok(Reconciled::Applied(Applied {
                 publication_id: attempt.publication_id.clone(),

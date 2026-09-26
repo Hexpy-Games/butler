@@ -22,7 +22,7 @@ pub(super) fn recognizes(args: &[OsString]) -> bool {
         match value.as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             option if option.starts_with('-') => index += 1,
             "mcp" => {
@@ -407,7 +407,7 @@ fn command_name(args: &[OsString]) -> String {
         match value.as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             option if option.starts_with('-') => index += 1,
             _ => {

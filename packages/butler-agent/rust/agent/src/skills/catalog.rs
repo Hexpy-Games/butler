@@ -181,7 +181,7 @@ pub(crate) fn validate(skills: &[SkillDefinition]) -> Vec<SkillValidationIssue> 
             issues.push(SkillValidationIssue {
                 file_path: path.clone(),
                 message: message.to_owned(),
-            })
+            });
         };
         if !names.insert(&skill.name) {
             add(&format!("duplicate skill name: {}", skill.name));

@@ -23,7 +23,7 @@ impl WorkspaceFileEditEffectAdapter {
 }
 
 impl EffectAdapter for WorkspaceFileEditEffectAdapter {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "edit_file"
     }
     fn binding(&self) -> PlanBinding {

@@ -366,10 +366,10 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
         let events = fixture.events.lock().unwrap();
         match decision {
             AuthorityDecision::Allow => {
-                assert!(events.iter().any(|value| value == "execute:read_file"))
+                assert!(events.iter().any(|value| value == "execute:read_file"));
             }
             AuthorityDecision::Deny => {
-                assert!(events.iter().any(|value| value == "unexecuted:pending"))
+                assert!(events.iter().any(|value| value == "unexecuted:pending"));
             }
             AuthorityDecision::Modify { .. } => {
                 assert!(events.iter().any(|value| value == "unexecuted:pending"));

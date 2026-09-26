@@ -388,9 +388,9 @@ impl Operation {
         };
         let acquire = self.coordinator.acquire(request, self.wait_class);
         let lease = if let Some(cancel) = &self.cancellation {
-            tokio::select! {biased;_ = self.shutdown.cancelled()=>return Err(write_aborted()),_ = cancel.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
+            tokio::select! {biased;() = self.shutdown.cancelled()=>return Err(write_aborted()),() = cancel.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
         } else {
-            tokio::select! {biased;_ = self.shutdown.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
+            tokio::select! {biased;() = self.shutdown.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
         };
         lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))
     }
@@ -414,7 +414,7 @@ impl Operation {
                 &state.input.target,
                 &state.handle,
             )
-            .and_then(|_| operation(state));
+            .and_then(|()| operation(state));
             let release = lease.release(result.is_ok()).map_err(coordination_error);
             release.and(result)
         })

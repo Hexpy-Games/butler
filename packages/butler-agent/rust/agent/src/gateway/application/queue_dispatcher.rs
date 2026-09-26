@@ -163,7 +163,7 @@ async fn run(
     loop {
         let delay = deadline.map(tokio::time::sleep);
         tokio::select! {
-            _ = cancellation.cancelled() => return Ok(()),
+            () = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
                     let app = application.insert(app);
@@ -178,7 +178,7 @@ async fn run(
                 }
                 Some(Command::Drain { chat_id, reply }) => {
                     let result = tokio::select! {
-                        _ = cancellation.cancelled() => Err(GatewayApplicationError::Internal),
+                        () = cancellation.cancelled() => Err(GatewayApplicationError::Internal),
                         result = async {
                             match application.as_ref() {
                                 Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
@@ -193,7 +193,7 @@ async fn run(
                 }
                 Some(Command::Close) | None => return Ok(()),
             },
-            _ = async { if let Some(delay) = delay { delay.await } }, if deadline.is_some() => {
+            () = async { if let Some(delay) = delay { delay.await } }, if deadline.is_some() => {
                 if let Some(app) = application.as_ref() {
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
@@ -205,7 +205,7 @@ async fn run(
 
 async fn cycle(cancellation: &CancellationToken, app: &AppApplication, chat: Option<&str>) -> bool {
     tokio::select! {
-        _ = cancellation.cancelled() => false,
+        () = cancellation.cancelled() => false,
         _ = recover_and_drain(cancellation, app, chat) => true,
     }
 }

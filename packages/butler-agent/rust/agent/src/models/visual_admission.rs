@@ -364,8 +364,8 @@ pub(crate) fn admit_visual_image_request(
         }
         if (manifest.derivative_size_bytes as f64) > capability.max_inline_image_bytes
             || manifest.derivative_size_bytes > 10 * 1024 * 1024
-            || (manifest.width as f64) > capability.max_width
-            || (manifest.height as f64) > capability.max_height
+            || f64::from(manifest.width) > capability.max_width
+            || f64::from(manifest.height) > capability.max_height
             || (manifest.pixel_count as f64) > capability.max_pixels
         {
             return Err(error("image_payload_invalid", "image_limit_exceeded"));

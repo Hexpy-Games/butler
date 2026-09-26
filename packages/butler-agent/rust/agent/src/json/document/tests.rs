@@ -39,9 +39,9 @@ fn source_json_surrogates_survive_nested_wire_and_selective_controls() {
 
 #[test]
 fn value_entry_uses_js_encoding_and_rejects_invalid_encoded_documents() {
-    let source: Value = serde_json::from_str(r#"{"10":1.0,"2":1e-7,"label":"é"}"#).unwrap();
+    let source: Value = serde_json::from_str(r#"{"10":1.0,"2":1e-7,"label":"é"}"#).unwrap();
     let encoded = JsonDocument::from_value(&source).unwrap();
-    assert_eq!(encoded.as_str(), "{\"2\":1e-7,\"10\":1,\"label\":\"é\"}");
+    assert_eq!(encoded.as_str(), "{\"2\":1e-7,\"10\":1,\"label\":\"é\"}");
     let decoded: Value = encoded.read().unwrap();
     assert_eq!(decoded["10"].as_f64(), source["10"].as_f64());
     assert_eq!(decoded["2"].as_f64(), source["2"].as_f64());

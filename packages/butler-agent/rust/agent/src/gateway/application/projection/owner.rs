@@ -243,7 +243,7 @@ async fn run(
         if work.pending {
             if !work.retry.is_zero() {
                 tokio::select! {
-                    _ = tokio::time::sleep(work.retry) => {}
+                    () = tokio::time::sleep(work.retry) => {}
                     command = receiver.recv() => {
                         if work.command(command, &context).await { return Ok(()) }
                     }
@@ -292,7 +292,7 @@ impl Work {
         match command {
             Some(Command::Wake) => {
                 if self.pending {
-                    self.resweep = true
+                    self.resweep = true;
                 } else {
                     self.pending = true;
                     self.retry = SETTLE_DELAY;
@@ -300,19 +300,19 @@ impl Work {
             }
             Some(Command::Transcript(file)) => {
                 if self.changed_set.insert(file.clone()) {
-                    self.changed.push_back(file)
+                    self.changed.push_back(file);
                 }
             }
             Some(Command::Terminal) => {
                 if self.terminal {
-                    self.terminal_resweep = true
+                    self.terminal_resweep = true;
                 } else {
-                    self.terminal = true
+                    self.terminal = true;
                 }
                 if self.pending {
-                    self.resweep = true
+                    self.resweep = true;
                 } else {
-                    self.pending = true
+                    self.pending = true;
                 }
             }
             Some(Command::Refresh(chat, completion)) => {

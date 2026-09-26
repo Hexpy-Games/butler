@@ -353,7 +353,7 @@ fn quote(value: &str) -> String {
 fn distance(batch: &arrow_array::RecordBatch, column: usize, row: usize) -> CognitionResult<f64> {
     let data = batch.column(column);
     if let Some(values) = data.as_any().downcast_ref::<Float32Array>() {
-        return Ok(values.value(row) as f64);
+        return Ok(f64::from(values.value(row)));
     }
     if let Some(values) = data.as_any().downcast_ref::<Float64Array>() {
         return Ok(values.value(row));

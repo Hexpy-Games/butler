@@ -126,14 +126,14 @@ impl NativeConversationObserver {
 }
 
 impl ConversationAdmissionObserver for NativeConversationObserver {
-    fn admission_metric<'a>(&'a self, metric: AdmissionMetric) -> ConversationObserverFuture<'a> {
+    fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async move { self.submit(|reply| Job::Admission(metric, reply)).await })
     }
 
-    fn completion_observation<'a>(
-        &'a self,
+    fn completion_observation(
+        &self,
         observation: CompletionObservation,
-    ) -> ConversationObserverFuture<'a> {
+    ) -> ConversationObserverFuture<'_> {
         let input = CompletionNotice {
             project_id: observation.project_id,
             runtime_session_id: observation.runtime_session_id,
@@ -147,7 +147,7 @@ impl ConversationAdmissionObserver for NativeConversationObserver {
         Box::pin(async move { self.submit(|reply| Job::Completion(input, reply)).await })
     }
 
-    fn completion_metric<'a>(&'a self, metric: CompletionMetric) -> ConversationObserverFuture<'a> {
+    fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async move { self.submit(|reply| Job::Metric(metric, reply)).await })
     }
 }

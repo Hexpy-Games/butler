@@ -11,7 +11,7 @@ pub(super) fn read(data_root: &Path, row: &HistoricalOriginCandidate) -> SourceE
     if !path.exists() {
         return SourceEvidence::absent();
     }
-    read_existing(&path, row).unwrap_or_else(|_| SourceEvidence::unavailable())
+    read_existing(&path, row).unwrap_or_else(|()| SourceEvidence::unavailable())
 }
 
 fn read_existing(path: &Path, candidate: &HistoricalOriginCandidate) -> Result<SourceEvidence, ()> {

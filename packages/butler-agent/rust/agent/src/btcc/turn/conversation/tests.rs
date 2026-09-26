@@ -21,17 +21,14 @@ struct Observer {
     completions: AtomicUsize,
 }
 impl ConversationAdmissionObserver for Observer {
-    fn admission_metric<'a>(&'a self, _: AdmissionMetric) -> ConversationObserverFuture<'a> {
+    fn admission_metric(&self, _: AdmissionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async { Ok(()) })
     }
-    fn completion_observation<'a>(
-        &'a self,
-        _: CompletionObservation,
-    ) -> ConversationObserverFuture<'a> {
+    fn completion_observation(&self, _: CompletionObservation) -> ConversationObserverFuture<'_> {
         self.completions.fetch_add(1, Ordering::Relaxed);
         Box::pin(async { Ok(()) })
     }
-    fn completion_metric<'a>(&'a self, _: CompletionMetric) -> ConversationObserverFuture<'a> {
+    fn completion_metric(&self, _: CompletionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async { Ok(()) })
     }
 }

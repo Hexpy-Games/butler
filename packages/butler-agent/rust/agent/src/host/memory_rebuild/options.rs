@@ -70,7 +70,7 @@ pub(super) fn parse(
                         .ok_or("--generation requires an ID")?
                         .into_string()
                         .map_err(|_| "generation ID must be UTF-8")?,
-                )
+                );
             }
             "--acceptance" => {
                 acceptance = Some(PathBuf::from(
@@ -91,7 +91,7 @@ pub(super) fn parse(
                 ));
             }
             "--input" => {
-                repair_input = Some(PathBuf::from(args.next().ok_or("--input requires a path")?))
+                repair_input = Some(PathBuf::from(args.next().ok_or("--input requires a path")?));
             }
             "--dry-run" => dry_run = true,
             "--model" => {
@@ -100,7 +100,7 @@ pub(super) fn parse(
                         .ok_or("--model requires a value")?
                         .into_string()
                         .map_err(|_| "model must be UTF-8")?,
-                )
+                );
             }
             "--reasoning-effort" => {
                 effort = Some(
@@ -108,7 +108,7 @@ pub(super) fn parse(
                         .ok_or("--reasoning-effort requires a value")?
                         .into_string()
                         .map_err(|_| "effort must be UTF-8")?,
-                )
+                );
             }
             "--quota-fallback-model" => {
                 fallback_model = Some(
@@ -116,7 +116,7 @@ pub(super) fn parse(
                         .ok_or("--quota-fallback-model requires a value")?
                         .into_string()
                         .map_err(|_| "model must be UTF-8")?,
-                )
+                );
             }
             "--quota-fallback-reasoning-effort" => {
                 fallback_effort = Some(
@@ -124,7 +124,7 @@ pub(super) fn parse(
                         .ok_or("--quota-fallback-reasoning-effort requires a value")?
                         .into_string()
                         .map_err(|_| "effort must be UTF-8")?,
-                )
+                );
             }
             "--json" => json = true,
             value if value.starts_with("--") => return Err(format!("unknown option: {value}")),

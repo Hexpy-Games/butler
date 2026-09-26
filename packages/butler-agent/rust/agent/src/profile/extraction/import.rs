@@ -182,10 +182,10 @@ fn normalize_source(value: Option<&str>) -> String {
             || matches!(character, '_' | '-')
         {
             output.push(character);
-            dash = false
+            dash = false;
         } else if !dash {
             output.push('-');
-            dash = true
+            dash = true;
         }
     }
     let output = output.trim_matches('-');

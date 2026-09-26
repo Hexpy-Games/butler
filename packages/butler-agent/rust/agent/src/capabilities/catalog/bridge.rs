@@ -165,7 +165,7 @@ fn summary(value: &str) -> String {
     let head: String = normalized
         .encode_utf16()
         .take(217)
-        .map(|unit| char::from_u32(unit as u32).unwrap_or('\u{fffd}'))
+        .map(|unit| char::from_u32(u32::from(unit)).unwrap_or('\u{fffd}'))
         .collect();
     format!("{}...", head.trim_end())
 }

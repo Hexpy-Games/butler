@@ -123,7 +123,7 @@ impl NativeAppModelCatalog {
                         input.api_key.as_deref(),
                         Some(&root),
                     ) => result,
-                    _ = cancellation.cancelled() => return Err(GatewayApplicationError::Internal),
+                    () = cancellation.cancelled() => return Err(GatewayApplicationError::Internal),
                 }
                 .map_err(|error| {
                     operation_error_status("local_model_discovery_failed", 502, error)

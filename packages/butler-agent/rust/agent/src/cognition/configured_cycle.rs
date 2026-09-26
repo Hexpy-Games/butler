@@ -163,7 +163,7 @@ impl ConfiguredCycleService {
             // The source records a soft subphase budget but never enforces or emits it.
             let _phase_soft_budget_ms = config.subphase_budgets_ms[phase_index];
             let output = self.executor.run(phase, deadline, cancellation).await;
-            let duration = phase_start.elapsed().as_millis().min(u64::MAX as u128) as u64;
+            let duration = phase_start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
             let event = match output {
                 Ok(_) if now_ms() >= deadline => {
                     result.aborted = Some("aborted_budget");
@@ -240,7 +240,7 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
             .append(true)
             .open(path)
             .map_err(log_error)?;
-        writeln!(file, "{}", event).map_err(log_error)?;
+        writeln!(file, "{event}").map_err(log_error)?;
         Ok::<(), CognitionError>(())
     })
     .await

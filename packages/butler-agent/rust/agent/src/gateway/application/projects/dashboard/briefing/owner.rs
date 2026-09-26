@@ -114,8 +114,8 @@ impl ProjectDashboardBriefingOwner {
         self.0.tasks.spawn(async move {
             let future = future(cancellation.clone());
             tokio::select! {
-                _ = cancellation.cancelled() => {}
-                _ = future => {}
+                () = cancellation.cancelled() => {}
+                () = future => {}
             }
             owner.finish(id);
         });

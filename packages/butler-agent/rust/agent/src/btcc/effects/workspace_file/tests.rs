@@ -3,7 +3,7 @@ use super::*;
 
 struct WritesThenReject(std::path::PathBuf);
 impl RegisteredWritePort for WritesThenReject {
-    fn write<'a>(&'a self, prepared: PreparedWrite) -> EffectFuture<'a, Value> {
+    fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             std::fs::write(self.0.join(&prepared.path), &prepared.content)
                 .map_err(|error| EffectFailure::adapter(error.to_string()))?;

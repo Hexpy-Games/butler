@@ -108,7 +108,7 @@ impl LegacySessionOffsets {
                     .map_err(|_| failure("legacy_session_offset_write_failed"))?;
             }
             file.write_all(&content)
-                .and_then(|_| file.sync_all())
+                .and_then(|()| file.sync_all())
                 .map_err(|_| failure("legacy_session_offset_write_failed"))?;
             fs::rename(&temp, &path).map_err(|_| failure("legacy_session_offset_write_failed"))?;
             Ok(())

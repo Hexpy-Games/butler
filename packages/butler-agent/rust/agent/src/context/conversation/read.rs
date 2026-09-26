@@ -316,7 +316,7 @@ pub(in crate::context) fn apply_char_budget(
             return (selected, true);
         }
         selected.push(message);
-        used += cost
+        used += cost;
     }
     (selected, false)
 }

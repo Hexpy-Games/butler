@@ -77,7 +77,7 @@ impl NativeWorkStreams {
                         }
                         Job::Active(query, reply) => (store.active(query), reply),
                         Job::Reconcile(outcome, reply) => {
-                            (store.reconcile_turn(outcome).map(|_| Value::Null), reply)
+                            (store.reconcile_turn(outcome).map(|()| Value::Null), reply)
                         }
                         Job::Prompt(session, project, reply) => {
                             (store.prompt_context(&session, project.as_deref()), reply)

@@ -25,7 +25,7 @@ pub(super) fn summarize(output: &mut ExtractOutput) {
         let mut next = evidence.clone();
         for quote in &claim.evidence {
             if !next.contains(quote) {
-                next.push(quote.clone())
+                next.push(quote.clone());
             }
         }
         if next.len() > 4 {

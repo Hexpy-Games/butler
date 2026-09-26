@@ -269,13 +269,13 @@ fn fences(raw: &str) -> &str {
         .get(..7)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("```json"))
     {
-        text = &text[7..]
+        text = &text[7..];
     } else if text.starts_with("```") {
-        text = &text[3..]
+        text = &text[3..];
     }
     text = crate::public_text::trim_js_whitespace(text);
     if let Some(value) = text.strip_suffix("```") {
-        text = crate::public_text::trim_js_whitespace(value)
+        text = crate::public_text::trim_js_whitespace(value);
     }
     text
 }

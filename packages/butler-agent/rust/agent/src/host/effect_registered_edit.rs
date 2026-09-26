@@ -25,7 +25,7 @@ impl NativeRegisteredEdit {
     }
 }
 impl RegisteredEditPort for NativeRegisteredEdit {
-    fn edit<'a>(&'a self, prepared: Value) -> EffectFuture<'a, Value> {
+    fn edit(&self, prepared: Value) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             let call = json!({"arguments":prepared});
             self.capabilities

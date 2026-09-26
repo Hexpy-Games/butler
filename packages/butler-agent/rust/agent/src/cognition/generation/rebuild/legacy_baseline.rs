@@ -106,7 +106,7 @@ pub(super) async fn ensure(
         .map_err(|_| error("memory_write_busy"));
     match (result, released) {
         (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => Ok(()),
     }
 }

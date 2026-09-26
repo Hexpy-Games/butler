@@ -32,7 +32,7 @@ pub(super) async fn write_mode_600(path: &Path, bytes: &[u8]) -> Result<(), Auth
         })
         .await
         .map_err(|_| write_error())?
-        .map_err(|_| write_error())
+        .map_err(|()| write_error())
     }
     #[cfg(not(unix))]
     tokio::fs::write(path, bytes)

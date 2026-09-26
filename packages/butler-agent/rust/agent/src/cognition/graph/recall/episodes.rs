@@ -41,7 +41,7 @@ pub(super) fn load(
         scope::placeholders(raw_ids.len())
     };
     let sql = format!(
-        r#"
+        r"
       WITH eligible_sources AS (
         SELECT s.* FROM memory_chunk_sources s
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
@@ -82,7 +82,7 @@ pub(super) fn load(
       LEFT JOIN claim_summary ON claim_summary.episode_id=c.memory_chunk_id
       WHERE COALESCE(claim_counts.total,0)=0 OR claim_summary.total>0 OR c.memory_chunk_id IN ({raw_placeholders})
       ORDER BY c.memory_chunk_id
-    "#,
+    ",
         scope::placeholders(episode_ids.len()),
         source.sql,
         claim.sql

@@ -271,7 +271,7 @@ async fn execute_planned(
     let mut output = SearchOutput {
         results,
         provider_overview: None,
-        duration_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+        duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
         provider: if providers.len() == 1 {
             providers.remove(0)
         } else {

@@ -293,10 +293,10 @@ pub(crate) struct PreparedWrite {
     pub expected_sha256: Option<String>,
 }
 pub(crate) trait RegisteredWritePort: Send + Sync {
-    fn write<'a>(&'a self, prepared: PreparedWrite) -> EffectFuture<'a, Value>;
+    fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value>;
 }
 pub(crate) trait RegisteredEditPort: Send + Sync {
-    fn edit<'a>(&'a self, prepared: Value) -> EffectFuture<'a, Value>;
+    fn edit(&self, prepared: Value) -> EffectFuture<'_, Value>;
 }
 pub(crate) trait EffectAdapter: Send + Sync {
     fn capability(&self) -> &str;

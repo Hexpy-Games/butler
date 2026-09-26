@@ -185,7 +185,7 @@ impl AppApplication {
             match visual {
                 Ok(attachments) => {
                     self.finish_visual(&chat_id, &queued_id, attachments)
-                        .await?
+                        .await?;
                 }
                 Err(error) => {
                     self.fail_admission(&chat_id, &queued_id, &error).await?;

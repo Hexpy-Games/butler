@@ -37,7 +37,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
             "--data" | "--check" | "--home" => index += 2,
             "--fix" | "--collect-logs" | "--github" => index += 1,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with('-') => return false,
             value => return value == "doctor",
@@ -92,7 +92,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let report = json!({
         "schema": "butler.native-doctor.v1",
         "status": if healthy { "healthy" } else { "degraded" },
-        "exitCode": if healthy { 0 } else { 1 },
+        "exitCode": i32::from(!healthy),
         "checks": checks.iter().map(check_value).collect::<Vec<_>>(),
         "capabilities": {
             "nativeExecutable": capability(&checks, "executable"),

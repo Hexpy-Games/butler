@@ -62,7 +62,7 @@ pub(super) async fn download_to_label(
     let mut hash = Sha256::new();
     if url.starts_with("http://") || url.starts_with("https://") {
         let response = tokio::select! {
-            _ = shutdown.cancelled() => return Err("update_cancelled".into()),
+            () = shutdown.cancelled() => return Err("update_cancelled".into()),
             result = client.get(url).send() => result.map_err(|_| "update_artifact_unavailable")?,
         };
         if !response.status().is_success() {
@@ -70,7 +70,7 @@ pub(super) async fn download_to_label(
         }
         let mut stream = response.bytes_stream();
         while let Some(chunk) = tokio::select! {
-            _ = shutdown.cancelled() => return Err("update_cancelled".into()),
+            () = shutdown.cancelled() => return Err("update_cancelled".into()),
             item = stream.next() => item,
         } {
             let chunk = chunk.map_err(|_| "update_artifact_unavailable")?;
@@ -98,7 +98,7 @@ pub(super) async fn download_to_label(
         let mut buf = [0u8; 65536];
         loop {
             let count = tokio::select! {
-                _ = shutdown.cancelled() => return Err("update_cancelled".into()),
+                () = shutdown.cancelled() => return Err("update_cancelled".into()),
                 result = tokio::io::AsyncReadExt::read(&mut input, &mut buf) => result.map_err(|_| "update_artifact_unavailable")?,
             };
             if count == 0 {

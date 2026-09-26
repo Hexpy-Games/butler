@@ -269,7 +269,7 @@ fn stage_snapshot(
         .elapsed()
         .unwrap_or_default()
         .as_millis()
-        .min(u64::MAX as u128) as u64;
+        .min(u128::from(u64::MAX)) as u64;
     Ok(Snapshot {
         path: published,
         sha256,

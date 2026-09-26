@@ -30,22 +30,20 @@ impl NativeAutomationCliStore {
         include_deleted: bool,
         status: Option<&str>,
     ) -> Result<Vec<Value>, AutomationError> {
-        Ok(self
-            .store
+        self.store
             .list(include_deleted)?
             .into_iter()
             .filter(|item| status.is_none_or(|status| item.status == status))
             .map(preview_value)
-            .collect::<Result<_, _>>()?)
+            .collect::<Result<_, _>>()
     }
 
     pub(crate) fn show(&self, id: &str) -> Result<Option<Value>, AutomationError> {
-        Ok(self
-            .store
+        self.store
             .read(id)?
             .filter(|item| item.status != "deleted")
             .map(preview_value)
-            .transpose()?)
+            .transpose()
     }
 
     pub(crate) fn run_now(&self, id: &str, now_ms: i64) -> Result<Value, AutomationError> {

@@ -164,7 +164,7 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
         delete.join().unwrap().unwrap();
         let final_record = store.read("race").unwrap().unwrap();
         assert_eq!(final_record.status, "deleted");
-        assert_eq!(final_record.run_count, if run_succeeded { 1 } else { 0 });
+        assert_eq!(final_record.run_count, u64::from(run_succeeded));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

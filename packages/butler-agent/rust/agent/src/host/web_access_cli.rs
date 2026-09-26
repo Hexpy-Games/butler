@@ -338,7 +338,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
         match value.as_ref() {
             "--data" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with('-') => return values,
             _ => {

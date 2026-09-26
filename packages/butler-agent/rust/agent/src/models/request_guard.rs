@@ -100,8 +100,8 @@ impl RequestProgress {
             match next {
                 Some((deadline, kind)) => tokio::select! {
                     biased;
-                    _ = self.shared.changed.notified() => continue,
-                    _ = tokio::time::sleep_until(deadline) => return kind,
+                    () = self.shared.changed.notified() => continue,
+                    () = tokio::time::sleep_until(deadline) => return kind,
                 },
                 None => self.shared.changed.notified().await,
             }
@@ -152,7 +152,7 @@ where
     tokio::pin!(operation);
     let result = tokio::select! {
         biased;
-        _ = external.cancelled() => Err(GuardError::Cancelled),
+        () = external.cancelled() => Err(GuardError::Cancelled),
         kind = progress.deadline() => {
             progress.shared.cancellation.cancel();
             Err(GuardError::Timeout(kind))

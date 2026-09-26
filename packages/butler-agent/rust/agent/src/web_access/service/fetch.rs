@@ -72,7 +72,7 @@ impl WebAccess {
         }
         let response = tokio::select! {
             biased;
-            _ = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
+            () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
             result = request.send() => result.map_err(|_| {
                 WebAccessError::new("web_access_request_failed", "Public web request failed.")
             })?,
@@ -96,7 +96,7 @@ impl WebAccess {
         loop {
             let next = tokio::select! {
                 biased;
-                _ = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
+                () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
                 chunk = futures_util::StreamExt::next(&mut stream) => chunk,
             };
             let Some(chunk) = next else { break };

@@ -52,7 +52,7 @@ impl WebSearchMetrics {
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => return fallback,
             Err(_) => return fallback,
-        };
+        }
         if !runtime
             .canonicalize()
             .is_ok_and(|path| path.starts_with(&canonical_root))
@@ -66,7 +66,7 @@ impl WebSearchMetrics {
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => return fallback,
             Err(_) => return fallback,
-        };
+        }
         let Ok(raw) = read_json_if_present(&summary) else {
             return fallback;
         };

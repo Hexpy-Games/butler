@@ -31,7 +31,7 @@ impl AutomationScheduler {
             timer.tick().await;
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => break,
+                    () = cancel.cancelled() => break,
                     _ = timer.tick() => {
                         if app.dispatch_due_owned().await.is_err() {
                             app.record_automation_scheduler_error("automation_scheduler_failed").await;

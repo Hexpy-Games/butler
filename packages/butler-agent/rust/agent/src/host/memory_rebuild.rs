@@ -248,7 +248,7 @@ pub async fn run(
                     json!({"ok":true,"command":"butler cognition memory rebuild","data":value})
                 )
             } else {
-                format!("{}\n", value)
+                format!("{value}\n")
             },
             stderr: String::new(),
             exit_code: 0,

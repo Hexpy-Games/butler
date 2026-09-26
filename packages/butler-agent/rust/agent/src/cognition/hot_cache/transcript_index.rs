@@ -228,7 +228,7 @@ impl LegacyIndexService {
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, release) {
                 (Err(failure), _) => Err(failure),
-                (Ok(_), Err(failure)) => Err(failure),
+                (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),
             }
         })

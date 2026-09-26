@@ -47,7 +47,7 @@ pub(super) fn looks_like_cli(command: &str) -> bool {
     let tokens = tokens(command);
     let mut index = 0;
     while tokens.get(index).is_some_and(|token| assignment(token)) {
-        index += 1
+        index += 1;
     }
     let Some(first) = tokens.get(index) else {
         return false;
@@ -95,9 +95,9 @@ fn tokens(command: &str) -> Vec<String> {
     for ch in command.chars() {
         if let Some(expected) = quote {
             if ch == expected {
-                quote = None
+                quote = None;
             } else {
-                token.push(ch)
+                token.push(ch);
             }
             continue;
         }
@@ -110,7 +110,7 @@ fn tokens(command: &str) -> Vec<String> {
                 result.push(std::mem::take(&mut token));
             }
         } else {
-            token.push(ch)
+            token.push(ch);
         }
     }
     if !token.is_empty() {

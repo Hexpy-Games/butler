@@ -435,8 +435,8 @@ impl RoutedRound<'_> {
         let delay =
             Duration::from_secs_f64((self.retry.base_delay_ms * multiplier).min(5_000.0) / 1_000.0);
         tokio::select! {
-            _ = tokio::time::sleep(delay) => Ok(()),
-            _ = self.cancellation.cancelled() => Err(ModelRoundError::Cancelled),
+            () = tokio::time::sleep(delay) => Ok(()),
+            () = self.cancellation.cancelled() => Err(ModelRoundError::Cancelled),
         }
     }
 

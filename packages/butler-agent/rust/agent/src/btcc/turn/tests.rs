@@ -166,9 +166,10 @@ impl TurnStore for Harness {
             if self.block_stop.load(Ordering::SeqCst) {
                 self.stop_permits.acquire().await.unwrap().forget();
             }
-            if self.panic_stop.load(Ordering::SeqCst) {
-                panic!("fixture TurnStore Stop panic");
-            }
+            assert!(
+                !self.panic_stop.load(Ordering::SeqCst),
+                "fixture TurnStore Stop panic"
+            );
             if let Some(turn) = self.turns.lock().unwrap().get_mut(&turn_id) {
                 turn.semantic_state = TurnSemanticState::Cancelled;
             }
@@ -213,12 +214,13 @@ impl AgentLoop for Harness {
             if self.block_agent.load(Ordering::SeqCst) {
                 tokio::select! {
                     permit = self.permits.acquire() => permit.unwrap().forget(),
-                    _ = cancellation.cancelled() => return Err(AgentLoopError::Propagate(BtccError::new("turn_cancelled", "cancelled")))
+                    () = cancellation.cancelled() => return Err(AgentLoopError::Propagate(BtccError::new("turn_cancelled", "cancelled")))
                 }
             }
-            if self.panic_agent.load(Ordering::SeqCst) {
-                panic!("fixture AgentLoop panic");
-            }
+            assert!(
+                !self.panic_agent.load(Ordering::SeqCst),
+                "fixture AgentLoop panic"
+            );
             let mut result = agent_result();
             if self.suspend_agent.load(Ordering::SeqCst) {
                 result.suspension = Some(SuspensionReason::WaitingForWorker);
@@ -303,7 +305,7 @@ async fn turn_outcome_follows_agent_result_progress_failures_and_resume_state() 
         match setup {
             Setup::Suspending => harness.suspend_agent.store(true, Ordering::SeqCst),
             Setup::StartedProgressFails => {
-                harness.fail_started_progress.store(true, Ordering::SeqCst)
+                harness.fail_started_progress.store(true, Ordering::SeqCst);
             }
             Setup::StateProgressFails => harness.fail_state_progress.store(true, Ordering::SeqCst),
             Setup::Admitted | Setup::DeliveryCommitted => {}

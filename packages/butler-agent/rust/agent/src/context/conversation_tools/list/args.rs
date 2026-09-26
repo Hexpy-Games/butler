@@ -84,7 +84,7 @@ pub(super) fn parse(
         return Err("invalid_session_kind");
     }
     let time = match input.get("time") {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => None,
+        None | Some(Value::Null | Value::Bool(false)) => None,
         Some(Value::Number(number)) if number.as_f64() == Some(0.0) => None,
         Some(Value::String(value)) if value.is_empty() => None,
         Some(value) => {

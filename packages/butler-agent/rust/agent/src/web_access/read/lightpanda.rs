@@ -183,8 +183,8 @@ async fn run_dump(
     loop {
         let read = tokio::select! {
             biased;
-            _ = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
-            _ = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
+            () = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
+            () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
             result = stdout.read(&mut buffer) => match result {
                 Ok(read) => read,
                 Err(_) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_failed", "Lightpanda output failed.")); }
@@ -204,8 +204,8 @@ async fn run_dump(
     drop(stdout);
     let status = tokio::select! {
         biased;
-        _ = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
-        _ = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
+        () = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
+        () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
         status = child.wait() => status.map_err(|_| WebAccessError::new("web_access_reader_failed", "Lightpanda process failed."))?,
     };
     if file.flush().await.is_err() {

@@ -240,7 +240,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
                 index += if args.get(index + 1).is_some() { 2 } else { 1 };
             }
             "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive" | "--verbose" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with("--data=") || value.starts_with("--session=") => {
                 index += 1;

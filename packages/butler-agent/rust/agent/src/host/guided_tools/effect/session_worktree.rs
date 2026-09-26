@@ -114,7 +114,7 @@ impl SessionWorktreeEffect {
 }
 
 impl EffectAdapter for SessionWorktreeEffect {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "bind_session_git_worktree"
     }
 

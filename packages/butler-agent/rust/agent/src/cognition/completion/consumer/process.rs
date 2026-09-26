@@ -224,7 +224,7 @@ fn dead_letter(
         } else { reason },
     });
     file.write_all(record.to_string().as_bytes())
-        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|()| file.write_all(b"\n"))
         .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))
 }
 

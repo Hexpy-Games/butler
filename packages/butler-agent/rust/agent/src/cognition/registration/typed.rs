@@ -106,8 +106,8 @@ async fn run(
     );
     let lease = tokio::select! {
         biased;
-        _ = shutdown.cancelled() => return Err(aborted()),
-        _ = input.cancellation.cancelled() => return Err(aborted()),
+        () = shutdown.cancelled() => return Err(aborted()),
+        () = input.cancellation.cancelled() => return Err(aborted()),
         acquired = acquisition => acquired.map_err(coordination_error)?.ok_or_else(aborted)?,
     };
     tokio::task::spawn_blocking(move || {

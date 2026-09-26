@@ -17,22 +17,22 @@ pub(super) fn apply(
 ) -> Result<(), LedgerEffectError> {
     for update in updates {
         commands::apply_candidate_effect_update(root, update, collation)
-            .map_err(|_| LedgerEffectError::Uncertain)?;
+            .map_err(|()| LedgerEffectError::Uncertain)?;
     }
     for view in ["dashboard", "handoff", "roadmap"] {
         commands::render_candidate(root, view, collation)
-            .map_err(|_| LedgerEffectError::Uncertain)?;
+            .map_err(|()| LedgerEffectError::Uncertain)?;
     }
-    commands::write_candidate_index(root, collation).map_err(|_| LedgerEffectError::Uncertain)
+    commands::write_candidate_index(root, collation).map_err(|()| LedgerEffectError::Uncertain)
 }
 
 pub(super) fn inspect(root: &Path, collation: &LocaleCollation) -> Result<(), LedgerEffectError> {
     validate_events(&root.join("ledger.jsonl"))?;
-    if !commands::candidate_index_available(root).map_err(|_| LedgerEffectError::Uncertain)? {
+    if !commands::candidate_index_available(root).map_err(|()| LedgerEffectError::Uncertain)? {
         return Err(LedgerEffectError::Uncertain);
     }
     if commands::candidate_check_errors(root, collation)
-        .map_err(|_| LedgerEffectError::Uncertain)?
+        .map_err(|()| LedgerEffectError::Uncertain)?
     {
         return Err(LedgerEffectError::Uncertain);
     }
@@ -71,7 +71,7 @@ fn validate_events(path: &Path) -> Result<(), LedgerEffectError> {
         }
     }
     if !line.is_empty() {
-        validate_line(&line)?
+        validate_line(&line)?;
     }
     Ok(())
 }

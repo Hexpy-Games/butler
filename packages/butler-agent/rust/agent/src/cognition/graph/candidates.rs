@@ -61,12 +61,12 @@ pub(super) fn load(
     {
         let id = row.map_err(db_error)?;
         if seen.insert(id.clone()) {
-            ids.push(id)
+            ids.push(id);
         }
     }
     for id in seeds.all_seeds {
         if seen.insert(id.clone()) {
-            ids.push(id)
+            ids.push(id);
         }
     }
     let mut loaded = HashMap::<String, Option<Arc<ExtractCandidate>>>::new();
@@ -94,7 +94,7 @@ pub(super) fn load(
             }
             for candidate in group {
                 context.selected.insert(candidate.ref_id.clone());
-                result.push(candidate)
+                result.push(candidate);
             }
         }
     }
@@ -107,7 +107,7 @@ impl Serialize for CandidateSlices<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(self.0.len() + self.1.len()))?;
         for candidate in self.0.iter().chain(self.1) {
-            seq.serialize_element(candidate.as_ref())?
+            seq.serialize_element(candidate.as_ref())?;
         }
         seq.end()
     }

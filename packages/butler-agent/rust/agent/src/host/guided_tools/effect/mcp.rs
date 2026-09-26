@@ -54,7 +54,7 @@ struct McpToolEffect {
 }
 
 impl EffectAdapter for McpToolEffect {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "call_mcp_tool"
     }
 

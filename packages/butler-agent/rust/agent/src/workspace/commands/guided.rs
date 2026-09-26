@@ -115,9 +115,9 @@ async fn execute(
                 Ok(status) => (Cause::Normal, Some(status)),
                 Err(error) => return cleanup_error(host, &mut child, pid, capture, paths, CommandError::io(error)).await,
             },
-            _ = tokio::time::sleep(timeout) => (Cause::Timeout, None),
-            _ = input.abort.cancelled() => (Cause::Abort, None),
-            _ = shutdown.cancelled() => (Cause::Shutdown, None),
+            () = tokio::time::sleep(timeout) => (Cause::Timeout, None),
+            () = input.abort.cancelled() => (Cause::Abort, None),
+            () = shutdown.cancelled() => (Cause::Shutdown, None),
             error = capture.failure() => (Cause::Capture(error), None),
         }
     };
@@ -386,7 +386,7 @@ fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), Comma
 pub(super) fn guided_timeout(value: Option<f64>) -> Duration {
     let value = value.filter(|value| value.is_finite()).unwrap_or(120_000.0);
     // Node timers coerce finite sub-millisecond and nonpositive values to a short tick.
-    if value <= 1.0 || value > i32::MAX as f64 {
+    if value <= 1.0 || value > f64::from(i32::MAX) {
         return Duration::from_millis(1);
     }
     Duration::from_millis(value.trunc() as u64)

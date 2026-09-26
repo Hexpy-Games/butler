@@ -8,7 +8,7 @@ use crate::cognition::CognitionResult;
 
 pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<()> {
     connection.execute_batch(
-        r#"CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON memory_alias_postings(gram,node_id,source_id);
+        r"CREATE INDEX IF NOT EXISTS idx_alias_postings_gram_source ON memory_alias_postings(gram,node_id,source_id);
          CREATE INDEX IF NOT EXISTS idx_alias_postings_entity ON memory_alias_postings(node_id,gram,source_id,surface_original);
          CREATE INDEX IF NOT EXISTS idx_alias_postings_alias ON memory_alias_postings(node_id,source_id,surface_original,gram);
          CREATE INDEX IF NOT EXISTS idx_alias_postings_scope_gram_node ON memory_alias_postings(identity_scope,project_id,gram,node_id);
@@ -23,7 +23,7 @@ pub(super) fn install_and_backfill(connection: &Connection) -> CognitionResult<(
            DELETE FROM memory_alias_index_dirty WHERE node_id=OLD.node_id AND source_id=OLD.source_id AND surface_original=OLD.surface_original; END;
          CREATE TRIGGER IF NOT EXISTS memory_alias_index_scope AFTER UPDATE OF identity_scope,project_id ON memory_nodes
            WHEN NEW.identity_scope IS NOT OLD.identity_scope OR NEW.project_id IS NOT OLD.project_id BEGIN
-           INSERT OR IGNORE INTO memory_alias_index_dirty SELECT node_id,source_id,surface_original FROM memory_aliases WHERE node_id=NEW.id; END;"#
+           INSERT OR IGNORE INTO memory_alias_index_dirty SELECT node_id,source_id,surface_original FROM memory_aliases WHERE node_id=NEW.id; END;"
     ).map_err(db_error)?;
     let ready = connection
         .query_row(

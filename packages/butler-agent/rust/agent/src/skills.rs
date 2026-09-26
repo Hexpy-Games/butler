@@ -189,7 +189,7 @@ impl NativeSkills {
             return Err(error("skills_closed", "Skill service is closed"));
         }
         let permit = tokio::select! {
-            _ = self.inner.closed.cancelled() => Err(error("skills_closed", "Skill service is closed")),
+            () = self.inner.closed.cancelled() => Err(error("skills_closed", "Skill service is closed")),
             permit = self.inner.jobs.clone().acquire_owned() => permit.map_err(|_| error("skills_closed", "Skill service is closed")),
         }?;
         if self.inner.closed.is_cancelled() {

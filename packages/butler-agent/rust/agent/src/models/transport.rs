@@ -163,10 +163,10 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                         if delay > 0.0 {
                             let cancellation = progress.cancellation();
                             tokio::select! {
-                                _ = cancellation.cancelled() => {
+                                () = cancellation.cancelled() => {
                                     return Err(TransportError::Provider(Box::new(diagnostics::cancelled(provider, api))));
                                 }
-                                _ = tokio::time::sleep(std::time::Duration::from_millis(delay.trunc() as u64)) => {}
+                                () = tokio::time::sleep(std::time::Duration::from_millis(delay.trunc() as u64)) => {}
                             }
                         }
                     }

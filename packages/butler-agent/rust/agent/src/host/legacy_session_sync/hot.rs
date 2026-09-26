@@ -263,7 +263,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
                 .map_err(|_| "legacy_hot_write_failed")?;
         }
         file.write_all(output.as_bytes())
-            .and_then(|_| file.sync_all())
+            .and_then(|()| file.sync_all())
             .map_err(|_| "legacy_hot_write_failed".to_owned())?;
         fs::rename(temp, target).map_err(|_| "legacy_hot_write_failed".to_owned())
     })();

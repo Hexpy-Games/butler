@@ -234,7 +234,7 @@ pub(super) fn inspect(stdout: &str) -> Metadata {
         }
     };
     inspect_one(trimmed);
-    for line in trimmed.split("\n") {
+    for line in trimmed.split('\n') {
         let candidate = crate::public_text::trim_js_whitespace(line.trim_end_matches('\r'));
         if candidate.is_empty()
             || candidate == trimmed

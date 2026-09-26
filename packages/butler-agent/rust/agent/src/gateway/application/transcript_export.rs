@@ -49,8 +49,8 @@ impl TranscriptExportOwner {
         let cancellation = self.cancellation.clone();
         self.tasks.spawn(async move {
             tokio::select! {
-                _ = cancellation.cancelled() => {}
-                _ = future => {}
+                () = cancellation.cancelled() => {}
+                () = future => {}
             }
         });
     }

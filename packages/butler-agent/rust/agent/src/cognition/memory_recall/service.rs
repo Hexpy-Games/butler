@@ -217,7 +217,7 @@ async fn operation(
 ) -> CognitionResult<RecallResponse> {
     let _permit = tokio::select! {
         result=admission.acquire_owned()=>result.map_err(|_|closed())?,
-        _=shutdown.cancelled()=>return Err(closed()),
+        ()=shutdown.cancelled()=>return Err(closed()),
     };
     if shutdown.is_cancelled() {
         return Err(closed());
@@ -257,7 +257,7 @@ async fn operation(
             let vector_deadline = deadline_at.min(clock() + 750);
             let remaining = vector_deadline.saturating_sub(clock()) as u64;
             let result = tokio::select! {
-                _=shutdown.cancelled()=>return Err(closed()),
+                ()=shutdown.cancelled()=>return Err(closed()),
                 result=tokio::time::timeout(std::time::Duration::from_millis(remaining),
                     port.search(&generation, &input, vector_deadline))=>result,
             };

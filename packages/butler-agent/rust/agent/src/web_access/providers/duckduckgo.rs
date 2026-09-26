@@ -22,7 +22,7 @@ impl DuckDuckGoHtmlSearchProvider {
 }
 
 impl SearchProvider for DuckDuckGoHtmlSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "duckduckgo-html"
     }
 
@@ -102,7 +102,7 @@ impl SearchProvider for DuckDuckGoHtmlSearchProvider {
             Ok(SearchOutput::direct(
                 self.id(),
                 results,
-                started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
             ))
         }
         .boxed()

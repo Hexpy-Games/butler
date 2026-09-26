@@ -121,7 +121,7 @@ pub(crate) async fn record_helper_terminal(
     let result = journal
         .finish_restart_handoff(intent_id.to_owned(), state)
         .await
-        .map_err(|error| error.code.to_owned());
+        .map_err(|error| error.code.clone());
     let closed = storage
         .close()
         .await

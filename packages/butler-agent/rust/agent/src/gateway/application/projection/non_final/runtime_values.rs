@@ -256,12 +256,12 @@ fn fallback(key: &str) -> String {
     let mut output = String::new();
     for part in key.split(['_', '-']).filter(|part| !part.is_empty()) {
         if !output.is_empty() {
-            output.push(' ')
+            output.push(' ');
         }
         let mut chars = part.chars();
         if let Some(first) = chars.next() {
             output.extend(first.to_uppercase());
-            output.extend(chars)
+            output.extend(chars);
         }
     }
     if output.is_empty() {

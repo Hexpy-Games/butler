@@ -183,8 +183,8 @@ impl NativeEmbeddingOwner {
         };
         tokio::select! {
             biased;
-            _ = admitted_cancel.cancelled() => Err(error("embed_request_cancelled")),
-            _ = deadline_wait(deadline) => Err(error("embed_request_deadline")),
+            () = admitted_cancel.cancelled() => Err(error("embed_request_cancelled")),
+            () = deadline_wait(deadline) => Err(error("embed_request_deadline")),
             result = response => result,
         }
     }
@@ -197,11 +197,11 @@ impl Drop for NativeEmbeddingOwner {
 }
 
 impl CognitionEmbeddingPort for NativeEmbeddingOwner {
-    fn embed<'a>(
-        &'a self,
+    fn embed(
+        &self,
         request: EmbeddingRequest,
         cancellation: CancellationToken,
-    ) -> EmbeddingFuture<'a> {
+    ) -> EmbeddingFuture<'_> {
         Box::pin(self.embed_request(request, cancellation))
     }
 }
@@ -280,14 +280,14 @@ async fn run_actor(inner: Arc<Inner>) {
         }
         if let Some(process) = child.as_mut() {
             tokio::select! {
-                _ = inner.notify.notified() => {},
-                _ = inner.shutdown.cancelled() => {},
+                () = inner.notify.notified() => {},
+                () = inner.shutdown.cancelled() => {},
                 _ = process.child.wait() => { child = None; },
             }
         } else {
             tokio::select! {
-                _ = inner.notify.notified() => {},
-                _ = inner.shutdown.cancelled() => {},
+                () = inner.notify.notified() => {},
+                () = inner.shutdown.cancelled() => {},
             }
         }
     }
@@ -317,7 +317,7 @@ async fn run_item(
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let initialized = tokio::select! {
             biased;
-            _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
+            () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
             result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
                 result.unwrap_or_else(|_| Err(error("embed_worker_unavailable"))),
         };
@@ -342,9 +342,9 @@ async fn run_item(
     };
     let outcome = tokio::select! {
         biased;
-        _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
-        _ = item.cancellation.cancelled() => Err(error("embed_request_cancelled")),
-        _ = deadline_wait(item.deadline) => Err(error("embed_request_deadline")),
+        () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
+        () = item.cancellation.cancelled() => Err(error("embed_request_cancelled")),
+        () = deadline_wait(item.deadline) => Err(error("embed_request_deadline")),
         result = exchange(process, item) => result,
     };
     match outcome {

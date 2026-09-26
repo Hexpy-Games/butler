@@ -78,10 +78,10 @@ pub(super) fn create(
     let id = identity(&input, clock);
     let now = clock.now_iso();
     db.execute(
-        r#"
+        r"
 INSERT INTO chats(id,title,kind,project_id,pinned,archived,created_at,updated_at)
 VALUES(?1,?2,?3,?4,0,0,?5,?5)
-"#,
+",
         params![id, title, input.kind.as_str(), project_id, now],
     )
     .map_err(AppStorageError::sqlite)?;

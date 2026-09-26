@@ -120,8 +120,8 @@ async fn run(run: TypedLifecycleRun) -> CognitionResult<()> {
     );
     let lease = tokio::select! {
         biased;
-        _ = shutdown.cancelled() => return Err(aborted()),
-        _ = cancellation.cancelled() => return Err(aborted()),
+        () = shutdown.cancelled() => return Err(aborted()),
+        () = cancellation.cancelled() => return Err(aborted()),
         acquired = acquisition => acquired.map_err(coordination_error)?.ok_or_else(aborted)?,
     };
     tokio::task::spawn_blocking(move || {

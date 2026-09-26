@@ -23,7 +23,7 @@ pub(super) fn validate_outbox(
     started: Instant,
     cancellation: &CancellationToken,
 ) -> Result<(), &'static str> {
-    let Some(db) = open(data_root).map_err(|_| "memory_origin_evidence_unavailable")? else {
+    let Some(db) = open(data_root).map_err(|()| "memory_origin_evidence_unavailable")? else {
         return Ok(());
     };
     if !has_outbox(&db).map_err(|_| "memory_origin_evidence_unavailable")? {
@@ -60,7 +60,7 @@ pub(super) fn subsession_evidence(
     let (Some(external), Some(source_ref)) = (&row.external_session_id, &row.source_ref) else {
         return Ok(None);
     };
-    let Some(db) = open(data_root).map_err(|_| "memory_origin_evidence_unavailable")? else {
+    let Some(db) = open(data_root).map_err(|()| "memory_origin_evidence_unavailable")? else {
         return Ok(None);
     };
     if !has_outbox(&db).map_err(|_| "memory_origin_evidence_unavailable")? {
@@ -134,7 +134,7 @@ pub(super) fn admission(data_root: &Path, candidate: &HistoricalOriginCandidate)
         Err(()) => return SourceEvidence::unavailable(),
     };
     read_admission(&db, candidate, external, turn, source_ref)
-        .unwrap_or_else(|_| SourceEvidence::unavailable())
+        .unwrap_or_else(|()| SourceEvidence::unavailable())
 }
 
 fn read_admission(

@@ -336,10 +336,10 @@ fn effective_model(
     environment: &crate::models::ModelConfigurationEnvironment,
 ) -> String {
     let requested = crate::public_text::trim_js_whitespace(requested);
-    if !requested.is_empty() {
-        requested.into()
-    } else {
+    if requested.is_empty() {
         dynamic::configured_model(environment, &read.config)
+    } else {
+        requested.into()
     }
 }
 

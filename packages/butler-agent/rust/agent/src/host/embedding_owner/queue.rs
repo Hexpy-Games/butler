@@ -124,7 +124,7 @@ pub(super) fn deadline_instant(epoch_ms: Option<i64>) -> CognitionResult<Option<
     if epoch_ms <= 0 || epoch_ms as u128 <= now_ms {
         return Err(error("embed_request_deadline"));
     }
-    let remaining = (epoch_ms as u128 - now_ms).min(u64::MAX as u128) as u64;
+    let remaining = (epoch_ms as u128 - now_ms).min(u128::from(u64::MAX)) as u64;
     Ok(Instant::now().checked_add(Duration::from_millis(remaining)))
 }
 

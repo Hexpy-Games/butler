@@ -376,7 +376,7 @@ fn recover(
                     "before_sha256":hint.before_sha256,"after_sha256":hint.after_sha256}))
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| {
+            .map_err(|()| {
                 rejected(
                     "edit_file_reconciliation_mismatch",
                     "The durable edit path changed.",

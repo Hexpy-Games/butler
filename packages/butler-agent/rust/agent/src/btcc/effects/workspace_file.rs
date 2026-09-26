@@ -157,7 +157,7 @@ fn rejection(value: &Value) -> Option<EffectAdapterError> {
 }
 
 impl EffectAdapter for WorkspaceFileEffectAdapter {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "write_file"
     }
     fn binding(&self) -> PlanBinding {

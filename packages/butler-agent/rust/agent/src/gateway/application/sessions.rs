@@ -101,7 +101,7 @@ impl AppApplication {
                 tokio::pin!(future);
                 tokio::select! {
                     result = &mut future => result,
-                    _ = owner_shutdown.cancelled() => {
+                    () = owner_shutdown.cancelled() => {
                         cancellation.cancel();
                         future.await
                     }

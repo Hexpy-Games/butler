@@ -87,11 +87,11 @@ impl Transport<RoleClient> for LegacySseTransport {
             let body = serde_json::to_vec(&item).map_err(|_| LegacySseError)?;
             let target = loop {
                 if let Some(value) = endpoint.borrow_and_update().clone() {
-                    break value.map_err(|_| LegacySseError)?;
+                    break value.map_err(|()| LegacySseError)?;
                 }
                 tokio::select! {
                     biased;
-                    _ = cancel.cancelled() => return Err(LegacySseError),
+                    () = cancel.cancelled() => return Err(LegacySseError),
                     changed = endpoint.changed() => changed.map_err(|_| LegacySseError)?,
                 }
             };
@@ -105,7 +105,7 @@ impl Transport<RoleClient> for LegacySseTransport {
             // closes; a completed POST is never retried by this adapter.
             let response = tokio::select! {
                 biased;
-                _ = cancel.cancelled() => return Err(LegacySseError),
+                () = cancel.cancelled() => return Err(LegacySseError),
                 result = request.send() => result.map_err(|_| LegacySseError)?,
             };
             if !response.status().is_success() {
@@ -150,7 +150,7 @@ async fn run_sse_source(
 ) {
     let response = tokio::select! {
         biased;
-        _ = cancel.cancelled() => return,
+        () = cancel.cancelled() => return,
         result = client
             .get(source_url.clone())
             .header(header::ACCEPT, "text/event-stream")
@@ -168,7 +168,7 @@ async fn run_sse_source(
     loop {
         let next = tokio::select! {
             biased;
-            _ = cancel.cancelled() => return,
+            () = cancel.cancelled() => return,
             next = bytes.next() => next,
         };
         let Some(chunk) = next else {
@@ -205,7 +205,7 @@ async fn run_sse_source(
             {
                 tokio::select! {
                     biased;
-                    _ = cancel.cancelled() => return,
+                    () = cancel.cancelled() => return,
                     result = incoming.send(message) => if result.is_err() { return; },
                 }
             }
@@ -236,13 +236,13 @@ impl SseParser {
                 line.pop();
             }
             if line.is_empty() {
-                if !self.data.is_empty() {
+                if self.data.is_empty() {
+                    self.event.clear();
+                } else {
                     events.push(SseEvent {
                         event: std::mem::take(&mut self.event),
                         data: std::mem::take(&mut self.data),
                     });
-                } else {
-                    self.event.clear();
                 }
                 continue;
             }

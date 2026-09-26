@@ -177,7 +177,7 @@ impl NativeMemorySyncConsumer {
                 Ok(false) => {
                     tokio::select! {
                         result = catchup::run_once(&input) => result,
-                        _ = cancellation.cancelled() => { operation.cancel(); Err(CognitionError::new("memory_operation_aborted", "memory_operation_aborted")) },
+                        () = cancellation.cancelled() => { operation.cancel(); Err(CognitionError::new("memory_operation_aborted", "memory_operation_aborted")) },
                     }
                 }
             };

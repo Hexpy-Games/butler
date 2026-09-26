@@ -33,11 +33,11 @@ pub(crate) type EmbeddingFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<NativeEmbeddingResult>> + Send + 'a>>;
 
 pub(crate) trait CognitionEmbeddingPort: Send + Sync {
-    fn embed<'a>(
-        &'a self,
+    fn embed(
+        &self,
         request: EmbeddingRequest,
         cancellation: CancellationToken,
-    ) -> EmbeddingFuture<'a>;
+    ) -> EmbeddingFuture<'_>;
 }
 
 #[derive(Deserialize, Serialize)]

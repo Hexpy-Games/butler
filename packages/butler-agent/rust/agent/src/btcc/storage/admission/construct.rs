@@ -205,7 +205,7 @@ fn insert_initial_turn(
                 } else {
                     Some(checkpoint_id.as_str())
                 },
-                if stopped { 1 } else { 0 },
+                i32::from(stopped),
                 if stopped { Some("cancelled") } else { None }
             ],
         )

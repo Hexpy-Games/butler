@@ -59,8 +59,8 @@ pub(super) fn record(
         }
         output
             .write_all(&serialized)
-            .and_then(|_| output.write_all(b"\n"))
-            .and_then(|_| output.sync_all())
+            .and_then(|()| output.write_all(b"\n"))
+            .and_then(|()| output.sync_all())
             .map_err(|_| error("hot_cache_receipt_failed"))?;
         fs::rename(temp, &stats).map_err(|_| error("hot_cache_receipt_failed"))?;
         Ok(())
@@ -155,8 +155,8 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
         }
         output
             .write_all(&serialized)
-            .and_then(|_| output.write_all(b"\n"))
-            .and_then(|_| output.sync_all())
+            .and_then(|()| output.write_all(b"\n"))
+            .and_then(|()| output.sync_all())
             .map_err(|_| error("legacy_session_receipt_failed"))?;
         fs::rename(temp, &stats).map_err(|_| error("legacy_session_receipt_failed"))?;
         Ok(())

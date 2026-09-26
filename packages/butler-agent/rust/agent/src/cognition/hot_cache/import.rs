@@ -227,7 +227,7 @@ fn write_atomic(data_root: &Path, path: &Path, temp: &Path, body: &str) -> Cogni
             .map_err(|_| error("hot_cache_write_failed"))?;
         created_temp = true;
         file.write_all(body.as_bytes())
-            .and_then(|_| file.sync_all())
+            .and_then(|()| file.sync_all())
             .map_err(|_| error("hot_cache_write_failed"))?;
         fs::rename(temp, path).map_err(|_| error("hot_cache_write_failed"))
     })();

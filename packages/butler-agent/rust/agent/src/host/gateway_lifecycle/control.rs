@@ -76,7 +76,7 @@ impl GatewayControlServer {
         let task = tokio::spawn(async move {
             loop {
                 let accepted = tokio::select! {
-                    _ = worker_shutdown.cancelled() => break,
+                    () = worker_shutdown.cancelled() => break,
                     value = listener.accept() => value,
                 };
                 let Ok((mut stream, _peer)) = accepted else {

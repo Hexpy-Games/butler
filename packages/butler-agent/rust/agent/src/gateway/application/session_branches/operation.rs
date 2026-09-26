@@ -170,8 +170,8 @@ impl AppApplication {
         tokio::pin!(provision);
         tokio::select! {
             result = &mut provision => result,
-            _ = server_shutdown.cancelled() => { cancellation.cancel(); provision.await }
-            _ = owner_shutdown.cancelled() => { cancellation.cancel(); provision.await }
+            () = server_shutdown.cancelled() => { cancellation.cancel(); provision.await }
+            () = owner_shutdown.cancelled() => { cancellation.cancel(); provision.await }
         }
     }
 }

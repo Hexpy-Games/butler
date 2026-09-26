@@ -166,7 +166,7 @@ impl<'a> PreparedRequestAdmission<'a> {
                 message: error.to_string(),
             })?
             .tokens
-            + image_count as f64 * IMAGE_TOKEN_ALLOWANCE;
+            + f64::from(image_count) * IMAGE_TOKEN_ALLOWANCE;
         drop(projected);
         let admission = if estimated <= input_capacity {
             RequestContextAdmission::Admitted

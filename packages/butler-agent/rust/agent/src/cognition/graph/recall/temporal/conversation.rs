@@ -18,7 +18,7 @@ pub(super) fn select(
     let claim = scope::claim(input, "e", "id");
     let selected_claim = scope::claim(input, "e2", "id");
     let sql = format!(
-        r#"
+        r"
       WITH source_episodes AS (
         SELECT c.memory_chunk_id episode_id,
           CASE WHEN s.source_kind='conversation' THEN 'conversation:'||c.conversation_session_id
@@ -59,7 +59,7 @@ pub(super) fn select(
           s2.observed_at DESC,m2.node_id LIMIT 1
       ) node_id
       FROM bin_queue q WHERE q.bin_position<=8 ORDER BY q.bin_position,q.bin LIMIT 64
-    "#,
+    ",
         source.sql, claim.sql, selected_claim.sql, selected_source.sql
     );
     let mut args = source.args;

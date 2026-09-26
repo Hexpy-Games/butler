@@ -177,7 +177,7 @@ impl Owner {
             }
             let stop = joined.clone();
             let watcher = tokio::spawn(async move {
-                tokio::select! { _ = caller.cancelled() => stop.cancel(), _ = stop.cancelled() => {} }
+                tokio::select! { () = caller.cancelled() => stop.cancel(), () = stop.cancelled() => {} }
             });
             let result = self.bind_unlocked(input, &branch, joined.clone()).await;
             joined.cancel();

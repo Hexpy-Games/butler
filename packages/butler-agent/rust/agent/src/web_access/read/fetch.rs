@@ -38,7 +38,7 @@ impl WebAccess {
         });
         tokio::select! {
             biased;
-            _ = cancellation.cancelled() => {
+            () = cancellation.cancelled() => {
                 budget.cancel();
                 cancel_and_reap(&mut task).await;
                 Err(WebAccessError::cancelled())
@@ -46,7 +46,7 @@ impl WebAccess {
             output = &mut task => output.map_err(|_| {
                 WebAccessError::new("web_read_failed", "Public page read failed.")
             })?,
-            _ = tokio::time::sleep(Duration::from_secs(20)) => {
+            () = tokio::time::sleep(Duration::from_secs(20)) => {
                 budget.cancel();
                 cancel_and_reap(&mut task).await;
                 Ok(timeout_page(requested_url))
@@ -88,7 +88,7 @@ impl WebAccess {
                         add_warning(&mut page, &fallback_warning(&rendered));
                     }
                     Ok(None) => {
-                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight")
+                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight");
                     }
                     Err(error) if error.code == "cancelled" => return Err(error),
                     Err(_) => add_warning(&mut page, "lightpanda-render-fallback-rejected"),
@@ -96,7 +96,7 @@ impl WebAccess {
             }
             _ => {}
         }
-        page.duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+        page.duration_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
         if cancellation.is_cancelled() {
             return Err(WebAccessError::cancelled());
         }

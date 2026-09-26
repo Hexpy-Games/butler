@@ -111,6 +111,8 @@ impl Zone {
         let seconds = (self.hour.unwrap_or(0) as u32)
             .wrapping_mul(3600)
             .wrapping_add((self.minute.unwrap_or(0) as u32).wrapping_mul(60));
-        (seconds <= i32::MAX as u32).then_some(Some(i64::from(seconds) * sign))
+        i32::try_from(seconds)
+            .is_ok()
+            .then_some(Some(i64::from(seconds) * sign))
     }
 }

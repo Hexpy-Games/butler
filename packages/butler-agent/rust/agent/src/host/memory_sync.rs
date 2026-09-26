@@ -131,8 +131,8 @@ async fn poll(
             }
         };
         tokio::select! {
-            _ = shutdown.cancelled() => return,
-            _ = tokio::time::sleep(delay) => {},
+            () = shutdown.cancelled() => return,
+            () = tokio::time::sleep(delay) => {},
         }
     }
 }

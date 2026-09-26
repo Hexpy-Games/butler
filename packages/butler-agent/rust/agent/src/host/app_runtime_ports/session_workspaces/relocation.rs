@@ -38,9 +38,9 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
                 .map_err(|_| GatewayApplicationError::Internal)?;
             let open_child = has_open_child(&subsessions, runtime_session_id).await?;
             Ok(AppRelocationSnapshot {
+                binding,
                 active_execution,
                 open_child,
-                binding,
             })
         })
     }

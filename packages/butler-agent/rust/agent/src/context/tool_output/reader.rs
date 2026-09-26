@@ -50,7 +50,9 @@ pub(super) fn read(
     } else {
         max_tokens
     };
-    let stdout_slice = if input.stream != ArtifactStream::Stderr {
+    let stdout_slice = if input.stream == ArtifactStream::Stderr {
+        None
+    } else {
         Some(slice_tool_artifact_text(
             estimator,
             SliceInput {
@@ -62,10 +64,10 @@ pub(super) fn read(
                 max_tokens: stdout_tokens,
             },
         )?)
-    } else {
-        None
     };
-    let stderr_slice = if input.stream != ArtifactStream::Stdout {
+    let stderr_slice = if input.stream == ArtifactStream::Stdout {
+        None
+    } else {
         Some(slice_tool_artifact_text(
             estimator,
             SliceInput {
@@ -77,8 +79,6 @@ pub(super) fn read(
                 max_tokens: stderr_tokens,
             },
         )?)
-    } else {
-        None
     };
     let metadata = ToolOutputArtifactMetadata {
         id: artifact

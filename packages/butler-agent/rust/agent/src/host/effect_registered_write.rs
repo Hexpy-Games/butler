@@ -36,7 +36,7 @@ impl NativeRegisteredWrite {
 }
 
 impl RegisteredWritePort for NativeRegisteredWrite {
-    fn write<'a>(&'a self, prepared: PreparedWrite) -> EffectFuture<'a, Value> {
+    fn write(&self, prepared: PreparedWrite) -> EffectFuture<'_, Value> {
         Box::pin(async move {
             let mut arguments = json!({
                 "path":prepared.path,"content":prepared.content,

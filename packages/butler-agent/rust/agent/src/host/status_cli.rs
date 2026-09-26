@@ -49,7 +49,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
         match value.as_ref() {
             "--data" | "--since-hours" => index += 2,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             "--home" => {
                 return args.iter().any(|arg| {
@@ -278,10 +278,10 @@ fn service_health(data_root: &Path) -> Value {
                 && record.state == "ready"
                 && record.ready_at.is_some();
             let state = if online { "online" } else { "stale" };
-            let app_status = if !record.app_enabled {
-                json!({ "status": "disabled", "evidence": "configuration_disabled" })
-            } else {
+            let app_status = if record.app_enabled {
                 json!({ "status": "unknown", "evidence": "independent_readiness_not_observed" })
+            } else {
+                json!({ "status": "disabled", "evidence": "configuration_disabled" })
             };
             (
                 state,

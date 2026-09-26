@@ -182,7 +182,7 @@ fn update_project(
     };
     tx.execute(
         "UPDATE projects SET display_name=?1,pinned=?2,archived=?3,status=?4,updated_at=?5 WHERE id=?6",
-        params![display_name,if pinned { 1_i64 } else { 0_i64 },if archived { 1_i64 } else { 0_i64 },status,clock.now_iso(),project_id],
+        params![display_name,i64::from(pinned),i64::from(archived),status,clock.now_iso(),project_id],
     )
     .map_err(AppStorageError::sqlite)?;
     let project = read_project(&tx, project_id)?;
@@ -222,7 +222,7 @@ fn lifecycle_project(
     let pinned = pinned.unwrap_or(row.pinned);
     tx.execute(
         "UPDATE projects SET display_name=?1,pinned=?2,archived=1,status='archived',updated_at=?3 WHERE id=?4",
-        params![display_name,if pinned { 1_i64 } else { 0_i64 },clock.now_iso(),project_id],
+        params![display_name,i64::from(pinned),clock.now_iso(),project_id],
     )
     .map_err(AppStorageError::sqlite)?;
     let project = read_project(&tx, project_id)?;

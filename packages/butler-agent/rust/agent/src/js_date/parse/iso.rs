@@ -38,11 +38,7 @@ pub(super) fn parse(
             day.add(scanner.next().value)?;
         }
     }
-    if scanner.peek.kind != Kind::Separator {
-        if scanner.peek.kind != Kind::End {
-            return Some(scanner.next());
-        }
-    } else {
+    if scanner.peek.kind == Kind::Separator {
         scanner.next();
         if !scanner.peek.fixed(2, 0, 24) {
             return None;
@@ -93,6 +89,8 @@ pub(super) fn parse(
         if scanner.peek.kind != Kind::End {
             return None;
         }
+    } else if scanner.peek.kind != Kind::End {
+        return Some(scanner.next());
     }
     if zone.hour.is_none() && time.count == 0 {
         zone.set(0);

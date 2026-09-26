@@ -173,8 +173,8 @@ async fn run(
         }
         if cursor_waits.len() == PENDING_CAPACITY {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
-                _=cursor_signal.changed.notified()=>{},
+                ()=cancel.cancelled()=>return Ok(()),
+                ()=cursor_signal.changed.notified()=>{},
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
@@ -185,22 +185,22 @@ async fn run(
             && cursor_waits.is_empty()
         {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
+                ()=cancel.cancelled()=>return Ok(()),
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
         }
         if semantic_pending.is_empty() && maintenance_pending.is_empty() && sweep_cursor.is_none() {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
-                _=cursor_signal.changed.notified()=>{},
+                ()=cancel.cancelled()=>return Ok(()),
+                ()=cursor_signal.changed.notified()=>{},
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
         }
         tokio::select! {
-            _=cancel.cancelled()=>return Ok(()),
-            _=cursor_signal.changed.notified()=>{},
+            ()=cancel.cancelled()=>return Ok(()),
+            ()=cursor_signal.changed.notified()=>{},
             command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             _=semantic_tick.tick(),if !semantic_pending.is_empty()=>{
                 for _ in 0..SEMANTIC_BATCH_SIZE {
@@ -276,7 +276,7 @@ async fn compact_one(
 }
 fn push(queue: &mut VecDeque<String>, turn: String) {
     if queue.len() < PENDING_CAPACITY && !queue.contains(&turn) {
-        queue.push_back(turn)
+        queue.push_back(turn);
     }
 }
 fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {

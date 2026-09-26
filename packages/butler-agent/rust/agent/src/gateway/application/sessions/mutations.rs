@@ -190,7 +190,7 @@ fn mutate_session(
     let now = clock.now_iso();
     tx.execute(
         "UPDATE chats SET title=?1,archived=?2,updated_at=?3 WHERE id=?4",
-        params![title, if archived { 1 } else { 0 }, now, session_id],
+        params![title, i32::from(archived), now, session_id],
     )
     .map_err(AppStorageError::sqlite)?;
     let session = read::session(&tx, &session_id)?;

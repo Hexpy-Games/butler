@@ -43,7 +43,7 @@ pub(super) fn read(
         .get("attempt")
         .map(js_string)
         .unwrap_or_else(|| "undefined".into());
-    let attempt_name = format!("{:0>3}", attempt_name);
+    let attempt_name = format!("{attempt_name:0>3}");
     let result = read::text(
         &directory
             .join("attempts")

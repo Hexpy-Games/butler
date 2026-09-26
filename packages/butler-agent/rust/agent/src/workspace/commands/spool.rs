@@ -215,7 +215,7 @@ async fn copy_pipe<R: AsyncRead + Unpin>(
     loop {
         let count = tokio::select! {
             count = reader.read(&mut bytes) => count?,
-            _ = stop.cancelled() => break,
+            () = stop.cancelled() => break,
         };
         if count == 0 {
             break;

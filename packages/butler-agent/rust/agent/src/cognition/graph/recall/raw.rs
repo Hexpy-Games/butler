@@ -63,13 +63,13 @@ pub(super) fn select(
     }
     let predicate = scope::source(input, "s", "c");
     let stats_sql = format!(
-        r#"
+        r"
         SELECT COUNT(*) count, AVG(length(raw.text)) average_length
         FROM memory_source_text raw
         JOIN memory_source_leaves s ON s.source_id=raw.source_id
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
         WHERE {}
-    "#,
+    ",
         predicate.sql
     );
     let (population, average_length): (i64, Option<f64>) = db
@@ -79,7 +79,7 @@ pub(super) fn select(
         .map_err(db_error)?;
     let encoded_terms = serde_json::to_string(terms).map_err(json_error)?;
     let frequency_sql = format!(
-        r#"
+        r"
         SELECT p.term, COUNT(*) count
         FROM memory_source_terms p
         JOIN memory_source_text raw ON raw.id=p.source_key
@@ -87,7 +87,7 @@ pub(super) fn select(
         JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision
         WHERE p.term IN (SELECT value FROM json_each(?)) AND {}
         GROUP BY p.term
-    "#,
+    ",
         predicate.sql
     );
     let mut frequency_args = vec![Value::Text(encoded_terms)];
@@ -112,7 +112,7 @@ pub(super) fn select(
     let encoded_weights = serde_json::to_string(&weights).map_err(json_error)?;
     let cue = crate::public_text::trim_js_whitespace(&input.cue).to_owned();
     let candidate_sql = format!(
-        r#"
+        r"
         WITH query AS (
             SELECT json_extract(value,'$.term') term,
                    json_extract(value,'$.weight') weight
@@ -131,7 +131,7 @@ pub(super) fn select(
         HAVING COUNT(DISTINCT p.term)>=?
         ORDER BY exact_match DESC, score DESC, s.observed_at DESC, s.source_id
         LIMIT ?
-    "#,
+    ",
         predicate.sql
     );
     let mut args = vec![

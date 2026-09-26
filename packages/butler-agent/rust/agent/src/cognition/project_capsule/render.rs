@@ -38,7 +38,7 @@ pub(super) fn render(
         .map(|value| compact(value, 220));
     let mut lines = vec![
         format!("# Project Memory: {project_id}"),
-        "".into(),
+        String::new(),
         "## Identity".into(),
         format!("- project_id: {project_id}"),
         workspace.map_or_else(
@@ -50,18 +50,18 @@ pub(super) fn render(
             |value| format!("- purpose: {value}"),
         ),
         aliases.map_or_else(String::new, |value| format!("- aliases: {value}")),
-        "".into(),
+        String::new(),
         "## Structure".into(),
         workspace.map_or_else(
             || "- Workspace path: unknown".into(),
             |path| format!("- Workspace path: {path}"),
         ),
         "- Structure refresh is pending deeper repository inspection.".into(),
-        "".into(),
+        String::new(),
         "## Conventions".into(),
     ];
     extend_promotions(&mut lines, PromotionCategory::Conventions, &promotions);
-    lines.extend(["".into(), "## Active Work".into()]);
+    lines.extend([String::new(), "## Active Work".into()]);
     if snapshot.tasks.is_empty() {
         lines.push("- No recent project tasks found.".into());
     } else {
@@ -69,7 +69,7 @@ pub(super) fn render(
             lines.push(render_task(task));
         }
     }
-    lines.extend(["".into(), "## Decisions".into()]);
+    lines.extend([String::new(), "## Decisions".into()]);
     if let Some(decisions) = promotions.get(&PromotionCategory::Decisions)
         && !decisions.is_empty()
     {
@@ -84,7 +84,7 @@ pub(super) fn render(
     } else {
         lines.push("- No durable project decisions have been promoted yet.".into());
     }
-    lines.extend(["".into(), "## Feedback".into()]);
+    lines.extend([String::new(), "## Feedback".into()]);
     if snapshot.feedback.is_empty() {
         lines.push("- No project-local hot cache was found.".into());
     } else {
@@ -97,10 +97,10 @@ pub(super) fn render(
         }
     }
     extend_promotions(&mut lines, PromotionCategory::Feedback, &promotions);
-    lines.extend(["".into(), "## Risks".into()]);
+    lines.extend([String::new(), "## Risks".into()]);
     extend_promotions(&mut lines, PromotionCategory::Risks, &promotions);
     lines.extend([
-        "".into(),
+        String::new(),
         "## Freshness".into(),
         format!("- refreshed_at: {now}"),
         format!(

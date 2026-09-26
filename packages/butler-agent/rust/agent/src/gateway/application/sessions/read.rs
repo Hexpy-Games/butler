@@ -37,7 +37,7 @@ pub(super) fn workspace_project(
     })
 }
 
-const SESSION_SELECT: &str = r#"
+const SESSION_SELECT: &str = r"
 SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  (SELECT m.text FROM messages m WHERE m.chat_id=c.id
    AND NOT(m.role='assistant' AND m.safe_error_code IS NOT NULL
@@ -53,7 +53,7 @@ SELECT c.id,c.kind,c.title,c.project_id,c.created_at,c.updated_at,
  (SELECT COUNT(*) FROM app_automations a WHERE a.target_session_id=c.id AND a.state!='deleted'),
  (SELECT display_name FROM projects p WHERE p.id=c.project_id) AS project_display_name
 FROM chats c
-"#;
+";
 
 struct SessionRow {
     id: String,
@@ -118,13 +118,13 @@ pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, Ap
 pub(super) fn chats(db: &mut Connection) -> Result<Vec<AppChatSummary>, AppStorageError> {
     let mut statement = db
         .prepare(
-            r#"
+            r"
 SELECT id,title,kind,project_id,created_at,updated_at FROM chats
 WHERE archived=0 AND NOT EXISTS(
   SELECT 1 FROM app_session_branches b
   WHERE b.target_session_id=chats.id AND b.state='prepared')
 ORDER BY updated_at DESC,created_at DESC
-"#,
+",
         )
         .map_err(AppStorageError::sqlite)?;
     let rows = statement

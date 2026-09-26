@@ -122,7 +122,7 @@ pub(super) async fn capture(
     let mut model_error = None;
     let mut pending = read.windows.clone();
     let mut batches = 0;
-    while !pending.is_empty() && (batches as f64) < max_batches {
+    while !pending.is_empty() && f64::from(batches) < max_batches {
         let target_root = dependencies.root.clone();
         let target_sources = dependencies.sources.clone();
         let target_salt = pending[0].evidence_ref.clone();
@@ -169,14 +169,14 @@ pub(super) async fn capture(
                 break;
             }
         }
-        if !prepared.remainders.is_empty() {
+        if prepared.remainders.is_empty() {
+            pending.drain(0..prepared.consumed);
+        } else {
             tracked.remove(&pending[0].coverage_key);
             for window in prepared.windows.iter().chain(&prepared.remainders) {
                 tracked.insert(window.coverage_key.clone());
             }
             pending.splice(0..1, prepared.remainders.clone());
-        } else {
-            pending.drain(0..prepared.consumed);
         }
         batches += 1;
         let windows = prepared.windows;
@@ -298,10 +298,10 @@ pub(super) async fn capture(
     })
     .await?;
     if model_error.is_none() && (counts.pending > 0 || counts.failed > 0) {
-        model_error = Some("profile source coverage remains unfinished".into())
+        model_error = Some("profile source coverage remains unfinished".into());
     }
     if model_error.is_none() && (read.discovery_incomplete || !pending.is_empty()) {
-        model_error = Some("profile source discovery remains unfinished".into())
+        model_error = Some("profile source discovery remains unfinished".into());
     }
     Ok(result(CaptureResultInput {
         read: &read,

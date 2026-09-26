@@ -12,7 +12,7 @@ fn secret_key() -> &'static Regex {
 fn assignment_patterns() -> &'static [Regex; 4] {
     static VALUE: OnceLock<[Regex; 4]> = OnceLock::new();
     VALUE.get_or_init(|| [
-        fixed_regex(r##"(?i)("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*""##),
+        fixed_regex(r#"(?i)("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*""#),
         fixed_regex(r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+"),
         fixed_regex(r"(?i)\b[A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|ID_TOKEN|PASSWORD|SECRET)[A-Z0-9_]*\s*[:=]\s*\S+"),
         fixed_regex(r"(?i)\bbearer\s+[\w.~+/=-]+"),

@@ -47,7 +47,7 @@ pub(super) fn decorate(
         }
         let blocks = work_blocks::project(&snapshot.safe_progress_rows);
         if !blocks.is_empty() {
-            message.work_blocks = Some(blocks)
+            message.work_blocks = Some(blocks);
         }
         let activity = snapshot
             .safe_progress_rows
@@ -56,7 +56,7 @@ pub(super) fn decorate(
             .cloned()
             .collect::<Vec<_>>();
         if !activity.is_empty() {
-            message.turn_activity_rows = Some(activity)
+            message.turn_activity_rows = Some(activity);
         }
     }
     Ok(())

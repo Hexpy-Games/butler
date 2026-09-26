@@ -164,7 +164,7 @@ impl ProfileService {
                 ("butler_nickname", &input.butler_nickname),
             ] {
                 if value.is_some() {
-                    updated.push(name.into())
+                    updated.push(name.into());
                 }
             }
             let profile = if updated.is_empty() {
@@ -198,7 +198,7 @@ impl ProfileService {
             )?;
             if input.complete {
                 state.status = "complete".into();
-                state.completed_at = Some(host.now_iso())
+                state.completed_at = Some(host.now_iso());
             }
             state.updated_at = host.now_iso();
             state = onboarding::write(&root, &state, host.process_id(), host.now_epoch_millis())?;

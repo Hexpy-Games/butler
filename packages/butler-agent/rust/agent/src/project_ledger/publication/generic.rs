@@ -144,7 +144,7 @@ fn result(
         .map(|update| {
             let mut record = json!({"id":update.id});
             if let Some(kind) = &update.kind {
-                record["kind"] = Value::String(kind.as_str().into())
+                record["kind"] = Value::String(kind.as_str().into());
             }
             record
         })

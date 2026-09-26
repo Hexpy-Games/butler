@@ -180,8 +180,8 @@ pub(super) fn recall_from_corpus(
     LegacyRecallResponse {
         cue,
         seeds,
-        abstained,
         items,
+        abstained,
         diagnostics,
     }
 }

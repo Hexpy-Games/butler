@@ -127,7 +127,7 @@ fn write_candidates(command: &str) -> Vec<String> {
         .chain(DD.captures_iter(command))
     {
         if let Some(value) = captures.get(1) {
-            result.push(value.as_str().into())
+            result.push(value.as_str().into());
         }
     }
     for captures in FILE_OP.captures_iter(command) {
@@ -151,13 +151,13 @@ fn write_candidates(command: &str) -> Vec<String> {
         && ASYNC.is_match(command)
     {
         if command.contains("process.cwd()") {
-            result.push(".project-ledger".into())
+            result.push(".project-ledger".into());
         }
         if command.contains("process.env.BUTLER_DATA") {
-            result.push("/project-ledger/projects".into())
+            result.push("/project-ledger/projects".into());
         }
         if command.contains("process.env.HOME") {
-            result.push("$HOME/.butler/project-ledger/projects".into())
+            result.push("$HOME/.butler/project-ledger/projects".into());
         }
     }
     result

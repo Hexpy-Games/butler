@@ -23,7 +23,7 @@ pub(super) fn ensure_historical_columns(connection: &Connection) -> CognitionRes
     ).map_err(db_error)
 }
 
-const BASE_SCHEMA: &str = r#"
+const BASE_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS memory_state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 INSERT OR IGNORE INTO memory_state(key,value) VALUES('graph_revision','0');
 INSERT OR IGNORE INTO memory_state(key,value) VALUES('source_graph_schema','3');
@@ -45,12 +45,12 @@ CREATE TABLE IF NOT EXISTS memory_source_split_parents(source_id TEXT PRIMARY KE
 CREATE VIEW IF NOT EXISTS memory_source_leaves AS SELECT s.* FROM memory_chunk_sources s WHERE NOT EXISTS(SELECT 1 FROM memory_source_split_parents p WHERE p.source_id=s.source_id);
 CREATE TABLE IF NOT EXISTS memory_vector_units(unit_id TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES memory_projection_jobs(job_id),record_kind TEXT NOT NULL,owner_id TEXT NOT NULL,owner_revision TEXT NOT NULL,project_id TEXT,origin_kind TEXT NOT NULL,projection_text TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',error_code TEXT,attempt_count INTEGER NOT NULL DEFAULT 0,next_attempt_at TEXT,owner_pid INTEGER,owner_nonce TEXT,started_at TEXT,receipt_json TEXT,source_ids_json TEXT,source_byte_start INTEGER,source_byte_end INTEGER,source_role TEXT,UNIQUE(job_id,record_kind,owner_id,owner_revision,project_id,origin_kind));
 CREATE INDEX IF NOT EXISTS idx_alias_nfc ON memory_aliases(nfc_key,node_id); CREATE INDEX IF NOT EXISTS idx_alias_folded ON memory_aliases(folded_key,node_id); CREATE INDEX IF NOT EXISTS memory_evidence_episode ON memory_evidence(episode_id,node_id,source_id); CREATE INDEX IF NOT EXISTS memory_evidence_source ON memory_evidence(source_id,node_id); CREATE INDEX IF NOT EXISTS memory_edges_claim ON edges(claim_node_id,status,rel_type); CREATE INDEX IF NOT EXISTS idx_edges_source_rel ON edges(source_node_id,rel_type); CREATE INDEX IF NOT EXISTS idx_edges_target_rel ON edges(target_node_id,rel_type); CREATE INDEX IF NOT EXISTS idx_mentions_entity_episode ON memory_evidence(node_id,episode_id); CREATE INDEX IF NOT EXISTS idx_sources_message_revision ON memory_chunk_sources(conversation_message_id,revision); CREATE INDEX IF NOT EXISTS idx_chunks_project_origin ON memory_chunks(project_id,origin_kind,conversation_start,memory_chunk_id); CREATE INDEX IF NOT EXISTS idx_jobs_state ON memory_projection_jobs(last_served_at,created_at,job_id); CREATE INDEX IF NOT EXISTS idx_vector_units_state ON memory_vector_units(state,job_id,record_kind,unit_id);
-"#;
+";
 
 fn ensure_claim_schema(connection: &Connection) -> CognitionResult<()> {
-    connection.execute_batch(r#"CREATE TABLE IF NOT EXISTS memory_claims(node_id TEXT PRIMARY KEY REFERENCES memory_nodes(id),statement TEXT NOT NULL,speech_act TEXT NOT NULL,basis TEXT NOT NULL,polarity TEXT NOT NULL,condition TEXT,requirement TEXT,valid_from TEXT,valid_to TEXT,salience TEXT NOT NULL,source_class TEXT NOT NULL CHECK(source_class IN ('user','assistant','task_report','explicit','mixed','unknown')),authority TEXT NOT NULL DEFAULT 'model_interpretation' CHECK(authority='model_interpretation'));
+    connection.execute_batch(r"CREATE TABLE IF NOT EXISTS memory_claims(node_id TEXT PRIMARY KEY REFERENCES memory_nodes(id),statement TEXT NOT NULL,speech_act TEXT NOT NULL,basis TEXT NOT NULL,polarity TEXT NOT NULL,condition TEXT,requirement TEXT,valid_from TEXT,valid_to TEXT,salience TEXT NOT NULL,source_class TEXT NOT NULL CHECK(source_class IN ('user','assistant','task_report','explicit','mixed','unknown')),authority TEXT NOT NULL DEFAULT 'model_interpretation' CHECK(authority='model_interpretation'));
 CREATE TABLE IF NOT EXISTS memory_mentions(node_id TEXT NOT NULL REFERENCES memory_nodes(id),source_id TEXT NOT NULL REFERENCES memory_chunk_sources(source_id),byte_start INTEGER,byte_end INTEGER,surface TEXT NOT NULL,method TEXT NOT NULL CHECK(method IN ('literal','inferred')),CHECK((method='literal' AND byte_start>=0 AND byte_end>byte_start) OR (method='inferred' AND byte_start IS NULL AND byte_end IS NULL)),PRIMARY KEY(node_id,source_id,surface));
-CREATE TABLE IF NOT EXISTS memory_meaning_commits(window_ref TEXT PRIMARY KEY REFERENCES memory_projection_windows(window_ref),input_hash TEXT NOT NULL,output_json TEXT NOT NULL,plan_json TEXT NOT NULL,committed_at TEXT NOT NULL);"#).map_err(db_error)
+CREATE TABLE IF NOT EXISTS memory_meaning_commits(window_ref TEXT PRIMARY KEY REFERENCES memory_projection_windows(window_ref),input_hash TEXT NOT NULL,output_json TEXT NOT NULL,plan_json TEXT NOT NULL,committed_at TEXT NOT NULL);").map_err(db_error)
 }
 
 fn ensure_source_index_schema(connection: &Connection) -> CognitionResult<()> {

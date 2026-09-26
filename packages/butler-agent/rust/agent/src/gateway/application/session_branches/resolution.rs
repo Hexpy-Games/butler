@@ -263,8 +263,8 @@ impl AppApplication {
         let summary_input = crate::gateway::AppBranchSummaryInput { text, model_ref };
         let result = tokio::select! {
             result = self.dependencies.branch_summarizer.summarize(summary_input, cancellation.clone()) => result?,
-            _ = server_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
-            _ = owner_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
+            () = server_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
+            () = owner_shutdown.cancelled() => { cancellation.cancel(); return Err(cancelled()); }
         };
         let summary_text = crate::public_text::trim_js_whitespace(&result.text).to_owned();
         if summary_text.is_empty() {

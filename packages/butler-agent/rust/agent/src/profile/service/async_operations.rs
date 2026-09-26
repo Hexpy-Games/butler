@@ -46,11 +46,11 @@ impl ProfileService {
             let mut future = Box::pin(operation(operation_child));
             let result = tokio::select! {
                 result = &mut future => result,
-                _ = caller_cancellation.cancelled() => {
+                () = caller_cancellation.cancelled() => {
                     child.cancel();
                     future.await
                 }
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     child.cancel();
                     future.await
                 }

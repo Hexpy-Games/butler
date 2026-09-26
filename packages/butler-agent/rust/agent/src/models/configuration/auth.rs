@@ -49,7 +49,7 @@ impl std::fmt::Display for AuthError {
 }
 impl std::error::Error for AuthError {}
 
-impl<'a> AuthOwner<'a> {
+impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
         if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
             return Ok(ProviderAuth::ApiKey(key.to_owned()));
@@ -167,7 +167,7 @@ impl<'a> AuthOwner<'a> {
         if !response.status().is_success() {
             return Ok(profile);
         }
-        let token = response_json(response).await.map_err(|_| {
+        let token = response_json(response).await.map_err(|()| {
             error(
                 "provider_auth_refresh_invalid",
                 "OpenAI OAuth refresh response was invalid.",
@@ -234,7 +234,7 @@ impl<'a> AuthOwner<'a> {
                 "OpenAI OAuth token exchange failed.",
             ));
         }
-        let token = response_json(response).await.map_err(|_| {
+        let token = response_json(response).await.map_err(|()| {
             error(
                 "provider_auth_exchange_invalid",
                 "OpenAI OAuth token exchange response was invalid.",

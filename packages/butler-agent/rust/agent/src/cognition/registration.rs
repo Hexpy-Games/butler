@@ -400,14 +400,14 @@ async fn acquire(
     let lease = if let Some(cancellation) = &input.cancellation {
         tokio::select! {
             biased;
-            _ = shutdown.cancelled() => return Err(write_aborted()),
-            _ = cancellation.cancelled() => return Err(write_aborted()),
+            () = shutdown.cancelled() => return Err(write_aborted()),
+            () = cancellation.cancelled() => return Err(write_aborted()),
             result = acquire => result.map_err(coordination_error)?,
         }
     } else {
         tokio::select! {
             biased;
-            _ = shutdown.cancelled() => return Err(write_aborted()),
+            () = shutdown.cancelled() => return Err(write_aborted()),
             result = acquire => result.map_err(coordination_error)?,
         }
     };

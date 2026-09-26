@@ -252,7 +252,7 @@ fn positionals_without_common_options(args: &[OsString]) -> Vec<OsString> {
         match args[index].to_string_lossy().as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             _ => {
                 values.push(args[index].clone());

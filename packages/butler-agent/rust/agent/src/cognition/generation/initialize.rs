@@ -50,7 +50,7 @@ pub(crate) async fn initialize_empty_memory_generation(
         .map_err(|e| CognitionError::new(e.code, e.message));
     match (result, released) {
         (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => resolve_active_generation(&data_root, &environment),
     }
 }

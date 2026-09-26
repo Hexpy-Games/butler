@@ -177,10 +177,10 @@ fn evidence_requirement_score(
             }
         }
         LegacyRecallEvidenceRequirement::GraphRelationHit => {
-            if !candidate.related_nodes.is_empty() {
-                signals.graph
-            } else {
+            if candidate.related_nodes.is_empty() {
                 0.0
+            } else {
+                signals.graph
             }
         }
         LegacyRecallEvidenceRequirement::ExplicitRuleHit => {

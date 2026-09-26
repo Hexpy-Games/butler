@@ -144,7 +144,7 @@ pub(super) fn apply(
         raw.push_str(": ");
         match value {
             Value::String(text) => {
-                raw.push_str(&crate::json::stringify(&Value::String(text)).map_err(|_| invalid())?)
+                raw.push_str(&crate::json::stringify(&Value::String(text)).map_err(|_| invalid())?);
             }
             Value::Bool(value) => raw.push_str(if value { "true" } else { "false" }),
             Value::Number(value) => raw.push_str(&value.to_string()),

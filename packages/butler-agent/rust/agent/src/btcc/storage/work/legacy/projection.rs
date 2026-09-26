@@ -32,8 +32,7 @@ pub(super) fn project(
         .into_iter()
         .chain(works.iter().map(|item| field(&item.content, "outcome")))
         .chain([field(plan, "strategy")])
-        .filter_map(|value| concise(value, 800))
-        .next()
+        .find_map(|value| concise(value, 800))
         .unwrap_or_else(|| "Continue the unfinished Butler work.".into());
     let original_message_id = concise(field(goal, "originalMessageId"), 200);
     let sources = if tasks.is_empty() { works } else { tasks };

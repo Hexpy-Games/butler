@@ -268,7 +268,7 @@ fn contract(p: &Map<String, Value>, row: &mut Map<String, Value>) {
         ("semanticBlockId", "semantic_block_id"),
         ("activityStage", "activity_stage"),
     ] {
-        copy(p, row, from, to)
+        copy(p, row, from, to);
     }
 }
 fn details(p: &Map<String, Value>, row: &mut Map<String, Value>) {
@@ -325,11 +325,11 @@ fn base(id: &str, now: &str, sequence: Option<u64>) -> Option<Map<String, Value>
 }
 fn fields(row: &mut Map<String, Value>, value: Value) {
     if let Some(values) = value.as_object() {
-        row.extend(values.clone())
+        row.extend(values.clone());
     }
 }
 fn copy(p: &Map<String, Value>, row: &mut Map<String, Value>, from: &str, to: &str) {
-    insert(row, to, optional(p.get(from)))
+    insert(row, to, optional(p.get(from)));
 }
 fn copy_object(p: &Map<String, Value>, row: &mut Map<String, Value>, from: &str, to: &str) {
     if let Some(value) = p.get(from).filter(|value| value.is_object()) {

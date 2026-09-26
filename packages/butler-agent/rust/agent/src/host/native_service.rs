@@ -421,7 +421,7 @@ async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<
                 break lease.map_err(io);
             },
             joined = maintenance.join_next() => break unexpected_maintenance_exit(joined),
-            _ = queue.wait_for_enqueue() => {},
+            () = queue.wait_for_enqueue() => {},
             _ = fallback_poll.tick() => {},
         }
     };

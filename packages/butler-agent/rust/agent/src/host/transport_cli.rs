@@ -235,7 +235,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
             }
             value if value.starts_with("--data=") => index += 1,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             _ => {
                 values.push(value.into_owned());

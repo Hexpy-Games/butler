@@ -4,7 +4,7 @@ use tokio_util::sync::CancellationToken;
 use super::*;
 use crate::models::ProviderPromptRequest;
 
-fn request<'a>(attachment: &'a AttachmentRef) -> ProviderPromptRequest<'a> {
+fn request(attachment: &AttachmentRef) -> ProviderPromptRequest<'_> {
     ProviderPromptRequest {
         prompt: "Hello",
         model: None,

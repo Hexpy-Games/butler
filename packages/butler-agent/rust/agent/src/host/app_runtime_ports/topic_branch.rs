@@ -216,7 +216,7 @@ impl AppBranchSummarizer for NativeAppBranchSummarizer {
                 .await
                 .map_err(|_| summary_error())?;
             let bound = bound_context(&input.text, &input.model_ref, &metadata.catalog, &catalog)
-                .map_err(|_| summary_error())?;
+                .map_err(|()| summary_error())?;
             let encoded = serde_json::to_string(&bound.value).map_err(|_| summary_error())?;
             let messages = [ModelRoundMessage {
                 role: ModelRoundRole::User,

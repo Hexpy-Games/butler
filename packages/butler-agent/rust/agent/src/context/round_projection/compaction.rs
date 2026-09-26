@@ -137,7 +137,7 @@ impl CompactionState {
         let mut boundary = active.map_or(1, |record| record.covered_units);
         let mut upper = units.len().saturating_sub(1);
         while boundary < upper {
-            let middle = (boundary + upper) / 2;
+            let middle = usize::midpoint(boundary, upper);
             let dummy = ContextCompactionRecord {
                 source_digest: String::new(),
                 covered_units: middle,

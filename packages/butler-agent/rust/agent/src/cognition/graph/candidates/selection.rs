@@ -139,7 +139,7 @@ fn lexical(
         .chain(documents.iter().flat_map(|(_, grams)| grams))
     {
         if seen.insert(gram) {
-            all_grams.push(gram.clone())
+            all_grams.push(gram.clone());
         }
     }
     let mut df = HashMap::new();
@@ -262,7 +262,7 @@ fn context(
     {
         let (id, _observed_at) = row.map_err(db_error)?;
         if seen.insert(id.clone()) && ids.len() < 4 {
-            ids.push(id)
+            ids.push(id);
         }
     }
     Ok(ids

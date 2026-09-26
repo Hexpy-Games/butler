@@ -250,7 +250,7 @@ impl TopicConversationEffect {
         );
         let response = match tokio::select! {
             biased;
-            _ = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
+            () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
             result = request.json(&Value::Object(body)).send() => result,
         } {
             Ok(response) => response,
@@ -263,7 +263,7 @@ impl TopicConversationEffect {
         let status = response.status();
         let payload = match tokio::select! {
             biased;
-            _ = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
+            () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
             result = response.json::<Value>() => result,
         } {
             Ok(value) => value,

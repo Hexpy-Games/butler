@@ -62,20 +62,17 @@ struct TestObserver {
 }
 
 impl ConversationAdmissionObserver for TestObserver {
-    fn admission_metric<'a>(&'a self, _: AdmissionMetric) -> ConversationObserverFuture<'a> {
+    fn admission_metric(&self, _: AdmissionMetric) -> ConversationObserverFuture<'_> {
         self.admissions.fetch_add(1, AtomicOrdering::Relaxed);
         Box::pin(async { Ok(()) })
     }
 
-    fn completion_observation<'a>(
-        &'a self,
-        _: CompletionObservation,
-    ) -> ConversationObserverFuture<'a> {
+    fn completion_observation(&self, _: CompletionObservation) -> ConversationObserverFuture<'_> {
         self.completions.fetch_add(1, AtomicOrdering::Relaxed);
         Box::pin(async { Ok(()) })
     }
 
-    fn completion_metric<'a>(&'a self, _: CompletionMetric) -> ConversationObserverFuture<'a> {
+    fn completion_metric(&self, _: CompletionMetric) -> ConversationObserverFuture<'_> {
         self.metrics.fetch_add(1, AtomicOrdering::Relaxed);
         Box::pin(async { Ok(()) })
     }

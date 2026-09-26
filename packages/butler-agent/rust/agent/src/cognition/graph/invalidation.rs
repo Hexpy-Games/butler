@@ -301,7 +301,7 @@ pub(super) fn redirect_chain(connection: &Connection, id: &str) -> CognitionResu
                 "memory_identity_cycle",
             ));
         }
-        output.push(next)
+        output.push(next);
     }
     Err(CognitionError::new(
         "memory_identity_history_limit",

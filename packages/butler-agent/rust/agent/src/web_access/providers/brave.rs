@@ -24,7 +24,7 @@ impl BraveWebSearchProvider {
 }
 
 impl SearchProvider for BraveWebSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "brave"
     }
 
@@ -137,5 +137,5 @@ fn http_error(provider: &str, status: u16) -> WebAccessError {
 }
 
 fn elapsed_ms(started: Instant) -> u64 {
-    started.elapsed().as_millis().min(u64::MAX as u128) as u64
+    started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
 }

@@ -140,7 +140,7 @@ pub(super) fn append_slice(
     match slice.next_offset_chars {
         Some(offset) => output.push_str(&offset.to_string()),
         None => output.push_str("null"),
-    };
+    }
     output.push_str(",\"total_chars\":");
     output.push_str(&slice.total_chars.to_string());
     output.push_str(",\"applied_max_tokens\":");
@@ -162,7 +162,7 @@ fn append_search(output: &mut String, search: &ToolArtifactSearch) -> ContextRes
     match search.match_char {
         Some(offset) => output.push_str(&offset.to_string()),
         None => output.push_str("null"),
-    };
+    }
     output.push('}');
     Ok(())
 }
