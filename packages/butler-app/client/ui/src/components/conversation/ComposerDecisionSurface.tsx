@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Typo } from "@/butler-ds";
+import { Clickable, Stack, Typo } from "@/butler-ds";
 import styles from "./ComposerDecisionSurface.module.css";
 
 /** Shared Composer layout; each decision keeps its own domain action. */
@@ -12,7 +12,11 @@ export function ComposerDecisionSurface({ icon, title, onOpen, actions, error, t
     <div className={styles.surface} data-test-class={testClass}>
       <div className={styles.subject}>
         {icon}
-        <button className={styles.title} onClick={onOpen} type="button" title={title}>{title}</button>
+        <Stack.Item grow minWidth="0">
+          <Clickable variant="text" onClick={onOpen} title={title}>
+            <Typo.Label weight="medium" tone="primary" lineClamp={2} wrap="anywhere">{title}</Typo.Label>
+          </Clickable>
+        </Stack.Item>
         {aside}
       </div>
       {error ? (

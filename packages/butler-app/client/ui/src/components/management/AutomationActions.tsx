@@ -1,10 +1,10 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { ArrowLeft, Clock3, Play, RotateCcw, Save, Trash2 } from "@/butler-ds";
-import { Button, ButtonContainer } from "@/butler-ds";
+import { Button, ButtonContainer, IconButton } from "@/butler-ds";
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
+  BreadcrumbButton,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -44,23 +44,13 @@ export function AutomationActions({
       data-test-class="automation-detail-titlebar"
     >
       <Stack align="row" cross="center" gap="sm">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onBack}
-          aria-label={copy.backLabel}
-        >
+        <IconButton label={copy.backLabel} onClick={onBack}>
           <ArrowLeft size="md" />
-        </Button>
+        </IconButton>
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <button type="button" onClick={onBack}>
-                  {copy.title}
-                </button>
-              </BreadcrumbLink>
+              <BreadcrumbButton onClick={onBack}>{copy.title}</BreadcrumbButton>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>

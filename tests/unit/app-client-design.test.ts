@@ -1841,9 +1841,13 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("notifyLoading");
   expect(renderer).toContain("notifyStatus");
   expect(renderer).toContain('from "sonner"');
+  // The DS Toaster owns the sonner configuration and the toast class names.
   expect(
     read("packages/butler-app/client/ui/src/components/common/AppToaster.tsx"),
-  ).toContain("toastClassNames");
+  ).toContain('import { Toaster } from "@/butler-ds"');
+  expect(
+    read("packages/butler-app/client/ui/src/libs/design-system/components/Toast/Toaster.tsx"),
+  ).toContain("classNames: toastClassNames");
   expect(
     read("packages/butler-app/client/ui/src/components/common/AppToaster.tsx"),
   ).toContain('offset={{ top: "var(--titlebar-safe-area-top)" }}');
@@ -4499,7 +4503,7 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/components/management/AutomationActions.tsx",
       ),
-    ).toContain("<BreadcrumbLink asChild>");
+    ).toContain("<BreadcrumbButton onClick={onBack}>");
     expect(
       read(
         "packages/butler-app/client/ui/src/libs/design-system/components/Breadcrumb/Breadcrumb.module.css",

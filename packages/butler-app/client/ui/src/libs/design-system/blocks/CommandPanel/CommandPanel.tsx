@@ -54,6 +54,8 @@ export interface CommandPaletteItem {
 }
 
 export interface CommandPalettePanelProps {
+  /** Keep the panel mounted and toggle this, so the palette can animate out. */
+  open?: boolean;
   label: string;
   query: string;
   placeholder: string;
@@ -66,6 +68,7 @@ export interface CommandPalettePanelProps {
 }
 
 export function CommandPalettePanel({
+  open = true,
   label,
   query,
   placeholder,
@@ -98,8 +101,9 @@ export function CommandPalettePanel({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
+        motion="palette"
         className={styles.palette}
         aria-label={label}
         aria-describedby={undefined}

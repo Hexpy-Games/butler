@@ -56,3 +56,70 @@
   height: 8px;
   border-radius: var(--radius-pill);
 }
+
+/* ChartLegend: a wrapping row of labelled swatches. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+}
+
+.swatch[data-shape="bar"] {
+  width: var(--space-md);
+  height: var(--space-xs);
+}
+
+.swatch[data-color="chart-1"] {
+  background: var(--context-chart-1);
+}
+
+.swatch[data-color="chart-2"] {
+  background: var(--context-chart-2);
+}
+
+.swatch[data-color="chart-3"] {
+  background: var(--context-chart-3);
+}
+
+.swatch[data-color="chart-4"] {
+  background: var(--context-chart-4);
+}
+
+.swatch[data-color="chart-5"] {
+  background: var(--context-chart-5);
+}
+
+.swatch[data-color="chart-6"] {
+  background: var(--context-chart-6);
+}
+
+.swatch[data-color="success"] {
+  background: var(--color-success);
+}
+
+.swatch[data-color="warning"] {
+  background: var(--color-warning);
+}
+
+.swatch[data-color="danger"] {
+  background: var(--color-danger);
+}

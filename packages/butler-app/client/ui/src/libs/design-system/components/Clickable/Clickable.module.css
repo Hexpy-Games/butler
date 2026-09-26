@@ -38,6 +38,22 @@
   transition-duration: var(--motion-instant);
 }
 
+/* Text variant: a bare text target (a title that opens its source). */
+.clickable[data-variant="text"] {
+  width: auto;
+  padding: 0;
+  min-height: 0;
+  color: inherit;
+  transition: color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.clickable[data-variant="text"]:hover:not([data-disabled="true"]),
+.clickable[data-variant="text"]:active:not([data-disabled="true"]) {
+  background: transparent;
+  color: var(--text-secondary);
+  transform: none;
+}
+
 .clickable:focus-visible {
   box-shadow: var(--focus-ring);
 }

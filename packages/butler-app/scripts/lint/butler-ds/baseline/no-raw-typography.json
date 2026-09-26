@@ -5,7 +5,6 @@
   "components/layout/TitlebarWorkspaceSubtitle.tsx": 3,
   "components/management/ProjectActivityStatistics.tsx": 1,
   "components/management/ProjectHistoryPanel.tsx": 1,
-  "components/management/ProjectStatisticChart.tsx": 1,
   "components/space/SpaceActivity.tsx": 1,
   "components/space/SpaceGlyph.tsx": 1,
   "components/space/SpaceIdentity.tsx": 3,

@@ -14,31 +14,6 @@
   flex: none;
   color: var(--text-secondary);
 }
-.title {
-  flex: 1;
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: var(--font-size-2);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-compact);
-  text-align: left;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.title:hover {
-  color: var(--text-secondary);
-}
-.title:focus-visible {
-  outline: auto;
-  outline-color: var(--focus-ring-color);
-}
 .actions {
   display: flex;
   min-width: 0;

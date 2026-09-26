@@ -2,7 +2,6 @@
   "components/conversation/AccessModeMenu.tsx": 1,
   "components/conversation/ComposerAttachmentMenu.tsx": 1,
   "components/conversation/ComposerAttachments.tsx": 1,
-  "components/conversation/ComposerAuthorityDecisionSurface.tsx": 2,
   "components/conversation/ComposerContextControl.tsx": 1,
   "components/conversation/ComposerProjectDocumentMenu.tsx": 1,
   "components/conversation/ModelMenu.tsx": 1,

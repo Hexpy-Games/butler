@@ -1,12 +1,8 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import {
-  Button, ButtonContainer, ChevronDown, DropdownMenu, DropdownMenuContent,
-  DropdownMenuItem, DropdownMenuTrigger, ShieldCheck, Stack, Typo,
-} from "@/butler-ds";
+import { Button, ButtonContainer, ChevronDown, ShieldCheck, SplitButton, Typo } from "@/butler-ds";
 import { ComposerDecisionSurface } from "./ComposerDecisionSurface";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
-import styles from "./ComposerAuthorityDecisionSurface.module.css";
 
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
@@ -24,25 +20,12 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
     testClass="composer-authority-decision"
     actions={<ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={decision.onDeny}>{appCopy.interfaceDetails.deny}</Button>
-      <div className={styles.split}>
-        <Button type="button" size="sm" disabled={decision.pending} onClick={decision.onAllow}>{appCopy.interfaceDetails.allowOnce}</Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" size="sm" className={styles.arrow} disabled={decision.pending || !decision.scope} aria-label={appCopy.interfaceDetails.allowScope}>
-              <ChevronDown aria-hidden="true" size="md" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className={styles.menu}>
-            <DropdownMenuItem onSelect={decision.onAllowConversation}>
-              <Stack as="span" gap="xs">
-                <span>{appCopy.interfaceDetails.allowConversation}</span>
-                <Typo.Caption tone="secondary" wrap="anywhere">{decision.scope?.description}</Typo.Caption>
-                <Typo.Caption tone="secondary" wrap="anywhere">{appCopy.interfaceDetails.allowDescription}</Typo.Caption>
-              </Stack>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <SplitButton size="sm" text={appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={decision.onAllow}
+        menuLabel={appCopy.interfaceDetails.allowScope} menuSide="top"
+        items={[{
+          key: "conversation", label: appCopy.interfaceDetails.allowConversation, disabled: !decision.scope,
+          description: [decision.scope?.description, appCopy.interfaceDetails.allowDescription], onSelect: decision.onAllowConversation,
+        }]} />
     </ButtonContainer>}
   />;
 }

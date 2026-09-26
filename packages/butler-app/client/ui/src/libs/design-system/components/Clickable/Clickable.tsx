@@ -11,6 +11,8 @@ export interface ClickableProps extends HTMLAttributes<HTMLDivElement> {
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLDivElement>) => void;
   stretch?: boolean;
+  /** `row` (default): a padded row target with a hover fill. `text`: bare text that dims on hover. */
+  variant?: "row" | "text";
 }
 
 export function Clickable({
@@ -20,6 +22,7 @@ export function Clickable({
   onKeyDown,
   role = "button",
   stretch = false,
+  variant = "row",
   tabIndex,
   className,
   ...props
@@ -39,6 +42,7 @@ export function Clickable({
       data-disabled={disabled || undefined}
       data-slot="clickable"
       data-stretch={stretch ? "true" : undefined}
+      data-variant={variant === "text" ? "text" : undefined}
       role={role}
       tabIndex={tabIndex ?? (disabled ? undefined : 0)}
       className={[styles.clickable, className].filter(Boolean).join(" ")}

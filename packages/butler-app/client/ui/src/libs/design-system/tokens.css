@@ -61,6 +61,8 @@
   --motion-exit-fast: 90ms;
   --motion-exit-base: 110ms;
   --motion-exit-slow: 150ms;
+  /* The command palette opens between fast and base (Cmd+K). */
+  --motion-palette: 140ms;
   --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-ease-decelerate: cubic-bezier(0, 0, 0, 1);
   --motion-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
@@ -102,6 +104,7 @@
   --motion-scale-menu: 0.97;
   --motion-scale-dialog: 0.96;
   --motion-scale-press: 0.97;
+  --motion-scale-palette: 0.98;
   /* A dragged card or a drop target lifts toward the pointer (spring). */
   --motion-scale-lift: 1.02;
   /* How far moved rows may paint past a folded list clip during a drag (at
@@ -663,6 +666,7 @@
     --motion-scale-dialog: 1;
     --motion-scale-press: 1;
     --motion-scale-lift: 1;
+    --motion-scale-palette: 1;
   }
 }
 

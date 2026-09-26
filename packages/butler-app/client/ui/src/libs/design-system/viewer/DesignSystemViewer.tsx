@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useHotkey } from "../lib/useHotkey";
 import { showcaseEntries } from "../showcase/loader";
 import { DS_VIEWER_BUNDLE_MARKER } from "./bundleMarker";
 import { useViewerTheme } from "./useViewerTheme";
@@ -14,13 +15,12 @@ function isEditable(target: EventTarget | null): boolean {
     && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 }
 
-/** Focuses search on "/" or Cmd/Ctrl+K while the viewer is open. */
+/** Focuses search on "/" (outside fields) or Cmd/Ctrl+K while the viewer is open. */
 function useSearchShortcut(onFocus: () => void) {
+  useHotkey("mod+k", onFocus);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const slash = event.key === "/" && !isEditable(event.target);
-      const commandK = event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey);
-      if (!slash && !commandK) return;
+      if (event.key !== "/" || event.isComposing || isEditable(event.target)) return;
       event.preventDefault();
       onFocus();
     };

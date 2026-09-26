@@ -17,9 +17,11 @@ export interface LayoutItemProps {
   alignSelf?: LayoutAlignSelf;
   /** Grid children only: columns to span; `full` spans the whole row. */
   span?: LayoutSpan;
+  /** Keep the item's space but hide it (visibility: hidden; out of the tab order and accessibility tree). */
+  invisible?: boolean;
 }
 
-const ITEM_KEYS = ["grow", "shrink", "basis", "minWidth", "alignSelf", "span"] as const;
+const ITEM_KEYS = ["grow", "shrink", "basis", "minWidth", "alignSelf", "span", "invisible"] as const;
 
 /** Splits layout item props from the rest so they never reach the DOM as-is. */
 export function splitLayoutItemProps<T extends LayoutItemProps>(
@@ -49,6 +51,7 @@ export function layoutItemAttributes(item: LayoutItemProps): {
   "data-min-width"?: "0" | "auto";
   "data-align-self"?: LayoutAlignSelf;
   "data-span"?: LayoutSpan;
+  "data-invisible"?: "true";
 } {
   if (!hasItemProps(item)) return {};
   return {
@@ -59,5 +62,6 @@ export function layoutItemAttributes(item: LayoutItemProps): {
     "data-min-width": item.minWidth,
     "data-align-self": item.alignSelf,
     "data-span": item.span,
+    "data-invisible": item.invisible ? "true" : undefined,
   };
 }

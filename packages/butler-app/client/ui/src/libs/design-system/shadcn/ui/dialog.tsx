@@ -58,18 +58,22 @@ function DialogContent({
   glassRadius = "composer",
   showCloseButton = true,
   closeLabel,
+  motion = "dialog",
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   glassRadius?: TintedGlassRadius;
   showCloseButton?: boolean;
+  /** `palette`: the command palette's quicker scale-in and backdrop fade. */
+  motion?: "dialog" | "palette";
   /** Localized accessible name for the close button; callers pass app copy. */
   closeLabel?: string;
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay data-motion={motion} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-motion={motion}
         data-glass="popover"
         data-radius={glassRadius}
         data-surface="tinted-glass"

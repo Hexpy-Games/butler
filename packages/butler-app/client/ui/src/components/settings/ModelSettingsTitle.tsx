@@ -7,7 +7,7 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-  Button,
+  IconButton,
   Stack,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -43,17 +43,11 @@ export function ModelSettingsTitle({
       gap="sm"
       aria-hidden={hidden}
       data-test-class="settings-model-route-nav"
-      style={{ visibility: hidden ? "hidden" : "visible" }}
+      invisible={hidden}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={onBack}
-        aria-label={copy.back}
-      >
+      <IconButton label={copy.back} onClick={onBack}>
         <ArrowLeft size="md" />
-      </Button>
+      </IconButton>
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>

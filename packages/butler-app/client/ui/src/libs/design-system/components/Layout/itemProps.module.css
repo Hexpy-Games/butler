@@ -82,3 +82,7 @@
 .item[data-span="full"] {
   grid-column: 1 / -1;
 }
+
+.item[data-invisible="true"] {
+  visibility: hidden;
+}

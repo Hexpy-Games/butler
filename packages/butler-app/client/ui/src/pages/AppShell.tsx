@@ -22,6 +22,7 @@ import { ProjectDashboardView } from "@/components/management/ProjectDashboardVi
 import { AutomationsView } from "@/components/management/AutomationsView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { CommandPalette } from "@/components/command/CommandPalette.tsx";
+import { useCommandPaletteHotkey } from "@/components/command/useCommandPaletteHotkey.ts";
 import { ProjectRenameDialog } from "@/components/layout/ProjectRenameDialog.tsx";
 import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
@@ -102,6 +103,7 @@ function AppWorkspaceShell() {
   useNativeShellPreferences(settings);
   usePortalThemeClasses(settings, systemPrefersDark);
   const commandOpen = useButlerStore((state) => state.commandOpen);
+  useCommandPaletteHotkey();
   const renameProject = useButlerStore((state) => state.renameProject);
   const renameSession = useButlerStore((state) => state.renameSession);
   const projectCreateDialogOpen = useButlerStore(
@@ -248,7 +250,7 @@ function AppWorkspaceShell() {
         </AdaptiveShellChrome>
       )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
-      {commandOpen && <CommandPalette />}
+      <CommandPalette open={commandOpen} />
       {projectCreateDialogOpen && <ProjectCreateDialog />}
       {renameProject && <ProjectRenameDialog />}
       {renameSession && <SessionRenameDialog />}

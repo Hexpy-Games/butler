@@ -3,23 +3,6 @@
   min-width: 0;
   width: 100%;
 }
-.swatch {
-  display: inline-block;
-  width: var(--space-sm);
-  height: var(--space-sm);
-  border-radius: var(--radius-control);
-  margin-right: var(--space-xs);
-  background: var(--text-tertiary);
-}
-.swatch[data-kind="conversations"] {
-  background: var(--context-chart-1);
-}
-.swatch[data-kind="work"] {
-  background: var(--context-chart-2);
-}
-.swatch[data-kind="materials"] {
-  background: var(--context-chart-3);
-}
 .activityDates {
   display: flex;
   gap: 2px;

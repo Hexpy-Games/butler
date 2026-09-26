@@ -59,6 +59,21 @@
     forwards;
 }
 
+/* Command palette (Cmd+K): a crisper open than a dialog, a faster exit. */
+.overlay[data-motion="palette"][data-state="open"] {
+  animation: dialog-overlay-enter var(--motion-palette)
+    var(--motion-ease-decelerate);
+}
+
+.content[data-motion="palette"][data-state="open"] {
+  animation: palette-enter var(--motion-palette) var(--motion-ease-decelerate);
+}
+
+.content[data-motion="palette"][data-state="closed"] {
+  animation: palette-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
+    forwards;
+}
+
 .content[data-project-ledger-modal="true"] {
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -137,5 +152,19 @@
   to {
     opacity: 0;
     transform: translate(-50%, -50%) scale(var(--motion-scale-dialog));
+  }
+}
+
+@keyframes palette-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-palette));
+  }
+}
+
+@keyframes palette-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-palette));
   }
 }

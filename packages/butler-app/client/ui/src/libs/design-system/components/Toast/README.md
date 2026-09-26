@@ -2,9 +2,19 @@
 
 ## What is this component
 
-Butler's transient notification: sonner's `Toaster` configured once by the
-app (`AppToaster`, top center, close button, 8px gap) with the DS class names
-from `toastClassNames` (success tone uses the success color tokens).
+Butler's transient notification: the DS `Toaster` wraps sonner once (top
+center, close button, 8px gap) and restyles every toast with DS tokens in
+both themes: `--popover` surface with the composer glass filter, `--line`
+border, `--shadow-card`, `--radius-panel`, `--text-primary` /
+`--text-secondary`, and success, warning and error tones from the
+`--color-*` tokens. The app mounts it once (`AppToaster`, offset by the
+titlebar safe area).
+
+## Motion
+Toasts drop in by `--motion-distance-lg` and fade on `--motion-base`
+(`--motion-ease-enter`) and leave on `--motion-exit-base`
+(`--motion-ease-exit`); only transform and opacity move. Reduced motion
+fades (sonner would otherwise switch every transition off).
 
 ## When to use this component
 

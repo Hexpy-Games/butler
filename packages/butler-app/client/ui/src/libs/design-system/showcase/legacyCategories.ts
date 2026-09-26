@@ -5,7 +5,6 @@ import type { ShowcaseCategory } from "./categories";
 export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "components/Breadcrumb": "Navigation",
   "components/Card": "Layout",
-  "components/Chart": "Data display",
   "components/Clickable": "Action",
   "components/ContextMenu": "Overlay",
   "components/Dialog": "Overlay",
@@ -37,7 +36,6 @@ export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "blocks/CardList": "Settings & Forms",
   "blocks/ChangedLineDiff": "Conversation & Activity",
   "blocks/CollapsibleNavGroup": "Navigation",
-  "blocks/CommandPanel": "Navigation",
   "blocks/ComposerAdjunctPanel": "Composer",
   "blocks/ComposerCard": "Composer",
   "blocks/DashboardHeader": "Dashboard & Metrics",

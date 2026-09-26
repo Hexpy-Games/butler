@@ -20,9 +20,12 @@ import { useOrganization } from "@/app/space/organization";
 import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
 
 export function CommandPalette({
+  open = true,
   onClose,
   onSelect,
 }: {
+  /** The app shell keeps the palette mounted and toggles this so it can animate out. */
+  open?: boolean;
   onClose?: () => void;
   onSelect?: (result: CommandPaletteResult) => void;
 } = {}) {
@@ -43,10 +46,13 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    if (!open) return;
+    setQuery("");
     inputRef.current?.focus();
-  }, []);
+  }, [open]);
 
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     setSearchState({ query, status: "loading", results: [] });
     async function search() {
@@ -64,10 +70,11 @@ export function CommandPalette({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, retry]);
+  }, [query, retry, open]);
 
   return (
     <CommandPalettePanel
+      open={open}
       label={appCopy.commandPalette.label}
       closeLabel={appCopy.commandPalette.close}
       inputRef={inputRef}

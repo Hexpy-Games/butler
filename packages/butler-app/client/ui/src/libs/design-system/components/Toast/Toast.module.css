@@ -1,11 +1,105 @@
-.success {
-  border-color: color-mix(in srgb, var(--color-success) 34%, var(--line));
-  background: var(--color-success-bg);
-  color: var(--color-success);
+/* sonner toasts in DS tokens (DS spec S6): one surface in both themes, DS
+   tones, transform and opacity motion. sonner's own rules use two attribute
+   selectors; these add a class to win, and set sonner's variables on the
+   toast itself so they beat the theme values inherited from the region. */
+.toast[data-sonner-toast][data-styled="true"] {
+  --normal-bg: var(--popover);
+  --normal-border: var(--line);
+  --normal-text: var(--text-primary);
+  --border-radius: var(--radius-panel);
+  --gray12: var(--text-secondary);
+  --gray4: var(--line);
+  --gray2: var(--selection);
+  --gray5: var(--line-strong);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-2);
+  -webkit-backdrop-filter: var(--composer-glass-filter);
+  backdrop-filter: var(--composer-glass-filter);
+}
+
+.toast[data-sonner-toast][data-styled="true"] [data-title] {
+  font-weight: var(--font-weight-medium);
+}
+
+.toast[data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--text-secondary);
+}
+
+.toast[data-sonner-toast][data-styled="true"] [data-close-button] {
+  background: var(--popover);
+  border-color: var(--line);
+  color: var(--text-secondary);
+}
+
+.toast[data-sonner-toast][data-styled="true"] [data-button] {
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.toast[data-sonner-toast][data-styled="true"] [data-cancel] {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+.success[data-sonner-toast][data-styled="true"] {
+  --normal-bg: var(--color-success-bg);
+  --normal-border: var(--color-success-border);
+  --normal-text: var(--color-success);
+}
+
+.warning[data-sonner-toast][data-styled="true"] {
+  --normal-bg: var(--color-warning-bg);
+  --normal-border: var(--color-warning-border);
+  --normal-text: var(--color-warning-text);
+}
+
+.error[data-sonner-toast][data-styled="true"] {
+  --normal-bg: var(--color-danger-bg);
+  --normal-border: var(--color-danger-border);
+  --normal-text: var(--color-danger-text);
 }
 
 .success [data-icon],
 .success [data-title],
 .success [data-description] {
   color: var(--color-success);
+}
+
+.warning [data-icon],
+.error [data-icon] {
+  color: var(--normal-text);
+}
+
+/* Toned toasts sit on a tint over the popover so text stays readable. */
+.success[data-sonner-toast][data-styled="true"],
+.warning[data-sonner-toast][data-styled="true"],
+.error[data-sonner-toast][data-styled="true"] {
+  background:
+    linear-gradient(var(--normal-bg), var(--normal-bg)), var(--popover);
+}
+
+/* Motion: a short drop in (--motion-distance-lg) instead of a full-height
+   slide; transform and opacity only (no height), tokens only. */
+.toast[data-sonner-toast] {
+  transition:
+    transform var(--motion-base) var(--motion-ease-enter),
+    opacity var(--motion-base) var(--motion-ease-enter),
+    box-shadow var(--motion-fast) var(--motion-ease-standard);
+}
+
+.toast[data-sonner-toast][data-mounted="false"] {
+  --y: translateY(calc(-1 * var(--motion-distance-lg)));
+}
+
+.toast[data-sonner-toast][data-removed="true"] {
+  transition-duration: var(--motion-exit-base);
+  transition-timing-function: var(--motion-ease-exit);
+}
+
+/* sonner turns every transition off under reduced motion; fade instead. */
+@media (prefers-reduced-motion: reduce) {
+  .toast[data-sonner-toast] {
+    transition: opacity var(--motion-fast) var(--motion-ease-standard) !important;
+  }
 }

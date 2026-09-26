@@ -113,3 +113,9 @@ test("Stack and Inline take a separate rowGap on the named spacing scale", () =>
   // Row gaps are declared after the gap shorthand so they win at equal specificity.
   expect(stackCss.indexOf("[data-row-gap=")).toBeGreaterThan(stackCss.indexOf(".gap-2xl"));
 });
+
+test("invisible keeps an item's space but hides it from view, pointer and accessibility", () => {
+  const element = render(<Stack invisible><span>Back</span></Stack>);
+  expect(element.getAttribute("data-invisible")).toBe("true");
+  expect(rule('.item[data-invisible="true"]')).toContain("visibility: hidden");
+});

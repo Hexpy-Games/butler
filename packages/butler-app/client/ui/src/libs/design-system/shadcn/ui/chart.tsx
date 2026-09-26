@@ -139,7 +139,6 @@ export function ChartStyle({ id, config }: ChartStyleProps) {
 }
 
 export const ChartTooltip = RechartsPrimitive.Tooltip;
-export const ChartLegend = RechartsPrimitive.Legend;
 
 export function ChartTooltipContent({
   active,
@@ -187,10 +186,6 @@ export function ChartTooltipContent({
       </div>
     </div>
   );
-}
-
-export function ChartLegendContent() {
-  return null;
 }
 
 function formatTooltipValue(value: unknown): string {
