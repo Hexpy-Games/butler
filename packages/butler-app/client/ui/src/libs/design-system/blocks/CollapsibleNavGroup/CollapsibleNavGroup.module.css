@@ -50,5 +50,7 @@
 
 .stickyGroup > .content {
   --sticky-clip-top: 0px;
-  clip-path: inset(var(--sticky-clip-top, 0) 0 0);
+  clip-path: inset(
+    var(--sticky-clip-top, 0) 0 calc(-1 * var(--collapsible-clip-margin, 0px))
+  );
 }

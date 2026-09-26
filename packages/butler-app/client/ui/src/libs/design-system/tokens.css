@@ -104,6 +104,10 @@
   --motion-scale-press: 0.97;
   /* A dragged card or a drop target lifts toward the pointer (spring). */
   --motion-scale-lift: 1.02;
+  /* How far moved rows may paint past a folded list clip during a drag (at
+     least one touch row slot). A plain length: Chromium ignores calc() in
+     overflow-clip-margin. */
+  --drop-clip-margin: 64px;
   --adaptive-panel-duration: var(--motion-slow);
   --adaptive-panel-easing: var(--motion-ease-emphasized);
   /* Spinner: arc grow/shrink cycle and the slower whole-arc rotation. */

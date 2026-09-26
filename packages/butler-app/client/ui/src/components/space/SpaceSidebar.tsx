@@ -4,7 +4,6 @@ import {
   CollapsibleList,
   SidebarShell,
   SidebarTrafficSpace,
-  Stack,
 } from "@/butler-ds";
 import { useButlerStore } from "@/app/store";
 import { useOrganization } from "@/app/space/organization";
@@ -17,6 +16,7 @@ import { SpaceBrowseHeader } from "./SpaceBrowseHeader";
 import { SpaceRow } from "./SpaceRow";
 import { SpaceDialogs } from "./SpaceDialogs";
 import { SpaceRootDrop } from "./SpaceRootDrop";
+import { SpaceDropScope } from "./SpaceDropScope";
 import { SidebarSettingsItem } from "../layout/SidebarSettingsItem";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 
@@ -100,7 +100,7 @@ export function SpaceSidebar() {
         stickyHeader={<SpaceBrowseHeader />}
         footer={<SidebarSettingsItem />}
       >
-        <Stack gap="xs" as="nav" aria-label={appCopy.space.conversationList}>
+        <SpaceDropScope enabled={tab === "all"} ariaLabel={appCopy.space.conversationList}>
           {/* Inserted rows reveal and removed rows fold away; tab switches do not animate. */}
           <CollapsibleList scope={tab}>
             {roots
@@ -126,7 +126,7 @@ export function SpaceSidebar() {
             />
           )}
           {tab === "all" && <SpaceRootDrop rows={rows} />}
-        </Stack>
+        </SpaceDropScope>
       </SidebarShell>
       <SpaceDialogs rows={rows} />
     </>

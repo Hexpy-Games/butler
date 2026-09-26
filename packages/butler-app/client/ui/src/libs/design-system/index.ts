@@ -2,6 +2,7 @@
 export * from "./lib/floatingConstraints";
 export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
 export * from "./lib/motion";
+export * from "./lib/dropZones";
 export { useEnteringKeys, ENTER_WINDOW_MS } from "./lib/useEnteringKeys";
 export { recordSendOrigin, useSendFlight } from "./lib/sendFlight";
 export * from "./responsive";

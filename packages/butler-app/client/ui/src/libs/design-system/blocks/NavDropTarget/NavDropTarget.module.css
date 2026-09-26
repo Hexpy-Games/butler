@@ -1,107 +1,122 @@
-/* M4 drag motion (DS Motion Contract): rows slide apart around an insert
-   line, a drop-inside target lifts, indicators grow in. Only translate,
-   scale, opacity and shadow move; reduced motion zeroes distances and
-   scales, leaving fades. */
+/* M5 drag feedback (DS spec Motion Contract). An insert opens a one-row slot
+   where the row would land: the target (before) and every later row
+   translate down, and a line sits centered in the slot. A group or
+   drop-inside target gets an inset ring and never changes its box. Drop
+   zones are hit-tested on layout boxes (lib/dropZones), which translate never
+   moves, so the feedback cannot feed back into the zones. */
+.scope {
+  --nav-drop-spacing: var(--space-xs);
+  --nav-drop-gap: calc(var(--sidebar-row-height) + var(--nav-drop-spacing));
+}
+
+/* Folded list items and sticky folder content clip; while a drag is active
+   they let the moved rows and the slot line paint below them. */
+.scope[data-active="true"] {
+  --collapsible-clip-margin: var(--drop-clip-margin);
+}
+
 .item {
   position: relative;
-  transition: translate var(--motion-fast) var(--motion-ease-standard);
+  transition: translate var(--motion-base) var(--motion-ease-standard);
 }
 
 .item[data-dragging="true"] {
   opacity: 0.5;
 }
 
-/* Indicators sit over the row header only (a folder's children are below). */
+/* The slot: the target of a before drop, the rows after the insertion point
+   in its list, and the rows after each enclosing folder. */
+[data-slot="collapsible-list-item"]:has(> .item[data-drop="before"]) > .item,
+[data-slot="collapsible-list-item"]:has(
+    .item[data-drop="before"],
+    .item[data-drop="after"]
+  )
+  ~ [data-slot="collapsible-list-item"]
+  > .item,
+[data-slot="collapsible-list-item"]:has(
+    .item[data-drop="before"],
+    .item[data-drop="after"]
+  )
+  ~ :not([data-slot="collapsible-list-item"]) {
+  translate: 0 var(--nav-drop-gap);
+}
+
+/* Rows' neighbors that are not rows (load more, the root zone) slide too. */
+.scope[data-active="true"]
+  [data-slot="collapsible-list-item"]
+  ~ :not([data-slot="collapsible-list-item"], .root) {
+  transition: translate var(--motion-base) var(--motion-ease-standard);
+}
+
+/* Indicators: pseudo elements over the row, never part of its layout. */
 .item[data-drop]::before,
 .item[data-drop="after"]::after {
   position: absolute;
   z-index: var(--z-drop-indicator);
-  inset-inline: 0;
-  border-radius: 0;
+  inset-inline: var(--space-xs);
   content: "";
   pointer-events: none;
 }
 
+/* The line is centered in the slot (the gap plus the row spacing). */
 .item[data-drop="before"]::before {
-  top: var(--drop-row-top);
+  top: calc(
+    (
+        var(--nav-drop-gap) + var(--nav-drop-spacing) +
+          var(--border-width-strong)
+      ) /
+      -2
+  );
   height: var(--border-width-strong);
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  animation: indicator-grow var(--motion-fast) var(--motion-ease-decelerate);
+  animation: indicator-in var(--motion-base) var(--motion-ease-decelerate);
 }
 
 .item[data-drop="after"]::after {
   top: calc(
-    var(--drop-row-top) + var(--drop-row-height) - var(--border-width-strong)
+    100% +
+      (
+        var(--nav-drop-gap) + var(--nav-drop-spacing) -
+          var(--border-width-strong)
+      ) /
+      2
   );
   height: var(--border-width-strong);
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  animation: indicator-grow var(--motion-fast) var(--motion-ease-decelerate);
+  animation: indicator-in var(--motion-base) var(--motion-ease-decelerate);
 }
 
-/* Drop inside / group: the target's header lifts toward the dragged row. */
+/* Group / drop inside: an inset ring and tint over the target header. */
 .item[data-drop="inside"]::before,
 .item[data-drop="group"]::before {
   top: var(--drop-row-top);
   height: var(--drop-row-height);
-  border: var(--border-width-strong) solid var(--accent);
+  inset-inline: 0;
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--surface) 40%, transparent);
-  box-shadow: var(--shadow-drag-lift);
-  scale: var(--motion-scale-lift);
-  animation: target-lift var(--motion-base) var(--motion-ease-spring);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 var(--border-width-strong) var(--accent);
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
 }
 
-/* Neighbors slide aside: the rows on both sides of an insert line move
-   apart. Rows are CollapsibleList items; their clip margin lets the moved
-   rows (and the lift shadow) paint outside the folded-height clip. */
-.item[data-drop="before"] {
-  translate: 0 var(--motion-distance-xs);
-}
-
-.item[data-drop="after"] {
-  translate: 0 calc(-1 * var(--motion-distance-xs));
-}
-
-[data-slot="collapsible-list-item"]:has(
-    + [data-slot="collapsible-list-item"] > .item[data-drop="before"]
-  )
-  > .item {
-  translate: 0 calc(-1 * var(--motion-distance-xs));
-}
-
-[data-slot="collapsible-list-item"]:has(> .item[data-drop="after"])
-  + [data-slot="collapsible-list-item"]
-  > .item {
-  translate: 0 var(--motion-distance-xs);
-}
-
-[data-slot="collapsible-list-item"]:has(> .item[data-drop]),
-[data-slot="collapsible-list-item"]:has(
-  + [data-slot="collapsible-list-item"] > .item[data-drop="before"]
-),
-[data-slot="collapsible-list-item"]:has(> .item[data-drop="after"])
-  + [data-slot="collapsible-list-item"] {
-  overflow-clip-margin: var(--motion-distance-md);
-}
-
-@keyframes indicator-grow {
+@keyframes indicator-in {
   from {
     opacity: 0;
-    scale: 0.6 1;
+    scale: var(--motion-scale-menu) 1;
   }
 }
 
-@keyframes target-lift {
+@keyframes fade-in {
   from {
-    box-shadow: none;
-    scale: 1;
+    opacity: 0;
   }
 }
 
 .hint {
   position: absolute;
   z-index: var(--z-drop-hint);
-  top: 50%;
+  top: calc(var(--drop-row-top, 0px) + var(--drop-row-height, 0px) / 2);
   inset-inline-end: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-control);
@@ -109,13 +124,7 @@
   color: var(--accent);
   pointer-events: none;
   transform: translateY(-50%);
-  animation: hint-in var(--motion-fast) var(--motion-ease-decelerate);
-}
-
-@keyframes hint-in {
-  from {
-    opacity: 0;
-  }
+  animation: fade-in var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 .root {
@@ -123,6 +132,7 @@
   border: var(--border-hairline) dashed var(--line-strong);
   border-radius: var(--radius-control);
   transition:
+    translate var(--motion-base) var(--motion-ease-standard),
     border-color var(--motion-fast) var(--motion-ease-standard),
     background-color var(--motion-fast) var(--motion-ease-standard);
 }
@@ -132,10 +142,14 @@
   background: var(--selection);
 }
 
-/* Reduced motion: no travel or scale (tokens), the indicator only fades. */
+/* Reduced motion: no slot and no travel; the line and ring only fade in. */
 @media (prefers-reduced-motion: reduce) {
+  .scope {
+    --nav-drop-gap: 0px;
+  }
+
   .item[data-drop]::before,
   .item[data-drop="after"]::after {
-    animation-name: hint-in;
+    animation-name: fade-in;
   }
 }

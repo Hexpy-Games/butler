@@ -1,22 +1,14 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import {
-  useId,
-  useState,
-  type ReactNode,
-  type DragEvent,
-} from "react";
-import {
-  useSpaceDrag,
-  canDrop,
-  SESSION_REFERENCE_MIME,
-} from "@/app/space/drag";
-import { useOrganization } from "@/app/space/organization";
-import { requestSpaceMove } from "@/app/space/move";
-import { projectSpace, type SpaceRowData } from "@/app/space/projection";
-import { useButlerStore } from "@/app/store";
+import { useId, type ReactNode } from "react";
+import { useSpaceDrag, SESSION_REFERENCE_MIME } from "@/app/space/drag";
+import type { SpaceRowData } from "@/app/space/projection";
 import { NavDropTarget } from "@/butler-ds";
 
+/**
+ * A draggable tree row. Drop zones and drops are resolved once for the whole
+ * tree (SpaceDropScope); the row shows the feedback the store assigns it.
+ */
 export function SpaceDragRow({
   row,
   enabled,
@@ -28,56 +20,17 @@ export function SpaceDragRow({
 }) {
   useAppLocale();
   const instance = useId();
-  const placement = useSpaceDrag((s) =>
-    s.target?.instance === instance ? s.target.position : undefined,
-  );
+  const target = useSpaceDrag((s) => (s.target?.instance === instance ? s.target : null));
   const dragging = useSpaceDrag((s) => s.sourceInstance === instance);
-  const [bounds, setBounds] = useState({ top: 0, height: 0 });
-  function over(e: DragEvent<HTMLDivElement>) {
-    const rows = projectSpace(useButlerStore.getState().navigation);
-    const drag = useSpaceDrag.getState();
-    if (!drag.source) return;
-    e.stopPropagation();
-    if (!enabled) {
-      e.dataTransfer.dropEffect = "none";
-      drag.over(null);
-      return;
-    }
-    e.preventDefault();
-    const header = e.currentTarget.querySelector(
-      '[data-test-class="tree-row"]',
-    );
-    if (!header) return;
-    const rect = header.getBoundingClientRect();
-    const top = rect.top - e.currentTarget.getBoundingClientRect().top;
-    setBounds((old) =>
-      old.top === top && old.height === rect.height
-        ? old
-        : { top, height: rect.height },
-    );
-    const ratio = (e.clientY - rect.top) / rect.height;
-    const position =
-      ratio > 0.25 && ratio < 0.75
-        ? row.node.kind === "session"
-          ? "group"
-          : "inside"
-        : ratio < 0.5
-          ? "before"
-          : "after";
-    const possible = canDrop(rows, drag.source, row.node.key, position);
-    e.dataTransfer.dropEffect = possible ? "move" : "none";
-    drag.over(possible ? { key: row.node.key, instance, position } : null);
-  }
   return (
     <NavDropTarget
       data-tree-item={row.node.key}
       data-drag-instance={instance}
-      drop={placement}
+      drop={enabled ? target?.position : undefined}
       dragging={dragging}
-      indicator={bounds}
+      indicator={target?.indicator}
       hint={appCopy.space.groupTogether}
       draggable={enabled || row.node.kind === "session"}
-      onDragOver={over}
       onDragStart={(e) => {
         e.stopPropagation();
         e.dataTransfer.effectAllowed = "copyMove";
@@ -93,33 +46,7 @@ export function SpaceDragRow({
           );
         useSpaceDrag.getState().start(row.node.key, instance);
       }}
-      onDragLeave={(e) => {
-        const drag = useSpaceDrag.getState();
-        if (
-          drag.target?.instance === instance &&
-          !e.currentTarget.contains(e.relatedTarget as Node | null)
-        )
-          drag.over(null);
-      }}
       onDragEnd={() => useSpaceDrag.getState().end()}
-      onDrop={(e) => {
-        const rows = projectSpace(useButlerStore.getState().navigation);
-        e.preventDefault();
-        e.stopPropagation();
-        const { source, target, end } = useSpaceDrag.getState();
-        if (enabled && source && target?.instance === instance) {
-          if (target.position === "group") {
-            useOrganization.getState().setDialog({
-              kind: "group",
-              sourceKey: source,
-              targetKey: row.node.key,
-            });
-          } else {
-            requestSpaceMove(rows, source, row.node.key, target.position);
-          }
-        }
-        end();
-      }}
     >
       {children}
     </NavDropTarget>

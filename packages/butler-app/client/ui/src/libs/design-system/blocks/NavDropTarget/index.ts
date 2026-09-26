@@ -1,2 +1,2 @@
-export { NavDropTarget, NavRootDropZone } from "./NavDropTarget";
-export type { NavDropPosition, NavDropTargetProps, NavRootDropZoneProps } from "./NavDropTarget";
+export { NavDropScope, NavDropTarget, NavRootDropZone } from "./NavDropTarget";
+export type { NavDropPosition, NavDropScopeProps, NavDropTargetProps, NavRootDropZoneProps } from "./NavDropTarget";
