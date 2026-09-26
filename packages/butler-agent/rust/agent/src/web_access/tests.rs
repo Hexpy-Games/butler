@@ -8,10 +8,93 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+use std::sync::Arc;
+
+use reqwest::Url;
+
 use super::WebAccess;
+use super::service::{DirectPageRoute, PageRoute};
 
 mod readers;
 mod search_providers;
+
+/// Web access with planning disabled and pages fetched directly.
+pub(crate) fn access(data_root: PathBuf, search_endpoint: &str) -> WebAccess {
+    configured(data_root, search_endpoint, None, Arc::new(DirectPageRoute))
+}
+
+fn access_with_prompt(
+    data_root: PathBuf,
+    search_endpoint: &str,
+    prompt: Arc<dyn crate::models::ProviderPromptPort>,
+) -> WebAccess {
+    configured(
+        data_root,
+        search_endpoint,
+        Some(prompt),
+        Arc::new(DirectPageRoute),
+    )
+}
+
+/// Serves every logical page URL from `origin` at `/<host><path>`, reporting
+/// the logical URL as where the page settled.
+fn access_with_pages(data_root: PathBuf, search_endpoint: &str, origin: &str) -> WebAccess {
+    let origin = Url::parse(origin).expect("test page origin is a URL");
+    configured(
+        data_root,
+        search_endpoint,
+        None,
+        Arc::new(LocalPages(origin)),
+    )
+}
+
+/// Points the reader at `binary` through DATA/.env, as a user would.
+fn configure_lightpanda(data_root: &std::path::Path, binary: &std::path::Path) {
+    fs::write(
+        data_root.join(".env"),
+        format!("BUTLER_LIGHTPANDA_BIN={}\n", binary.display()),
+    )
+    .unwrap();
+}
+
+fn configured(
+    data_root: PathBuf,
+    search_endpoint: &str,
+    prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
+    route: Arc<dyn PageRoute>,
+) -> WebAccess {
+    let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));
+    let planning_disabled = prompt.is_none();
+    WebAccess::configured(
+        data_root,
+        search_endpoint,
+        None,
+        prompt,
+        metrics,
+        planning_disabled,
+        route,
+    )
+    .expect("test web access")
+}
+
+struct LocalPages(Url);
+
+impl PageRoute for LocalPages {
+    fn request_url(&self, logical: &Url) -> Url {
+        let mut url = self.0.clone();
+        url.set_path(&format!(
+            "/{}{}",
+            logical.host_str().unwrap_or_default(),
+            logical.path()
+        ));
+        url.set_query(logical.query());
+        url
+    }
+
+    fn settled_url(&self, logical: Url, _response_url: &str) -> Option<Url> {
+        Some(logical)
+    }
+}
 
 fn data_root() -> PathBuf {
     let path = std::env::temp_dir().join(format!("native-web-access-{}", uuid::Uuid::new_v4()));
@@ -42,7 +125,7 @@ async fn search_result_projects_public_evidence_and_direct_planner_limit() {
     let html = r#"<div class="result"><a class="result__a" href="https://example.com/report">Example report</a><div class="result__snippet">A public source snippet.</div></div>"#;
     let (endpoint, server) = respond_once("text/html", html).await;
     let root = data_root();
-    let access = WebAccess::for_test(root.clone(), &endpoint);
+    let access = access(root.clone(), &endpoint);
     let session = access.session_for_turn(String::new());
     let result = session
         .web_search(
@@ -77,7 +160,7 @@ async fn page_read_returns_turn_evidence_and_drops_data_spool_with_session() {
     );
     let (endpoint, server) = respond_once("text/html", &html).await;
     let root = data_root();
-    let access = WebAccess::for_test(root.clone(), &endpoint);
+    let access = access(root.clone(), &endpoint);
     let session = access.session_for_turn(String::new());
     let args = json!({"url":endpoint,"max_chars":2000,"max_chunks":2});
     let result = session
@@ -153,7 +236,7 @@ async fn cancellation_interrupts_body_stream_and_cleans_partial_spool() {
         tokio::time::sleep(Duration::from_secs(3)).await;
     });
     let root = data_root();
-    let access = WebAccess::for_test(root.clone(), &format!("http://{address}/search"));
+    let access = access(root.clone(), &format!("http://{address}/search"));
     let session = access.session_for_turn(String::new());
     let cancellation = CancellationToken::new();
     let task_token = cancellation.clone();
@@ -203,7 +286,7 @@ async fn configured_provider_without_credential_uses_duckduckgo_fallback() {
         r#"{"webSearch":{"provider":"brave"}}"#,
     )
     .unwrap();
-    let access = WebAccess::for_test(root.clone(), &endpoint);
+    let access = access(root.clone(), &endpoint);
     let result = access
         .session_for_turn(String::new())
         .web_search(&json!({"query":"example query"}), &CancellationToken::new())
@@ -223,7 +306,7 @@ async fn disabled_provider_is_projected_and_not_called() {
         r#"{"webSearch":{"provider":"disabled"}}"#,
     )
     .unwrap();
-    let access = WebAccess::for_test(root.clone(), "http://127.0.0.1:9/search");
+    let access = access(root.clone(), "http://127.0.0.1:9/search");
     let session = access.session_for_turn(String::new());
     assert_eq!(
         session
@@ -242,7 +325,7 @@ async fn disabled_provider_is_projected_and_not_called() {
 #[tokio::test]
 async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
     let root = data_root();
-    let access = WebAccess::for_test(root.clone(), "http://127.0.0.1:9/search");
+    let access = access(root.clone(), "http://127.0.0.1:9/search");
     let result = access
         .session_for_turn(String::new())
         .web_read(

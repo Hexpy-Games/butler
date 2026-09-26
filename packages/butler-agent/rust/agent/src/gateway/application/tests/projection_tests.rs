@@ -62,7 +62,9 @@ async fn transcript_watcher_projects_delivered_turn_without_foreground_refresh()
         "payload":{"actionId":"action-watched","ok":true}
     });
     std::fs::write(&transcript, format!("{outbound}\n{delivery}\n")).unwrap();
-    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+    // The temp root sits under a symlink on macOS (/var -> /private/var), so
+    // this also covers watched roots that resolve elsewhere.
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             let turns = app.turn_page("general".into(), 0.0).await.unwrap();
             if turns.turns.iter().any(|item| {

@@ -158,10 +158,6 @@ async fn git_text(
             timeout_ms: Some(5_000.0),
             abort: cancel.clone(),
             legacy: None,
-            #[cfg(test)]
-            test_late_reap: None,
-            #[cfg(test)]
-            test_pause_before_second_spawn: None,
         })
         .map_err(|error| {
             failure(

@@ -14,21 +14,27 @@ pub(crate) fn prepare_exact_text(
 }
 
 use super::contracts::{
-    EditFailure, EditFailureData, EditMutation, EditedFile, GuardedEdit, MutationOutcome,
+    CommitObserver, EditFailure, EditFailureData, EditMutation, EditedFile, GuardedEdit,
+    MutationOutcome,
 };
 use super::io;
 
-pub(super) fn execute(input: EditMutation, paths: Vec<GuardedEdit>) -> MutationOutcome {
+pub(super) fn execute(
+    input: EditMutation,
+    paths: Vec<GuardedEdit>,
+    observer: &dyn CommitObserver,
+) -> MutationOutcome {
     if input.batch {
-        MutationOutcome::Batch(batch::execute(input, paths))
+        MutationOutcome::Batch(batch::execute(paths, observer))
     } else {
         MutationOutcome::Single(single(
             paths.into_iter().next().expect("single guarded edit"),
+            observer,
         ))
     }
 }
 
-fn single(edit: GuardedEdit) -> Result<EditedFile, EditFailure> {
+fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile, EditFailure> {
     let path = edit.path.public.clone();
     let snapshot = io::observe(edit.path, false).map_err(|error| edit_failure(0, error))?;
     if !snapshot.exists {
@@ -68,7 +74,7 @@ fn single(edit: GuardedEdit) -> Result<EditedFile, EditFailure> {
         false,
     )
     .map_err(|error| edit_failure(0, error))?;
-    let committed = io::commit(prepared).map_err(|error| edit_failure(0, error))?;
+    let committed = io::commit(prepared, observer).map_err(|error| edit_failure(0, error))?;
     Ok(EditedFile {
         index: 0,
         edit_indexes: vec![0],

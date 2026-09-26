@@ -4,8 +4,8 @@ use tokio_util::sync::CancellationToken;
 use crate::btcc::{AgentLoop, StateExecutionClaim, TurnRecord};
 use crate::btcc::{AgentLoopProgress, PortFuture, RuntimeTurnEventInput};
 
-use super::ProductionAgentLoop;
 use super::contracts::{AcceptedCheckpoint, ModelRoundResult, ModelRoundTool, ModelRoundToolCall};
+use super::fixture_binding::FixtureAgentLoop;
 
 pub(super) fn result(text: &str, calls: Vec<ModelRoundToolCall>, round: u32) -> ModelRoundResult {
     ModelRoundResult {
@@ -87,7 +87,7 @@ pub(super) fn claim() -> StateExecutionClaim {
 }
 
 pub(super) async fn run(
-    agent: &ProductionAgentLoop,
+    agent: &FixtureAgentLoop,
     turn: &TurnRecord,
 ) -> Result<crate::btcc::AgentLoopResult, crate::btcc::AgentLoopError> {
     agent

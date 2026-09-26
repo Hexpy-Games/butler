@@ -337,7 +337,7 @@ async fn dropped_caller_keeps_registered_blocking_operation_owned_until_close_dr
         let release = release.clone();
         tokio::spawn(async move {
             service
-                .run_test_operation(move || {
+                .run(move || {
                     started.store(true, Ordering::SeqCst);
                     while !release.load(Ordering::SeqCst) {
                         std::thread::yield_now();

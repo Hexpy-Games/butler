@@ -34,8 +34,6 @@ enum Command {
     Due {
         reply: oneshot::Sender<Result<AutomationRunListView, GatewayApplicationError>>,
     },
-    #[cfg(test)]
-    Probe(oneshot::Sender<()>),
 }
 
 impl AutomationRunOwner {
@@ -142,10 +140,6 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
                 };
                 let _ = reply.send(result);
             }
-            #[cfg(test)]
-            Command::Probe(reply) => {
-                let _ = reply.send(());
-            }
         }
     }
 }
@@ -157,16 +151,19 @@ mod tests {
     #[tokio::test]
     async fn close_drains_admitted_commands_and_rejects_late_admission() {
         let owner = AutomationRunOwner::start();
-        let (admitted_send, admitted_receive) = oneshot::channel();
+        let (reply, admitted) = oneshot::channel();
         owner
-            .admit(Command::Probe(admitted_send))
+            .admit(Command::Due { reply })
             .await
-            .expect("probe admitted before close");
+            .expect("command admitted before close");
 
         owner.close().await.expect("owner closes after draining");
-        admitted_receive.await.expect("admitted probe completed");
+        // Uninitialized, the owner answers the drained command instead of dropping it.
+        assert!(matches!(
+            admitted.await.expect("admitted command completed"),
+            Err(GatewayApplicationError::Internal)
+        ));
 
-        let (late_send, _late_receive) = oneshot::channel();
-        assert!(owner.admit(Command::Probe(late_send)).await.is_err());
+        assert!(owner.due().await.is_err());
     }
 }

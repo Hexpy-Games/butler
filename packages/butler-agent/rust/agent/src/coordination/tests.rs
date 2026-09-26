@@ -195,18 +195,27 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
         owner_nonce: "successor".into(),
         purpose: "projection".into(),
     };
-    coordinator.replace_registration_for_test(
+    // A successor registered the same path after this lease (e.g. after a
+    // reclaim); dropping the old lease must not remove it.
+    let local = &coordinator.inner.local;
+    local.lock().unwrap().insert(
         fixture.lock.clone(),
-        "new-registration".into(),
-        successor,
+        coordinator::LocalRegistration {
+            registration_id: "new-registration".into(),
+            owner: successor,
+        },
     );
     drop(lease);
     assert_eq!(
-        coordinator.registration_for_test(&fixture.lock).as_deref(),
+        local
+            .lock()
+            .unwrap()
+            .get(&fixture.lock)
+            .map(|registration| registration.registration_id.as_str()),
         Some("new-registration")
     );
 
-    coordinator.clear_registration_for_test(&fixture.lock);
+    local.lock().unwrap().remove(&fixture.lock);
     let reacquired = coordinator
         .try_acquire(CognitionWriteAcquire::immediate(
             fixture.lock.clone(),

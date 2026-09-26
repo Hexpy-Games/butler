@@ -5,6 +5,8 @@ mod process;
 mod spool;
 mod structured;
 
+use process::{ProcessHost, SystemProcesses};
+
 #[cfg(test)]
 mod tests;
 
@@ -50,10 +52,6 @@ pub(crate) struct GuidedCommandInput {
     pub access: GuidedAccess,
     pub host_environment: HashMap<String, String>,
     pub abort: CancellationToken,
-    #[cfg(test)]
-    pub test_capture_fail_after_first_chunk: bool,
-    #[cfg(test)]
-    pub test_late_reap: Option<Arc<Notify>>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -97,10 +95,6 @@ pub(crate) struct StructuredCommandInput {
     pub timeout_ms: Option<f64>,
     pub abort: CancellationToken,
     pub legacy: Option<LegacyShell>,
-    #[cfg(test)]
-    pub test_late_reap: Option<Arc<Notify>>,
-    #[cfg(test)]
-    pub test_pause_before_second_spawn: Option<Arc<Notify>>,
 }
 
 pub(crate) struct LegacyShell {
@@ -128,6 +122,7 @@ pub(crate) struct NativeCommands {
 struct Owner {
     state: Mutex<OwnerState>,
     idle: Notify,
+    host: Arc<dyn ProcessHost>,
 }
 
 struct OwnerState {
@@ -167,6 +162,10 @@ impl NativeCommands {
         environment::guided_environment(host, butler_data)
     }
     pub(crate) fn new() -> Self {
+        Self::with_host(Arc::new(SystemProcesses))
+    }
+
+    pub(crate) fn with_host(host: Arc<dyn ProcessHost>) -> Self {
         Self {
             inner: Arc::new(Owner {
                 state: Mutex::new(OwnerState {
@@ -175,6 +174,7 @@ impl NativeCommands {
                     active: HashMap::new(),
                 }),
                 idle: Notify::new(),
+                host,
             }),
         }
     }
@@ -218,9 +218,10 @@ impl NativeCommands {
     ) -> Result<oneshot::Receiver<Result<GuidedCommandOutput, CommandError>>, CommandError> {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
+        let host = Arc::clone(&self.inner.host);
         tokio::spawn(async move {
             let _active = active;
-            guided::dispatch(input, shutdown, tx).await;
+            guided::dispatch(&*host, input, shutdown, tx).await;
         });
         Ok(rx)
     }
@@ -231,9 +232,10 @@ impl NativeCommands {
     ) -> Result<oneshot::Receiver<StructuredCommandOutput>, CommandError> {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
+        let host = Arc::clone(&self.inner.host);
         tokio::spawn(async move {
             let _active = active;
-            structured::dispatch(input, shutdown, tx).await;
+            structured::dispatch(&*host, input, shutdown, tx).await;
         });
         Ok(rx)
     }

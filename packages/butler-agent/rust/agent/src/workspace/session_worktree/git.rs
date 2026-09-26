@@ -56,10 +56,6 @@ impl<'a> GitWorktrees<'a> {
             timeout_ms: Some(30_000.0),
             abort,
             legacy: None,
-            #[cfg(test)]
-            test_late_reap: None,
-            #[cfg(test)]
-            test_pause_before_second_spawn: None,
         };
         self.commands
             .submit_structured(input)

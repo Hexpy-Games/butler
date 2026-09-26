@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::contracts::{CommittedFile, GuardedPath, MutationFailure};
+use super::contracts::{CommitObserver, CommittedFile, GuardedPath, MutationFailure};
 use super::{diff, failure};
 
 pub(super) struct Snapshot {
@@ -19,16 +19,7 @@ pub(super) struct Snapshot {
 pub(super) struct Prepared {
     pub before: Snapshot,
     pub data: Vec<u8>,
-    #[cfg(test)]
-    pub before_atomic: Option<BeforeAtomicHook>,
-    #[cfg(test)]
-    pub after_link: Option<AfterLinkHook>,
 }
-
-#[cfg(test)]
-type BeforeAtomicHook = Box<dyn FnOnce(&Path) + Send>;
-#[cfg(test)]
-type AfterLinkHook = Box<dyn Fn(&Path) + Send + Sync>;
 
 pub(super) fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -89,10 +80,6 @@ pub(super) fn prepare(
     Ok(Prepared {
         before: snapshot,
         data,
-        #[cfg(test)]
-        before_atomic: None,
-        #[cfg(test)]
-        after_link: None,
     })
 }
 
@@ -234,9 +221,10 @@ fn parent_failure(path: &str, error: &std::io::Error) -> MutationFailure {
     failure::new(Some(path.to_owned()), kind)
 }
 
-pub(super) fn commit(prepared: Prepared) -> Result<CommittedFile, MutationFailure> {
-    #[cfg(test)]
-    let mut prepared = prepared;
+pub(super) fn commit(
+    prepared: Prepared,
+    observer: &dyn CommitObserver,
+) -> Result<CommittedFile, MutationFailure> {
     let path = prepared.before.path.public.clone();
     let current = observe(
         GuardedPath {
@@ -265,10 +253,7 @@ pub(super) fn commit(prepared: Prepared) -> Result<CommittedFile, MutationFailur
         return Err(conflict);
     }
     drop(current);
-    #[cfg(test)]
-    if let Some(hook) = prepared.before_atomic.take() {
-        hook(&prepared.before.path.absolute);
-    }
+    observer.before_replace(&prepared.before.path.absolute);
     let temporary = prepared.before.path.absolute.with_file_name(format!(
         "{}.butler-{}-{}.tmp",
         prepared
@@ -281,7 +266,7 @@ pub(super) fn commit(prepared: Prepared) -> Result<CommittedFile, MutationFailur
         std::process::id(),
         Uuid::new_v4()
     ));
-    let result = atomic_replace(&prepared, &temporary);
+    let result = atomic_replace(&prepared, &temporary, observer);
     let cleanup_failed = match result {
         Ok(value) => value,
         Err(error) => {
@@ -314,7 +299,11 @@ pub(super) fn commit(prepared: Prepared) -> Result<CommittedFile, MutationFailur
     })
 }
 
-fn atomic_replace(prepared: &Prepared, temporary: &Path) -> std::io::Result<bool> {
+fn atomic_replace(
+    prepared: &Prepared,
+    temporary: &Path,
+    observer: &dyn CommitObserver,
+) -> std::io::Result<bool> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -330,10 +319,7 @@ fn atomic_replace(prepared: &Prepared, temporary: &Path) -> std::io::Result<bool
         Ok(false)
     } else {
         fs::hard_link(temporary, &prepared.before.path.absolute)?;
-        #[cfg(test)]
-        if let Some(hook) = &prepared.after_link {
-            hook(temporary);
-        }
+        observer.after_link(temporary);
         Ok(fs::remove_file(temporary).is_err())
     }
 }

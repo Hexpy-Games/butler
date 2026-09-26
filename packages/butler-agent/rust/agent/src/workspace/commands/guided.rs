@@ -8,19 +8,20 @@ use tokio_util::sync::CancellationToken;
 
 use super::environment::guided_environment;
 use super::process::{
-    FORCE_SETTLEMENT_GRACE, TERMINATION_GRACE, signal_command, signal_name, signal_pid,
+    FORCE_SETTLEMENT_GRACE, ProcessHost, TERMINATION_GRACE, signal_command, signal_name,
 };
 use super::spool::{Capture, Spool, SpoolPaths};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput, GuidedSummary};
 use crate::workspace::path_guard::{GuardInput, lexical_absolute, resolve_workspace_path_guard};
 
 pub(super) async fn dispatch(
+    host: &dyn ProcessHost,
     input: GuidedCommandInput,
     shutdown: CancellationToken,
     completion: oneshot::Sender<Result<GuidedCommandOutput, CommandError>>,
 ) {
     let mut completion = Some(completion);
-    let outcome = execute(input, shutdown, &mut completion).await;
+    let outcome = execute(host, input, shutdown, &mut completion).await;
     if let Some(sender) = completion {
         send_completion(
             sender,
@@ -31,6 +32,7 @@ pub(super) async fn dispatch(
 }
 
 async fn execute(
+    host: &dyn ProcessHost,
     input: GuidedCommandInput,
     shutdown: CancellationToken,
     completion: &mut Option<oneshot::Sender<Result<GuidedCommandOutput, CommandError>>>,
@@ -73,7 +75,7 @@ async fn execute(
         use std::os::unix::process::CommandExt;
         command.as_std_mut().process_group(0);
     }
-    let mut child = match command.spawn() {
+    let mut child = match host.spawn(&mut command).await {
         Ok(child) => child,
         Err(error) => {
             spool.discard().await;
@@ -83,16 +85,7 @@ async fn execute(
     let pid = child.id().expect("spawned child has pid");
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
-    let (paths, mut capture) = spool.capture(stdout, stderr, {
-        #[cfg(test)]
-        {
-            input.test_capture_fail_after_first_chunk
-        }
-        #[cfg(not(test))]
-        {
-            false
-        }
-    });
+    let (paths, mut capture) = spool.capture(host, stdout, stderr);
 
     enum Cause {
         Normal,
@@ -105,9 +98,9 @@ async fn execute(
         (Cause::Abort, None)
     } else {
         tokio::select! {
-            result = child.wait() => match result {
+            result = host.wait(&mut child) => match result {
                 Ok(status) => (Cause::Normal, Some(status)),
-                Err(error) => return cleanup_error(&mut child, pid, capture, paths, CommandError::io(error)).await,
+                Err(error) => return cleanup_error(host, &mut child, pid, capture, paths, CommandError::io(error)).await,
             },
             _ = tokio::time::sleep(timeout) => (Cause::Timeout, None),
             _ = input.abort.cancelled() => (Cause::Abort, None),
@@ -121,60 +114,59 @@ async fn execute(
         Cause::Normal => {
             // Node's close handler kills descendants even after the direct child exits.
             #[cfg(unix)]
-            if let Err(error) = signal_pid(pid, true) {
-                return cleanup_error(&mut child, pid, capture, paths, error).await;
+            if let Err(error) = host.signal_group(pid, true) {
+                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
             }
         }
         Cause::Capture(error) => {
-            return cleanup_error(&mut child, pid, capture, paths, error).await;
+            return cleanup_error(host, &mut child, pid, capture, paths, error).await;
         }
         Cause::Timeout | Cause::Abort | Cause::Shutdown => {
-            if let Err(error) = signal_command(&mut child, pid, false) {
-                return cleanup_error(&mut child, pid, capture, paths, error).await;
+            if let Err(error) = signal_command(host, &mut child, pid, false) {
+                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
             }
-            status = match tokio::time::timeout(TERMINATION_GRACE, child.wait()).await {
+            status = match tokio::time::timeout(TERMINATION_GRACE, host.wait(&mut child)).await {
                 Ok(Ok(status)) => Some(status),
                 Ok(Err(error)) => {
-                    return cleanup_error(&mut child, pid, capture, paths, CommandError::io(error))
-                        .await;
+                    return cleanup_error(
+                        host,
+                        &mut child,
+                        pid,
+                        capture,
+                        paths,
+                        CommandError::io(error),
+                    )
+                    .await;
                 }
                 Err(_) => {
-                    if let Err(error) = signal_command(&mut child, pid, true) {
-                        return cleanup_error(&mut child, pid, capture, paths, error).await;
+                    if let Err(error) = signal_command(host, &mut child, pid, true) {
+                        return cleanup_error(host, &mut child, pid, capture, paths, error).await;
                     }
                     force_sent = true;
-                    #[cfg(test)]
-                    let late_reap = input.test_late_reap.is_some();
-                    #[cfg(not(test))]
-                    let late_reap = false;
-                    if late_reap {
-                        tokio::time::sleep(FORCE_SETTLEMENT_GRACE).await;
-                        forced_output_close = true;
-                        None
-                    } else {
-                        match tokio::time::timeout(FORCE_SETTLEMENT_GRACE, child.wait()).await {
-                            Ok(Ok(status)) => Some(status),
-                            Ok(Err(error)) => {
-                                return cleanup_error(
-                                    &mut child,
-                                    pid,
-                                    capture,
-                                    paths,
-                                    CommandError::io(error),
-                                )
-                                .await;
-                            }
-                            Err(_) => {
-                                forced_output_close = true;
-                                None
-                            }
+                    match tokio::time::timeout(FORCE_SETTLEMENT_GRACE, host.wait(&mut child)).await
+                    {
+                        Ok(Ok(status)) => Some(status),
+                        Ok(Err(error)) => {
+                            return cleanup_error(
+                                host,
+                                &mut child,
+                                pid,
+                                capture,
+                                paths,
+                                CommandError::io(error),
+                            )
+                            .await;
+                        }
+                        Err(_) => {
+                            forced_output_close = true;
+                            None
                         }
                     }
                 }
             };
             #[cfg(unix)]
-            if !force_sent && let Err(error) = signal_pid(pid, true) {
-                return cleanup_error(&mut child, pid, capture, paths, error).await;
+            if !force_sent && let Err(error) = host.signal_group(pid, true) {
+                return cleanup_error(host, &mut child, pid, capture, paths, error).await;
             }
         }
     }
@@ -206,11 +198,8 @@ async fn execute(
         if let Some(sender) = completion.take() {
             send_completion(sender, result).await;
         }
-        #[cfg(test)]
-        if let Some(gate) = input.test_late_reap {
-            gate.notified().await;
-        }
-        let _ = child.wait().await;
+        // The public result is settled; the owner stays active until reaped.
+        let _ = host.wait(&mut child).await;
         return Ok(None);
     }
     if matches!(cause, Cause::Abort | Cause::Shutdown) {
@@ -253,15 +242,16 @@ async fn send_completion(
 }
 
 async fn cleanup_error(
+    host: &dyn ProcessHost,
     child: &mut tokio::process::Child,
     pid: u32,
     capture: Capture,
     paths: SpoolPaths,
     error: CommandError,
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
-    let _ = signal_command(child, pid, true);
+    let _ = signal_command(host, child, pid, true);
     let _ = child.start_kill();
-    let _ = child.wait().await;
+    let _ = host.wait(child).await;
     capture.stop();
     let _ = capture.finish(true).await;
     paths.discard().await;

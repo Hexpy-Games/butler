@@ -62,10 +62,6 @@ pub(in crate::host::guided_command) async fn snapshot(
             timeout_ms: Some(10_000.0),
             abort,
             legacy: None,
-            #[cfg(test)]
-            test_late_reap: None,
-            #[cfg(test)]
-            test_pause_before_second_spawn: None,
         })
         .ok()?
         .await

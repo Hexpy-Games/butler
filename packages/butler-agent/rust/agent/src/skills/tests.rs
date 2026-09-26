@@ -13,7 +13,7 @@ async fn only_installed_status_receives_a_canonical_shell_quoted_command() {
     let data = root.join("data");
     for directory in [
         resources.join("skills/restart"),
-        data.join("skills/restart"),
+        data.join("skills/default/restart"),
     ] {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(

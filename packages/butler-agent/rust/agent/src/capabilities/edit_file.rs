@@ -91,8 +91,6 @@ pub(super) async fn execute(
             context,
             edits,
             batch: has_batch,
-            #[cfg(test)]
-            before_commit: None,
         }))
         .map_err(owner_error)?;
     let (outcome, elapsed) = receiver

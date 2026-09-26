@@ -24,8 +24,6 @@ async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts(
             timeout_ms: None,
             abort: CancellationToken::new(),
             legacy: None,
-            test_late_reap: None,
-            test_pause_before_second_spawn: None,
         })
         .unwrap()
         .await
@@ -93,8 +91,6 @@ async fn real_k2_structured_and_guided_outputs_feed_persisted_context_artifacts(
             access: GuidedAccess::FullAccessContained,
             host_environment,
             abort: CancellationToken::new(),
-            test_capture_fail_after_first_chunk: false,
-            test_late_reap: None,
         })
         .unwrap()
         .await

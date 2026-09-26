@@ -2,10 +2,7 @@ use std::{
     cmp::Ordering,
     fs,
     path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering as AtomicOrdering},
-    },
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -19,9 +16,35 @@ use crate::{
 
 use super::*;
 
-#[derive(Default)]
+/// Coordinator clock reads happen only inside write-gate acquisition in these
+/// flows, so a read after `before` proves the operation is at the gate.
 struct TestHost {
-    clock_reads: AtomicUsize,
+    clock_reads: tokio::sync::watch::Sender<usize>,
+}
+
+impl Default for TestHost {
+    fn default() -> Self {
+        Self {
+            clock_reads: tokio::sync::watch::Sender::new(0),
+        }
+    }
+}
+
+impl TestHost {
+    fn clock_reads(&self) -> usize {
+        *self.clock_reads.borrow()
+    }
+
+    async fn gate_reached_after(&self, before: usize) {
+        let mut reads = self.clock_reads.subscribe();
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            reads.wait_for(|reads| *reads > before),
+        )
+        .await
+        .expect("operation must reach the write gate")
+        .unwrap();
+    }
 }
 
 impl ConversationIdentityClock for TestHost {
@@ -62,7 +85,7 @@ impl CognitionCoordinationHost for TestHost {
     }
 
     fn now_epoch_millis(&self) -> i64 {
-        self.clock_reads.fetch_add(1, AtomicOrdering::Relaxed);
+        self.clock_reads.send_modify(|reads| *reads += 1);
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -113,7 +136,7 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
     )
     .unwrap();
 
-    let coordinator = Arc::new(CognitionWriteCoordinator::new(host).unwrap());
+    let coordinator = Arc::new(CognitionWriteCoordinator::new(host.clone()).unwrap());
     let environment = CognitionPathEnvironment::default();
     let lock_path = environment.consolidation_lock(&fixture.0);
     let held = coordinator
@@ -123,6 +146,7 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
         ))
         .unwrap()
         .unwrap();
+    let clock_before = host.clock_reads();
     let cancellation = CancellationToken::new();
     let running = tokio::spawn(prepare(
         fixture.0.clone(),
@@ -135,28 +159,21 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
     ));
 
     let generations = fixture.0.join("cognition/memory/generations");
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            if fs::read_dir(&generations)
-                .unwrap()
-                .filter_map(Result::ok)
-                .any(|entry| {
-                    entry.file_name().to_string_lossy().starts_with(".prepare-")
-                        && entry.path().join("graph.sqlite").is_file()
-                        && entry
-                            .path()
-                            .join("source-snapshot/memory-source-inventory.json")
-                            .is_file()
-                })
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .expect("snapshot must stage before cancellation");
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    host.gate_reached_after(clock_before).await;
+    assert!(
+        fs::read_dir(&generations)
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_name().to_string_lossy().starts_with(".prepare-")
+                    && entry.path().join("graph.sqlite").is_file()
+                    && entry
+                        .path()
+                        .join("source-snapshot/memory-source-inventory.json")
+                        .is_file()
+            }),
+        "snapshot must stage before the write gate"
+    );
     assert!(
         !running.is_finished(),
         "held write gate must block publication"
@@ -168,7 +185,7 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
         .unwrap();
     assert_eq!(
         outcome.err().expect("acquisition must fail").code,
-        "memory_write_busy"
+        "memory_operation_aborted"
     );
     assert_eq!(fs::read_dir(&generations).unwrap().count(), 0);
     held.release(false).unwrap();
@@ -223,7 +240,7 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
         ))
         .unwrap()
         .unwrap();
-    let clock_before = host.clock_reads.load(AtomicOrdering::Relaxed);
+    let clock_before = host.clock_reads();
     let cancellation = CancellationToken::new();
     let record = readiness::record(
         &fixture.0,
@@ -234,16 +251,7 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     );
     let cache = root.join("hot/cache.md");
     let change_after_compute = async {
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                if host.clock_reads.load(AtomicOrdering::Relaxed) > clock_before {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await
-        .expect("read-only readiness must finish before gate acquisition");
+        host.gate_reached_after(clock_before).await;
         fs::create_dir_all(cache.parent().unwrap()).unwrap();
         fs::write(&cache, "changed after readiness computation\n").unwrap();
         held.release(false).unwrap();
@@ -320,7 +328,7 @@ async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
         ))
         .unwrap()
         .unwrap();
-    let clock_before = host.clock_reads.load(AtomicOrdering::Relaxed);
+    let clock_before = host.clock_reads();
     let row = crate::cognition::generation_vectors::GenerationVectorRow {
         vector_key: "a".repeat(64),
         generation: handle.generation_id.clone(),
@@ -357,13 +365,7 @@ async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
             ],
         });
     let change = async {
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while host.clock_reads.load(AtomicOrdering::Relaxed) <= clock_before {
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await
-        .expect("commit must wait for gate");
+        host.gate_reached_after(clock_before).await;
         let cache = handle.root.join("hot/cache.md");
         fs::create_dir_all(cache.parent().unwrap()).unwrap();
         fs::write(cache, "changed while gate held\n").unwrap();

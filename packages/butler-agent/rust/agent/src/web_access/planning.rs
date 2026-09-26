@@ -56,12 +56,12 @@ pub(super) async fn create_plan(
     let planning = &config["webSearch"]["planning"];
     let enabled =
         planning["mode"].as_str() != Some("off") && planning["enabled"].as_bool().unwrap_or(true);
-    if access.test_planning_disabled() || !enabled {
+    if access.planning_disabled() || !enabled {
         return Ok(PlanningResult {
             plan: None,
             used_planner: false,
             attempts: 0,
-            fallback_reason: Some(if access.test_planning_disabled() {
+            fallback_reason: Some(if access.planning_disabled() {
                 "test search planning is disabled".into()
             } else {
                 "search planning is disabled".into()

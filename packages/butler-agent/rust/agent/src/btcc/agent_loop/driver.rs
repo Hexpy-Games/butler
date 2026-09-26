@@ -200,18 +200,6 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
                 super::contracts::TextCallDisposition::Fail(error) => {
                     return Err(propagated(error));
                 }
-                #[cfg(test)]
-                super::contracts::TextCallDisposition::Continue(observation) => {
-                    if observation.trim().is_empty() {
-                        return Err(propagated(super::invalid_contract(
-                            "btcc_text_tool_call_observation_missing",
-                        )));
-                    }
-                    state
-                        .messages
-                        .push(ModelRoundMessage::user(observation, None));
-                    continue;
-                }
             }
         }
 
@@ -255,17 +243,6 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
                 .await
                 .map_err(propagated)?
             {
-                #[cfg(test)]
-                CandidateDisposition::Wait => {
-                    return finish(
-                        &input,
-                        &state,
-                        "",
-                        Some(SuspensionReason::WaitingForWorker),
-                        None,
-                    )
-                    .await;
-                }
                 CandidateDisposition::Continue(observation) => {
                     if observation.trim().is_empty() {
                         return Err(propagated(super::invalid_contract(

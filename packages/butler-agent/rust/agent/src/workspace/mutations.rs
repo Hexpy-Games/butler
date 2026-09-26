@@ -12,8 +12,8 @@ mod write;
 mod tests;
 
 pub(crate) use contracts::{
-    BatchResult, ChangedFile, CommittedFile, EditFailure, EditMutation, EditedFile, ExactEdit,
-    MutationCommand, MutationContext, MutationOutcome, WriteMutation,
+    BatchResult, ChangedFile, CommitObserver, CommittedFile, EditFailure, EditMutation, EditedFile,
+    ExactEdit, MutationCommand, MutationContext, MutationOutcome, Unobserved, WriteMutation,
 };
 
 pub(crate) fn net_changed_file_detail(
@@ -44,6 +44,7 @@ struct MutationOwner {
     state: Mutex<OwnerState>,
     serial: Arc<Semaphore>,
     idle: Notify,
+    observer: Arc<dyn CommitObserver>,
 }
 
 struct OwnerState {
@@ -69,6 +70,10 @@ pub(crate) struct MutationOwnerError {
 
 impl WorkspaceMutations {
     pub(crate) fn new() -> Self {
+        Self::observed(Arc::new(Unobserved))
+    }
+
+    pub(crate) fn observed(observer: Arc<dyn CommitObserver>) -> Self {
         Self {
             inner: Arc::new(MutationOwner {
                 state: Mutex::new(OwnerState {
@@ -77,6 +82,7 @@ impl WorkspaceMutations {
                 }),
                 serial: Arc::new(Semaphore::new(1)),
                 idle: Notify::new(),
+                observer,
             }),
         }
     }
@@ -97,6 +103,7 @@ impl WorkspaceMutations {
         }
         let active = Active(Arc::clone(&self.inner));
         let serial = Arc::clone(&self.inner.serial);
+        let observer = Arc::clone(&self.inner.observer);
         let (sender, receiver) = oneshot::channel();
         tokio::spawn(async move {
             let _active = active;
@@ -105,7 +112,7 @@ impl WorkspaceMutations {
                 Ok(Ok(Err(outcome))) => Ok((outcome, Duration::ZERO)),
                 Ok(Ok(Ok(command))) => {
                     let started = Instant::now();
-                    execute_serial(command, serial)
+                    execute_serial(command, serial, observer)
                         .await
                         .map(|outcome| (outcome, started.elapsed()))
                 }
@@ -150,6 +157,7 @@ impl WorkspaceMutations {
 async fn execute_serial(
     command: GuardedCommand,
     serial: Arc<Semaphore>,
+    observer: Arc<dyn CommitObserver>,
 ) -> Result<MutationOutcome, MutationOwnerError> {
     let permit = serial
         .acquire_owned()
@@ -161,9 +169,9 @@ async fn execute_serial(
         let _lease = permit;
         match command {
             GuardedCommand::Write(input, path) => {
-                MutationOutcome::Write(write::execute(input, path))
+                MutationOutcome::Write(write::execute(input, path, observer.as_ref()))
             }
-            GuardedCommand::Edit(input, paths) => edit::execute(input, paths),
+            GuardedCommand::Edit(input, paths) => edit::execute(input, paths, observer.as_ref()),
         }
     })
     .await

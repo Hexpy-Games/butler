@@ -10,8 +10,11 @@ async fn post_dispatch_and_post_receipt_faults_settle_same_durable_occurrence() 
         binding: PlanBinding::AcceptedPlan,
     });
     let journal = Arc::new(StorageEffectJournal::new(storage.clone(), clock()));
-    let first = NativeEffectService::new(journal.clone(), clock())
-        .with_fault(Arc::new(FailAt("after_dispatch")));
+    let first = NativeEffectService::with_fault_points(
+        journal.clone(),
+        clock(),
+        Arc::new(FailAt("after_dispatch")),
+    );
     let mut input = invocation(work.clone(), Arc::clone(&adapter), CancellationToken::new());
     input.occurrence_id = Some("first".into());
     assert!(matches!(
@@ -21,8 +24,11 @@ async fn post_dispatch_and_post_receipt_faults_settle_same_durable_occurrence() 
             ..
         }
     ));
-    let second = NativeEffectService::new(journal.clone(), clock())
-        .with_fault(Arc::new(FailAt("after_receipt")));
+    let second = NativeEffectService::with_fault_points(
+        journal.clone(),
+        clock(),
+        Arc::new(FailAt("after_receipt")),
+    );
     let mut input = invocation(work.clone(), Arc::clone(&adapter), CancellationToken::new());
     input.occurrence_id = Some("second".into());
     assert!(matches!(
@@ -141,8 +147,11 @@ async fn cancellation_before_intent_and_after_claim_preserve_source_dispatch_bou
             .is_empty()
     );
     let marker = CancellationToken::new();
-    let service = NativeEffectService::new(journal.clone(), clock())
-        .with_fault(Arc::new(CancelAtMarker(marker.clone())));
+    let service = NativeEffectService::with_fault_points(
+        journal.clone(),
+        clock(),
+        Arc::new(CancelAtMarker(marker.clone())),
+    );
     assert!(
         matches!(service.execute(invocation(work.clone(),adapter,marker)).await.unwrap(),
         EffectOutcome::Rejected(error) if error.code=="effect_cancelled")

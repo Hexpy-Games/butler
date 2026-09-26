@@ -54,9 +54,11 @@ impl ProviderRequestConfigPort for Config {
                 endpoint: self.endpoint.clone(),
                 api_shape: self.metadata.hosted_api_shape,
                 auth: ProviderAuth::ApiKey("test-only".into()),
+                // Failure bounds only; the local server answers at once, and
+                // tight budgets turned scheduler stalls into provider errors.
                 policy: ProviderRoundPolicy {
-                    total: Duration::from_secs(2),
-                    idle: Some(Duration::from_secs(1)),
+                    total: Duration::from_secs(60),
+                    idle: Some(Duration::from_secs(60)),
                     retry_base_ms: 0.0,
                 },
                 retry_attempts: 1.0,
@@ -91,8 +93,11 @@ impl ProviderClock for Clock {
     }
 }
 
+/// Serves provider requests until `shutdown` is cancelled. No idle timeout: a
+/// slow projection under parallel test load must not find the listener gone.
 async fn response_server(
     body: Vec<u8>,
+    shutdown: tokio_util::sync::CancellationToken,
 ) -> (Url, tokio::task::JoinHandle<Vec<Vec<u8>>>, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = Url::parse(&format!(
@@ -104,9 +109,11 @@ async fn response_server(
     let counter = requests.clone();
     let task = tokio::spawn(async move {
         let mut captured = Vec::new();
-        while let Ok(Ok((mut socket, _))) =
-            tokio::time::timeout(Duration::from_secs(3), listener.accept()).await
-        {
+        loop {
+            let mut socket = tokio::select! {
+                () = shutdown.cancelled() => break,
+                accepted = listener.accept() => accepted.unwrap().0,
+            };
             counter.fetch_add(1, Ordering::SeqCst);
             let mut request = Vec::new();
             let mut part = [0u8; 4096];
@@ -176,7 +183,8 @@ async fn response_server(
 async fn actual_native_provider_applies_registered_semantic_window() {
     let meaning=serde_json::json!({"status":"processed","entities":[{"name":"Straße","evidence":[0]}],"items":[{"kind":"preference","subject":0,"text":"Straße likes tea","evidence":[0]}],"attributes":[]}).to_string();
     let body=serde_json::json!({"id":"resp_cognition","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":meaning}]}],"usage":{"input_tokens":3,"total_tokens":5}}).to_string().into_bytes();
-    let (endpoint, server, requests) = response_server(body).await;
+    let server_shutdown = tokio_util::sync::CancellationToken::new();
+    let (endpoint, server, requests) = response_server(body, server_shutdown.clone()).await;
     let catalog = Arc::new(ModelCatalog::new().unwrap());
     let snapshot = Arc::new(
         catalog
@@ -272,6 +280,7 @@ async fn actual_native_provider_applies_registered_semantic_window() {
         .unwrap();
     assert_eq!(second_projection.semantic_graph["state"], "partial");
     service.close().await;
+    server_shutdown.cancel();
     let provider_requests = server.await.unwrap();
     assert!(requests.load(Ordering::SeqCst) >= 2);
     assert!(String::from_utf8_lossy(&provider_requests[0]).contains("memory_meaning_v4"));

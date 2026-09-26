@@ -11,6 +11,6 @@ mod service;
 mod spool;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub(crate) use service::{WebAccess, WebSession};

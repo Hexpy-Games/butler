@@ -369,7 +369,15 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         .await
         .unwrap();
     let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
-    assert_eq!(page.messages.last().unwrap().text, "answer");
+    // The queue wake may already have dispatched the plan continuation, whose
+    // user message then follows the answer.
+    let texts = page
+        .messages
+        .iter()
+        .map(|message| message.text.as_str())
+        .collect::<Vec<_>>();
+    let question = texts.iter().position(|text| *text == "question").unwrap();
+    assert_eq!(texts.get(question + 1), Some(&"answer"));
     let settled_turn = turn_id.clone();
     let state = app
         .storage
@@ -386,11 +394,14 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     assert_eq!(state, "dispatched");
     app.storage
         .execute(move |db| {
+            // The plan continuation is the newest queue row. The queue wake
+            // issued by projection may already have dispatched it, so its
+            // state is not part of this contract.
             let (text, resolution): (String, String) = db
                 .query_row(
                     "SELECT text,control_resolution_json FROM session_queued_messages \
-                     WHERE state='queued' ORDER BY rowid DESC LIMIT 1",
-                    [],
+                     WHERE turn_id IS NOT ?1 ORDER BY rowid DESC LIMIT 1",
+                    [&turn_id],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 )
                 .map_err(AppStorageError::sqlite)?;

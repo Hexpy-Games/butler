@@ -26,8 +26,6 @@ pub(crate) use effect_file::{
     EffectFileError, EffectFileObservation, EffectFileScope, guard_effect_file,
     observe_effect_file, read_effect_edit_target,
 };
-#[cfg(test)]
-pub(crate) use file_owner::TestReadBarrier;
 pub(crate) use file_owner::{FileOwnerError, NativeWorkspaceFiles};
 pub(crate) use files::{ReadFileInput, WorkspaceFileRead, cursor_path, utf8_prefix_end};
 pub(crate) use grep::{GrepCandidate, GrepMatch, GrepRead};

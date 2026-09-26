@@ -10,9 +10,9 @@ use crate::btcc::{
 };
 use serde_json::{Value, json};
 
-use super::ProductionAgentLoop;
 use super::continuation::GuidedPresentation;
 use super::contracts::*;
+use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::TurnContextProjection;
 use super::guided_ports::{GuidedInvocation, GuidedPolicyDependencies};
 use super::operation_result_replay::{OperationResultMessageReferences, OperationResultScope};
@@ -66,28 +66,26 @@ impl Fixture {
         })
     }
 
-    pub(super) fn agent(self: &Arc<Self>) -> ProductionAgentLoop {
-        ProductionAgentLoop {
-            binding: super::LoopBinding::Fixture(super::fixture_binding::FixtureAgentLoop {
-                model: self.clone(),
-                execution_factory: self.clone(),
-                policy: self.clone(),
-                operation_result_factory: Arc::new(FixtureOperationFactory(self.clone())),
-                work_scope: self.clone(),
-                budget_factory: Arc::new(crate::btcc::GuidedContinuationBudgetFactory::new(
-                    None,
-                    Arc::new(|| 0),
-                )),
-                observer: Some(self.clone()),
-            }),
+    pub(super) fn agent(self: &Arc<Self>) -> FixtureAgentLoop {
+        FixtureAgentLoop {
+            model: self.clone(),
+            execution_factory: self.clone(),
+            policy: self.clone(),
+            operation_result_factory: Arc::new(FixtureOperationFactory(self.clone())),
+            work_scope: self.clone(),
+            budget_factory: Arc::new(crate::btcc::GuidedContinuationBudgetFactory::new(
+                None,
+                Arc::new(|| 0),
+            )),
+            observer: Some(self.clone()),
         }
     }
 
     pub(super) fn guided_agent(
         self: &Arc<Self>,
         authority_decision: Option<AuthorityDecision>,
-    ) -> ProductionAgentLoop {
-        ProductionAgentLoop::guided(
+    ) -> FixtureAgentLoop {
+        FixtureAgentLoop::guided(
             self.clone(),
             self.clone(),
             GuidedPolicyDependencies {
@@ -112,7 +110,7 @@ impl Fixture {
         )
     }
 
-    fn note(&self, value: impl Into<String>) {
+    pub(super) fn note(&self, value: impl Into<String>) {
         self.events.lock().unwrap().push(value.into());
     }
 }
@@ -364,9 +362,10 @@ impl GuidedPolicyPort for Fixture {
         _: u32,
     ) -> PortFuture<'a, TextCallDisposition> {
         Box::pin(async {
-            Ok(TextCallDisposition::Continue(
-                "structured tool calls required".into(),
-            ))
+            Ok(TextCallDisposition::Fail(BtccError::new(
+                "btcc_text_tool_calls_unsupported",
+                "structured tool calls required",
+            )))
         })
     }
 

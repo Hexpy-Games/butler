@@ -1,9 +1,12 @@
-use super::contracts::{CommittedFile, GuardedPath, MutationFailure, WriteMutation};
+use super::contracts::{
+    CommitObserver, CommittedFile, GuardedPath, MutationFailure, WriteMutation,
+};
 use super::{failure, io};
 
 pub(super) fn execute(
     input: WriteMutation,
     path: GuardedPath,
+    observer: &dyn CommitObserver,
 ) -> Result<CommittedFile, MutationFailure> {
     let snapshot = io::observe(path, input.create_parents)?;
     if snapshot.exists && !input.overwrite {
@@ -29,5 +32,5 @@ pub(super) fn execute(
         // The observation checked an existing parent; recheck after preparation.
         io::ensure_existing_parent(&prepared.before.path)?;
     }
-    io::commit(prepared)
+    io::commit(prepared, observer)
 }

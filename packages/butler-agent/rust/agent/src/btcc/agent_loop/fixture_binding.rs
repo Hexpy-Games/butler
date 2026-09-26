@@ -1,5 +1,7 @@
-//! Existing component fixture assembly, excluded from the native executable.
+//! Agent loop assembled from explicit test collaborators instead of the
+//! native guided-turn factory; it drives the same policy and driver.
 
+use super::ports::GuidedPolicyPort;
 use super::*;
 
 pub(crate) struct FixtureAgentLoop {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{NativeProjectLedger, PlanRecordRead, ProjectLedgerReadError, TestReadBarrier};
+use super::{NativeProjectLedger, PlanRecordRead, ProjectLedgerReadError};
 
 struct Fixture {
     data: PathBuf,
@@ -276,30 +276,36 @@ async fn before_image_remains_authoritative_until_claim_release() {
 async fn dropped_caller_keeps_admitted_read_owned_and_close_drains() {
     let fixture = Fixture::new();
     let native = fixture.native();
-    let barrier = Arc::new(TestReadBarrier {
-        entered: std::sync::Barrier::new(2),
-        release: std::sync::Barrier::new(2),
-    });
-    native.set_test_barrier(Arc::clone(&barrier));
+    let entered = Arc::new(std::sync::Barrier::new(2));
+    let release = Arc::new(std::sync::Barrier::new(2));
     let caller = tokio::spawn({
         let native = native.clone();
-        let input = fixture.input("PLAN-1");
-        async move { native.show_plan_record(input).await }
+        let (entered, release) = (Arc::clone(&entered), Arc::clone(&release));
+        async move {
+            native
+                .run(move |_, _| {
+                    entered.wait();
+                    release.wait();
+                    Ok(())
+                })
+                .await
+        }
     });
-    tokio::task::spawn_blocking({
-        let barrier = Arc::clone(&barrier);
-        move || barrier.entered.wait()
-    })
-    .await
-    .unwrap();
+    tokio::task::spawn_blocking(move || entered.wait())
+        .await
+        .unwrap();
     caller.abort();
-    let closing = tokio::spawn({
+    let mut closing = tokio::spawn({
         let native = native.clone();
         async move { native.close().await }
     });
-    tokio::task::yield_now().await;
-    assert!(!closing.is_finished());
-    tokio::task::spawn_blocking(move || barrier.release.wait())
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut closing)
+            .await
+            .is_err(),
+        "close finished while an admitted read was running"
+    );
+    tokio::task::spawn_blocking(move || release.wait())
         .await
         .unwrap();
     closing.await.unwrap();

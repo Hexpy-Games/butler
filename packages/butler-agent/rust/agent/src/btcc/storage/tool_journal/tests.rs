@@ -190,7 +190,11 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(record.status, "failed");
+        // The journal status tracks the call lifecycle, not the tool outcome:
+        // any produced result (including an absent or JSON-null body) is
+        // `completed` so it can be admitted for delivery; failure is projected
+        // from the result body by the operation-result reader.
+        assert_eq!(record.status, "completed");
         assert_eq!(record.result.is_some(), result.is_some());
         if let (Some(actual), Some(expected)) = (record.result, result) {
             assert_eq!(actual.read::<Value>().unwrap(), expected);

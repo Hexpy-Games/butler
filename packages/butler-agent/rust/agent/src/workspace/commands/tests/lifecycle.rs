@@ -1,4 +1,7 @@
-use super::{CommandStep, Fixture, GuidedAccess, NativeCommands};
+use std::sync::Arc;
+use std::time::Duration;
+
+use super::{CommandStep, Fixture, GuidedAccess, NativeCommands, ScriptedProcesses};
 
 #[cfg(unix)]
 #[tokio::test]
@@ -23,16 +26,10 @@ async fn guided_normal_close_kills_owned_background_descendant() {
         .trim()
         .parse()
         .unwrap();
-    let gone = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH) {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+    crate::testing::eventually("the owned descendant to exit", || {
+        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
     })
     .await;
-    assert!(gone.is_ok(), "owned descendant {pid} still exists");
     owner.close().await;
 }
 
@@ -60,9 +57,11 @@ async fn spool_initialization_failure_does_not_start_child() {
 #[tokio::test]
 async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
-    let mut input = fixture.guided("printf x; sleep 5");
-    input.test_capture_fail_after_first_chunk = true;
+    let owner = NativeCommands::with_host(Arc::new(ScriptedProcesses {
+        failing_capture: true,
+        ..ScriptedProcesses::default()
+    }));
+    let input = fixture.guided("printf x; sleep 5");
     let failure = tokio::time::timeout(std::time::Duration::from_secs(2), async {
         owner
             .submit_guided(input)
@@ -177,26 +176,38 @@ async fn guided_read_only_uses_actual_sandbox_boundary() {
 #[tokio::test]
 async fn guided_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
-    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
-    let mut input = fixture.guided("trap '' TERM; while :; do sleep 1; done");
+    let (host, release) = ScriptedProcesses::reaped_on_release();
+    let owner = NativeCommands::with_host(Arc::new(host));
+    let mut input = fixture.guided("while :; do sleep 1; done");
     input.timeout_ms = Some(10.0);
-    input.test_late_reap = Some(gate.clone());
     let receiver = owner.submit_guided(input).unwrap();
-    let output = tokio::time::timeout(std::time::Duration::from_secs(3), receiver)
+    let output = tokio::time::timeout(Duration::from_secs(10), receiver)
         .await
         .unwrap()
         .unwrap()
         .unwrap();
     assert!(output.summary.timed_out);
     assert_eq!(owner.active_count(), 1);
-    let closing = tokio::spawn({
+    assert_close_waits_for_reap(&owner, release).await;
+}
+
+/// The public result is already settled; closing the owner must still wait
+/// until the killed child is reaped.
+async fn assert_close_waits_for_reap(
+    owner: &NativeCommands,
+    release: tokio::sync::watch::Sender<bool>,
+) {
+    let mut closing = tokio::spawn({
         let owner = owner.clone();
         async move { owner.close().await }
     });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    assert!(!closing.is_finished());
-    gate.notify_one();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut closing)
+            .await
+            .is_err(),
+        "close finished before the owned child was reaped"
+    );
+    release.send(true).unwrap();
     closing.await.unwrap();
     assert_eq!(owner.active_count(), 0);
 }
@@ -204,33 +215,21 @@ async fn guided_forced_public_settlement_precedes_owned_reap() {
 #[tokio::test]
 async fn structured_forced_public_settlement_precedes_owned_reap() {
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
-    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+    let (host, release) = ScriptedProcesses::reaped_on_release();
+    let owner = NativeCommands::with_host(Arc::new(host));
     let mut input = fixture.structured(vec![CommandStep {
         executable: "/bin/sh".into(),
-        arguments: vec![
-            "-c".into(),
-            "trap '' TERM; while :; do sleep 1; done".into(),
-        ],
+        arguments: vec!["-c".into(), "while :; do sleep 1; done".into()],
     }]);
     input.timeout_ms = Some(10.0);
-    input.test_late_reap = Some(gate.clone());
     let receiver = owner.submit_structured(input).unwrap();
-    let output = tokio::time::timeout(std::time::Duration::from_secs(3), receiver)
+    let output = tokio::time::timeout(Duration::from_secs(10), receiver)
         .await
         .unwrap()
         .unwrap();
     assert!(output.timed_out);
     assert_eq!(owner.active_count(), 1);
-    let closing = tokio::spawn({
-        let owner = owner.clone();
-        async move { owner.close().await }
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    assert!(!closing.is_finished());
-    gate.notify_one();
-    closing.await.unwrap();
-    assert_eq!(owner.active_count(), 0);
+    assert_close_waits_for_reap(&owner, release).await;
 }
 
 #[cfg(unix)]
@@ -241,11 +240,17 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
     use nix::unistd::Pid;
 
     let fixture = Fixture::new();
-    let owner = NativeCommands::new();
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let owner = NativeCommands::with_host(Arc::new(ScriptedProcesses {
+        before_second_spawn: Some(gate.clone()),
+        ..ScriptedProcesses::default()
+    }));
     let pid_path = fixture.0.join("partial-child.pid");
-    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+    // The descendant reports its pid only after it ignores SIGTERM; the file
+    // appears atomically so the test never reads a partial write.
     let first = format!(
-        "sh -c 'trap \"\" TERM; exec sleep 10' & echo $! > '{}'; trap 'exit 0' TERM; wait",
+        "sh -c 'trap \"\" TERM; echo $$ > \"$0.tmp\"; mv \"$0.tmp\" \"$0\"; exec sleep 10' '{}' & \
+         trap 'exit 0' TERM; wait",
         pid_path.display()
     );
     let mut input = fixture.structured(vec![
@@ -258,33 +263,27 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
             arguments: vec![],
         },
     ]);
-    input.test_pause_before_second_spawn = Some(gate.clone());
+    input.timeout_ms = Some(60_000.0);
     let receiver = owner.submit_structured(input).unwrap();
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        while !pid_path.exists() {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
+    let mut pid = None;
+    crate::testing::eventually("the TERM-ignoring descendant", || {
+        pid = std::fs::read_to_string(&pid_path)
+            .ok()
+            .and_then(|pid| pid.trim().parse::<i32>().ok());
+        pid.is_some()
     })
-    .await
-    .unwrap();
-    let pid: i32 = std::fs::read_to_string(&pid_path)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
+    .await;
+    let pid = pid.unwrap();
     gate.notify_one();
-    let result = tokio::time::timeout(std::time::Duration::from_secs(3), receiver)
+    let result = tokio::time::timeout(Duration::from_secs(10), receiver)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(result.error.unwrap().code, "command_spawn_failed");
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        while kill(Pid::from_raw(pid), None) != Err(Errno::ESRCH) {
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+    crate::testing::eventually("the descendant to be reaped", || {
+        kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
     })
-    .await
-    .unwrap();
+    .await;
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
 }

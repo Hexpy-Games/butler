@@ -93,7 +93,6 @@ pub(super) fn budget(
         },
         raw_tokens: raw_tokens as u64,
     };
-    #[cfg(test)]
     identity.before_artifact_write();
     std::fs::write(
         &path,

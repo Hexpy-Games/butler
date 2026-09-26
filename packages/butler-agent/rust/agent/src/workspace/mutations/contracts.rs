@@ -32,12 +32,24 @@ pub(crate) struct EditMutation {
     pub context: MutationContext,
     pub edits: Vec<ExactEdit>,
     pub batch: bool,
-    #[cfg(test)]
-    pub before_commit: Option<BeforeCommitHook>,
 }
 
-#[cfg(test)]
-pub(crate) type BeforeCommitHook = std::sync::Arc<dyn Fn(usize, &std::path::Path) + Send + Sync>;
+/// Observes the commit points of one mutation lane, between the conflict
+/// check and the filesystem operations it guards. Production observes
+/// nothing; the points exist so concurrent external changes can be modelled
+/// exactly where they matter.
+pub(crate) trait CommitObserver: Send + Sync {
+    /// Before a batch target is committed (`index` is its first edit index).
+    fn before_target(&self, _index: usize, _target: &std::path::Path) {}
+    /// After the external-change check, before the temporary file is written.
+    fn before_replace(&self, _target: &std::path::Path) {}
+    /// After a new file is linked into place, before its temporary is removed.
+    fn after_link(&self, _temporary: &std::path::Path) {}
+}
+
+pub(crate) struct Unobserved;
+
+impl CommitObserver for Unobserved {}
 
 pub(crate) enum MutationCommand {
     Write(WriteMutation),

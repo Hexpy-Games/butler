@@ -2,6 +2,7 @@ name: Rust quality
 
 on:
   push:
+    branches: [main]
     paths:
       - "packages/butler-agent/rust/**"
       - ".github/workflows/rust-quality.yml"
@@ -13,30 +14,84 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rust-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
-    name: Rust quality (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    # The agent links a static ONNX Runtime built by the repository recipe,
+    # which (like the shipped agent) targets macOS arm64 only.
+    name: Rust quality (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: packages/butler-agent/rust
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.91.0
           components: rustfmt, clippy
+
       - name: Check formatting
         run: cargo fmt --all -- --check
+
+      - name: Set up Python for the ORT recipe
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The recipe fingerprints the lock, the script, the Rust toolchain and the
+      # host SDK/clang/Python; the runner image version stands in for the host.
+      - name: Identify runner image
+        id: image
+        run: echo "version=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore static ONNX Runtime cache
+        id: ort-cache
+        uses: actions/cache/restore@v4
+        with:
+          # Outside the Cargo target so rust-cache and `cargo clean` never touch it.
+          path: ${{ runner.temp }}/ort-cache/native-deps
+          key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort-macos-arm64.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort-macos-arm64.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
+
+      - name: Prepare pinned static ONNX Runtime and protoc
+        env:
+          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+        run: |
+          set -euo pipefail
+          prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+          echo "$prepared"
+          {
+            echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
+            echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
+            echo "ORT_PREFER_DYNAMIC_LINK=0"
+            echo "ORT_SKIP_DOWNLOAD=1"
+          } >> "$GITHUB_ENV"
+
+      - name: Save static ONNX Runtime cache
+        if: steps.ort-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ort-cache/native-deps
+          key: ${{ steps.ort-cache.outputs.cache-primary-key }}
+
+      - name: Cache Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/butler-agent/rust
+          cache-on-failure: true
+
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Check Rust source sizes and architecture
+        run: cargo run --locked -p butler-source-check -- .
+
       - name: Run tests
         run: cargo test --workspace --locked
-      - name: Check Rust source sizes
-        run: cargo run --locked -p butler-source-check -- .

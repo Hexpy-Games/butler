@@ -377,7 +377,7 @@ impl ProfileService {
             .join("consolidation/locks/consolidation.lock")
     }
 
-    async fn run<T, F>(&self, operation: F) -> ProfileResult<T>
+    pub(super) async fn run<T, F>(&self, operation: F) -> ProfileResult<T>
     where
         T: Send + 'static,
         F: FnOnce() -> ProfileResult<T> + Send + 'static,
@@ -405,14 +405,6 @@ impl ProfileService {
         })
         .await
         .map_err(|_| ProfileError::new("profile_operation_failed", "Profile operation failed."))?
-    }
-
-    #[cfg(test)]
-    pub(super) async fn run_test_operation<F>(&self, operation: F) -> ProfileResult<()>
-    where
-        F: FnOnce() -> ProfileResult<()> + Send + 'static,
-    {
-        self.run(operation).await
     }
 }
 

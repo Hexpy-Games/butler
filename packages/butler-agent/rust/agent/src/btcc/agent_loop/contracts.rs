@@ -303,8 +303,6 @@ pub(crate) struct ToolError {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ToolOutcome {
-    #[cfg(test)]
-    Reply(String),
     Suspend(crate::btcc::SuspensionReason),
 }
 
@@ -319,8 +317,6 @@ pub(crate) enum BatchDisposition {
 pub(crate) enum CandidateDisposition {
     Accepted(Option<String>),
     Continue(String),
-    #[cfg(test)]
-    Wait,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -475,7 +471,5 @@ pub(crate) struct ReplayPreparation {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TextCallDisposition {
-    #[cfg(test)]
-    Continue(String),
     Fail(BtccError),
 }

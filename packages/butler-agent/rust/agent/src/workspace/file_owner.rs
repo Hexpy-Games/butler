@@ -8,6 +8,9 @@ use super::files::{ReadFileInput, WorkspaceFileRead, read_one_blocking};
 use super::grep::{GrepCandidate, GrepRead, read_candidate};
 use super::path_guard::{GuardInput, GuardResult, resolve_workspace_path_guard};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone)]
 pub(crate) struct NativeWorkspaceFiles {
     inner: Arc<FileOwner>,
@@ -16,13 +19,6 @@ struct FileOwner {
     permits: Arc<Semaphore>,
     state: Mutex<OwnerState>,
     idle: Notify,
-    #[cfg(test)]
-    barrier: Mutex<Option<Arc<TestReadBarrier>>>,
-}
-#[cfg(test)]
-pub(crate) struct TestReadBarrier {
-    pub entered: std::sync::Barrier,
-    pub release: std::sync::Barrier,
 }
 struct OwnerState {
     closing: bool,
@@ -53,18 +49,8 @@ impl NativeWorkspaceFiles {
                     active: 0,
                 }),
                 idle: Notify::new(),
-                #[cfg(test)]
-                barrier: Mutex::new(None),
             }),
         }
-    }
-    #[cfg(test)]
-    pub(crate) fn set_test_barrier(&self, barrier: Arc<TestReadBarrier>) {
-        *self
-            .inner
-            .barrier
-            .lock()
-            .expect("workspace barrier poisoned") = Some(barrier);
     }
     pub(crate) fn active_count(&self) -> usize {
         self.inner
@@ -119,21 +105,9 @@ impl NativeWorkspaceFiles {
             state.active += 1;
         }
         let active = ActiveOperation(Arc::clone(&self.inner));
-        #[cfg(test)]
-        let barrier = self
-            .inner
-            .barrier
-            .lock()
-            .expect("workspace barrier poisoned")
-            .clone();
         let task = tokio::task::spawn_blocking(move || {
             let _active = active;
             let _permit = permit;
-            #[cfg(test)]
-            if let Some(barrier) = barrier {
-                barrier.entered.wait();
-                barrier.release.wait();
-            }
             action()
         });
         task.await.map_err(|_| FileOwnerError {

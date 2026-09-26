@@ -24,7 +24,7 @@ use crate::json::JsonDocument;
 pub(crate) trait ToolOutputIdentity: Send + Sync {
     fn now(&self) -> SystemTime;
     fn uuid(&self) -> String;
-    #[cfg(test)]
+    /// Called once the artifact is fully assembled, just before it is written.
     fn before_artifact_write(&self) {}
 }
 
@@ -148,8 +148,6 @@ pub(crate) struct PruneToolOutputResult {
     pub remaining_bytes: u64,
     pub max_age_ms: f64,
     pub max_bytes: f64,
-    #[cfg(test)]
-    pub raw_text_stored: bool,
 }
 
 pub(crate) trait PruneMetricObserver: Send + Sync {
