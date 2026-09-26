@@ -51,7 +51,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Title states the task (Rename conversation); buttons repeat the verb (Save, Archive)."],
+  content: ["size sets the width (sm default, md, lg, xl, full); layout=\"scroll-body\" gives header, one ScrollArea fill body and footer; maxHeight=\"3/5\" caps a live transcript; DialogTitle visuallyHidden keeps the accessible name when the body shows its own heading.", "Title states the task (Rename conversation); buttons repeat the verb (Save, Archive)."],
   accessibility: [
     "Focus is trapped and returns to the trigger; Escape closes; pass closeLabel from app copy.",
     "Every dialog has a DialogTitle (sr-only when DialogForm shows the visible title).",

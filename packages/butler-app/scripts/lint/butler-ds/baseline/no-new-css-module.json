@@ -4,7 +4,6 @@
   "components/conversation/StewardComposerCapsules.module.css": 1,
   "components/conversation/StewardParentProgress.module.css": 1,
   "components/conversation/UserMessageText.module.css": 1,
-  "components/layout/SessionObserverDialog.module.css": 1,
   "components/layout/TitlebarWorkspaceSubtitle.module.css": 1,
   "components/management/ProjectHistoryPanel.module.css": 1,
   "components/management/ProjectInformation.module.css": 1,

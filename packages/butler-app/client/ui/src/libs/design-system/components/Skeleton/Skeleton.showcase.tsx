@@ -18,19 +18,11 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-// Skeleton has no size props yet: callers size it with a style (as the
-// settings list and the pending turn do). Heights follow the text they stand in for.
-const TURN_LINES = ["62%", "88%", "74%"] as const;
-
 export const stories: ShowcaseStory[] = [
   {
     name: "Pending turn lines",
     render: (context) => (
-      <Stack gap="md">
-        {TURN_LINES.map((width, index) => (
-          <Skeleton key={width} label={index === 0 ? text(context).turn : undefined} style={{ height: index === 0 ? 18 : 12, width }} />
-        ))}
-      </Stack>
+      <Skeleton lines={3} height="line" label={text(context).turn} />
     ),
   },
   {
@@ -39,8 +31,21 @@ export const stories: ShowcaseStory[] = [
     render: (context) => (
       <Stack gap="sm">
         {[0, 1, 2, 3].map((index) => (
-          <Skeleton key={index} label={index === 0 ? text(context).settings : undefined} style={{ height: 44, width: "100%" }} />
+          <Skeleton key={index} label={index === 0 ? text(context).settings : undefined} height="row" width="full" />
         ))}
+      </Stack>
+    ),
+  },
+  {
+    name: "Widths, heights and shapes",
+    widths: ["375", "app"],
+    render: () => (
+      <Stack gap="sm">
+        <Skeleton height="title" width="1/2" />
+        <Skeleton height="line" width="3/4" />
+        <Skeleton height="line" width={24} />
+        <Skeleton height="control" width="1/3" shape="pill" />
+        <Skeleton height="control" shape="circle" />
       </Stack>
     ),
   },

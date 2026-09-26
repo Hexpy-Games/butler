@@ -1940,8 +1940,8 @@ export function StatesRecipe() {
     <Stack gap="xl">
       <EmptyLine message="No automations yet." action={<Button size="sm" variant="outline" iconStart={<Plus size="md" />} text="New automation" />} />
       <Stack gap="sm" aria-busy="true">
-        <Skeleton label="Loading settings" style={{ height: 18, width: "40%" }} />
-        <Skeleton style={{ height: 44, width: "100%" }} />
+        <Skeleton label="Loading settings" height="title" width="2/5" />
+        <Skeleton height="row" width="full" />
       </Stack>
       <Notice tone="error" title="Could not load the dashboard" message="Check the connection and try again."
         action={<Button variant="outline" text="Retry" />} />

@@ -52,6 +52,28 @@ function DialogOverlay({
   );
 }
 
+/** Dialog widths (`--dialog-width-*`); every size stays inside the viewport gutter. */
+export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
+/**
+ * `flow`: children stack with the dialog gap and the whole dialog scrolls.
+ * `scroll-body`: header, one scrolling body (a `ScrollArea fill`) and footer;
+ * the dialog itself does not scroll.
+ */
+export type DialogLayout = "flow" | "scroll-body";
+
+/** Data attributes DialogContent sets for its size props (read by Dialog.module.css). */
+export function dialogContentAttributes({ size = "sm", layout = "flow", maxHeight = "full" }: {
+  size?: DialogSize;
+  layout?: DialogLayout;
+  maxHeight?: "full" | "3/5";
+}) {
+  return {
+    "data-size": size,
+    "data-layout": layout,
+    "data-max-height": maxHeight === "full" ? undefined : maxHeight,
+  };
+}
+
 function DialogContent({
   className,
   children,
@@ -59,6 +81,9 @@ function DialogContent({
   showCloseButton = true,
   closeLabel,
   motion = "dialog",
+  size = "sm",
+  layout = "flow",
+  maxHeight = "full",
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   glassRadius?: TintedGlassRadius;
@@ -67,6 +92,10 @@ function DialogContent({
   motion?: "dialog" | "palette";
   /** Localized accessible name for the close button; callers pass app copy. */
   closeLabel?: string;
+  size?: DialogSize;
+  layout?: DialogLayout;
+  /** `3/5`: at most 60% of the viewport height (live transcripts). */
+  maxHeight?: "full" | "3/5";
 }) {
   return (
     <DialogPortal>
@@ -77,6 +106,7 @@ function DialogContent({
         data-glass="popover"
         data-radius={glassRadius}
         data-surface="tinted-glass"
+        {...dialogContentAttributes({ size, layout, maxHeight })}
         className={cn(
           tintedGlassSurfaceClassName,
           styles.content,
@@ -147,12 +177,16 @@ function DialogFooter({
 
 function DialogTitle({
   className,
+  visuallyHidden = false,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) {
+}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title> & {
+  /** Keep the accessible name but hide the title (the dialog shows its own heading). */
+  visuallyHidden?: boolean;
+}) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn(styles.title, className)}
+      className={cn(visuallyHidden ? "sr-only" : styles.title, className)}
       {...props}
     />
   );

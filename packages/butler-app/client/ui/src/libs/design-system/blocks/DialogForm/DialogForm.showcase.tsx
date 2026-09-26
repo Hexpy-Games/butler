@@ -56,7 +56,7 @@ export const stories: ShowcaseStory[] = [
       <Dialog>
         <DialogTrigger asChild><Button variant="outline" text={text(context).open} /></DialogTrigger>
         <DialogContent aria-describedby={undefined} closeLabel={text(context).close} glassRadius="composer">
-          <DialogTitle className="sr-only">{text(context).title}</DialogTitle>
+          <DialogTitle visuallyHidden>{text(context).title}</DialogTitle>
           <ProjectForm context={context} />
         </DialogContent>
       </Dialog>

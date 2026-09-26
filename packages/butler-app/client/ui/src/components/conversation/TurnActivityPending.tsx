@@ -7,8 +7,6 @@ import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
 
 const SESSION_STARTING_STATE = "session_starting";
 const SKELETON_WIDTH = "min(420px, 100%)";
-const SKELETON_LINE_HEIGHT = "0.75rem";
-const SKELETON_LINE_WIDTHS = ["86%", "68%", "46%"] as const;
 
 export function TurnActivityPending({
   readModels,
@@ -50,12 +48,7 @@ export function TurnActivityPending({
             {pendingLabel}
           </Typo.Body>
         </AssistantStatusLabel>
-        {SKELETON_LINE_WIDTHS.map((width) => (
-          <Skeleton
-            key={width}
-            style={{ height: SKELETON_LINE_HEIGHT, width }}
-          />
-        ))}
+        <Skeleton lines={3} height="line" />
       </Stack>
     );
   }

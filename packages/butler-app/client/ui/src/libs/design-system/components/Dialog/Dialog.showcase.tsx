@@ -6,6 +6,7 @@ import { Field, FieldLabel } from "../Field";
 import { Input } from "../Input";
 import { Textarea } from "../Textarea";
 import { Typo } from "../Typo";
+import { ScrollArea } from "../../blocks/ScrollArea";
 import {
   Dialog,
   DialogClose,
@@ -71,7 +72,30 @@ function RenameDialog({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+/** ProjectDocumentDialog / SessionObserverDialog: a wide reader with one scrolling body. */
+function ReaderDialog({ context }: { context: ShowcaseRenderContext }) {
+  const copy = text(context);
+  return (
+    <Dialog>
+      <DialogTrigger asChild><Button variant="outline" text={copy.description} /></DialogTrigger>
+      <DialogContent closeLabel={copy.close} size="xl" layout="scroll-body" maxHeight="3/5">
+        <DialogHeader>
+          <DialogTitle>{copy.description}</DialogTitle>
+          <DialogDescription>{copy.descriptionValue}</DialogDescription>
+        </DialogHeader>
+        <ScrollArea fill>
+          {Array.from({ length: 12 }, (_, index) => <Typo.Body key={index}>{copy.descriptionValue}</Typo.Body>)}
+        </ScrollArea>
+        <DialogFooter>
+          <DialogClose asChild><Button variant="outline" text={copy.cancel} /></DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export const stories: ShowcaseStory[] = [
+  { name: "Wide reader (size xl, scroll-body, maxHeight 3/5)", render: (context) => <ReaderDialog context={context} /> },
   { name: "Rename conversation", states: ["open"], render: (context) => <RenameDialog context={context} /> },
   {
     name: "Edit project description",

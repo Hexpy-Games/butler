@@ -21,7 +21,9 @@
   left: 50%;
   z-index: var(--z-dialog);
   display: grid;
-  width: min(380px, calc(100% - var(--space-4) * 2));
+  --dialog-width: var(--dialog-width-sm);
+
+  width: min(var(--dialog-width), calc(100% - var(--space-4) * 2));
   max-width: calc(
     100% - 2 *
       max(var(--space-4), var(--safe-area-left), var(--safe-area-right))
@@ -68,6 +70,41 @@
 .content[data-motion="palette"][data-state="closed"] {
   animation: palette-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
     forwards;
+}
+
+.content[data-size="md"] {
+  --dialog-width: var(--dialog-width-md);
+}
+
+.content[data-size="lg"] {
+  --dialog-width: var(--dialog-width-lg);
+}
+
+.content[data-size="xl"] {
+  --dialog-width: var(--dialog-width-xl);
+}
+
+.content[data-size="full"] {
+  --dialog-width: 100%;
+}
+
+/* Header, one scrolling body and footer; the dialog itself never scrolls. */
+.content[data-layout="scroll-body"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
+}
+
+.content[data-layout="scroll-body"] > .header {
+  padding-bottom: var(--space-3);
+}
+
+.content[data-layout="scroll-body"] > .footer {
+  padding-top: var(--space-4);
+}
+
+.content[data-max-height="3/5"] {
+  max-height: 60%;
 }
 
 .content[data-project-ledger-modal="true"] {

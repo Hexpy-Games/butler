@@ -4,6 +4,7 @@ import {
   Button,
   Dialog,
   DialogContent,
+  DialogFooter,
   MessageRow,
   ScrollArea,
   Stack,
@@ -15,7 +16,6 @@ import { TurnActivityPending } from "@/components/conversation/TurnActivityPendi
 import { SessionObserverTimeline } from "./SessionObserverTimeline.tsx";
 import { SessionObserverHeader } from "./SessionObserverHeader.tsx";
 import { useSessionViewSubscription } from "./hooks/useSessionViewSubscription.ts";
-import styles from "./SessionObserverDialog.module.css";
 
 export function SessionObserverDialog() {
   useAppLocale();
@@ -52,7 +52,8 @@ export function SessionObserverDialog() {
     >
       <DialogContent closeLabel={appCopy.common.close}
         aria-describedby="steward-observer-description"
-        className={styles.dialog}
+        layout="scroll-body"
+        maxHeight="3/5"
         data-test-class="steward-observer-dialog"
         glassRadius="composer"
       >
@@ -83,7 +84,7 @@ export function SessionObserverDialog() {
           </Stack>
         </ScrollArea>
         {view?.latest_turn?.retryable && !view.active_turn && view.relation ? (
-          <Stack className={styles.actions} align="row" justify="end">
+          <DialogFooter>
             <Button
               type="button"
               disabled={resuming}
@@ -97,9 +98,9 @@ export function SessionObserverDialog() {
                 ? appCopy.conversation.work.pendingStateLabels.retrying
                 : appCopy.conversation.work.resumeInterrupted}
             </Button>
-          </Stack>
+          </DialogFooter>
         ) : (view?.active_turn || view?.waiting_for_children) && view.relation ? (
-          <Stack className={styles.actions} align="row" justify="end">
+          <DialogFooter>
             <Button
               type="button"
               variant="destructive"
@@ -114,7 +115,7 @@ export function SessionObserverDialog() {
                 ? appCopy.conversation.work.pendingStateLabels.cancelling
                 : appCopy.composer.stop}
             </Button>
-          </Stack>
+          </DialogFooter>
         ) : null}
       </DialogContent>
     </Dialog>

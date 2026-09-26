@@ -118,6 +118,14 @@
   --spinner-rotate-duration: 2000ms;
   --pulse-duration: 1250ms;
   --shimmer-duration: 1400ms;
+  /* Skeleton heights for a text line and a heading line. */
+  --skeleton-height-line: 0.75rem;
+  --skeleton-height-title: 1.125rem;
+  /* Dialog widths (DialogContent size). */
+  --dialog-width-sm: 380px;
+  --dialog-width-md: 520px;
+  --dialog-width-lg: 720px;
+  --dialog-width-xl: 880px;
   --spinner-easing: linear(
     0,
     0.0363,

@@ -83,7 +83,7 @@ export function ProjectCreateDialog({
         glassRadius="composer"
         showCloseButton={!pending}
       >
-        <DialogTitle className="sr-only">
+        <DialogTitle visuallyHidden>
           {appCopy.sidebar.projectCreateTitle}
         </DialogTitle>
         <DialogForm

@@ -26,7 +26,7 @@ export const guidance: ShowcaseGuidance = {
   doDont: [
     {
       do: { caption: "Size to ICON_SIZE so it sits in icon slots.", render: () => <SyncingButton /> },
-      dont: { caption: "A spinner for a full list of known rows.", render: () => <Skeleton style={{ height: 44, width: "100%" }} /> },
+      dont: { caption: "A spinner for a full list of known rows.", render: () => <Skeleton height="row" width="full" /> },
     },
   ],
   content: ["Pair with a verb in progress (Syncing, Running)."],
