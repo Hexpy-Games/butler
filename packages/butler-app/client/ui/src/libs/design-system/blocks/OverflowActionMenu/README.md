@@ -16,7 +16,7 @@ Use OverflowActionMenu for row actions that don't fit inline, secondary commands
 
 ## Similar blocks
 
-- Use **RowActionCluster** for 1-2 inline actions that should always be visible
+- Use **ButtonContainer** for 1-2 inline actions that should always be visible
 - Use **DropdownMenu** primitive when you need full control over menu structure
 - Use **ContextMenu** for right-click actions
 

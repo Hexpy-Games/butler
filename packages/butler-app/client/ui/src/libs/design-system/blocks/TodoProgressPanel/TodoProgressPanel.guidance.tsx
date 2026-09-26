@@ -19,7 +19,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: ["A turn follows a plan with several steps"],
   whenNotToUse: [
     { when: "Workers", use: "WorkerActivityPanel" },
-    { when: "A setup wizard", use: "ProgressStepper" },
+    { when: "A setup wizard", use: "SetupWizardShell" },
   ],
   recipes: [{ name: "Plan steps above the composer", description: "Every state has a label; do not rely on the icon alone.", render: () => <PlanSteps /> }],
   doDont: [

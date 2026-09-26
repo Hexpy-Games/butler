@@ -607,7 +607,7 @@
   }
 }
 
-/* Sidebar density (SidebarShell / NavRow / SessionRow `density`): row height,
+/* Sidebar density (SidebarShell / NavRow `density`): row height,
    inline padding, icon size, label gap, row spacing and trailing action
    target. The shell sets the attribute on its root; a row may override it. */
 [data-sidebar-density="compact"] {

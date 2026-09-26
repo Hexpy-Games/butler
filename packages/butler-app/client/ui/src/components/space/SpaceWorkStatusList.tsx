@@ -1,6 +1,6 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { WorkStatusItemView, WorkStatusView } from "@/app/types.ts";
-import { NavSectionHeading, SessionRow, Stack } from "@/butler-ds";
+import { MessageSquare, NavRow, NavSectionHeading, Stack, Typo } from "@/butler-ds";
 
 /** Nothing renders while loading, empty or unavailable: the Running tab stays a list of live work. */
 export function SpaceWorkStatusList({
@@ -16,16 +16,31 @@ export function SpaceWorkStatusList({
     <Stack gap="xs" data-test-class="sidebar-work-status">
       <NavSectionHeading title={appCopy.settings.workStatus.title} />
       {view.items.map((item) => (
-        <SessionRow
+        <WorkStatusRow
           key={`${item.session_id}:${item.updated_at}`}
-          dataTestClass="sidebar-work-status-row"
-          title={item.safe_title}
-          description={item.latest_report_summary || item.safe_summary}
-          meta={workStatusMeta(item)}
-          onSelect={() => onOpenSession(item.session_id)}
+          item={item}
+          onOpenSession={onOpenSession}
         />
       ))}
     </Stack>
+  );
+}
+
+function WorkStatusRow({ item, onOpenSession }: { item: WorkStatusItemView; onOpenSession: (sessionId: string) => void }) {
+  const secondLine = [item.latest_report_summary || item.safe_summary, workStatusMeta(item)].filter(Boolean).join(" · ");
+  return (
+    <NavRow
+      dataTestClass="sidebar-work-status-row"
+      icon={<MessageSquare />}
+      label={secondLine
+        ? <Typo.Text lineClamp={2} wrap="anywhere" title={item.safe_title}>{item.safe_title}</Typo.Text>
+        : <Typo.Text truncate title={item.safe_title}>{item.safe_title}</Typo.Text>}
+      multiline={Boolean(secondLine)}
+      meta={secondLine ? <Typo.Caption tone="secondary">{secondLine}</Typo.Caption> : undefined}
+      ariaLabel={item.safe_title}
+      actionsVisibility="hover"
+      onClick={() => onOpenSession(item.session_id)}
+    />
   );
 }
 

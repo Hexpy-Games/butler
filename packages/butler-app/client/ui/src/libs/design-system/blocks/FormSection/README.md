@@ -29,16 +29,16 @@ inside the card should be separate bordered rows or panels, not loose text.
 ## Usage
 
 ```tsx
-import { FormSection, FormRow } from "@/butler-ds";
+import { FormSection, SettingsField } from "@/butler-ds";
 
 <FormSection title="Appearance" description="Customize your theme">
-  <FormRow label="Theme"><Select>...</Select></FormRow>
-  <FormRow label="Density"><Select>...</Select></FormRow>
+  <SettingsField id="theme" label="Theme" control={<Select>...</Select>} />
+  <SettingsField id="density" label="Density" control={<Select>...</Select>} />
 </FormSection>
 
 // The page's single card, when a title would repeat the page title:
 <FormSection>
-  <FormRow label="Theme"><Select>...</Select></FormRow>
+  <SettingsField id="theme" label="Theme" control={<Select>...</Select>} />
 </FormSection>
 ```
 

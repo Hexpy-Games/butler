@@ -21,7 +21,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: ["Rename, archive, delete and similar actions on a row or header"],
   whenNotToUse: [
     { when: "Grouped menus, submenus or radio items", use: "DropdownMenu" },
-    { when: "One or two always-visible actions", use: "RowActionCluster" },
+    { when: "One or two always-visible actions", use: "ButtonContainer" },
   ],
   recipes: [{ name: "Session overflow menu", description: "Destructive items go last with variant=\"destructive\".", render: () => <SessionMenu /> }],
   doDont: [

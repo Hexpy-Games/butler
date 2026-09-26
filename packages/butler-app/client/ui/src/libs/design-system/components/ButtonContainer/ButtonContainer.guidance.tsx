@@ -19,7 +19,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: ["Place several buttons next to each other", "Align a group of actions to the end of a footer"],
   whenNotToUse: [
     { when: "A single button", use: "Button" },
-    { when: "Icon actions trailing a list row", use: "RowActionCluster" },
+    { when: "Icon actions trailing a list row", use: "ListRow" },
     { when: "General row layout of mixed content", use: "Stack" },
   ],
   recipes: [{ name: "Right-aligned form actions", description: "Pass the same size to the container and every button inside it.", render: () => <FormActions /> }],

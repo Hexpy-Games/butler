@@ -23,7 +23,7 @@ const REQUIRES_STATE_MATRIX = [
   "components/CopyButton", "components/IconButton", "components/Input", "components/NativeSelect", "components/PillButton",
   "components/SegmentedControl", "components/Select", "components/Slider", "components/Switch", "components/Tabs",
   "components/Textarea", "blocks/ComposerControl", "blocks/DisclosureRow", "blocks/NavRow", "blocks/OptionMenu",
-  "blocks/SessionRow", "blocks/SplitButton",
+  "blocks/SplitButton",
 ];
 
 function folderIds(): string[] {
@@ -61,7 +61,7 @@ describe("design-system showcase coverage", () => {
   test("every component and block folder has a showcase and a README (no gaps)", () => {
     const missing = folderIds().filter((id) => !existsSync(showcasePath(id)) || !existsSync(join(designSystemRoot, id, "README.md")));
     expect(missing).toEqual([]);
-    expect(folderIds().length).toBeGreaterThanOrEqual(118);
+    expect(folderIds().length).toBeGreaterThanOrEqual(113);
   });
 
   test("the legacy registry, category map and fixtures are gone", () => {

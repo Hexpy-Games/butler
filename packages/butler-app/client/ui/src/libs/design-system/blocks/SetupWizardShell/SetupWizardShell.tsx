@@ -3,15 +3,17 @@ import { PageContainer } from "../../components/PageContainer";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
 import { ScrollArea } from "../ScrollArea";
-import { ProgressStepper, type ProgressStepperStep } from "../ProgressStepper";
+import { SetupWizardProgress, type SetupWizardStep } from "./SetupWizardProgress";
 import { PromptFluidBackground } from "../PromptSuggestionList/PromptFluidBackground";
 import styles from "./SetupWizardShell.module.css";
+
+export type { SetupWizardStep } from "./SetupWizardProgress";
 
 interface SetupWizardShellProps
   extends Omit<HTMLAttributes<HTMLElement>, "title"> {
   activeIndex: number;
   children: ReactNode;
-  steps: ProgressStepperStep[];
+  steps: SetupWizardStep[];
   title: ReactNode;
   progressLabel?: string;
   windowControls?: ReactNode;
@@ -61,7 +63,7 @@ export function SetupWizardShell({
       >
         <Stack className={`${styles.header} drag-region`} gap="sm">
           <p className={styles.productTitle}>{title}</p>
-          <ProgressStepper
+          <SetupWizardProgress
             activeIndex={activeIndex}
             ariaLabel={progressLabel}
             steps={steps}

@@ -19,8 +19,8 @@ Read this before adding primitives, blocks, product containers, or CSS.
 | -------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Page or panel layout | `Stack`, `Grid`, `Section`, `Space`, `Separator`                 | Repeated shell or panel pattern exists, such as `SurfacePanel` or `PanelHeader`                         | Fixed-width local wrappers                                 |
 | Text hierarchy       | `Typo`                                                           | Text appears inside a block with a named slot                                                           | Raw font sizes or document headings in app chrome          |
-| Commands             | `Button`, `PillButton`, `IconButton`, `Clickable`                | Row or toolbar action pattern repeats, such as `RowActionCluster`                                       | Nested `<button>` elements                                 |
-| Forms/settings       | `Field`, `Input`, `Textarea`, `Select`, `NativeSelect`, `Switch` | Responsive label/control layout is needed, such as `SettingsField`, `FormRow`, `TokenInputControl`      | Placeholder-only labels or local form CSS                  |
+| Commands             | `Button`, `PillButton`, `IconButton`, `Clickable`                | Row or toolbar action pattern repeats, such as `ButtonContainer`                                        | Nested `<button>` elements                                 |
+| Forms/settings       | `Field`, `Input`, `Textarea`, `Select`, `NativeSelect`, `Switch` | Responsive label/control layout is needed, such as `SettingsField`, `TokenInputControl`                 | Placeholder-only labels or local form CSS                  |
 | Navigation           | `Tabs`, `Breadcrumb`, `Separator`                                | Sidebar/list navigation is needed, such as `NavRow`, `NavSection`, `CollapsibleNavGroup`, `SettingsNav` | Active outlines, shadows, or indented collapsible children |
 | Overlays             | `Dialog`, `Popover`, `Tooltip`, menus                            | Modal form composition is needed, such as `DialogForm` or `CommandPanel`                                | Long workflows in popovers                                 |
 | Surfaces             | `Card`, `TintedGlass`                                            | Repeated panel or overlay treatment is needed, such as `SurfacePanel`                                   | Local glass gradients or Radix wrapper DOM                 |
@@ -234,8 +234,8 @@ Children default to the same row size and alignment as other rows. For an
 explicitly hierarchical tree, use the `indented` variant: 16px per depth, with
 header actions visible. Do not apply one-off indentation in product CSS.
 
-Use `RowActionCluster` for inline action buttons within rows that need click
-isolation; it delegates spacing to `ButtonContainer`.
+Use `ButtonContainer` for inline action buttons within rows; stop click
+propagation on it when the row itself is clickable.
 
 Use `OverflowActionMenu` for dropdown menus containing overflow actions accessed via a "more" button.
 
@@ -252,13 +252,13 @@ Tags: navigation, sidebar, row, section, collapsible, actions
 
 ### Form Blocks
 
-Use `FormRow` for form fields with label, input, help text, and error message layout.
+Use `SettingsField` for form fields with label, input, help text, and error message layout.
 
 Use `FormSection` for grouping related form fields under a titled section.
 
 Wrong turns:
 
-- Do not use FormRow for non-form content.
+- Do not use SettingsField for non-form content.
 - Do not use FormSection for navigation sections; use NavSection.
 
 Tags: form, field, input, validation, section
@@ -293,12 +293,12 @@ Tags: metric, dashboard, analytics, kpi, stats, grid
 
 Use `ListRow` for list items with icon, title, description, and metadata (non-navigation).
 
-Use `ResourceTile` for resources like projects or documents in a card/tile format.
+Use `DocumentTile` for resources like projects or documents in a card/tile format.
 
 Wrong turns:
 
 - Do not use ListRow for clickable navigation; use NavRow.
-- Do not use ResourceTile for list layouts; use ListRow.
+- Do not use DocumentTile for list layouts; use ListRow.
 
 Tags: list, row, item, tile, card, resource
 
@@ -310,7 +310,7 @@ Use `Notice` for alert/notice banners with info, warning, error, or success tone
 
 Wrong turns:
 
-- Do not use `Notice` for inline field validation when the validation belongs to one field. Use `FormRow` or `SettingsField`.
+- Do not use `Notice` for inline field validation when the validation belongs to one field. Use `SettingsField`.
 - Do not use `EmptyLine` as placeholder copy in populated panels. Use real section content.
 
 Tags: empty, state, notice, alert, banner
@@ -391,9 +391,7 @@ Use `DashboardHeader` for management and project dashboard page headers with one
 
 Use `DocumentTile` for Project Ledger docs and document-like resources.
 
-Use `SessionRow` for chat/session summary rows.
-
-Use `AutomationRow` for automation definitions and status.
+Use `NavRow` (multiline, with a caption `meta`) for chat/session summary rows.
 
 Use `AutomationRunList` for automation run history.
 

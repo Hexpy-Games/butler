@@ -27,7 +27,7 @@ Management and project containers.
 Keep document fetching and routing outside this block.
 
 ## Wrong use cases
-Do not use it for session rows. Use `SessionRow`.
+Do not use it for session rows. Use `NavRow`.
 
 ## Tags
 document, dashboard, resource, tile

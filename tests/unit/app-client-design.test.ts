@@ -427,7 +427,7 @@ test("dedicated client keeps complete work history and session management contro
   ).toContain("width: var(--icon-button-size, var(--control-height-md))");
   expect(
     read(
-      "packages/butler-app/client/ui/src/libs/design-system/blocks/RowActionCluster/RowActionCluster.module.css",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkerActivityRow/WorkerActivityRow.module.css",
     ),
   ).toContain("--icon-button-size: var(--sidebar-action-size)");
   expect(
@@ -3206,9 +3206,7 @@ describe("app-client design system foundation", () => {
     "NavRow",
     "NavSection",
     "CollapsibleNavGroup",
-    "RowActionCluster",
     "OverflowActionMenu",
-    "FormRow",
     "FormSection",
     "PanelHeader",
     "PromptSuggestionList",
@@ -3217,8 +3215,6 @@ describe("app-client design system foundation", () => {
     "MetricGrid",
     "CardList",
     "ListRow",
-    "ResourceSummary",
-    "ResourceTile",
     "EmptyLine",
     "Notice",
     "ComposerControl",
@@ -3242,8 +3238,6 @@ describe("app-client design system foundation", () => {
     "ManagementPage",
     "DashboardHeader",
     "DocumentTile",
-    "SessionRow",
-    "AutomationRow",
     "AutomationRunList",
     "ArtifactList",
     "ArtifactPreview",
@@ -3302,7 +3296,7 @@ describe("app-client design system foundation", () => {
     expect(indexContent).toContain('export * from "./components/Card"');
     expect(indexContent).toContain('export * from "./components/TintedGlass"');
     expect(indexContent).toContain('export * from "./blocks/NavRow"');
-    expect(indexContent).toContain('export * from "./blocks/FormRow"');
+    expect(indexContent).not.toContain('export * from "./blocks/FormRow"');
     expect(indexContent).toContain('export * from "./blocks/Notice"');
     expect(indexContent).toContain('export * from "./blocks/ComposerControl"');
     expect(indexContent).toContain(
@@ -3311,7 +3305,9 @@ describe("app-client design system foundation", () => {
     expect(indexContent).toContain('export * from "./blocks/QueuedMessage"');
     expect(indexContent).not.toContain("ComposerQueuePanel");
     expect(indexContent).toContain('export * from "./blocks/CardList"');
-    expect(indexContent).toContain('export * from "./blocks/ResourceSummary"');
+    for (const removed of ["SessionRow", "RowActionCluster", "ResourceSummary", "ResourceTile", "AutomationRow", "ProgressStepper"]) {
+      expect(indexContent).not.toContain(`export * from "./blocks/${removed}"`);
+    }
     expect(indexContent).toContain('export * from "./blocks/SettingsField"');
     expect(indexContent).toContain(
       'export * from "./blocks/TodoProgressPanel"',
@@ -3677,10 +3673,6 @@ describe("app-client design system foundation", () => {
       join(designSystemRoot, "blocks/AutomationRunList/AutomationRunList.tsx"),
       "utf8",
     );
-    const sessionRow = readFileSync(
-      join(designSystemRoot, "blocks/SessionRow/SessionRow.tsx"),
-      "utf8",
-    );
     const titlebarShell = readFileSync(
       join(designSystemRoot, "blocks/TitlebarShell/TitlebarShell.tsx"),
       "utf8",
@@ -3910,7 +3902,7 @@ describe("app-client design system foundation", () => {
     expect(activityFeedStyles).toContain("width: 1lh");
     expect(activityFeedStyles).toContain("text-overflow: ellipsis");
     expect(workerActivityRow).toContain("phaseRail");
-    expect(workerActivityRow).toContain("RowActionCluster");
+    expect(workerActivityRow).toContain("event.stopPropagation()");
     expect(workerActivityRow).toContain(
       'if (phase === "committing" || phase === "consolidating") return "verifying"',
     );
@@ -4075,7 +4067,6 @@ describe("app-client design system foundation", () => {
     expect(titlebarShell).toContain("className={styles.leading}");
     expect(titlebarShellStyles).toContain("align-items: center");
     expect(titlebarShellStyles).toContain("var(--typo-app-title-line-height)");
-    expect(sessionRow).toContain("stretch");
   });
 
   test("design-system app surface style bridge is retired", () => {

@@ -19,7 +19,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: ["Artifacts in the inspector", "Plans and specs on the project dashboard"],
   whenNotToUse: [
     { when: "Artifacts under an answer", use: "ArtifactList" },
-    { when: "A resource in a grid", use: "ResourceTile" },
+    { when: "A resource in a grid", use: "CardList" },
   ],
   recipes: [{ name: "Inspector artifact tile", description: "clickTarget=\"tile\" opens on click; icon actions stay separate.", render: () => <ArtifactTile /> }],
   doDont: [

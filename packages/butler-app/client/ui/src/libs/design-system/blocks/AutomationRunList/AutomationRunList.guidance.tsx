@@ -19,7 +19,7 @@ export const guidance: ShowcaseGuidance = {
   whenToUse: ["Show recent runs on an automation detail page"],
   whenNotToUse: [
     { when: "General activity", use: "ActivityFeed" },
-    { when: "The automation itself", use: "AutomationRow" },
+    { when: "The automation itself", use: "ListRow" },
   ],
   recipes: [{ name: "Recent runs", description: "Pass state icons so success and failure scan at a glance.", render: () => <RecentRuns /> }],
   doDont: [

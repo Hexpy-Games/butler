@@ -104,6 +104,8 @@
 }
 
 .actions {
+  --icon-button-size: var(--sidebar-action-size);
+
   min-width: max-content;
 }
 

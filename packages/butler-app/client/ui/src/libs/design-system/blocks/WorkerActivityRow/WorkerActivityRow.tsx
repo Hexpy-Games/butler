@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
-import { RowActionCluster } from "../RowActionCluster";
+import { ButtonContainer } from "../../components/ButtonContainer";
 import styles from "./WorkerActivityRow.module.css";
 
 const PUBLIC_PHASES = ["orienting", "planning", "executing", "verifying", "reporting"] as const;
@@ -86,7 +86,7 @@ export function WorkerActivityRow({
           ) : heading}
           {actions.length > 0 ? (
             <span className={styles.actions}>
-              <RowActionCluster>{actions}</RowActionCluster>
+              <ButtonContainer size="icon-sm" onClick={(event) => event.stopPropagation()}>{actions}</ButtonContainer>
             </span>
           ) : null}
         </div>

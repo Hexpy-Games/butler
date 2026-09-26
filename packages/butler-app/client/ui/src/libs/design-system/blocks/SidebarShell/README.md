@@ -6,7 +6,7 @@ padding, icon size, label gap, row spacing and trailing action targets for every
 `--sidebar-row-height`, `--sidebar-row-padding-inline`, `--sidebar-icon-size`,
 `--sidebar-row-gap`, `--sidebar-row-spacing`, `--sidebar-action-size`).
 Comfortable becomes touch on phones and coarse pointers. A single `NavRow` or
-`SessionRow` may take its own `density`.
+`NavRow` may take its own `density`.
 
 The shell owns the sidebar surface: icon actions sized by the density with a
 round hover surface, tight icon clusters, a transparent sticky header, heading
@@ -75,7 +75,7 @@ Frontend agents building Butler app chrome or sidebar variants.
 ## Best practice
 
 Keep `SidebarShell` as layout only. Put row state and actions in
-`NavRow`, `RowActionCluster`, `OverflowActionMenu`, or product containers.
+`NavRow`, `ButtonContainer`, `OverflowActionMenu`, or product containers.
 
 ## Wrong use cases
 

@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NavRow } from "../NavRow";
-import { SessionRow } from "../SessionRow";
 import { SidebarBrand, SidebarNav, SidebarShell } from "./SidebarShell";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -55,13 +54,13 @@ test("each sidebar density defines row height, padding, icon size, gap and actio
   expect(tokens).toMatch(/@media \(width <= 640px\), \(pointer: coarse\) \{ \[data-sidebar-density="comfortable"\] \{/u);
 });
 
-test("SidebarShell, NavRow and SessionRow expose density as a prop, comfortable by default", () => {
+test("SidebarShell and NavRow expose density as a prop, comfortable by default", () => {
   const markup = renderToStaticMarkup(
     <>
       <SidebarShell ariaLabel="Nav"><NavRow label="Row" /></SidebarShell>
       <SidebarShell density="compact" ariaLabel="Nav"><NavRow label="Row" /></SidebarShell>
       <NavRow label="Touch row" density="touch" />
-      <SessionRow title="Session" density="compact" />
+      <NavRow label="Session" density="compact" />
     </>,
   );
   const document = new JSDOM(markup).window.document;

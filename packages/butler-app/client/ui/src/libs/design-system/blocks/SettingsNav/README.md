@@ -22,7 +22,7 @@ Settings containers.
 Keep active routing state outside the block.
 
 ## Wrong use cases
-Do not use it for project/session lists. Use navigation blocks or `SessionRow`.
+Do not use it for project/session lists. Use navigation blocks such as `NavRow`.
 
 ## Tags
 settings, navigation, sidebar

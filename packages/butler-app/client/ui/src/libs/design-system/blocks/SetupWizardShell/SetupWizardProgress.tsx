@@ -2,26 +2,26 @@ import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
-import styles from "./ProgressStepper.module.css";
+import styles from "./SetupWizardProgress.module.css";
 
-export interface ProgressStepperStep {
+export interface SetupWizardStep {
   id: string;
   label: ReactNode;
 }
 
-export interface ProgressStepperProps {
-  steps: ProgressStepperStep[];
+export interface SetupWizardProgressProps {
+  steps: SetupWizardStep[];
   activeIndex: number;
   ariaLabel?: string;
   className?: string;
 }
 
-export function ProgressStepper({
+export function SetupWizardProgress({
   steps,
   activeIndex,
   ariaLabel = "Progress steps",
   className,
-}: ProgressStepperProps) {
+}: SetupWizardProgressProps) {
   return (
     <Stack
       as="ol"
