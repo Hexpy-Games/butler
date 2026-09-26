@@ -4,11 +4,20 @@ use crate::btcc::authority::contracts::{
 use crate::btcc::work::{DurableWorkService, WorkContext, WorkTurnScope};
 use crate::btcc::{BtccError, TurnRecord};
 
-#[derive(Debug)]
+/// Failures preparing a guided turn.
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum GuidedPreparationError {
+    /// Durable work could not be read or validated.
+    #[error(transparent)]
     Work(BtccError),
+    /// An authority request could not be admitted.
+    #[error(transparent)]
     Authority(AuthorityError),
+    /// A guided contract was violated; the value is its wire code.
+    #[error("{0}")]
     Contract(&'static str),
+    /// Guided policy was invalid; the message says why.
+    #[error("guided_policy_invalid: {0}")]
     Policy(String),
 }
 

@@ -10,9 +10,14 @@ use crate::btcc::{StateExecutionClaim, TurnRecord};
 use super::super::contracts::{ModelRoundMessage, ModelRoundResult};
 use super::super::ports::{ModelRoundError, ModelRoundPort};
 
-#[derive(Clone, Debug)]
+/// Failures replaying a persisted operation result into a round.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum OperationResultError {
+    /// The model round failed.
+    #[error(transparent)]
     Model(ModelRoundError),
+    /// A BTCC contract was violated.
+    #[error(transparent)]
     Contract(BtccError),
 }
 

@@ -62,9 +62,14 @@ pub(crate) trait TurnStore: Send + Sync {
     ) -> PortFuture<'_, Value>;
 }
 
-#[derive(Debug)]
+/// A turn transition could not be committed.
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum TransitionCommitError {
+    /// Another owner committed first; the caller retries.
+    #[error("turn transition contention")]
     Contention,
+    /// The commit failed.
+    #[error(transparent)]
     Failure(BtccError),
 }
 
@@ -127,9 +132,14 @@ pub(crate) trait AgentLoopProgress: Send + Sync {
     fn emit(&self, event: crate::btcc::RuntimeTurnEventInput) -> PortFuture<'_, ()>;
 }
 
-#[derive(Debug)]
+/// The agent loop ended with an error.
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum AgentLoopError {
+    /// An integrity failure that ends the turn.
+    #[error(transparent)]
     Propagate(BtccError),
+    /// An operational failure recorded as the turn's runtime failure.
+    #[error("{0}")]
     Runtime(crate::btcc::RuntimeFailure),
 }
 

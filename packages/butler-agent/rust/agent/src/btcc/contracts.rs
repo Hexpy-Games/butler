@@ -198,6 +198,8 @@ pub(crate) enum AdmissionKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(thiserror::Error)]
+#[error("{code}")]
 pub(crate) struct RuntimeFailure {
     pub(crate) code: String,
     pub(crate) retryable: bool,

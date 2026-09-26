@@ -14,39 +14,65 @@ use super::contracts::{
 use super::guided_ports::GuidedInvocation;
 use super::guided_ports::TurnContextProjection;
 
-#[derive(Clone, Debug)]
+/// Failures of one model round. The agent loop reduces these to an
+/// operational runtime failure or an integrity error (`failure::reduce`).
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum ModelRoundError {
+    /// The provider request failed; the record is persisted with the turn.
+    #[error("{0}")]
     Provider(Box<crate::btcc::model_route::ProviderRequestError>),
+    /// Request admission (context or output capacity) refused the round.
+    #[error("{0}")]
     RequestAdmission(Box<crate::btcc::ModelRequestAdmissionError>),
     /// Source exceptions from invocation callbacks and synchronous metric I/O.
     /// These are not provider transport failures and must not enter its retry loop.
+    #[error("{message}")]
     InvocationFailure {
         code: Option<String>,
         message: String,
     },
+    /// The stable provider prefix contract was violated; the value is its code.
+    #[error("{0}")]
     StablePrefix(String),
-    ImageAdmission {
-        code: String,
-        reason: String,
-    },
+    /// A visual attachment was refused for the selected model.
+    #[error("{code}: {reason}")]
+    ImageAdmission { code: String, reason: String },
+    /// A previously recorded round failure was replayed.
+    #[error("{failure_code}")]
     Recovered {
         failure_code: String,
         disposition: String,
     },
+    /// The route exhausted its dispatch budget.
+    #[error("model_route_dispatch_limit_exceeded")]
     DispatchLimit,
+    /// The turn was cancelled during the round.
+    #[error("turn_cancelled")]
     Cancelled,
+    /// An already-reduced operational failure.
+    #[error("{0}")]
     Operational(RuntimeFailure),
+    /// A BTCC integrity failure.
+    #[error(transparent)]
     Integrity(BtccError),
 }
 
-#[derive(Clone, Debug)]
+/// A tool execution failed its integrity contract.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum ToolExecutionError {
+    /// A BTCC integrity failure.
+    #[error(transparent)]
     Integrity(BtccError),
 }
 
-#[derive(Clone, Debug)]
+/// Context projection for a round failed.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum ContextProjectionError {
+    /// The model round used for projection (e.g. compaction) failed.
+    #[error(transparent)]
     Model(ModelRoundError),
+    /// A BTCC contract was violated.
+    #[error(transparent)]
     Contract(BtccError),
 }
 

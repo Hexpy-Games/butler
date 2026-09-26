@@ -9,8 +9,10 @@ use crate::btcc::{
     AgentLoopProgress, BtccError, ModelIdentity, ReasoningEffort, StateExecutionClaim, TurnRecord,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// A provider request failure, persisted with the turn's model route history.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
 #[serde(rename_all = "camelCase")]
+#[error("{code}: {message}")]
 pub(crate) struct ProviderRequestError {
     pub code: String,
     pub message: String,
