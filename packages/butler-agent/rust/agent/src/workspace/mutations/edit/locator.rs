@@ -72,8 +72,10 @@ pub(super) fn locate(
     if count == 1 {
         return Ok(first);
     }
-    if hinted_count == 1 {
-        return Ok(hinted.expect("one hinted match"));
+    if hinted_count == 1
+        && let Some(hinted) = hinted
+    {
+        return Ok(hinted);
     }
     Err(LocateFailure {
         error: "old_text_ambiguous",

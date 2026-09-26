@@ -60,13 +60,9 @@ pub(super) fn read(data_root: &Path, ids: &[String]) -> (HashMap<String, Label>,
                     id.clone(),
                     Label {
                         title,
-                        kind: if kind.as_deref() == Some("chat")
-                            || kind.as_deref() == Some("project")
-                        {
-                            kind.expect("recognized kind")
-                        } else {
-                            "unknown".into()
-                        },
+                        kind: kind
+                            .filter(|kind| kind == "chat" || kind == "project")
+                            .unwrap_or_else(|| "unknown".into()),
                     },
                 );
             }

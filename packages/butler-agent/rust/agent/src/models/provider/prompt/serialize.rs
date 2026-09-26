@@ -126,12 +126,10 @@ fn responses(
         if !codex && !explicit {
             Value::String(prompt.into())
         } else {
-            let mut stable = json!({"type":"input_text","text":boundary.stable_prefix});
+            let mut stable =
+                crate::json::json_object!({"type":"input_text","text":boundary.stable_prefix});
             if explicit {
-                stable
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("prompt_cache_breakpoint".into(), json!({"mode":"explicit"}));
+                stable.insert("prompt_cache_breakpoint".into(), json!({"mode":"explicit"}));
             }
             json!([{"role":"user","content":[
                 stable,

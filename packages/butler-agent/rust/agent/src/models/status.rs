@@ -32,10 +32,9 @@ impl NativeStatusModels {
     pub(crate) fn status_value(&self, telemetry: Value) -> Value {
         let mut prompt_cache = self.prompt_cache.clone();
         prompt_cache["telemetry"] = telemetry_projection(&telemetry);
-        prompt_cache
-            .as_object_mut()
-            .expect("prompt-cache status is an object")
-            .insert("scope".into(), Value::Null);
+        if let Some(object) = prompt_cache.as_object_mut() {
+            object.insert("scope".into(), Value::Null);
+        }
         json!({
             "runtime": self.runtime,
             "provider": self.provider,

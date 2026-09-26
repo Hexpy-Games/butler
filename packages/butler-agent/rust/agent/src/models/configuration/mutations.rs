@@ -4,7 +4,7 @@ mod local;
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::{ModelConfiguration, array, read_object_sync};
 use crate::models::{
@@ -190,9 +190,7 @@ impl ModelConfiguration {
             "label":input.credential_label.as_deref().and_then(clean).unwrap_or(&input.provider_id),
             "secret":secret, "created_at":self.clock.now_iso(), "updated_at":self.clock.now_iso()
         }));
-        file.as_object_mut()
-            .unwrap()
-            .insert("credentials".into(), Value::Array(records));
+        crate::json::object_mut(&mut file).insert("credentials".into(), Value::Array(records));
         write_json(&path, &file)?;
         Ok(id)
     }
@@ -214,16 +212,8 @@ fn normalized_registered(
 }
 
 fn set_models_array(config: &mut Value, key: &str, value: Value) {
-    let root = config
-        .as_object_mut()
-        .expect("read_object always returns object");
-    let models = root
-        .entry("models")
-        .or_insert_with(|| Value::Object(Map::new()));
-    if !models.is_object() {
-        *models = Value::Object(Map::new())
-    }
-    models.as_object_mut().unwrap().insert(key.into(), value);
+    let root = crate::json::object_mut(config);
+    crate::json::object_field_mut(root, "models").insert(key.into(), value);
 }
 
 pub(super) fn write_json(path: &Path, value: &Value) -> Result<(), ModelCatalogError> {

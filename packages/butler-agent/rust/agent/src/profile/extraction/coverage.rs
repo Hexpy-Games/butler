@@ -274,7 +274,7 @@ fn owner_live(
 }
 
 fn operation_key(root: &Path, key: &str, nonce: &str) -> String {
-    serde_json::to_string(&[root.to_string_lossy().as_ref(), key, nonce]).unwrap()
+    serde_json::Value::from([root.to_string_lossy().as_ref(), key, nonce].as_slice()).to_string()
 }
 
 #[cfg(test)]

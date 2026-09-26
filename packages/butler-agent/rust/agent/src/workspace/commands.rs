@@ -184,10 +184,13 @@ impl NativeCommands {
             ));
         }
         let id = state.next_id;
-        state.next_id = state
-            .next_id
-            .checked_add(1)
-            .expect("command operation id overflow");
+        let Some(next_id) = state.next_id.checked_add(1) else {
+            return Err(CommandError::new(
+                "command_owner_exhausted",
+                "Native command operation ids are exhausted",
+            ));
+        };
+        state.next_id = next_id;
         let shutdown = CancellationToken::new();
         state.active.insert(id, shutdown.clone());
         Ok((

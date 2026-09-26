@@ -47,16 +47,13 @@ pub(super) fn read(
         Ok(artifact) => artifact,
         Err(_) => return failure("artifact_unreadable"),
     };
-    if artifact.get("schema").and_then(Value::as_str) != Some(SCHEMA)
-        || !artifact
-            .get("serialized_text")
-            .is_some_and(Value::is_string)
-    {
+    let Some(text) = artifact
+        .get("serialized_text")
+        .and_then(Value::as_str)
+        .filter(|_| artifact.get("schema").and_then(Value::as_str) == Some(SCHEMA))
+    else {
         return failure("artifact_invalid");
-    }
-    let text = artifact["serialized_text"]
-        .as_str()
-        .expect("checked string");
+    };
     let offset_lines = input.offset_lines.map(nonnegative_trunc).unwrap_or(0);
     let offset_chars = input
         .offset_chars

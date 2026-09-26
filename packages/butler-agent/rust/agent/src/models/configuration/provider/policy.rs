@@ -57,12 +57,10 @@ pub(super) fn cache_prefix(data: &std::path::Path) -> String {
 }
 
 fn positive_integer_ms(value: Option<&str>, fallback: f64) -> f64 {
-    let parsed = value.map(crate::json::number_from_string);
-    if parsed.is_some_and(|value| value.fract() == 0.0 && value > 0.0) {
-        parsed.unwrap()
-    } else {
-        fallback
-    }
+    value
+        .map(crate::json::number_from_string)
+        .filter(|value| value.fract() == 0.0 && *value > 0.0)
+        .unwrap_or(fallback)
 }
 fn duration(milliseconds: f64) -> Duration {
     // Bun 1.3.11 converts timer delays above signed 32-bit range to 1 ms.

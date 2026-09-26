@@ -208,10 +208,7 @@ fn count_entries(path: &Path) -> io::Result<usize> {
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .expect("fixed developer log path has a file name")
-        .to_string_lossy();
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
     path.with_file_name(format!(".{name}.retain-{}.tmp", uuid::Uuid::new_v4()))
 }
 

@@ -22,13 +22,19 @@ pub(super) async fn dispatch(
 ) {
     let mut completion = Some(completion);
     let outcome = execute(host, input, shutdown, &mut completion).await;
-    if let Some(sender) = completion {
-        send_completion(
-            sender,
-            outcome.map(|output| output.expect("unsettled guided result")),
-        )
-        .await;
-    }
+    // `execute` returns `Ok(None)` only after it settled the completion itself.
+    let Some(sender) = completion else {
+        return;
+    };
+    let result = match outcome {
+        Ok(Some(output)) => Ok(output),
+        Ok(None) => Err(CommandError::new(
+            "command_settlement_lost",
+            "Command result was settled without a completion",
+        )),
+        Err(error) => Err(error),
+    };
+    send_completion(sender, result).await;
 }
 
 async fn execute(
@@ -82,9 +88,16 @@ async fn execute(
             return Err(CommandError::io(error));
         }
     };
-    let pid = child.id().expect("spawned child has pid");
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
+    let (Some(pid), Some(stdout), Some(stderr)) =
+        (child.id(), child.stdout.take(), child.stderr.take())
+    else {
+        // `kill_on_drop` stops the child when it is dropped here.
+        spool.discard().await;
+        return Err(CommandError::new(
+            "command_spawn_failed",
+            "Spawned command has no pid or piped output",
+        ));
+    };
     let (paths, mut capture) = spool.capture(host, stdout, stderr);
 
     enum Cause {
@@ -211,7 +224,13 @@ async fn execute(
             "Command cancelled",
         )));
     }
-    let status = status.expect("reaped command");
+    let Some(status) = status else {
+        let error = CommandError::new(
+            "command_termination_failed",
+            "Command exited without a reaped status",
+        );
+        return cleanup_error(host, &mut child, pid, capture, paths, error).await;
+    };
     let summary = GuidedSummary {
         command: input.command,
         cwd: cwd.to_string_lossy().into_owned(),

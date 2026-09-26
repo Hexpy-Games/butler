@@ -30,6 +30,29 @@ macro_rules! json_object {
 }
 pub(crate) use json_object;
 
+/// `value` as a mutable object; any other value is first replaced by `{}`.
+pub(crate) fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+    match value {
+        Value::Object(map) => map,
+        other => {
+            *other = Value::Object(serde_json::Map::new());
+            object_mut(other)
+        }
+    }
+}
+
+/// `parent[key]` as a mutable object; a missing or non-object value becomes `{}`.
+pub(crate) fn object_field_mut<'a>(
+    parent: &'a mut serde_json::Map<String, Value>,
+    key: &str,
+) -> &'a mut serde_json::Map<String, Value> {
+    object_mut(
+        parent
+            .entry(key)
+            .or_insert_with(|| Value::Object(serde_json::Map::new())),
+    )
+}
+
 #[derive(Debug)]
 pub(crate) struct JsonError(String);
 impl JsonError {

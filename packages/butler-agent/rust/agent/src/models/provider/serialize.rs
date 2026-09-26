@@ -194,8 +194,7 @@ fn responses(
 pub(super) use stable::identity as provider_cache_identity;
 
 fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::ModelRoundError> {
-    if request.bounded_continuation.is_some() {
-        let bounded = request.bounded_continuation.unwrap();
+    if let Some(bounded) = request.bounded_continuation {
         let response = bounded
             .get("responseItemId")
             .and_then(Value::as_str)

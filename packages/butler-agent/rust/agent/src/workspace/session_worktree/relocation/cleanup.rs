@@ -15,11 +15,10 @@ pub(super) async fn discard(owner: &Owner, plan: RelocationWorkspacePlan) -> Wor
 }
 
 async fn discard_unlocked(owner: &Owner, plan: RelocationWorkspacePlan) -> WorkspaceResult<bool> {
-    if !plan.created || plan.marker.is_none() {
+    let Some(marker) = plan.marker.as_ref().filter(|_| plan.created) else {
         return Ok(true);
-    }
+    };
     owner.validate_plan_path(&plan).await?;
-    let marker = plan.marker.as_ref().expect("validated marker");
     let git = owner.git();
     let entries = match git
         .list(&marker.repository_anchor_path, owner.shutdown.child_token())

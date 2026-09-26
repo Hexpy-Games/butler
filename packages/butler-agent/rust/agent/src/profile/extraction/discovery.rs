@@ -146,11 +146,9 @@ fn incomplete_windows(
     }
     let db = storage::open(root, false)?;
     let query_limit = MAX_SCAN_MESSAGES.min(limit.saturating_mul(4).saturating_add(1));
-    let since = since_ms.map(|value| {
-        chrono::DateTime::from_timestamp_millis(value)
-            .unwrap()
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-    });
+    let since = since_ms
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let rows = (|| {
         let mut statement = db.prepare("SELECT coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,observed_at,evidence_ref FROM profile_source_coverage WHERE disposition IN ('pending','failed') AND COALESCE(failure_code,'')!='source_stale' AND (?1 IS NULL OR observed_at>=?1) ORDER BY observed_at,message_id,part_index,scalar_pointer,byte_start LIMIT ?2").map_err(storage::db_error)?;
         statement

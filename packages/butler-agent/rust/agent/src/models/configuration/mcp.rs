@@ -1,6 +1,6 @@
 //! Read and write the two model fields exposed by the retained MCP tools.
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::ModelConfiguration;
 use crate::models::{ModelCatalogError, ParsedModelRef, parse_model_ref};
@@ -61,22 +61,12 @@ impl ModelConfiguration {
         let path = self.data_root.join("butler.config.json");
         let mut config = super::read_object_sync(&path);
         let canonical = parse_model_ref(trimmed).canonical_ref;
-        let system = config
-            .as_object_mut()
-            .expect("configuration reader returns an object")
-            .entry("system")
-            .or_insert_with(|| json!({}));
-        if !system.is_object() {
-            *system = json!({});
-        }
+        let system = crate::json::object_field_mut(crate::json::object_mut(&mut config), "system");
         let field = match target {
             McpModelTarget::Worker => "workerModel",
             McpModelTarget::Butler => "butlerModel",
         };
-        system
-            .as_object_mut()
-            .expect("system configuration is an object")
-            .insert(field.into(), Value::String(canonical));
+        system.insert(field.into(), Value::String(canonical));
         super::mutations::write_json(&path, &config)
     }
 }

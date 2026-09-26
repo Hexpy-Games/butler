@@ -144,8 +144,9 @@ impl CompactionState {
                 summary: Arc::from(""),
             };
             let candidate_pressure = {
-                let candidate = project(messages, units, Some(&dummy))
-                    .expect("a summary record always projects messages");
+                let candidate = project(messages, units, Some(&dummy)).ok_or_else(|| {
+                    ContextProjectionError::Contract(error("summary_projection_missing"))
+                })?;
                 measure(&candidate)?
             };
             if candidate_pressure + summary_budget as f64 > max_bytes * TARGET_RATIO {
@@ -185,8 +186,10 @@ impl CompactionState {
                 summary: Arc::from(next_summary.as_str()),
             };
             let candidate_fits = {
-                let candidate_messages = project(messages, units, Some(&candidate))
-                    .expect("a summary record always projects messages");
+                let candidate_messages =
+                    project(messages, units, Some(&candidate)).ok_or_else(|| {
+                        ContextProjectionError::Contract(error("summary_projection_missing"))
+                    })?;
                 measure(&candidate_messages)? <= max_bytes
             };
             if candidate_fits {
@@ -267,7 +270,11 @@ async fn summarize_history(
             }
             let split_budget = range.len() / 2;
             let pieces = summary::utf8_ranges(&history[range.clone()], split_budget);
-            let first = pieces.first().expect("nonempty split").clone();
+            let Some(first) = pieces.first().cloned() else {
+                return Err(ContextProjectionError::Contract(error(
+                    "summary_required_context_exceeds_model_capacity",
+                )));
+            };
             for piece in pieces.iter().skip(1).rev() {
                 chunks.push_front(range.start + piece.start..range.start + piece.end);
             }

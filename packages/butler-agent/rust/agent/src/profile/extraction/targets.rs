@@ -70,10 +70,7 @@ pub(super) fn revision(entry: &storage::StoredEntry) -> String {
         "evidence_observed_at":entry.payload.get("evidence_observed_at").cloned().unwrap_or(Value::Object(Default::default())),
         "updated_at":entry.updated_at,
     });
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_string(&object).unwrap().as_bytes())
-    )
+    format!("{:x}", Sha256::digest(object.to_string().as_bytes()))
 }
 
 pub(super) fn normalized_conditions(mut values: Vec<String>) -> Vec<String> {

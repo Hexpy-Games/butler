@@ -27,10 +27,10 @@ pub(super) fn execute(
     if input.batch {
         MutationOutcome::Batch(batch::execute(paths, observer))
     } else {
-        MutationOutcome::Single(single(
-            paths.into_iter().next().expect("single guarded edit"),
-            observer,
-        ))
+        MutationOutcome::Single(match paths.into_iter().next() {
+            Some(edit) => single(edit, observer),
+            None => Err(EditFailure::new(0, None, "invalid_arguments")),
+        })
     }
 }
 

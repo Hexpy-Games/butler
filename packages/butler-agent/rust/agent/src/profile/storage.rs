@@ -18,7 +18,7 @@ pub(super) fn database_path(data_root: &Path) -> PathBuf {
 pub(super) fn open(data_root: &Path, create: bool) -> ProfileResult<Connection> {
     let path = database_path(data_root);
     if create {
-        fs::create_dir_all(path.parent().expect("profile DB has parent")).map_err(io_error)?;
+        fs::create_dir_all(data_root.join("cognition/profile")).map_err(io_error)?;
     }
     let flags = if create {
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE

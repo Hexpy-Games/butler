@@ -97,10 +97,9 @@ fn project_acknowledged(previous: &[Value], messages: &[ModelRoundMessage]) -> V
                 return item.clone();
             };
             let mut projected = item.clone();
-            projected
-                .as_object_mut()
-                .expect("function_call_output is an object")
-                .insert("output".into(), message.content.as_ref().to_owned().into());
+            if let Some(object) = projected.as_object_mut() {
+                object.insert("output".into(), message.content.as_ref().to_owned().into());
+            }
             projected
         })
         .collect()

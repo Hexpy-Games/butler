@@ -190,8 +190,9 @@ pub(super) fn from_reader(mut reader: impl Read, max_chars: usize) -> IoResult<O
                 }
                 Err(error) => {
                     let valid = error.valid_up_to();
-                    let prefix = std::str::from_utf8(&bytes[consumed..consumed + valid])
-                        .expect("valid prefix");
+                    // `valid_up_to` bytes decode by definition.
+                    let prefix =
+                        std::str::from_utf8(&bytes[consumed..consumed + valid]).unwrap_or_default();
                     for character in prefix.chars() {
                         collector.push(character);
                     }

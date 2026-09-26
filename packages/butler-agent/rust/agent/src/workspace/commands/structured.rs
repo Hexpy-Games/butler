@@ -104,6 +104,7 @@ async fn execute(
     let environment = environment(&input);
     let mut children = Vec::with_capacity(steps.len());
     let mut pids = Vec::with_capacity(steps.len());
+    let mut stdio = Vec::with_capacity(steps.len());
     for step in &steps {
         let mut command = Command::new(&step.executable);
         command
@@ -122,10 +123,22 @@ async fn execute(
             use std::os::unix::process::CommandExt;
             command.as_std_mut().process_group(0);
         }
-        match host.spawn(&mut command).await {
-            Ok(child) => {
-                pids.push(child.id().expect("spawned child has pid"));
+        let spawned = host.spawn(&mut command).await.and_then(|mut child| {
+            let pipes = (child.stdin.take(), child.stdout.take(), child.stderr.take());
+            match (child.id(), pipes) {
+                (Some(pid), (Some(stdin), Some(stdout), Some(stderr))) => {
+                    Ok((child, pid, (stdin, stdout, stderr)))
+                }
+                _ => Err(std::io::Error::other(
+                    "spawned command has no pid or piped stdio",
+                )),
+            }
+        });
+        match spawned {
+            Ok((child, pid, pipes)) => {
+                pids.push(pid);
                 children.push(child);
+                stdio.push(pipes);
             }
             Err(spawn_error) => {
                 let mut cleanup_error = None;
@@ -179,32 +192,47 @@ async fn execute(
     }
     let (tx, mut rx) = mpsc::channel::<StreamChunk>(64);
     let mut io_tasks = Vec::new();
-    for (index, child) in children.iter_mut().enumerate() {
-        let stderr = child.stderr.take().expect("piped stderr");
+    let mut stdins = Vec::with_capacity(stdio.len());
+    let mut stdouts = Vec::with_capacity(stdio.len());
+    for (index, (stdin, stdout, stderr)) in stdio.into_iter().enumerate() {
         io_tasks.push(tokio::spawn(read_stream(
             stderr,
             StreamKind::Stderr(index),
             tx.clone(),
         )));
+        stdins.push(stdin);
+        stdouts.push(stdout);
     }
-    let last = children.len() - 1;
-    let stdout = children[last].stdout.take().expect("piped stdout");
+    // The plan was checked to be non-empty, so the pipeline has both ends.
+    let mut stdins = stdins.into_iter();
+    let (Some(mut first_stdin), Some(last_stdout)) = (stdins.next(), stdouts.pop()) else {
+        return result(
+            started,
+            String::new(),
+            String::new(),
+            None,
+            false,
+            false,
+            Some(CommandError::new(
+                "command_plan_empty",
+                "command plan must contain at least one executable step",
+            )),
+        );
+    };
     io_tasks.push(tokio::spawn(read_stream(
-        stdout,
+        last_stdout,
         StreamKind::Stdout,
         tx.clone(),
     )));
     drop(tx);
-    for index in 0..last {
-        let mut stdout = children[index].stdout.take().expect("piped stdout");
-        let mut stdin = children[index + 1].stdin.take().expect("piped stdin");
+    // Each step's stdout feeds the next step's stdin.
+    for (mut stdout, mut stdin) in stdouts.into_iter().zip(stdins) {
         io_tasks.push(tokio::spawn(async move {
             let copied = tokio::io::copy(&mut stdout, &mut stdin).await;
             drop(stdin);
             copied.map(|_| ())
         }));
     }
-    let mut first_stdin = children[0].stdin.take().expect("piped stdin");
     let stdin_bytes = input.stdin.into_bytes();
     io_tasks.push(tokio::spawn(async move {
         let result = first_stdin.write_all(&stdin_bytes).await;

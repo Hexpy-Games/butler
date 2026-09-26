@@ -86,31 +86,23 @@ pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<Worksp
         allow_directories: true,
         protected_roots: &input.protected_roots,
     })?;
-    if guard.ok() {
-        let selected = guard
-            .real
-            .as_ref()
-            .or(guard.absolute.as_ref())
-            .expect("guarded root");
-        if !std::fs::symlink_metadata(guard.absolute.as_ref().expect("guarded absolute path"))?
-            .is_dir()
-            || !std::fs::symlink_metadata(selected)?.is_dir()
-        {
-            guard.reason = Some("not_a_directory");
+    let not_directory = match guard.accepted() {
+        Some((absolute, selected)) => {
+            !std::fs::symlink_metadata(absolute)?.is_dir()
+                || !std::fs::symlink_metadata(selected)?.is_dir()
         }
+        None => false,
+    };
+    if not_directory {
+        guard.reason = Some("not_a_directory");
     }
-    if let Some(reason) = guard.reason {
+    let Some((_, root_path)) = guard.accepted() else {
         return Ok(WorkspaceListOutcome::Rejected(WorkspaceListRejection {
-            reason,
+            reason: guard.reason.unwrap_or("path_rejected"),
             safe_path: guard.safe_path(),
             guard: guard.public_rejection(),
         }));
-    }
-    let root_path = guard
-        .real
-        .as_ref()
-        .or(guard.absolute.as_ref())
-        .expect("guarded root");
+    };
     let displayed_root = root_path
         .strip_prefix(&guard.root)
         .unwrap_or(Path::new(""))
@@ -238,11 +230,10 @@ impl Walk<'_> {
                 break;
             }
             let path = child.path();
-            let relative = path
-                .strip_prefix(self.root)
-                .expect("inside workspace root")
-                .to_string_lossy()
-                .replace('\\', "/");
+            let Ok(relative) = path.strip_prefix(self.root) else {
+                continue;
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
             if relative.is_empty()
                 || looks_sensitive(&relative)
                 || protected_path(self.root, &path, &self.input.protected_roots)

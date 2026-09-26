@@ -249,9 +249,13 @@ impl NativeTurnContext {
             )
             .await?;
         if let Some(record) = &projection.save_record {
-            self.repository
-                .as_ref()
-                .expect("compaction state requires repository")
+            let Some(repository) = self.repository.as_ref() else {
+                return Err(ContextProjectionError::Contract(BtccError::new(
+                    "context_compaction_repository_missing",
+                    "Compaction state requires a repository",
+                )));
+            };
+            repository
                 .save(&self.turn_id, record)
                 .await
                 .map_err(ContextProjectionError::Contract)?;

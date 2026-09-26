@@ -69,7 +69,12 @@ impl PublicMemorySnapshot {
                 "Canonical Turn binding is invalid",
             ));
         }
-        let session = session.expect("checked above");
+        let Some(session) = session else {
+            return Err(ConversationError::new(
+                "invalid_scope",
+                "Canonical Turn binding is invalid",
+            ));
+        };
         let external: Option<String> = reader.connection()?.query_row(
             "SELECT external_session_id FROM conversation_bindings WHERE conversation_session_id=?1 AND gateway=?2 ORDER BY created_at LIMIT 1",
             [&session.id, &session.gateway_origin], |row| row.get(0),

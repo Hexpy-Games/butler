@@ -73,8 +73,8 @@ fn apply_mandatory_rules(
     units: &mut [AtomicUnit],
     has_open_tool_calls: bool,
 ) {
-    if units.len() > 1 {
-        units.last_mut().expect("nonempty units").mandatory = true;
+    if let [_, .., last] = units {
+        last.mandatory = true;
     }
     if !has_open_tool_calls
         && let Some(unit) = units.iter_mut().rev().find(|unit| {

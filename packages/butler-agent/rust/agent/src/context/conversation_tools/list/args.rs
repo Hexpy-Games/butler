@@ -112,10 +112,9 @@ pub(super) fn parse(
         "includeArchived":include_archived,"time":time.as_ref().map(|(from,to)| json!({"from":from,"to":to,"basis":"conversation"}))});
     let filter = if time.is_none() {
         let mut filter = filter;
-        filter
-            .as_object_mut()
-            .expect("filter object")
-            .shift_remove("time");
+        if let Some(object) = filter.as_object_mut() {
+            object.shift_remove("time");
+        }
         filter
     } else {
         filter
@@ -149,7 +148,9 @@ pub(super) fn parse(
 }
 
 pub(super) fn encode_cursor(cursor: &ListCursor) -> String {
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).expect("cursor serializable"))
+    // A derived struct of strings and numbers always serializes; an empty
+    // cursor would be rejected as invalid on decode.
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).unwrap_or_default())
 }
 fn decode_cursor(text: &str) -> Result<ListCursor, &'static str> {
     let bytes = URL_SAFE_NO_PAD.decode(text).map_err(|_| "invalid_cursor")?;

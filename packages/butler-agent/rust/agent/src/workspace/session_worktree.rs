@@ -315,7 +315,9 @@ impl Owner {
             let same = same_marker && git.same_path(&path, &binding.workspace_path).await?;
             (path, true, same)
         } else {
-            let target = target.expect("create target prepared");
+            let Some(target) = target else {
+                return Ok(failure(action, Some(branch), "git_operation_failed"));
+            };
             let mut target_entry = None;
             for entry in &entries {
                 if git
@@ -445,10 +447,8 @@ impl Owner {
         code: &'static str,
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         if (code == "cancelled" || code == "git_operation_failed")
-            && target.is_some()
-            && git
-                .partial_creation(anchor, target.unwrap(), branch)
-                .await?
+            && let Some(target) = target
+            && git.partial_creation(anchor, target, branch).await?
         {
             return Ok(failure(action, Some(branch), "partial_creation"));
         }

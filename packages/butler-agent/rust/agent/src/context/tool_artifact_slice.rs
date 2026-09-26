@@ -42,12 +42,12 @@ impl ExactText {
                         Ok('\r') => output.push_str("\\r"),
                         Ok('\t') => output.push_str("\\t"),
                         Ok(character) if character < ' ' => {
-                            write!(output, "\\u{:04x}", character as u32).expect("String write");
+                            // Writing to a String cannot fail.
+                            let _ = write!(output, "\\u{:04x}", u32::from(character));
                         }
                         Ok(character) => output.push(character),
                         Err(error) => {
-                            write!(output, "\\u{:04x}", error.unpaired_surrogate())
-                                .expect("String write");
+                            let _ = write!(output, "\\u{:04x}", error.unpaired_surrogate());
                         }
                     }
                 }

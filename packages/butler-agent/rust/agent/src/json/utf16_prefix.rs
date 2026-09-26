@@ -96,7 +96,8 @@ impl<'a> Utf16Prefix<'a> {
         if let Some(high) = self.trailing_high {
             use std::fmt::Write;
             output.pop();
-            write!(output, "\\u{high:04x}\"").expect("writing to String cannot fail");
+            // Writing to a String cannot fail.
+            let _ = write!(output, "\\u{high:04x}\"");
         }
         Ok(output)
     }

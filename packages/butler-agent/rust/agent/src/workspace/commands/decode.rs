@@ -16,7 +16,8 @@ impl Utf8Decoder {
                 Err(error) => {
                     let valid = error.valid_up_to();
                     output.push_str(
-                        std::str::from_utf8(&self.pending[..valid]).expect("valid prefix"),
+                        // `valid_up_to` bytes decode by definition.
+                        std::str::from_utf8(&self.pending[..valid]).unwrap_or_default(),
                     );
                     let bad = error.error_len();
                     self.pending.drain(..valid);

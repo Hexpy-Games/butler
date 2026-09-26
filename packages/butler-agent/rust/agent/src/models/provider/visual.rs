@@ -164,18 +164,16 @@ fn replace_first_user(body: &mut Value, carrier: Carrier, content: Value) {
                     .and_then(Value::as_str)
                     == Some("user")
             }) {
-                if body.get("input").is_some_and(Value::is_array) {
-                    let input = body.get_mut("input").and_then(Value::as_array_mut).unwrap();
-                    if let Some(index) = input
-                        .iter()
-                        .position(|row| row.get("role").and_then(Value::as_str) == Some("user"))
-                    {
-                        input.splice(index..=index, content.as_array().unwrap().iter().cloned());
-                    } else {
-                        input.splice(0..0, content.as_array().unwrap().iter().cloned());
+                match body.get_mut("input").and_then(Value::as_array_mut) {
+                    Some(input) => {
+                        let rows = content.as_array().map(Vec::as_slice).unwrap_or_default();
+                        let target = input
+                            .iter()
+                            .position(|row| row.get("role").and_then(Value::as_str) == Some("user"))
+                            .map_or(0..0, |index| index..index + 1);
+                        input.splice(target, rows.iter().cloned());
                     }
-                } else {
-                    body["input"] = content;
+                    None => body["input"] = content,
                 }
             }
         }

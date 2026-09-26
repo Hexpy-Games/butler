@@ -94,10 +94,7 @@ pub(super) fn strict(
             resolved.push(Value::String(target.stable_id.clone()));
         }
         resolved.truncate(6);
-        candidate
-            .payload
-            .as_object_mut()
-            .unwrap()
+        crate::json::object_mut(&mut candidate.payload)
             .insert("contradiction_refs".into(), Value::Array(resolved));
         output.push(candidate);
     }

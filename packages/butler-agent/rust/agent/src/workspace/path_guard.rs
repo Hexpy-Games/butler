@@ -34,6 +34,15 @@ impl GuardResult {
     pub(crate) fn ok(&self) -> bool {
         self.reason.is_none()
     }
+    /// For an accepted path: the lexical absolute path and the path to open
+    /// (its real path when resolved, otherwise the absolute path).
+    pub(crate) fn accepted(&self) -> Option<(&Path, &Path)> {
+        if !self.ok() {
+            return None;
+        }
+        let absolute = self.absolute.as_deref()?;
+        Some((absolute, self.real.as_deref().unwrap_or(absolute)))
+    }
     pub(crate) fn safe_path(&self) -> Option<String> {
         let candidate = match &self.absolute {
             Some(path) => path
@@ -109,14 +118,11 @@ pub(crate) fn resolve_workspace_path_guard(input: GuardInput<'_>) -> std::io::Re
         unresolved
     };
     out.absolute = Some(absolute.clone());
-    if inside_relative(&root_real, &absolute).is_none() {
+    let Some(relative) = inside_relative(&root_real, &absolute) else {
         out.reason = Some("path_escape");
         return Ok(out);
-    }
-    let relative = absolute
-        .strip_prefix(&root_real)
-        .expect("root containment")
-        .to_string_lossy();
+    };
+    let relative = relative.to_string_lossy();
     if looks_sensitive(&relative) {
         out.reason = Some("sensitive_path_blocked");
         return Ok(out);
@@ -203,14 +209,11 @@ pub(crate) fn resolve_workspace_mutation_guard(
         })
     };
     out.absolute = Some(absolute.clone());
-    if inside_relative(&root_real, &absolute).is_none() {
+    let Some(relative) = inside_relative(&root_real, &absolute) else {
         out.reason = Some("path_escape");
         return Ok(out);
-    }
-    let relative = absolute
-        .strip_prefix(&root_real)
-        .expect("contained")
-        .to_string_lossy();
+    };
+    let relative = relative.to_string_lossy();
     if looks_sensitive(&relative) {
         out.reason = Some("sensitive_path_blocked");
         return Ok(out);
@@ -246,7 +249,10 @@ pub(crate) fn resolve_workspace_mutation_guard(
             } else if inside_relative(&root_real, &parent_real).is_none() {
                 out.reason = Some("parent_escape");
             } else {
-                out.real = Some(parent_real.join(absolute.strip_prefix(parent).expect("child")));
+                match absolute.file_name() {
+                    Some(leaf) => out.real = Some(parent_real.join(leaf)),
+                    None => out.reason = Some("parent_escape"),
+                }
             }
         }
         Err(_) => out.reason = Some("not_found"),

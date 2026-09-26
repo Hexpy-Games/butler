@@ -167,8 +167,8 @@ async fn run_dump(
             "Lightpanda output is unavailable.",
         ));
     };
-    let mut spool = match TemporarySpool::create(access.data_root()) {
-        Ok(spool) => spool,
+    let (spool, file) = match TemporarySpool::create(access.data_root()) {
+        Ok(created) => created,
         Err(_) => {
             stop_child(&mut child).await;
             return Err(WebAccessError::new(
@@ -177,7 +177,7 @@ async fn run_dump(
             ));
         }
     };
-    let mut file = TokioFile::from_std(spool.open_file.take().expect("new private spool"));
+    let mut file = TokioFile::from_std(file);
     let deadline = Instant::now() + MAX_RUNTIME;
     let mut buffer = [0_u8; 16 * 1024];
     loop {

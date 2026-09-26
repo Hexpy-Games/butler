@@ -34,7 +34,7 @@ impl ConversationMetrics {
                 "orphan_tool_result_rejected": input.reason == "orphan_tool_result_rejected",
             },
         });
-        let dimensions = event["dimensions"].as_object_mut().expect("object literal");
+        let dimensions = crate::json::object_mut(&mut event["dimensions"]);
         for (key, value) in [
             ("event_kind", input.event_kind),
             ("session_role", input.session_role),

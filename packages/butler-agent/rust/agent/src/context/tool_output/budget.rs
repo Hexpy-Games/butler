@@ -276,14 +276,10 @@ fn failure_output_preview(output: &str) -> (ExactText, bool) {
     if line_breaks < 20 && output.encode_utf16().count() <= 1_000 {
         return (ExactText::Plain(output.to_owned()), false);
     }
-    let tail = if line_breaks >= 20 {
-        let preceding_break = output
-            .rmatch_indices('\n')
-            .nth(19)
-            .expect("at least twenty line breaks");
-        &output[preceding_break.0 + 1..]
-    } else {
-        output
+    // Keep the last twenty lines when there are at least twenty line breaks.
+    let tail = match output.rmatch_indices('\n').nth(19) {
+        Some((preceding_break, _)) => output.get(preceding_break + 1..).unwrap_or(output),
+        None => output,
     };
     let total = tail.encode_utf16().count();
     let mut units = "...[output truncated]\n".encode_utf16().collect::<Vec<_>>();

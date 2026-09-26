@@ -35,8 +35,8 @@ impl NativeAutomationCliStore {
             .list(include_deleted)?
             .into_iter()
             .filter(|item| status.is_none_or(|status| item.status == status))
-            .map(|item| serde_json::to_value(item).expect("automation preview serializes"))
-            .collect())
+            .map(preview_value)
+            .collect::<Result<_, _>>()?)
     }
 
     pub(crate) fn show(&self, id: &str) -> Result<Option<Value>, AutomationError> {
@@ -44,7 +44,8 @@ impl NativeAutomationCliStore {
             .store
             .read(id)?
             .filter(|item| item.status != "deleted")
-            .map(|item| serde_json::to_value(item).expect("automation preview serializes")))
+            .map(preview_value)
+            .transpose()?)
     }
 
     pub(crate) fn run_now(&self, id: &str, now_ms: i64) -> Result<Value, AutomationError> {
@@ -65,9 +66,7 @@ impl NativeAutomationCliStore {
     }
 
     pub(crate) fn delete(&self, id: &str, now_ms: i64) -> Result<Value, AutomationError> {
-        self.store
-            .delete(id, now_ms)
-            .map(|item| serde_json::to_value(item).expect("automation preview serializes"))
+        self.store.delete(id, now_ms).and_then(preview_value)
     }
 }
 
@@ -77,6 +76,11 @@ pub(crate) type AutomationFuture<'a, T> =
 pub(crate) trait AutomationEnqueue: Send + Sync + 'static {
     fn enqueue(&self, envelope: Value, metadata: Map<String, Value>)
     -> Result<(), AutomationError>;
+}
+
+fn preview_value(item: impl serde::Serialize) -> Result<Value, AutomationError> {
+    serde_json::to_value(item)
+        .map_err(|error| AutomationError::new("automation_preview_invalid", error.to_string()))
 }
 
 #[derive(Clone, Debug)]

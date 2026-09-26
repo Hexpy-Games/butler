@@ -52,16 +52,8 @@ impl ModelConfiguration {
         let root = root.unwrap_or(&self.data_root);
         let path = root.join("butler.config.json");
         let mut config = configuration::read_json_object(&path)?;
-        let object = config
-            .as_object_mut()
-            .expect("config reader returns object");
-        let user = object
-            .entry("user")
-            .or_insert_with(|| Value::Object(serde_json::Map::new()));
-        if !user.is_object() {
-            *user = Value::Object(serde_json::Map::new());
-        }
-        let user = user.as_object_mut().expect("user settings are an object");
+        let object = crate::json::object_mut(&mut config);
+        let user = crate::json::object_field_mut(object, "user");
         for (key, value) in patch {
             user.insert(key.clone(), value.clone());
         }
@@ -83,16 +75,8 @@ impl ModelConfiguration {
         let _write = self.configuration_writes.acquire().await;
         let path = root.join("butler.config.json");
         let mut config = configuration::read_json_object(&path)?;
-        let object = config
-            .as_object_mut()
-            .expect("config reader returns object");
-        let web_search = object
-            .entry("webSearch")
-            .or_insert_with(|| Value::Object(serde_json::Map::new()));
-        if !web_search.is_object() {
-            *web_search = Value::Object(serde_json::Map::new());
-        }
-        let web_search = web_search.as_object_mut().expect("web search is an object");
+        let object = crate::json::object_mut(&mut config);
+        let web_search = crate::json::object_field_mut(object, "webSearch");
         if let Some(value) = patch.get("provider") {
             web_search.insert("provider".into(), value.clone());
         }
@@ -100,13 +84,7 @@ impl ModelConfiguration {
             web_search.insert("readerBackend".into(), value.clone());
         }
         if let Some(planning_patch) = patch.get("planning").and_then(Value::as_object) {
-            let planning = web_search
-                .entry("planning")
-                .or_insert_with(|| Value::Object(serde_json::Map::new()));
-            if !planning.is_object() {
-                *planning = Value::Object(serde_json::Map::new());
-            }
-            let planning = planning.as_object_mut().expect("planning is an object");
+            let planning = crate::json::object_field_mut(web_search, "planning");
             for (key, value) in planning_patch {
                 planning.insert(key.clone(), value.clone());
             }
@@ -207,18 +185,8 @@ impl ModelConfiguration {
             .pointer("/system/defaultModel")
             .cloned()
             .unwrap_or(Value::Null);
-        let root = config
-            .as_object_mut()
-            .expect("configuration reader returns an object");
-        let system = root
-            .entry("system")
-            .or_insert_with(|| Value::Object(serde_json::Map::new()));
-        if !system.is_object() {
-            *system = Value::Object(serde_json::Map::new());
-        }
-        let system = system
-            .as_object_mut()
-            .expect("system configuration is an object");
+        let root = crate::json::object_mut(&mut config);
+        let system = crate::json::object_field_mut(root, "system");
         system.insert(
             "defaultModel".into(),
             Value::String(model.canonical_ref.clone()),

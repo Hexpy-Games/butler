@@ -47,13 +47,8 @@ pub(super) async fn inspect_project_workspace(
         abort.clone(),
     )
     .await?;
-    if let Some(invalid) = command_failure(&version, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: match invalid {
-                SessionWorkspaceValidation::Invalid { code } => code,
-                SessionWorkspaceValidation::Valid { .. } => unreachable!(),
-            },
-        });
+    if let Some(code) = command_failure_code(&version, "git_workspace_unavailable") {
+        return Ok(ProjectWorkspaceInspection::Unavailable { code });
     }
     let probe = git(
         commands,
@@ -69,13 +64,8 @@ pub(super) async fn inspect_project_workspace(
     {
         return Ok(ProjectWorkspaceInspection::Folder);
     }
-    if let Some(invalid) = command_failure(&probe, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: match invalid {
-                SessionWorkspaceValidation::Invalid { code } => code,
-                SessionWorkspaceValidation::Valid { .. } => unreachable!(),
-            },
-        });
+    if let Some(code) = command_failure_code(&probe, "git_workspace_unavailable") {
+        return Ok(ProjectWorkspaceInspection::Unavailable { code });
     }
     let branch = git(
         commands,
@@ -227,16 +217,23 @@ fn command_failure(
     result: &StructuredCommandOutput,
     other_code: &'static str,
 ) -> Option<SessionWorkspaceValidation> {
+    command_failure_code(result, other_code).map(invalid)
+}
+
+fn command_failure_code(
+    result: &StructuredCommandOutput,
+    other_code: &'static str,
+) -> Option<&'static str> {
     if result.cancelled || result.timed_out {
-        Some(invalid("cancelled"))
+        Some("cancelled")
     } else if result
         .error
         .as_ref()
         .is_some_and(|error| error.code == "ENOENT")
     {
-        Some(invalid("git_not_installed"))
+        Some("git_not_installed")
     } else if result.exit_code != Some(0) {
-        Some(invalid(other_code))
+        Some(other_code)
     } else {
         None
     }

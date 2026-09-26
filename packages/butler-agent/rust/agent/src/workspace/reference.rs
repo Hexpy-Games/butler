@@ -52,11 +52,11 @@ fn resolve(path: &Path) -> PathBuf {
     if path.is_absolute() {
         normalize(path)
     } else {
-        normalize(
-            &std::env::current_dir()
-                .expect("current directory available")
-                .join(path),
-        )
+        // Without a current directory the relative path is kept as given.
+        match std::env::current_dir() {
+            Ok(current) => normalize(&current.join(path)),
+            Err(_) => normalize(path),
+        }
     }
 }
 

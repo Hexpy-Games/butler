@@ -237,34 +237,36 @@ pub(super) async fn capture(
                 match committed {
                     Ok(next) => ids.extend(next),
                     Err(error) => {
-                        model_error = Some(safe_error(&error));
+                        let failure = safe_error(&error);
                         if !interruption(&error) {
                             runtime::mark_batch_failed(
                                 &dependencies,
                                 &windows,
                                 &nonce,
-                                &model_error.clone().unwrap(),
+                                &failure,
                                 &usage,
                                 &provider_cancellation,
                             )
                             .await
                             .ok();
                         }
+                        model_error = Some(failure);
                     }
                 }
             }
             Err(error) => {
-                model_error = Some(safe_error(&error));
+                let failure = safe_error(&error);
                 runtime::mark_batch_failed(
                     &dependencies,
                     &windows,
                     &nonce,
-                    &model_error.clone().unwrap(),
+                    &failure,
                     &usage,
                     &provider_cancellation,
                 )
                 .await
                 .ok();
+                model_error = Some(failure);
             }
         }
         let release = runtime::with_gate(&dependencies, None, {

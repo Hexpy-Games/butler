@@ -36,7 +36,7 @@ pub(crate) fn sanitize_image(input: ImageSanitizerInput<'_>) -> ContextResult<Sa
         "jpeg" => ImageFormat::Jpeg,
         "gif" => ImageFormat::Gif,
         "webp" => ImageFormat::WebP,
-        _ => unreachable!("sniff_image returns only admitted formats"),
+        other => return Err(preprocess_error(format!("unsupported format {other}"))),
     };
     let mut decoder = ImageReader::with_format(Cursor::new(input.source_bytes), format)
         .into_decoder()
@@ -133,7 +133,7 @@ fn encode_derivative(image: DynamicImage, magic: &str) -> ContextResult<(Vec<u8>
                 .map_err(|error| preprocess_error(format!("{error:?}")))?;
             Ok((encoded.to_vec(), "image/webp"))
         }
-        _ => unreachable!("sniff_image returns only admitted formats"),
+        other => Err(preprocess_error(format!("unsupported format {other}"))),
     }
 }
 

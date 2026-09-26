@@ -318,13 +318,13 @@ pub(super) fn consolidate(
     let stable_count = stable.len();
     let generated =
         projection::build_current(data_root, sources, mode, now_ms, now_ms as f64, now.into())?;
-    let written = generated.as_ref().is_some_and(|value| {
+    let written = generated.as_ref().filter(|value| {
         !value.response_hints.is_empty()
             || !value.current_attention.is_empty()
             || !value.caution_hints.is_empty()
     });
-    if written {
-        storage::write_projection(data_root, generated.as_ref().unwrap())?
+    if let Some(generated) = written {
+        storage::write_projection(data_root, generated)?
     } else {
         storage::delete_projection(data_root)?
     }
@@ -336,7 +336,7 @@ pub(super) fn consolidate(
         skipped_count: skipped,
         rejected_count: rejected,
         stable_entry_count: stable_count,
-        projection_written: written,
+        projection_written: written.is_some(),
         raw_text_included: false,
     })
 }

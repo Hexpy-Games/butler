@@ -178,7 +178,7 @@ pub(super) fn apply_persona(
         )
     };
     let path = data_root.join("personas/active.md");
-    fs::create_dir_all(path.parent().unwrap()).map_err(|_| error())?;
+    fs::create_dir_all(data_root.join("personas")).map_err(|_| error())?;
     fs::write(
         &path,
         if output.ends_with('\n') {
@@ -320,12 +320,7 @@ fn locale_str(value: PersonaLocale) -> &'static str {
     }
 }
 fn object<'a>(root: &'a mut Value, key: &str) -> &'a mut Map<String, Value> {
-    let map = root.as_object_mut().unwrap();
-    let value = map.entry(key).or_insert_with(|| Value::Object(Map::new()));
-    if !value.is_object() {
-        *value = Value::Object(Map::new())
-    }
-    value.as_object_mut().unwrap()
+    crate::json::object_field_mut(crate::json::object_mut(root), key)
 }
 fn error() -> ProfileError {
     ProfileError::new("profile_write_failed", "Profile could not be written.")
