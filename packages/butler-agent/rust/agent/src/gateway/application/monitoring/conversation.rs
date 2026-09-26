@@ -1,5 +1,6 @@
 //! Bounded-page reads and source-compatible public conversation enrichment.
 
+use crate::public_text::fixed_regex;
 use std::{cmp::Reverse, collections::HashSet, sync::LazyLock};
 
 use regex::Regex;
@@ -138,36 +139,20 @@ fn push_nonempty(values: &mut HashSet<String>, value: Option<&str>) {
 }
 
 fn safe_conversation_label(value: &str, internal_refs: &[String], fallback: &str) -> String {
-    static MARKDOWN_LINK: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"!?\[([^\]]*)\]\([^)]*\)").expect("fixed conversation-link pattern")
-    });
-    static URL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b[a-z][a-z0-9+.-]*://\S+").expect("fixed conversation-url pattern")
-    });
+    static MARKDOWN_LINK: LazyLock<Regex> =
+        LazyLock::new(|| fixed_regex(r"!?\[([^\]]*)\]\([^)]*\)"));
+    static URL: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?i)\b[a-z][a-z0-9+.-]*://\S+"));
     static UNIX_PATH: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?:/Users|/home|/private|/var|/tmp|/Volumes|/opt|/usr|/etc)/[^\s),;]+")
-            .expect("fixed conversation-path pattern")
+        fixed_regex(r"(?:/Users|/home|/private|/var|/tmp|/Volumes|/opt|/usr|/etc)/[^\s),;]+")
     });
-    static HOME_PATH: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?:~/|\$HOME/)[^\s),;]+").expect("fixed conversation-home pattern")
-    });
-    static WINDOWS_PATH: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\b[A-Za-z]:\\[^\s),;]+").expect("fixed conversation-windows pattern")
-    });
-    static UNC_PATH: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\\\\[^\s\\]+\\[^\s),;]+").expect("fixed conversation-unc pattern")
-    });
-    static REPOSITORY_PATH: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\b(?:packages|src|tests|docs|project-ledger)/[^\s),;]+")
-            .expect("fixed conversation-repository pattern")
-    });
-    static UUID: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b")
-            .expect("fixed conversation-uuid pattern")
-    });
-    static LONG_HEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b[0-9a-f]{24,}\b").expect("fixed conversation-hex pattern")
-    });
+    static HOME_PATH: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?:~/|\$HOME/)[^\s),;]+"));
+    static WINDOWS_PATH: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"\b[A-Za-z]:\\[^\s),;]+"));
+    static UNC_PATH: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"\\\\[^\s\\]+\\[^\s),;]+"));
+    static REPOSITORY_PATH: LazyLock<Regex> =
+        LazyLock::new(|| fixed_regex(r"\b(?:packages|src|tests|docs|project-ledger)/[^\s),;]+"));
+    static UUID: LazyLock<Regex> =
+        LazyLock::new(|| fixed_regex(r"(?i)\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b"));
+    static LONG_HEX: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?i)\b[0-9a-f]{24,}\b"));
 
     let mut text = value.to_owned();
     for reference in internal_refs {

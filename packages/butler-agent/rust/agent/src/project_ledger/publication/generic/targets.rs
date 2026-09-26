@@ -38,14 +38,13 @@ pub(super) fn capture(
             })
             .collect::<Vec<_>>();
         let (kind, path, parent_id) = match matches.as_slice() {
-            [record] => (
-                update
-                    .kind
-                    .clone()
-                    .unwrap_or_else(|| kind_from(&record.kind).expect("indexed kind")),
-                record.path.clone(),
-                record.parent_id.clone(),
-            ),
+            [record] => {
+                let kind = match update.kind.clone() {
+                    Some(kind) => kind,
+                    None => kind_from(&record.kind).ok_or(LedgerEffectError::Uncertain)?,
+                };
+                (kind, record.path.clone(), record.parent_id.clone())
+            }
             [] => absent(scope, &records, update)?,
             _ => return Err(LedgerEffectError::Uncertain),
         };

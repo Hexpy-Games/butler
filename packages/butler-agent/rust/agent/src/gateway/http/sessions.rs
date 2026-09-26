@@ -68,7 +68,7 @@ pub(super) async fn create(
 ) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    let request = parse_request(value).ok_or_else(|| {
+    let request = parse_request(&value).ok_or_else(|| {
         HttpError::public(
             400,
             "invalid_request",
@@ -88,7 +88,7 @@ pub(super) async fn create(
     )
 }
 
-fn parse_request(value: Value) -> Option<AppCreateSessionRequest> {
+fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
     let object = value.as_object()?;
     let kind = match object.get("kind")?.as_str()? {
         "chat" => AppChatKind::Chat,

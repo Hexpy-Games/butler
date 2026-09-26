@@ -18,8 +18,9 @@ mod work;
 mod work_json;
 mod work_scope;
 
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::{Notify, Semaphore};
 
 use crate::btcc::{ProjectWorkOperationIdentity, ResolvedProjectWorkScope};
@@ -86,7 +87,7 @@ struct ActiveRead(Arc<ReadOwner>);
 
 impl Drop for ActiveRead {
     fn drop(&mut self) {
-        let mut state = self.0.state.lock().expect("project ledger owner poisoned");
+        let mut state = self.0.state.lock();
         state.active -= 1;
         drop(state);
         self.0.idle.notify_waiters();
@@ -220,7 +221,7 @@ impl NativeProjectLedger {
         id: String,
     ) -> Result<Vec<String>, ProjectLedgerReadError> {
         self.run(move |data_root, _| {
-            commands::canonical_record_kinds(data_root, &project_root, &id).map_err(|_| {
+            commands::canonical_record_kinds(data_root, &project_root, &id).map_err(|()| {
                 ProjectLedgerReadError::RecordShow("project_ledger_record_kinds_unavailable")
             })
         })
@@ -339,7 +340,7 @@ impl NativeProjectLedger {
             let _publication_permit = publication_permit;
             let _active = active;
             let _fs_permit = fs_permit;
-            publication::apply_record_effect(&data_root, request, &collation)
+            publication::apply_record_effect(&data_root, &request, &collation)
         })
         .await
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?
@@ -366,7 +367,7 @@ impl NativeProjectLedger {
             let _publication_permit = publication_permit;
             let _active = active;
             let _fs_permit = fs_permit;
-            publication::reconcile_record_effect(&data_root, request, &collation)
+            publication::reconcile_record_effect(&data_root, &request, &collation)
         })
         .await
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?
@@ -383,11 +384,7 @@ impl NativeProjectLedger {
             .await
             .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_closed"))?;
         {
-            let mut state = self
-                .owner
-                .state
-                .lock()
-                .expect("project ledger owner poisoned");
+            let mut state = self.owner.state.lock();
             if state.closing {
                 return Err(ProjectWorkPublicationError::Owner("project_ledger_closed"));
             }
@@ -408,12 +405,8 @@ impl NativeProjectLedger {
             .await
             .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_closed"))?;
         {
-            let mut state = self
-                .owner
-                .state
-                .lock()
-                .expect("project ledger owner poisoned");
-            if state.closing && IN_PUBLICATION.try_with(|_| ()).is_err() {
+            let mut state = self.owner.state.lock();
+            if state.closing && IN_PUBLICATION.try_with(|()| ()).is_err() {
                 return Err(ProjectLedgerReadError::Owner("project_ledger_closed"));
             }
             state.active += 1;
@@ -432,25 +425,14 @@ impl NativeProjectLedger {
 
     pub(crate) async fn close(&self) {
         {
-            self.owner
-                .state
-                .lock()
-                .expect("project ledger owner poisoned")
-                .closing = true;
+            self.owner.state.lock().closing = true;
         }
         self.owner.publication_permits.close();
         loop {
             let notified = self.owner.idle.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self
-                .owner
-                .state
-                .lock()
-                .expect("project ledger owner poisoned")
-                .active
-                == 0
-            {
+            if self.owner.state.lock().active == 0 {
                 break;
             }
             notified.await;

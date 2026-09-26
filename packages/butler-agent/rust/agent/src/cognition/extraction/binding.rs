@@ -103,7 +103,7 @@ pub(super) fn repair_schema(batch: &BindingBatch) -> Map<String, Value> {
     } else {
         json!({"anyOf":[null_decision,selected_decision]})
     };
-    serde_json::from_value(json!({"type":"object","additionalProperties":false,"required":["decisions"],"properties":{"decisions":{"type":"array","maxItems":4,"items":item}}})).unwrap()
+    crate::json::json_object!({"type":"object","additionalProperties":false,"required":["decisions"],"properties":{"decisions":{"type":"array","maxItems":4,"items":item}}})
 }
 fn error(code: &'static str) -> CognitionError {
     CognitionError::new(code, code)

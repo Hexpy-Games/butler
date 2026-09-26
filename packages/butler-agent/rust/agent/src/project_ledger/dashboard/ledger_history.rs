@@ -50,7 +50,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         return Err(changed());
     }
     let mut limited = file.take(MAX_HISTORY_BYTES + 1);
-    let mut bytes = Vec::with_capacity(path_metadata.len() as usize);
+    let mut bytes = Vec::with_capacity(usize::try_from(path_metadata.len()).unwrap_or(usize::MAX));
     limited.read_to_end(&mut bytes).map_err(|_| unavailable())?;
     file = limited.into_inner();
     if bytes.len() as u64 > MAX_HISTORY_BYTES {
@@ -175,7 +175,7 @@ fn change_time_millis(metadata: &Metadata) -> Option<f64> {
 
 fn epoch_millis(value: std::time::SystemTime) -> Option<f64> {
     let duration = value.duration_since(std::time::UNIX_EPOCH).ok()?;
-    Some(duration.as_secs() as f64 * 1000.0 + duration.subsec_nanos() as f64 / 1_000_000.0)
+    Some(duration.as_secs() as f64 * 1000.0 + f64::from(duration.subsec_nanos()) / 1_000_000.0)
 }
 
 fn number_string(value: f64) -> String {

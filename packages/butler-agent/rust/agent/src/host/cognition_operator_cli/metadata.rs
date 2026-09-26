@@ -31,7 +31,7 @@ pub(super) async fn run(
         paths.clone(),
         coordinator.clone(),
     ));
-    let service = LegacyMetadataIntegrityService::new(data_root, paths, box_store, feedback);
+    let service = LegacyMetadataIntegrityService::new(&data_root, paths, box_store, feedback);
     match command {
         super::Command::MetadataInspect => {
             let id = memory_chunk_id.unwrap_or_default();
@@ -63,17 +63,13 @@ pub(super) async fn run(
                 &report.integrity.missing_box_refs,
                 &report.integrity.missing_feedback_refs,
             );
-            let data = match data {
-                Value::Object(mut fields) => {
-                    fields.insert("repaired_box_refs".into(), json!(report.repaired_box_refs));
-                    fields.insert(
-                        "repaired_feedback_refs".into(),
-                        json!(report.repaired_feedback_refs),
-                    );
-                    Value::Object(fields)
-                }
-                _ => unreachable!("integrity projection is an object"),
-            };
+            let mut data = data;
+            let fields = crate::json::object_mut(&mut data);
+            fields.insert("repaired_box_refs".into(), json!(report.repaired_box_refs));
+            fields.insert(
+                "repaired_feedback_refs".into(),
+                json!(report.repaired_feedback_refs),
+            );
             let human = format!(
                 "metadata links repaired: box={} feedback={}",
                 report.repaired_box_refs, report.repaired_feedback_refs

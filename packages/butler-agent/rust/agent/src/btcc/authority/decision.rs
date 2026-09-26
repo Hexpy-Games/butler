@@ -6,7 +6,7 @@ use super::{permission, projection};
 
 pub(super) fn decide(
     repository: &mut dyn AuthorityRepository,
-    input: AuthorityDecisionInput,
+    input: &AuthorityDecisionInput,
     collation: &crate::locale::LocaleCollation,
     clock: &dyn Fn() -> String,
 ) -> AuthorityResult<AuthorityDecisionResult> {
@@ -33,7 +33,7 @@ pub(super) fn decide(
         })
         .ok_or_else(|| AuthorityError::policy("authority_request_not_found"))?;
     if current.decision != "pending" {
-        if same(&current, &input, alternative.as_deref()) {
+        if same(&current, input, alternative.as_deref()) {
             return projection::decision(&current);
         }
         return Err(AuthorityError::policy(
@@ -69,7 +69,7 @@ pub(super) fn decide(
         return projection::decision(&record);
     }
     if let Some(raced) = repository.find_ref(&input.request_ref)?
-        && same(&raced, &input, alternative.as_deref())
+        && same(&raced, input, alternative.as_deref())
     {
         return projection::decision(&raced);
     }

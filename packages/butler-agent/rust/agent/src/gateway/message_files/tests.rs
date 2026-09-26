@@ -20,7 +20,7 @@ async fn source_artifact_is_stored_once_with_original_metadata() {
     let source = root.join("artifacts/public-data/report.MD");
     std::fs::create_dir_all(source.parent().unwrap()).unwrap();
     std::fs::write(&source, b"native artifact\n").unwrap();
-    let owner = NativeAppMessageFiles::new(root.clone(), Arc::new(Clock));
+    let owner = NativeAppMessageFiles::new(&root.clone(), Arc::new(Clock));
     let candidate = ArtifactFileCandidate {
         candidate_paths: vec![source],
         name: "reports\\Daily:Report.MD".into(),

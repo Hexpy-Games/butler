@@ -5,6 +5,10 @@ use std::{
 
 use serde_json::{Map, Value, json};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 pub(super) struct Options {
     pub(super) data: Option<String>,
@@ -115,7 +119,7 @@ pub(super) fn values(options: &Options, key: &str) -> Vec<String> {
     options.values.get(key).cloned().unwrap_or_default()
 }
 
-pub(super) fn upsert_input(options: &Options, id: String) -> Result<Value, String> {
+pub(super) fn upsert_input(options: &Options, id: &str) -> Result<Value, String> {
     let transport = value(options, "--transport").unwrap_or_else(|| "stdio".into());
     if !matches!(transport.as_str(), "stdio" | "http" | "sse") {
         return Err("--transport must be stdio, http, or sse".into());
@@ -182,7 +186,7 @@ mod tests {
     fn add_omits_unset_optional_fields_but_replaces_secret_arrays() {
         let args = ["mcp", "add", "--id", "local"].map(OsString::from).to_vec();
         let options = parse(&args).unwrap();
-        let input = upsert_input(&options, "local".into()).unwrap();
+        let input = upsert_input(&options, "local").unwrap();
         assert!(input.get("command").is_none());
         assert!(input.get("cwd").is_none());
         assert!(input.get("url").is_none());

@@ -92,9 +92,8 @@ impl AppApplication {
             .await
             .map_err(app_error)??;
         for row in pending {
-            let _guard = match self.space_mutations.lock_relocation(&row.session_id).await {
-                Ok(guard) => guard,
-                Err(_) => return Ok(()),
+            let Ok(_guard) = self.space_mutations.lock_relocation(&row.session_id).await else {
+                return Ok(());
             };
             if let Err(error) = recovery::recover_one(self, row.clone(), true).await {
                 let operation_id = row.operation_id;
@@ -294,14 +293,13 @@ impl AppApplication {
         error: GatewayApplicationError,
     ) -> Result<AppSpaceMutationResult, GatewayApplicationError> {
         let runtime_session_id = app_session_hint(&row.session_id);
-        let snapshot = match self
+        let Ok(snapshot) = self
             .dependencies
             .relocation_host
             .inspect(runtime_session_id)
             .await
-        {
-            Ok(snapshot) => snapshot,
-            Err(_) => return Err(error),
+        else {
+            return Err(error);
         };
         if snapshot
             .binding

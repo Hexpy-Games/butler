@@ -9,6 +9,10 @@ use super::{ResolvedInstallation, service_instance::RestartIdentity};
 
 mod lifecycle;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<String>,

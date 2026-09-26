@@ -113,7 +113,10 @@ impl NativeSessionWorkspaceRecovery {
                 )
                 .await?
             }
-            SessionWorkspaceAuthority::Unavailable { .. } => unreachable!(),
+            // Returned above; kept total so the match needs no panic.
+            SessionWorkspaceAuthority::Unavailable { .. } => SessionWorkspaceValidation::Invalid {
+                code: "session_workspace_unavailable",
+            },
         };
         let workspace_reference = match &validation {
             SessionWorkspaceValidation::Valid { path, .. } => {

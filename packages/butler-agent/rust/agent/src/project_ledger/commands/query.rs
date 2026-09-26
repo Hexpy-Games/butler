@@ -69,18 +69,20 @@ pub(super) fn query(
     let Some(raw_limit) = options.get("limit") else {
         return Ok(json!({"kind":kind,"results":filtered}));
     };
-    let limit = match raw_limit {
-        Value::String(raw) => raw.parse::<f64>().ok(),
-        Value::Number(number) => number.as_f64(),
-        _ => None,
-    }
-    .filter(|value| value.fract() == 0.0 && (1.0..=1000.0).contains(value))
-    .ok_or_else(|| {
-        CliFailure::new(
-            "invalid_arguments",
-            "limit must be an integer between 1 and 1000",
-        )
-    })? as usize;
+    let limit = crate::json::saturating_usize(
+        match raw_limit {
+            Value::String(raw) => raw.parse::<f64>().ok(),
+            Value::Number(number) => number.as_f64(),
+            _ => None,
+        }
+        .filter(|value| value.fract() == 0.0 && (1.0..=1000.0).contains(value))
+        .ok_or_else(|| {
+            CliFailure::new(
+                "invalid_arguments",
+                "limit must be an integer between 1 and 1000",
+            )
+        })?,
+    );
     let total = filtered.len();
     Ok(json!({
         "kind":kind,

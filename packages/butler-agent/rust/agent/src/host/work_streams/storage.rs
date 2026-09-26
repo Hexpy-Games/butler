@@ -19,8 +19,8 @@ impl Store {
 
     pub(super) fn update_todo(
         &mut self,
-        scope: WorkStreamScope,
-        input: Value,
+        scope: &WorkStreamScope,
+        input: &Value,
     ) -> Result<Value, BtccError> {
         self.recover_pending()?;
         let object = input
@@ -37,7 +37,7 @@ impl Store {
             "created_at":prior_todo.as_ref().and_then(|value|string(value,"created_at")).unwrap_or_else(||now.clone()),
             "updated_at":now,"items":items
         });
-        let base_id = stable_stream_id(&scope, &list_id);
+        let base_id = stable_stream_id(scope, &list_id);
         let base = self.read_stream(&base_id)?;
         let id = if base.as_ref().is_some_and(terminal) {
             revision_stream_id(&base_id, &now)
@@ -121,8 +121,8 @@ impl Store {
 
     pub(super) fn list(
         &mut self,
-        scope: WorkStreamScope,
-        input: Value,
+        scope: &WorkStreamScope,
+        input: &Value,
     ) -> Result<Value, BtccError> {
         self.recover_pending()?;
         let session = input
@@ -150,8 +150,8 @@ impl Store {
 
     pub(super) fn transition(
         &mut self,
-        scope: WorkStreamScope,
-        input: Value,
+        scope: &WorkStreamScope,
+        input: &Value,
     ) -> Result<Value, BtccError> {
         self.recover_pending()?;
         let id = input
@@ -202,7 +202,7 @@ impl Store {
         Ok(json!({"ok":true,"work_stream":record}))
     }
 
-    pub(super) fn active(&mut self, query: AppWorkStreamQuery) -> Result<Value, BtccError> {
+    pub(super) fn active(&mut self, query: &AppWorkStreamQuery) -> Result<Value, BtccError> {
         self.recover_pending()?;
         let scopes = [
             query.app_session_id.as_str(),
@@ -237,15 +237,15 @@ impl Store {
 
     pub(super) fn link(
         &mut self,
-        scope: WorkStreamScope,
-        target_id: String,
+        scope: &WorkStreamScope,
+        target_id: &str,
         field: &'static str,
     ) -> Result<Value, BtccError> {
         self.recover_pending()?;
         if !matches!(field, "linked_orchestration_ids" | "linked_worker_task_ids") {
             return Err(error("work_stream_link_invalid"));
         }
-        safe_id(&target_id, 120)?;
+        safe_id(target_id, 120)?;
         let Some(id) = self.active_for_session(&scope.session_id, &scope.turn_id)? else {
             return Ok(json!({"linked":false}));
         };
@@ -259,10 +259,7 @@ impl Store {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            if !linked
-                .iter()
-                .any(|value| value.as_str() == Some(&target_id))
-            {
+            if !linked.iter().any(|value| value.as_str() == Some(target_id)) {
                 linked.push(json!(target_id));
                 linked.sort_by_key(|value| value.as_str().unwrap_or_default().to_owned());
             }

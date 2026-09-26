@@ -17,7 +17,7 @@ pub(super) fn normalize_limit(value: Option<f64>, fallback: u64, max: u64) -> u6
     let Some(value) = value.filter(|value| value.is_finite()) else {
         return fallback;
     };
-    value.floor().clamp(1.0, max as f64) as u64
+    crate::json::saturating_u64(value.floor().clamp(1.0, max as f64))
 }
 
 pub(super) fn next_seq(
@@ -208,7 +208,10 @@ fn source_payload(message: &ConversationMessageWithParts) -> ConversationResult<
         "session_id".into(),
         Value::String(message.message.session_id.clone()),
     );
-    object.insert("turn_id".into(), option_string(&message.message.turn_id));
+    object.insert(
+        "turn_id".into(),
+        option_string(message.message.turn_id.as_ref()),
+    );
     object.insert("seq".into(), Value::from(message.message.seq));
     object.insert(
         "role".into(),
@@ -228,11 +231,11 @@ fn source_payload(message: &ConversationMessageWithParts) -> ConversationResult<
     );
     object.insert(
         "source_gateway".into(),
-        option_string(&message.message.source_gateway),
+        option_string(message.message.source_gateway.as_ref()),
     );
     object.insert(
         "source_ref".into(),
-        option_string(&message.message.source_ref),
+        option_string(message.message.source_ref.as_ref()),
     );
     object.insert(
         "parts".into(),
@@ -250,10 +253,13 @@ fn part_payload(part: &ConversationPart) -> Value {
         Value::String(part_kind_text(part.kind).into()),
     );
     object.insert("content_json".into(), part.content_json.clone());
-    object.insert("tool_call_id".into(), option_string(&part.tool_call_id));
+    object.insert(
+        "tool_call_id".into(),
+        option_string(part.tool_call_id.as_ref()),
+    );
     object.insert(
         "parent_tool_call_id".into(),
-        option_string(&part.parent_tool_call_id),
+        option_string(part.parent_tool_call_id.as_ref()),
     );
     object.insert(
         "provider_shape".into(),
@@ -268,8 +274,8 @@ fn part_payload(part: &ConversationPart) -> Value {
     Value::Object(object)
 }
 
-fn option_string(value: &Option<String>) -> Value {
-    value.clone().map(Value::String).unwrap_or(Value::Null)
+fn option_string(value: Option<&String>) -> Value {
+    value.cloned().map(Value::String).unwrap_or(Value::Null)
 }
 
 pub(super) fn role_text(value: ConversationRole) -> &'static str {

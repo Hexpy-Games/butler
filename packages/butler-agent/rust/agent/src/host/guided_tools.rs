@@ -16,11 +16,12 @@ mod project_source;
 mod resume;
 pub(in crate::host) use message::structured_raw as structured_tool_preview;
 
+use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -345,7 +346,7 @@ impl ToolPort for NativeGuidedTools {
     ) -> Pin<
         Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
     > {
-        Box::pin(async move { execute::execute(self, invocation, call).await })
+        Box::pin(async move { Box::pin(execute::execute(self, invocation, call)).await })
     }
 
     fn record_unexecuted<'a>(
@@ -360,7 +361,6 @@ impl ToolPort for NativeGuidedTools {
     fn operation_result_call_id(&self, provider_call_id: &str) -> Option<String> {
         self.state
             .lock()
-            .expect("guided tool state poisoned")
             .journal_by_provider
             .get(provider_call_id)
             .cloned()

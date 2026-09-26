@@ -91,7 +91,7 @@ pub(crate) fn resolve_work_review_transition(
     if !review_entry_stages(subject).contains(&current_stage) {
         return Err(guard_error(
             current_stage,
-            format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
+            &format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
             review_guard(current_stage),
             review_next_action(current_stage),
         ));
@@ -102,7 +102,7 @@ pub(crate) fn resolve_work_review_transition(
     {
         return Err(guard_error(
             current_stage,
-            format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
+            &format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
             "correction_scope_required",
             "choose_planning_or_execution_correction",
         ));
@@ -146,8 +146,7 @@ pub(crate) fn allowed_next_work_stages(stage: Option<WorkStage>) -> Vec<WorkStag
     match stage {
         None => vec![WorkStage::Conception],
         Some(WorkStage::Conception) => vec![WorkStage::Planning],
-        Some(WorkStage::Planning) => vec![WorkStage::Review],
-        Some(WorkStage::Execution) => vec![WorkStage::Review],
+        Some(WorkStage::Planning | WorkStage::Execution) => vec![WorkStage::Review],
         Some(WorkStage::Review) => vec![
             WorkStage::Planning,
             WorkStage::Execution,
@@ -311,7 +310,7 @@ fn review_next_action(stage: WorkStage) -> &'static str {
     }
 }
 
-fn guard_error(current: WorkStage, requested: String, unmet: &str, next: &str) -> BtccError {
+fn guard_error(current: WorkStage, requested: &str, unmet: &str, next: &str) -> BtccError {
     BtccError::new(
         "work_transition_guard_unmet",
         format!(

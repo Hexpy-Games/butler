@@ -21,10 +21,10 @@ pub(super) async fn execute(
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if super::image::supports(&call.name) {
-        return super::image::execute(owner, invocation, call).await;
+        return Box::pin(super::image::execute(owner, invocation, call)).await;
     }
     if super::memory_write::supports(&call.name) {
-        return super::memory_write::execute(owner, invocation, call, call_id).await;
+        return super::memory_write::execute(owner, invocation, call, call_id);
     }
     if web::supports(&call.name) {
         return web::execute(owner, invocation, call).await;
@@ -33,7 +33,7 @@ pub(super) async fn execute(
         call.name.as_str(),
         "tool_search" | "tool_describe" | "tool_call"
     ) {
-        return super::discovery::execute(owner, invocation, call, call_id).await;
+        return Box::pin(super::discovery::execute(owner, invocation, call, call_id)).await;
     }
     if call.name == "call_mcp_tool" {
         return super::effect::execute(owner, invocation, call, call_id).await;
@@ -48,7 +48,7 @@ pub(super) async fn execute(
         return super::project_source::execute(owner, call).await;
     }
     if mcp::supports(&call.name) {
-        return mcp::execute(owner, invocation, call).await;
+        return Box::pin(mcp::execute(owner, invocation, call)).await;
     }
     if call.name == "delegate_to_steward" {
         let request = call
@@ -358,7 +358,7 @@ pub(super) async fn execute(
             .binding
             .workspace_reference
             .as_ref()
-            .map(|reference| reference.get())
+            .map(crate::workspace::WorkspaceReference::get)
             .transpose()
             .map_err(|error| {
                 ToolExecutionError::Integrity(BtccError::new(

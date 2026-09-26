@@ -19,7 +19,7 @@ pub(crate) struct ProjectLedgerPlanInput {
 }
 
 pub(crate) fn accepted_project_plan(
-    input: ProjectLedgerPlanInput,
+    input: &ProjectLedgerPlanInput,
     expected_id: &str,
 ) -> Option<ProjectLedgerPlan> {
     let id = crate::public_text::trim_js_whitespace(&input.id);
@@ -67,8 +67,8 @@ mod tests {
             body: Some("\nBody\n".into()),
             path: Some(" plan.md ".into()),
         };
-        assert!(accepted_project_plan(record.clone(), " PLAN-1 ").is_none());
-        let plan = accepted_project_plan(record.clone(), "PLAN-1").unwrap();
+        assert!(accepted_project_plan(&record.clone(), " PLAN-1 ").is_none());
+        let plan = accepted_project_plan(&record.clone(), "PLAN-1").unwrap();
         assert_eq!(plan.path.as_deref(), Some("plan.md"));
         assert_eq!(
             render_accepted_project_plan(&plan),
@@ -76,7 +76,7 @@ mod tests {
         );
         assert!(
             accepted_project_plan(
-                ProjectLedgerPlanInput {
+                &ProjectLedgerPlanInput {
                     status: "closed".into(),
                     ..record
                 },

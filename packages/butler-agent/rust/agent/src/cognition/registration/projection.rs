@@ -5,12 +5,13 @@ mod recovery;
 mod stages;
 pub(crate) use notice::ProjectionSourceNotice;
 use notice::assert_notice_current;
+use parking_lot::Mutex;
 
 use std::{
     collections::HashSet,
     path::PathBuf,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -80,7 +81,7 @@ struct ActiveWindow {
 }
 impl Drop for ActiveWindow {
     fn drop(&mut self) {
-        self.owners.lock().unwrap().remove(&self.key);
+        self.owners.lock().remove(&self.key);
     }
 }
 
@@ -106,7 +107,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -118,6 +119,9 @@ impl CognitionRegistrationService {
         let shutdown = self.shutdown.clone();
         let owners = self.active_windows.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
@@ -196,7 +200,7 @@ async fn execute(
     deps: &ProjectionDependencies,
 ) -> CognitionResult<Option<GraphProgress>> {
     let host = deps.host.clone();
-    let active = owners.lock().unwrap().clone();
+    let active = owners.lock().clone();
     let claim_owners = owners.clone();
     let nonce = host.new_uuid();
     let now = (operation.clock)();
@@ -213,7 +217,7 @@ async fn execute(
                 },
             )?;
             if let Some(claim) = &claim {
-                claim_owners.lock().unwrap().insert((
+                claim_owners.lock().insert((
                     claim.job_id.clone(),
                     claim.window_ref.clone(),
                     claim.owner_nonce.clone(),
@@ -387,9 +391,9 @@ impl Operation {
         };
         let acquire = self.coordinator.acquire(request, self.wait_class);
         let lease = if let Some(cancel) = &self.cancellation {
-            tokio::select! {biased;_ = self.shutdown.cancelled()=>return Err(write_aborted()),_ = cancel.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
+            tokio::select! {biased;() = self.shutdown.cancelled()=>return Err(write_aborted()),() = cancel.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
         } else {
-            tokio::select! {biased;_ = self.shutdown.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
+            tokio::select! {biased;() = self.shutdown.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(coordination_error)?}
         };
         lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))
     }
@@ -402,7 +406,7 @@ impl Operation {
         let lock_path = self.lock_path.clone();
         let environment = self.environment.clone();
         tokio::task::spawn_blocking(move || {
-            let mut guard = shared.lock().unwrap();
+            let mut guard = shared.lock();
             let state = guard.as_mut().ok_or_else(closed)?;
             lease
                 .assert_for_path(&lock_path)
@@ -413,7 +417,7 @@ impl Operation {
                 &state.input.target,
                 &state.handle,
             )
-            .and_then(|_| operation(state));
+            .and_then(|()| operation(state));
             let release = lease.release(result.is_ok()).map_err(coordination_error);
             release.and(result)
         })
@@ -426,7 +430,7 @@ impl Operation {
     ) -> CognitionResult<T> {
         let shared = self.state.clone();
         tokio::task::spawn_blocking(move || {
-            let mut guard = shared.lock().unwrap();
+            let mut guard = shared.lock();
             operation(guard.as_mut().ok_or_else(closed)?)
         })
         .await
@@ -435,7 +439,7 @@ impl Operation {
     async fn close(&self) -> CognitionResult<()> {
         let shared = self.state.clone();
         tokio::task::spawn_blocking(move || {
-            let state = shared.lock().unwrap().take().ok_or_else(closed)?;
+            let state = shared.lock().take().ok_or_else(closed)?;
             let graph = state.graph.close();
             let canonical = state.canonical.close().map_err(conversation_error);
             canonical.and(graph)
@@ -453,6 +457,10 @@ fn assert_current(state: &State, now: &str) -> CognitionResult<()> {
 fn write_aborted() -> CognitionError {
     CognitionError::new("memory_write_aborted", "memory_write_aborted")
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_projection_operation_failed", error.to_string())
 }

@@ -49,9 +49,8 @@ pub(super) async fn serve(
     let Some(root) = root else {
         return Err(not_found());
     };
-    let root = match tokio::fs::canonicalize(root).await {
-        Ok(root) => root,
-        Err(_) => return Err(not_found()),
+    let Ok(root) = tokio::fs::canonicalize(root).await else {
+        return Err(not_found());
     };
     let relative = if pathname == "/" {
         "index.html".to_owned()

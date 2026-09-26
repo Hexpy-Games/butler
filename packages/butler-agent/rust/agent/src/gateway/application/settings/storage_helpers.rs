@@ -14,11 +14,10 @@ pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
 pub(super) fn json_type(value: Option<&Value>) -> &'static str {
     match value {
         None => "undefined",
-        Some(Value::Null) => "object",
+        Some(Value::Null | Value::Array(_) | Value::Object(_)) => "object",
         Some(Value::Bool(_)) => "boolean",
         Some(Value::Number(_)) => "number",
         Some(Value::String(_)) => "string",
-        Some(Value::Array(_) | Value::Object(_)) => "object",
     }
 }
 
@@ -28,7 +27,7 @@ pub(super) fn safe_integer(value: &Value) -> Option<u64> {
         && number >= 0.0
         && number.fract() == 0.0
         && number <= 9_007_199_254_740_991.0)
-        .then_some(number as u64)
+        .then_some(crate::json::saturating_u64(number))
 }
 
 pub(super) fn invalid_resolution() -> AppStorageError {

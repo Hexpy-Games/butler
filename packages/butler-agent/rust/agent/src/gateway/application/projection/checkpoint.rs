@@ -114,12 +114,13 @@ fn decode(value: &str) -> Vec<u8> {
             return Vec::new();
         };
         let bits = (u32::from(a) << 18) | (u32::from(b) << 12) | (u32::from(c) << 6) | u32::from(d);
-        output.push((bits >> 16) as u8);
+        let [_, first, second, third] = bits.to_be_bytes();
+        output.push(first);
         if chunk[2] != b'=' {
-            output.push((bits >> 8) as u8);
+            output.push(second);
         }
         if chunk[3] != b'=' {
-            output.push(bits as u8);
+            output.push(third);
         }
     }
     output
@@ -128,7 +129,7 @@ fn index(byte: u8) -> Option<u8> {
     ALPHABET
         .iter()
         .position(|candidate| *candidate == byte)
-        .map(|value| value as u8)
+        .map(|value| u8::try_from(value).unwrap_or(u8::MAX))
 }
 
 #[cfg(test)]
@@ -151,6 +152,6 @@ mod tests {
         .unwrap();
         let checkpoint = load(&db, "general").unwrap().unwrap();
         assert_eq!(checkpoint.projected_bytes, 17);
-        assert_eq!(checkpoint.modified_at_ms, 1789313577777.5864);
+        assert_eq!(checkpoint.modified_at_ms, 1_789_313_577_777.586_4);
     }
 }

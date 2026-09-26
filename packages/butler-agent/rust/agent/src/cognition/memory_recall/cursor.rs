@@ -1,6 +1,7 @@
 //! Bounded, query-local-metadata-only continuation inventory.
 
-use std::{collections::HashMap, sync::Mutex};
+use parking_lot::Mutex;
+use std::collections::HashMap;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
@@ -114,12 +115,12 @@ pub(super) fn argument_hash(input: &RecallRequest, as_of: &str) -> CognitionResu
 }
 
 pub(super) fn encode(key: &str, offset: usize) -> String {
-    let wire = WireCursor {
-        schema: "butler.recall-cursor.v2".into(),
-        key: key.into(),
-        offset: offset as u64,
-    };
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&wire).expect("fixed cursor schema"))
+    let wire = serde_json::json!({
+        "schema": "butler.recall-cursor.v2",
+        "key": key,
+        "offset": offset,
+    });
+    URL_SAFE_NO_PAD.encode(wire.to_string())
 }
 
 fn decode(cursor: &str) -> CognitionResult<WireCursor> {
@@ -139,13 +140,13 @@ fn decode(cursor: &str) -> CognitionResult<WireCursor> {
     }) else {
         return Err(invalid_arguments());
     };
-    if schema != Some("butler.recall-cursor.v2") || key.is_none() {
+    let (Some(schema @ "butler.recall-cursor.v2"), Some(key)) = (schema, key) else {
         return Err(invalid_arguments());
-    }
+    };
     Ok(WireCursor {
-        schema: schema.unwrap().into(),
-        key: key.unwrap().into(),
-        offset: offset as u64,
+        schema: schema.into(),
+        key: key.into(),
+        offset: crate::json::saturating_u64(offset),
     })
 }
 
@@ -153,14 +154,10 @@ fn invalid_arguments() -> CognitionError {
     CognitionError::new("invalid_arguments", "invalid_arguments")
 }
 
-fn lock_error() -> CognitionError {
-    CognitionError::new("memory_recall_unavailable", "memory_recall_unavailable")
-}
-
 impl CursorStore {
     pub(super) fn read(&self, cursor: &str, now: i64) -> CognitionResult<Page> {
         let wire = decode(cursor)?;
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         state.expire(now);
         let inventory = state
             .entries
@@ -170,7 +167,7 @@ impl CursorStore {
         state.touch(&wire.key);
         Ok(Page {
             key: wire.key,
-            offset: wire.offset as usize,
+            offset: usize::try_from(wire.offset).unwrap_or(usize::MAX),
             inventory,
         })
     }
@@ -202,7 +199,7 @@ impl CursorStore {
             coverage: None,
             diagnostics: None,
         };
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         state.expire(now);
         state.entries.insert(key.clone(), inventory.clone());
         state.touch(&key);
@@ -222,7 +219,7 @@ impl CursorStore {
         key: &str,
         response: &crate::cognition::recall::RecallResponse,
     ) -> CognitionResult<()> {
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         if let Some(entry) = state.entries.get_mut(key) {
             entry.status = Some(response.status);
             entry.coverage = Some(response.coverage.clone());
@@ -235,7 +232,7 @@ impl CursorStore {
     }
 
     pub(super) fn remove(&self, key: &str) -> CognitionResult<()> {
-        self.0.lock().map_err(|_| lock_error())?.remove(key);
+        self.0.lock().remove(key);
         Ok(())
     }
 }

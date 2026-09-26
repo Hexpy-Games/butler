@@ -9,7 +9,7 @@ use crate::gateway::{
     AppSessionSummary, ApplicationFuture, GatewayApplication, GatewayApplicationError,
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct AppMonitorPage {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -175,7 +175,7 @@ pub(crate) fn project_work_status(facts: Vec<AppBoundWorkStatusFact>) -> Value {
         if let Some(state) = item["state"].as_str()
             && let Some(count) = counts
                 .get(state)
-                .and_then(|value| value.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .map(|n| n + 1)
         {
             counts[state] = json!(count);

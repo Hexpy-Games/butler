@@ -9,7 +9,7 @@ pub(super) enum MessageRequestError {
 }
 
 pub(super) fn validate_message_request(
-    value: Value,
+    value: &Value,
 ) -> Result<MessageSendRequest, MessageRequestError> {
     let object = value.as_object().ok_or(MessageRequestError::Invalid)?;
     let expected_project_id = expected_project_id(object)?;
@@ -78,10 +78,7 @@ fn validate_content(value: &Value) -> Result<MessageContent, MessageRequestError
         return Err(MessageRequestError::Invalid);
     }
     let mut normalized = value.clone();
-    normalized
-        .as_object_mut()
-        .expect("validated message content object")
-        .insert("version".to_owned(), Value::from(1));
+    crate::json::object_mut(&mut normalized).insert("version".to_owned(), Value::from(1));
     serde_json::from_value(normalized).map_err(|_| MessageRequestError::Invalid)
 }
 

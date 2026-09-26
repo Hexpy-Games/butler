@@ -59,7 +59,7 @@ impl AppMonitoringPort for NativeAppMonitoring {
 
     fn developer_logs(&self, query: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
         let root = self.data_root.clone();
-        Box::pin(async move { logs::read(&root, query) })
+        Box::pin(async move { logs::read(&root, &query) })
     }
 }
 

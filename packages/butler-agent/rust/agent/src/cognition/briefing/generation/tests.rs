@@ -35,10 +35,13 @@ impl CognitionCoordinationHost for Facts {
         uuid::Uuid::new_v4().to_string()
     }
     fn now_epoch_millis(&self) -> i64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64
+        i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap_or(i64::MAX)
     }
     fn now_iso(&self) -> String {
         "2026-09-23T00:00:00.000Z".into()

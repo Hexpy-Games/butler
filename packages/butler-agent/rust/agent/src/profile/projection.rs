@@ -165,13 +165,13 @@ fn build(
                 } else {
                     should
                 });
-                failures.extend(should_not)
+                failures.extend(should_not);
             }
             (_, "boundaries") => {
                 boundaries.push(summary.clone());
                 boundaries.extend(should_not);
                 if text(&entry.payload, "sensitivity") != Some("normal") {
-                    ask.push(summary)
+                    ask.push(summary);
                 }
             }
             (Some("contextual_adaptation"), _) => collaborate.extend(if should.is_empty() {
@@ -181,9 +181,9 @@ fn build(
             }),
             _ => {
                 if entry.category == "affective_landscape" {
-                    failures.push(summary.clone())
+                    failures.push(summary.clone());
                 }
-                collaborate.push(summary)
+                collaborate.push(summary);
             }
         }
     }
@@ -209,7 +209,7 @@ fn build(
 }
 
 pub(super) fn render(value: &RuntimeProfileProjection) -> String {
-    let mut lines=vec!["# Runtime Profile Projection".into(),"".into(),format!("- Mode: {}",value.mode),format!("- Version: {}",value.version),"".into(),"Use these as lightweight adaptation hints. Do not treat them as a raw biography or expose them as profile data.".into()];
+    let mut lines=vec!["# Runtime Profile Projection".into(),String::new(),format!("- Mode: {}",value.mode),format!("- Version: {}",value.version),String::new(),"Use these as lightweight adaptation hints. Do not treat them as a raw biography or expose them as profile data.".into()];
     for (title, items) in [
         ("How to answer", &value.how_to_answer),
         ("How to collaborate", &value.how_to_collaborate),
@@ -221,9 +221,9 @@ pub(super) fn render(value: &RuntimeProfileProjection) -> String {
         if items.is_empty() {
             continue;
         }
-        lines.push("".into());
+        lines.push(String::new());
         lines.push(format!("## {title}"));
-        lines.extend(items.iter().take(6).map(|item| format!("- {item}")))
+        lines.extend(items.iter().take(6).map(|item| format!("- {item}")));
     }
     lines.join("\n")
 }

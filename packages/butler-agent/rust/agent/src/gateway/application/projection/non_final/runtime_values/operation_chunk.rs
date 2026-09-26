@@ -96,7 +96,7 @@ fn integer(
                 && *value <= MAX_SAFE_INTEGER
                 && value.fract() == 0.0
         })
-        .map(|value| value as u64)
+        .map(crate::json::saturating_u64)
         .ok_or_else(invalid)
 }
 

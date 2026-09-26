@@ -93,6 +93,6 @@ pub(super) fn run(options: &Options, data_root: &Path) -> ExitCode {
             .as_u64()
             .map_or_else(|| "none".into(), |pid| pid.to_string())
     );
-    report_success(options, "butler ps", data, &human);
+    report_success(options, "butler ps", &data, &human);
     ExitCode::SUCCESS
 }

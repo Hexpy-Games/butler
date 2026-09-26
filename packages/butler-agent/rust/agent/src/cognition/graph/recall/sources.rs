@@ -61,6 +61,6 @@ pub(super) fn project_id(db: &Connection, episode_id: &str) -> CognitionResult<O
         |row| row.get(0),
     )
     .optional()
-    .map(|value| value.flatten())
+    .map(std::option::Option::flatten)
     .map_err(db_error)
 }

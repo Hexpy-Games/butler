@@ -21,7 +21,7 @@ pub(super) fn load(
     let source = scope::source(input, "s", "c");
     let dependency = scope::source(input, "ds", "dc");
     let sql = format!(
-        r#"
+        r"
       SELECT e.edge_id,e.source_node_id,e.target_node_id,e.rel_type,e.claim_node_id,
         COUNT(DISTINCT s.episode_id) support
       FROM edges e
@@ -47,7 +47,7 @@ pub(super) fn load(
         support DESC,e.rel_type,
         CASE WHEN e.source_node_id=? THEN e.target_node_id ELSE e.source_node_id END,e.edge_id
       LIMIT {} OFFSET {}
-    "#,
+    ",
         claim.sql,
         source.sql,
         dependency.sql,

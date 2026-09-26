@@ -75,7 +75,7 @@ impl NativeAgentRuntime {
             Arc::new(std::env::vars().collect());
         let continuation_limits =
             btcc::select_turn_continuation_budget(|key| host_environment.get(key).cloned())?;
-        let mcp_client = mcp_owner::for_runtime(&paths, host_environment.clone(), writes.clone());
+        let mcp_client = mcp_owner::for_runtime(&paths, &host_environment.clone(), writes.clone());
         let process_services = web_owner::open(
             &paths,
             environment.model,
@@ -101,7 +101,7 @@ impl NativeAgentRuntime {
         ));
         let files = NativeWorkspaceFiles::new(4);
         let image_files = Arc::new(crate::gateway::NativeAppImageFiles::new(
-            paths.data_root.clone(),
+            &paths.data_root.clone(),
         ));
         let attachment_context = Arc::new(crate::context::NativeAttachmentContext::new(
             paths.data_root.clone(),
@@ -118,8 +118,8 @@ impl NativeAgentRuntime {
             }
         };
         let observer = match NativeConversationObserver::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
+            &paths.data_root,
+            &environment.cognition_paths,
             Arc::new(SystemIdentity),
             metric_files.clone(),
         ) {
@@ -131,17 +131,15 @@ impl NativeAgentRuntime {
             }
         };
         let memory_sync = match super::memory_sync::NativeMemorySync::open(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
+            &paths.data_root,
+            &environment.cognition_paths,
             coordinator.clone(),
             models.provider.clone(),
             #[cfg(unix)]
             embedding.clone(),
             #[cfg(unix)]
             vectors.clone(),
-        )
-        .await
-        {
+        ) {
             Ok(owner) => owner,
             Err(error) => {
                 let _ = observer.close().await;
@@ -223,13 +221,13 @@ impl NativeAgentRuntime {
             host_environment.clone(),
         ));
         let tool_artifacts = Arc::new(super::NativeToolArtifactReader::new(tool_output.clone()));
-        let memory_query = Arc::new(NativeExactMemoryQuery::new(paths.data_root.clone(), 2));
+        let memory_query = Arc::new(NativeExactMemoryQuery::new(&paths.data_root.clone(), 2));
         let memory_sources = Arc::new(super::NativeMemorySourceReader::new(
             paths.data_root.clone(),
             environment.cognition_paths.clone(),
         ));
         let conversation_reference = Arc::new(NativeConversationSessionReference::new(
-            paths.data_root.clone(),
+            &paths.data_root.clone(),
             2,
             memory_sources,
         ));
@@ -277,8 +275,8 @@ impl NativeAgentRuntime {
         let repositories = Arc::new(documents.clone());
         let now: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
         let memory_publisher = Arc::new(CompletionPublisher::new(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
+            &paths.data_root.clone(),
+            &environment.cognition_paths.clone(),
             now.clone(),
         ));
         let preparation = Arc::new(DefaultTurnPreparation::new(
@@ -335,7 +333,7 @@ impl NativeAgentRuntime {
         );
         let work_service = Arc::new(DurableWorkService::new(work_repository));
         let inbound_queue = Arc::new(crate::gateway::NativeInboundQueue::new(
-            paths.data_root.clone(),
+            &paths.data_root.clone(),
         ));
         let automations =
             super::open_automation_service(&paths.data_root, date_parser, inbound_queue.clone());
@@ -371,7 +369,9 @@ impl NativeAgentRuntime {
                 ),
                 budget: Arc::new(GuidedContinuationBudgetFactory::new(
                     Some(repositories.clone()),
-                    Arc::new(|| SystemIdentity.now_epoch_millis().max(0) as u64),
+                    Arc::new(|| {
+                        u64::try_from(SystemIdentity.now_epoch_millis().max(0)).unwrap_or_default()
+                    }),
                 )),
                 default_workspace: paths.workspace_root.to_string_lossy().into_owned(),
                 phase_surface_flag: environment.phase_surface_flag,
@@ -453,7 +453,7 @@ impl NativeAgentRuntime {
             context_maintenance: context_maintenance.clone(),
             automations: automations.clone(),
         });
-        let assembly = btcc::assemble(TurnFacadeDependencies {
+        let assembly = btcc::assemble(&TurnFacadeDependencies {
             preparation,
             store: repositories.clone(),
             agent,

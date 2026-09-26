@@ -4,9 +4,8 @@ mod content;
 mod publication;
 mod snapshot;
 
-use std::sync::Mutex;
-
 use indexmap::IndexMap;
+use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
 use crate::btcc::{
@@ -17,6 +16,10 @@ use crate::btcc::{
 use content::{Content, activity_kind, content, resumed};
 use publication::{emit, publish};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Clone)]
 struct Group {
     id: String,
@@ -88,12 +91,12 @@ impl NativeGuidedActivity {
 
     pub(crate) fn restore(&self, snapshot: &GuidedActivitySnapshot) -> Result<(), BtccError> {
         let state = snapshot::restore(snapshot)?;
-        *self.state.lock().expect("guided activity state poisoned") = state;
+        *self.state.lock() = state;
         Ok(())
     }
 
     pub(crate) fn snapshot(&self) -> GuidedActivitySnapshot {
-        snapshot::capture(&self.state.lock().expect("guided activity state poisoned"))
+        snapshot::capture(&self.state.lock())
     }
 
     pub(crate) fn source_revision(&self) -> u64 {
@@ -107,7 +110,7 @@ impl NativeGuidedActivity {
         calls: &[ModelRoundToolCall],
     ) -> Result<(), BtccError> {
         self.check_turn(turn_id)?;
-        let mut state = self.state.lock().expect("guided activity state poisoned");
+        let mut state = self.state.lock();
         state.pending.clear();
         let mut ordinary_group: Option<String> = None;
         let ordinary_calls = calls
@@ -148,7 +151,7 @@ impl NativeGuidedActivity {
     ) -> Result<ActivityBinding, BtccError> {
         self.check_turn(turn_id)?;
         let (binding, events) = {
-            let mut state = self.state.lock().expect("guided activity state poisoned");
+            let mut state = self.state.lock();
             if let Some(existing) = state.bindings.get(journal_call_id) {
                 return Ok(existing.clone());
             }
@@ -187,11 +190,15 @@ impl NativeGuidedActivity {
             } else {
                 state.managed = true;
             }
-            let group = state.groups.get(&group_id).expect("activity group exists");
+            // Every group id above names a created group.
+            let (stage, deferred) = state
+                .groups
+                .get(&group_id)
+                .map_or((None, false), |group| (group.stage, group.deferred));
             let binding = ActivityBinding {
                 id: group_id.clone(),
-                stage: group.stage,
-                deferred: group.deferred,
+                stage,
+                deferred,
             };
             let events = if (state.managed || batch_managed) && !binding.deferred {
                 publish(&mut state, &group_id, &self.turn_id, &self.source_revision)
@@ -216,7 +223,7 @@ impl NativeGuidedActivity {
     ) -> Result<(), BtccError> {
         self.check_turn(turn_id)?;
         let events = {
-            let mut state = self.state.lock().expect("guided activity state poisoned");
+            let mut state = self.state.lock();
             state.managed = true;
             let Some(binding) = state.bindings.get(journal_call_id).cloned() else {
                 return Ok(());

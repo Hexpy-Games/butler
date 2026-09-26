@@ -8,7 +8,7 @@ pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
         .map_err(AppStorageError::sqlite)
 }
 
-const CORE_SCHEMA: &str = r#"
+const CORE_SCHEMA: &str = r"
     CREATE TABLE IF NOT EXISTS chats (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -296,4 +296,4 @@ const CORE_SCHEMA: &str = r#"
     CREATE INDEX IF NOT EXISTS events_type_session_id_idx
     ON events(type, json_extract(payload_json, '$.session_id'), id DESC);
 
-"#;
+";

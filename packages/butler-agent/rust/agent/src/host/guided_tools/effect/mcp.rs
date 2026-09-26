@@ -54,7 +54,7 @@ struct McpToolEffect {
 }
 
 impl EffectAdapter for McpToolEffect {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "call_mcp_tool"
     }
 
@@ -109,10 +109,13 @@ impl EffectAdapter for McpToolEffect {
                     "mcp_tool_input_invalid",
                 )));
             };
-            match self
-                .client
-                .call_tool(&self.server_id, &self.tool_name, arguments, signal)
-                .await
+            match Box::pin(self.client.call_tool(
+                &self.server_id,
+                &self.tool_name,
+                arguments,
+                signal,
+            ))
+            .await
             {
                 Ok(result) => JsonDocument::from_value(&result)
                     .map(AdapterOutcome::Applied)

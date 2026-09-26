@@ -4,9 +4,10 @@ mod admission;
 mod files;
 mod payload;
 
+use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde_json::Value;
@@ -24,7 +25,7 @@ pub(crate) struct NativeAppImageFiles {
 }
 
 impl NativeAppImageFiles {
-    pub(crate) fn new(data_root: PathBuf) -> Self {
+    pub(crate) fn new(data_root: &Path) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),
             permits: Arc::new(Semaphore::new(1)),
@@ -35,7 +36,7 @@ impl NativeAppImageFiles {
 
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         {
-            let mut closing = self.closing.lock().expect("App image owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();
@@ -92,7 +93,7 @@ impl NativeAppImageFiles {
     }
 
     fn ensure_open(&self) -> Result<(), GatewayApplicationError> {
-        if *self.closing.lock().expect("App image owner poisoned") {
+        if *self.closing.lock() {
             Err(GatewayApplicationError::Internal)
         } else {
             Ok(())
@@ -112,7 +113,7 @@ impl NativeAppImageFiles {
             .map_err(|_| GatewayApplicationError::Internal)?;
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self.closing.lock().expect("App image owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(GatewayApplicationError::Internal);
             }

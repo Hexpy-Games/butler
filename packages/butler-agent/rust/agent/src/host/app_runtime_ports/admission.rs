@@ -89,9 +89,12 @@ impl AppAdmissionAuthority for NativeAppAdmission {
                     .admit_visual(request.files, &request.model_ref, &[])
                     .await;
             }
-            let catalog =
-                crate::host::catalog_for_visual_admission(&models, &mcp, &request.model_ref)
-                    .await?;
+            let catalog = Box::pin(crate::host::catalog_for_visual_admission(
+                &models,
+                &mcp,
+                &request.model_ref,
+            ))
+            .await?;
             images
                 .admit_visual(request.files, &request.model_ref, &catalog)
                 .await
@@ -99,6 +102,10 @@ impl AppAdmissionAuthority for NativeAppAdmission {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn ledger_error(error: ProjectLedgerReadError) -> GatewayApplicationError {
     match error {
         ProjectLedgerReadError::DashboardChanged => GatewayApplicationError::Public {

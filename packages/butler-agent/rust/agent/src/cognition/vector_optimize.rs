@@ -73,8 +73,8 @@ impl NativeVectorOptimizeService {
         // Legacy CLI opens the table first and reports unavailable if absent.
         // No connection or model is loaded until optimize is actually requested.
         let _operation = tokio::select! {
-            _ = cancellation.cancelled() => return Err(error("memory_write_aborted")),
-            _ = tokio::time::sleep(remaining(deadline_at_epoch_ms)?) =>
+            () = cancellation.cancelled() => return Err(error("memory_write_aborted")),
+            () = tokio::time::sleep(remaining(deadline_at_epoch_ms)?) =>
                 return Err(error("memory_write_busy")),
             permit = self.store.one_at_a_time.acquire() =>
                 permit.map_err(|_| error("vector_store_unavailable"))?,
@@ -201,11 +201,13 @@ fn remaining(deadline_at_epoch_ms: i64) -> CognitionResult<Duration> {
         .duration_since(UNIX_EPOCH)
         .map_err(|_| error("memory_write_busy"))?
         .as_millis();
-    let millis = (deadline_at_epoch_ms as i128) - (now as i128);
+    let millis = i128::from(deadline_at_epoch_ms) - i128::try_from(now).unwrap_or(i128::MAX);
     if millis <= 0 {
         return Err(error("memory_write_busy"));
     }
-    Ok(Duration::from_millis(millis.min(u64::MAX as i128) as u64))
+    Ok(Duration::from_millis(
+        u64::try_from(millis).unwrap_or(u64::MAX),
+    ))
 }
 
 fn check_entry(cancellation: &CancellationToken, deadline_at_epoch_ms: i64) -> CognitionResult<()> {

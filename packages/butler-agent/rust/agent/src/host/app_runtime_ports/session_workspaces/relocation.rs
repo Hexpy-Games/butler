@@ -38,9 +38,9 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
                 .map_err(|_| GatewayApplicationError::Internal)?;
             let open_child = has_open_child(&subsessions, runtime_session_id).await?;
             Ok(AppRelocationSnapshot {
+                binding,
                 active_execution,
                 open_child,
-                binding,
             })
         })
     }
@@ -300,6 +300,10 @@ fn from_app_plan(plan: AppRelocationWorkspacePlan) -> RelocationWorkspacePlan {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn relocation_error(error: WorkspaceError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 409,

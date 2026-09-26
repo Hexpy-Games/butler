@@ -15,7 +15,8 @@ pub(crate) async fn eventually(what: &str, mut condition: impl FnMut() -> bool) 
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     };
-    if tokio::time::timeout(DEADLINE, wait).await.is_err() {
-        panic!("timed out waiting for {what}");
-    }
+    assert!(
+        tokio::time::timeout(DEADLINE, wait).await.is_ok(),
+        "timed out waiting for {what}"
+    );
 }

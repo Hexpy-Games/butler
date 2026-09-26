@@ -27,9 +27,8 @@ impl super::service::WebAccess {
             );
             return Ok(cli_projection(&page));
         }
-        let parsed = match Url::parse(requested_url) {
-            Ok(url) => url,
-            Err(_) => return Ok(cli_invalid_url(requested_url)),
+        let Ok(parsed) = Url::parse(requested_url) else {
+            return Ok(cli_invalid_url(requested_url));
         };
         if !matches!(parsed.scheme(), "http" | "https")
             || parsed.host_str().is_none()
@@ -185,7 +184,7 @@ impl WebSession {
                 &observed_at,
             )]);
         result["evidence_receipts"] = Value::Array(vec![evidence::tool_receipt(
-            evidence::ToolReceiptInput {
+            &evidence::ToolReceiptInput {
                 tool: "web_read",
                 receipt_type: "source",
                 summary: if ok {
@@ -298,7 +297,7 @@ fn bounded_number(value: Option<&Value>, min: usize, max: usize, fallback: usize
     value
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .map(|value| value.trunc().clamp(min as f64, max as f64) as usize)
+        .map(|value| crate::json::saturating_usize(value.trunc().clamp(min as f64, max as f64)))
         .unwrap_or(fallback)
 }
 

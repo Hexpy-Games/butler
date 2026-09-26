@@ -46,7 +46,7 @@ fn service(root: &Path) -> BoxStoreService {
     )
 }
 
-fn manifest(id: &str, expires_at: Option<&str>, files: Value) -> Value {
+fn manifest(id: &str, expires_at: Option<&str>, files: &Value) -> Value {
     json!({
         "schema": "butler.cognition.box.item.v1",
         "box_item_id": id,
@@ -111,7 +111,7 @@ async fn index_rebuild_reports_skips_and_count_rebuilds_only_when_missing() {
     let valid = manifest(
         "box_valid",
         None,
-        json!([file_ref("box-owned", Some("content/main.txt"))]),
+        &json!([file_ref("box-owned", Some("content/main.txt"))]),
     );
     write_manifest(&root, "box_valid", &valid);
     write_manifest(&root, "box_invalid", &json!({"schema": "older"}));
@@ -168,7 +168,7 @@ async fn retention_preserves_unknown_data_and_skips_external_or_unexpired_items(
     let mut expired = manifest(
         "box_expired",
         Some("2026-09-22T23:59:59.000Z"),
-        json!([file_ref("box-owned", Some("content/main.txt"))]),
+        &json!([file_ref("box-owned", Some("content/main.txt"))]),
     );
     expired["schema"] = json!("legacy-but-readable");
     write_manifest(&root, "box_expired", &expired);
@@ -183,7 +183,7 @@ async fn retention_preserves_unknown_data_and_skips_external_or_unexpired_items(
         &manifest(
             "box_external",
             Some("2026-09-22T23:59:59.000Z"),
-            json!([file_ref(
+            &json!([file_ref(
                 "external-user-owned",
                 Some("../external-user-file.txt")
             )]),
@@ -194,7 +194,7 @@ async fn retention_preserves_unknown_data_and_skips_external_or_unexpired_items(
         "box_unexpired_invalid_schema",
         &json!({"schema": "legacy", "retention": {"pinned": false, "expires_at": null}}),
     );
-    let mut pinned = manifest("box_pinned", Some("2026-09-22T23:59:59.000Z"), json!([]));
+    let mut pinned = manifest("box_pinned", Some("2026-09-22T23:59:59.000Z"), &json!([]));
     pinned["retention"]["pinned"] = json!(true);
     write_manifest(&root, "box_pinned", &pinned);
 
@@ -235,7 +235,7 @@ async fn retention_prevalidates_every_path_before_deleting_any_file_in_an_item()
         &manifest(
             "box_unsafe",
             Some("2026-09-22T23:59:59.000Z"),
-            json!([
+            &json!([
                 file_ref("box-owned", Some("content/main.txt")),
                 file_ref("box-owned", Some("../outside.txt"))
             ]),

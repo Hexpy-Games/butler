@@ -234,7 +234,7 @@ where
     tokio::pin!(future);
     tokio::select! {
         result = &mut future => result,
-        _ = tokio::time::sleep(Duration::from_secs(120)) => {
+        () = tokio::time::sleep(Duration::from_secs(120)) => {
             cancellation.cancel();
             // A Lance mutation already admitted must finish while its write lease remains held.
             let _ = future.await;

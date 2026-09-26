@@ -130,7 +130,7 @@ impl CaptureStore {
     ) -> CognitionResult<()> {
         let (mut file, before) = open_stable_file(path)?;
         let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 64 * 1024];
+        let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             let count = file
                 .read(&mut buffer)
@@ -202,7 +202,7 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
         };
         let (mut file, before) = open_stable_file(&path)?;
         let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 64 * 1024];
+        let mut buffer = vec![0_u8; 64 * 1024];
         loop {
             let count = file
                 .read(&mut buffer)

@@ -405,9 +405,7 @@ fn merge_state<'a>(current: &'a str, incoming: &'a str) -> &'a str {
 fn rank(state: &str) -> u8 {
     if matches!(state, "running" | "streaming") {
         2
-    } else if matches!(state, "thinking" | "accepted") {
-        1
     } else {
-        0
+        u8::from(matches!(state, "thinking" | "accepted"))
     }
 }

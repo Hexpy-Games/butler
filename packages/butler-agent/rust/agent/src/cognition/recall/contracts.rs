@@ -83,6 +83,10 @@ pub(crate) struct EpisodeRankInput {
     pub half_life_days: Option<f64>,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one independent flag per recall channel"
+)]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ExecutedEpisodeChannels {
     pub graph: bool,

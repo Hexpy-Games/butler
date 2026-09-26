@@ -27,18 +27,17 @@ impl WebAccess {
         let requested_for_task = requested_url.to_owned();
         let backend_for_task = backend.to_owned();
         let mut task = tokio::spawn(async move {
-            access
-                .read_page_with_budget(
-                    url_for_task,
-                    &requested_for_task,
-                    &backend_for_task,
-                    &task_budget,
-                )
-                .await
+            Box::pin(access.read_page_with_budget(
+                url_for_task,
+                &requested_for_task,
+                &backend_for_task,
+                &task_budget,
+            ))
+            .await
         });
         tokio::select! {
             biased;
-            _ = cancellation.cancelled() => {
+            () = cancellation.cancelled() => {
                 budget.cancel();
                 cancel_and_reap(&mut task).await;
                 Err(WebAccessError::cancelled())
@@ -46,7 +45,7 @@ impl WebAccess {
             output = &mut task => output.map_err(|_| {
                 WebAccessError::new("web_read_failed", "Public page read failed.")
             })?,
-            _ = tokio::time::sleep(Duration::from_secs(20)) => {
+            () = tokio::time::sleep(Duration::from_secs(20)) => {
                 budget.cancel();
                 cancel_and_reap(&mut task).await;
                 Ok(timeout_page(requested_url))
@@ -80,7 +79,14 @@ impl WebAccess {
         match backend {
             "jina-hosted" => add_warning(&mut page, "jina-hosted-reader-not-yet-enabled"),
             "auto" | "lightpanda" if page.render_recommended => {
-                match super::lightpanda::render(self, &url, requested_url, cancellation).await {
+                match Box::pin(super::lightpanda::render(
+                    self,
+                    &url,
+                    requested_url,
+                    cancellation,
+                ))
+                .await
+                {
                     Ok(Some(rendered)) if should_use_rendered(&page, &rendered) => {
                         page = rendered;
                     }
@@ -88,7 +94,7 @@ impl WebAccess {
                         add_warning(&mut page, &fallback_warning(&rendered));
                     }
                     Ok(None) => {
-                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight")
+                        add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight");
                     }
                     Err(error) if error.code == "cancelled" => return Err(error),
                     Err(_) => add_warning(&mut page, "lightpanda-render-fallback-rejected"),
@@ -96,7 +102,8 @@ impl WebAccess {
             }
             _ => {}
         }
-        page.duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+        page.duration_ms = u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX);
         if cancellation.is_cancelled() {
             return Err(WebAccessError::cancelled());
         }
@@ -260,8 +267,9 @@ fn should_use_rendered(lightweight: &PageRead, rendered: &PageRead) -> bool {
     }
     let score = |page: &PageRead| {
         let mut score = if page.ok { 40_i32 } else { 0 };
-        score += (page.text.encode_utf16().count() / 100).min(40) as i32;
-        score += (page.chunks.len() * 3).min(15) as i32;
+        score +=
+            i32::try_from((page.text.encode_utf16().count() / 100).min(40)).unwrap_or(i32::MAX);
+        score += i32::try_from((page.chunks.len() * 3).min(15)).unwrap_or(i32::MAX);
         if page.method == "readability" {
             score += 8;
         }

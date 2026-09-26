@@ -110,7 +110,7 @@ impl TurnRuntime {
         let ticket = self.supervisor.install_stop(turn_id);
         match self.store.stop(turn_id).await {
             Ok(outcome) => {
-                self.supervisor.observe_stop(&ticket, outcome.clone());
+                self.supervisor.observe_stop(&ticket, &outcome.clone());
                 Ok(TurnOutcome {
                     result: stop_outcome(turn_id, outcome),
                     admission: None,
@@ -268,7 +268,6 @@ impl TurnRuntime {
                                     == TurnSemanticState::DeliveryCommitted =>
                         {
                             turn = current;
-                            continue;
                         }
                         Some(current) if terminal(current.semantic_state) => {
                             turn = current;

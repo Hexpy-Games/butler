@@ -122,7 +122,7 @@ async fn caller_drop_does_not_abandon_admitted_recall_and_close_drains_it() {
         std::env::temp_dir().join(format!("butler-recall-drain-{}", uuid::Uuid::new_v4())),
         crate::cognition::CognitionPathEnvironment::default(),
         std::sync::Arc::new(crate::js_date::parse_iso_millis),
-        std::sync::Arc::new(|a, b| a.cmp(b)),
+        std::sync::Arc::new(std::cmp::Ord::cmp),
         std::sync::Arc::new(|| 1_789_776_000_000),
         0,
     ));

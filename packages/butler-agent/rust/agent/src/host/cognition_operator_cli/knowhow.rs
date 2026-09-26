@@ -187,7 +187,7 @@ fn numeric_option(args: &[String], option: &str, fallback: usize, max: usize) ->
     if !value.is_finite() || value < 0.0 {
         return fallback;
     }
-    (value.trunc() as usize).min(max)
+    crate::json::saturating_usize(value.trunc()).min(max)
 }
 
 fn string(value: &Value, key: &str) -> String {
@@ -208,11 +208,14 @@ fn display(value: &Value) -> String {
 }
 
 fn now_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX)
 }
 
 fn service_error(error: crate::cognition::CognitionError) -> CliError {

@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     btcc::{AccessMode, ModelRoundToolCall, ToolExecutionError},
     json::JsonDocument,
-    profile::{FirstChatOnboardingUpdate, ProfilingMode},
+    profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode},
 };
 
 use super::NativeGuidedTools;
@@ -23,7 +23,7 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "update_onboarding_profile" => {
             if owner.binding.access_mode != AccessMode::FullAccess {
-                return encoded(json!({"ok":false,"error":{
+                return encoded(&json!({"ok":false,"error":{
                     "code":"profile_write_requires_full_access",
                     "message":"This Turn does not have full access; no profile change was applied."
                 }}));
@@ -33,7 +33,7 @@ pub(super) async fn execute(
                 .profile
                 .update_first_chat_onboarding(input)
                 .await
-                .map(|value| serde_json::to_value(value).expect("profile result is serializable"))
+                .and_then(profile_value)
         }
         "summarize_user_profile" => {
             let locale = if text(&call.arguments, "locale") == Some("en") {
@@ -45,17 +45,26 @@ pub(super) async fn execute(
                 .profile
                 .reflective_summary(locale)
                 .await
-                .map(|value| serde_json::to_value(value).expect("profile summary is serializable"))
+                .and_then(profile_value)
         }
-        _ => unreachable!("profile dispatch checks supports"),
+        // Dispatch routes only supported names here.
+        _ => Err(ProfileError::new(
+            "unknown_tool",
+            "This tool is not a profile tool.",
+        )),
     };
     match result {
-        Ok(value) => encoded(value),
-        Err(error) => encoded(json!({"ok":false,"error":{
+        Ok(value) => encoded(&value),
+        Err(error) => encoded(&json!({"ok":false,"error":{
             "code":error.code,
             "message":error.message
         }})),
     }
+}
+
+fn profile_value(value: impl serde::Serialize) -> Result<Value, ProfileError> {
+    serde_json::to_value(value)
+        .map_err(|error| ProfileError::new("profile_result_invalid", error.to_string()))
 }
 
 fn onboarding_input(args: &Map<String, Value>) -> FirstChatOnboardingUpdate {
@@ -105,8 +114,8 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     args.get(key).and_then(Value::as_str)
 }
 
-fn encoded(value: Value) -> Result<JsonDocument, ToolExecutionError> {
-    JsonDocument::from_value(&value).map_err(|error| {
+fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
+    JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(crate::btcc::BtccError::new(
             "guided_profile_result_json",
             error.to_string(),

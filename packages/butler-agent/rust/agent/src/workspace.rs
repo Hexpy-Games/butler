@@ -93,6 +93,10 @@ impl WorkspaceError {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn sqlite(error: rusqlite::Error) -> Self {
         Self::new("workspace_sqlite_error", error.to_string())
     }
@@ -227,6 +231,8 @@ impl SessionBindingStore {
         drop(lane);
         if let Some(thread) = thread {
             let inner = Arc::clone(&self.inner);
+            // Detached on purpose: close waiters receive the join result, and the join
+            // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await

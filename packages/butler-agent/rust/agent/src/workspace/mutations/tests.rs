@@ -112,7 +112,7 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
     .unwrap();
     let prepared = io::prepare(snapshot, b"ours".to_vec(), None, true).unwrap();
     let external = At((Point::BeforeReplace, |path: &Path| {
-        std::fs::write(path, b"external").unwrap()
+        std::fs::write(path, b"external").unwrap();
     }));
     let failure = io::commit(prepared, &external).unwrap_err();
     assert_eq!(failure.error, "external_change_conflict");

@@ -109,7 +109,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 })?;
                 let result = async {
                     let response = current.send().await.map_err(|error| {
-                        diagnostics::network(provider, api, error.to_string())
+                        diagnostics::network(provider, api, &error.to_string())
                     })?;
                     progress.record_progress();
                     let response = checked(response, provider, api).await?;
@@ -147,9 +147,9 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                     if error.code != "provider_network_error"
                         && let Some(receipt) = receipt
                     {
-                        error.request_generation = Some(receipt.plan.generation as u64);
-                        error.measured_input_tokens = Some(receipt.plan.compiled_input_tokens as u64);
-                        error.registered_input_capacity = Some(receipt.plan.input_capacity_tokens as u64);
+                        error.request_generation = Some(crate::json::saturating_u64(receipt.plan.generation));
+                        error.measured_input_tokens = Some(crate::json::saturating_u64(receipt.plan.compiled_input_tokens));
+                        error.registered_input_capacity = Some(crate::json::saturating_u64(receipt.plan.input_capacity_tokens));
                         error.request_hash = Some(receipt.request_hash);
                     }
                     TransportError::Provider(error)
@@ -163,10 +163,10 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                         if delay > 0.0 {
                             let cancellation = progress.cancellation();
                             tokio::select! {
-                                _ = cancellation.cancelled() => {
+                                () = cancellation.cancelled() => {
                                     return Err(TransportError::Provider(Box::new(diagnostics::cancelled(provider, api))));
                                 }
-                                _ = tokio::time::sleep(std::time::Duration::from_millis(delay.trunc() as u64)) => {}
+                                () = tokio::time::sleep(std::time::Duration::from_millis(crate::json::saturating_u64(delay.trunc()))) => {}
                             }
                         }
                     }
@@ -222,7 +222,7 @@ async fn json(
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| Box::new(diagnostics::network(provider, api, error.to_string())))?;
+        .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
     let text = String::from_utf8_lossy(&bytes);
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
     match serde_json::from_str(text) {

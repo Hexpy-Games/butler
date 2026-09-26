@@ -1,9 +1,7 @@
 //! Long-lived FIFO session queue dispatch and lease recovery ownership.
 
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -165,12 +163,12 @@ async fn run(
     loop {
         let delay = deadline.map(tokio::time::sleep);
         tokio::select! {
-            _ = cancellation.cancelled() => return Ok(()),
+            () = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
-                    application = Some(app);
-                    if !cycle(&cancellation, application.as_ref().unwrap(), None).await { return Ok(()); }
-                    deadline = next_deadline(application.as_ref().unwrap()).await.ok().flatten();
+                    let app = application.insert(app);
+                    if !cycle(&cancellation, app, None).await { return Ok(()); }
+                    deadline = next_deadline(app).await.ok().flatten();
                 }
                 Some(Command::Wake(chat)) => {
                     if let Some(app) = application.as_ref() {
@@ -180,7 +178,7 @@ async fn run(
                 }
                 Some(Command::Drain { chat_id, reply }) => {
                     let result = tokio::select! {
-                        _ = cancellation.cancelled() => Err(GatewayApplicationError::Internal),
+                        () = cancellation.cancelled() => Err(GatewayApplicationError::Internal),
                         result = async {
                             match application.as_ref() {
                                 Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
@@ -195,7 +193,7 @@ async fn run(
                 }
                 Some(Command::Close) | None => return Ok(()),
             },
-            _ = async { if let Some(delay) = delay { delay.await } }, if deadline.is_some() => {
+            () = async { if let Some(delay) = delay { delay.await } }, if deadline.is_some() => {
                 if let Some(app) = application.as_ref() {
                     if !cycle(&cancellation, app, None).await { return Ok(()); }
                     deadline = next_deadline(app).await.ok().flatten();
@@ -207,7 +205,7 @@ async fn run(
 
 async fn cycle(cancellation: &CancellationToken, app: &AppApplication, chat: Option<&str>) -> bool {
     tokio::select! {
-        _ = cancellation.cancelled() => false,
+        () = cancellation.cancelled() => false,
         _ = recover_and_drain(cancellation, app, chat) => true,
     }
 }
@@ -278,14 +276,12 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
             .await
             .map_err(app_error)?;
         let Some(claim) = claim else { continue };
-        let resolution = match settings::resolution_from_persisted(&row.control_resolution_json) {
-            Ok(resolution) => resolution,
-            Err(_) => {
-                let _ = app
-                    .fail_dispatch(&claim, "turn_control_resolution_invalid")
-                    .await;
-                continue;
-            }
+        let Ok(resolution) = settings::resolution_from_persisted(&row.control_resolution_json)
+        else {
+            let _ = app
+                .fail_dispatch(&claim, "turn_control_resolution_invalid")
+                .await;
+            continue;
         };
         if let Err(error) = app
             .start_turn(
@@ -346,14 +342,12 @@ async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, Gateway
         let value: Option<String> = db.query_row("SELECT MIN(lease_expires_at) FROM session_queued_messages WHERE state='dispatching' AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 AND (claim_owner IS NULL OR claim_owner<>?2)", params![now, owner], |row| row.get(0)).map_err(AppStorageError::sqlite)?;
         let current = DateTime::parse_from_rfc3339(&now).ok();
         Ok(value.and_then(|value| {
-            let millis = (DateTime::parse_from_rfc3339(&value).ok()? - current?)
-                .num_milliseconds().max(0) as u64;
+            let millis = u64::try_from((DateTime::parse_from_rfc3339(&value).ok()? - current?)
+                .num_milliseconds().max(0)).unwrap_or_default();
             Some(Duration::from_millis(millis))
         }))
     }).await.map_err(app_error)
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

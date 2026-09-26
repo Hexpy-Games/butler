@@ -219,7 +219,7 @@ fn sanitize_value(value: &Value, key: &str, preserve_numbers: bool) -> Value {
                 })
                 .collect(),
         ),
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 
@@ -230,7 +230,7 @@ fn non_negative_integer(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|value| value.is_finite() && *value >= 0.0)
-    .map(|value| value.round() as u64)
+    .map(|value| crate::json::saturating_u64(value.round()))
 }
 
 fn decision_key(key: &str) -> bool {
@@ -256,12 +256,12 @@ fn fallback(key: &str) -> String {
     let mut output = String::new();
     for part in key.split(['_', '-']).filter(|part| !part.is_empty()) {
         if !output.is_empty() {
-            output.push(' ')
+            output.push(' ');
         }
         let mut chars = part.chars();
         if let Some(first) = chars.next() {
             output.extend(first.to_uppercase());
-            output.extend(chars)
+            output.extend(chars);
         }
     }
     if output.is_empty() {

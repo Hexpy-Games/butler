@@ -60,8 +60,7 @@ impl FeedbackBufferService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(error), _) => Err(error),
-                (Ok(_), Err(error)) => Err(error),
+                (Err(error), _) | (Ok(()), Err(error)) => Err(error),
                 (Ok(()), Ok(())) => Ok(()),
             }
         })
@@ -177,11 +176,11 @@ pub(super) fn format_entry(entry: &FeedbackEntry) -> String {
         ),
         format!(
             "- supersedes: {}",
-            serde_json::to_string(&entry.supersedes).unwrap()
+            serde_json::Value::from(entry.supersedes.as_slice())
         ),
         format!(
             "- conflicts_with: {}",
-            serde_json::to_string(&entry.conflicts_with).unwrap()
+            serde_json::Value::from(entry.conflicts_with.as_slice())
         ),
         format!("- privacy_class: {}", privacy_name(entry.privacy_class)),
     ];

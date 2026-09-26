@@ -11,7 +11,7 @@ use super::{options::Options, output};
 
 pub(super) fn execute(
     data_root: &Path,
-    options: Options,
+    options: &Options,
     collation: &LocaleCollation,
 ) -> Result<(String, Value, String), output::CommandError> {
     let reader = WorkRecordReader::new(data_root);
@@ -21,12 +21,12 @@ pub(super) fn execute(
         .map(String::as_str)
         .unwrap_or("dashboard");
     match subcommand {
-        "dashboard" => dashboard(&reader, &options, collation),
-        "list" => list(&reader, &options, collation),
-        "show" => show(&reader, &options, collation),
-        "resume" => resume(&reader, &options, collation),
-        "cancel" => unsupported_cancel(&options),
-        "retry" => unsupported_retry(&options),
+        "dashboard" => dashboard(&reader, options, collation),
+        "list" => list(&reader, options, collation),
+        "show" => show(&reader, options, collation),
+        "resume" => resume(&reader, options, collation),
+        "cancel" => unsupported_cancel(options),
+        "retry" => unsupported_retry(options),
         other => Err(output::failure(
             "unknown_command",
             format!("unknown work command: {other}"),
@@ -322,5 +322,5 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 }
 
 fn count(value: &Value, key: &str) -> usize {
-    value.get(key).and_then(Value::as_u64).unwrap_or(0) as usize
+    usize::try_from(value.get(key).and_then(Value::as_u64).unwrap_or(0)).unwrap_or(usize::MAX)
 }

@@ -1,6 +1,6 @@
 //! Explicit, command-scoped historical Conversation import.
 
-use std::{ffi::OsString, fs, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use super::{NativeDateParser, ResolvedInstallation, SystemIdentity, settings_cli};
 use crate::{
@@ -126,14 +126,14 @@ async fn execute(installation: ResolvedInstallation, options: Options) -> Result
     };
     let store_path = conversation_store_path(&data);
     if !options.write {
-        let reader = match fs::metadata(&store_path) {
+        let reader = match tokio::fs::metadata(&store_path).await {
             Ok(_) => Some(
                 ConversationSourceReader::open(&store_path).map_err(|error| error.to_string())?,
             ),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error.to_string()),
         };
-        let planned = plan_historical_recovery(reader.as_ref(), &parse_timestamp, input);
+        let planned = plan_historical_recovery(reader.as_ref(), &parse_timestamp, &input);
         if let Some(reader) = reader {
             reader.close().map_err(|error| error.to_string())?;
         }

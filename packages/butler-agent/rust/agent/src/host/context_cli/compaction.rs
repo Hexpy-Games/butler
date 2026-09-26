@@ -24,7 +24,9 @@ pub(super) async fn run(
     installation: &ResolvedInstallation,
     session_id: Option<&str>,
 ) -> Result<(Value, String), CliError> {
-    let session_id = session_id.expect("parser requires a context compact session");
+    let Some(session_id) = session_id else {
+        return Err(CliError::invalid("context compact requires a session"));
+    };
     validate_compaction_destinations(data_root, installation, session_id)?;
     let models = open_status_models(data_root).await?;
     let budget_owner = context_budget_owner(&models);

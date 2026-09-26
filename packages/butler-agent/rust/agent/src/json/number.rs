@@ -134,7 +134,9 @@ fn radix_number(digits: &str, bits_per_digit: usize) -> f64 {
     let mut number = 0.0;
     let mut weight = 1.0;
     for byte in digits.bytes().rev() {
-        let value = digit(byte).expect("radix digits were validated");
+        let Some(value) = digit(byte) else {
+            return f64::NAN;
+        };
         if value != 0 {
             number += f64::from(value) * weight;
         }

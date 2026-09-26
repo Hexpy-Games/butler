@@ -123,7 +123,7 @@ pub(super) fn append_event(root: &Path, event: &Value) -> Result<(), CliFailure>
         .open(root.join("ledger.jsonl"))
         .map_err(|_| super::super::io_failure())?;
     file.write_all(line.as_bytes())
-        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|()| file.write_all(b"\n"))
         .map_err(|_| super::super::io_failure())
 }
 

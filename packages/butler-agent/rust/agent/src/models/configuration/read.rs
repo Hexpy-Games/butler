@@ -43,9 +43,9 @@ pub(super) fn app_default(config: &Value) -> Option<&str> {
 pub(super) async fn read_object(path: &Path) -> Value {
     // Source readJsonObject catches read/parse failures and returns an empty
     // object. This path never repairs, deletes or rewrites original file bytes.
-    let bytes = match tokio::fs::read(path).await {
-        Ok(bytes) => bytes,
-        Err(_) => return Value::Object(Map::new()),
+    // It decodes UTF-8 lossily like the source's readFile(.., "utf8").
+    let Ok(bytes) = tokio::fs::read(path).await else {
+        return Value::Object(Map::new());
     };
     serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes))
         .ok()
@@ -54,9 +54,8 @@ pub(super) async fn read_object(path: &Path) -> Value {
 }
 
 pub(super) fn read_object_sync(path: &Path) -> Value {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(_) => return Value::Object(Map::new()),
+    let Ok(bytes) = std::fs::read(path) else {
+        return Value::Object(Map::new());
     };
     serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes))
         .ok()

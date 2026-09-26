@@ -190,7 +190,7 @@ async fn generated_projection_requires_current_canonical_evidence_and_closes_rea
     drop(db);
     candidates::upsert(
         &root.0,
-        ProfileCandidateInput {
+        &ProfileCandidateInput {
             category: "communication".into(),
             payload: json!({"summary":"Use concise answers","butler_should":["Be concise"]}),
             source_type: "explicit".into(),
@@ -246,7 +246,7 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
     };
     let first = candidates::upsert(
         &root.0,
-        candidate("e1", "Prefer native ownership"),
+        &candidate("e1", "Prefer native ownership"),
         "2023-11-14T22:13:20.000Z",
     )
     .unwrap()
@@ -270,7 +270,7 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
     );
     candidates::upsert(
         &root.0,
-        candidate("e1", "Keep durable evidence"),
+        &candidate("e1", "Keep durable evidence"),
         "2023-11-15T22:13:20.000Z",
     )
     .unwrap();
@@ -305,7 +305,7 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
     );
     candidates::upsert(
         &root.0,
-        candidate("e2", "Retain merged instructions"),
+        &candidate("e2", "Retain merged instructions"),
         "2023-11-16T22:13:20.000Z",
     )
     .unwrap();

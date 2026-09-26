@@ -22,17 +22,15 @@ pub(in crate::capabilities) fn changed_file_value(detail: &ChangedFile) -> Value
     value
 }
 
-pub(super) fn project(outcome: MutationOutcome, elapsed: Duration, batch: bool) -> Value {
-    if batch {
-        let MutationOutcome::Batch(result) = outcome else {
-            unreachable!("batch result")
-        };
-        batch_result(result, elapsed)
-    } else {
-        let MutationOutcome::Single(result) = outcome else {
-            unreachable!("single result")
-        };
-        single_result(result, elapsed)
+pub(super) fn project(outcome: MutationOutcome, elapsed: Duration) -> Value {
+    match outcome {
+        MutationOutcome::Batch(result) => batch_result(&result, elapsed),
+        MutationOutcome::Single(result) => single_result(result, elapsed),
+        MutationOutcome::Write(_) => super::failure(
+            "workspace_mutation_outcome_mismatch",
+            "The workspace returned a write outcome for an edit.",
+            "Retry the edit.",
+        ),
     }
 }
 
@@ -47,10 +45,10 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
                 "start_line":file.start_line,"replacements":1,"bytes":committed.bytes,
                 "before_sha256":committed.before_sha256,"after_sha256":committed.after_sha256,
                 "atomic_write":true,
-                "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+                "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("edit_file",
-                    format!("Edited workspace file {}", committed.path),reference),
+                    &format!("Edited workspace file {}", committed.path),&reference),
                 "evidence_capability_receipts":mutation_evidence::success("edit_file",
                     Some(&committed.path),&[],&[],mutation_evidence::MutationOperation::Edited,committed.bytes)});
             if committed.cleanup_failed {
@@ -100,7 +98,7 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
     }
 }
 
-fn batch_result(result: BatchResult, elapsed: Duration) -> Value {
+fn batch_result(result: &BatchResult, elapsed: Duration) -> Value {
     let applied: Vec<Value> = result.applied.iter().map(applied_record).collect();
     let unchanged: Vec<Value> = result
         .unchanged
@@ -203,12 +201,12 @@ fn batch_result(result: BatchResult, elapsed: Duration) -> Value {
         .collect();
     json!({"ok":true,"changed":!applied.is_empty(),"unchanged":unchanged,
         "files":applied,"applied":applied,"changed_files":changed_files,
-        "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+        "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
             "files_written":result.applied.len(),"bytes_written":bytes},
         "evidence_receipts":if applied.is_empty(){Vec::new()}else{
             mutation_evidence::execution("edit_file",
-                format!("Edited {} workspace files",applied.len()),
-                json!({"batch":true,"applied":applied}))},
+                &format!("Edited {} workspace files",applied.len()),
+                &json!({"batch":true,"applied":applied}))},
         "evidence_capability_receipts":mutation_evidence::success("edit_file",
             None,&paths,&applied,mutation_evidence::MutationOperation::Batch { edited: !applied.is_empty() },bytes)})
 }

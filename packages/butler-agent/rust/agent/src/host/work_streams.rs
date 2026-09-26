@@ -66,24 +66,24 @@ impl NativeWorkStreams {
                 while let Some(job) = receiver.blocking_recv() {
                     let (result, reply) = match job {
                         Job::UpdateTodo(scope, input, reply) => {
-                            (store.update_todo(scope, input), reply)
+                            (store.update_todo(&scope, &input), reply)
                         }
                         Job::ViewTodo(scope, input, reply) => {
-                            (store.view_todo(scope, input), reply)
+                            (store.view_todo(&scope, &input), reply)
                         }
-                        Job::List(scope, input, reply) => (store.list(scope, input), reply),
+                        Job::List(scope, input, reply) => (store.list(&scope, &input), reply),
                         Job::Transition(scope, input, reply) => {
-                            (store.transition(scope, input), reply)
+                            (store.transition(&scope, &input), reply)
                         }
-                        Job::Active(query, reply) => (store.active(query), reply),
+                        Job::Active(query, reply) => (store.active(&query), reply),
                         Job::Reconcile(outcome, reply) => {
-                            (store.reconcile_turn(outcome).map(|_| Value::Null), reply)
+                            (store.reconcile_turn(&outcome).map(|()| Value::Null), reply)
                         }
                         Job::Prompt(session, project, reply) => {
                             (store.prompt_context(&session, project.as_deref()), reply)
                         }
                         Job::Link(scope, target_id, field, reply) => {
-                            (store.link(scope, target_id, field), reply)
+                            (store.link(&scope, &target_id, field), reply)
                         }
                     };
                     let _ = reply.send(result);

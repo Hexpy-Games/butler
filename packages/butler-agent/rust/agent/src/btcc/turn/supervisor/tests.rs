@@ -30,7 +30,7 @@ fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
     // A turn already finalizing may still deliver, then retires.
     let supervisor = TurnExecutionSupervisor::default();
     let ticket = supervisor.install_stop("turn-1");
-    supervisor.observe_stop(&ticket, StopPersistenceOutcome::AlreadyFinalizing);
+    supervisor.observe_stop(&ticket, &StopPersistenceOutcome::AlreadyFinalizing);
     assert!(
         supervisor
             .enter("turn-1", TurnSemanticState::Admitted)
@@ -48,7 +48,7 @@ fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
 fn stale_stop_results_cannot_change_newer_registrations_or_fences() {
     let supervisor = TurnExecutionSupervisor::default();
     let ticket = supervisor.install_stop("turn-1");
-    supervisor.observe_stop(&ticket, StopPersistenceOutcome::AlreadyCancelled);
+    supervisor.observe_stop(&ticket, &StopPersistenceOutcome::AlreadyCancelled);
     let permit = supervisor
         .enter("turn-1", TurnSemanticState::Admitted)
         .unwrap();
@@ -60,7 +60,7 @@ fn stale_stop_results_cannot_change_newer_registrations_or_fences() {
     let older = supervisor.install_stop("turn-1");
     let newer = supervisor.install_stop("turn-1");
     supervisor.observe_stop_failure(&newer);
-    supervisor.observe_stop(&older, StopPersistenceOutcome::AlreadyFinalizing);
+    supervisor.observe_stop(&older, &StopPersistenceOutcome::AlreadyFinalizing);
     assert!(
         supervisor
             .enter("turn-1", TurnSemanticState::DeliveryCommitted)

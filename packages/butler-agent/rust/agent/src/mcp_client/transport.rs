@@ -30,7 +30,7 @@ impl NativeMcpClient {
         operation: Operation,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
-        self.with_server_timeout(server, secrets, operation, DEFAULT_TIMEOUT, signal)
+        Box::pin(self.with_server_timeout(server, secrets, operation, DEFAULT_TIMEOUT, signal))
             .await
     }
 
@@ -69,32 +69,29 @@ impl NativeMcpClient {
                         false,
                     )
                 })?;
-                let stdout = match child.stdout.take() {
-                    Some(stdout) => stdout,
-                    None => {
-                        let _ = child.start_kill();
-                        let _ = child.wait().await;
-                        return Err(failure(
-                            "mcp_server_unavailable",
-                            "MCP server could not be started.",
-                            false,
-                        ));
-                    }
+                let Some(stdout) = child.stdout.take() else {
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
+                    return Err(failure(
+                        "mcp_server_unavailable",
+                        "MCP server could not be started.",
+                        false,
+                    ));
                 };
-                let stdin = match child.stdin.take() {
-                    Some(stdin) => stdin,
-                    None => {
-                        let _ = child.start_kill();
-                        let _ = child.wait().await;
-                        return Err(failure(
-                            "mcp_server_unavailable",
-                            "MCP server could not be started.",
-                            false,
-                        ));
-                    }
+                let Some(stdin) = child.stdin.take() else {
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
+                    return Err(failure(
+                        "mcp_server_unavailable",
+                        "MCP server could not be started.",
+                        false,
+                    ));
                 };
                 let transport = AsyncRwTransport::<RoleClient, _, _>::new_client(stdout, stdin);
-                run_session_with_child(transport, operation, timeout, signal, child).await
+                Box::pin(run_session_with_child(
+                    transport, operation, timeout, signal, child,
+                ))
+                .await
             }
             McpTransportKind::Http => {
                 let url = parse_http_url(server.url.as_deref())?;
@@ -109,7 +106,7 @@ impl NativeMcpClient {
                 config.reinit_on_expired_session = false;
                 config.custom_headers = custom_headers;
                 let transport = StreamableHttpClientTransport::from_config(config);
-                run_session(transport, operation, timeout, signal).await
+                Box::pin(run_session(transport, operation, timeout, signal)).await
             }
             McpTransportKind::Sse => {
                 let url = parse_http_url(server.url.as_deref())?;
@@ -126,7 +123,7 @@ impl NativeMcpClient {
                     custom_headers,
                     CancellationToken::new(),
                 );
-                run_session(transport, operation, timeout, signal).await
+                Box::pin(run_session(transport, operation, timeout, signal)).await
             }
         }
     }

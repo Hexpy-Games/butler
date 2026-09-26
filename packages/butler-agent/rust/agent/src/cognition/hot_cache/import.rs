@@ -115,8 +115,7 @@ impl LegacyIndexService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(failure), _) => Err(failure),
-                (Ok(()), Err(failure)) => Err(failure),
+                (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),
             }
         })
@@ -135,10 +134,13 @@ pub(crate) fn extract_legacy_import_transcript(
     project: &str,
 ) -> CognitionResult<usize> {
     let memory_root = paths.memory_root(data_root);
-    let timestamp = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| error("memory_graph_unavailable"))?
-        .as_secs() as i64;
+    let timestamp = i64::try_from(
+        SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| error("memory_graph_unavailable"))?
+            .as_secs(),
+    )
+    .unwrap_or(i64::MAX);
     legacy_graph::extract_and_save(
         data_root,
         &memory_root,
@@ -227,7 +229,7 @@ fn write_atomic(data_root: &Path, path: &Path, temp: &Path, body: &str) -> Cogni
             .map_err(|_| error("hot_cache_write_failed"))?;
         created_temp = true;
         file.write_all(body.as_bytes())
-            .and_then(|_| file.sync_all())
+            .and_then(|()| file.sync_all())
             .map_err(|_| error("hot_cache_write_failed"))?;
         fs::rename(temp, path).map_err(|_| error("hot_cache_write_failed"))
     })();

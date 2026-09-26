@@ -34,10 +34,10 @@ pub(super) fn select(
         return Ok(TemporalSelection::default());
     }
     let duration = (to_ms - from_ms).max(1.0);
-    let bins = duration.floor().clamp(1.0, 8.0) as i64;
+    let bins = crate::json::saturating_i64(duration.floor().clamp(1.0, 8.0));
     let rows = match time.basis {
         RecallTimeBasis::Conversation => conversation::select(db, input, from_ms, duration, bins)?,
-        RecallTimeBasis::Event => event::select(db, input, from_ms, duration, bins)?,
+        RecallTimeBasis::Event => event::select(db, input, time, from_ms, duration, bins)?,
     };
     let mut episode_seen = HashSet::new();
     let mut seed_seen = HashSet::new();

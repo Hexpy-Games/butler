@@ -53,6 +53,7 @@ impl AppApplication {
             )
             .await
             .map_err(map_read_error)?
+            .as_ref()
             .and_then(|plan| normalized_plan(plan, &plan_id))
             .ok_or_else(|| public(404, "plan_not_found", "Project Ledger Plan not found."))?;
         if plan.status != "draft" {
@@ -178,7 +179,10 @@ impl AppApplication {
             )
             .await
             .map_err(map_read_error)
-            .map(|plan| plan.and_then(|plan| normalized_plan(plan, plan_id)))
+            .map(|plan| {
+                plan.as_ref()
+                    .and_then(|plan| normalized_plan(plan, plan_id))
+            })
     }
 
     async fn queue_continuation(

@@ -3,17 +3,22 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use reqwest::header::HeaderMap;
 
 pub(super) fn at(headers: &HeaderMap) -> Option<String> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_millis() as i64;
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_millis(),
+    )
+    .unwrap_or(i64::MAX);
     let retry_after = value(headers, "retry-after");
     if let Some(raw) = retry_after.filter(|value| !value.is_empty()) {
         let timestamp = raw
             .parse::<f64>()
             .ok()
             .filter(|value| value.is_finite())
-            .map(|seconds| now.saturating_add((seconds.max(0.0) * 1_000.0) as i64))
+            .map(|seconds| {
+                now.saturating_add(crate::json::saturating_i64(seconds.max(0.0) * 1_000.0))
+            })
             .or_else(|| parse_http_date(raw));
         if let Some(timestamp) = timestamp.filter(|value| *value >= now) {
             return iso(timestamp);
@@ -23,10 +28,10 @@ pub(super) fn at(headers: &HeaderMap) -> Option<String> {
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 0.0)
     {
-        return iso(now.saturating_add((seconds * 1_000.0) as i64));
+        return iso(now.saturating_add(crate::json::saturating_i64(seconds * 1_000.0)));
     }
     let seconds = value(headers, "x-ratelimit-reset")?.parse::<f64>().ok()?;
-    let timestamp = (seconds * 1_000.0) as i64;
+    let timestamp = crate::json::saturating_i64(seconds * 1_000.0);
     (seconds.is_finite() && timestamp >= now)
         .then(|| iso(timestamp))
         .flatten()

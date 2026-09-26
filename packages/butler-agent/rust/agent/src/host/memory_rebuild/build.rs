@@ -113,8 +113,7 @@ pub(super) async fn run(
         .await
         .map_err(|e| CognitionError::new(e.code, e.message));
     match (result, closed) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
     }
 }
@@ -243,7 +242,7 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
         record_rebuild_readiness(data_root, paths, coordinator, &target, cancellation).await?;
     let inspected = inspect_memory_rebuild(data_root, paths, &handle.generation_id)?;
     Ok(json!({
-        "generationId":handle.generation_id,"canonicalSnapshotId":match target {MemoryGenerationTarget::Rebuild {canonical_snapshot_id,..}=>canonical_snapshot_id,_=>unreachable!()},
+        "generationId":handle.generation_id,"canonicalSnapshotId":match target {MemoryGenerationTarget::Rebuild {canonical_snapshot_id,..}=>Some(canonical_snapshot_id),MemoryGenerationTarget::Active { .. }=>None},
         "inventorySourceCount":inventory.expected_source_count,
         "catchupQuanta":catchup_quanta,"conversationRegistered":conversation_registered,
         "typedRegistered":typed_registered,"projectionQuanta":projection_quanta,"cacheQuanta":cache_quanta,

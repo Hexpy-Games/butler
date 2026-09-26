@@ -166,7 +166,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
         ready
             .authority
             .execution(AuthorityExecutionInput {
-                source_session_id: Some("".into()),
+                source_session_id: Some(String::new()),
                 ..base.clone()
             })
             .await
@@ -178,7 +178,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
         ready
             .authority
             .execution(AuthorityExecutionInput {
-                client_message_id: Some("".into()),
+                client_message_id: Some(String::new()),
                 ..base
             })
             .await

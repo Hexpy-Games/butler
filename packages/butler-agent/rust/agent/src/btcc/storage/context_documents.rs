@@ -36,7 +36,7 @@ impl BtccRepositories {
     ) -> PortFuture<'_, String> {
         Box::pin(async move {
             self.storage
-                .execute(move |db| persist(db, input))
+                .execute(move |db| persist(db, &input))
                 .await
                 .map_err(btcc_error)
         })
@@ -66,7 +66,7 @@ impl BtccRepositories {
     }
 }
 
-fn persist(db: &Connection, input: ContextDocumentInput) -> StorageResult<String> {
+fn persist(db: &Connection, input: &ContextDocumentInput) -> StorageResult<String> {
     let content_sha256 = digest(&input.content);
     let reference = reference(
         &input.scope_kind,

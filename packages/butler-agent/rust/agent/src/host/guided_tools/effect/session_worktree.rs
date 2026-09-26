@@ -27,8 +27,15 @@ pub(super) fn prepare(
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
     let input = normalize(&Value::Object(args.clone()))
         .map_err(|error| BtccError::new(error.code, error.message))?;
-    let action = input["action"].as_str().expect("normalized action");
-    let branch = input["branch"].as_str().expect("normalized branch");
+    let (Some(action), Some(branch)) = (
+        input.get("action").and_then(Value::as_str),
+        input.get("branch").and_then(Value::as_str),
+    ) else {
+        return Err(BtccError::new(
+            "invalid_arguments",
+            "Session worktree input requires action and branch.",
+        ));
+    };
     let target = format!("session-worktree/{action}/{branch}");
     let reference = owner.binding.workspace_reference.clone().ok_or_else(|| {
         BtccError::new(
@@ -107,7 +114,7 @@ impl SessionWorktreeEffect {
 }
 
 impl EffectAdapter for SessionWorktreeEffect {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "bind_session_git_worktree"
     }
 

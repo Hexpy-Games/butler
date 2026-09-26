@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -57,10 +58,8 @@ async fn group(
 }
 
 fn language(candidate: &str) -> Option<String> {
-    static RESPONSE_LANGUAGE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?imu)^Assistant Response Language:\s*(.+)$")
-            .expect("source response language pattern")
-    });
+    static RESPONSE_LANGUAGE: LazyLock<Regex> =
+        LazyLock::new(|| fixed_regex(r"(?imu)^Assistant Response Language:\s*(.+)$"));
     let prefix = crate::json::Utf16Prefix::new(candidate, 12_000);
     let text = prefix.utf8_for_hash();
     let language = RESPONSE_LANGUAGE.captures(&text)?.get(1)?;

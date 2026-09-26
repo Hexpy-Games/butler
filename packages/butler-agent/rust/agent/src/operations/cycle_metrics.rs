@@ -30,7 +30,7 @@ impl CycleMetrics {
         Self { files, enabled }
     }
 
-    pub(crate) fn record(&self, name: &str, status: &str, dimensions: Value) {
+    pub(crate) fn record(&self, name: &str, status: &str, dimensions: &Value) {
         if !self.enabled {
             return;
         }

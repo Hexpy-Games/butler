@@ -24,7 +24,7 @@ impl ProfileService {
             .await
             .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
                     "profile_closed",
@@ -37,6 +37,9 @@ impl ProfileService {
         let child = caller_cancellation.child_token();
         let operation_child = child.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _permit = permit;
             let _token = token;
@@ -46,11 +49,11 @@ impl ProfileService {
             let mut future = Box::pin(operation(operation_child));
             let result = tokio::select! {
                 result = &mut future => result,
-                _ = caller_cancellation.cancelled() => {
+                () = caller_cancellation.cancelled() => {
                     child.cancel();
                     future.await
                 }
-                _ = shutdown.cancelled() => {
+                () = shutdown.cancelled() => {
                     child.cancel();
                     future.await
                 }

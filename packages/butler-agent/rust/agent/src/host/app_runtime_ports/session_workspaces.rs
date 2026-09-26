@@ -118,22 +118,24 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     abort: server_shutdown,
                 })
                 .await;
-            match result {
-                Ok(BindSessionWorktreeResult::Bound { .. }) => Ok(()),
-                failed => {
+            // A failed bind clears the binding, then reports its outcome.
+            let failed = match result {
+                Ok(BindSessionWorktreeResult::Bound { .. }) => None,
+                Ok(BindSessionWorktreeResult::Failed {
+                    code: "git_not_installed" | "git_repository_required",
+                    ..
+                }) => Some(Ok(())),
+                Ok(BindSessionWorktreeResult::Failed { .. }) => Some(Err(provisioning_error())),
+                Err(_) => Some(Err(GatewayApplicationError::Internal)),
+            };
+            match failed {
+                None => Ok(()),
+                Some(outcome) => {
                     bindings
                         .delete_session(&snapshot.runtime_session_id)
                         .await
                         .map_err(|_| GatewayApplicationError::Internal)?;
-                    match failed {
-                        Ok(BindSessionWorktreeResult::Failed {
-                            code: "git_not_installed" | "git_repository_required",
-                            ..
-                        }) => Ok(()),
-                        Ok(BindSessionWorktreeResult::Failed { .. }) => Err(provisioning_error()),
-                        Err(_) => Err(GatewayApplicationError::Internal),
-                        Ok(BindSessionWorktreeResult::Bound { .. }) => unreachable!(),
-                    }
+                    outcome
                 }
             }
         })

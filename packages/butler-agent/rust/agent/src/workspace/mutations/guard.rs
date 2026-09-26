@@ -20,7 +20,14 @@ pub(super) fn prepare(
             })
         }
         MutationCommand::Edit(mut edit) if !edit.batch => {
-            let guarded = path(&edit.context, &edit.edits[0].path, false)?;
+            let Some(first) = edit.edits.first() else {
+                return Ok(Err(MutationOutcome::Single(Err(EditFailure::new(
+                    0,
+                    None,
+                    "invalid_arguments",
+                )))));
+            };
+            let guarded = path(&edit.context, &first.path, false)?;
             Ok(match guarded {
                 Ok(path) => {
                     let input = edit.edits.remove(0);
@@ -121,16 +128,20 @@ fn path(
         installation_root: context.installation_root.as_deref(),
         protected_roots: &context.protected_roots,
     })?;
-    if !guard.ok() {
+    let Some((absolute, real)) = guard
+        .accepted()
+        .map(|(absolute, real)| (absolute.to_path_buf(), real.to_path_buf()))
+    else {
         return Ok(Err(guard));
-    }
-    let absolute = guard.absolute.as_ref().expect("accepted path").clone();
-    let real = guard.real.as_ref().unwrap_or(&absolute).clone();
-    let public = absolute
-        .strip_prefix(&guard.root)
-        .expect("accepted containment")
-        .to_string_lossy()
-        .replace('\\', "/");
+    };
+    let public = match absolute.strip_prefix(&guard.root) {
+        Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
+        Err(_) => {
+            let mut guard = guard;
+            guard.reason = Some("path_escape");
+            return Ok(Err(guard));
+        }
+    };
     Ok(Ok(GuardedPath {
         public: if public.is_empty() {
             ".".into()

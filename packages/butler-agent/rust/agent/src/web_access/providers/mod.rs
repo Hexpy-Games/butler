@@ -25,6 +25,10 @@ use self::{
     tavily::TavilyWebSearchProvider,
 };
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) async fn configured(
     access: &WebAccess,
 ) -> Result<Box<dyn SearchProvider>, WebAccessError> {
@@ -112,6 +116,10 @@ pub(super) async fn configured(
     Ok(provider)
 }
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) fn status(access: &WebAccess) -> Result<Value, WebAccessError> {
     let provider = access
         .configured_provider()
@@ -311,7 +319,7 @@ impl SearchProvider for FallbackSearchProvider {
 struct MockSearchProvider;
 
 impl SearchProvider for MockSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "mock"
     }
 
@@ -342,7 +350,7 @@ impl SearchProvider for MockSearchProvider {
 struct DisabledSearchProvider;
 
 impl SearchProvider for DisabledSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "disabled"
     }
 

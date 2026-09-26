@@ -100,7 +100,7 @@ fn stage_counts(
         match state.as_str() {
             "complete" => counts.complete += count,
             "unsupported" if semantic => {
-                *counts.unsupported.as_mut().expect("semantic count") += count
+                *counts.unsupported.get_or_insert(0) += count;
             }
             "pending" | "planned" | "running" => counts.pending += count,
             "failed" => counts.failed += count,

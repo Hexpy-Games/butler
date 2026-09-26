@@ -327,5 +327,5 @@ fn utf16_prefix(value: &str, max: usize) -> String {
 
 fn simple_hash(value: &str) -> String {
     let digest = Sha256::digest(value.as_bytes());
-    format!("{:x}", digest)[..16].to_owned()
+    format!("{digest:x}")[..16].to_owned()
 }

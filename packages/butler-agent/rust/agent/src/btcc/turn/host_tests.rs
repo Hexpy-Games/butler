@@ -9,7 +9,7 @@ use crate::btcc::StopRequest;
 async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention() {
     let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
     harness.block_stop.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let btcc = assembly.btcc.clone();
     let stopped = tokio::spawn(async move {
         btcc.stop_turn(StopRequest {
@@ -47,7 +47,7 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
     let panic_harness = Harness::new([record("turn-2", "session-2", TurnSemanticState::Admitted)]);
     panic_harness.block_stop.store(true, Ordering::SeqCst);
     panic_harness.panic_stop.store(true, Ordering::SeqCst);
-    let panic_assembly = crate::btcc::assemble(panic_harness.dependencies());
+    let panic_assembly = crate::btcc::assemble(&panic_harness.dependencies());
     let panic_btcc = panic_assembly.btcc.clone();
     let panicking = tokio::spawn(async move {
         panic_btcc
@@ -75,7 +75,7 @@ async fn panicking_owned_turn_settles_duplicates_and_close_without_retention() {
     let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
     harness.block_agent.store(true, Ordering::SeqCst);
     harness.panic_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let first_btcc = assembly.btcc.clone();
     let duplicate_btcc = assembly.btcc.clone();
     let first =

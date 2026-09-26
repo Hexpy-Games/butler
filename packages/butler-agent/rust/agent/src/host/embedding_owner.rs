@@ -1,11 +1,12 @@
 //! Host-owned, bounded client for the private same-executable embedding worker.
 //! One in-process queue serializes one child and one inference at a time.
 
+use parking_lot::Mutex;
 use std::{
     panic::AssertUnwindSafe,
     path::PathBuf,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -89,7 +90,7 @@ impl NativeEmbeddingOwner {
         loop {
             let completed = *completion.borrow_and_update();
             if let Some(completed) = completed {
-                let actor = self.actor.lock().expect("embedding actor mutex").take();
+                let actor = self.actor.lock().take();
                 if let Some(actor) = actor {
                     actor.await.map_err(|_| error("embed_worker_unavailable"))?;
                 }
@@ -141,7 +142,7 @@ impl NativeEmbeddingOwner {
         let admitted_cancel = cancellation.child_token();
         let (sender, receiver) = oneshot::channel();
         {
-            let mut state = self.inner.state.lock().expect("embedding queue mutex");
+            let mut state = self.inner.state.lock();
             if state.closed {
                 return Err(error("embed_owner_closed"));
             }
@@ -182,8 +183,8 @@ impl NativeEmbeddingOwner {
         };
         tokio::select! {
             biased;
-            _ = admitted_cancel.cancelled() => Err(error("embed_request_cancelled")),
-            _ = deadline_wait(deadline) => Err(error("embed_request_deadline")),
+            () = admitted_cancel.cancelled() => Err(error("embed_request_cancelled")),
+            () = deadline_wait(deadline) => Err(error("embed_request_deadline")),
             result = response => result,
         }
     }
@@ -196,18 +197,18 @@ impl Drop for NativeEmbeddingOwner {
 }
 
 impl CognitionEmbeddingPort for NativeEmbeddingOwner {
-    fn embed<'a>(
-        &'a self,
+    fn embed(
+        &self,
         request: EmbeddingRequest,
         cancellation: CancellationToken,
-    ) -> EmbeddingFuture<'a> {
+    ) -> EmbeddingFuture<'_> {
         Box::pin(self.embed_request(request, cancellation))
     }
 }
 
 impl Inner {
     fn close(&self) {
-        let mut state = self.state.lock().expect("embedding queue mutex");
+        let mut state = self.state.lock();
         if state.closed {
             return;
         }
@@ -227,7 +228,7 @@ impl Inner {
     }
 
     fn remove_waiting(&self, id: u64) {
-        let mut state = self.state.lock().expect("embedding queue mutex");
+        let mut state = self.state.lock();
         let removed = state
             .interactive
             .iter()
@@ -259,7 +260,7 @@ async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     loop {
         let next = {
-            let mut state = inner.state.lock().expect("embedding queue mutex");
+            let mut state = inner.state.lock();
             if state.closed {
                 None
             } else {
@@ -269,7 +270,7 @@ async fn run_actor(inner: Arc<Inner>) {
         if let Some(item) = next {
             let result = run_item(&inner, &mut child, &item).await;
             let _ = item.response.send(result);
-            let mut state = inner.state.lock().expect("embedding queue mutex");
+            let mut state = inner.state.lock();
             state.active_cancel = None;
             state.release(item.bytes);
             continue;
@@ -279,14 +280,14 @@ async fn run_actor(inner: Arc<Inner>) {
         }
         if let Some(process) = child.as_mut() {
             tokio::select! {
-                _ = inner.notify.notified() => {},
-                _ = inner.shutdown.cancelled() => {},
+                () = inner.notify.notified() => {},
+                () = inner.shutdown.cancelled() => {},
                 _ = process.child.wait() => { child = None; },
             }
         } else {
             tokio::select! {
-                _ = inner.notify.notified() => {},
-                _ = inner.shutdown.cancelled() => {},
+                () = inner.notify.notified() => {},
+                () = inner.shutdown.cancelled() => {},
             }
         }
     }
@@ -313,19 +314,20 @@ async fn run_item(
     if child.is_none() {
         *child = Some(spawn_worker(&inner.executable, &inner.data_root)?);
     }
-    if !child.as_ref().expect("spawned above").initialized {
-        let process = child.as_mut().expect("spawned above");
+    if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let initialized = tokio::select! {
             biased;
-            _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
+            () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
             result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
                 result.unwrap_or_else(|_| Err(error("embed_worker_unavailable"))),
         };
-        if let Err(failure) = initialized {
-            kill_and_reap(child).await;
-            return Err(failure);
+        match initialized {
+            Ok(()) => process.initialized = true,
+            Err(failure) => {
+                kill_and_reap(child).await;
+                return Err(failure);
+            }
         }
-        child.as_mut().expect("initialized above").initialized = true;
     }
     // Initialization belongs to the owner. An initiating caller may have
     // timed out while the same child became ready for later live requests.
@@ -335,12 +337,14 @@ async fn run_item(
     if expired(item.deadline) {
         return Err(error("embed_request_deadline"));
     }
-    let process = child.as_mut().expect("spawned above");
+    let Some(process) = child.as_mut() else {
+        return Err(error("embed_worker_unavailable"));
+    };
     let outcome = tokio::select! {
         biased;
-        _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
-        _ = item.cancellation.cancelled() => Err(error("embed_request_cancelled")),
-        _ = deadline_wait(item.deadline) => Err(error("embed_request_deadline")),
+        () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
+        () = item.cancellation.cancelled() => Err(error("embed_request_cancelled")),
+        () = deadline_wait(item.deadline) => Err(error("embed_request_deadline")),
         result = exchange(process, item) => result,
     };
     match outcome {

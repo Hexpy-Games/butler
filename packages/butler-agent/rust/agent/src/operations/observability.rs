@@ -4,6 +4,7 @@
 #[path = "observability_tests.rs"]
 mod tests;
 
+use crate::public_text::fixed_regex;
 use std::{
     collections::VecDeque,
     fs::{self, File},
@@ -148,9 +149,11 @@ fn read_follow_state(state: &mut FollowState, output: &mut Vec<LogEntry>) -> io:
     }
     state.file.seek(SeekFrom::Start(state.offset))?;
     let mut remaining = metadata.len().saturating_sub(state.offset);
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     while remaining > 0 {
-        let requested = buffer.len().min(remaining as usize);
+        let requested = buffer
+            .len()
+            .min(usize::try_from(remaining).unwrap_or(usize::MAX));
         let count = state.file.read(&mut buffer[..requested])?;
         if count == 0 {
             break;
@@ -210,9 +213,9 @@ pub(crate) fn redact_log_line(line: &str) -> String {
     static BEARER: OnceLock<Regex> = OnceLock::new();
     static API_KEY: OnceLock<Regex> = OnceLock::new();
     static BOT_TOKEN: OnceLock<Regex> = OnceLock::new();
-    let bearer = BEARER.get_or_init(|| Regex::new(r"(?i)(Bearer\s+)[A-Za-z0-9._-]+").unwrap());
-    let api_key = API_KEY.get_or_init(|| Regex::new(r"(?i)(OPENAI_API_KEY=)[^\s]+").unwrap());
-    let bot = BOT_TOKEN.get_or_init(|| Regex::new(r"bot\d+:[A-Za-z0-9_-]+").unwrap());
+    let bearer = BEARER.get_or_init(|| fixed_regex(r"(?i)(Bearer\s+)[A-Za-z0-9._-]+"));
+    let api_key = API_KEY.get_or_init(|| fixed_regex(r"(?i)(OPENAI_API_KEY=)[^\s]+"));
+    let bot = BOT_TOKEN.get_or_init(|| fixed_regex(r"bot\d+:[A-Za-z0-9_-]+"));
     let redacted = bearer.replace_all(line, "$1[redacted]");
     let redacted = api_key.replace_all(&redacted, "$1[redacted]");
     bot.replace_all(&redacted, "bot[redacted]").into_owned()

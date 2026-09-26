@@ -141,7 +141,11 @@ impl Stage {
             .create_new(true)
             .open(&path)
             .map_err(|_| GatewayApplicationError::Internal)?;
-        if file.write_all(bytes).and_then(|_| file.sync_all()).is_err() {
+        if file
+            .write_all(bytes)
+            .and_then(|()| file.sync_all())
+            .is_err()
+        {
             let _ = fs::remove_file(&path);
             return Err(GatewayApplicationError::Internal);
         }

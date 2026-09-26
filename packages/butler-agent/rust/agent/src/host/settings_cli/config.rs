@@ -1,6 +1,6 @@
 //! Generic operator configuration parsing and validation for the native CLI.
 
-use serde_json::{Map, Number, Value};
+use serde_json::{Number, Value};
 
 use crate::models::{ParsedModelRefSource, parse_model_ref};
 
@@ -97,15 +97,7 @@ pub(super) fn set_path(config: &mut Value, dotted_path: &str, value: Value) {
             current.insert(part.to_owned(), value);
             return;
         }
-        let child = current
-            .entry(part.to_owned())
-            .or_insert_with(|| Value::Object(Map::new()));
-        if !child.is_object() || child.is_array() {
-            *child = Value::Object(Map::new());
-        }
-        current = child
-            .as_object_mut()
-            .expect("configuration path child is an object");
+        current = crate::json::object_field_mut(current, part);
     }
 }
 

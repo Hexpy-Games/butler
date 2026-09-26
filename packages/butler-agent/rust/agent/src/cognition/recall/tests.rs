@@ -77,7 +77,7 @@ fn graph_expansion_matches_unchanged_bun_source() {
                 now_calls.set(count + 1);
                 if case["deadlineAfter"]
                     .as_u64()
-                    .is_some_and(|after| count >= after as usize)
+                    .is_some_and(|after| count >= usize::try_from(after).unwrap_or(usize::MAX))
                 {
                     101
                 } else {

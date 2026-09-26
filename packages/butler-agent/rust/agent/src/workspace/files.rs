@@ -84,7 +84,7 @@ fn io_failure(path: &str, error: &std::io::Error, stage: &str) -> Value {
         ),
     }
 }
-pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
+pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
     let guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.path,
@@ -92,7 +92,7 @@ pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<Workspa
         allow_directories: false,
         protected_roots: &input.protected_roots,
     })?;
-    if !guard.ok() {
+    let Some((_, file)) = guard.accepted() else {
         let safe = if input.relative_only {
             guard.safe_path().unwrap_or_else(|| ".".into())
         } else {
@@ -108,12 +108,7 @@ pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<Workspa
             "The file path is not an admitted workspace file.",
             "Choose a contained, non-sensitive regular file path.",
         )));
-    }
-    let file = guard
-        .real
-        .as_ref()
-        .or(guard.absolute.as_ref())
-        .expect("guarded path");
+    };
     let metadata = match std::fs::symlink_metadata(file) {
         Ok(value) => value,
         Err(error) => {
@@ -185,20 +180,17 @@ pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<Workspa
             None,
         ));
     }
-    let mut decoded = match String::from_utf8(data) {
-        Ok(value) => value,
-        Err(_) => {
-            return Ok(failed_bytes(
-                failure(
-                    &input.path,
-                    "invalid_utf8",
-                    "The workspace file is not valid UTF-8 text.",
-                    "Choose a UTF-8 text file or convert it before reading.",
-                ),
-                false,
-                None,
-            ));
-        }
+    let Ok(mut decoded) = String::from_utf8(data) else {
+        return Ok(failed_bytes(
+            failure(
+                &input.path,
+                "invalid_utf8",
+                "The workspace file is not valid UTF-8 text.",
+                "Choose a UTF-8 text file or convert it before reading.",
+            ),
+            false,
+            None,
+        ));
     };
     if decoded.starts_with('\u{feff}') {
         decoded.drain(..3);
@@ -274,27 +266,11 @@ pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<Workspa
     })
 }
 fn normalize_line_endings(text: String) -> String {
-    if !text.as_bytes().contains(&b'\r') {
+    if !text.contains('\r') {
         return text;
     }
-    let mut bytes = text.into_bytes();
-    let mut read = 0;
-    let mut write = 0;
-    while read < bytes.len() {
-        if bytes[read] == b'\r' {
-            bytes[write] = b'\n';
-            read += 1;
-            if read < bytes.len() && bytes[read] == b'\n' {
-                read += 1;
-            }
-        } else {
-            bytes[write] = bytes[read];
-            read += 1;
-        }
-        write += 1;
-    }
-    bytes.truncate(write);
-    String::from_utf8(bytes).expect("replacing ASCII CR preserves UTF-8")
+    // CRLF and a lone CR both become LF.
+    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 fn char_index_at_line(text: &str, line: usize) -> usize {
     if line <= 1 {

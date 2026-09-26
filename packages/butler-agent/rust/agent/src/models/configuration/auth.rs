@@ -39,7 +39,7 @@ impl std::fmt::Debug for AuthError {
         formatter
             .debug_struct("AuthError")
             .field("code", &self.code)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 impl std::fmt::Display for AuthError {
@@ -49,7 +49,7 @@ impl std::fmt::Display for AuthError {
 }
 impl std::error::Error for AuthError {}
 
-impl<'a> AuthOwner<'a> {
+impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
         if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
             return Ok(ProviderAuth::ApiKey(key.to_owned()));
@@ -68,7 +68,7 @@ impl<'a> AuthOwner<'a> {
                 account_id_from_access_token(&profile.access_token).unwrap_or_default();
             return self.codex_auth(
                 ProviderAuthMode::CodexSubscription,
-                profile.access_token,
+                &profile.access_token,
                 account_id,
             );
         }
@@ -82,7 +82,7 @@ impl<'a> AuthOwner<'a> {
                 .and_then(|value| trimmed(Some(value)))
         {
             let account_id = codex_account_id(&auth, token).unwrap_or_default();
-            return self.codex_auth(ProviderAuthMode::CodexOauth, token.to_owned(), account_id);
+            return self.codex_auth(ProviderAuthMode::CodexOauth, token, account_id);
         }
         Err(error(
             "provider_auth_missing",
@@ -93,7 +93,7 @@ impl<'a> AuthOwner<'a> {
     fn codex_auth(
         &self,
         mode: ProviderAuthMode,
-        token: String,
+        token: &str,
         account_id: String,
     ) -> Result<ProviderAuth, AuthError> {
         let originator = trimmed(self.environment.oauth_originator.as_deref())
@@ -103,9 +103,18 @@ impl<'a> AuthOwner<'a> {
         {
             value.to_owned()
         } else {
-            let platform = required(&self.environment.os_platform, "provider_os_facts_missing")?;
-            let release = required(&self.environment.os_release, "provider_os_facts_missing")?;
-            let arch = required(&self.environment.os_arch, "provider_os_facts_missing")?;
+            let platform = required(
+                self.environment.os_platform.as_ref(),
+                "provider_os_facts_missing",
+            )?;
+            let release = required(
+                self.environment.os_release.as_ref(),
+                "provider_os_facts_missing",
+            )?;
+            let arch = required(
+                self.environment.os_arch.as_ref(),
+                "provider_os_facts_missing",
+            )?;
             format!("butler ({platform} {release}; {arch})")
         };
         Ok(ProviderAuth::Codex {
@@ -167,7 +176,7 @@ impl<'a> AuthOwner<'a> {
         if !response.status().is_success() {
             return Ok(profile);
         }
-        let token = response_json(response).await.map_err(|_| {
+        let token = response_json(response).await.map_err(|()| {
             error(
                 "provider_auth_refresh_invalid",
                 "OpenAI OAuth refresh response was invalid.",
@@ -234,7 +243,7 @@ impl<'a> AuthOwner<'a> {
                 "OpenAI OAuth token exchange failed.",
             ));
         }
-        let token = response_json(response).await.map_err(|_| {
+        let token = response_json(response).await.map_err(|()| {
             error(
                 "provider_auth_exchange_invalid",
                 "OpenAI OAuth token exchange response was invalid.",
@@ -357,9 +366,9 @@ pub(crate) fn pkce_challenge(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn required<'a>(value: &'a Option<String>, code: &'static str) -> Result<&'a str, AuthError> {
+fn required<'a>(value: Option<&'a String>, code: &'static str) -> Result<&'a str, AuthError> {
     value
-        .as_deref()
+        .map(String::as_str)
         .and_then(|value| trimmed(Some(value)))
         .ok_or_else(|| error(code, "Required host identity facts are unavailable."))
 }

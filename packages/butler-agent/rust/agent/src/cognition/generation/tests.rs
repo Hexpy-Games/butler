@@ -41,7 +41,7 @@ impl Fixture {
         .unwrap();
     }
 
-    fn manifest(&self, generation: &str, value: serde_json::Value) {
+    fn manifest(&self, generation: &str, value: &serde_json::Value) {
         let root = self.0.join("memory/generations").join(generation);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("manifest.json"), value.to_string()).unwrap();
@@ -89,10 +89,10 @@ fn existing_javascript_embedding_wire_shape_round_trips_unchanged() {
 fn active_and_rebuild_resolution_keep_source_roots_and_refresh_authority() {
     let fixture = Fixture::new();
     fixture.descriptor(ACTIVE, "running");
-    fixture.manifest(ACTIVE, manifest(ACTIVE, "active", None));
+    fixture.manifest(ACTIVE, &manifest(ACTIVE, "active", None));
     fixture.manifest(
         REBUILD,
-        manifest(
+        &manifest(
             REBUILD,
             "building",
             Some((
@@ -148,8 +148,8 @@ fn active_and_rebuild_resolution_keep_source_roots_and_refresh_authority() {
 fn active_read_resolves_only_the_current_descriptor_and_manifest() {
     let fixture = Fixture::new();
     fixture.descriptor(ACTIVE, "running");
-    fixture.manifest(ACTIVE, manifest(ACTIVE, "active", None));
-    fixture.manifest(REBUILD, manifest(REBUILD, "building", None));
+    fixture.manifest(ACTIVE, &manifest(ACTIVE, "active", None));
+    fixture.manifest(REBUILD, &manifest(REBUILD, "building", None));
     let environment = fixture.environment();
     let current = resolve_active_generation(Path::new("canonical"), &environment).unwrap();
     assert_eq!(current.generation_id, ACTIVE);

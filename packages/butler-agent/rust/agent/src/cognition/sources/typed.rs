@@ -149,7 +149,7 @@ pub(in crate::cognition) fn hydrate_typed_source(
         if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > usize::MAX as f64 {
             return Err(changed());
         }
-        Ok(value as usize)
+        Ok(crate::json::saturating_usize(value))
     };
     let start = offset(row.byte_start)?;
     let end = offset(row.byte_end)?;

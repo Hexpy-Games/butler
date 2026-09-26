@@ -99,7 +99,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     data["readerBackend"].as_str().unwrap_or("unknown"),
                     data["metrics"]["requestCount"].as_u64().unwrap_or(0),
                 );
-                report_success(&options, command.source_name(), data, &human);
+                report_success(&options, command.source_name(), &data, &human);
                 ExitCode::SUCCESS
             }
             Err(error) => report_error(
@@ -112,7 +112,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         },
         Command::SearchTest => run_search_test(options, command, data_root, metrics).await,
         Command::WebRead => {
-            let requested_url = &options.positionals[2];
+            // Parsing admitted `web read <url>` with exactly three positionals.
+            let requested_url = options.positionals.get(2).map_or("", String::as_str);
             match access
                 .read_cli(requested_url, &CancellationToken::new())
                 .await
@@ -135,7 +136,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                             .join(", "),
                         data["preview"].as_str().unwrap_or(""),
                     );
-                    report_success(&options, command.source_name(), data, &human);
+                    report_success(&options, command.source_name(), &data, &human);
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -184,22 +185,19 @@ async fn run_search_test(
             );
         }
     };
-    let models = match NativeProcessModels::new(
+    let Ok(models) = NativeProcessModels::new(
         data_root.clone(),
         environment.model,
         Arc::new(crate::configuration::ConfigurationWrites::new()),
         collation,
-    ) {
-        Ok(models) => models,
-        Err(_) => {
-            return report_error(
-                command.source_name(),
-                options.json,
-                "web_search_provider_auth_missing",
-                "Web search provider authentication is unavailable.",
-                5,
-            );
-        }
+    ) else {
+        return report_error(
+            command.source_name(),
+            options.json,
+            "web_search_provider_auth_missing",
+            "Web search provider authentication is unavailable.",
+            5,
+        );
     };
     let access =
         match crate::web_access::WebAccess::new_search(data_root, models.configuration, metrics) {
@@ -233,7 +231,7 @@ async fn run_search_test(
             report_success(
                 &options,
                 command.source_name(),
-                data,
+                &data,
                 if human.is_empty() {
                     "Search completed with no results."
                 } else {
@@ -338,7 +336,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
         match value.as_ref() {
             "--data" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             value if value.starts_with('-') => return values,
             _ => {
@@ -359,7 +357,7 @@ fn command_name(args: &[OsString]) -> &'static str {
     }
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) {
     if options.json {
         println!(
             "{}",

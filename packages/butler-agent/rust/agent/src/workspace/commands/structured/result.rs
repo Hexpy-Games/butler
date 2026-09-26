@@ -6,18 +6,20 @@ pub(super) fn pipeline_exit(statuses: &[Option<std::process::ExitStatus>]) -> Op
     statuses
         .iter()
         .rev()
-        .filter_map(|status| status.as_ref().and_then(|status| status.code()))
+        .filter_map(|status| status.as_ref().and_then(std::process::ExitStatus::code))
         .find(|code| *code != 0)
         .or_else(|| {
             statuses
                 .last()
-                .and_then(|status| status.as_ref().and_then(|status| status.code()))
+                .and_then(|status| status.as_ref().and_then(std::process::ExitStatus::code))
         })
 }
 
 pub(super) fn bounded_timeout(value: Option<f64>) -> Duration {
     let value = value.filter(|value| value.is_finite()).unwrap_or(30_000.0);
-    Duration::from_millis(value.trunc().clamp(1.0, 3_600_000.0) as u64)
+    Duration::from_millis(crate::json::saturating_u64(
+        value.trunc().clamp(1.0, 3_600_000.0),
+    ))
 }
 
 pub(super) fn result(
@@ -35,11 +37,14 @@ pub(super) fn result(
         exit_code,
         timed_out,
         cancelled,
-        duration_ms: SystemTime::now()
-            .duration_since(started)
-            .unwrap_or_default()
-            .as_millis()
-            .min(u128::from(u64::MAX)) as u64,
+        duration_ms: u64::try_from(
+            SystemTime::now()
+                .duration_since(started)
+                .unwrap_or_default()
+                .as_millis()
+                .min(u128::from(u64::MAX)),
+        )
+        .unwrap_or(u64::MAX),
         error,
     }
 }

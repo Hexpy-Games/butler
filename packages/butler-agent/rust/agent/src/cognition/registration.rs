@@ -6,9 +6,10 @@ mod typed;
 mod typed_lifecycle;
 mod types;
 
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -116,7 +117,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -127,6 +128,9 @@ impl CognitionRegistrationService {
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
@@ -143,7 +147,7 @@ impl CognitionRegistrationService {
 
     pub(crate) async fn close(&self) {
         {
-            let mut lifecycle = self.lifecycle.lock().unwrap();
+            let mut lifecycle = self.lifecycle.lock();
             if !lifecycle.closing {
                 lifecycle.closing = true;
                 self.shutdown.cancel();
@@ -399,14 +403,14 @@ async fn acquire(
     let lease = if let Some(cancellation) = &input.cancellation {
         tokio::select! {
             biased;
-            _ = shutdown.cancelled() => return Err(write_aborted()),
-            _ = cancellation.cancelled() => return Err(write_aborted()),
+            () = shutdown.cancelled() => return Err(write_aborted()),
+            () = cancellation.cancelled() => return Err(write_aborted()),
             result = acquire => result.map_err(coordination_error)?,
         }
     } else {
         tokio::select! {
             biased;
-            _ = shutdown.cancelled() => return Err(write_aborted()),
+            () = shutdown.cancelled() => return Err(write_aborted()),
             result = acquire => result.map_err(coordination_error)?,
         }
     };
@@ -457,6 +461,10 @@ fn write_aborted() -> CognitionError {
 fn closed() -> CognitionError {
     CognitionError::new("cognition_closed", "cognition_closed")
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_registration_operation_failed", error.to_string())
 }

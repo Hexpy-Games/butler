@@ -144,7 +144,7 @@ pub(super) fn first_executable(command: &str) -> String {
         });
         if !assignment {
             break word;
-        };
+        }
     };
     if candidate.is_empty()
         || candidate.starts_with(['$', '-'])

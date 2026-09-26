@@ -28,14 +28,13 @@ pub(super) async fn get(
     let Some(ledger_id) = project.ledger_project_id.clone() else {
         return Ok(unavailable("unbound"));
     };
-    let snapshot = match application
+    let Ok(snapshot) = application
         .dependencies
         .project_dashboard_ledger
         .snapshot(project.id.clone(), ledger_id)
         .await
-    {
-        Ok(snapshot) => snapshot,
-        Err(_) => return Ok(unavailable("source_unavailable")),
+    else {
+        return Ok(unavailable("source_unavailable"));
     };
     let pin_rows = pins(&project).map_err(app_error)?;
     let mut pinned = Vec::new();

@@ -47,13 +47,8 @@ pub(super) async fn inspect_project_workspace(
         abort.clone(),
     )
     .await?;
-    if let Some(invalid) = command_failure(&version, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: match invalid {
-                SessionWorkspaceValidation::Invalid { code } => code,
-                SessionWorkspaceValidation::Valid { .. } => unreachable!(),
-            },
-        });
+    if let Some(code) = command_failure_code(&version, "git_workspace_unavailable") {
+        return Ok(ProjectWorkspaceInspection::Unavailable { code });
     }
     let probe = git(
         commands,
@@ -69,13 +64,8 @@ pub(super) async fn inspect_project_workspace(
     {
         return Ok(ProjectWorkspaceInspection::Folder);
     }
-    if let Some(invalid) = command_failure(&probe, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable {
-            code: match invalid {
-                SessionWorkspaceValidation::Invalid { code } => code,
-                SessionWorkspaceValidation::Valid { .. } => unreachable!(),
-            },
-        });
+    if let Some(code) = command_failure_code(&probe, "git_workspace_unavailable") {
+        return Ok(ProjectWorkspaceInspection::Unavailable { code });
     }
     let branch = git(
         commands,
@@ -169,7 +159,7 @@ pub(super) async fn validate_linked_worktree(
     let target_for_list = target.to_owned();
     let branch_for_list = branch.to_owned();
     let listed = files
-        .run(move || listed_worktree_matches(stdout, target_for_list, branch_for_list))
+        .run(move || listed_worktree_matches(&stdout, &target_for_list, &branch_for_list))
         .await
         .map_err(file_owner_error)?
         .map_err(io_error)?;
@@ -227,16 +217,23 @@ fn command_failure(
     result: &StructuredCommandOutput,
     other_code: &'static str,
 ) -> Option<SessionWorkspaceValidation> {
+    command_failure_code(result, other_code).map(invalid)
+}
+
+fn command_failure_code(
+    result: &StructuredCommandOutput,
+    other_code: &'static str,
+) -> Option<&'static str> {
     if result.cancelled || result.timed_out {
-        Some(invalid("cancelled"))
+        Some("cancelled")
     } else if result
         .error
         .as_ref()
         .is_some_and(|error| error.code == "ENOENT")
     {
-        Some(invalid("git_not_installed"))
+        Some("git_not_installed")
     } else if result.exit_code != Some(0) {
-        Some(invalid(other_code))
+        Some(other_code)
     } else {
         None
     }
@@ -270,10 +267,18 @@ async fn git(
         .map_err(|_| WorkspaceError::new("workspace_recovery_command_lost", "Git result lost"))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
     WorkspaceError::new(error.code, "Workspace file owner closed")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
     WorkspaceError::new("workspace_recovery_io", error.to_string())
 }

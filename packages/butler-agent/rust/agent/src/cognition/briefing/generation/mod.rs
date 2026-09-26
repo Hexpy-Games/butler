@@ -9,7 +9,7 @@ mod write;
 use std::{path::PathBuf, sync::Arc};
 
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -78,30 +78,27 @@ impl BriefingGenerationService {
     ) -> Result<Map<String, Value>, BriefingGenerationError> {
         ensure_active(cancellation)?;
         let input = self.source.snapshot().await?;
-        let BriefingSettings::Configured {
-            locale: _,
-            model,
-            reasoning_effort,
-        } = &input.settings
-        else {
-            let BriefingSettings::Unavailable { reason, .. } = input.settings else {
-                unreachable!()
-            };
-            return Ok(metrics(BriefingMetrics {
-                outcome: "configuration_unavailable",
-                reason: Some(reason),
-                generated: 0,
-                failed: 0,
-                skipped: 0,
-                general: None,
-                projects: vec![],
-                model: None,
-                reasoning: None,
-                usage: Usage::default(),
-            }));
+        let (model, reasoning) = match &input.settings {
+            BriefingSettings::Configured {
+                model,
+                reasoning_effort,
+                ..
+            } => (model.clone(), *reasoning_effort),
+            BriefingSettings::Unavailable { reason, .. } => {
+                return Ok(metrics(&BriefingMetrics {
+                    outcome: "configuration_unavailable",
+                    reason: Some(reason),
+                    generated: 0,
+                    failed: 0,
+                    skipped: 0,
+                    general: None,
+                    projects: vec![],
+                    model: None,
+                    reasoning: None,
+                    usage: Usage::default(),
+                }));
+            }
         };
-        let model = model.clone();
-        let reasoning = *reasoning_effort;
         let local_minute = self.source.local_minute(now.timestamp_millis())?;
         let mut usage = Usage::default();
         let mut generated = 0;
@@ -162,7 +159,7 @@ impl BriefingGenerationService {
                 Err(_) => failed += 1,
             }
         }
-        Ok(metrics(BriefingMetrics {
+        Ok(metrics(&BriefingMetrics {
             outcome: "completed",
             reason: None,
             generated,
@@ -244,7 +241,6 @@ impl BriefingGenerationService {
             },
             response.usage.as_ref(),
         );
-        let reasoning_name = serde_json::to_value(reasoning).expect("reasoning serializes");
         let artifact = artifact::from_model(
             &response.text,
             artifact::BriefingArtifactContext {
@@ -254,7 +250,7 @@ impl BriefingGenerationService {
                 local_minute,
                 run_id,
                 model,
-                reasoning: reasoning_name.as_str().unwrap_or("medium"),
+                reasoning: reasoning.as_str(),
             },
         )?;
         let path = write::artifact_path(
@@ -296,17 +292,14 @@ impl BriefingGenerationService {
     }
 }
 
-fn metrics(input: BriefingMetrics) -> Map<String, Value> {
-    json!({
+fn metrics(input: &BriefingMetrics) -> Map<String, Value> {
+    crate::json::json_object!({
         "outcome":input.outcome, "skip_reason":input.reason, "generated_count":input.generated,
         "failed_count":input.failed, "skipped_project_count":input.skipped,
         "general_artifact_path":input.general, "project_artifact_paths":input.projects,
         "model_ref":input.model, "reasoning_effort":input.reasoning,
         "model_usage":input.usage.value(), "raw_text_included":false,
     })
-    .as_object()
-    .expect("briefing metrics object")
-    .clone()
 }
 
 fn ensure_active(cancellation: &CancellationToken) -> Result<(), BriefingGenerationError> {

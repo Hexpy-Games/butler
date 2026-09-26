@@ -41,10 +41,10 @@ pub(super) fn authorize(
         ("id_token_add_organizations", "true"),
         ("codex_cli_simplified_flow", "true"),
     ] {
-        set(&mut pairs, key, value)
+        set(&mut pairs, key, value);
     }
     if !originator.is_empty() {
-        set(&mut pairs, "originator", originator)
+        set(&mut pairs, "originator", originator);
     }
     url.query_pairs_mut().clear().extend_pairs(pairs);
     Ok(url)

@@ -1,6 +1,7 @@
 //! The effective App endpoint published by the live App owner.
 
-use std::{net::SocketAddr, path::PathBuf, sync::RwLock};
+use parking_lot::RwLock;
+use std::{net::SocketAddr, path::PathBuf};
 
 use crate::{gateway::LocalAuthConfig, host::service_configuration::NativeAppServiceConfiguration};
 
@@ -24,7 +25,7 @@ impl NativeActiveAppEndpoint {
     }
 
     pub(crate) fn snapshot(&self) -> Option<NativeActiveAppEndpointSnapshot> {
-        self.current.read().ok()?.clone()
+        self.current.read().clone()
     }
 
     pub(crate) fn publish(
@@ -39,14 +40,10 @@ impl NativeActiveAppEndpoint {
             configured_port: configuration.port,
             database_path: configuration.db_path.clone(),
         };
-        if let Ok(mut current) = self.current.write() {
-            *current = Some(snapshot);
-        }
+        *self.current.write() = Some(snapshot);
     }
 
     pub(crate) fn clear(&self) {
-        if let Ok(mut current) = self.current.write() {
-            *current = None;
-        }
+        *self.current.write() = None;
     }
 }

@@ -128,13 +128,10 @@ pub(super) fn move_nodes(
                 to.len()
             }
         }
-        AppSpacePosition::Before | AppSpacePosition::After => {
-            let target_key = target_key.expect("before/after requires target");
-            to.iter()
-                .position(|node| node.key == target_key)
-                .map(|index| index + usize::from(matches!(position, AppSpacePosition::After)))
-                .unwrap_or(to.len())
-        }
+        AppSpacePosition::Before | AppSpacePosition::After => target_key
+            .and_then(|target_key| to.iter().position(|node| node.key == target_key))
+            .map(|index| index + usize::from(matches!(position, AppSpacePosition::After)))
+            .unwrap_or(to.len()),
     };
     let mut moved = source;
     moved.parent_key = parent_key;
@@ -145,7 +142,7 @@ pub(super) fn move_nodes(
             .into_iter()
             .enumerate()
             .map(|(index, mut node)| {
-                node.position = index as i64;
+                node.position = i64::try_from(index).unwrap_or(i64::MAX);
                 node
             })
             .collect::<Vec<_>>()

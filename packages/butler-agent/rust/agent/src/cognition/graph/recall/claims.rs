@@ -53,7 +53,7 @@ pub(super) fn matched_summary(
     let source = scope::source(input, "s", "c");
     let matched_filter = if matched_is_claim { "AND e.id=?" } else { "" };
     let sql = format!(
-        r#"
+        r"
         SELECT (SELECT statement FROM memory_claims WHERE node_id=e.id)
         FROM memory_evidence m
         JOIN memory_nodes e ON e.id=m.node_id
@@ -68,7 +68,7 @@ pub(super) fn matched_summary(
           AND e.type IN ('preference','goal','constraint','decision','memory_atom')
           {matched_filter} AND {} AND {}
         ORDER BY CASE WHEN e.id=? THEN 0 ELSE 1 END,m.source_id,e.id LIMIT 1
-    "#,
+    ",
         scope::placeholders(matched_sources.len()),
         scope::placeholders(surviving.len()),
         validity.sql,

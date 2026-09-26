@@ -13,6 +13,10 @@ use crate::{
 
 const SCHEMA: &str = "butler.cognition.namespace-migration.v1";
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized result schema field for field"
+)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CognitionNamespaceMigrationPlan {
     pub schema: &'static str,
@@ -112,8 +116,7 @@ impl CognitionNamespaceMigrationService {
                 .release(result.is_ok())
                 .map_err(|error| CognitionError::new(error.code, error.message));
             match (result, released) {
-                (Err(error), _) => Err(error),
-                (Ok(_), Err(error)) => Err(error),
+                (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(value), Ok(())) => Ok(value),
             }
         })

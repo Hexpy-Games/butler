@@ -1,10 +1,7 @@
 //! Caller-drop-safe accepted recall work and source-owning close/drain.
 
-use std::{
-    cmp::Ordering,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{cmp::Ordering, path::PathBuf, sync::Arc};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -57,7 +54,7 @@ impl NativeMemoryRecall {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let closing = self.lifecycle.lock().map_err(|_| closed())?;
+            let closing = self.lifecycle.lock();
             if *closing {
                 return Err(closed());
             }
@@ -76,8 +73,8 @@ impl NativeMemoryRecall {
                 binding,
                 current_user_message,
                 operation_id,
-                args,
-                now,
+                &args,
+                &now,
             )
         })
         .await
@@ -95,10 +92,9 @@ impl NativeMemoryRecall {
                 "Recall result encoding failed",
             )
         })?;
-        value
-            .as_object_mut()
-            .expect("recall response object")
-            .insert("ok".into(), true.into());
+        if let Some(object) = value.as_object_mut() {
+            object.insert("ok".into(), true.into());
+        }
         Ok(value)
     }
 
@@ -146,7 +142,7 @@ impl NativeMemoryRecall {
         let input = validate::normalize(request, |value| (self.parse_date)(value))?;
         let deadline_at = (self.clock)() + 5_000;
         let token = {
-            let closing = self.lifecycle.lock().map_err(|_| closed())?;
+            let closing = self.lifecycle.lock();
             if *closing {
                 return Err(closed());
             }
@@ -163,6 +159,9 @@ impl NativeMemoryRecall {
         let vector_port = self.vector_port.clone();
         let metrics = self.metrics.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let result = operation(
@@ -192,7 +191,7 @@ impl NativeMemoryRecall {
 
     pub(crate) async fn close(&self) {
         {
-            let mut closing = self.lifecycle.lock().expect("recall lifecycle poisoned");
+            let mut closing = self.lifecycle.lock();
             if !*closing {
                 *closing = true;
                 self.shutdown.cancel();
@@ -221,7 +220,7 @@ async fn operation(
 ) -> CognitionResult<RecallResponse> {
     let _permit = tokio::select! {
         result=admission.acquire_owned()=>result.map_err(|_|closed())?,
-        _=shutdown.cancelled()=>return Err(closed()),
+        ()=shutdown.cancelled()=>return Err(closed()),
     };
     if shutdown.is_cancelled() {
         return Err(closed());
@@ -259,9 +258,10 @@ async fn operation(
             vector.code = Some("embedding_not_configured".into());
         } else if let Some(port) = vector_port {
             let vector_deadline = deadline_at.min(clock() + 750);
-            let remaining = vector_deadline.saturating_sub(clock()) as u64;
+            let remaining =
+                u64::try_from(vector_deadline.saturating_sub(clock())).unwrap_or_default();
             let result = tokio::select! {
-                _=shutdown.cancelled()=>return Err(closed()),
+                ()=shutdown.cancelled()=>return Err(closed()),
                 result=tokio::time::timeout(std::time::Duration::from_millis(remaining),
                     port.search(&generation, &input, vector_deadline))=>result,
             };

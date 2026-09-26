@@ -14,8 +14,7 @@ pub(super) fn recognizes(args: &[OsString]) -> bool {
     let rest = values.get(2..).unwrap_or_default();
     let subcommand = rest.first().map(String::as_str).unwrap_or("list");
     match subcommand {
-        "list" | "add" | "show" => true,
-        "resolve" => true,
+        "list" | "add" | "show" | "resolve" => true,
         "clear" => rest.iter().any(|value| value == "--applied"),
         _ => false,
     }

@@ -22,7 +22,7 @@ pub(super) fn update_string(raw: &mut Map<String, Value>, key: &str, value: Opti
 }
 
 pub(super) fn copy_string(raw: &mut Map<String, Value>, key: &str, value: Option<&Value>) {
-    update_string(raw, key, value)
+    update_string(raw, key, value);
 }
 
 pub(super) fn update_number(

@@ -75,7 +75,10 @@ pub(crate) async fn classify_historical_origins(
             for row in rows.iter().filter(|row| row.role == role) {
                 check(cancellation, started)?;
                 if role == ConversationRole::User {
-                    let facts = &facts[user];
+                    // read_page returns one fact set per user row, in order.
+                    let Some(facts) = facts.get(user) else {
+                        return Err(unavailable());
+                    };
                     user += 1;
                     if let Some(outbox) = facts
                         .outbox

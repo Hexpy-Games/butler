@@ -31,7 +31,7 @@ pub(super) fn read_record(
     let chunk = read_at(
         &checkpoint.path,
         read_start,
-        BYTE_WINDOW.min(size.saturating_sub(read_start) as usize),
+        BYTE_WINDOW.min(usize::try_from(size.saturating_sub(read_start)).unwrap_or(usize::MAX)),
     )?;
     let mut combined = std::mem::take(&mut checkpoint.trailing);
     combined.extend_from_slice(&chunk);
@@ -84,7 +84,7 @@ fn extend_spool(
     let chunk = read_at(
         &checkpoint.path,
         start,
-        BYTE_WINDOW.min(size.saturating_sub(start) as usize),
+        BYTE_WINDOW.min(usize::try_from(size.saturating_sub(start)).unwrap_or(usize::MAX)),
     )?;
     let newline = chunk.iter().position(|byte| *byte == b'\n');
     let record = newline.map_or(chunk.as_slice(), |at| &chunk[..at]);
@@ -152,7 +152,11 @@ fn spool_matches(checkpoint: &Checkpoint) -> bool {
 
 pub(super) fn anchor(path: impl AsRef<Path>, offset: u64) -> Result<Vec<u8>, AppStorageError> {
     let start = offset.saturating_sub(ANCHOR_BYTES);
-    read_at(path, start, (offset - start) as usize)
+    read_at(
+        path,
+        start,
+        usize::try_from(offset - start).unwrap_or(usize::MAX),
+    )
 }
 
 fn read_at(path: impl AsRef<Path>, start: u64, length: usize) -> Result<Vec<u8>, AppStorageError> {
@@ -182,9 +186,17 @@ fn parse_record(bytes: &[u8]) -> Result<Option<TranscriptEvent>, AppStorageError
     }
     serde_json::from_str(text).map(Some).map_err(json_error)
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
     AppStorageError::new("invalid_json", error.to_string())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> AppStorageError {
     AppStorageError::new("app_transcript_io_failed", error.to_string())
 }

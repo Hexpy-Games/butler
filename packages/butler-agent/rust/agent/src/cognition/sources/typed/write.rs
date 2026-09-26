@@ -52,7 +52,7 @@ pub(crate) fn update_explicit_memory(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     publisher: &CompletionPublisher,
-    input: ExplicitMemoryUpdateInput,
+    input: &ExplicitMemoryUpdateInput,
 ) -> CognitionResult<ExplicitMemoryUpdateResult> {
     if crate::public_text::trim_js_whitespace(&input.text).is_empty() {
         return Err(error("explicit_memory_text_required"));
@@ -225,7 +225,9 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
-    let parent = path.parent().expect("fixed memory owner path");
+    let parent = path
+        .parent()
+        .ok_or_else(|| error("memory_data_path_unsafe"))?;
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -260,7 +262,9 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
 }
 
 fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
-    let parent = path.parent().expect("fixed memory owner path");
+    let parent = path
+        .parent()
+        .ok_or_else(|| error("memory_data_path_unsafe"))?;
     let existed = path.exists();
     let mut options = OpenOptions::new();
     options.create(true).append(true);
@@ -288,6 +292,10 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_source_unavailable", error.to_string())
 }

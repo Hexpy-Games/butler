@@ -17,7 +17,9 @@ pub(super) fn index_source(
         )
         .optional()
         .map_err(db_error)?;
-    if source.is_none_or(|(start, end)| end - start != text.len() as i64) {
+    if source
+        .is_none_or(|(start, end)| end - start != i64::try_from(text.len()).unwrap_or(i64::MAX))
+    {
         return Err(CognitionError::new(
             "memory_source_index_span_mismatch",
             "memory_source_index_span_mismatch",

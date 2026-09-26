@@ -336,10 +336,10 @@ fn effective_model(
     environment: &crate::models::ModelConfigurationEnvironment,
 ) -> String {
     let requested = crate::public_text::trim_js_whitespace(requested);
-    if !requested.is_empty() {
-        requested.into()
-    } else {
+    if requested.is_empty() {
         dynamic::configured_model(environment, &read.config)
+    } else {
+        requested.into()
     }
 }
 
@@ -354,6 +354,10 @@ fn registered_config<'a>(
             && (value.model_ref == parsed.canonical_ref || value.model_id == parsed.model_id)
     })
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn auth_error(error: AuthError) -> ProviderRequestError {
     provider_error(error.code, "authentication", error.message)
 }

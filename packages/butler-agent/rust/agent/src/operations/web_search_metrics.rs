@@ -1,10 +1,11 @@
 //! DATA-scoped web-search counters and usage events.
 
+use parking_lot::Mutex;
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -26,7 +27,7 @@ impl WebSearchMetrics {
 
     /// Metrics failures never change the search result or leak provider errors.
     pub(crate) fn record(&self, provider: &str, query: &str, error: Option<&str>) {
-        let Ok(_guard) = self.gate.lock() else { return };
+        let _guard = self.gate.lock();
         let _ = self.record_locked(provider, query, error);
     }
 
@@ -38,9 +39,7 @@ impl WebSearchMetrics {
             "lastQuery": null,
             "lastError": null,
         });
-        let Ok(_guard) = self.gate.lock() else {
-            return fallback;
-        };
+        let _guard = self.gate.lock();
         let Ok(canonical_root) = ensure_data_root(&self.data_root) else {
             return fallback;
         };
@@ -53,7 +52,7 @@ impl WebSearchMetrics {
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => return fallback,
             Err(_) => return fallback,
-        };
+        }
         if !runtime
             .canonicalize()
             .is_ok_and(|path| path.starts_with(&canonical_root))
@@ -67,7 +66,7 @@ impl WebSearchMetrics {
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => return fallback,
             Err(_) => return fallback,
-        };
+        }
         let Ok(raw) = read_json_if_present(&summary) else {
             return fallback;
         };

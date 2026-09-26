@@ -11,6 +11,10 @@ use crate::locale::LocaleCollation;
 
 use super::{CliFailure, CommandContext, display_path, index, io_failure, option_string};
 
+#[expect(
+    clippy::expect_used,
+    reason = "fixed source patterns; tests::private_patterns_compile forces this set"
+)]
 static PRIVATE_PATTERNS: LazyLock<RegexSet> = LazyLock::new(|| {
     RegexSetBuilder::new([
         r"OPENAI_API_KEY\s*=",
@@ -150,4 +154,12 @@ fn scan_directory(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn private_patterns_compile() {
+        assert!(super::PRIVATE_PATTERNS.is_match("Authorization: Bearer x"));
+    }
 }

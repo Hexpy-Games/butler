@@ -126,7 +126,7 @@ impl ProjectWorkRepository {
                         ReviewSubject::Plan => view.latest_plan_review = Some(review),
                         ReviewSubject::Result => view.latest_result_review = Some(review),
                         ReviewSubject::Completion => {
-                            view.latest_completion_validation = Some(review)
+                            view.latest_completion_validation = Some(review);
                         }
                     }
                     view.updated_at = at;

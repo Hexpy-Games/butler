@@ -101,13 +101,9 @@ impl LegacyIndexService {
                 outcome.attempted += 1;
                 let digest =
                     Sha256::digest(format!("{}:{index}:{block}", file.display()).as_bytes());
-                let session_id = format!(
-                    "hot_maintain_{}",
-                    digest[..8]
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect::<String>()
-                );
+                let mut hex = format!("{digest:x}");
+                hex.truncate(16);
+                let session_id = format!("hot_maintain_{hex}");
                 match self.index_block(&block, &session_id, cancellation).await {
                     Ok(()) => outcome.indexed += 1,
                     Err(failure) if failure.code == "memory_write_aborted" => return Err(failure),
@@ -241,8 +237,7 @@ impl LegacyIndexService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, release) {
-                (Err(failure), _) => Err(failure),
-                (Ok(_), Err(failure)) => Err(failure),
+                (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),
             }
         })

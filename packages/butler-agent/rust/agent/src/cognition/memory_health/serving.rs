@@ -24,7 +24,7 @@ pub(super) fn read(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
     now: i64,
-    profile: Value,
+    profile: &Value,
 ) -> Value {
     let Ok(handle) = resolve_active_generation(data_root, paths) else {
         return unavailable(data_root, paths, now, "generation_unavailable", profile);
@@ -85,7 +85,7 @@ pub(super) fn read(
                 paths,
                 now,
                 "generation_changed",
-                profile.clone(),
+                &profile.clone(),
             ));
         }
         Ok(
@@ -279,7 +279,7 @@ fn unavailable(
     paths: &CognitionPathEnvironment,
     now: i64,
     reason: &str,
-    profile: Value,
+    profile: &Value,
 ) -> Value {
     let empty = json!({"complete":0,"pending":0,"failed":0,"not_configured":0});
     let cache = resolve_active_generation(data_root, paths).map_or_else(

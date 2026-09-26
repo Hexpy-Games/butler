@@ -78,7 +78,7 @@ pub(super) fn observe(
     root_entries(root, root, &mut entries)?;
     entries.sort_by(|left, right| collation.compare(&left.0, &right.0));
     let mut storage = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     for (relative, path, directory) in &entries {
         storage.update(if *directory {
             b"directory".as_slice()

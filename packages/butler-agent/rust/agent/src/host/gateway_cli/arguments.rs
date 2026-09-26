@@ -1,5 +1,9 @@
 use std::ffi::OsString;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default, Debug)]
 pub(super) struct Options {
     pub(super) data: Option<String>,
@@ -79,7 +83,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
                                 })?,
                         );
                     }
-                    _ => unreachable!(),
+                    _ => return Err(format!("unknown option: {option}")),
                 }
                 index += 2;
             }

@@ -169,14 +169,17 @@ fn condition(
             return Err(error("memory_extract_invalid_condition"));
         }
         for child in children {
-            condition(Some(child), entities, depth + 1, atoms)?
+            condition(Some(child), entities, depth + 1, atoms)?;
         }
     }
     Ok(())
 }
 
 pub(super) fn map_condition(value: &Value) -> Value {
-    let object = value.as_object().expect("validated condition object");
+    // Conditions were validated as objects; anything else maps to null.
+    let Some(object) = value.as_object() else {
+        return Value::Null;
+    };
     if let Some(subject) = object.get("subject") {
         return serde_json::json!({"subject":subject.as_u64().map(|index|format!("n{index}")),
             "state":object.get("state")});
@@ -189,12 +192,11 @@ pub(super) fn map_condition(value: &Value) -> Value {
     } else {
         "any"
     };
-    let children = object[key]
-        .as_array()
-        .expect("validated children")
-        .iter()
-        .map(map_condition)
-        .collect();
+    let children = object
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|children| children.iter().map(map_condition).collect())
+        .unwrap_or_default();
     Value::Object(Map::from_iter([(key.into(), Value::Array(children))]))
 }
 
@@ -232,10 +234,10 @@ fn entity(value: Option<&Value>, entities: usize) -> CognitionResult<usize> {
     let n = value
         .and_then(Value::as_u64)
         .ok_or_else(|| error("memory_extract_invalid_ref"))?;
-    if n as usize >= entities {
+    if usize::try_from(n).unwrap_or(usize::MAX) >= entities {
         return Err(error("memory_extract_invalid_ref"));
     }
-    Ok(n as usize)
+    Ok(usize::try_from(n).unwrap_or(usize::MAX))
 }
 fn nullable_entity(value: Option<&Value>, entities: usize) -> CognitionResult<()> {
     if value.is_some_and(Value::is_null) {
@@ -256,7 +258,7 @@ fn evidence(value: Option<&Value>, passages: &[Passage]) -> CognitionResult<()> 
         let Some(id) = item.as_u64() else {
             return Err(error("memory_extract_invalid_evidence"));
         };
-        if id as usize >= passages.len() || !seen.insert(id) {
+        if usize::try_from(id).unwrap_or(usize::MAX) >= passages.len() || !seen.insert(id) {
             return Err(error("memory_extract_invalid_evidence"));
         }
     }

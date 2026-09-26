@@ -6,6 +6,7 @@ use crate::workspace::{SessionRole, StoredSessionBinding};
 
 use super::files::{safe_config_string, safe_config_text};
 
+#[derive(Clone, Copy)]
 pub(super) struct RuntimeStateInput<'a> {
     pub binding: &'a StoredSessionBinding,
     pub request: &'a TurnRequest,

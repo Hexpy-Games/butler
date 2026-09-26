@@ -7,6 +7,7 @@ use rusqlite::{Connection, params};
 use super::{GraphRepository, db_error};
 use crate::cognition::CognitionResult;
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct InternalSupersessionInput<'a> {
     pub episode_id: &'a str,
     pub internal_control_message_ids: &'a [&'a str],

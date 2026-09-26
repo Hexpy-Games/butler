@@ -42,7 +42,7 @@ impl NativeAcceptedPlanProducer {
             Err(error) => return Err(error),
         };
         Ok(accepted_project_plan(
-            ProjectLedgerPlanInput {
+            &ProjectLedgerPlanInput {
                 id: show.id,
                 title: show.title,
                 status: show.status,

@@ -168,7 +168,9 @@ fn label(name: &str) -> String {
     name.split('-')
         .filter(|part| !part.is_empty())
         .map(|part| {
-            let first = part.chars().next().expect("nonempty split component");
+            let Some(first) = part.chars().next() else {
+                return String::new();
+            };
             // Source uppercases slice(0,1), a single UTF-16 unit. A leading
             // supplementary character is therefore unchanged, even if cased.
             if first.len_utf16() == 2 {

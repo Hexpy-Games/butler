@@ -30,15 +30,12 @@ impl LedgerCommand {
         match self {
             Self::Status => "project-ledger status",
             Self::Query => "project-ledger query",
-            Self::Show => "project-ledger record",
+            Self::Show | Self::RecordCreate | Self::RecordUpdate => "project-ledger record",
             Self::Check => "project-ledger check",
             Self::Index => "project-ledger index",
             Self::Render => "project-ledger render",
-            Self::RecordCreate | Self::RecordUpdate => "project-ledger record",
-            Self::WorkCreate | Self::WorkUpdate => "project-ledger work",
-            Self::WorkComplete => "project-ledger work",
-            Self::TaskCreate | Self::TaskUpdate => "project-ledger task",
-            Self::TaskComplete => "project-ledger task",
+            Self::WorkCreate | Self::WorkUpdate | Self::WorkComplete => "project-ledger work",
+            Self::TaskCreate | Self::TaskUpdate | Self::TaskComplete => "project-ledger task",
             Self::AttemptStart | Self::AttemptSucceed | Self::AttemptFail => {
                 "project-ledger attempt"
             }

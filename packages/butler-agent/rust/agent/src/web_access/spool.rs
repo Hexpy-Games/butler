@@ -20,11 +20,11 @@ impl FetchedBody {
 
 pub(super) struct TemporarySpool {
     pub(super) path: PathBuf,
-    pub(super) open_file: Option<std::fs::File>,
 }
 
 impl TemporarySpool {
-    pub(super) fn create(data_root: &Path) -> io::Result<Self> {
+    /// Creates a private spool file and returns it opened for writing.
+    pub(super) fn create(data_root: &Path) -> io::Result<(Self, std::fs::File)> {
         fs::create_dir_all(data_root)?;
         let root = data_root.canonicalize()?;
         let tmp = root.join("tmp");
@@ -40,15 +40,11 @@ impl TemporarySpool {
             options.mode(0o600);
         }
         let open_file = options.open(&path)?;
-        Ok(Self {
-            path,
-            open_file: Some(open_file),
-        })
+        Ok((Self { path }, open_file))
     }
 
     pub(super) fn from_bytes(data_root: &Path, bytes: &[u8]) -> io::Result<Self> {
-        let mut spool = Self::create(data_root)?;
-        let mut file = spool.open_file.take().expect("new spool file");
+        let (spool, mut file) = Self::create(data_root)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         Ok(spool)
@@ -57,7 +53,6 @@ impl TemporarySpool {
 
 impl Drop for TemporarySpool {
     fn drop(&mut self) {
-        drop(self.open_file.take());
         let _ = fs::remove_file(&self.path);
     }
 }

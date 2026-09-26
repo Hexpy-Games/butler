@@ -409,7 +409,7 @@ pub(super) fn request() -> TurnRequest {
                     visual_manifest: None,
                 },
                 AttachmentRef {
-                    id: "".into(),
+                    id: String::new(),
                     kind: AttachmentKind::Binary,
                     mime_type: None,
                     file_name: None,

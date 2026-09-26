@@ -92,7 +92,7 @@ impl NativeModelProvider {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 &config.metadata.provider_id,
                 api,
-                error.to_string(),
+                &error.to_string(),
             )))
         })?;
         let provider_cache_identity =
@@ -105,7 +105,7 @@ impl NativeModelProvider {
         .then_some(request.max_output_tokens)
         .flatten();
         let physical_admission = request_admission::PreparedRequestAdmission::new(
-            request_admission::PrepareAdmissionInput {
+            &request_admission::PrepareAdmissionInput {
                 catalog: &self.catalog,
                 config: self.config.as_ref(),
                 provider: &config.metadata.provider_id,
@@ -359,7 +359,7 @@ impl ModelRoundPort for NativeModelProvider {
                 ModelRoundError::Provider(Box::new(diagnostics::network(
                     "openai",
                     "serialization",
-                    error.to_string(),
+                    &error.to_string(),
                 )))
             })
     }
@@ -377,7 +377,7 @@ impl ModelRoundPort for NativeModelProvider {
             ModelRoundError::Provider(Box::new(diagnostics::network(
                 "openai",
                 "serialization",
-                error.to_string(),
+                &error.to_string(),
             )))
         })
     }

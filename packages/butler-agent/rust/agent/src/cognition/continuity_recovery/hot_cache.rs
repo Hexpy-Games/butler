@@ -195,6 +195,7 @@ pub(super) fn rollback(
     })
 }
 
+#[derive(Clone, Copy)]
 struct SemanticEntry<'a> {
     project_id: &'a str,
     manifest_id: &'a str,

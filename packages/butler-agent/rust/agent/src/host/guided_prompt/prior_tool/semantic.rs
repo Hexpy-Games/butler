@@ -14,7 +14,7 @@ pub(super) fn facts(
     let mut error = None;
     let mut effect_status = None;
     let mut effect_receipt = None;
-    let mut current = result.map(|result| result.as_str());
+    let mut current = result.map(crate::json::JsonDocument::as_str);
     for _ in 0..4 {
         let Some(layer) = current.filter(|raw| raw.trim_start().starts_with('{')) else {
             break;
@@ -158,7 +158,10 @@ fn append(output: &mut String, name: &str, raw: Option<&str>) -> Result<(), Btcc
 
 fn string(value: &str) -> String {
     let mut output = String::new();
-    crate::json::write_string(value, &mut output).expect("writing to String");
+    // Encoding a Rust string to JSON cannot fail; fall back to serde's encoding.
+    if crate::json::write_string(value, &mut output).is_err() {
+        return serde_json::Value::from(value).to_string();
+    }
     output
 }
 

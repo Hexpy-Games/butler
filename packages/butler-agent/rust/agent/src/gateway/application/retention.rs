@@ -1,9 +1,10 @@
 //! Bounded terminal-turn snapshot compaction owner.
 
+use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -63,7 +64,7 @@ enum Command {
 impl RetentionOwner {
     pub(super) fn start(
         storage: AppStorage,
-        subscribers: EventSubscribers,
+        subscribers: &EventSubscribers,
         initial_cursor: u64,
     ) -> (Self, RetentionWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);
@@ -162,7 +163,8 @@ async fn run(
     semantic_tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
     maintenance_tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        let latest = cursor_signal.latest.load(Ordering::Relaxed) as i64;
+        let latest =
+            i64::try_from(cursor_signal.latest.load(Ordering::Relaxed)).unwrap_or(i64::MAX);
         if let Some(turn) = cursor_waits
             .iter()
             .find_map(|(turn, wake)| (*wake <= latest).then_some(turn.clone()))
@@ -172,8 +174,8 @@ async fn run(
         }
         if cursor_waits.len() == PENDING_CAPACITY {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
-                _=cursor_signal.changed.notified()=>{},
+                ()=cancel.cancelled()=>return Ok(()),
+                ()=cursor_signal.changed.notified()=>{},
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
@@ -184,22 +186,22 @@ async fn run(
             && cursor_waits.is_empty()
         {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
+                ()=cancel.cancelled()=>return Ok(()),
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
         }
         if semantic_pending.is_empty() && maintenance_pending.is_empty() && sweep_cursor.is_none() {
             tokio::select! {
-                _=cancel.cancelled()=>return Ok(()),
-                _=cursor_signal.changed.notified()=>{},
+                ()=cancel.cancelled()=>return Ok(()),
+                ()=cursor_signal.changed.notified()=>{},
                 command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             }
             continue;
         }
         tokio::select! {
-            _=cancel.cancelled()=>return Ok(()),
-            _=cursor_signal.changed.notified()=>{},
+            ()=cancel.cancelled()=>return Ok(()),
+            ()=cursor_signal.changed.notified()=>{},
             command=receiver.recv()=>if stop(command,&mut semantic_pending,&mut sweep_cursor){return Ok(())},
             _=semantic_tick.tick(),if !semantic_pending.is_empty()=>{
                 for _ in 0..SEMANTIC_BATCH_SIZE {
@@ -275,11 +277,9 @@ async fn compact_one(
 }
 fn push(queue: &mut VecDeque<String>, turn: String) {
     if queue.len() < PENDING_CAPACITY && !queue.contains(&turn) {
-        queue.push_back(turn)
+        queue.push_back(turn);
     }
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

@@ -34,7 +34,7 @@ impl ConversationMetrics {
                 "orphan_tool_result_rejected": input.reason == "orphan_tool_result_rejected",
             },
         });
-        let dimensions = event["dimensions"].as_object_mut().expect("object literal");
+        let dimensions = crate::json::object_mut(&mut event["dimensions"]);
         for (key, value) in [
             ("event_kind", input.event_kind),
             ("session_role", input.session_role),
@@ -48,11 +48,11 @@ impl ConversationMetrics {
                 }
             }
         }
-        self.record(event);
+        self.record(&event);
     }
 
     pub(crate) fn completion(&self, project_scoped: bool, succeeded: bool) {
-        self.record(json!({
+        self.record(&json!({
             "schema": "butler.operational-metric.v1",
             "ts": now_millis(), "category": "memory", "name": "completion_observation_publish",
             "status": if succeeded { "ok" } else { "error" },
@@ -61,7 +61,7 @@ impl ConversationMetrics {
         }));
     }
 
-    fn record(&self, event: Value) {
+    fn record(&self, event: &Value) {
         if !self.enabled() {
             return;
         }
@@ -93,6 +93,7 @@ pub(crate) fn enabled_for_data_root(data_root: &std::path::Path) -> bool {
     ConversationMetrics::new(Arc::new(MetricFiles::new(data_root.to_path_buf()))).enabled()
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct AdmissionMeasure<'a> {
     pub session_id: &'a str,
     pub session_role: &'a str,

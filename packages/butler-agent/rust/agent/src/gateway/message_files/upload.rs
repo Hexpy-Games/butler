@@ -79,12 +79,12 @@ pub(super) fn write(
 
 pub(super) fn prepare(
     root: &Path,
-    file: AppMessageFileSnapshot,
+    file: &AppMessageFileSnapshot,
 ) -> Result<(), GatewayApplicationError> {
-    if !is_pdf(&file) {
+    if !is_pdf(file) {
         return Ok(());
     }
-    let path = file_path(root, &file)?;
+    let path = file_path(root, file)?;
     let text = {
         let extraction = match fs::read(&path) {
             Ok(bytes) => extract_pdf_text(&bytes),
@@ -99,9 +99,9 @@ pub(super) fn prepare(
 
 pub(super) fn read(
     root: &Path,
-    file: AppMessageFileSnapshot,
+    file: &AppMessageFileSnapshot,
 ) -> Result<Bytes, GatewayApplicationError> {
-    let path = file_path(root, &file)?;
+    let path = file_path(root, file)?;
     fs::read(path).map(Bytes::from).map_err(internal)
 }
 

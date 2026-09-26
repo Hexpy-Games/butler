@@ -43,7 +43,9 @@ pub(super) fn copy_typed_sources(data_root: &Path, snapshot_root: &Path) -> Cogn
         if !present {
             continue;
         }
-        create_destination_parents(data_root, snapshot_root, target.parent().unwrap())?;
+        if let Some(parent) = target.parent() {
+            create_destination_parents(data_root, snapshot_root, parent)?;
+        }
         copy_source_tree(data_root, snapshot_root, &source, &target)?;
     }
 
@@ -282,6 +284,10 @@ fn snapshot_changed() -> CognitionError {
     CognitionError::new("memory_snapshot_changed", "memory_snapshot_changed")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: io::Error) -> CognitionError {
     CognitionError::new("memory_snapshot_copy_failed", error.to_string())
 }

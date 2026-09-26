@@ -26,17 +26,17 @@ pub(super) fn config_get(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("config get requires <path>"),
+            &CliError::invalid("config get requires <path>"),
         );
     };
     let file = match safe_data_file(installation, data_root, &config_path(data_root)) {
         Ok(path) => path,
-        Err(error) => return report_error(command.name(), options.json, error),
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
         Err(message) => {
-            return report_error(command.name(), options.json, CliError::health(message));
+            return report_error(command.name(), options.json, &CliError::health(message));
         }
     };
     let value = config::value_at_path(&current, path);
@@ -57,7 +57,7 @@ pub(super) fn config_get(
             format!("{path}: {human}"),
         )
     };
-    report_success(options, command.name(), data, &human)
+    report_success(options, command.name(), &data, &human)
 }
 
 pub(super) fn config_set(
@@ -72,33 +72,33 @@ pub(super) fn config_set(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("config set requires <path> <value>"),
+            &CliError::invalid("config set requires <path> <value>"),
         );
     };
     if config::is_secret_path(dotted_path) {
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("secret config values must use domain-specific auth commands"),
+            &CliError::invalid("secret config values must use domain-specific auth commands"),
         );
     }
     if !config::SAFE_CONFIG_PATHS.contains(&dotted_path.as_str()) {
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid(format!(
+            &CliError::invalid(format!(
                 "config path is not writable through CLI: {dotted_path}"
             )),
         );
     }
     let file = match safe_data_file(installation, data_root, &config_path(data_root)) {
         Ok(path) => path,
-        Err(error) => return report_error(command.name(), options.json, error),
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
     let mut current = match configuration::read_json_object(&file) {
         Ok(value) => value,
         Err(message) => {
-            return report_error(command.name(), options.json, CliError::health(message));
+            return report_error(command.name(), options.json, &CliError::health(message));
         }
     };
     let previous = config::value_at_path(&current, dotted_path).cloned();
@@ -109,14 +109,14 @@ pub(super) fn config_set(
         return report_error(
             command.name(),
             options.json,
-            CliError::health(validation.errors.join("; ")),
+            &CliError::health(validation.errors.join("; ")),
         );
     }
     if let Err(message) = configuration::write_json_atomic(&file, &current) {
         return report_error(
             command.name(),
             options.json,
-            CliError::failed("config_write_failed", message),
+            &CliError::failed("config_write_failed", message),
         );
     }
     let data = json!({
@@ -129,7 +129,7 @@ pub(super) fn config_set(
     report_success(
         options,
         command.name(),
-        data,
+        &data,
         &format!("Updated {dotted_path}."),
     )
 }
@@ -142,12 +142,12 @@ pub(super) fn config_validate(
 ) -> ExitCode {
     let file = match safe_data_file(installation, data_root, &config_path(data_root)) {
         Ok(path) => path,
-        Err(error) => return report_error(command.name(), options.json, error),
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
         Err(message) => {
-            return report_error(command.name(), options.json, CliError::health(message));
+            return report_error(command.name(), options.json, &CliError::health(message));
         }
     };
     let validation = config::validate(&current);
@@ -185,7 +185,7 @@ pub(super) fn config_validate(
     report_success(
         options,
         command.name(),
-        data,
+        &data,
         &format!("Config valid. warnings={}", validation.warnings.len()),
     )
 }
@@ -200,18 +200,18 @@ pub(super) fn config_edit(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("config edit requires an interactive editor"),
+            &CliError::invalid("config edit requires an interactive editor"),
         );
     }
     let file = match safe_data_file(installation, data_root, &config_path(data_root)) {
         Ok(path) => path,
-        Err(error) => return report_error(command.name(), options.json, error),
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
     if let Err(message) = ensure_config_exists(&file) {
         return report_error(
             command.name(),
             options.json,
-            CliError::failed("config_write_failed", message),
+            &CliError::failed("config_write_failed", message),
         );
     }
     let editor = std::env::var("EDITOR")
@@ -219,20 +219,19 @@ pub(super) fn config_edit(
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "vi".into());
-    let status = match ProcessCommand::new(editor).arg(&file).status() {
-        Ok(status) => status,
-        Err(_) => return ExitCode::FAILURE,
+    let Ok(status) = ProcessCommand::new(editor).arg(&file).status() else {
+        return ExitCode::FAILURE;
     };
     if !status.success() {
-        return ExitCode::from(status.code().unwrap_or(1) as u8);
+        return ExitCode::from(u8::try_from(status.code().unwrap_or(1)).unwrap_or(1));
     }
     if let Err(error) = safe_data_file(installation, data_root, &file) {
-        return report_error(command.name(), options.json, error);
+        return report_error(command.name(), options.json, &error);
     }
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
         Err(message) => {
-            return report_error(command.name(), options.json, CliError::health(message));
+            return report_error(command.name(), options.json, &CliError::health(message));
         }
     };
     let validation = config::validate(&current);
@@ -240,7 +239,7 @@ pub(super) fn config_edit(
         return report_error(
             command.name(),
             options.json,
-            CliError::health(format!(
+            &CliError::health(format!(
                 "Config invalid after edit: {}",
                 validation.errors.join("; ")
             )),
@@ -249,7 +248,7 @@ pub(super) fn config_edit(
     report_success(
         options,
         command.name(),
-        json!({ "configPath": file.display().to_string(), "warnings": validation.warnings }),
+        &json!({ "configPath": file.display().to_string(), "warnings": validation.warnings }),
         &format!("Config edited and validated: {}", file.display()),
     )
 }

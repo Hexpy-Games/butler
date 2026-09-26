@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 
@@ -105,7 +105,7 @@ impl RoutedRound<'_> {
                 let mut result: ModelRoundResult = serde_json::from_value(value).map_err(|_| {
                     failure::durability(
                         "response_acceptance_read",
-                        BtccError::new("model_response_invalid", "invalid accepted response"),
+                        &BtccError::new("model_response_invalid", "invalid accepted response"),
                     )
                 })?;
                 result.accepted_checkpoint.get_or_insert(
@@ -128,7 +128,7 @@ impl RoutedRound<'_> {
                 .map_err(|_| {
                     failure::durability(
                         "attempt_history_read",
-                        BtccError::new("model_history_invalid", "invalid model route history"),
+                        &BtccError::new("model_history_invalid", "invalid model route history"),
                     )
                 })?;
                 self.abandon_open(
@@ -194,13 +194,13 @@ impl RoutedRound<'_> {
                     None,
                 )
                 .await?;
-            let pending = self.view.pending_fallback.lock().unwrap().take();
+            let pending = self.view.pending_fallback.lock().take();
             if pending.as_ref() == Some(&(round_id.clone(), candidate.model_ref.clone())) {
                 projection::fallback_started(self.progress, &round_id, &candidate.model_ref).await;
             } else if let Some(pending) = pending {
-                *self.view.pending_fallback.lock().unwrap() = Some(pending);
+                *self.view.pending_fallback.lock() = Some(pending);
             }
-            if let Some(status) = status(&started)
+            if let Some(status) = status(started.as_ref())
                 && status != "recorded"
             {
                 loaded_key = None;
@@ -210,13 +210,11 @@ impl RoutedRound<'_> {
                 value.reasoning_effort = Some(candidate.reasoning_effort.clone());
                 value
             });
-            let mut route_context = json!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
+            let mut route_context = crate::json::json_object!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
             if let Some(digest) = request.tool_surface_digest {
-                route_context
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("toolSurfaceDigest".into(), Value::String(digest.into()));
+                route_context.insert("toolSurfaceDigest".into(), Value::String(digest.into()));
             }
+            let route_context = Value::Object(route_context);
             let physical = ModelRoundRequest {
                 max_output_tokens: request.max_output_tokens,
                 round_id: Some(&round_id),
@@ -309,7 +307,7 @@ impl RoutedRound<'_> {
             let value = serde_json::to_value(&result).map_err(|_| {
                 failure::durability(
                     "response_acceptance_write",
-                    BtccError::new("model_response_invalid", "cannot encode accepted response"),
+                    &BtccError::new("model_response_invalid", "cannot encode accepted response"),
                 )
             })?;
             self.hooks
@@ -321,8 +319,7 @@ impl RoutedRound<'_> {
                     value,
                 )
                 .await?;
-            *self.view.accepted.lock().unwrap() =
-                Some(identity(&request, &candidate.model_ref, &result));
+            *self.view.accepted.lock() = Some(identity(&request, &candidate.model_ref, &result));
             return Ok(ModelRoundResult {
                 accepted_checkpoint: Some(crate::btcc::agent_loop::AcceptedCheckpoint {
                     round_id,
@@ -404,9 +401,8 @@ impl RoutedRound<'_> {
                 Some(route_value),
             )
             .await?;
-        *self.view.active.lock().unwrap() = candidate.model_ref.clone();
-        *self.view.pending_fallback.lock().unwrap() =
-            Some((round.into(), candidate.model_ref.clone()));
+        *self.view.active.lock() = candidate.model_ref.clone();
+        *self.view.pending_fallback.lock() = Some((round.into(), candidate.model_ref.clone()));
         projection::fallback(
             self.progress,
             self.semantic_state,
@@ -435,12 +431,12 @@ impl RoutedRound<'_> {
             max,
         )
         .await;
-        let multiplier = 2_f64.powi(attempt.saturating_sub(1) as i32);
+        let multiplier = 2_f64.powi(i32::try_from(attempt.saturating_sub(1)).unwrap_or(i32::MAX));
         let delay =
             Duration::from_secs_f64((self.retry.base_delay_ms * multiplier).min(5_000.0) / 1_000.0);
         tokio::select! {
-            _ = tokio::time::sleep(delay) => Ok(()),
-            _ = self.cancellation.cancelled() => Err(ModelRoundError::Cancelled),
+            () = tokio::time::sleep(delay) => Ok(()),
+            () = self.cancellation.cancelled() => Err(ModelRoundError::Cancelled),
         }
     }
 

@@ -9,6 +9,7 @@ use crate::context::BudgetedToolOutput;
 use crate::json::JsonDocument;
 use crate::workspace::GuidedSummary;
 
+#[derive(Clone, Copy)]
 pub(super) struct Assembly<'a> {
     pub base: &'a JsonDocument,
     pub budget: &'a BudgetedToolOutput,
@@ -102,7 +103,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
             let mut kinds = Vec::new();
             for artifact in artifacts {
                 if !kinds.contains(&artifact.artifact_kind) {
-                    kinds.push(artifact.artifact_kind)
+                    kinds.push(artifact.artifact_kind);
                 }
             }
             append_value(&mut encoded, "written_files", &serde_json::json!(labels))?;

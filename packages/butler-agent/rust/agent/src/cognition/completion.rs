@@ -8,7 +8,7 @@ mod typed_notice;
 pub(crate) use consumer::{MemorySyncPoll, NativeMemorySyncConsumer};
 pub(crate) use typed_notice::TypedMemorySourceNotice;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::cognition::{CognitionPathEnvironment, CognitionResult};
@@ -33,12 +33,12 @@ pub(crate) struct CompletionPublisher {
 
 impl CompletionPublisher {
     pub(crate) fn new(
-        data_root: PathBuf,
-        paths: CognitionPathEnvironment,
+        data_root: &Path,
+        paths: &CognitionPathEnvironment,
         now_iso: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
         Self {
-            memory_root: paths.memory_root(&data_root),
+            memory_root: paths.memory_root(data_root),
             now_iso,
         }
     }

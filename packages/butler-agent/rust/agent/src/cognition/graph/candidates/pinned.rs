@@ -59,10 +59,7 @@ pub(in crate::cognition::graph) fn load(
         }
     }
     drop(loaded);
-    Ok(result
-        .into_iter()
-        .map(|candidate| Arc::try_unwrap(candidate).expect("candidate has one result owner"))
-        .collect())
+    Ok(result.into_iter().map(Arc::unwrap_or_clone).collect())
 }
 
 pub(in crate::cognition::graph) fn assert_source_current(

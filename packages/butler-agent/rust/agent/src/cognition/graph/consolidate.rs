@@ -145,7 +145,7 @@ fn json_number(value: f64) -> Value {
         && value >= i64::MIN as f64
         && value < i64::MAX as f64
     {
-        Value::from(value as i64)
+        Value::from(crate::json::saturating_i64(value))
     } else {
         Number::from_f64(value)
             .map(Value::Number)

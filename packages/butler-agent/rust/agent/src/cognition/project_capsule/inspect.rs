@@ -205,8 +205,12 @@ fn read_failures(path: &Path, project_id: &str) -> RefreshFailures {
 
 fn epoch_millis(time: SystemTime) -> Option<i64> {
     let millis = match time.duration_since(UNIX_EPOCH) {
-        Ok(duration) => duration.as_millis().min(i64::MAX as u128) as i64,
-        Err(error) => -(error.duration().as_millis().min(i64::MAX as u128) as i64),
+        Ok(duration) => {
+            i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
+        }
+        Err(error) => {
+            -i64::try_from(error.duration().as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
+        }
     };
     Some(millis)
 }

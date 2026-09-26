@@ -64,7 +64,7 @@ impl NativeAppModelCatalog {
                         Some(&self.validated_root()?),
                     )
                     .await
-                    .map_err(|error| operation_error("provider_credential_save_failed", error))?;
+                    .map_err(|error| operation_error("provider_credential_save_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 Ok(json!({"credential":credential,"catalog":catalog}))
             }
@@ -86,7 +86,7 @@ impl NativeAppModelCatalog {
                     .configuration
                     .register_hosted_model(&mutation, Some(&self.validated_root()?))
                     .await
-                    .map_err(|error| operation_error("hosted_model_registration_failed", error))?;
+                    .map_err(|error| operation_error("hosted_model_registration_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 let model = catalog
                     .get("registered_models")
@@ -107,7 +107,7 @@ impl NativeAppModelCatalog {
                     .configuration
                     .delete_hosted_model(&lookup, Some(&self.validated_root()?))
                     .await
-                    .map_err(|error| operation_error("hosted_model_delete_failed", error))?;
+                    .map_err(|error| operation_error("hosted_model_delete_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 Ok(json!({"removed_model_ref":removed.model_ref,"catalog":catalog}))
             }
@@ -123,10 +123,10 @@ impl NativeAppModelCatalog {
                         input.api_key.as_deref(),
                         Some(&root),
                     ) => result,
-                    _ = cancellation.cancelled() => return Err(GatewayApplicationError::Internal),
+                    () = cancellation.cancelled() => return Err(GatewayApplicationError::Internal),
                 }
                 .map_err(|error| {
-                    operation_error_status("local_model_discovery_failed", 502, error)
+                    operation_error_status("local_model_discovery_failed", 502, &error)
                 })?;
                 let models = result
                     .models
@@ -149,7 +149,7 @@ impl NativeAppModelCatalog {
                     .configuration
                     .upsert_local_model(&mutation, Some(&self.validated_root()?))
                     .await
-                    .map_err(|error| operation_error("local_model_registration_failed", error))?;
+                    .map_err(|error| operation_error("local_model_registration_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 let summary = catalog_model(&catalog, &model.model_ref)?;
                 Ok(json!({"model":summary,"catalog":catalog}))
@@ -162,7 +162,7 @@ impl NativeAppModelCatalog {
                     .configuration
                     .update_local_model(&lookup, &mutation, Some(&self.validated_root()?))
                     .await
-                    .map_err(|error| operation_error("local_model_update_failed", error))?;
+                    .map_err(|error| operation_error("local_model_update_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 let summary = catalog_model(&catalog, &model.model_ref)?;
                 Ok(json!({"model":summary,"catalog":catalog}))
@@ -173,7 +173,7 @@ impl NativeAppModelCatalog {
                     .configuration
                     .delete_local_model(&lookup, Some(&self.validated_root()?))
                     .await
-                    .map_err(|error| operation_error("local_model_delete_failed", error))?;
+                    .map_err(|error| operation_error("local_model_delete_failed", &error))?;
                 let catalog = self.refresh_catalog().await?;
                 Ok(json!({"removed_model_ref":removed.model_ref,"catalog":catalog}))
             }
@@ -337,14 +337,14 @@ fn invalid_model_input() -> GatewayApplicationError {
     }
 }
 
-fn operation_error(code: &str, error: ModelCatalogError) -> GatewayApplicationError {
+fn operation_error(code: &str, error: &ModelCatalogError) -> GatewayApplicationError {
     operation_error_status(code, 400, error)
 }
 
 fn operation_error_status(
     code: &str,
     status: u16,
-    error: ModelCatalogError,
+    error: &ModelCatalogError,
 ) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status,

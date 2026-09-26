@@ -49,9 +49,9 @@ impl Token {
     }
     pub(super) fn milliseconds(self) -> i64 {
         if self.length < 3 {
-            self.value * 10_i64.pow((3 - self.length) as u32)
+            self.value * 10_i64.pow(u32::try_from(3 - self.length).unwrap_or(u32::MAX))
         } else {
-            self.value / 10_i64.pow((self.length.min(9) - 3) as u32)
+            self.value / 10_i64.pow(u32::try_from(self.length.min(9) - 3).unwrap_or(u32::MAX))
         }
     }
 }
@@ -154,7 +154,7 @@ fn keyword(prefix: [u8; 3], length: usize) -> (Kind, i64) {
         b"dec",
     ];
     if let Some(index) = MONTHS.iter().position(|name| **name == prefix) {
-        return (Kind::Month, index as i64 + 1);
+        return (Kind::Month, i64::try_from(index).unwrap_or(i64::MAX) + 1);
     }
     if length > 3 {
         return (Kind::Word, 0);

@@ -186,7 +186,10 @@ fn span(row: &CognitionSourceRow, len: usize) -> Option<(usize, usize)> {
     {
         return None;
     }
-    Some((row.byte_start as usize, row.byte_end as usize))
+    Some((
+        crate::json::saturating_usize(row.byte_start),
+        crate::json::saturating_usize(row.byte_end),
+    ))
 }
 fn truncate(text: &str, max: usize) -> String {
     let end = grapheme_segments(text)

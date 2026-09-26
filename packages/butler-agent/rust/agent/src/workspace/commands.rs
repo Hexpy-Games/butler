@@ -5,6 +5,7 @@ mod process;
 mod spool;
 mod structured;
 
+use parking_lot::Mutex;
 use process::{ProcessHost, SystemProcesses};
 
 #[cfg(test)]
@@ -12,7 +13,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Notify, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -32,6 +33,10 @@ impl CommandError {
             io_kind: None,
         }
     }
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn io(error: std::io::Error) -> Self {
         Self::new("command_io_failed", error.to_string())
     }
@@ -138,12 +143,7 @@ struct Active {
 
 impl Drop for Active {
     fn drop(&mut self) {
-        self.owner
-            .state
-            .lock()
-            .expect("command owner poisoned")
-            .active
-            .remove(&self.id);
+        self.owner.state.lock().active.remove(&self.id);
         self.owner.idle.notify_waiters();
     }
 }
@@ -180,7 +180,7 @@ impl NativeCommands {
     }
 
     fn register(&self) -> Result<(Active, CancellationToken), CommandError> {
-        let mut state = self.inner.state.lock().expect("command owner poisoned");
+        let mut state = self.inner.state.lock();
         if state.closing {
             return Err(CommandError::new(
                 "command_owner_closed",
@@ -188,10 +188,13 @@ impl NativeCommands {
             ));
         }
         let id = state.next_id;
-        state.next_id = state
-            .next_id
-            .checked_add(1)
-            .expect("command operation id overflow");
+        let Some(next_id) = state.next_id.checked_add(1) else {
+            return Err(CommandError::new(
+                "command_owner_exhausted",
+                "Native command operation ids are exhausted",
+            ));
+        };
+        state.next_id = next_id;
         let shutdown = CancellationToken::new();
         state.active.insert(id, shutdown.clone());
         Ok((
@@ -204,12 +207,7 @@ impl NativeCommands {
     }
 
     pub(crate) fn active_count(&self) -> usize {
-        self.inner
-            .state
-            .lock()
-            .expect("command owner poisoned")
-            .active
-            .len()
+        self.inner.state.lock().active.len()
     }
 
     pub(crate) fn submit_guided(
@@ -219,6 +217,9 @@ impl NativeCommands {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
         let host = Arc::clone(&self.inner.host);
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _active = active;
             guided::dispatch(&*host, input, shutdown, tx).await;
@@ -233,6 +234,9 @@ impl NativeCommands {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
         let host = Arc::clone(&self.inner.host);
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _active = active;
             structured::dispatch(&*host, input, shutdown, tx).await;
@@ -242,7 +246,7 @@ impl NativeCommands {
 
     pub(crate) async fn close(&self) {
         let tokens = {
-            let mut state = self.inner.state.lock().expect("command owner poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
             state.active.values().cloned().collect::<Vec<_>>()
         };

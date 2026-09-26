@@ -132,7 +132,7 @@ pub(crate) async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFil
                 }));
             }
             let mut file = std::fs::File::open(&path)?;
-            let mut chunk = [0_u8; 64 * 1024];
+            let mut chunk = vec![0_u8; 64 * 1024];
             let mut bytes = 0_usize;
             let mut sha256 = Sha256::new();
             loop {

@@ -1,6 +1,6 @@
 use super::parse_and_chunk;
 
-fn event(kind: &str, timestamp: &str, payload: serde_json::Value) -> String {
+fn event(kind: &str, timestamp: &str, payload: &serde_json::Value) -> String {
     serde_json::json!({
         "eventId": format!("event-{kind}-{timestamp}"),
         "sessionId": "session/source",
@@ -17,22 +17,22 @@ fn parses_deduplicates_and_chunks_transcript_events() {
         event(
             "inbound",
             "2025-01-01T00:00:00.000Z",
-            serde_json::json!({"message":{"text":" hello "}}),
+            &serde_json::json!({"message":{"text":" hello "}}),
         ),
         event(
             "inbound",
             "2025-01-01T00:01:00.000Z",
-            serde_json::json!({"message":{"text":"hello"}}),
+            &serde_json::json!({"message":{"text":"hello"}}),
         ),
         event(
             "turn",
             "2025-01-01T00:30:00.000Z",
-            serde_json::json!({"text":"reply"}),
+            &serde_json::json!({"text":"reply"}),
         ),
         event(
             "outbound",
             "2025-01-01T01:00:00.001Z",
-            serde_json::json!({"message":{"text":"later"}}),
+            &serde_json::json!({"message":{"text":"later"}}),
         ),
         "not-json".to_owned(),
     ];

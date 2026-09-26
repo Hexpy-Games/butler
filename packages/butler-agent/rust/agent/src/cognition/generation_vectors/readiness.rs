@@ -7,10 +7,7 @@ use std::{
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
-use lancedb::{
-    Error as LanceError,
-    query::{ExecutableQuery, QueryBase, Select},
-};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use serde_json::Value;
 
 use super::rows::{COLUMNS, GenerationVectorRow, optional_text, text};
@@ -35,7 +32,11 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
     if units.is_empty() {
         return Ok(0);
     }
-    let Some(version) = generation.embedding.as_ref().map(|value| value.version()) else {
+    let Some(version) = generation
+        .embedding
+        .as_ref()
+        .map(crate::cognition::GenerationEmbedding::version)
+    else {
         return Ok(units.len());
     };
     let root = generation.root.join("butler.lance");
@@ -103,14 +104,11 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
     if !root.exists() {
         return Ok(units.len());
     }
-    let connection = match lance_store::connect(&root).await {
-        Ok(value) => value,
-        Err(_) => return Ok(units.len()),
+    let Ok(connection) = lance_store::connect(&root).await else {
+        return Ok(units.len());
     };
-    let table = match lance_store::open(&connection, "butler_memory").await {
-        Ok(value) => value,
-        Err(LanceError::TableNotFound { .. }) => return Ok(units.len()),
-        Err(_) => return Ok(units.len()),
+    let Ok(table) = lance_store::open(&connection, "butler_memory").await else {
+        return Ok(units.len());
     };
     let keys = groups.keys().cloned().collect::<Vec<_>>();
     for chunk in keys.chunks(CHUNK) {

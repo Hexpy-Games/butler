@@ -8,9 +8,11 @@ pub(super) fn validate(
     refs: &IndexMap<String, String>,
 ) -> CognitionResult<()> {
     let o = requirement.as_object().ok_or_else(invalid)?;
+    let Some(condition) = o.get("condition") else {
+        return Err(invalid());
+    };
     if o.len() != 2
         || !o.contains_key("action")
-        || !o.contains_key("condition")
         || o.get("action")
             .and_then(Value::as_str)
             .is_none_or(|action| action.trim().is_empty())
@@ -18,7 +20,7 @@ pub(super) fn validate(
         return Err(invalid());
     }
     let mut atoms = 0;
-    visit(o.get("condition").expect("required"), refs, 0, &mut atoms)
+    visit(condition, refs, 0, &mut atoms)
 }
 fn visit(
     value: &Value,
@@ -53,11 +55,11 @@ fn visit(
         if *atoms > 16 {
             return Err(invalid());
         }
-    } else if o.contains_key("not") {
+    } else if let Some(negated) = o.get("not") {
         if o.len() != 1 {
             return Err(invalid());
         }
-        visit(o.get("not").expect("present"), refs, depth + 1, atoms)?;
+        visit(negated, refs, depth + 1, atoms)?;
     } else {
         let key = if o.contains_key("all") {
             "all"
@@ -74,7 +76,7 @@ fn visit(
             return Err(invalid());
         }
         for child in children {
-            visit(child, refs, depth + 1, atoms)?
+            visit(child, refs, depth + 1, atoms)?;
         }
     }
     Ok(())

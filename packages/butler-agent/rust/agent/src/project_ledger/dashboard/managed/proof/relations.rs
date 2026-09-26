@@ -82,10 +82,13 @@ pub(super) fn validate(
             .get("resultRefs")
             .and_then(Value::as_array)
             .ok_or_else(invalid)?;
-        let end = checkpoint
-            .pointer("/resultWindow/toSequence")
-            .and_then(Value::as_u64)
-            .ok_or_else(invalid)? as usize;
+        let end = usize::try_from(
+            checkpoint
+                .pointer("/resultWindow/toSequence")
+                .and_then(Value::as_u64)
+                .ok_or_else(invalid)?,
+        )
+        .unwrap_or(usize::MAX);
         let mentioned = item
             .get("referencedResultRefs")
             .and_then(Value::as_array)
@@ -146,10 +149,13 @@ pub(super) fn validate(
         {
             return Err(invalid());
         }
-        let sequence = child
-            .get("boundResultSequence")
-            .and_then(Value::as_u64)
-            .ok_or_else(invalid)? as usize;
+        let sequence = usize::try_from(
+            child
+                .get("boundResultSequence")
+                .and_then(Value::as_u64)
+                .ok_or_else(invalid)?,
+        )
+        .unwrap_or(usize::MAX);
         let bound = review
             .get("boundResultRefs")
             .and_then(Value::as_array)
@@ -208,7 +214,7 @@ pub(super) fn validate(
                 != item
                     .get("resultSequence")
                     .and_then(Value::as_u64)
-                    .map(|n| n as usize)
+                    .map(|n| usize::try_from(n).unwrap_or(usize::MAX))
         {
             return Err(invalid());
         }

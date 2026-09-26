@@ -120,21 +120,38 @@ pub(super) fn pending_authority(value: Option<&crate::json::JsonDocument>) -> Op
         .and_then(|raw| serde_json::from_str(raw).ok())
 }
 
+/// An authority decision that stops the rest of a resumed batch.
+#[derive(Clone, Copy)]
+pub(super) enum Refusal {
+    Denied,
+    Modified,
+}
+
+impl Refusal {
+    /// `Allow` executes the accepted call, so it is not a refusal.
+    pub(super) fn from_decision(decision: Option<&AuthorityDecision>) -> Option<Self> {
+        match decision? {
+            AuthorityDecision::Allow => None,
+            AuthorityDecision::Deny => Some(Self::Denied),
+            AuthorityDecision::Modify { .. } => Some(Self::Modified),
+        }
+    }
+}
+
 pub(super) fn unexecuted_call(
     call: &ModelRoundToolCall,
-    decision: &AuthorityDecision,
+    refusal: Refusal,
     pending: bool,
 ) -> ToolResult {
-    let (decision_name, message) = match decision {
-        AuthorityDecision::Deny => (
+    let (decision_name, message) = match refusal {
+        Refusal::Denied => (
             "denied",
             "The user denied this operation. It was not executed.",
         ),
-        AuthorityDecision::Modify { .. } => (
+        Refusal::Modified => (
             "modified",
             "The user requested a change. This operation was not executed.",
         ),
-        AuthorityDecision::Allow => unreachable!("allow executes the accepted call"),
     };
     ToolResult {
         tool_call_id: call.id.clone(),

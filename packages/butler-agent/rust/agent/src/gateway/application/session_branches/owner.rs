@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -41,7 +42,7 @@ impl SessionBranchOwner {
             .map_err(|_| GatewayApplicationError::Internal)?;
         let (send, receive) = oneshot::channel();
         {
-            let closing = self.0.closing.lock().expect("App branch owner poisoned");
+            let closing = self.0.closing.lock();
             if *closing {
                 return Err(GatewayApplicationError::Internal);
             }
@@ -61,7 +62,7 @@ impl SessionBranchOwner {
 
     pub(in crate::gateway::application) async fn close(&self) {
         {
-            let mut closing = self.0.closing.lock().expect("App branch owner poisoned");
+            let mut closing = self.0.closing.lock();
             *closing = true;
             self.0.permit.close();
             self.0.shutdown.cancel();

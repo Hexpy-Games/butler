@@ -210,13 +210,15 @@ fn paginate(
     }
     let requested_start = cursor.as_ref().map_or(0, |cursor| cursor.next_byte);
     let bytes = scalar.as_bytes();
-    if requested_start < 0 || requested_start as u64 > bytes.len() as u64 {
+    if requested_start < 0
+        || u64::try_from(requested_start).unwrap_or_default() > bytes.len() as u64
+    {
         return Err(ContextError::new(
             "source_changed",
             "Source cursor position is outside the scalar",
         ));
     }
-    let start = requested_start as usize;
+    let start = usize::try_from(requested_start).unwrap_or_default();
     let remainder = String::from_utf8_lossy(&bytes[start..]);
     let mut text = String::new();
     let mut encoded_text_bytes = 11usize; // JSON.stringify({text:""})
@@ -256,7 +258,7 @@ fn paginate(
             source_ref: source_ref.into(),
             source_hash: source_hash.into(),
             scope_hash: Some(parsed.scope_hash.clone()),
-            next_byte: end as i64,
+            next_byte: i64::try_from(end).unwrap_or(i64::MAX),
         };
         let json =
             json::stringify(&json!(value)).map_err(|e| ContextError::new("json", e.to_string()))?;

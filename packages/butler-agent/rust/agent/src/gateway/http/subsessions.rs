@@ -167,7 +167,9 @@ fn session_page(
         .get("limit")
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 0.0)
-        .map_or(200, |value| (value.floor() as usize).clamp(1, 200));
+        .map_or(200, |value| {
+            crate::json::saturating_usize(value.floor()).clamp(1, 200)
+        });
     Ok(AppSessionViewPage {
         after_cursor: before.is_none().then_some(after).flatten(),
         before_cursor: before,
@@ -285,7 +287,9 @@ fn hmac_sha256(secret: &[u8], payload: &[u8]) -> [u8; 32] {
 fn current_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_millis() as u64)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+        })
 }
 
 fn resync() -> HttpError {

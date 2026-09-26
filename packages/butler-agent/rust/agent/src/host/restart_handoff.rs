@@ -80,7 +80,8 @@ pub(crate) async fn record_helper_terminal(
     }
     let path = data_root.join("agent-runtime/btcc.sqlite");
     for destination in [data_root.join("agent-runtime"), path.clone()] {
-        if std::fs::symlink_metadata(&destination)
+        if tokio::fs::symlink_metadata(&destination)
+            .await
             .is_ok_and(|metadata| metadata.file_type().is_symlink())
         {
             return Err("restart_handoff_journal_path_ambiguous".into());
@@ -108,7 +109,8 @@ pub(crate) async fn record_helper_terminal(
             owner_id: uuid::Uuid::new_v4().to_string(),
             host_id: host_id.clone(),
             process_id: std::process::id(),
-            process_started_at_ms: SystemIdentity.now_epoch_millis().max(0) as u64,
+            process_started_at_ms: u64::try_from(SystemIdentity.now_epoch_millis().max(0))
+                .unwrap_or_default(),
         },
         process_liveness: Arc::new(HandoffProcessLiveness { host_id }),
     })
@@ -121,7 +123,7 @@ pub(crate) async fn record_helper_terminal(
     let result = journal
         .finish_restart_handoff(intent_id.to_owned(), state)
         .await
-        .map_err(|error| error.code.to_owned());
+        .map_err(|error| error.code.clone());
     let closed = storage
         .close()
         .await

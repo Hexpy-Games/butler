@@ -18,10 +18,12 @@ pub(super) async fn execute(
         "list_mcp_capabilities" => {
             let include_disabled =
                 call.arguments.get("include_disabled") == Some(&Value::Bool(true));
-            match owner
-                .mcp_client
-                .list_capabilities(include_disabled, invocation.cancellation)
-                .await
+            match Box::pin(
+                owner
+                    .mcp_client
+                    .list_capabilities(include_disabled, invocation.cancellation),
+            )
+            .await
             {
                 Ok(result) => json!({
                     "ok":true,
@@ -44,10 +46,12 @@ pub(super) async fn execute(
                 .get("uri")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            match owner
-                .mcp_client
-                .read_resource(server_id, uri, invocation.cancellation)
-                .await
+            match Box::pin(
+                owner
+                    .mcp_client
+                    .read_resource(server_id, uri, invocation.cancellation),
+            )
+            .await
             {
                 Ok(mut result) => {
                     result["ok"] = Value::Bool(true);

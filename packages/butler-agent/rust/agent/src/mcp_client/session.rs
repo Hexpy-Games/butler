@@ -92,7 +92,7 @@ where
     let connecting = serve_client_with_ct(handler, transport, session_cancel.clone());
     let connected: Result<RunningService<RoleClient, ClientConfig>, McpClientError> = tokio::select! {
         biased;
-        _ = turn_cancel.cancelled() => {
+        () = turn_cancel.cancelled() => {
             session_cancel.cancel();
             Err(failure("turn_cancelled", "MCP operation was cancelled.", false))
         }
@@ -120,7 +120,7 @@ where
     let operation_deadline = Instant::now() + timeout;
     let result = tokio::select! {
         biased;
-        _ = turn_cancel.cancelled() => Err(failure(
+        () = turn_cancel.cancelled() => Err(failure(
             "turn_cancelled",
             "MCP operation was cancelled.",
             attempted.load(Ordering::Acquire),

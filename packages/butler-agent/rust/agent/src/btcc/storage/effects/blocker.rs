@@ -4,6 +4,10 @@ use sha2::{Digest, Sha256};
 
 use crate::btcc::effects::contracts::*;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string())
 }

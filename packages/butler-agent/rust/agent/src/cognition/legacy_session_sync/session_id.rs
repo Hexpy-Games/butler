@@ -4,17 +4,11 @@ pub(crate) fn normalize_session_id_for_storage(session_id: &str) -> String {
     let trimmed = session_id.trim_matches(is_js_trim_char);
     let normalized: String = trimmed
         .encode_utf16()
-        .map(|unit| {
-            if unit <= 0x7f
-                && ((unit as u8).is_ascii_alphanumeric()
-                    || unit == u16::from(b'.')
-                    || unit == u16::from(b'_')
-                    || unit == u16::from(b'-'))
-            {
-                char::from_u32(unit as u32).expect("ASCII unit")
-            } else {
-                '_'
+        .map(|unit| match u8::try_from(unit) {
+            Ok(byte) if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') => {
+                char::from(byte)
             }
+            _ => '_',
         })
         .collect();
 

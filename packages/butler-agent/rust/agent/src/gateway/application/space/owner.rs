@@ -1,7 +1,8 @@
+use parking_lot::Mutex as StdMutex;
 use std::{
     collections::HashMap,
     sync::{
-        Arc, Mutex as StdMutex, Weak,
+        Arc, Weak,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -39,10 +40,7 @@ impl SpaceMutationOwner {
         session_id: &str,
     ) -> Result<tokio::sync::OwnedMutexGuard<()>, GatewayApplicationError> {
         let lock = {
-            let mut locks = self
-                .relocation_locks
-                .lock()
-                .expect("space relocation locks poisoned");
+            let mut locks = self.relocation_locks.lock();
             if self.closed.load(Ordering::Acquire) {
                 return Err(GatewayApplicationError::Internal);
             }
@@ -102,7 +100,7 @@ impl SpaceMutationOwner {
                     db,
                     clock.as_ref(),
                     previous,
-                    command,
+                    &command,
                     origin,
                     title.as_deref().unwrap_or("새 그룹"),
                 ))
@@ -111,7 +109,7 @@ impl SpaceMutationOwner {
             .map_err(super::super::app_error)??;
         *state = result.history;
         drop(state);
-        crate::gateway::application::events::publish(&publish_to, result.event);
+        crate::gateway::application::events::publish(&publish_to, &result.event);
         Ok(result.result)
     }
 
@@ -144,7 +142,7 @@ impl SpaceMutationOwner {
         *history = SpaceHistory::default();
         drop(history);
         for event in result.events {
-            events::publish(&publish_to, event);
+            events::publish(&publish_to, &event);
         }
         Ok(result.result)
     }
@@ -154,7 +152,6 @@ impl SpaceMutationOwner {
         let locks = self
             .relocation_locks
             .lock()
-            .expect("space relocation locks poisoned")
             .values()
             .filter_map(Weak::upgrade)
             .collect::<Vec<_>>();
@@ -248,10 +245,7 @@ fn commit_relocation(
         &tx,
         "session.updated",
         None,
-        serde_json::json!({"session":session,"context_revision":operation_id})
-            .as_object()
-            .cloned()
-            .expect("session event payload is an object"),
+        crate::json::json_object!({"session":session,"context_revision":operation_id}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;
@@ -260,10 +254,7 @@ fn commit_relocation(
         &tx,
         "space.changed",
         None,
-        serde_json::json!({"revision":final_view.revision})
-            .as_object()
-            .cloned()
-            .expect("space event payload is an object"),
+        crate::json::json_object!({"revision":final_view.revision}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;

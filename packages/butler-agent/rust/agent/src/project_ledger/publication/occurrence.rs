@@ -292,7 +292,7 @@ pub(super) fn atomic_json(
     let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
     let mut bytes = serde_json::to_vec_pretty(value).map_err(|_| invalid())?;
     bytes.push(b'\n');
-    let result = fs::write(&temporary, bytes).and_then(|_| fs::rename(&temporary, path));
+    let result = fs::write(&temporary, bytes).and_then(|()| fs::rename(&temporary, path));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }

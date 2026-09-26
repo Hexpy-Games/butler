@@ -4,7 +4,7 @@ use super::{ConversationError, ConversationIdentityClock, ConversationResult};
 
 pub(super) const VERSION: u64 = 4;
 
-const SQL: &str = r#"
+const SQL: &str = r"
 CREATE TABLE IF NOT EXISTS conversation_sessions (
   id TEXT PRIMARY KEY, workspace_id TEXT, project_id TEXT, gateway_origin TEXT NOT NULL,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT NOT NULL,
@@ -77,7 +77,7 @@ CREATE INDEX IF NOT EXISTS conversation_parts_tool_call_idx ON conversation_part
 CREATE UNIQUE INDEX IF NOT EXISTS conversation_bindings_gateway_external_idx ON conversation_bindings(gateway, external_session_id);
 CREATE INDEX IF NOT EXISTS conversation_summaries_session_range_idx ON conversation_summaries(session_id, covers_from_seq, covers_to_seq);
 CREATE INDEX IF NOT EXISTS conversation_turn_outcomes_session_created_idx ON conversation_turn_outcomes(session_id, created_at, turn_id);
-"#;
+";
 
 pub(super) fn ensure(
     connection: &Connection,

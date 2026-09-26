@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::json;
 
+#[derive(Clone, Copy)]
 pub(crate) struct BridgeCatalogTool<'a> {
     pub name: &'a str,
     pub definition: &'a Value,
@@ -58,7 +59,9 @@ pub(crate) fn search_native<'a>(
         .get("limit")
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite())
-        .map_or(20, |number| (number.floor() as usize).clamp(1, 50));
+        .map_or(20, |number| {
+            crate::json::saturating_usize(number.floor()).clamp(1, 50)
+        });
     let mut ranked = Vec::new();
     for tool in tools {
         if !include_disabled && !tool.enabled || category.is_some_and(|c| c != tool.category) {
@@ -165,7 +168,7 @@ fn summary(value: &str) -> String {
     let head: String = normalized
         .encode_utf16()
         .take(217)
-        .map(|unit| char::from_u32(unit as u32).unwrap_or('\u{fffd}'))
+        .map(|unit| char::from_u32(u32::from(unit)).unwrap_or('\u{fffd}'))
         .collect();
     format!("{}...", head.trim_end())
 }

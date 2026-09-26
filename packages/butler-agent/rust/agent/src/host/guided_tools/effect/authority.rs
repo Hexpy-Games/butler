@@ -60,21 +60,15 @@ pub(super) async fn gate(
         Ok(value) => value,
         Err(failure) => return error(&failure.code, &failure.message),
     };
-    let plan = match &work.current_plan {
-        Some(plan) => plan,
-        None => {
-            return error(
-                "effect_plan_review_required",
-                "The current Plan revision is required before requesting Allow.",
-            );
-        }
+    let Some(plan) = &work.current_plan else {
+        return error(
+            "effect_plan_review_required",
+            "The current Plan revision is required before requesting Allow.",
+        );
     };
     let resume_ref = owner.binding.authority_request_ref.as_deref().filter(|_| {
         owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-            && !*owner
-                .authority_consumed
-                .lock()
-                .expect("authority state poisoned")
+            && !*owner.authority_consumed.lock()
     });
     if let Some(request_ref) = resume_ref {
         let execution = match owner
@@ -248,10 +242,7 @@ pub(super) async fn settle(
                 failure.message,
             ))
         })?;
-    *owner
-        .authority_consumed
-        .lock()
-        .expect("authority state poisoned") = true;
+    *owner.authority_consumed.lock() = true;
     Ok(None)
 }
 

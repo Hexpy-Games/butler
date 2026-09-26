@@ -10,6 +10,7 @@ use super::db_error;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
 use crate::conversation::ConversationSourceReader;
 
+#[derive(Clone, Copy)]
 pub(super) struct InvalidationInput<'a> {
     pub old_source_ids: &'a [String],
     pub new_job_id: &'a str,
@@ -132,6 +133,7 @@ pub(super) fn superseded_sources(
     Ok(changed)
 }
 
+#[derive(Clone, Copy)]
 struct RecordInput<'a> {
     record: &'a Value,
     node: &'a history::Node,
@@ -206,7 +208,7 @@ fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResu
             None => node.id.clone(),
         },
     );
-    value.insert("source_refs".into(), serde_json::to_value(refs).unwrap());
+    value.insert("source_refs".into(), Value::from(refs));
     put(&mut value, "source_revision", input.new_revision);
     value.insert(
         "decision_source".into(),
@@ -301,7 +303,7 @@ pub(super) fn redirect_chain(connection: &Connection, id: &str) -> CognitionResu
                 "memory_identity_cycle",
             ));
         }
-        output.push(next)
+        output.push(next);
     }
     Err(CognitionError::new(
         "memory_identity_history_limit",

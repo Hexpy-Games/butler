@@ -35,7 +35,11 @@ pub(in crate::cognition) async fn prepare(
         let subject = item
             .get("subject")
             .and_then(Value::as_u64)
-            .and_then(|i| meaning.entities.get(i as usize))
+            .and_then(|i| {
+                meaning
+                    .entities
+                    .get(usize::try_from(i).unwrap_or(usize::MAX))
+            })
             .map(|e| e.name.as_str())
             .unwrap_or("");
         let cue = [
@@ -109,7 +113,7 @@ pub(in crate::cognition) async fn prepare(
         let mut evidence = Vec::new();
         for id in &target.evidence {
             let passage = passages
-                .get(*id as usize)
+                .get(crate::json::saturating_usize(*id))
                 .ok_or_else(|| error("memory_extract_invalid_ref"))?;
             let reference = format!("{}u{id}", target.local_ref);
             current_refs.insert(reference.clone());
@@ -185,14 +189,7 @@ pub(in crate::cognition) async fn prepare(
             return Err(error("memory_extract_binding_oversize"));
         }
         let mut proposed = batch.prompt.clone();
-        proposed["targets"]
-            .as_array_mut()
-            .unwrap()
-            .push(entry.clone());
-        proposed["evidence"]
-            .as_array_mut()
-            .unwrap()
-            .extend(evidence.clone());
+        append_to_prompt(&mut proposed, entry.clone(), evidence.clone());
         if batch.targets.len() == 4
             || crate::json::stringify(&proposed).map_err(json_error)?.len() > 3072
         {
@@ -203,11 +200,7 @@ pub(in crate::cognition) async fn prepare(
                 quotes: HashMap::new(),
             };
         }
-        batch.prompt["targets"].as_array_mut().unwrap().push(entry);
-        batch.prompt["evidence"]
-            .as_array_mut()
-            .unwrap()
-            .extend(evidence);
+        append_to_prompt(&mut batch.prompt, entry, evidence);
         batch.targets.push(Target {
             local_ref: target.local_ref,
             candidates: candidate_map,
@@ -222,4 +215,14 @@ pub(in crate::cognition) async fn prepare(
         batches.push(batch);
     }
     Ok((batches, all))
+}
+
+/// Appends a target and its evidence to a `{"targets":[],"evidence":[]}` prompt.
+fn append_to_prompt(prompt: &mut Value, entry: Value, evidence: Vec<Value>) {
+    if let Some(targets) = prompt.get_mut("targets").and_then(Value::as_array_mut) {
+        targets.push(entry);
+    }
+    if let Some(items) = prompt.get_mut("evidence").and_then(Value::as_array_mut) {
+        items.extend(evidence);
+    }
 }

@@ -103,10 +103,7 @@ pub(super) fn read(
         .min(max_context)
         .max(1_000);
     let defaults = ui_defaults();
-    let mut output = defaults
-        .as_object()
-        .cloned()
-        .expect("settings defaults are object");
+    let mut output = defaults.as_object().cloned().unwrap_or_default();
     output.insert(
         "bridge_mode".into(),
         native

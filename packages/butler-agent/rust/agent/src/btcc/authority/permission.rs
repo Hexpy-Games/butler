@@ -47,6 +47,7 @@ pub(super) fn for_record(
     })
 }
 
+#[derive(Clone, Copy)]
 struct PermissionFacts<'a> {
     owner: &'a str,
     workspace: &'a str,

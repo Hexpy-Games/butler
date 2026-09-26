@@ -182,13 +182,11 @@ fn binding_current(
     let Some(message_id) = &row.conversation_message_id else {
         return Ok(false);
     };
-    let message = match canonical.read_message(message_id) {
-        Ok(Some(message)) => message,
-        Ok(None) | Err(_) => return Ok(false),
+    let Ok(Some(message)) = canonical.read_message(message_id) else {
+        return Ok(false);
     };
-    let hydrated = match hydrate_conversation_source(&message, &row, f64::INFINITY) {
-        Ok(hydrated) => hydrated,
-        Err(_) => return Ok(false),
+    let Ok(hydrated) = hydrate_conversation_source(&message, &row, f64::INFINITY) else {
+        return Ok(false);
     };
     let quote = string(binding, "quote").unwrap_or("");
     if quote.is_empty() {
@@ -202,7 +200,7 @@ fn binding_current(
     Ok(hydrated
         .text
         .as_bytes()
-        .get(start as usize..end as usize)
+        .get(crate::json::saturating_usize(start)..crate::json::saturating_usize(end))
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
         == Some(quote))
 }
@@ -238,7 +236,7 @@ pub(super) fn append_record(
         connection
             .execute(
                 "UPDATE memory_projection_jobs SET identity_decisions_json=?1 WHERE job_id=?2",
-                params![serde_json::to_string(&records).unwrap(), job],
+                params![Value::Array(records).to_string(), job],
             )
             .map_err(db_error)?;
     }

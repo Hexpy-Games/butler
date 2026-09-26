@@ -1,6 +1,5 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use super::read;
 use crate::gateway::GatewayApplicationError;
@@ -59,7 +58,7 @@ impl AppApplication {
                 mutate_session(
                     db,
                     &subscribers,
-                    session,
+                    &session,
                     title,
                     input.archived,
                     clock.as_ref(),
@@ -98,7 +97,14 @@ impl AppApplication {
         let session = session_id.clone();
         self.storage
             .execute(move |db| {
-                mutate_session(db, &subscribers, session, title, Some(true), clock.as_ref())
+                mutate_session(
+                    db,
+                    &subscribers,
+                    &session,
+                    title,
+                    Some(true),
+                    clock.as_ref(),
+                )
             })
             .await
             .map_err(app_error)
@@ -136,7 +142,7 @@ impl AppApplication {
                     mutate_session(
                         db,
                         &subscribers,
-                        session_id,
+                        &session_id,
                         None,
                         Some(true),
                         clock.as_ref(),
@@ -173,13 +179,13 @@ impl AppApplication {
 fn mutate_session(
     db: &mut Connection,
     subscribers: &crate::gateway::application::events::EventSubscribers,
-    session_id: String,
+    session_id: &str,
     title: Option<String>,
     archived: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
-    let current = read::session(&tx, &session_id)?;
+    let current = read::session(&tx, session_id)?;
     if session_id == "general" && archived == Some(true) {
         return Err(AppStorageError::new(
             "general_channel_protected",
@@ -191,22 +197,19 @@ fn mutate_session(
     let now = clock.now_iso();
     tx.execute(
         "UPDATE chats SET title=?1,archived=?2,updated_at=?3 WHERE id=?4",
-        params![title, if archived { 1 } else { 0 }, now, session_id],
+        params![title, i32::from(archived), now, session_id],
     )
     .map_err(AppStorageError::sqlite)?;
-    let session = read::session(&tx, &session_id)?;
+    let session = read::session(&tx, session_id)?;
     let event = events::append_unpublished(
         &tx,
         "session.updated",
         None,
-        json!({"session":session})
-            .as_object()
-            .cloned()
-            .expect("session event is an object"),
+        crate::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppSessionActionResult { session })
 }
 
@@ -230,14 +233,11 @@ fn delete_permanently(
         &tx,
         "session.permanently_deleted",
         None,
-        json!({"session":session})
-            .as_object()
-            .cloned()
-            .expect("session event is an object"),
+        crate::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppSessionActionResult { session })
 }
 

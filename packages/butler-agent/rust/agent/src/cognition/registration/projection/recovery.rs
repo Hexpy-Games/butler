@@ -26,7 +26,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -39,6 +39,9 @@ impl CognitionRegistrationService {
         let host = deps.host.clone();
         let active_owners = self.active_windows.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
@@ -47,8 +50,8 @@ impl CognitionRegistrationService {
             request.cancellation = Some(cancellation.clone());
             let acquired = tokio::select! {
                 biased;
-                _ = shutdown.cancelled() => Err(write_aborted()),
-                _ = cancellation.cancelled() => Err(write_aborted()),
+                () = shutdown.cancelled() => Err(write_aborted()),
+                () = cancellation.cancelled() => Err(write_aborted()),
                 result = coordinator.acquire(request, CognitionWaitClass::Background) =>
                     result.map_err(coordination_error).and_then(|lease|
                         lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))),
@@ -64,7 +67,7 @@ impl CognitionRegistrationService {
                         let now = clock();
                         // Snapshot after the write lease. Claims register their
                         // owner while holding that same lease.
-                        let active = active_owners.lock().unwrap().clone();
+                        let active = active_owners.lock().clone();
                         let result = graph.recover_interrupted_semantic(
                             crate::cognition::graph::ClaimProjectionWindowInput {
                                 job_id: None,

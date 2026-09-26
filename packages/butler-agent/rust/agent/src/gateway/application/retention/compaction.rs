@@ -70,7 +70,7 @@ pub(super) fn compact(db: &mut Connection, turn: &str) -> Result<CompactResult, 
 
     let delivery = delivery_metadata(&tx, turn, target)?;
     let base = existing.as_ref().map_or("[]", |value| value.0.as_str());
-    upsert_projection(&tx, turn, &chat, &state, base, delivery, target)?;
+    upsert_projection(&tx, turn, &chat, &state, base, delivery.as_ref(), target)?;
     tx.execute(
         "DELETE FROM app_terminal_turn_snapshot_state WHERE turn_id=?1",
         [turn],
@@ -212,7 +212,7 @@ fn upsert_projection(
     chat: &str,
     state: &str,
     rows: &str,
-    delivery: Option<String>,
+    delivery: Option<&String>,
     target: i64,
 ) -> Result<(), AppStorageError> {
     tx.execute(

@@ -16,10 +16,10 @@ pub(super) async fn execute(
 ) -> Result<JsonDocument, ToolExecutionError> {
     let args = &call.arguments;
     let Some(file_id) = args.get("file_id").and_then(Value::as_str) else {
-        return encoded(json!({"ok":false,"error":"source_unavailable"}));
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
     if !valid_file_id(file_id) {
-        return encoded(json!({"ok":false,"error":"source_unavailable"}));
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     }
     let Some(source) = owner.binding.project_sources.iter().find(|source| {
         source
@@ -27,23 +27,22 @@ pub(super) async fn execute(
             .and_then(Value::as_str)
             == Some(file_id)
     }) else {
-        return encoded(json!({"ok":false,"error":"source_not_admitted"}));
+        return encoded(&json!({"ok":false,"error":"source_not_admitted"}));
     };
     let Some(digest) = source
         .pointer("/originalRef/sha256")
         .and_then(Value::as_str)
     else {
-        return encoded(json!({"ok":false,"error":"source_unavailable"}));
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
     let Some(size) = source
         .pointer("/originalRef/sizeBytes")
         .and_then(Value::as_u64)
     else {
-        return encoded(json!({"ok":false,"error":"source_unavailable"}));
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
-    let offset = match parse_cursor(args, file_id, digest) {
-        Ok(offset) => offset,
-        Err(()) => return encoded(invalid_cursor()),
+    let Ok(offset) = parse_cursor(args, file_id, digest) else {
+        return encoded(&invalid_cursor());
     };
     let bytes = match owner
         .attachment_context
@@ -57,33 +56,28 @@ pub(super) async fn execute(
             } else {
                 "source_unavailable"
             };
-            return encoded(json!({"ok":false,"error":code}));
+            return encoded(&json!({"ok":false,"error":code}));
         }
     };
-    let body = match String::from_utf8(bytes) {
-        Ok(body) => body,
-        Err(_) => return encoded(json!({"ok":false,"error":"source_unavailable"})),
+    let Ok(body) = String::from_utf8(bytes) else {
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
     let units: Vec<u16> = body.encode_utf16().collect();
     if offset > units.len() {
-        return encoded(invalid_cursor());
+        return encoded(&invalid_cursor());
     }
     let mut end = units.len().min(offset.saturating_add(PAGE_UTF16));
     if end < units.len() && end > offset && (0xd800..=0xdbff).contains(&units[end - 1]) {
         end -= 1;
     }
-    let content = match String::from_utf16(&units[offset..end]) {
-        Ok(content) => content,
-        Err(_) => return encoded(invalid_cursor()),
+    let Ok(content) = String::from_utf16(&units[offset..end]) else {
+        return encoded(&invalid_cursor());
     };
     let truncated = end < units.len();
     let next_cursor = truncated.then(|| {
-        URL_SAFE_NO_PAD.encode(
-            serde_json::to_vec(&json!({"fileId":file_id,"digest":digest,"offset":end}))
-                .expect("cursor value is serializable"),
-        )
+        URL_SAFE_NO_PAD.encode(json!({"fileId":file_id,"digest":digest,"offset":end}).to_string())
     });
-    encoded(json!({
+    encoded(&json!({
         "ok":true,"title":source.get("title").cloned().unwrap_or(Value::Null),
         "source":source.get("source").cloned().unwrap_or(Value::Null),
         "content":content,"truncated":truncated,"next_cursor":next_cursor,
@@ -127,8 +121,8 @@ fn invalid_cursor() -> Value {
         "For the first page omit cursor or use an empty string. For later pages copy next_cursor exactly; do not guess it."})
 }
 
-fn encoded(value: Value) -> Result<JsonDocument, ToolExecutionError> {
-    JsonDocument::from_value(&value).map_err(|error| {
+fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
+    JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(BtccError::new(
             "guided_project_source_result_json",
             error.to_string(),

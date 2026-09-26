@@ -24,7 +24,7 @@ pub(super) struct FinalApply<'a> {
 
 pub(super) fn apply(
     db: &mut Connection,
-    input: FinalCandidate,
+    input: &FinalCandidate,
     apply: FinalApply<'_>,
 ) -> Result<bool, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
@@ -80,11 +80,11 @@ pub(super) fn apply(
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,
-            super::final_turn_events::TurnEventInput {
+            &super::final_turn_events::TurnEventInput {
                 session_id: &input.chat_id,
                 turn_id: &input.turn_id,
                 kind: "turn.failed",
-                payload: object_value(json!({
+                payload: object_value(&json!({
                     "safeLabel":"No visible answer",
                     "safeErrorCode":"no_visible_result"
                 }))?,
@@ -103,7 +103,7 @@ pub(super) fn apply(
         settle(
             &tx,
             apply.subscribers,
-            &input,
+            input,
             "no_visible_result",
             None,
             apply.now,
@@ -113,11 +113,11 @@ pub(super) fn apply(
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,
-            super::final_turn_events::TurnEventInput {
+            &super::final_turn_events::TurnEventInput {
                 session_id: &input.chat_id,
                 turn_id: &input.turn_id,
                 kind: "message.final.started",
-                payload: object_value(json!({"safeLabel":"Preparing final answer"}))?,
+                payload: object_value(&json!({"safeLabel":"Preparing final answer"}))?,
                 event_id: &apply.turn_event_ids.started,
                 created_at: apply.now,
             },
@@ -147,12 +147,12 @@ pub(super) fn apply(
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,
-            super::final_turn_events::TurnEventInput {
+            &super::final_turn_events::TurnEventInput {
                 session_id: &input.chat_id,
                 turn_id: &input.turn_id,
                 kind: "message.final.completed",
                 payload: object_value(
-                    json!({"safeLabel":"Final answer ready","textChars":input.text.encode_utf16().count()}),
+                    &json!({"safeLabel":"Final answer ready","textChars":input.text.encode_utf16().count()}),
                 )?,
                 event_id: &apply.turn_event_ids.completed,
                 created_at: apply.now,
@@ -166,14 +166,14 @@ pub(super) fn apply(
             &input.turn_id,
             apply.now,
         )?;
-        let mut completion_payload = object_value(json!({"safeLabel":"Completed"}))?;
+        let mut completion_payload = object_value(&json!({"safeLabel":"Completed"}))?;
         if let Some(delivery) = input.delivery_metadata.as_ref() {
             completion_payload.extend(delivery.clone());
         }
         super::final_turn_events::append_if_missing(
             &tx,
             apply.subscribers,
-            super::final_turn_events::TurnEventInput {
+            &super::final_turn_events::TurnEventInput {
                 session_id: &input.chat_id,
                 turn_id: &input.turn_id,
                 kind: "turn.completed",
@@ -185,7 +185,7 @@ pub(super) fn apply(
         settle(
             &tx,
             apply.subscribers,
-            &input,
+            input,
             "",
             Some(message_id),
             apply.now,
@@ -213,7 +213,7 @@ pub(super) fn apply(
             apply.subscribers,
             "message.created",
             Some(&input.turn_id),
-            object_value(json!({"message":message}))?,
+            object_value(&json!({"message":message}))?,
             apply.now,
         )?;
     }
@@ -279,7 +279,7 @@ fn settle(
     } else {
         "failed"
     };
-    let mut payload = object_value(json!({
+    let mut payload = object_value(&json!({
         "session_id":input.chat_id,
         "turn_id":input.turn_id,
         "action":action
@@ -335,13 +335,13 @@ fn append_turn_state_changed(
         subscribers,
         "turn.state_changed",
         Some(turn),
-        object_value(json!({"turn":turn_view}))?,
+        object_value(&json!({"turn":turn_view}))?,
         now,
     )
     .map(|_| ())
 }
 
-fn object_value(value: Value) -> Result<Map<String, Value>, AppStorageError> {
+fn object_value(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
         AppStorageError::new(
             "app_projection_payload_invalid",

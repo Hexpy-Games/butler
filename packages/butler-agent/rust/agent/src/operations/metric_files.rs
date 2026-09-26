@@ -1,9 +1,10 @@
 //! Operations-owned append and retention for the fixed metric files.
 
+use parking_lot::{Mutex, MutexGuard};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use serde_json::{Value, json};
 
@@ -70,7 +71,7 @@ impl MetricFiles {
     }
 
     pub(crate) fn append(&self, file: MetricFile, bytes: &[u8]) -> io::Result<()> {
-        let _guard = self.lock(file)?;
+        let _guard = self.lock(file);
         let directory = self.metric_directory();
         fs::create_dir_all(&directory)?;
         let mut output = OpenOptions::new()
@@ -106,7 +107,7 @@ impl MetricFiles {
         now_ms: f64,
         max_age_ms: f64,
     ) -> io::Result<MetricRetentionStats> {
-        let _guard = self.lock(file)?;
+        let _guard = self.lock(file);
         let path = self.metric_directory().join(file.file_name());
         let source = match File::open(&path) {
             Ok(source) => source,
@@ -136,12 +137,9 @@ impl MetricFiles {
             }
 
             stats.scanned += 1;
-            let mut value = match serde_json::from_slice::<Value>(&record) {
-                Ok(value) => value,
-                Err(_) => {
-                    stats.parse_errors += 1;
-                    continue;
-                }
+            let Ok(mut value) = serde_json::from_slice::<Value>(&record) else {
+                stats.parse_errors += 1;
+                continue;
             };
             let timestamp = value
                 .get("ts")
@@ -175,10 +173,8 @@ impl MetricFiles {
         Ok(stats)
     }
 
-    fn lock(&self, file: MetricFile) -> io::Result<MutexGuard<'_, ()>> {
-        self.locks[file.index()]
-            .lock()
-            .map_err(|_| io::Error::other("metric file lock poisoned"))
+    fn lock(&self, file: MetricFile) -> MutexGuard<'_, ()> {
+        self.locks[file.index()].lock()
     }
 
     fn metric_directory(&self) -> PathBuf {
@@ -255,10 +251,7 @@ impl MetricRetentionResult {
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .expect("fixed metric paths have file names")
-        .to_string_lossy();
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
     path.with_file_name(format!(".{name}.retain-{}.tmp", uuid::Uuid::new_v4()))
 }
 
@@ -299,6 +292,10 @@ impl Drop for TemporaryPath {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_write_error(error: serde_json::Error) -> io::Error {
     io::Error::other(error.to_string())
 }

@@ -62,7 +62,7 @@ fn final_artifact(value: &Value) -> Option<FinalArtifact> {
     let size_bytes = size_value
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite() && *number > 0.0)
-        .map(|number| number.trunc() as u64);
+        .map(|number| crate::json::saturating_u64(number.trunc()));
     if size_bytes.is_some_and(|size| size > 10 * 1024 * 1024) {
         return None;
     }

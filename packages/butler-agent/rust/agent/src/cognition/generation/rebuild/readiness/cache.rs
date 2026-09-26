@@ -20,7 +20,7 @@ pub(in crate::cognition::generation) fn evaluate(
 ) -> CacheEvidence {
     let evicted = rows
         .iter()
-        .flat_map(|row| row.receipt_json.as_deref())
+        .filter_map(|row| row.receipt_json.as_deref())
         .filter_map(|raw| serde_json::from_str::<Value>(raw).ok())
         .flat_map(|receipt| receipt["entries"].as_array().cloned().unwrap_or_default())
         .flat_map(|entry| {

@@ -34,9 +34,9 @@ pub(super) async fn get(
         return Err(invalid_cursor());
     }
     let project_key = project_id.to_owned();
-    let before_rowid = cursor
-        .as_ref()
-        .map_or(i64::MAX, |cursor| cursor.rowid as i64);
+    let before_rowid = cursor.as_ref().map_or(i64::MAX, |cursor| {
+        i64::try_from(cursor.rowid).unwrap_or(i64::MAX)
+    });
     let before_file = cursor
         .as_ref()
         .map_or_else(String::new, |cursor| cursor.file_id.clone());
@@ -152,7 +152,7 @@ fn read_artifact_page(
                     created_at: row.get(12)?,
                 };
                 Ok(ArtifactRow {
-                    message_rowid: row.get::<_, i64>(0)?.max(0) as u64,
+                    message_rowid: u64::try_from(row.get::<_, i64>(0)?.max(0)).unwrap_or_default(),
                     message_id: row.get(1)?,
                     session_id: row.get(2)?,
                     turn_id: row.get(3)?,
@@ -181,6 +181,7 @@ fn artifact_summary(row: &ArtifactRow, project_id: &str) -> Result<Value, AppSto
     }))
 }
 
+#[derive(Clone, Copy)]
 struct ArtifactValueInput<'a> {
     file: &'a MessageFileRef,
     id: &'a str,

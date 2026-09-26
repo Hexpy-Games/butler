@@ -45,7 +45,6 @@ pub(super) async fn reconcile(
         }
     }
     let mut not_applied = Vec::new();
-    let mut can_adopt = false;
     let mut must_dispatch = false;
     let mut adopted_result: Option<crate::json::JsonDocument> = None;
     for Classified {
@@ -147,10 +146,9 @@ pub(super) async fn reconcile(
                     )));
                 }
                 if relation == BlockerRelation::Equivalent {
-                    if !can_adopt {
+                    if adopted_result.is_none() {
                         adopted_result = Some(result);
                     }
-                    can_adopt = true;
                 } else {
                     must_dispatch = true;
                 }
@@ -167,10 +165,12 @@ pub(super) async fn reconcile(
             )
             .await?;
     }
-    if !can_adopt || must_dispatch || current.status == EffectStatus::Applied {
+    if must_dispatch || current.status == EffectStatus::Applied {
         return Ok(None);
     }
-    let result = adopted_result.expect("equivalent applied blocker has result");
+    let Some(result) = adopted_result else {
+        return Ok(None);
+    };
     Ok(Some(
         execution::record_applied(context, current, result).await?,
     ))
@@ -195,10 +195,9 @@ fn reconcile_error(error: Option<&EffectAdapterError>) -> EffectError {
 }
 fn rank(value: BlockerRelation) -> u8 {
     match value {
-        BlockerRelation::Equivalent => 0,
         BlockerRelation::Overlapping => 1,
         BlockerRelation::Ambiguous => 2,
-        BlockerRelation::Unrelated => 0,
+        BlockerRelation::Equivalent | BlockerRelation::Unrelated => 0,
     }
 }
 async fn classify(

@@ -23,7 +23,7 @@ pub(in crate::web_access) fn extract_readable_html(
             return HtmlExtraction {
                 markdown: markdown_from_html(&article.content),
                 text,
-                title: nonempty(article.title),
+                title: nonempty(&article.title),
                 method: "readability",
             };
         }
@@ -36,7 +36,7 @@ pub(in crate::web_access) fn extract_readable_html(
     }
 }
 
-fn nonempty(value: String) -> Option<String> {
+fn nonempty(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
 }

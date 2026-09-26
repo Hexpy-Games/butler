@@ -49,16 +49,17 @@ fn normalize_entry(value: &Value, scope: &EffectFileScope) -> EffectResult<Value
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("edit_file requires path"))?;
     let path = crate::btcc::effects::workspace_file::normalized_workspace_effect_path(scope, path)?;
-    let line = object
-        .get("start_line")
-        .and_then(Value::as_f64)
-        .filter(|number| {
-            number.is_finite()
-                && number.fract() == 0.0
-                && (1.0..=9_007_199_254_740_991.0).contains(number)
-        })
-        .ok_or_else(|| invalid("edit_file effect start_line must be a positive integer"))?
-        as u64;
+    let line = crate::json::saturating_u64(
+        object
+            .get("start_line")
+            .and_then(Value::as_f64)
+            .filter(|number| {
+                number.is_finite()
+                    && number.fract() == 0.0
+                    && (1.0..=9_007_199_254_740_991.0).contains(number)
+            })
+            .ok_or_else(|| invalid("edit_file effect start_line must be a positive integer"))?,
+    );
     let old_text = object
         .get("old_text")
         .and_then(Value::as_str)

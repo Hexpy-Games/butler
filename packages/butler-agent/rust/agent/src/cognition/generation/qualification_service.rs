@@ -277,7 +277,7 @@ fn copy_checked(source: &Path, target: &Path, expected_sha: &str) -> CognitionRe
         .open(target)
         .map_err(|_| error("memory_qualification_io_error"))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let count = source
             .read(&mut buffer)

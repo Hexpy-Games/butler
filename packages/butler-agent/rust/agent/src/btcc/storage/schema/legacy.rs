@@ -1,5 +1,5 @@
 // Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
-pub(in crate::btcc::storage) const LEGACY_SCHEMA: &str = r###"
+pub(in crate::btcc::storage) const LEGACY_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_r3_legacy_turn_cutovers (
   cutover_id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL UNIQUE,
@@ -47,4 +47,4 @@ BEFORE DELETE ON btcc_r3_legacy_turn_quarantine
 BEGIN
   SELECT RAISE(ABORT, 'BTCC R3 legacy Turn quarantine is immutable');
 END;
-"###;
+";

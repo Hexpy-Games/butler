@@ -44,7 +44,11 @@ pub(super) fn planned_outcome(
         .map(|id| reader.read_message(id))
         .transpose()?
         .flatten();
-    Ok(planned_mapping(decision, by_source, by_id))
+    Ok(planned_mapping(
+        decision,
+        by_source.as_ref(),
+        by_id.as_ref(),
+    ))
 }
 
 pub(super) fn planned_outcome_connection(
@@ -62,13 +66,17 @@ pub(super) fn planned_outcome_connection(
         .map(|id| super::super::codec::read_message(connection, id))
         .transpose()?
         .flatten();
-    Ok(planned_mapping(decision, by_source, by_id))
+    Ok(planned_mapping(
+        decision,
+        by_source.as_ref(),
+        by_id.as_ref(),
+    ))
 }
 
 fn planned_mapping(
     decision: &Decision,
-    by_source: Option<ConversationMessageWithParts>,
-    by_id: Option<ConversationMessageWithParts>,
+    by_source: Option<&ConversationMessageWithParts>,
+    by_id: Option<&ConversationMessageWithParts>,
 ) -> Outcome {
     if !decision.admit {
         return Outcome::default();
@@ -119,17 +127,26 @@ pub(super) fn import_one(
         .transpose()?
         .flatten();
     if by_source.is_some() || by_id.is_some() {
-        let outcome = planned_mapping(decision, by_source, by_id);
+        let outcome = planned_mapping(decision, by_source.as_ref(), by_id.as_ref());
         transaction.commit().map_err(ConversationError::sqlite)?;
         return Ok(outcome);
     }
-    let role = decision.role.expect("admissible role");
+    // Only admissible decisions reach import; they carry role, time and text.
+    let (Some(role), Some(now), Some(text)) = (
+        decision.role,
+        decision.created_at.clone(),
+        decision.text.clone(),
+    ) else {
+        return Err(ConversationError::new(
+            "conversation_recovery_input_unavailable",
+            "Recovery decision is not admissible",
+        ));
+    };
     let message_id = target_message_id(decision);
     let turn_id = decision
         .conversation_turn_id
         .clone()
         .unwrap_or_else(|| recovered_id("ct", &source_ref));
-    let now = decision.created_at.clone().expect("admissible timestamp");
     let gateway = "historical-recovery".to_owned();
     super::super::turns::begin_in_transaction(
         &transaction,
@@ -145,9 +162,9 @@ pub(super) fn import_one(
             turn_id: Some(turn_id.clone()),
             now: Some(now.clone()),
         },
-        session_id.clone(),
+        &session_id.clone(),
         turn_id.clone(),
-        now.clone(),
+        &now.clone(),
     )?;
     super::super::messages::append_in_transaction(
         &transaction,
@@ -155,7 +172,7 @@ pub(super) fn import_one(
         AppendMessageInput {
             session_id: session_id.clone(),
             turn_id: Some(turn_id.clone()),
-            text: decision.text.clone().expect("admissible text"),
+            text,
             message_id: Some(message_id.clone()),
             role: role.conversation(),
             status: Some(ConversationStatus::Complete),
@@ -180,7 +197,7 @@ pub(super) fn import_one(
             now: Some(now.clone()),
             parts: None,
         },
-        now.clone(),
+        &now.clone(),
     )?;
     super::super::turns::finalize_in_transaction(
         &transaction,
@@ -191,7 +208,7 @@ pub(super) fn import_one(
             completed_at: Some(now.clone()),
             outcome_capsule: None,
         },
-        now,
+        &now,
     )?;
     transaction.commit().map_err(ConversationError::sqlite)?;
     Ok(Outcome {

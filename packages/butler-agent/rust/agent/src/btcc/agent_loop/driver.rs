@@ -9,7 +9,7 @@ use crate::btcc::{
 
 use super::completion::{after_batch, finish, finish_outcome, record_result};
 use super::continuation::{
-    AuthorityBatch, AuthorityLoopContinuation, pending_authority, unexecuted_call,
+    AuthorityBatch, AuthorityLoopContinuation, Refusal, pending_authority, unexecuted_call,
 };
 use super::contracts::{
     AgentLoopEvent, AuthorityDecision, BatchDisposition, CandidateDisposition, ModelRoundMessage,
@@ -288,7 +288,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             for prepared_call in &prepared_calls {
                 emit(
                     input.observer,
-                    AgentLoopEvent::ToolCall {
+                    &AgentLoopEvent::ToolCall {
                         iteration,
                         call: prepared_call.call.clone(),
                     },
@@ -347,18 +347,15 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
         for (index, prepared_call) in prepared_calls.iter().enumerate().skip(start) {
             emit(
                 input.observer,
-                AgentLoopEvent::ToolCall {
+                &AgentLoopEvent::ToolCall {
                     iteration,
                     call: prepared_call.call.clone(),
                 },
             );
-            let result = match (&prepared.authority_decision, resumed_batch.is_some()) {
-                (Some(AuthorityDecision::Deny | AuthorityDecision::Modify { .. }), true) => {
-                    let result = unexecuted_call(
-                        &prepared_call.call,
-                        prepared.authority_decision.as_ref().unwrap(),
-                        index == start,
-                    );
+            let refusal = Refusal::from_decision(prepared.authority_decision.as_ref());
+            let result = match (refusal, resumed_batch.is_some()) {
+                (Some(refusal), true) => {
+                    let result = unexecuted_call(&prepared_call.call, refusal, index == start);
                     input
                         .policy
                         .record_unexecuted(

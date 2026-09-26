@@ -23,8 +23,7 @@ impl CycleService {
             .release(outcome.is_ok())
             .map_err(|e| CognitionError::new(e.code, e.message));
         match (outcome, released) {
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
             (Ok(value), Ok(())) => Ok(value),
         }
     }
@@ -57,12 +56,8 @@ impl CycleService {
             .unwrap_or_else(|| expected.clone());
             if let Some(active) = &current.active_phase {
                 let same_process = active.owner_pid == self.host.process_id();
-                let locally_active = same_process
-                    && self
-                        .active_claims
-                        .lock()
-                        .expect("claim set poisoned")
-                        .contains(&active.owner_nonce);
+                let locally_active =
+                    same_process && self.active_claims.lock().contains(&active.owner_nonce);
                 let other_active = !same_process
                     && self.host.process_status(u64::from(active.owner_pid))
                         != CognitionProcessStatus::DefinitelyDead;

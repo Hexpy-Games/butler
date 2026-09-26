@@ -5,7 +5,7 @@ use crate::{
     public_text::trim_js_whitespace,
 };
 
-pub(super) fn event(event_type: &str, payload: Value) -> AppPersonalizationEvent {
+pub(super) fn event(event_type: &str, payload: &Value) -> AppPersonalizationEvent {
     AppPersonalizationEvent {
         event_type: event_type.to_owned(),
         payload: payload.as_object().cloned().unwrap_or_default(),

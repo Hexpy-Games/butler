@@ -310,8 +310,8 @@ impl NativeEmbeddingEngine {
             .map_err(|_| EmbeddingFailure("embed_output_invalid"))?;
         if shape.len() != 3
             || shape[0] != 1
-            || shape[1] != len as i64
-            || shape[2] != EXPECTED_DIMENSION as i64
+            || shape[1] != i64::try_from(len).unwrap_or(i64::MAX)
+            || shape[2] != i64::try_from(EXPECTED_DIMENSION).unwrap_or(i64::MAX)
             || data.len() != len * EXPECTED_DIMENSION
         {
             return Err(EmbeddingFailure("embed_dimension_invalid"));
@@ -342,6 +342,10 @@ impl NativeEmbeddingEngine {
         if !squared.is_finite() || squared <= 0.0 {
             return Err(EmbeddingFailure("embed_output_invalid"));
         }
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the finite positive norm of f32 components fits f32"
+        )]
         let norm = squared.sqrt() as f32;
         for value in &mut vector {
             *value /= norm;
@@ -377,7 +381,7 @@ fn hash_file(path: &PathBuf) -> Result<String, EmbeddingFailure> {
     let mut file =
         File::open(path).map_err(|_| EmbeddingFailure("embed_asset_identity_unavailable"))?;
     let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let count = file
             .read(&mut buffer)

@@ -27,16 +27,15 @@ impl TimeZoneData {
         if take(&mut input, 4)? != b"BTZ2" {
             return Err(failure("Invalid embedded time zone header"));
         }
-        let count = u32::from_le_bytes(take(&mut input, 4)?.try_into().unwrap()) as usize;
+        let count = take_u32(&mut input)? as usize;
         if count > input.len() / 6 {
             return Err(failure("Invalid embedded time zone count"));
         }
         let mut entries: Vec<Entry> = Vec::with_capacity(count);
         for _ in 0..count {
-            let name_len = u16::from_le_bytes(take(&mut input, 2)?.try_into().unwrap()) as usize;
-            let canonical_len =
-                u16::from_le_bytes(take(&mut input, 2)?.try_into().unwrap()) as usize;
-            let data_len = u32::from_le_bytes(take(&mut input, 4)?.try_into().unwrap()) as usize;
+            let name_len = usize::from(take_u16(&mut input)?);
+            let canonical_len = usize::from(take_u16(&mut input)?);
+            let data_len = take_u32(&mut input)? as usize;
             let name = std::str::from_utf8(take(&mut input, name_len)?)
                 .map_err(|error| failure(error.to_string()))?;
             let canonical = std::str::from_utf8(take(&mut input, canonical_len)?)
@@ -115,14 +114,14 @@ impl TimeZoneData {
         let view = zone.as_ref();
         // ICU zones without a final annual rule retain the final time type,
         // including permanent daylight offsets. TZif has no fixed-DST footer.
-        let local = if view.extra_rule().is_none()
-            && view
-                .transitions()
-                .last()
-                .is_some_and(|last| epoch >= last.unix_leap_time())
-        {
-            let last = view.transitions().last().unwrap();
-            &view.local_time_types()[last.local_time_type_index()]
+        let final_transition = view
+            .transitions()
+            .last()
+            .filter(|last| view.extra_rule().is_none() && epoch >= last.unix_leap_time());
+        let local = if let Some(last) = final_transition {
+            view.local_time_types()
+                .get(last.local_time_type_index())
+                .ok_or_else(|| failure("Invalid time zone data"))?
         } else {
             zone.find_local_time_type(epoch)
                 .map_err(|error| failure(error.to_string()))?
@@ -148,6 +147,20 @@ fn compare(left: &str, right: &str) -> Ordering {
     left.bytes()
         .map(|byte| byte.to_ascii_lowercase())
         .cmp(right.bytes().map(|byte| byte.to_ascii_lowercase()))
+}
+
+fn take_u16(input: &mut &'static [u8]) -> ContextResult<u16> {
+    let bytes = take(input, 2)?;
+    <[u8; 2]>::try_from(bytes)
+        .map(u16::from_le_bytes)
+        .map_err(|_| failure("Truncated embedded time zone data"))
+}
+
+fn take_u32(input: &mut &'static [u8]) -> ContextResult<u32> {
+    let bytes = take(input, 4)?;
+    <[u8; 4]>::try_from(bytes)
+        .map(u32::from_le_bytes)
+        .map_err(|_| failure("Truncated embedded time zone data"))
 }
 
 fn take(input: &mut &'static [u8], length: usize) -> ContextResult<&'static [u8]> {

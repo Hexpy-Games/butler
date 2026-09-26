@@ -39,7 +39,7 @@ impl Drop for Staging {
 pub(super) fn run(
     root: &Path,
     clock: &dyn AppIdentityClock,
-    request: ArtifactMaterializationRequest,
+    request: &ArtifactMaterializationRequest,
 ) -> Result<Vec<MaterializedResponderFile>, GatewayApplicationError> {
     let paths = AllowedPaths::new(&request.allowed_roots).map_err(internal)?;
     let mut seen = HashSet::new();
@@ -86,13 +86,17 @@ pub(super) fn run(
             continue;
         }
         let staged = if let Some(bytes) = bytes {
-            if staging.0.is_none() {
-                fs::create_dir_all(root).map_err(internal)?;
-                let directory = root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
-                fs::create_dir(&directory).map_err(internal)?;
-                staging.0 = Some(directory);
-            }
-            let path = staging.0.as_ref().unwrap().join(pending.len().to_string());
+            let directory = match &staging.0 {
+                Some(directory) => directory,
+                None => {
+                    fs::create_dir_all(root).map_err(internal)?;
+                    let directory =
+                        root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
+                    fs::create_dir(&directory).map_err(internal)?;
+                    staging.0.insert(directory)
+                }
+            };
+            let path = directory.join(pending.len().to_string());
             let mut file = File::create(&path).map_err(internal)?;
             file.write_all(&bytes).map_err(internal)?;
             Some(path)
@@ -159,7 +163,7 @@ fn read_and_hash(
     let mut digest = Sha256::new();
     let mut size = 0_u64;
     let mut bytes = buffer.then(Vec::new);
-    let mut chunk = [0_u8; 64 * 1024];
+    let mut chunk = vec![0_u8; 64 * 1024];
     loop {
         let n = file.read(&mut chunk).map_err(internal)?;
         if n == 0 {

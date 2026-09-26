@@ -66,7 +66,7 @@ pub(super) fn assert_projection_ownership(
     for item in &input.works {
         let work = &item.work;
         let WorkScope::Project { project_ref } = &work.scope else {
-            unreachable!()
+            return Err(invalid("project_work_runtime_projection_mismatch"));
         };
         let row = db.query_row(
             "SELECT session_id,scope_kind,scope_ref,ledger_project_id FROM btcc_guided_works WHERE work_id=?1",
@@ -139,7 +139,7 @@ pub(super) fn assert_projection_ownership(
             .find(|item| item.work.session_id == session)
             .ok_or_else(|| invalid("project_work_runtime_ownership_conflict"))?;
         let WorkScope::Project { project_ref } = &expected.work.scope else {
-            unreachable!()
+            return Err(invalid("project_work_runtime_projection_mismatch"));
         };
         if work_session.as_deref() != Some(expected.work.session_id.as_str())
             || kind.as_deref() != Some("project")

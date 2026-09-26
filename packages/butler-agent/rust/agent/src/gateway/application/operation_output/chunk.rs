@@ -141,8 +141,8 @@ where
             return Ok(ChunkOutputRead::Invalid);
         }
         result_hasher.update(&chunk);
-        let chunk_start = row.byte_start as u64;
-        let chunk_end = row.byte_end as u64;
+        let chunk_start = u64::try_from(row.byte_start).unwrap_or_default();
+        let chunk_end = u64::try_from(row.byte_end).unwrap_or_default();
         let overlap_start = chunk_start.max(byte_start);
         let overlap_end = chunk_end.min(page_end);
         if overlap_start < overlap_end {
@@ -244,7 +244,7 @@ fn integer(value: &Value, positive: bool) -> Option<i64> {
                 && *value <= MAX_SAFE_INTEGER
                 && value.fract() == 0.0
         })
-        .and_then(|value| i64::try_from(value as u64).ok())
+        .and_then(|value| i64::try_from(crate::json::saturating_u64(value)).ok())
 }
 
 pub(super) fn sha256(bytes: &[u8]) -> String {

@@ -39,7 +39,12 @@ pub(crate) fn format_date_value(value: f64) -> Option<String> {
     if !value.is_finite() || value.abs() > TIME_CLIP as f64 {
         return None;
     }
-    format_iso_millis(value.trunc() as i64)
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "finite and within TIME_CLIP, so the truncated value fits i64"
+    )]
+    let millis = value.trunc() as i64;
+    format_iso_millis(millis)
 }
 
 pub(crate) fn parse_iso_millis(value: &str) -> Option<i64> {

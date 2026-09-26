@@ -294,10 +294,9 @@ fn transitions(kind: &str, from: &str) -> &'static [&'static str] {
         ("work", "specified") => &["in_progress", "review", "blocked", "cancelled"],
         ("work", "in_progress") => &["review", "blocked", "cancelled"],
         ("work", "review") => &["done", "in_progress", "blocked", "cancelled"],
-        ("work", "blocked") => &["in_progress", "cancelled"],
+        ("work", "blocked") | ("task", "blocked" | "failed") => &["in_progress", "cancelled"],
         ("task", "todo") => &["in_progress", "blocked", "cancelled"],
         ("task", "in_progress") => &["done", "failed", "blocked", "cancelled"],
-        ("task", "blocked" | "failed") => &["in_progress", "cancelled"],
         ("attempt", "started") => &["succeeded", "failed", "interrupted"],
         _ => &[],
     }

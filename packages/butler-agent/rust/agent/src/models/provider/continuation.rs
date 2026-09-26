@@ -36,13 +36,13 @@ pub(super) fn prepare(
         let item = match message.role {
             ModelRoundRole::Tool => {
                 tools += 1;
-                ((tools as i64) > already_sent_tools).then(|| {
+                (i64::try_from(tools).unwrap_or(i64::MAX) > already_sent_tools).then(|| {
                     serde_json::json!({"type":"function_call_output","call_id":message.tool_call_id,"output":message.content})
                 })
             }
             ModelRoundRole::User => {
                 users += 1;
-                ((users as i64) > already_sent_users).then(|| {
+                (i64::try_from(users).unwrap_or(i64::MAX) > already_sent_users).then(|| {
                     serde_json::json!({"role":"user","content":[{"type":"input_text","text":message.content}]})
                 })
             }
@@ -68,7 +68,7 @@ fn sent(previous: &Value, field: &str) -> Result<i64, crate::btcc::ModelRoundErr
         .pointer(&format!("/sent/{field}"))
         .and_then(Value::as_f64)
         .filter(|value| value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0)
-        .map(|value| value as i64)
+        .map(crate::json::saturating_i64)
         .ok_or_else(|| invalid("openai_sent_continuation_missing"))
 }
 
@@ -97,10 +97,9 @@ fn project_acknowledged(previous: &[Value], messages: &[ModelRoundMessage]) -> V
                 return item.clone();
             };
             let mut projected = item.clone();
-            projected
-                .as_object_mut()
-                .expect("function_call_output is an object")
-                .insert("output".into(), message.content.as_ref().to_owned().into());
+            if let Some(object) = projected.as_object_mut() {
+                object.insert("output".into(), message.content.as_ref().to_owned().into());
+            }
             projected
         })
         .collect()

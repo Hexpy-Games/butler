@@ -1,4 +1,3 @@
-use serde::Serialize;
 use serde_json::Value;
 
 use super::super::contracts::ProfilingMode;
@@ -63,40 +62,28 @@ pub(super) fn extractor_prompt(
     mode: ProfilingMode,
     targets: &[Value],
 ) -> String {
-    #[derive(Serialize)]
-    struct Observation<'a> {
-        #[serde(rename = "ref")]
-        reference: &'a str,
-        observed_at: &'a str,
-        text: &'a str,
-    }
-    #[derive(Serialize)]
-    struct ExtractorPrompt<'a> {
-        task: &'static str,
-        mode: &'a str,
-        rules: [&'static str; 2],
-        correction_targets: &'a [Value],
-        observations: Vec<Observation<'a>>,
-    }
-    serde_json::to_string(&ExtractorPrompt {
-        task: "extract_profile_candidates",
-        mode: mode.as_str(),
-        rules: [
+    let observations = windows
+        .iter()
+        .take(MAX_OBSERVATIONS)
+        .map(|window| {
+            serde_json::json!({
+                "ref": window.evidence_ref,
+                "observed_at": window.timestamp,
+                "text": window.text.as_ref(),
+            })
+        })
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "task": "extract_profile_candidates",
+        "mode": mode.as_str(),
+        "rules": [
             "Evidence refs must be non-empty and come only from delivered observations.",
             "For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly."
         ],
-        correction_targets: targets,
-        observations: windows
-            .iter()
-            .take(MAX_OBSERVATIONS)
-            .map(|window| Observation {
-                reference: &window.evidence_ref,
-                observed_at: &window.timestamp,
-                text: window.text.as_ref(),
-            })
-            .collect(),
+        "correction_targets": targets,
+        "observations": observations,
     })
-    .unwrap()
+    .to_string()
 }
 
 pub(super) fn instructions(mode: ProfilingMode) -> String {

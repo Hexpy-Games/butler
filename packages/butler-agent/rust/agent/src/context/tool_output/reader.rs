@@ -9,10 +9,10 @@ use crate::public_text::trim_js_whitespace;
 pub(super) fn read(
     butler_data: &Path,
     estimator: &OwnedDefaultTokenEstimator,
-    input: ReadToolOutputInput,
+    input: &ReadToolOutputInput,
 ) -> ContextResult<FocusedToolOutputArtifactRead> {
     let root = butler_data.join("artifacts/tool-output");
-    let path = match reference(&root, &input, None)? {
+    let path = match reference(&root, input, None)? {
         Ok(path) => path,
         Err(error) => return Ok(failure(error)),
     };
@@ -32,12 +32,15 @@ pub(super) fn read(
         .offset_chars
         .filter(|value| value.is_finite())
         .map(nonnegative_trunc);
-    let limit_lines = input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0) as usize;
-    let max_tokens = input
-        .max_tokens
-        .unwrap_or(1_200.0)
-        .trunc()
-        .clamp(50.0, 8_000.0) as usize;
+    let limit_lines =
+        crate::json::saturating_usize(input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0));
+    let max_tokens = crate::json::saturating_usize(
+        input
+            .max_tokens
+            .unwrap_or(1_200.0)
+            .trunc()
+            .clamp(50.0, 8_000.0),
+    );
     let stdout_has_text = !trim_js_whitespace(stdout).is_empty();
     let stderr_has_text = !trim_js_whitespace(stderr).is_empty();
     let stdout_tokens = if input.stream == ArtifactStream::Both && stderr_has_text {
@@ -50,7 +53,9 @@ pub(super) fn read(
     } else {
         max_tokens
     };
-    let stdout_slice = if input.stream != ArtifactStream::Stderr {
+    let stdout_slice = if input.stream == ArtifactStream::Stderr {
+        None
+    } else {
         Some(slice_tool_artifact_text(
             estimator,
             SliceInput {
@@ -62,10 +67,10 @@ pub(super) fn read(
                 max_tokens: stdout_tokens,
             },
         )?)
-    } else {
-        None
     };
-    let stderr_slice = if input.stream != ArtifactStream::Stdout {
+    let stderr_slice = if input.stream == ArtifactStream::Stdout {
+        None
+    } else {
         Some(slice_tool_artifact_text(
             estimator,
             SliceInput {
@@ -77,8 +82,6 @@ pub(super) fn read(
                 max_tokens: stderr_tokens,
             },
         )?)
-    } else {
-        None
     };
     let metadata = ToolOutputArtifactMetadata {
         id: artifact
@@ -134,7 +137,7 @@ fn failure(error: &'static str) -> FocusedToolOutputArtifactRead {
 }
 
 fn nonnegative_trunc(value: f64) -> usize {
-    value.trunc().max(0.0) as usize
+    crate::json::saturating_usize(value.trunc().max(0.0))
 }
 
 fn read_artifact(path: &Path) -> Option<Value> {
@@ -267,6 +270,10 @@ fn under_root(path: &Path, root: &Path) -> ContextResult<bool> {
     Ok(real_path.starts_with(real_root))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> ContextError {
     ContextError::new("tool_output_io_error", error.to_string())
 }

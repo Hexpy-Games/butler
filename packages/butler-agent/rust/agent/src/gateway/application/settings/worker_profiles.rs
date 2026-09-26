@@ -37,9 +37,9 @@ pub(super) fn canonicalize(
     };
     let max_workers = stored
         .get("max_simultaneous_workers")
-        .and_then(|value| value.as_f64())
+        .and_then(serde_json::Value::as_f64)
         .filter(|value| value.fract() == 0.0 && (1.0..=10.0).contains(value))
-        .map(|value| value as u64)
+        .map(crate::json::saturating_u64)
         .unwrap_or(DEFAULT_MAX_WORKERS);
     let profiles_value = Value::Array(profiles);
     let changed = has_legacy
@@ -293,10 +293,12 @@ fn valid_numbered_id(value: &str) -> bool {
     })
 }
 fn next_id(reserved: &HashSet<String>, seen: &HashSet<String>) -> String {
-    (1_u64..)
+    // At most `reserved.len() + seen.len()` ids are taken, so this finds one.
+    let taken = reserved.len() + seen.len();
+    (1..=taken + 1)
         .map(|number| format!("w{number}"))
         .find(|id| !reserved.contains(id) && !seen.contains(id))
-        .expect("unbounded profile id space")
+        .unwrap_or_else(|| format!("w{}", taken + 1))
 }
 fn encoded(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()

@@ -79,6 +79,19 @@ pub(crate) enum AttachmentKind {
     Binary,
 }
 
+impl AttachmentKind {
+    /// The serde (`snake_case`) name.
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::Audio => "audio",
+            Self::Video => "video",
+            Self::Document => "document",
+            Self::Binary => "binary",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TurnMessage {

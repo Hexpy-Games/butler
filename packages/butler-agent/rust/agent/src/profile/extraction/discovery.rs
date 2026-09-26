@@ -18,19 +18,21 @@ pub(super) fn read(
     factory: &dyn CanonicalProfileSourceFactory,
     options: &ProfileTranscriptCaptureOptions,
 ) -> ProfileResult<SourceRead> {
-    let limit = options
-        .max_user_messages
-        .filter(|value| value.is_finite())
-        .unwrap_or(1_200.0)
-        .clamp(1.0, MAX_SCAN_MESSAGES as f64)
-        .ceil() as usize;
+    let limit = crate::json::saturating_usize(
+        options
+            .max_user_messages
+            .filter(|value| value.is_finite())
+            .unwrap_or(1_200.0)
+            .clamp(1.0, MAX_SCAN_MESSAGES as f64)
+            .ceil(),
+    );
     let since = normalized_since(options.since.as_deref());
     let since_ms = since
         .as_deref()
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.timestamp_millis());
     let mut reader = factory.open()?;
-    let result = read_owned(root, reader.as_mut(), limit, since, since_ms);
+    let result = read_owned(root, reader.as_mut(), limit, since.as_ref(), since_ms);
     let close = reader.close();
     close?;
     result
@@ -40,7 +42,7 @@ fn read_owned(
     root: &Path,
     reader: &mut dyn CanonicalProfileSourceReader,
     limit: usize,
-    since: Option<String>,
+    since: Option<&String>,
     since_ms: Option<i64>,
 ) -> ProfileResult<SourceRead> {
     let incomplete = incomplete_windows(root, reader, since_ms, limit)?;
@@ -59,7 +61,7 @@ fn read_owned(
     while source_rows < MAX_SCAN_MESSAGES && windows.len() < limit {
         let page_limit = 1_000usize.min(MAX_SCAN_MESSAGES - source_rows);
         let page = reader.read_cognition_messages(CanonicalProfileScan {
-            since: since.clone(),
+            since: since.cloned(),
             offset: offset as f64,
             limit: page_limit as f64,
         })?;
@@ -146,15 +148,13 @@ fn incomplete_windows(
     }
     let db = storage::open(root, false)?;
     let query_limit = MAX_SCAN_MESSAGES.min(limit.saturating_mul(4).saturating_add(1));
-    let since = since_ms.map(|value| {
-        chrono::DateTime::from_timestamp_millis(value)
-            .unwrap()
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-    });
+    let since = since_ms
+        .and_then(chrono::DateTime::from_timestamp_millis)
+        .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let rows = (|| {
         let mut statement = db.prepare("SELECT coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,observed_at,evidence_ref FROM profile_source_coverage WHERE disposition IN ('pending','failed') AND COALESCE(failure_code,'')!='source_stale' AND (?1 IS NULL OR observed_at>=?1) ORDER BY observed_at,message_id,part_index,scalar_pointer,byte_start LIMIT ?2").map_err(storage::db_error)?;
         statement
-            .query_map(params![since, query_limit as i64], |row| {
+            .query_map(params![since, i64::try_from(query_limit).unwrap_or(i64::MAX)], |row| {
                 Ok(SourceWindow {
                     coverage_key: row.get(0)?,
                     message_id: row.get(1)?,
@@ -162,8 +162,8 @@ fn incomplete_windows(
                     part_id: row.get(3)?,
                     part_index: row.get(4)?,
                     scalar_pointer: row.get(5)?,
-                    byte_start: row.get::<_, i64>(6)?.max(0) as usize,
-                    byte_end: row.get::<_, i64>(7)?.max(0) as usize,
+                    byte_start: usize::try_from(row.get::<_, i64>(6)?.max(0)).unwrap_or_default(),
+                    byte_end: usize::try_from(row.get::<_, i64>(7)?.max(0)).unwrap_or_default(),
                     timestamp: row.get(8)?,
                     evidence_ref: row.get(9)?,
                     text: Arc::from(""),
@@ -251,6 +251,7 @@ pub(super) fn make_window(input: SourceWindowInput<'_>) -> SourceWindow {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct SourceWindowInput<'a> {
     pub(super) message_id: &'a str,
     pub(super) timestamp: &'a str,
@@ -335,20 +336,20 @@ fn contiguous_children(db: &Connection, window: &SourceWindow) -> ProfileResult<
                 window.source_hash,
                 window.part_id,
                 window.scalar_pointer,
-                window.byte_start as i64,
-                window.byte_end as i64
+                i64::try_from(window.byte_start).unwrap_or(i64::MAX),
+                i64::try_from(window.byte_end).unwrap_or(i64::MAX)
             ],
             |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
         )
         .map_err(storage::db_error)?;
-    let mut cursor = window.byte_start as i64;
+    let mut cursor = i64::try_from(window.byte_start).unwrap_or(i64::MAX);
     for row in rows {
         let (start, end) = row.map_err(storage::db_error)?;
         if start != cursor || end <= cursor {
             return Ok(false);
         }
         cursor = end;
-        if cursor == window.byte_end as i64 {
+        if cursor == i64::try_from(window.byte_end).unwrap_or(i64::MAX) {
             return Ok(true);
         }
     }

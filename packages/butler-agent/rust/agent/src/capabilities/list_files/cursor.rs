@@ -15,7 +15,7 @@ pub(super) fn encode(query: &str, marker: &str) -> String {
     fields.insert("tool".into(), json!("list_files"));
     fields.insert("query".into(), json!(query));
     fields.insert("marker".into(), json!(marker));
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(fields)).expect("list cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(fields).to_string())
 }
 
 pub(super) fn decode(value: &Value) -> Option<ListCursor> {
@@ -24,7 +24,7 @@ pub(super) fn decode(value: &Value) -> Option<ListCursor> {
         return None;
     }
     let bytes = super::super::cursor::decode_buffer_base64url(raw);
-    let decoded: Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let decoded: Value = serde_json::from_slice(&bytes).ok()?;
     let fields = decoded.as_object()?;
     if fields.get("v")?.as_f64()? != 1.0 || fields.get("tool")?.as_str()? != "list_files" {
         return None;

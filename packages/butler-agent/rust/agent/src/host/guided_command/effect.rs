@@ -43,7 +43,9 @@ pub(super) async fn prepare(
     proposed.insert("cwd".into(), Value::String(relative.clone()));
     let input = normalize(&Value::Object(proposed))
         .map_err(|e| BtccError::new("command_effect_invalid", e))?;
-    let effect = input["state_effect"].as_str().expect("normalized effect");
+    let Some(effect) = input.get("state_effect").and_then(Value::as_str) else {
+        return Err(error("command_effect_invalid"));
+    };
     let target = target(&relative, effect);
     let adapter = CommandEffectAdapter {
         commands: owner.commands.clone(),
@@ -136,8 +138,15 @@ impl EffectAdapter for CommandEffectAdapter {
                     "The approved command workspace or directory changed before dispatch.",
                 )));
             }
-            let args = input.as_object().expect("normalized effect input");
-            let command = args["command"].as_str().expect("normalized command");
+            let Some((args, command)) = input.as_object().and_then(|args| {
+                let command = args.get("command").and_then(Value::as_str)?;
+                Some((args, command))
+            }) else {
+                return Ok(AdapterOutcome::NotApplied(adapter_error(
+                    "command_effect_invalid",
+                    "The approved command input is not a normalized command.",
+                )));
+            };
             let data = self.butler_data.clone();
             let before = self
                 .jobs

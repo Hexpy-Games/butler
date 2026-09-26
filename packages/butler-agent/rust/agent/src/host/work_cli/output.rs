@@ -26,13 +26,13 @@ pub(super) fn failure(
 
 pub(super) fn render_success(
     json_output: bool,
-    command: String,
+    command: &str,
     data: Value,
-    human: String,
+    human: &str,
     quiet: bool,
 ) -> NativeWorkCliResult {
     let stdout = if json_output {
-        envelope(true, &command, Some(data), None)
+        envelope(true, command, Some(data), None)
     } else if quiet {
         String::new()
     } else {
@@ -48,7 +48,7 @@ pub(super) fn render_success(
 pub(super) fn render_error(
     json_output: bool,
     command: &str,
-    error: CommandError,
+    error: &CommandError,
 ) -> NativeWorkCliResult {
     if json_output {
         NativeWorkCliResult {
@@ -56,7 +56,7 @@ pub(super) fn render_error(
                 false,
                 command,
                 None,
-                Some(json!({ "code": error.code, "message": error.message })),
+                Some(&json!({ "code": error.code, "message": error.message })),
             ),
             stderr: String::new(),
             exit_code: error.exit_code,
@@ -70,16 +70,15 @@ pub(super) fn render_error(
     }
 }
 
-fn envelope(ok: bool, command: &str, data: Option<Value>, error: Option<Value>) -> String {
+fn envelope(ok: bool, command: &str, data: Option<Value>, error: Option<&Value>) -> String {
     format!(
         "{}\n",
-        serde_json::to_string_pretty(&json!({
+        crate::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(Value::Null),
             "error": error,
             "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
         }))
-        .expect("JSON envelope serialization cannot fail")
     )
 }

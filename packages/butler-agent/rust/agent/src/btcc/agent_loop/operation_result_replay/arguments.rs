@@ -79,7 +79,7 @@ pub(super) fn safe_integer(value: Option<&Value>, code: &'static str) -> Result<
     let number = value
         .ok_or_else(|| error(code))
         .and_then(|value| number(value, code))?;
-    usize::try_from(number as u64).map_err(|_| error(code))
+    usize::try_from(crate::json::saturating_u64(number)).map_err(|_| error(code))
 }
 
 fn number(value: &Value, code: &'static str) -> Result<f64, BtccError> {

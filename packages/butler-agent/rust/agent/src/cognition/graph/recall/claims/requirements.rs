@@ -26,7 +26,7 @@ pub(super) fn requirements(
     let validity = scope::claim(input, "e", "id");
     let source = scope::source(input, "s", "c");
     let sql = format!(
-        r#"
+        r"
         SELECT DISTINCT e.id,m.source_id FROM memory_nodes e
         JOIN memory_evidence m ON m.node_id=e.id
         JOIN memory_chunk_sources s ON s.source_id=m.source_id
@@ -38,7 +38,7 @@ pub(super) fn requirements(
             SELECT 1 FROM memory_evidence dependency
             WHERE dependency.node_id=e.id AND dependency.source_id NOT IN ({})
           ) AND {} AND {}
-    "#,
+    ",
         scope::placeholders(ids.len()),
         scope::placeholders(ids.len()),
         validity.sql,

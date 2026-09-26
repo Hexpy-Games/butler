@@ -174,8 +174,7 @@ pub(crate) async fn prepare(
         .release(result.is_ok())
         .map_err(|_| error("memory_write_busy"));
     match (result, released) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
     }
 }
@@ -221,9 +220,11 @@ fn stage(
         File::open(&snapshot_path)
             .and_then(|file| file.sync_all())
             .map_err(io_error)?;
-        File::open(snapshot_path.parent().unwrap())
-            .and_then(|dir| dir.sync_all())
-            .map_err(io_error)?;
+        if let Some(directory) = snapshot_path.parent() {
+            File::open(directory)
+                .and_then(|dir| dir.sync_all())
+                .map_err(io_error)?;
+        }
         if cancellation.is_cancelled() {
             return Err(error("memory_operation_aborted"));
         }
@@ -251,11 +252,14 @@ fn stage(
             .map_err(io_error)?;
         let canonical_bytes = fs::metadata(&snapshot_path).map_err(io_error)?.len();
         let canonical_sha256 = hash_file(&snapshot_path)?;
-        let duration_ms = start
-            .elapsed()
-            .unwrap_or_default()
-            .as_millis()
-            .min(u64::MAX as u128) as u64;
+        let duration_ms = u64::try_from(
+            start
+                .elapsed()
+                .unwrap_or_default()
+                .as_millis()
+                .min(u128::from(u64::MAX)),
+        )
+        .unwrap_or(u64::MAX);
         let _ = generation_id;
         Ok(Staged {
             source_inventory_hash: live.hash,
@@ -357,7 +361,7 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
     use std::io::Read;
     let mut file = File::open(path).map_err(io_error)?;
     let mut hash = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     loop {
         let n = file.read(&mut buffer).map_err(io_error)?;
         if n == 0 {
@@ -367,11 +371,19 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
     }
     Ok(format!("{:x}", hash.finalize()))
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_rebuild_io_error", error.to_string())
 }
 /// A caller cancellation observed while waiting for the write gate is an abort,
 /// not contention: `memory_write_busy` is retryable for callers.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
     if failure.code == "memory_write_aborted" {
         error("memory_operation_aborted")

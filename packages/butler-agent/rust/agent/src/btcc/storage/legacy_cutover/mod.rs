@@ -221,7 +221,7 @@ fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
         revision,
         &content,
         "btcc-canonical-delivery.v1",
-    );
+    )?;
     let pending = blockers::pending(db, &turn.turn_id, turn.checkpoint_id.as_deref())?;
     blockers::preserve(
         db,
@@ -329,7 +329,7 @@ fn settle_quarantined(db: &Connection, turn: &LegacyTurn) -> StorageResult<()> {
             revision,
             &content,
             "btcc-r3-quarantine-delivery.v1",
-        )
+        )?
         .with_message(message_id)
     } else {
         new_delivery(
@@ -337,7 +337,7 @@ fn settle_quarantined(db: &Connection, turn: &LegacyTurn) -> StorageResult<()> {
             revision,
             &limitation_message(&turn.original_message),
             "btcc-r3-quarantine-delivery.v1",
-        )
+        )?
     };
     let delivered = canonical.is_some();
     if existing.is_none() {

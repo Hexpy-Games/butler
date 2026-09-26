@@ -1,18 +1,25 @@
 //! Dashboard-consumed worker completion safety from durable task evidence.
 
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::LazyLock,
 };
 
 use regex::Regex;
 use serde_json::Value;
 
+use crate::public_text::fixed_regex;
+
 use crate::public_text::trim_js_whitespace as trim;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Default)]
 struct Facts {
     implementation: bool,
@@ -195,28 +202,28 @@ fn classification(directory: &Path, request: &str) -> &'static str {
         return "diagnosis-only";
     }
     let text = format!("{request}\n{plan}").to_lowercase();
-    if pattern(
+    if matches_fixed(
         r"(blocked|blocker|cannot safely|can't safely|불가능|막힘|차단|진행할 수 없)",
         &text,
     ) {
         return "explicit-blocker";
     }
-    if pattern(
+    if matches_fixed(
         r"(implement|fix|change|modify|patch|edit|create|add|update|refactor|ship|수정|구현|변경|추가|고쳐|만들|반영)",
         &text,
     ) {
         return "implementation-required";
     }
-    if pattern(r"(review|audit|검토|리뷰)", &text) {
+    if matches_fixed(r"(review|audit|검토|리뷰)", &text) {
         return "review-only";
     }
-    if pattern(
+    if matches_fixed(
         r"(research|investigate|diagnose|analy[sz]e|summari[sz]e|check|verify|inspect|조사|분석|진단|파악|요약|확인|검증)",
         &text,
     ) {
         return "diagnosis-only";
     }
-    if pattern(r"(write|draft|document|문서|작성|정리)", &text) {
+    if matches_fixed(r"(write|draft|document|문서|작성|정리)", &text) {
         return "writing-only";
     }
     "implementation-required"
@@ -248,14 +255,14 @@ fn collect(directory: &Path) -> Facts {
     let result = read(&directory.join("result.md"));
     let log = read(&directory.join("log.txt"));
     let text = format!("{log}\n{result}");
-    facts.implementation |= pattern(
+    facts.implementation |= matches_fixed(
         r"(?i)\b(apply_patch|patch\s+-p|git apply|git\s+diff|diff\s+-|bun test|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc|git\s+commit|sed\s+-i|perl\s+-pi|cat\s+>|printf\s+.*>|tee\s+|mv\s+.*|cp\s+.*|touch|mkdir\s+-p)\b",
         &text,
     );
     facts.execution |= text.contains("run_shell")
         || text.contains("run_command")
         || text.contains("===== COMMAND:");
-    facts.final_blocker |= pattern(
+    facts.final_blocker |= matches_fixed(
         r"(?i)\b(blocked|blocker|cannot safely|unable to proceed|TIMEOUT|deadlock|auth|credential)\b",
         &result,
     );
@@ -274,7 +281,7 @@ fn collect(directory: &Path) -> Facts {
             || contract.get("has_execution_evidence") == Some(&Value::Bool(true));
         facts.report |= semantic == "reporting";
         facts.implementation |= contract.get("has_commit_evidence") == Some(&Value::Bool(true))
-            || pattern(
+            || matches_fixed(
                 r"(?i)(apply_patch|patch|edit_file|write_file|file_modified|modify|create_file|file_created|git_diff|diff|test|typecheck|lint|verify|commit|검증|modified|updated|edited|wrote|created|added)",
                 &format!("{action} {phrase}"),
             );
@@ -306,7 +313,7 @@ fn collect(directory: &Path) -> Facts {
                 || satisfies
                     .iter()
                     .any(|value| value.as_str() == Some("command_executed"));
-            facts.implementation |= satisfies.iter().filter_map(Value::as_str).any(|value| pattern(r"file_created|file_modified|durable_artifact|patch|diff|test|validation|typecheck|lint|commit",value));
+            facts.implementation |= satisfies.iter().filter_map(Value::as_str).any(|value| matches_fixed(r"file_created|file_modified|durable_artifact|patch|diff|test|validation|typecheck|lint|commit",value));
             facts.refs = true;
         }
     }
@@ -349,7 +356,7 @@ fn collect(directory: &Path) -> Facts {
                         .and_then(Value::as_array)
                         .is_some_and(|items| !items.is_empty())
                     || result.get("durable_artifact_created") == Some(&Value::Bool(true))
-                    || pattern(
+                    || matches_fixed(
                         r"(?i)\b(apply_patch|patch\s+-p|git apply|git\s+diff|diff\s+-|bun test|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc|git\s+commit|committed)\b",
                         &text,
                     );
@@ -377,20 +384,20 @@ fn json_lines(path: &Path) -> impl Iterator<Item = Value> {
         .flat_map(|file| BufReader::new(file).lines())
         .filter_map(|line| line.ok().and_then(|line| serde_json::from_str(&line).ok()))
 }
-fn pattern(source: &'static str, value: &str) -> bool {
+fn matches_fixed(source: &'static str, value: &str) -> bool {
     static CACHE: LazyLock<Mutex<HashMap<&'static str, Regex>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
-    let mut cache = CACHE.lock().expect("worker evidence patterns poisoned");
+    let mut cache = CACHE.lock();
     cache
         .entry(source)
-        .or_insert_with(|| Regex::new(source).expect("source evidence pattern"))
+        .or_insert_with(|| fixed_regex(source))
         .is_match(value)
 }
 fn environment_blocker(value: &str) -> bool {
-    pattern(
+    matches_fixed(
         r"(?is)\b(tsc|typescript|bun|npm|pnpm|yarn|node_modules|dependency|dependencies)\b.{0,120}\b(command not found|not found|missing|not installed)\b",
         value,
-    ) || pattern(
+    ) || matches_fixed(
         r"(?is)\b(command not found|not found|missing|not installed)\b.{0,120}\b(tsc|typescript|bun|npm|pnpm|yarn|node_modules|dependency|dependencies)\b",
         value,
     )

@@ -26,7 +26,7 @@ impl<'a> References<'a> {
         visitor
     }
 
-    fn path(&mut self, parts: Vec<String>) {
+    fn path(&mut self, parts: &[String]) {
         let Some(first) = parts.first().map(String::as_str) else {
             return;
         };
@@ -66,14 +66,14 @@ impl<'a> References<'a> {
             UseTree::Name(name) => {
                 let mut parts = prefix.to_vec();
                 parts.push(name.ident.to_string());
-                self.path(parts);
+                self.path(&parts);
             }
             UseTree::Rename(name) => {
                 let mut parts = prefix.to_vec();
                 parts.push(name.ident.to_string());
-                self.path(parts);
+                self.path(&parts);
             }
-            UseTree::Glob(_) => self.path(prefix.to_vec()),
+            UseTree::Glob(_) => self.path(prefix),
         }
     }
 
@@ -100,7 +100,7 @@ impl<'a> References<'a> {
                 cursor += 3;
             }
             if parts.len() > 1 {
-                self.path(parts);
+                self.path(&parts);
             }
         }
     }
@@ -124,10 +124,11 @@ impl<'ast> Visit<'ast> for References<'_> {
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
         self.path(
-            path.segments
+            &path
+                .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
-                .collect(),
+                .collect::<Vec<_>>(),
         );
         visit::visit_path(self, path);
     }

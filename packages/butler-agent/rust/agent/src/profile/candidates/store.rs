@@ -119,7 +119,7 @@ pub(super) fn hydrate(row: CandidateRow) -> Option<ProfileCandidateRecord> {
     payload.insert(
         "evidence_count".into(),
         if evidence_count.fract() == 0.0 && evidence_count <= u64::MAX as f64 {
-            Value::from(evidence_count as u64)
+            Value::from(crate::json::saturating_u64(evidence_count))
         } else {
             Value::from(evidence_count)
         },
@@ -205,10 +205,10 @@ pub(super) fn write_candidate(
     last: &str,
     expires: Option<&str>,
     status: &str,
-    payload: Value,
+    payload: &Value,
 ) -> ProfileResult<()> {
-    let stored_payload = persisted_payload(&payload, false);
-    db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at)VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,source_type=excluded.source_type,confidence=excluded.confidence,sensitive_domain=excluded.sensitive_domain,updated_at=excluded.updated_at,last_seen_at=excluded.last_seen_at,expires_or_decay=excluded.expires_or_decay,status=excluded.status,promoted_at=excluded.promoted_at",params![id,category,serde_json::to_string(&stored_payload).unwrap_or("null".into()),source,confidence,sensitive as i64,created,updated,last,expires,status,payload.get("promoted_at").and_then(Value::as_str)]).map_err(storage::db_error)?;
+    let stored_payload = persisted_payload(payload, false);
+    db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at)VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,source_type=excluded.source_type,confidence=excluded.confidence,sensitive_domain=excluded.sensitive_domain,updated_at=excluded.updated_at,last_seen_at=excluded.last_seen_at,expires_or_decay=excluded.expires_or_decay,status=excluded.status,promoted_at=excluded.promoted_at",params![id,category,serde_json::to_string(&stored_payload).unwrap_or("null".into()),source,confidence,i64::from(sensitive),created,updated,last,expires,status,payload.get("promoted_at").and_then(Value::as_str)]).map_err(storage::db_error)?;
     Ok(())
 }
 

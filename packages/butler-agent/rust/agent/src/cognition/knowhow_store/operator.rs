@@ -283,11 +283,14 @@ fn round3(value: f64) -> f64 {
 }
 
 fn now_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX)
 }
 
 fn now_iso() -> String {

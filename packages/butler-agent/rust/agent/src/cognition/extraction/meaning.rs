@@ -42,16 +42,15 @@ pub(in crate::cognition) fn source_passages(input: &ExtractInput) -> CognitionRe
                 let end = sentence.start + group.last().map_or(0, |x| x.end);
                 let text = unit.text[start..end].to_owned();
                 let occurrence = unit.text[..start].match_indices(&text).count();
-                let context = input.context_units.iter().find(|entry| {
-                    entry.source_span.as_ref().is_some_and(|span| {
-                        span.source_ref == unit.ref_id
-                            && span.focus_start == start as f64
-                            && span.focus_end == end as f64
-                    })
+                let context = input.context_units.iter().find_map(|entry| {
+                    let span = entry.source_span.as_ref()?;
+                    (span.source_ref == unit.ref_id
+                        && span.focus_start == start as f64
+                        && span.focus_end == end as f64)
+                        .then_some((entry, span))
                 });
-                let (quote, before, after) = if let Some(context) = context {
-                    let span = context.source_span.as_ref().unwrap();
-                    let prefix = span.prefix_bytes as usize;
+                let (quote, before, after) = if let Some((context, span)) = context {
+                    let prefix = crate::json::saturating_usize(span.prefix_bytes);
                     let focus_end = prefix + text.len();
                     (
                         QuoteRef {
@@ -184,7 +183,9 @@ pub(in crate::cognition) fn meaning_to_output(
             .iter()
             .map(|x| {
                 passages
-                    .get(x.as_f64().unwrap_or(f64::NAN) as usize)
+                    .get(crate::json::saturating_usize(
+                        x.as_f64().unwrap_or(f64::NAN),
+                    ))
                     .map(|p| p.quote.clone())
                     .ok_or_else(|| error("memory_extract_invalid_evidence"))
             })
@@ -204,8 +205,13 @@ pub(in crate::cognition) fn meaning_to_output(
                 evidence: e
                     .evidence
                     .iter()
-                    .map(|x| passages[*x as usize].quote.clone())
-                    .collect(),
+                    .map(|x| {
+                        passages
+                            .get(crate::json::saturating_usize(*x))
+                            .map(|passage| passage.quote.clone())
+                            .ok_or_else(|| error("memory_extract_invalid_evidence"))
+                    })
+                    .collect::<CognitionResult<_>>()?,
             })
         })
         .collect::<CognitionResult<Vec<_>>>()?;
@@ -224,7 +230,7 @@ pub(in crate::cognition) fn meaning_to_output(
             .get("subject")
             .or_else(|| o.get("from"))
             .and_then(Value::as_f64)
-            .map(|x| format!("n{}", x as usize));
+            .map(|x| format!("n{}", crate::json::saturating_usize(x)));
         let relation = matches!(kind, "relation" | "not_relation");
         let statement = o
             .get("text")
@@ -251,7 +257,7 @@ pub(in crate::cognition) fn meaning_to_output(
             object_ref: if relation {
                 o.get("to")
                     .and_then(Value::as_f64)
-                    .map(|x| format!("n{}", x as usize))
+                    .map(|x| format!("n{}", crate::json::saturating_usize(x)))
             } else {
                 None
             },
@@ -262,7 +268,13 @@ pub(in crate::cognition) fn meaning_to_output(
             basis: if kind == "inference" {
                 "inference".into()
             } else {
-                basis(&input.source_units[0].role).into()
+                basis(
+                    input
+                        .source_units
+                        .first()
+                        .map_or("", |unit| unit.role.as_str()),
+                )
+                .into()
             },
             polarity: if kind == "not_relation" {
                 "negative".into()
@@ -287,7 +299,7 @@ pub(in crate::cognition) fn meaning_to_output(
                 to_ref: o
                     .get("to")
                     .and_then(Value::as_f64)
-                    .map(|x| format!("n{}", x as usize))
+                    .map(|x| format!("n{}", crate::json::saturating_usize(x)))
                     .ok_or_else(|| error("memory_extract_invalid_ref"))?,
                 relation: o
                     .get("predicate")
@@ -305,11 +317,12 @@ pub(in crate::cognition) fn meaning_to_output(
             .ok_or_else(|| error("memory_extract_invalid_output"))?;
         match o.get("kind").and_then(Value::as_str) {
             Some("alias") => {
-                let index = o
-                    .get("entity")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?
-                    as usize;
+                let index = usize::try_from(
+                    o.get("entity")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                )
+                .unwrap_or(usize::MAX);
                 let text = o
                     .get("name")
                     .and_then(Value::as_str)
@@ -323,22 +336,24 @@ pub(in crate::cognition) fn meaning_to_output(
                     .push(ExtractAlias { text, evidence });
             }
             Some("importance") => {
-                let index = o
-                    .get("item")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?
-                    as usize;
+                let index = usize::try_from(
+                    o.get("item")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                )
+                .unwrap_or(usize::MAX);
                 claims
                     .get_mut(index)
                     .ok_or_else(|| error("memory_extract_invalid_ref"))?
                     .salience = "high".into();
             }
             Some("validity") => {
-                let index = o
-                    .get("item")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?
-                    as usize;
+                let index = usize::try_from(
+                    o.get("item")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                )
+                .unwrap_or(usize::MAX);
                 let claim = claims
                     .get_mut(index)
                     .ok_or_else(|| error("memory_extract_invalid_ref"))?;

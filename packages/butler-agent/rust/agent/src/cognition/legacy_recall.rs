@@ -17,7 +17,7 @@ use crate::public_text::trim_js_whitespace;
 pub(crate) fn recall_legacy(
     data_root: &Path,
     paths: &CognitionPathEnvironment,
-    request: LegacyRecallRequest,
+    request: &LegacyRecallRequest,
 ) -> CognitionResult<LegacyRecallResponse> {
     ensure_data_authority(data_root, &[data_root])?;
     let corpus = corpus::load(data_root, paths, request.project_id.as_deref())?;
@@ -29,7 +29,7 @@ pub(crate) fn recall_legacy(
     }
 
     let now = request.now.unwrap_or_else(epoch_now_ms);
-    Ok(ranking::recall_from_corpus(request, corpus, now))
+    Ok(ranking::recall_from_corpus(request, &corpus, now))
 }
 
 fn epoch_now_ms() -> f64 {

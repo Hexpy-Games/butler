@@ -83,12 +83,12 @@ async fn canonical_write_query_read_args_reopens_original_scalar() {
         turn_id: "ct_exact".into(),
         project_id: Some("project-1".into()),
     };
-    let query = NativeExactMemoryQuery::new(root.clone(), 2);
+    let query = NativeExactMemoryQuery::new(&root.clone(), 2);
     let memory = Arc::new(NativeMemorySourceReader::new(
         root.clone(),
         CognitionPathEnvironment::default(),
     ));
-    let read = NativeConversationSessionReference::new(root.clone(), 2, memory.clone());
+    let read = NativeConversationSessionReference::new(&root.clone(), 2, memory.clone());
     let hits = query
         .query(
             binding.clone(),
@@ -106,7 +106,7 @@ async fn canonical_write_query_read_args_reopens_original_scalar() {
     query.close().await.unwrap();
     read.close().await.unwrap();
     store.close().await.unwrap();
-    let reopened = NativeConversationSessionReference::new(root.clone(), 1, memory);
+    let reopened = NativeConversationSessionReference::new(&root.clone(), 1, memory);
     let source = reopened
         .read(binding, hits["results"][0]["read_args"].clone())
         .await

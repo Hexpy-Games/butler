@@ -178,7 +178,7 @@ impl NativeSkills {
             .inner
             .jobs
             .clone()
-            .acquire_many_owned(MAX_BLOCKING_SKILL_JOBS as u32)
+            .acquire_many_owned(u32::try_from(MAX_BLOCKING_SKILL_JOBS).unwrap_or(u32::MAX))
             .await;
         self.inner.jobs.close();
         drop(permits);
@@ -189,7 +189,7 @@ impl NativeSkills {
             return Err(error("skills_closed", "Skill service is closed"));
         }
         let permit = tokio::select! {
-            _ = self.inner.closed.cancelled() => Err(error("skills_closed", "Skill service is closed")),
+            () = self.inner.closed.cancelled() => Err(error("skills_closed", "Skill service is closed")),
             permit = self.inner.jobs.clone().acquire_owned() => permit.map_err(|_| error("skills_closed", "Skill service is closed")),
         }?;
         if self.inner.closed.is_cancelled() {

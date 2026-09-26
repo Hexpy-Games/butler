@@ -34,7 +34,7 @@ pub(super) async fn execute(
         _ => None,
     };
     let create_parents = args.get("create_parents") == Some(&Value::Bool(true));
-    if requested.is_empty() || content.is_none() || overwrite.is_none() {
+    let (false, Some(content), Some(overwrite)) = (requested.is_empty(), content, overwrite) else {
         return Ok(failure(
             &root,
             &requested,
@@ -42,7 +42,7 @@ pub(super) async fn execute(
             "write_file requires path, content, and boolean overwrite.",
             "Retry with path, content, and overwrite=false or true.",
         ));
-    }
+    };
     if !arguments::allowed(&input, "write_file:workspace") {
         return Ok(failure(
             &root,
@@ -61,24 +61,21 @@ pub(super) async fn execute(
             "Retry only within the immutable Steward mutation scope.",
         ));
     }
-    let expected_sha256 = match arguments::sha256(args.get("expected_sha256")) {
-        Ok(value) => value,
-        Err(()) => {
-            return Ok(failure(
-                &root,
-                &requested,
-                "invalid_arguments",
-                "expected_sha256 must be a 64-character hexadecimal SHA-256 digest.",
-                "Retry with the complete current lowercase or uppercase SHA-256.",
-            ));
-        }
+    let Ok(expected_sha256) = arguments::sha256(args.get("expected_sha256")) else {
+        return Ok(failure(
+            &root,
+            &requested,
+            "invalid_arguments",
+            "expected_sha256 must be a 64-character hexadecimal SHA-256 digest.",
+            "Retry with the complete current lowercase or uppercase SHA-256.",
+        ));
     };
     let context = arguments::context(&input, root);
     let command = MutationCommand::Write(WriteMutation {
         context,
         path: requested,
-        content: content.expect("validated").to_owned(),
-        overwrite: overwrite.expect("validated"),
+        content: content.to_owned(),
+        overwrite,
         create_parents,
         expected_sha256,
     });
@@ -90,7 +87,9 @@ pub(super) async fn execute(
         })?
         .map_err(owner_error)?;
     let MutationOutcome::Write(result) = outcome else {
-        unreachable!("write command outcome")
+        return Err(CapabilityError {
+            code: "workspace_mutation_outcome_mismatch".into(),
+        });
     };
     Ok(match result {
         Ok(committed) => {
@@ -99,11 +98,11 @@ pub(super) async fn execute(
                 "overwritten":!committed.created,"bytes":committed.bytes,
                 "after_sha256":committed.after_sha256,"atomic_write":true,
                 "create_parents":create_parents,
-                "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+                "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("write_file",
-                    format!("{} workspace file {}", if committed.created {"Created"} else {"Overwrote"}, committed.path),
-                    write_reference(&committed, create_parents)),
+                    &format!("{} workspace file {}", if committed.created {"Created"} else {"Overwrote"}, committed.path),
+                    &write_reference(&committed, create_parents)),
                 "evidence_capability_receipts":mutation_evidence::success("write_file",
                     Some(&committed.path), &[], &[], if committed.created {
                         mutation_evidence::MutationOperation::Created
@@ -185,6 +184,10 @@ fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: 
     reference
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError {
         code: error.code.into(),

@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex;
 use std::{collections::HashSet, sync::LazyLock};
 
 use regex::Regex;
@@ -67,10 +68,9 @@ fn parse_body(body: &str, allowed: &HashSet<&str>, index: usize) -> Option<Model
         return None;
     }
     static CALL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
+        fixed_regex(
             r"(?is)^call\s*:\s*([A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)*)\s*(.*)$",
         )
-        .unwrap()
     });
     let (name, arguments) = if let Some(captures) = CALL.captures(body) {
         let name = normalize(captures.get(1)?.as_str(), allowed)?;
@@ -137,8 +137,8 @@ fn jsonish(value: &str) -> Option<Map<String, Value>> {
         .and_then(|value| value.as_object().cloned())
         .or_else(|| {
             static KEYS: LazyLock<Regex> =
-                LazyLock::new(|| Regex::new(r"([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:").unwrap());
-            static COMMAS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r",\s*([}\]])").unwrap());
+                LazyLock::new(|| fixed_regex(r"([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:"));
+            static COMMAS: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r",\s*([}\]])"));
             let normalized = KEYS.replace_all(value, "$1\"$2\":");
             let normalized = COMMAS.replace_all(&normalized, "$1");
             serde_json::from_str::<Value>(&normalized)
@@ -223,15 +223,14 @@ fn standalone_names(text: &str, allowed: &HashSet<&str>) -> Vec<String> {
     if text.len() > 64_000 {
         return Vec::new();
     }
-    let masked = Regex::new(r"(?s)```.*?```|~~~.*?~~~")
-        .unwrap()
-        .replace_all(text, "");
+    static FENCE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?s)```.*?```|~~~.*?~~~"));
+    let masked = FENCE.replace_all(text, "");
     allowed
         .iter()
         .filter(|name| {
+            // The name is escaped, so only the regex size limit could reject it.
             Regex::new(&format!(r"(?:^|[^A-Za-z0-9_]){}\s*\(", regex::escape(name)))
-                .unwrap()
-                .is_match(&masked)
+                .is_ok_and(|call| call.is_match(&masked))
         })
         .map(|value| (*value).to_owned())
         .collect()
@@ -259,15 +258,14 @@ fn sanitize(raw: &str) -> String {
     }
     let (mut text, fences) = preserve_fences(&text);
     static THINK: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?is)<think\b[^>]*>.*?</think>|<think\b[^>]*>.*$").unwrap());
+        LazyLock::new(|| fixed_regex(r"(?is)<think\b[^>]*>.*?</think>|<think\b[^>]*>.*$"));
     static PROTOCOL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
+        fixed_regex(
             r"(?is:<\|[^>]*\|>|</?s>|</?(?:channel|message|start|end|analysis|final)\|[^>]*>)",
         )
-        .unwrap()
     });
     static REASONING_LINE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?im)^\s*(?:analysis|reasoning)\s*:\s*$").unwrap());
+        LazyLock::new(|| fixed_regex(r"(?im)^\s*(?:analysis|reasoning)\s*:\s*$"));
     text = THINK.replace_all(&text, "").into_owned();
     text = strip_call_blocks(&text);
     text = PROTOCOL.replace_all(&text, "").into_owned();
@@ -287,8 +285,7 @@ fn sanitize(raw: &str) -> String {
 }
 
 fn mask_fences(text: &str) -> String {
-    static FENCE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?s)```.*?```|~~~.*?~~~").unwrap());
+    static FENCE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?s)```.*?```|~~~.*?~~~"));
     FENCE
         .replace_all(text, |capture: &regex::Captures<'_>| {
             " ".repeat(capture[0].len())
@@ -297,8 +294,7 @@ fn mask_fences(text: &str) -> String {
 }
 
 fn preserve_fences(text: &str) -> (String, Vec<String>) {
-    static FENCE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?s)```.*?```|~~~.*?~~~").unwrap());
+    static FENCE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?s)```.*?```|~~~.*?~~~"));
     let mut fences = Vec::new();
     let output = FENCE
         .replace_all(text, |capture: &regex::Captures<'_>| {
@@ -311,8 +307,7 @@ fn preserve_fences(text: &str) -> (String, Vec<String>) {
 }
 
 fn restore_fences(text: &str, fences: &[String]) -> String {
-    static TOKEN: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new("\\u{e000}([0-9]+)\\u{e001}").unwrap());
+    static TOKEN: LazyLock<Regex> = LazyLock::new(|| fixed_regex("\\u{e000}([0-9]+)\\u{e001}"));
     TOKEN
         .replace_all(text, |capture: &regex::Captures<'_>| {
             capture[1]
@@ -327,18 +322,20 @@ fn restore_fences(text: &str, fences: &[String]) -> String {
 
 fn reasoning_signal(text: &str) -> bool {
     static SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)<think\b|<\|channel\|analysis\|>|<channel\|analysis>|(?:^|\n)\s*(?:analysis|reasoning)\s*:").unwrap()
+        fixed_regex(
+            r"(?im)<think\b|<\|channel\|analysis\|>|<channel\|analysis>|(?:^|\n)\s*(?:analysis|reasoning)\s*:",
+        )
     });
     SIGNAL.is_match(text)
 }
 
 fn final_marker_end(text: &str, allow_text: bool) -> Option<usize> {
     static FINAL: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?i:<\|channel\|final\|>|<channel\|final>)").unwrap());
+        LazyLock::new(|| fixed_regex(r"(?i:<\|channel\|final\|>|<channel\|final>)"));
     let mut latest = FINAL.find_iter(text).map(|found| found.end()).max();
     if allow_text {
         static TEXT_FINAL: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"(?im)(?:^|\n)\s*(?:final|assistant_final)\s*:").unwrap());
+            LazyLock::new(|| fixed_regex(r"(?im)(?:^|\n)\s*(?:final|assistant_final)\s*:"));
         latest = latest.max(TEXT_FINAL.find_iter(text).map(|found| found.end()).max());
     }
     latest

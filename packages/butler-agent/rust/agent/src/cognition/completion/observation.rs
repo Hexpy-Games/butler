@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::CompletionNotice;
@@ -41,7 +41,7 @@ pub(super) fn publish(
     } else {
         Value::Null
     };
-    let base = json!({
+    let mut value = crate::json::json_object!({
         "schema_version": "butler.conversation-completion-observation.v1",
         "job_id": job_id,
         "scope": if project.is_some() { "project" } else { "global" },
@@ -54,11 +54,8 @@ pub(super) fn publish(
         "outcome_generation": generation_json,
         "completed_at": required(&input.completed_at)?,
     });
-    let mut value = base.as_object().expect("object literal").clone();
-    value.insert(
-        "integrity_sha256".into(),
-        Value::String(sha(canonical(&base)?.as_bytes())),
-    );
+    let integrity = sha(canonical(&Value::Object(value.clone()))?.as_bytes());
+    value.insert("integrity_sha256".into(), Value::String(integrity));
     let observation = Value::Object(value);
     let path = root
         .join("queue/completion-observations")
@@ -107,9 +104,8 @@ pub(super) fn read_verified(root: &Path, job_id: &str) -> CognitionResult<Option
     let path = root
         .join("queue/completion-observations")
         .join(format!("{job_id}.json"));
-    let content = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(_) => return Ok(None),
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(None);
     };
     let value: Value = match serde_json::from_str(&content) {
         Ok(value) => value,
@@ -185,6 +181,10 @@ fn write_atomic(path: &Path, value: &Value) -> CognitionResult<()> {
     result
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("completion_observation_io_error", error.to_string())
 }

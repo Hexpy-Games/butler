@@ -7,7 +7,7 @@ pub(super) fn ui_defaults() -> Value {
         "model":"openai/gpt-5.5", "reasoning_effort":"xhigh",
         "consolidation_model":"default", "consolidation_reasoning_effort":"xhigh",
         "effective_consolidation_model":"openai/gpt-5.5", "consolidation_uses_butler_model":true,
-        "context_window_tokens":258000, "worker_profiles":[], "max_simultaneous_workers":10,
+        "context_window_tokens":258_000, "worker_profiles":[], "max_simultaneous_workers":10,
         "access_mode":"full_access", "plan_mode_default":false, "follow_up_behavior":"queue",
         "multiline_send_behavior":"modifier_enter_send_enter_newline", "appearance_theme":"system",
         "main_screen_theme":"bloom", "main_screen_theme_preset":"monochrome",
@@ -29,7 +29,8 @@ pub(super) fn object(value: &Value) -> Map<String, Value> {
 }
 pub(super) fn integer(value: &Value) -> Option<u64> {
     let number = value.as_f64()?;
-    (number.is_finite() && number.fract() == 0.0 && number >= 0.0).then_some(number as u64)
+    (number.is_finite() && number.fract() == 0.0 && number >= 0.0)
+        .then_some(crate::json::saturating_u64(number))
 }
 pub(super) fn enum_value(value: Option<&Value>, allowed: &[&str], fallback: &str) -> String {
     value
@@ -83,6 +84,10 @@ pub(super) fn main_theme(value: Option<&Value>) -> &'static str {
         _ => "bloom",
     }
 }
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) fn main_preset(value: Option<&Value>, colors: &[String; 6]) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("aurora") => "aurora",

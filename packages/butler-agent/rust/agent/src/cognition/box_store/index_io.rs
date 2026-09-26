@@ -18,9 +18,8 @@ pub(super) fn create_private_dir(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::DirBuilderExt;
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error("memory_box_index_write_failed")),
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error("memory_box_index_write_failed")),
+            _ => return Err(error("memory_box_index_write_failed")),
         }
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);
@@ -93,9 +92,12 @@ pub(super) fn write_report(path: &Path, report: &BoxIndexReport) -> CognitionRes
 }
 
 pub(super) fn now_iso() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
+    let millis = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(i64::MAX);
     crate::js_date::format_iso_millis(millis).unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into())
 }

@@ -28,6 +28,7 @@ mod subsessions;
 mod transcript_export;
 mod updates;
 
+use axum::http::HeaderValue;
 use std::{collections::HashMap, error::Error as StdError, path::PathBuf, sync::Arc};
 
 use axum::{
@@ -108,7 +109,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
     }
     let mut response = match route(state, request).await {
         Ok(response) => response,
-        Err(error) => error_response(error),
+        Err(error) => error_response(&error),
     };
     dev_cors::apply(&mut response, origin.as_ref());
     response
@@ -313,7 +314,7 @@ async fn post_message(
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     drop(bytes);
-    let message = validate_message_request(value).map_err(|error| match error {
+    let message = validate_message_request(&value).map_err(|error| match error {
         MessageRequestError::Invalid => {
             HttpError::public(400, "invalid_request", "Message text is required.")
         }
@@ -383,7 +384,7 @@ fn limit_param(value: Option<&String>) -> usize {
         .and_then(|value| javascript_number(value))
         .filter(|value| value.is_finite())
         .map_or(DEFAULT_PAGE_LIMIT, |value| {
-            value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64) as usize
+            crate::json::saturating_usize(value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64))
         })
 }
 
@@ -431,7 +432,7 @@ fn payload_too_large_response() -> Response {
     *response.status_mut() = StatusCode::PAYLOAD_TOO_LARGE;
     response
         .headers_mut()
-        .insert(header::CONNECTION, "close".parse().unwrap());
+        .insert(header::CONNECTION, HeaderValue::from_static("close"));
     response
 }
 
@@ -441,6 +442,10 @@ pub(super) async fn read_body_with_limit(body: Body, limit: usize) -> Result<Byt
         .map_err(classify_body_read_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn classify_body_read_error(error: axum::Error) -> HttpError {
     let mut source: &(dyn StdError + 'static) = &error;
     loop {

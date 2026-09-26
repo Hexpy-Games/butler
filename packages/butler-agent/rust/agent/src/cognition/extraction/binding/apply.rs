@@ -2,7 +2,7 @@ use super::*;
 use crate::cognition::extraction::{ExtractCorrection, ExtractNode, ExtractRelation};
 
 pub(in crate::cognition) fn apply(
-    value: Value,
+    value: &Value,
     batch: &BindingBatch,
     output: &mut ExtractOutput,
     input: &ExtractInput,
@@ -41,13 +41,12 @@ pub(in crate::cognition) fn apply(
         let support = o["support"]
             .as_array()
             .ok_or_else(|| error("memory_extract_invalid_binding"))?;
-        if support.len() > 4 || support.iter().any(|v| !v.is_string()) {
-            return Err(error("memory_extract_invalid_binding"));
-        }
         let refs = support
             .iter()
-            .map(|v| v.as_str().unwrap())
-            .collect::<Vec<_>>();
+            .map(Value::as_str)
+            .collect::<Option<Vec<_>>>()
+            .filter(|refs| refs.len() <= 4)
+            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
         let span = o["span"].as_str();
         if !o["span"].is_null() && span.is_none() {
             return Err(error("memory_extract_invalid_binding"));
@@ -145,7 +144,7 @@ pub(in crate::cognition) fn apply(
         let claim = &mut output.claims[claim_index];
         for quote in &evidence {
             if !claim.evidence.contains(quote) {
-                claim.evidence.push(quote.clone())
+                claim.evidence.push(quote.clone());
             }
         }
         let previous = meta
@@ -290,5 +289,5 @@ pub(in crate::cognition) fn apply_repair(
             Value::Array(current.into_iter().chain(historical).collect()),
         );
     }
-    apply(value, batch, output, input)
+    apply(&value, batch, output, input)
 }

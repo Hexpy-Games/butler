@@ -126,14 +126,17 @@ impl RouteHooks {
         F: FnMut() -> Fut,
         Fut: Future<Output = Result<T, BtccError>>,
     {
-        for attempt in 1..=3 {
+        let mut attempt = 1;
+        loop {
             match operation().await {
                 Ok(value) => return Ok(value),
-                Err(error) if contention(&error) && attempt < 3 => tokio::task::yield_now().await,
-                Err(error) => return Err(failure::durability(phase, error)),
+                Err(error) if contention(&error) && attempt < 3 => {
+                    attempt += 1;
+                    tokio::task::yield_now().await;
+                }
+                Err(error) => return Err(failure::durability(phase, &error)),
             }
         }
-        unreachable!()
     }
 }
 

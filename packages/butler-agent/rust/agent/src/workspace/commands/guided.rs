@@ -22,13 +22,19 @@ pub(super) async fn dispatch(
 ) {
     let mut completion = Some(completion);
     let outcome = execute(host, input, shutdown, &mut completion).await;
-    if let Some(sender) = completion {
-        send_completion(
-            sender,
-            outcome.map(|output| output.expect("unsettled guided result")),
-        )
-        .await;
-    }
+    // `execute` returns `Ok(None)` only after it settled the completion itself.
+    let Some(sender) = completion else {
+        return;
+    };
+    let result = match outcome {
+        Ok(Some(output)) => Ok(output),
+        Ok(None) => Err(CommandError::new(
+            "command_settlement_lost",
+            "Command result was settled without a completion",
+        )),
+        Err(error) => Err(error),
+    };
+    send_completion(sender, result).await;
 }
 
 async fn execute(
@@ -82,9 +88,16 @@ async fn execute(
             return Err(CommandError::io(error));
         }
     };
-    let pid = child.id().expect("spawned child has pid");
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
+    let (Some(pid), Some(stdout), Some(stderr)) =
+        (child.id(), child.stdout.take(), child.stderr.take())
+    else {
+        // `kill_on_drop` stops the child when it is dropped here.
+        spool.discard().await;
+        return Err(CommandError::new(
+            "command_spawn_failed",
+            "Spawned command has no pid or piped output",
+        ));
+    };
     let (paths, mut capture) = spool.capture(host, stdout, stderr);
 
     enum Cause {
@@ -102,9 +115,9 @@ async fn execute(
                 Ok(status) => (Cause::Normal, Some(status)),
                 Err(error) => return cleanup_error(host, &mut child, pid, capture, paths, CommandError::io(error)).await,
             },
-            _ = tokio::time::sleep(timeout) => (Cause::Timeout, None),
-            _ = input.abort.cancelled() => (Cause::Abort, None),
-            _ = shutdown.cancelled() => (Cause::Shutdown, None),
+            () = tokio::time::sleep(timeout) => (Cause::Timeout, None),
+            () = input.abort.cancelled() => (Cause::Abort, None),
+            () = shutdown.cancelled() => (Cause::Shutdown, None),
             error = capture.failure() => (Cause::Capture(error), None),
         }
     };
@@ -211,7 +224,13 @@ async fn execute(
             "Command cancelled",
         )));
     }
-    let status = status.expect("reaped command");
+    let Some(status) = status else {
+        let error = CommandError::new(
+            "command_termination_failed",
+            "Command exited without a reaped status",
+        );
+        return cleanup_error(host, &mut child, pid, capture, paths, error).await;
+    };
     let summary = GuidedSummary {
         command: input.command,
         cwd: cwd.to_string_lossy().into_owned(),
@@ -220,7 +239,7 @@ async fn execute(
         } else {
             status.code()
         },
-        signal: signal_name(&status),
+        signal: signal_name(status),
         timed_out: matches!(cause, Cause::Timeout),
     };
     let payload_source = paths
@@ -367,8 +386,8 @@ fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), Comma
 pub(super) fn guided_timeout(value: Option<f64>) -> Duration {
     let value = value.filter(|value| value.is_finite()).unwrap_or(120_000.0);
     // Node timers coerce finite sub-millisecond and nonpositive values to a short tick.
-    if value <= 1.0 || value > i32::MAX as f64 {
+    if value <= 1.0 || value > f64::from(i32::MAX) {
         return Duration::from_millis(1);
     }
-    Duration::from_millis(value.trunc() as u64)
+    Duration::from_millis(crate::json::saturating_u64(value.trunc()))
 }

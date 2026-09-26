@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Weak},
 };
 
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
@@ -11,7 +12,7 @@ pub(crate) struct PlanDecisionLocks(Arc<Mutex<HashMap<String, Weak<AsyncMutex<()
 impl PlanDecisionLocks {
     pub(crate) async fn acquire(&self, key: String) -> OwnedMutexGuard<()> {
         let lock = {
-            let mut locks = self.0.lock().unwrap_or_else(|error| error.into_inner());
+            let mut locks = self.0.lock();
             locks.retain(|_, lock| lock.strong_count() > 0);
             if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
                 lock

@@ -48,7 +48,7 @@ fn assembly(harness: &Arc<Harness>) -> (crate::btcc::BtccAssembly, Arc<AtomicUsi
         original: dependencies.preparation,
         drops: drops.clone(),
     });
-    (crate::btcc::assemble(dependencies), drops)
+    (crate::btcc::assemble(&dependencies), drops)
 }
 
 #[tokio::test]

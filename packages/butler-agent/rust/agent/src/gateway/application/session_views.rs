@@ -80,7 +80,7 @@ impl AppApplication {
             })
             .transpose()?;
         let active_turn_view = active.and(latest_turn_view.as_ref()).cloned();
-        let next_cursor = messages.next_cursor as u64;
+        let next_cursor = crate::json::saturating_u64(messages.next_cursor);
         let first_cursor = messages.messages.first().map(|message| message.cursor);
         let mut view = Map::new();
         view.insert("protocol_version".into(), json!(APP_PROTOCOL_VERSION));

@@ -66,7 +66,7 @@ impl CompactionState {
         };
         self.current = active.clone();
         let mut projected = project(messages, &units, active.as_deref());
-        let projected_bytes = measure(view(messages, &projected))?;
+        let projected_bytes = measure(view(messages, projected.as_ref()))?;
         // The source returns before constructing a rebase identity in this
         // fitting, all-mandatory pressure case, even with a saved summary.
         if projected_bytes > max_bytes * PRESSURE_RATIO
@@ -130,22 +130,25 @@ impl CompactionState {
                 "current_context_exceeds_model_capacity",
             )));
         }
-        let summary_budget = (max_bytes * SUMMARY_RATIO)
-            .min((max_bytes - required_bytes) / 2.0)
-            .floor()
-            .max(0.0) as usize;
+        let summary_budget = crate::json::saturating_usize(
+            (max_bytes * SUMMARY_RATIO)
+                .min((max_bytes - required_bytes) / 2.0)
+                .floor()
+                .max(0.0),
+        );
         let mut boundary = active.map_or(1, |record| record.covered_units);
         let mut upper = units.len().saturating_sub(1);
         while boundary < upper {
-            let middle = (boundary + upper) / 2;
+            let middle = usize::midpoint(boundary, upper);
             let dummy = ContextCompactionRecord {
                 source_digest: String::new(),
                 covered_units: middle,
                 summary: Arc::from(""),
             };
             let candidate_pressure = {
-                let candidate = project(messages, units, Some(&dummy))
-                    .expect("a summary record always projects messages");
+                let candidate = project(messages, units, Some(&dummy)).ok_or_else(|| {
+                    ContextProjectionError::Contract(error("summary_projection_missing"))
+                })?;
                 measure(&candidate)?
             };
             if candidate_pressure + summary_budget as f64 > max_bytes * TARGET_RATIO {
@@ -185,8 +188,10 @@ impl CompactionState {
                 summary: Arc::from(next_summary.as_str()),
             };
             let candidate_fits = {
-                let candidate_messages = project(messages, units, Some(&candidate))
-                    .expect("a summary record always projects messages");
+                let candidate_messages =
+                    project(messages, units, Some(&candidate)).ok_or_else(|| {
+                        ContextProjectionError::Contract(error("summary_projection_missing"))
+                    })?;
                 measure(&candidate_messages)? <= max_bytes
             };
             if candidate_fits {
@@ -195,7 +200,7 @@ impl CompactionState {
             let prompt = summary::shorten_prompt(&next_summary, summary_budget);
             let source_digest = digest(&prompt);
             next_summary = trim_summary(
-                summary
+                &summary
                     .summarize(SummaryRequest {
                         text: &prompt,
                         max_output_bytes: summary_budget,
@@ -226,11 +231,13 @@ async fn summarize_history(
     current: &mut String,
 ) -> Result<(), ContextProjectionError> {
     let sizing = producer.sizing().map_err(ContextProjectionError::Model)?;
-    let chunk_budget = max_bytes
-        .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
-        .mul_add(0.5, 0.0)
-        .floor()
-        .max(0.0) as usize;
+    let chunk_budget = crate::json::saturating_usize(
+        max_bytes
+            .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
+            .mul_add(0.5, 0.0)
+            .floor()
+            .max(0.0),
+    );
     let mut chunks: VecDeque<_> = summary::utf8_ranges(history, chunk_budget).into();
     if chunks.is_empty() {
         chunks.push_back(0..0);
@@ -248,7 +255,7 @@ async fn summarize_history(
             if fits {
                 let source_digest = digest(&prompt);
                 *current = trim_summary(
-                    producer
+                    &producer
                         .summarize(SummaryRequest {
                             text: &prompt,
                             max_output_bytes: summary_budget,
@@ -267,7 +274,11 @@ async fn summarize_history(
             }
             let split_budget = range.len() / 2;
             let pieces = summary::utf8_ranges(&history[range.clone()], split_budget);
-            let first = pieces.first().expect("nonempty split").clone();
+            let Some(first) = pieces.first().cloned() else {
+                return Err(ContextProjectionError::Contract(error(
+                    "summary_required_context_exceeds_model_capacity",
+                )));
+            };
             for piece in pieces.iter().skip(1).rev() {
                 chunks.push_front(range.start + piece.start..range.start + piece.end);
             }
@@ -397,13 +408,13 @@ fn flatten_matching(
 
 fn view<'a>(
     messages: &'a [ModelRoundMessage],
-    projected: &'a Option<Vec<ModelRoundMessage>>,
+    projected: Option<&'a Vec<ModelRoundMessage>>,
 ) -> &'a [ModelRoundMessage] {
-    projected.as_deref().unwrap_or(messages)
+    projected.map_or(messages, Vec::as_slice)
 }
 
-fn trim_summary(value: String) -> Result<String, BtccError> {
-    let trimmed = crate::public_text::trim_js_whitespace(&value);
+fn trim_summary(value: &str) -> Result<String, BtccError> {
+    let trimmed = crate::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
         Err(error("context_summary_empty_response"))
     } else {

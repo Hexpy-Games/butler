@@ -94,8 +94,8 @@ pub(super) struct Decision {
 }
 
 pub(super) fn classify_rows(
-    transcript_rows: Vec<HistoricalTranscriptRow>,
-    app_rows: Vec<HistoricalAppProjectionRow>,
+    transcript_rows: &[HistoricalTranscriptRow],
+    app_rows: &[HistoricalAppProjectionRow],
     parse_timestamp: &dyn Fn(&str) -> Option<i64>,
 ) -> Vec<Decision> {
     transcript_rows

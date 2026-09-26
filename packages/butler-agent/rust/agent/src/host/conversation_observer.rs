@@ -1,6 +1,6 @@
 //! Tracked bounded host lane for passive metrics and durable completion jobs.
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -42,14 +42,14 @@ pub(crate) struct NativeConversationObserver {
 
 impl NativeConversationObserver {
     pub(crate) fn new(
-        data_root: PathBuf,
-        paths: CognitionPathEnvironment,
+        data_root: &Path,
+        paths: &CognitionPathEnvironment,
         clock: Arc<dyn ConversationIdentityClock>,
         metric_files: Arc<MetricFiles>,
     ) -> std::io::Result<Self> {
         let (sender, mut receiver) = mpsc::channel(CAPACITY);
         let now_iso = Arc::new(move || clock.now_iso());
-        let publisher = CompletionPublisher::new(data_root.clone(), paths, now_iso);
+        let publisher = CompletionPublisher::new(data_root, paths, now_iso);
         let metrics = ConversationMetrics::new(metric_files);
         let worker = std::thread::Builder::new()
             .name("butler-completion-observer".into())
@@ -126,14 +126,14 @@ impl NativeConversationObserver {
 }
 
 impl ConversationAdmissionObserver for NativeConversationObserver {
-    fn admission_metric<'a>(&'a self, metric: AdmissionMetric) -> ConversationObserverFuture<'a> {
+    fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async move { self.submit(|reply| Job::Admission(metric, reply)).await })
     }
 
-    fn completion_observation<'a>(
-        &'a self,
+    fn completion_observation(
+        &self,
         observation: CompletionObservation,
-    ) -> ConversationObserverFuture<'a> {
+    ) -> ConversationObserverFuture<'_> {
         let input = CompletionNotice {
             project_id: observation.project_id,
             runtime_session_id: observation.runtime_session_id,
@@ -147,7 +147,7 @@ impl ConversationAdmissionObserver for NativeConversationObserver {
         Box::pin(async move { self.submit(|reply| Job::Completion(input, reply)).await })
     }
 
-    fn completion_metric<'a>(&'a self, metric: CompletionMetric) -> ConversationObserverFuture<'a> {
+    fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_> {
         Box::pin(async move { self.submit(|reply| Job::Metric(metric, reply)).await })
     }
 }

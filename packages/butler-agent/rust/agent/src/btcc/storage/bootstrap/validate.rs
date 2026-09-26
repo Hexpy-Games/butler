@@ -111,8 +111,8 @@ pub(super) fn readiness(db: &Connection, expected: &str) -> StorageResult<()> {
         || marker["storageContract"] != "split-v1"
         || marker["firstActivatedAt"]
             .as_str()
-            .is_none_or(|v| v.is_empty())
-        || marker["activatedAt"].as_str().is_none_or(|v| v.is_empty())
+            .is_none_or(str::is_empty)
+        || marker["activatedAt"].as_str().is_none_or(str::is_empty)
     {
         return Err(error("agent_btcc_storage_activation_invalid"));
     }

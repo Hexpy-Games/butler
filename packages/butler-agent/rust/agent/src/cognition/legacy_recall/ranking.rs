@@ -40,17 +40,17 @@ struct RankingSignals {
 }
 
 pub(super) fn recall_from_corpus(
-    request: LegacyRecallRequest,
-    corpus: LegacyRecallCorpus,
+    request: &LegacyRecallRequest,
+    corpus: &LegacyRecallCorpus,
     now: f64,
 ) -> LegacyRecallResponse {
     let cue = crate::public_text::trim_js_whitespace(&request.cue).to_owned();
     let seeds = extract_recall_seeds(&cue);
     let limit = normalized_limit(request.limit);
-    let activation = activate_graph(&corpus, &seeds);
+    let activation = activate_graph(corpus, &seeds);
     let lexical_stats = build_lexical_stats(&corpus.candidates, &seeds);
-    let contextual_evidence = contextual_recall_evidence(request.context.as_ref(), &corpus);
-    let degree = build_degree_map(&corpus);
+    let contextual_evidence = contextual_recall_evidence(request.context.as_ref(), corpus);
+    let degree = build_degree_map(corpus);
     let active_candidate_ids = corpus
         .candidates
         .iter()
@@ -180,8 +180,8 @@ pub(super) fn recall_from_corpus(
     LegacyRecallResponse {
         cue,
         seeds,
-        abstained,
         items,
+        abstained,
         diagnostics,
     }
 }
@@ -191,7 +191,7 @@ fn normalized_limit(limit: Option<f64>) -> usize {
     if value.is_nan() {
         0
     } else {
-        value.clamp(1.0, 10.0) as usize
+        crate::json::saturating_usize(value.clamp(1.0, 10.0))
     }
 }
 

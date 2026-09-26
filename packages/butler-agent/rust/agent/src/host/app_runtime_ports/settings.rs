@@ -1,7 +1,8 @@
 //! One replaceable App facts snapshot from the real model configuration owner.
 
+use parking_lot::RwLock;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -61,20 +62,14 @@ impl NativeAppSettingsFacts {
             &self.bridge_mode,
         )
         .await?;
-        *self
-            .current
-            .write()
-            .map_err(|_| GatewayApplicationError::Internal)? = next;
+        *self.current.write() = next;
         Ok(())
     }
 }
 
 impl AppSettingsFactsProvider for NativeAppSettingsFacts {
     fn snapshot(&self) -> Result<Arc<AppSettingsFacts>, GatewayApplicationError> {
-        self.current
-            .read()
-            .map(|current| current.clone())
-            .map_err(|_| GatewayApplicationError::Internal)
+        Ok(self.current.read().clone())
     }
 
     fn refresh(&self) -> crate::gateway::ApplicationFuture<()> {
@@ -255,7 +250,7 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
         context_window_tokens: source
             .context_window_tokens
             .filter(|value| value.is_finite() && *value > 0.0)
-            .map(|value| value.trunc() as u64),
+            .map(|value| crate::json::saturating_u64(value.trunc())),
         aliases: source.aliases.clone().unwrap_or_default().into(),
         runtime_supported: source.runtime_supported,
         registered: source.registered == Some(true),

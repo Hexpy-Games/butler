@@ -35,7 +35,7 @@ fn generation_value(model: &ModelProviderMetadata) -> Result<Value, ModelCatalog
     if let Some(aliases) = &model.aliases {
         let mut aliases = aliases.clone();
         aliases.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
-        map.insert("aliases".into(), serde_json::to_value(aliases).unwrap());
+        map.insert("aliases".into(), to_json(&aliases)?);
     }
     if let Some(value) = &model.provider_family_id {
         map.insert("provider_family_id".into(), Value::String(value.clone()));
@@ -45,10 +45,7 @@ fn generation_value(model: &ModelProviderMetadata) -> Result<Value, ModelCatalog
         Value::Bool(model.runtime_supported),
     );
     if let Some(value) = model.hosted_api_shape {
-        map.insert(
-            "hosted_api_shape".into(),
-            serde_json::to_value(value).unwrap(),
-        );
+        map.insert("hosted_api_shape".into(), to_json(&value)?);
     }
     if let Some(value) = model.context_window_tokens {
         map.insert("context_window_tokens".into(), Value::from(value));
@@ -58,14 +55,15 @@ fn generation_value(model: &ModelProviderMetadata) -> Result<Value, ModelCatalog
     }
     map.insert("source_url".into(), Value::String(model.source_url.clone()));
     let mut efforts = model.reasoning_efforts.clone();
-    efforts.sort_by_key(|value| serde_json::to_string(value).unwrap());
-    map.insert(
-        "reasoning_efforts".into(),
-        serde_json::to_value(efforts).unwrap(),
-    );
+    efforts.sort_by_key(|value| value.as_str());
+    map.insert("reasoning_efforts".into(), to_json(&efforts)?);
     map.insert(
         "default_reasoning_effort".into(),
-        serde_json::to_value(model.default_reasoning_effort).unwrap(),
+        to_json(&model.default_reasoning_effort)?,
     );
     Ok(Value::Object(map))
+}
+
+fn to_json<T: serde::Serialize>(value: &T) -> Result<Value, ModelCatalogError> {
+    serde_json::to_value(value).map_err(|error| ModelCatalogError::new(error.to_string()))
 }

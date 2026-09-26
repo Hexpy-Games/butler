@@ -69,7 +69,7 @@ impl PublicMemorySnapshot {
             ]);
         }
         sql.push_str(" ORDER BY MAX(m.created_at) DESC,s.id ASC LIMIT ?");
-        values.push((limit as i64).into());
+        values.push(i64::try_from(limit).unwrap_or(i64::MAX).into());
         let mut statement = self
             .reader
             .connection()?
@@ -113,7 +113,7 @@ impl PublicMemorySnapshot {
             values.extend([from.to_owned().into(), to.to_owned().into()]);
         }
         sql.push_str(" ORDER BY m.created_at DESC,m.id DESC LIMIT ?");
-        values.push((limit as i64).into());
+        values.push(i64::try_from(limit).unwrap_or(i64::MAX).into());
         let ids = {
             let mut statement = self
                 .reader

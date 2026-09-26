@@ -26,7 +26,7 @@ impl ModelRoundPort for NoMeasurement {
         &'a self,
         _: ModelRoundRequest<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<ModelRoundResult, ModelRoundError>> + Send + 'a>> {
-        unreachable!("replay economics never calls the model")
+        panic!("replay economics never calls the model")
     }
 }
 

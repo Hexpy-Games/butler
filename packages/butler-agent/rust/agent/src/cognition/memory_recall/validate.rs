@@ -1,5 +1,6 @@
 //! Source-order validation and canonical timestamp normalization.
 
+use crate::public_text::fixed_regex;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -82,7 +83,7 @@ pub(super) fn normalize(
 fn timestamp(text: &str, parse_date: &impl Fn(&str) -> Option<i64>) -> CognitionResult<String> {
     static OFFSET: OnceLock<Regex> = OnceLock::new();
     let offset = OFFSET.get_or_init(|| {
-        Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$").unwrap()
+        fixed_regex(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
     });
     if !offset.is_match(text) {
         return Err(failure("invalid_arguments"));

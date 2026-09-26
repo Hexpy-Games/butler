@@ -11,6 +11,10 @@ const SELECT: &str = "SELECT e.effect_id,e.receipt_id,e.idempotency_key,e.identi
  LEFT JOIN btcc_guided_effect_recovery_hints recovery ON recovery.effect_id=e.effect_id
  LEFT JOIN btcc_guided_effect_recovery_payloads payload ON payload.effect_id=e.effect_id";
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string())
 }
@@ -138,7 +142,7 @@ pub(super) fn list_for_work(
     work_id: &str,
     limit: Option<f64>,
 ) -> EffectResult<Vec<EffectRecord>> {
-    let limit = limit.unwrap_or(12.0).trunc().clamp(1.0, 50.0) as i64;
+    let limit = crate::json::saturating_i64(limit.unwrap_or(12.0).trunc().clamp(1.0, 50.0));
     let mut statement = db
         .prepare(&format!(
             "{SELECT} WHERE e.work_id=?1 \

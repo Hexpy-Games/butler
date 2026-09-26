@@ -158,7 +158,7 @@ mod tests {
             session_id: "butler/app-general".into(),
             kind: "outbound".into(),
             timestamp: "2026-09-14T00:00:00.000Z".into(),
-            payload: json!({"metadata":metadata}).as_object().unwrap().clone(),
+            payload: crate::json::json_object!({"metadata":metadata}),
             transport: Some("app".into()),
             metadata: None,
         }

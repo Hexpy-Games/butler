@@ -82,7 +82,9 @@ pub(super) async fn execute(
     });
     let position = cursor_input.and_then(cursor::decode);
     if cursor_input.is_some() && position.as_ref().is_none_or(|cursor| cursor.query != query) {
-        return Ok(invalid_cursor(started.elapsed().as_millis() as u64));
+        return Ok(invalid_cursor(
+            u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        ));
     }
     let outcome = workspace
         .list_files(WorkspaceListInput {
@@ -155,14 +157,14 @@ pub(super) async fn execute(
                 "files_considered":listed.files_considered,
                 "dirs_visited":listed.dirs_visited, "io_errors":listed.io_errors,
                 "truncated":truncated,
-                "metrics":{"elapsed_ms":listed.elapsed_ms.max(started.elapsed().as_millis() as u64),
+                "metrics":{"elapsed_ms":listed.elapsed_ms.max(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)),
                     "files_considered":listed.files_considered,
                     "files_returned":files.len(),
                     "dirs_visited":listed.dirs_visited,
                     "io_errors":listed.io_errors},
                 "evidence_receipts":evidence::list_execution(
                     files.len(), next_cursor.is_some(), truncated,
-                    references),
+                    &references),
                 "evidence_capability_receipts":evidence::list_capability(
                     &files, listed.files_considered, listed.dirs_visited, truncated)
             });
@@ -266,7 +268,7 @@ pub(super) fn integer(
         code: "invalid_number_conversion".into(),
     })?;
     Ok(if number.is_finite() {
-        number.floor().max(min as f64).min(max as f64) as usize
+        crate::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
     } else {
         fallback
     })

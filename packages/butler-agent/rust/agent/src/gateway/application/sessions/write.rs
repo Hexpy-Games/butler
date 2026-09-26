@@ -1,5 +1,4 @@
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::json;
 
 use super::{AppStorageError, contracts::*, read};
 use crate::gateway::application::{AppIdentityClock, EventSubscribers, events};
@@ -39,7 +38,7 @@ fn safe_local_session_id(value: &str) -> String {
 pub(super) fn create(
     db: &Connection,
     subscribers: &EventSubscribers,
-    input: AppCreateSessionInput,
+    input: &AppCreateSessionInput,
     clock: &dyn AppIdentityClock,
     emit_created: bool,
 ) -> Result<AppSessionSummary, AppStorageError> {
@@ -76,13 +75,13 @@ pub(super) fn create(
         } else {
             "New chat"
         });
-    let id = identity(&input, clock);
+    let id = identity(input, clock);
     let now = clock.now_iso();
     db.execute(
-        r#"
+        r"
 INSERT INTO chats(id,title,kind,project_id,pinned,archived,created_at,updated_at)
 VALUES(?1,?2,?3,?4,0,0,?5,?5)
-"#,
+",
         params![id, title, input.kind.as_str(), project_id, now],
     )
     .map_err(AppStorageError::sqlite)?;
@@ -109,10 +108,7 @@ pub(super) fn append_created_unpublished(
     clock: &dyn AppIdentityClock,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
     let summary = read::session(db, id)?;
-    let payload = json!({"session":summary})
-        .as_object()
-        .cloned()
-        .expect("session event is an object");
+    let payload = crate::json::json_object!({"session":summary});
     events::append_unpublished(db, "session.created", None, payload, &clock.now_iso())
 }
 
@@ -122,10 +118,7 @@ fn append_created(
     summary: &AppSessionSummary,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let payload = json!({"session":summary})
-        .as_object()
-        .cloned()
-        .expect("session event is an object");
+    let payload = crate::json::json_object!({"session":summary});
     events::append(db, subscribers, "session.created", None, payload, now)?;
     Ok(())
 }

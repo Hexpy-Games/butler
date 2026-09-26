@@ -108,9 +108,16 @@ impl Zone {
         };
         // Source explicitly uses 32-bit unsigned arithmetic before its range
         // check. Retain that behavior even for unusual legacy zone numerals.
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "ECMAScript ToUint32 wrapping is the source behavior"
+        )]
         let seconds = (self.hour.unwrap_or(0) as u32)
             .wrapping_mul(3600)
             .wrapping_add((self.minute.unwrap_or(0) as u32).wrapping_mul(60));
-        (seconds <= i32::MAX as u32).then_some(Some(i64::from(seconds) * sign))
+        i32::try_from(seconds)
+            .is_ok()
+            .then_some(Some(i64::from(seconds) * sign))
     }
 }

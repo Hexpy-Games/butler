@@ -38,12 +38,12 @@ pub(crate) type ConversationObserverFuture<'a> =
     Pin<Box<dyn Future<Output = ConversationResult<()>> + Send + 'a>>;
 
 pub(crate) trait ConversationAdmissionObserver: Send + Sync {
-    fn admission_metric<'a>(&'a self, metric: AdmissionMetric) -> ConversationObserverFuture<'a>;
-    fn completion_observation<'a>(
-        &'a self,
+    fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_>;
+    fn completion_observation(
+        &self,
         observation: CompletionObservation,
-    ) -> ConversationObserverFuture<'a>;
-    fn completion_metric<'a>(&'a self, metric: CompletionMetric) -> ConversationObserverFuture<'a>;
+    ) -> ConversationObserverFuture<'_>;
+    fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_>;
 }
 
 #[derive(Clone, Debug)]

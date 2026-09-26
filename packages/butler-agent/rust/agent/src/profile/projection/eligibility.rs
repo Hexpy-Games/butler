@@ -192,14 +192,14 @@ fn eligible_policy(
                 .filter_map(|(_, value)| value.as_str())
                 .filter_map(parse_time)
                 .collect::<Vec<_>>();
-            if observed.is_empty() {
+            let Some(latest) = observed.into_iter().max() else {
                 return text(&entry.payload, "temporal_scope") == Some("durable")
                     && matches!(
                         text(&entry.payload, "decay_policy"),
                         Some("reinforce_or_decay" | "never_without_consent")
                     );
-            }
-            let age = now_ms.saturating_sub(observed.into_iter().max().unwrap());
+            };
+            let age = now_ms.saturating_sub(latest);
             match text(&entry.payload, "decay_policy") {
                 Some("days_7") => age <= 7 * 86_400_000,
                 Some("days_30") => age <= 30 * 86_400_000,

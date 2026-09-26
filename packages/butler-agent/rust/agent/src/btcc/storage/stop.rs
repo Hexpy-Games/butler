@@ -92,7 +92,7 @@ fn persist_existing(
             close_stop(connection, request_id, "already_finalizing", turn.revision)?;
             Ok(StopPersistenceOutcome::AlreadyFinalizing)
         }
-        "admitted" => cancel(connection, turn_id, request_id, turn),
+        "admitted" => cancel(connection, turn_id, request_id, &turn),
         value => Err(error(
             "invalid_turn_state",
             format!("BTCC R3 Turn state is invalid: {value}"),
@@ -143,7 +143,7 @@ fn cancel(
     connection: &Connection,
     turn_id: &str,
     request_id: &str,
-    turn: ControlRow,
+    turn: &ControlRow,
 ) -> StorageResult<StopPersistenceOutcome> {
     let revision = turn
         .revision

@@ -1,8 +1,9 @@
 //! Native watcher and bounded projection worker ownership.
 
+use parking_lot::Mutex;
 use std::{
     collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
@@ -174,9 +175,7 @@ impl ProjectionOwner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        if let Ok(watcher) = self.watcher.get_mut() {
-            watcher.take();
-        }
+        self.watcher.get_mut().take();
         let _ = self.sender.try_send(Command::Close);
     }
 }
@@ -244,7 +243,7 @@ async fn run(
         if work.pending {
             if !work.retry.is_zero() {
                 tokio::select! {
-                    _ = tokio::time::sleep(work.retry) => {}
+                    () = tokio::time::sleep(work.retry) => {}
                     command = receiver.recv() => {
                         if work.command(command, &context).await { return Ok(()) }
                     }
@@ -275,6 +274,10 @@ async fn run(
     }
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Default)]
 struct Work {
     pending: bool,
@@ -293,7 +296,7 @@ impl Work {
         match command {
             Some(Command::Wake) => {
                 if self.pending {
-                    self.resweep = true
+                    self.resweep = true;
                 } else {
                     self.pending = true;
                     self.retry = SETTLE_DELAY;
@@ -301,19 +304,19 @@ impl Work {
             }
             Some(Command::Transcript(file)) => {
                 if self.changed_set.insert(file.clone()) {
-                    self.changed.push_back(file)
+                    self.changed.push_back(file);
                 }
             }
             Some(Command::Terminal) => {
                 if self.terminal {
-                    self.terminal_resweep = true
+                    self.terminal_resweep = true;
                 } else {
-                    self.terminal = true
+                    self.terminal = true;
                 }
                 if self.pending {
-                    self.resweep = true
+                    self.resweep = true;
                 } else {
-                    self.pending = true
+                    self.pending = true;
                 }
             }
             Some(Command::Refresh(chat, completion)) => {
@@ -381,8 +384,6 @@ async fn sync_requested(
     while sync_deferred_once(context).await? {}
     Ok(())
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

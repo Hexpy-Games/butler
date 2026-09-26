@@ -1,5 +1,5 @@
 // Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
-pub(in crate::btcc::storage) const CORE_SCHEMA: &str = r###"
+pub(in crate::btcc::storage) const CORE_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_messages (
   message_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -315,4 +315,4 @@ CREATE TABLE IF NOT EXISTS btcc_context_documents (
   created_at TEXT NOT NULL,
   UNIQUE(scope_kind, scope_id, projection_class, source_id, source_revision)
 );
-"###;
+";

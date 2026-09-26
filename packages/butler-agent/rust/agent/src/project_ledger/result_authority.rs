@@ -20,10 +20,8 @@ pub(crate) async fn prepare_exact_project_work_result_authority(
     scope: ResolvedProjectWorkScope,
     work_ids: Vec<String>,
 ) -> Result<Arc<dyn ExactProjectWorkResultAuthority>, StorageError> {
-    if work_ids.len() != 1 || work_ids.iter().collect::<HashSet<_>>().len() != 1 {
-        return Err(storage_error("operation_result_project_work_set_invalid"));
-    }
-    let work_id = work_ids.into_iter().next().expect("one checked work id");
+    let [work_id] = <[String; 1]>::try_from(work_ids)
+        .map_err(|_| storage_error("operation_result_project_work_set_invalid"))?;
     let identities = ledger
         .run(move |data_root, collation| {
             let projects_root = data_root.join("project-ledger/projects");
@@ -95,11 +93,10 @@ impl ExactProjectWorkResultAuthority for PreparedProjectWorkResultAuthority {
                 && identity.turn_id == input.turn_id
                 && identity.result_sha256 == input.result_sha256
         });
-        let found = matches.next().cloned();
-        if found.is_none() || matches.next().is_some() {
-            return Err(storage_error("operation_result_project_reference_mismatch"));
+        match (matches.next(), matches.next()) {
+            (Some(found), None) => Ok(found.clone()),
+            _ => Err(storage_error("operation_result_project_reference_mismatch")),
         }
-        Ok(found.expect("one checked identity"))
     }
 }
 
@@ -163,6 +160,10 @@ fn storage_error(code: &'static str) -> StorageError {
         message: code.into(),
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn read_error(error: ProjectLedgerReadError) -> StorageError {
     match error {
         ProjectLedgerReadError::Resolution(code)

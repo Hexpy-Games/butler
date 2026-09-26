@@ -51,8 +51,12 @@ impl ModelConfiguration {
             .filter(|model| model.model_ref != candidate.model_ref)
             .collect::<Vec<_>>();
         next.push(candidate.clone());
-        credentials =
-            credentials_for_models(&next, &credentials, &candidate.model_ref, candidate_secret);
+        credentials = credentials_for_models(
+            &next,
+            &credentials,
+            &candidate.model_ref,
+            candidate_secret.as_ref(),
+        );
         super::set_models_array(
             &mut config,
             "local",
@@ -106,8 +110,12 @@ impl ModelConfiguration {
         let previous_ref = previous.model_ref.clone();
         next.push(candidate.clone());
         credentials.remove(&previous.model_ref);
-        credentials =
-            credentials_for_models(&next, &credentials, &candidate.model_ref, candidate_secret);
+        credentials = credentials_for_models(
+            &next,
+            &credentials,
+            &candidate.model_ref,
+            candidate_secret.as_ref(),
+        );
         super::set_models_array(
             &mut config,
             "local",
@@ -207,13 +215,13 @@ fn credentials_for_models(
     models: &[LocalModelConfig],
     current: &HashMap<String, String>,
     updated_ref: &str,
-    updated_secret: Option<String>,
+    updated_secret: Option<&String>,
 ) -> HashMap<String, String> {
     models
         .iter()
         .filter_map(|model| {
             let secret = if model.model_ref == updated_ref {
-                updated_secret.as_ref()
+                updated_secret
             } else {
                 current.get(&model.model_ref)
             }?;

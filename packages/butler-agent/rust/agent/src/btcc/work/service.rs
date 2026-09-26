@@ -91,11 +91,21 @@ impl DurableWorkService {
     }
 }
 
-fn fingerprint(operation: &str, input: Value) -> Result<String, BtccError> {
+fn fingerprint(operation: &str, input: &Value) -> Result<String, BtccError> {
     let value = serde_json::json!({"operation": operation, "input": input});
     Ok(crate::btcc::identity::digest(
         &crate::btcc::identity::stable_json(&value)?,
     ))
+}
+
+/// The serialized input as an object; typed inputs are structs.
+fn object_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>, BtccError> {
+    value.as_object_mut().ok_or_else(|| {
+        BtccError::new(
+            "durable_work_serialization_failed",
+            "serialized work input is not an object",
+        )
+    })
 }
 
 fn serialized<T: serde::Serialize>(input: &T) -> Result<Value, BtccError> {

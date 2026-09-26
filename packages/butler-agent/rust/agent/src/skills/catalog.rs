@@ -181,7 +181,7 @@ pub(crate) fn validate(skills: &[SkillDefinition]) -> Vec<SkillValidationIssue> 
             issues.push(SkillValidationIssue {
                 file_path: path.clone(),
                 message: message.to_owned(),
-            })
+            });
         };
         if !names.insert(&skill.name) {
             add(&format!("duplicate skill name: {}", skill.name));
@@ -321,6 +321,10 @@ pub(super) fn project_dir(data: &Path, id: &str) -> PathBuf {
 fn core_dir(resources: &Path) -> PathBuf {
     resources.join("skills")
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io(source: std::io::Error) -> SkillError {
     error("skills_io_failed", &source.to_string())
 }

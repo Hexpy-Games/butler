@@ -13,7 +13,7 @@ impl Drop for WorkspaceRoot {
 
 #[tokio::test]
 async fn actual_registered_write_commits_then_effect_reopens_without_second_write() {
-    let (_fixture, storage, work) = ready("effect-real-registered-write").await;
+    let (fixture, storage, work) = ready("effect-real-registered-write").await;
     ToolJournalRepository::new(storage.clone(), clock())
         .start(ToolJournalStart {
             turn_id: "turn".into(),
@@ -86,7 +86,7 @@ async fn actual_registered_write_commits_then_effect_reopens_without_second_writ
 
     // A replay against an absent current target demonstrates no second write.
     std::fs::remove_file(root.0.join("a")).unwrap();
-    let reopened = BtccStorage::open(_fixture.config("effect-registered-reopen"))
+    let reopened = BtccStorage::open(fixture.config("effect-registered-reopen"))
         .await
         .unwrap();
     let replay = NativeEffectService::new(

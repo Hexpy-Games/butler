@@ -2,11 +2,8 @@
 
 mod claims;
 
-use std::{
-    collections::HashSet,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
@@ -209,10 +206,7 @@ impl CycleService {
                     phases.push(PhaseResult {
                         phase,
                         status: PhaseResultStatus::Error,
-                        metrics: serde_json::json!({"lock_held": true})
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        metrics: crate::json::json_object!({"lock_held": true}),
                         error: Some("consolidation lock is held".into()),
                     });
                     return result::build_result(
@@ -227,10 +221,7 @@ impl CycleService {
                 }
                 Err(error) => return Err(error),
             };
-            self.active_claims
-                .lock()
-                .expect("claim set poisoned")
-                .insert(nonce.clone());
+            self.active_claims.lock().insert(nonce.clone());
             let execution = self
                 .executor
                 .execute(phase, &run_id, &input.cancellation)
@@ -274,10 +265,7 @@ impl CycleService {
                 }
             }
             let commit = self.commit_checkpoint(&claimed, &committed, None).await;
-            self.active_claims
-                .lock()
-                .expect("claim set poisoned")
-                .remove(&nonce);
+            self.active_claims.lock().remove(&nonce);
             commit?;
             checkpoint = committed;
         }
@@ -326,12 +314,9 @@ impl CycleService {
 
 fn rate_phase(phase: Phase, status: PhaseResultStatus, budget: &RateBudget) -> PhaseResult {
     let mut result = PhaseResult::new(phase, status);
-    result.metrics = serde_json::json!({
+    result.metrics = crate::json::json_object!({
         "remaining_ratio":budget.remaining_ratio,"reset_at":budget.reset_at,
-    })
-    .as_object()
-    .unwrap()
-    .clone();
+    });
     result
 }
 

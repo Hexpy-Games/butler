@@ -454,11 +454,10 @@ impl GatewayServer {
     /// Stop admission, terminate live streams, and wait for the listener task.
     pub(crate) async fn close(mut self) -> std::io::Result<()> {
         self.shutdown.cancel();
-        self.task
-            .take()
-            .expect("gateway serving task is owned until close")
-            .await
-            .map_err(std::io::Error::other)?
+        let Some(task) = self.task.take() else {
+            return Ok(());
+        };
+        task.await.map_err(std::io::Error::other)?
     }
 }
 

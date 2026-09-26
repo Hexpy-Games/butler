@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 pub(super) fn create_branch_session(
     db: &Connection,
     subscribers: &EventSubscribers,
-    input: AppCreateSessionInput,
+    input: &AppCreateSessionInput,
     clock: &dyn super::AppIdentityClock,
 ) -> Result<AppSessionSummary, AppStorageError> {
     write::create(db, subscribers, input, clock, false)
@@ -101,7 +101,7 @@ impl AppApplication {
                 tokio::pin!(future);
                 tokio::select! {
                     result = &mut future => result,
-                    _ = owner_shutdown.cancelled() => {
+                    () = owner_shutdown.cancelled() => {
                         cancellation.cancel();
                         future.await
                     }
@@ -170,7 +170,9 @@ impl AppApplication {
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         self.storage
-            .execute(move |db| write::create(db, &subscribers, input, clock.as_ref(), emit_created))
+            .execute(move |db| {
+                write::create(db, &subscribers, &input, clock.as_ref(), emit_created)
+            })
             .await
             .map_err(app_error)
     }
@@ -273,6 +275,10 @@ impl AppApplication {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
     AppStorageError::new("app_session_json_invalid", error.to_string())
 }

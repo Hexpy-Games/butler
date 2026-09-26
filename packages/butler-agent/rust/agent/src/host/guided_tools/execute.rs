@@ -37,14 +37,10 @@ pub(super) async fn execute(
         .await
         .map_err(ToolExecutionError::Integrity)?;
     if record.is_some() {
-        resume
-            .lock()
-            .expect("guided resume pool poisoned")
-            .discard(&call_id);
+        resume.lock().discard(&call_id);
     } else if occurrence.provider_call_id.is_none() {
         let claimed = resume
             .lock()
-            .expect("guided resume pool poisoned")
             .claim(&effective_name, &presentation_args, catalog_id.as_deref())
             .map_err(ToolExecutionError::Integrity)?;
         if let Some(claimed) = claimed {
@@ -107,7 +103,7 @@ pub(super) async fn execute(
                 .await?;
                 return Ok(output);
             }
-            "failed" | "cancelled" => return Ok(prior_failure(&call.name, &record.status)),
+            "failed" | "cancelled" => return prior_failure(&call.name, &record.status),
             "started" | "awaiting_authority"
                 if !NativeGuidedTools::supports(&call.name)
                     || matches!(
@@ -117,7 +113,7 @@ pub(super) async fn execute(
                             | "update_explicit_memory"
                     ) =>
             {
-                return Ok(uncertain_mutation(&effective_name));
+                return uncertain_mutation(&effective_name);
             }
             _ => {}
         }
@@ -125,7 +121,7 @@ pub(super) async fn execute(
     if record.is_none() {
         start(owner, call, &call_id, &effective_name, &presentation_args).await?;
     }
-    let result = super::dispatch::execute(owner, invocation, call, &call_id).await?;
+    let result = Box::pin(super::dispatch::execute(owner, invocation, call, &call_id)).await?;
     super::discovery::remember_described(owner, call, &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.
@@ -203,7 +199,7 @@ pub(super) async fn record_unexecuted(
 }
 
 fn next_index(owner: &NativeGuidedTools) -> u64 {
-    let mut state = owner.state.lock().expect("guided tool state poisoned");
+    let mut state = owner.state.lock();
     let current = state.next_call_index;
     state.next_call_index += 1;
     current
@@ -213,7 +209,6 @@ fn remember_provider(owner: &NativeGuidedTools, occurrence: &Occurrence, call_id
         owner
             .state
             .lock()
-            .expect("guided tool state poisoned")
             .journal_by_provider
             .insert(provider.clone(), call_id.into());
     }
@@ -284,7 +279,7 @@ fn record_output(record: &ToolJournalRecord) -> Result<JsonDocument, ToolExecuti
         .clone()
         .ok_or_else(|| integrity("guided_tool_record_result_missing"))
 }
-fn prior_failure(name: &str, status: &str) -> JsonDocument {
+fn prior_failure(name: &str, status: &str) -> Result<JsonDocument, ToolExecutionError> {
     let code = if status == "cancelled" {
         "prior_tool_call_cancelled"
     } else {
@@ -292,12 +287,12 @@ fn prior_failure(name: &str, status: &str) -> JsonDocument {
     };
     JsonDocument::from_value(&json!({"ok":false,"error":{"code":code,"message":format!(
         "The previous {name} call did not complete successfully. Adjust the call or continue with other evidence."
-    )}})).expect("static failure result")
+    )}})).map_err(|_| integrity("guided_tool_result_invalid"))
 }
-fn uncertain_mutation(name: &str) -> JsonDocument {
+fn uncertain_mutation(name: &str) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(&json!({"ok":false,"error":{"code":"prior_mutation_completion_unknown",
         "message":format!("A previous {name} call may have changed external state, but its result was not durably recorded. Inspect the target before deciding whether another mutation is safe.")}}))
-    .expect("static uncertain result")
+    .map_err(|_| integrity("guided_tool_result_invalid"))
 }
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value)

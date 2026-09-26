@@ -35,6 +35,10 @@ impl super::ProjectWorkRepository {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(in crate::project_ledger) fn read_error(error: ProjectLedgerReadError) -> BtccError {
     match error {
         ProjectLedgerReadError::RecordShow(code)
@@ -54,7 +58,7 @@ pub(in crate::project_ledger) fn read_current(
     for _attempt in 0..3 {
         match current_attempt(scope, work_id, collation)? {
             Attempt::Missing => return Ok(None),
-            Attempt::Changed => continue,
+            Attempt::Changed => {}
             Attempt::Ready(snapshot) => return Ok(Some(*snapshot)),
         }
     }

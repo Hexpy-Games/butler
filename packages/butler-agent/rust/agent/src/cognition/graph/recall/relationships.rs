@@ -82,7 +82,7 @@ fn relationship_rows(
         .filter(|time| time.basis == RecallTimeBasis::Event)
         .map_or(input.as_of.as_str(), |time| time.from.as_str());
     let sql = format!(
-        r#"
+        r"
         SELECT DISTINCT e.rel_type, e.source_node_id, e.target_node_id,
           candidate.node_id, ee.chunk_source_id
         FROM memory_evidence candidate
@@ -103,7 +103,7 @@ fn relationship_rows(
           AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))
           AND {} AND {}
         ORDER BY e.rel_type,e.edge_id,ee.chunk_source_id
-    "#,
+    ",
         candidate.sql, evidence.sql
     );
     let mut args = vec![
@@ -137,7 +137,7 @@ fn explicit_rules(
     let validity = scope::claim(input, "e", "id");
     let source = scope::source(input, "s", "c");
     let sql = format!(
-        r#"
+        r"
         SELECT DISTINCT m.source_id FROM memory_evidence m
         JOIN memory_nodes e ON e.id=m.node_id
         JOIN memory_chunk_sources s ON s.source_id=m.source_id
@@ -150,7 +150,7 @@ fn explicit_rules(
             OR (s.source_kind='explicit_record' AND s.role='explicit'))
           AND s.basis='user_statement' AND {} AND {}
         ORDER BY m.source_id
-    "#,
+    ",
         validity.sql, source.sql
     );
     let mut args = vec![Value::Text(episode_id.into())];
@@ -172,7 +172,7 @@ pub(super) fn support_count(
     let candidate = scope::source(input, "candidate_source", "candidate_chunk");
     let evidence = scope::source(input, "s", "c");
     let sql = format!(
-        r#"
+        r"
         SELECT COUNT(DISTINCT s.episode_id) FROM memory_evidence candidate
         JOIN memory_chunk_sources candidate_source
           ON candidate_source.source_id=candidate.source_id
@@ -188,7 +188,7 @@ pub(super) fn support_count(
           AND (e.valid_from IS NULL OR julianday(e.valid_from)<=julianday(?))
           AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))
           AND {} AND {}
-    "#,
+    ",
         candidate.sql, evidence.sql
     );
     let mut args = vec![
@@ -225,7 +225,7 @@ pub(super) fn historical_claim(
     let current = scope::claim(&current_input, "selected", "id");
     let source = scope::source(input, "s", "c");
     let sql = format!(
-        r#"
+        r"
         SELECT 1 FROM memory_evidence m
         JOIN memory_nodes selected ON selected.id=m.node_id
         JOIN memory_chunk_sources s ON s.source_id=m.source_id
@@ -235,7 +235,7 @@ pub(super) fn historical_claim(
           AND selected.type IN ('preference','goal','constraint','decision','memory_atom')
           AND {} AND NOT ({}) AND {}
         LIMIT 1
-    "#,
+    ",
         selected.sql, current.sql, source.sql
     );
     let mut args = vec![Value::Text(episode_id.into())];
@@ -275,7 +275,7 @@ fn later_supersession(
          AND (e.valid_to IS NULL OR julianday(e.valid_to)>julianday(?))"
     };
     let sql = format!(
-        r#"
+        r"
         SELECT 1 FROM memory_evidence candidate
         JOIN memory_chunk_sources candidate_source
           ON candidate_source.source_id=candidate.source_id
@@ -292,7 +292,7 @@ fn later_supersession(
           AND correction_chunk.current_revision=correction_source.revision
         WHERE candidate.episode_id=? AND {} AND {} AND {temporal}
         LIMIT 1
-    "#,
+    ",
         candidate.sql, correction.sql
     );
     let mut args = vec![Value::Text(episode_id.into())];

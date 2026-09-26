@@ -144,7 +144,7 @@ pub(super) fn mark_vector_registration_failure(
     };
     let current: Value = serde_json::from_str(&current).map_err(json_error)?;
     let current_state = current.get("state").and_then(Value::as_str);
-    if matches!(current_state, Some("complete") | Some("not_configured")) {
+    if matches!(current_state, Some("complete" | "not_configured")) {
         return Ok(());
     }
     let next = if code == "memory_write_busy" {
@@ -194,7 +194,7 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
     if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > i64::MAX as f64 {
         Err(source_changed())
     } else {
-        Ok(value as i64)
+        Ok(crate::json::saturating_i64(value))
     }
 }
 

@@ -60,8 +60,10 @@ async fn run_native_oauth_login_with_data(
     } else {
         data_root.join(requested_profile)
     };
-    if std::fs::symlink_metadata(&requested_profile).is_ok()
-        && requested_profile.canonicalize().is_err()
+    if tokio::fs::symlink_metadata(&requested_profile)
+        .await
+        .is_ok()
+        && tokio::fs::canonicalize(&requested_profile).await.is_err()
     {
         return Err("OpenAI auth profile path is unavailable".into());
     }
@@ -179,7 +181,7 @@ async fn run_native_oauth_login_with_data(
     };
     tokio::select! {
         result = callback => result,
-        _ = cancellation() => Err("OAuth login cancelled".into()),
+        () = cancellation() => Err("OAuth login cancelled".into()),
     }
 }
 
@@ -189,21 +191,20 @@ async fn open_browser(url: &str) -> Result<bool, String> {
     } else {
         "xdg-open"
     };
-    let mut child = match tokio::process::Command::new(command)
+    let Ok(mut child) = tokio::process::Command::new(command)
         .arg(url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true)
         .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return Ok(false),
+    else {
+        return Ok(false);
     };
     let result = tokio::select! {
         result = child.wait() => Some(Ok(result.is_ok_and(|status| status.success()))),
-        _ = cancellation() => Some(Err("OAuth login cancelled".into())),
-        _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => None,
+        () = cancellation() => Some(Err("OAuth login cancelled".into())),
+        () = tokio::time::sleep(std::time::Duration::from_secs(3)) => None,
     };
     if let Some(Ok(opened)) = &result {
         return Ok(*opened);
@@ -254,12 +255,9 @@ async fn read_callback(
         respond(stream, 404, "Not found").await;
         return Ok(None);
     }
-    let current = match url::Url::parse(redirect_uri).and_then(|base| base.join(target[1])) {
-        Ok(url) => url,
-        Err(_) => {
-            respond(stream, 404, "Not found").await;
-            return Ok(None);
-        }
+    let Ok(current) = url::Url::parse(redirect_uri).and_then(|base| base.join(target[1])) else {
+        respond(stream, 404, "Not found").await;
+        return Ok(None);
     };
     if current.path() != "/auth/callback" {
         respond(stream, 404, "Not found").await;
@@ -320,9 +318,18 @@ fn should_open_browser() -> bool {
 }
 
 async fn cancellation() {
-    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .expect("SIGTERM listener");
-    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-        .expect("SIGINT listener");
-    tokio::select! { _ = term.recv() => {}, _ = interrupt.recv() => {} }
+    use tokio::signal::unix::{SignalKind, signal};
+    // A signal whose listener cannot be installed simply never cancels.
+    let term = signal(SignalKind::terminate()).ok();
+    let interrupt = signal(SignalKind::interrupt()).ok();
+    tokio::select! { () = received(term) => {}, () = received(interrupt) => {} }
+}
+
+async fn received(listener: Option<tokio::signal::unix::Signal>) {
+    match listener {
+        Some(mut listener) => {
+            listener.recv().await;
+        }
+        None => std::future::pending().await,
+    }
 }

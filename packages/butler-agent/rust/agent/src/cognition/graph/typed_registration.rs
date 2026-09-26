@@ -11,6 +11,7 @@ use super::{GraphRegistration, db_error, index, invalidation, jobs};
 use crate::cognition::{CognitionError, CognitionResult, sources, sources::TypedPlan};
 use crate::conversation::ConversationSourceReader;
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct TypedRegistrationInput<'a> {
     pub generation_id: &'a str,
     pub data_root: &'a Path,

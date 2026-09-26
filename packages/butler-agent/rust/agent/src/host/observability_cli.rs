@@ -214,7 +214,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
     values
 }
 
-pub(super) fn report_success(options: &Options, command: &str, data: Value, human: &str) {
+pub(super) fn report_success(options: &Options, command: &str, data: &Value, human: &str) {
     if options.json {
         println!(
             "{}",

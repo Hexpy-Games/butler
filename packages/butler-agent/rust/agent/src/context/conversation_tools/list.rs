@@ -145,12 +145,13 @@ fn read(
         .is_some_and(|sessions| sessions.len() > 1)
         && envelope_bytes(&result)? > 24 * 1024
     {
-        result["sessions"]
-            .as_array_mut()
-            .expect("sessions array")
-            .pop();
+        let Some(sessions) = result["sessions"].as_array_mut() else {
+            break;
+        };
+        sessions.pop();
+        let returned = sessions.len();
         has_more = true;
-        result["returned"] = json!(result["sessions"].as_array().expect("sessions array").len());
+        result["returned"] = json!(returned);
         result["status"] = json!("partial");
         add_diagnostic(&mut result, "serialization_budget");
         set_cursor(&mut result, parsed, revision, &rows, &selected, has_more);
@@ -168,10 +169,10 @@ fn read(
             .is_some_and(|items| items.len() > 1)
             && envelope_bytes(&result)? > 24 * 1024
         {
-            result["sessions"][0]["recent_messages"]
-                .as_array_mut()
-                .expect("preview array")
-                .remove(0);
+            let Some(preview) = result["sessions"][0]["recent_messages"].as_array_mut() else {
+                break;
+            };
+            preview.remove(0);
         }
         while result["sessions"][0]["recent_messages"]
             .as_array()
@@ -188,11 +189,10 @@ fn read(
             result["sessions"][0]["recent_messages"][0]["text"] =
                 json!(truncate(text, (length * 3 / 4).max(1)));
         }
-        if envelope_bytes(&result)? > 24 * 1024 {
-            result["sessions"][0]["recent_messages"]
-                .as_array_mut()
-                .expect("preview array")
-                .clear();
+        if envelope_bytes(&result)? > 24 * 1024
+            && let Some(preview) = result["sessions"][0]["recent_messages"].as_array_mut()
+        {
+            preview.clear();
         }
         set_cursor(&mut result, parsed, revision, &rows, &selected, has_more);
     }
@@ -246,7 +246,7 @@ fn set_cursor(
 }
 fn envelope_bytes(value: &Value) -> ContextResult<usize> {
     let mut output = json!({"tool_name":"list_conversation_sessions"});
-    for (key, item) in value.as_object().expect("list response") {
+    for (key, item) in value.as_object().into_iter().flatten() {
         output[key] = item.clone();
     }
     json::stringify(&json!({"ok":true,"output":output}))
@@ -254,9 +254,9 @@ fn envelope_bytes(value: &Value) -> ContextResult<usize> {
         .map_err(|error| ContextError::new("json", error.to_string()))
 }
 fn add_diagnostic(value: &mut Value, text: &str) {
-    let items = value["diagnostics"]
-        .as_array_mut()
-        .expect("diagnostics array");
+    let Some(items) = value["diagnostics"].as_array_mut() else {
+        return;
+    };
     if !items.iter().any(|item| item == text) {
         items.push(json!(text));
     }
@@ -269,6 +269,10 @@ fn truncate(text: &str, max: usize) -> String {
 fn failure(code: &str, diagnostics: &[&str]) -> Value {
     json!({"ok":false,"code":code,"diagnostics":diagnostics})
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
     ContextError::new("conversation_store_unavailable", error.to_string())
 }

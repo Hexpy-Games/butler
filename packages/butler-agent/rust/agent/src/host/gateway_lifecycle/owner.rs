@@ -74,13 +74,13 @@ impl NativeAppGatewayLifecycle {
     pub(crate) async fn execute(&self, command: GatewayControlCommand) -> Result<Value, String> {
         let mut current = self.current.lock().await;
         match command {
-            GatewayControlCommand::Status => self.view(&current).await,
-            GatewayControlCommand::Test => self.test(&current).await,
+            GatewayControlCommand::Status => self.view(current.as_ref()).await,
+            GatewayControlCommand::Test => self.test(current.as_ref()).await,
             GatewayControlCommand::Start => {
                 let desired = NativeAppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
-                    let mut view = self.view(&current).await?;
+                    let mut view = self.view(current.as_ref()).await?;
                     view["started"] = Value::Bool(false);
                     view["reason"] = Value::String("disabled".into());
                     return Ok(view);
@@ -89,7 +89,7 @@ impl NativeAppGatewayLifecycle {
                 self.start_locked(&mut current, &desired)
                     .await
                     .map_err(error_text)?;
-                let mut view = self.view(&current).await?;
+                let mut view = self.view(current.as_ref()).await?;
                 view["started"] = Value::Bool(!already);
                 view["alreadyRunning"] = Value::Bool(already);
                 Ok(view)
@@ -97,7 +97,7 @@ impl NativeAppGatewayLifecycle {
             GatewayControlCommand::Stop => {
                 let was_running = current.is_some();
                 self.stop_locked(&mut current).await?;
-                let mut view = self.view(&current).await?;
+                let mut view = self.view(current.as_ref()).await?;
                 view["stopped"] = Value::Bool(true);
                 view["alreadyStopped"] = Value::Bool(!was_running);
                 Ok(view)
@@ -106,7 +106,7 @@ impl NativeAppGatewayLifecycle {
                 let desired = NativeAppServiceConfiguration::capture(&self.data_root);
                 self.require_captured_dependencies_text(&desired)?;
                 if !desired.enabled {
-                    let mut view = self.view(&current).await?;
+                    let mut view = self.view(current.as_ref()).await?;
                     view["restarted"] = Value::Bool(false);
                     view["reason"] = Value::String("disabled".into());
                     return Ok(view);
@@ -115,7 +115,7 @@ impl NativeAppGatewayLifecycle {
                 self.start_locked(&mut current, &desired)
                     .await
                     .map_err(error_text)?;
-                let mut view = self.view(&current).await?;
+                let mut view = self.view(current.as_ref()).await?;
                 view["restarted"] = Value::Bool(true);
                 Ok(view)
             }
@@ -238,7 +238,7 @@ impl NativeAppGatewayLifecycle {
         )
     }
 
-    async fn view(&self, current: &Option<NativeAppServer>) -> Result<Value, String> {
+    async fn view(&self, current: Option<&NativeAppServer>) -> Result<Value, String> {
         let desired = NativeAppServiceConfiguration::capture(&self.data_root);
         let active = self.endpoint.snapshot();
         let enabled = desired.enabled;
@@ -284,7 +284,7 @@ impl NativeAppGatewayLifecycle {
         }))
     }
 
-    async fn test(&self, current: &Option<NativeAppServer>) -> Result<Value, String> {
+    async fn test(&self, current: Option<&NativeAppServer>) -> Result<Value, String> {
         let mut view = self.view(current).await?;
         let result = view["enabled"] == true && view["running"] == true;
         view["ok"] = Value::Bool(result);
@@ -293,12 +293,11 @@ impl NativeAppGatewayLifecycle {
 }
 
 async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> bool {
-    let client = match reqwest::Client::builder()
+    let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))
         .build()
-    {
-        Ok(client) => client,
-        Err(_) => return false,
+    else {
+        return false;
     };
     let mut request = client.get(format!("{}/health", base_url.trim_end_matches('/')));
     if auth.required {
@@ -307,9 +306,8 @@ async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> 
         };
         request = request.bearer_auth(token);
     }
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(_) => return false,
+    let Ok(response) = request.send().await else {
+        return false;
     };
     if !response.status().is_success() {
         return false;
@@ -319,6 +317,10 @@ async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> 
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn error_text(error: BtccError) -> String {
     format!("{}: {}", error.code, error.message)
 }

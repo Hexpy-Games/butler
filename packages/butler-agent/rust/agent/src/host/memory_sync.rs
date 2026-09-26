@@ -1,9 +1,10 @@
 //! Process-owned completion consumer. Queue and semantic work run independently
 //! of interactive Turns, using the same model and writer-coordination owners.
 
+use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
@@ -38,17 +39,17 @@ impl NativeMemorySync {
         self.consumer.clone()
     }
 
-    pub(super) async fn open(
-        data_root: PathBuf,
-        paths: CognitionPathEnvironment,
+    pub(super) fn open(
+        data_root: &Path,
+        paths: &CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
         provider: Arc<NativeModelProvider>,
         #[cfg(unix)] embedding: Arc<NativeEmbeddingOwner>,
         #[cfg(unix)] vector: Arc<NativeGenerationVectorAdapter>,
     ) -> Result<Self, BtccError> {
         let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
-        if active_memory_descriptor_exists(&data_root, &paths).map_err(error)? {
-            resolve_active_generation(&data_root, &paths).map_err(error)?;
+        if active_memory_descriptor_exists(data_root, paths).map_err(error)? {
+            resolve_active_generation(data_root, paths).map_err(error)?;
         }
         let registration = Arc::new(CognitionRegistrationService::with_projection(
             paths.clone(),
@@ -68,7 +69,7 @@ impl NativeMemorySync {
             Arc::new(SystemIdentity),
         ));
         let consumer = NativeMemorySyncConsumer::new(
-            data_root.clone(),
+            data_root.to_path_buf(),
             paths.clone(),
             registration.clone(),
             coordinator,
@@ -80,7 +81,7 @@ impl NativeMemorySync {
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(poll(
             consumer.clone(),
-            data_root.clone(),
+            data_root.to_path_buf(),
             paths.clone(),
             shutdown.clone(),
         ));
@@ -95,7 +96,7 @@ impl NativeMemorySync {
     pub(super) async fn close(&self) -> Result<(), BtccError> {
         self.shutdown.cancel();
         self.consumer.close().await;
-        let task = self.task.lock().expect("memory sync task poisoned").take();
+        let task = self.task.lock().take();
         let joined = match task {
             Some(task) => task
                 .await
@@ -134,8 +135,8 @@ async fn poll(
             }
         };
         tokio::select! {
-            _ = shutdown.cancelled() => return,
-            _ = tokio::time::sleep(delay) => {},
+            () = shutdown.cancelled() => return,
+            () = tokio::time::sleep(delay) => {},
         }
     }
 }

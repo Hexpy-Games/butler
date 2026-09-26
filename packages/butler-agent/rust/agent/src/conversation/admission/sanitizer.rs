@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 
@@ -7,18 +8,24 @@ const ARGUMENT_SCHEMA: &str = "butler.tool-call-arguments-transcript.v1";
 const EVIDENCE_SCHEMA: &str = "butler.tool-result-evidence-transcript.v1";
 
 static UNSAFE_KEY: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?iu)(?:raw[_-]?(?:arguments(?:[_-]?delta)?|output|stdout|stderr)|stdout|stderr|api[_-]?key|token|secret|password|passphrase|authorization|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)").unwrap()
+    fixed_regex(
+        r"(?iu)(?:raw[_-]?(?:arguments(?:[_-]?delta)?|output|stdout|stderr)|stdout|stderr|api[_-]?key|token|secret|password|passphrase|authorization|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)",
+    )
 });
 static SENSITIVE_KEY: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?iu)(?:api[_-]?key|token|secret|password|passphrase|authorization|auth|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)").unwrap()
+    fixed_regex(
+        r"(?iu)(?:api[_-]?key|token|secret|password|passphrase|authorization|auth|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)",
+    )
 });
-const NON_JS_WORD: &str = r"[^A-Za-z0-9_\u{17f}\u{212a}]";
+// `[^A-Za-z0-9_\u{17f}\u{212a}]` is a non-word character under ECMAScript /iu.
 static THINK_BLOCK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(&format!(r"(?isu)<think{NON_JS_WORD}[^>]*>.*?</think>")).unwrap());
+    LazyLock::new(|| fixed_regex(r"(?isu)<think[^A-Za-z0-9_\u{17f}\u{212a}][^>]*>.*?</think>"));
 static THINK_TAG: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(&format!(r"(?iu)</?think{NON_JS_WORD}[^>]*>")).unwrap());
+    LazyLock::new(|| fixed_regex(r"(?iu)</?think[^A-Za-z0-9_\u{17f}\u{212a}][^>]*>"));
 static PRIVATE_SENTINEL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?iu)SECRET[_-]?TOKEN|raw prompt text|(?:api[_-]?key|secret|token|authorization|bearer)\s*[:=]").unwrap()
+    fixed_regex(
+        r"(?iu)SECRET[_-]?TOKEN|raw prompt text|(?:api[_-]?key|secret|token|authorization|bearer)\s*[:=]",
+    )
 });
 
 pub(super) fn safe_tool_content(
@@ -185,7 +192,7 @@ fn safe_evidence(value: &Value, depth: usize) -> Value {
             }
             Value::Object(out)
         }
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 fn safe_argument(key: &str, value: &Value, depth: usize) -> Value {
@@ -209,7 +216,7 @@ fn safe_argument(key: &str, value: &Value, depth: usize) -> Value {
             }
             Value::Object(out)
         }
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 fn remove_unsafe(record: &Map<String, Value>) -> Map<String, Value> {

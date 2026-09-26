@@ -6,6 +6,7 @@ use super::contracts::{
 };
 use super::prompt;
 
+#[derive(Clone, Copy)]
 pub(super) struct BriefingArtifactContext<'a> {
     pub(super) input: &'a BriefingInputSnapshot,
     pub(super) project: Option<&'a BriefingProjectSignal>,

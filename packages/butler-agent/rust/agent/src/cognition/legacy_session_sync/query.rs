@@ -126,8 +126,8 @@ pub(super) fn index(
                     message.text,
                     message.created_at,
                     message.transcript_file,
-                    if message.internal { 1_i64 } else { 0_i64 },
-                    if message.placeholder { 1_i64 } else { 0_i64 },
+                    i64::from(message.internal),
+                    i64::from(message.placeholder),
                     updated_at,
                 ])
                 .map_err(db_error)?;

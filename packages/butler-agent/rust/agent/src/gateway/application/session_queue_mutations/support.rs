@@ -114,10 +114,10 @@ pub(super) fn attachment_ids(value: &str) -> Result<Vec<String>, GatewayApplicat
 }
 
 pub(super) fn content_matches_current(
-    content: &Option<MessageContent>,
-    current: &Option<String>,
+    content: Option<&MessageContent>,
+    current: Option<&String>,
 ) -> Result<bool, GatewayApplicationError> {
-    let current = current.as_deref().map(parse_json_value).transpose()?;
+    let current = current.map(|value| parse_json_value(value)).transpose()?;
     let requested = content
         .as_ref()
         .map(serde_json::to_value)
@@ -151,7 +151,7 @@ pub(super) fn parse_project_sources(value: Option<&str>) -> Result<Value, Gatewa
 
 pub(super) fn apply_plan_binding(
     persisted: &mut Value,
-    current: &Option<String>,
+    current: Option<&String>,
     requested: Option<&str>,
 ) {
     let requested = requested
@@ -161,7 +161,6 @@ pub(super) fn apply_plan_binding(
         .map(|value| Value::String(value.to_owned()))
         .or_else(|| {
             current
-                .as_deref()
                 .and_then(|value| serde_json::from_str::<Value>(value).ok())
                 .and_then(|value| value.get("plan_id").cloned())
         });
@@ -173,9 +172,8 @@ pub(super) fn apply_plan_binding(
     }
 }
 
-pub(super) fn has_authority(value: &Option<String>) -> bool {
+pub(super) fn has_authority(value: Option<&String>) -> bool {
     value
-        .as_deref()
         .and_then(|value| serde_json::from_str::<Value>(value).ok())
         .is_some_and(|value| {
             value

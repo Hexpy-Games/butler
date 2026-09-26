@@ -105,7 +105,11 @@ fn turn(
             turn_id: turn_id.to_owned(),
         });
     }
-    let messages = eligible_turn_messages(reader, request, &outcome.public_assistant_message_id)?;
+    let messages = eligible_turn_messages(
+        reader,
+        request,
+        outcome.public_assistant_message_id.as_ref(),
+    )?;
     let episode_id = projection_hash(vec!["canonical-conversation-turn".into(), turn_id.into()])?;
     plan(PlanInput {
         messages,
@@ -165,7 +169,7 @@ fn standalone(
 fn eligible_turn_messages(
     reader: &ConversationSourceReader,
     request: Option<ConversationMessageWithParts>,
-    assistant_id: &Option<String>,
+    assistant_id: Option<&String>,
 ) -> Result<Vec<ConversationMessageWithParts>, CognitionSourceError> {
     let Some(request) = request else {
         return Err(error("memory_source_ineligible"));
@@ -180,7 +184,6 @@ fn eligible_turn_messages(
         return Err(error("memory_source_ineligible"));
     }
     let assistant = assistant_id
-        .as_deref()
         .map(|id| reader.read_message(id))
         .transpose()?
         .flatten();

@@ -112,7 +112,7 @@ impl AppApplication {
                 let session = super::super::sessions::create_branch_session(
                     &tx,
                     &subscribers,
-                    AppCreateSessionInput {
+                    &AppCreateSessionInput {
                         kind,
                         title: Some(request.title.clone()),
                         project_id,
@@ -152,7 +152,7 @@ impl AppApplication {
 
 async fn rollback_scratch(root: PathBuf, scratch: super::super::projects::ScratchFolder) {
     let _ = tokio::task::spawn_blocking(move || {
-        super::super::projects::rollback_branch_scratch(&root, &scratch)
+        super::super::projects::rollback_branch_scratch(&root, &scratch);
     })
     .await;
 }

@@ -8,7 +8,7 @@ pub(super) fn create(connection: &Connection) -> Result<(), AppStorageError> {
         .map_err(AppStorageError::sqlite)
 }
 
-const SUPPORTING_SCHEMA: &str = r#"
+const SUPPORTING_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS app_terminal_turn_projections (
   turn_id TEXT PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
   chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -57,4 +57,4 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE OF text ON messages BE
   DELETE FROM messages_fts WHERE rowid = old.rowid;
   INSERT INTO messages_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
-"#;
+";

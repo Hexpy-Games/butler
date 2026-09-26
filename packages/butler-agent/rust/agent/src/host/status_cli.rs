@@ -49,7 +49,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
         match value.as_ref() {
             "--data" | "--since-hours" => index += 2,
             "--json" | "--verbose" | "--quiet" | "--silent" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             "--home" => {
                 return args.iter().any(|arg| {
@@ -87,8 +87,8 @@ pub async fn run_native_status_cli(
     let (data, text) = match command {
         Command::ModelStatus => {
             let telemetry = operations::read_prompt_cache_telemetry(&data_root, None);
-            let data = models.status_value(telemetry.clone());
-            let text = models.render_text(telemetry, None);
+            let data = models.status_value(&telemetry.clone());
+            let text = models.render_text(&telemetry, None);
             (data, text)
         }
         Command::MetricsStatus | Command::Status => {
@@ -110,7 +110,7 @@ pub async fn run_native_status_cli(
                     operations::render_metrics_status(&metrics),
                 )
             } else {
-                let model = models.status_value(metrics.model_telemetry());
+                let model = models.status_value(&metrics.model_telemetry());
                 let services = service_health(&data_root);
                 let text = operations::render_status_context(&metrics, &models, &services);
                 (
@@ -278,10 +278,10 @@ fn service_health(data_root: &Path) -> Value {
                 && record.state == "ready"
                 && record.ready_at.is_some();
             let state = if online { "online" } else { "stale" };
-            let app_status = if !record.app_enabled {
-                json!({ "status": "disabled", "evidence": "configuration_disabled" })
-            } else {
+            let app_status = if record.app_enabled {
                 json!({ "status": "unknown", "evidence": "independent_readiness_not_observed" })
+            } else {
+                json!({ "status": "disabled", "evidence": "configuration_disabled" })
             };
             (
                 state,

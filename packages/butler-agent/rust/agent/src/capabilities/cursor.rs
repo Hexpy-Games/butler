@@ -46,7 +46,7 @@ pub(super) fn encode(query: &str, index: usize, offset: usize, path: &str, sha: 
         object.insert("file_path".into(), json!(path));
     }
     object.insert("file_sha256".into(), json!(sha));
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(object)).expect("cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(object).to_string())
 }
 
 pub(super) fn decode(value: &Value) -> Option<ReadCursor> {
@@ -57,7 +57,7 @@ pub(super) fn decode(value: &Value) -> Option<ReadCursor> {
     // Buffer.from(base64url) ignores junk, stops at padding, and discards
     // incomplete low-order bits rather than requiring canonical encoding.
     let bytes = decode_buffer_base64url(raw);
-    let record: Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let record: Value = serde_json::from_slice(&bytes).ok()?;
     let object = record.as_object()?;
     if object.get("v")?.as_f64()? != 1.0 || object.get("tool")?.as_str()? != "read_file" {
         return None;
@@ -116,7 +116,7 @@ pub(super) fn decode_buffer_base64url(raw: &str) -> Vec<u8> {
         count += 6;
         if count >= 8 {
             count -= 8;
-            decoded.push((bits >> count) as u8);
+            decoded.push(u8::try_from(bits >> count).unwrap_or(u8::MAX));
             bits &= (1 << count) - 1;
         }
     }
@@ -125,5 +125,6 @@ pub(super) fn decode_buffer_base64url(raw: &str) -> Vec<u8> {
 
 fn nonnegative_integer(value: &Value) -> Option<usize> {
     let number = value.as_f64()?;
-    (number.is_finite() && number >= 0.0 && number.fract() == 0.0).then_some(number as usize)
+    (number.is_finite() && number >= 0.0 && number.fract() == 0.0)
+        .then_some(crate::json::saturating_usize(number))
 }

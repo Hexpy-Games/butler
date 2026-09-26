@@ -13,7 +13,7 @@ fn string(value: Option<&Value>) -> Option<String> {
 
 pub(super) fn read(
     root: &Path,
-    query: AppDeveloperLogsQuery,
+    query: &AppDeveloperLogsQuery,
 ) -> Result<Value, GatewayApplicationError> {
     let path = root.join("app/developer-logs/model-turns.jsonl");
     let contents = match fs::read_to_string(path) {

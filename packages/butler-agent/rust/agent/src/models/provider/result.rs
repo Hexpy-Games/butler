@@ -312,6 +312,10 @@ type Fields = (
     Option<Value>,
     Option<String>,
 );
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn nonempty(value: String) -> Option<String> {
     let value = crate::public_text::trim_js_whitespace(&value);
     if value.is_empty() {

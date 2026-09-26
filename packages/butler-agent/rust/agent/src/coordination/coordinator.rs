@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -57,9 +58,9 @@ impl CognitionWriteCoordinator {
 
     pub(crate) fn try_acquire(
         &self,
-        request: CognitionWriteAcquire,
+        request: &CognitionWriteAcquire,
     ) -> CoordinationResult<Option<CognitionWriteLease>> {
-        self.inner.try_acquire(&request)
+        self.inner.try_acquire(request)
     }
 
     pub(crate) async fn acquire(
@@ -100,17 +101,23 @@ impl CognitionWriteCoordinator {
             let wait = if remaining.is_nan() {
                 Duration::ZERO
             } else {
-                Duration::from_millis(remaining.min(20.0) as u64)
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "clamped to (0, 20] milliseconds above"
+                )]
+                let millis = remaining.min(20.0) as u64;
+                Duration::from_millis(millis)
             };
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {
-                    _ = cancellation.cancelled() => {
+                    () = cancellation.cancelled() => {
                         return Err(CoordinationError::new(
                             "memory_write_aborted",
                             "Memory writer acquisition was aborted",
                         ));
                     }
-                    _ = tokio::time::sleep(wait) => {}
+                    () = tokio::time::sleep(wait) => {}
                 }
             } else if wait.is_zero() {
                 tokio::task::yield_now().await;
@@ -216,7 +223,7 @@ impl CoordinatorInner {
                 return Err(error);
             }
         };
-        self.local.lock().unwrap().insert(
+        self.local.lock().insert(
             request.lock_path.clone(),
             LocalRegistration {
                 registration_id: registration_id.clone(),
@@ -233,7 +240,7 @@ impl CoordinatorInner {
     }
 
     fn remove_registration(&self, path: &Path, registration_id: &str) {
-        let mut local = self.local.lock().unwrap();
+        let mut local = self.local.lock();
         if local
             .get(path)
             .is_some_and(|current| current.registration_id == registration_id)

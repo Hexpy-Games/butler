@@ -107,6 +107,10 @@ impl StorageError {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn sqlite(error: rusqlite::Error) -> Self {
         Self::new("sqlite_error", error.to_string())
     }
@@ -170,17 +174,16 @@ impl BtccStorage {
                 "BTCC SQLite owner exited before initialization completed",
             )
         });
-        let (_owner_id, _owner_generation) = match initialized {
+        let owner = match initialized {
             Ok(Ok(owner)) => owner,
-            Ok(Err(error)) => {
-                join_failed_initialization(thread).await;
-                return Err(error);
-            }
-            Err(error) => {
+            Ok(Err(error)) | Err(error) => {
                 join_failed_initialization(thread).await;
                 return Err(error);
             }
         };
+        // The owner identity is only retained for test assertions.
+        #[cfg(not(test))]
+        let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
                 lane: AsyncMutex::new(LaneState {
@@ -190,9 +193,9 @@ impl BtccStorage {
                     close_waiters: Vec::new(),
                 }),
                 #[cfg(test)]
-                owner_id: _owner_id,
+                owner_id: owner.0,
                 #[cfg(test)]
-                owner_generation: _owner_generation,
+                owner_generation: owner.1,
             }),
         })
     }
@@ -274,6 +277,8 @@ impl BtccStorage {
         drop(lane);
         if let Some(thread) = thread {
             let inner = Arc::clone(&self.inner);
+            // Detached on purpose: close waiters receive the join result, and the join
+            // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await

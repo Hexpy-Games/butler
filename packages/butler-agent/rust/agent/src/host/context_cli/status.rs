@@ -29,8 +29,7 @@ pub(super) async fn run(
         StatusFact::Available(Some(session)) if !session.model_ref.trim().is_empty() => {
             Some(session.model_ref.as_str())
         }
-        StatusFact::Available(None) | StatusFact::Unavailable(_) => None,
-        StatusFact::Available(Some(_)) => None,
+        StatusFact::Available(None | Some(_)) | StatusFact::Unavailable(_) => None,
     };
     let model_ref = active_model.unwrap_or(&models.model_ref);
     let budget_owner = context_budget_owner(&models);
@@ -109,7 +108,7 @@ pub(super) async fn run(
         .unwrap_or_else(|| "unavailable".into());
     let human = format!(
         "Context estimate for {model_ref}: budget={} messages={messages_text} total={}; threshold={}.",
-        budget.context_window_tokens as u64,
+        crate::json::saturating_u64(budget.context_window_tokens),
         total
             .map(|value| value.to_string())
             .unwrap_or_else(|| "unavailable".into()),

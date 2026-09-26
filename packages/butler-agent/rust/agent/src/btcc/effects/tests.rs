@@ -24,7 +24,7 @@ struct FixtureAdapter {
     binding: PlanBinding,
 }
 impl EffectAdapter for FixtureAdapter {
-    fn capability(&self) -> &str {
+    fn capability(&self) -> &'static str {
         "write_file"
     }
     fn binding(&self) -> PlanBinding {

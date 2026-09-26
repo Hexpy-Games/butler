@@ -12,7 +12,7 @@ use crate::conversation::{ConversationSourceReader, conversation_store_path};
 
 use super::CapsulePresence;
 
-fn failure(error: std::io::Error) -> CognitionError {
+fn failure(error: &std::io::Error) -> CognitionError {
     CognitionError::new("cognition_prompt_read_failed", error.to_string())
 }
 
@@ -20,19 +20,16 @@ fn optional_text(path: &Path) -> CognitionResult<Option<String>> {
     let text = match super::read_utf8(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(failure(error)),
+        Err(error) => return Err(failure(&error)),
     };
     let text = crate::public_text::trim_js_whitespace(&text);
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
 pub(super) fn continuity(memory_root: &Path, session: &str) -> CognitionResult<Option<String>> {
-    let hash = Sha256::digest(session.as_bytes());
-    let key = hash
-        .iter()
-        .take(16)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    // Hex of the first 16 digest bytes.
+    let mut key = format!("{:x}", Sha256::digest(session.as_bytes()));
+    key.truncate(32);
     optional_text(&memory_root.join("sessions").join(format!("{key}.md")))
 }
 
@@ -84,7 +81,7 @@ pub(super) fn status(
     match fs::metadata(path) {
         Ok(_) => Ok(CapsulePresence::Present),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(CapsulePresence::Missing),
-        Err(error) => Err(failure(error)),
+        Err(error) => Err(failure(&error)),
     }
 }
 
@@ -117,12 +114,9 @@ fn read_generation_hot_cache(
         return Ok(None);
     }
     let graph = GraphRepository::open_readonly(&generation.graph_path)?;
-    let canonical = match ConversationSourceReader::open(&conversation_store_path(data_root)) {
-        Ok(reader) => reader,
-        Err(_) => {
-            graph.close()?;
-            return Ok(None);
-        }
+    let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root)) else {
+        graph.close()?;
+        return Ok(None);
     };
     let result = project_entries(
         data_root,

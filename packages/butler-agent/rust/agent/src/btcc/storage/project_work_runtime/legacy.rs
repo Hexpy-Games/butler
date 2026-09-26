@@ -36,11 +36,12 @@ pub(super) fn import_observation(
     {
         return Ok(None);
     }
-    let prior = current::import_row(db, &row.work_id)?;
-    if prior.is_none() || current::has_semantic_rows(db, &row.work_id)? {
+    let Some(prior) = current::import_row(db, &row.work_id)? else {
+        return Ok(None);
+    };
+    if current::has_semantic_rows(db, &row.work_id)? {
         return Ok(None);
     }
-    let prior = prior.unwrap();
     if row.ledger_project_id.as_deref() != Some(input.resolved_scope.ledger_project_id.as_str())
         || !valid_hash(row.canonical_head_sha256.as_deref().unwrap_or(""))
         || !valid_hash(&prior.source_revision)

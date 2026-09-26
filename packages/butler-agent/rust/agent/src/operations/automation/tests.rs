@@ -36,12 +36,12 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     let now = Arc::new(AtomicI64::new(0));
     let queue = Arc::new(Queue::default());
     let service =
-        NativeAutomationService::open(root.clone(), dependencies(now.clone(), queue.clone()));
+        NativeAutomationService::open(&root.clone(), dependencies(now.clone(), queue.clone()));
 
     service
         .execute(
             "create_automation",
-            object(json!({
+            object(&json!({
                 "id":"tool-claim", "prompt":"tool only", "schedule_type":"once",
                 "run_at":"1970-01-01T00:00:01.000Z"
             })),
@@ -52,7 +52,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     let claimed = service
         .execute(
             "run_due_automations",
-            object(json!({
+            object(&json!({
                 "now":"1970-01-01T00:00:01.000Z"
             })),
             "session-1",
@@ -65,7 +65,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     service
         .execute(
             "create_automation",
-            object(json!({
+            object(&json!({
                 "id":"scheduled", "prompt":"scheduled", "schedule_type":"once",
                 "run_at":"1970-01-01T00:00:02.000Z"
             })),
@@ -86,13 +86,13 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
             .is_err()
     );
 
-    let reopened = NativeAutomationService::open(root.clone(), dependencies(now, queue.clone()));
+    let reopened = NativeAutomationService::open(&root.clone(), dependencies(now, queue.clone()));
     tokio::task::yield_now().await;
     assert_eq!(queue.0.lock().unwrap().len(), 1);
     reopened
         .execute(
             "delete_automation",
-            object(json!({"id":"scheduled"})),
+            object(&json!({"id":"scheduled"})),
             "session-1",
         )
         .await
@@ -100,7 +100,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
     let listed = reopened
         .execute(
             "list_automations",
-            object(json!({"include_deleted":true})),
+            object(&json!({"include_deleted":true})),
             "session-1",
         )
         .await
@@ -120,7 +120,7 @@ async fn tool_claim_does_not_enqueue_and_scheduler_restart_does_not_duplicate() 
 fn offline_store_list_does_not_initialize_data() {
     let root =
         std::env::temp_dir().join(format!("native-automation-read-{}", uuid::Uuid::new_v4()));
-    let store = super::store::AutomationStore::new(root.clone());
+    let store = super::store::AutomationStore::new(&root.clone());
     assert!(store.list(false).unwrap().is_empty());
     assert!(!root.join("automations").exists());
 }
@@ -132,10 +132,10 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
     for _ in 0..16 {
         let root =
             std::env::temp_dir().join(format!("native-automation-race-{}", uuid::Uuid::new_v4()));
-        let store = super::store::AutomationStore::new(root.clone());
+        let store = super::store::AutomationStore::new(&root.clone());
         store
             .create(
-                &object(json!({
+                &object(&json!({
                     "id":"race", "prompt":"tick", "schedule_type":"interval",
                     "interval_minutes":1
                 })),
@@ -146,13 +146,13 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
             .unwrap();
 
         let barrier = Arc::new(Barrier::new(3));
-        let run_store = super::store::AutomationStore::new(root.clone());
+        let run_store = super::store::AutomationStore::new(&root.clone());
         let run_barrier = barrier.clone();
         let run = thread::spawn(move || {
             run_barrier.wait();
             run_store.run_now("race", 1_000, &crate::js_date::parse_iso_millis)
         });
-        let delete_store = super::store::AutomationStore::new(root.clone());
+        let delete_store = super::store::AutomationStore::new(&root.clone());
         let delete_barrier = barrier.clone();
         let delete = thread::spawn(move || {
             delete_barrier.wait();
@@ -164,11 +164,11 @@ fn concurrent_run_and_delete_preserve_any_successful_run_count() {
         delete.join().unwrap().unwrap();
         let final_record = store.read("race").unwrap().unwrap();
         assert_eq!(final_record.status, "deleted");
-        assert_eq!(final_record.run_count, if run_succeeded { 1 } else { 0 });
+        assert_eq!(final_record.run_count, u64::from(run_succeeded));
         std::fs::remove_dir_all(root).unwrap();
     }
 }
 
-fn object(value: Value) -> Map<String, Value> {
+fn object(value: &Value) -> Map<String, Value> {
     value.as_object().unwrap().clone()
 }

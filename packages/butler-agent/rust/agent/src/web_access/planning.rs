@@ -161,7 +161,7 @@ fn bounded_original_request(value: &str) -> Option<String> {
     if utf16_len(&compact) <= 3_000 {
         return Some(compact);
     }
-    let head = ((3_000 - utf16_len(MARKER)) as f64 * 0.7).floor() as usize;
+    let head = crate::json::saturating_usize(((3_000 - utf16_len(MARKER)) as f64 * 0.7).floor());
     let tail = 3_000 - utf16_len(MARKER) - head;
     Some(format!(
         "{}{}{}",

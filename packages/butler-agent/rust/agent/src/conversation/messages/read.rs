@@ -172,7 +172,7 @@ pub(in crate::conversation) fn projection(
 ) -> ConversationResult<Vec<ConversationMessageWithParts>> {
     let after = after_seq
         .filter(|value| value.is_finite())
-        .map(|value| value.floor().max(0.0) as u64)
+        .map(|value| crate::json::saturating_u64(value.floor().max(0.0)))
         .unwrap_or(0);
     let limit = normalize_limit(limit, 500, 1000);
     query_messages(
@@ -251,7 +251,7 @@ pub(in crate::conversation) fn cognition(
     let offset = input
         .offset
         .filter(|v| v.is_finite())
-        .map(|v| v.floor().max(0.0) as u64)
+        .map(|v| crate::json::saturating_u64(v.floor().max(0.0)))
         .unwrap_or(0);
     let mut clauses = vec!["visibility='model'".to_owned()];
     let mut values = Vec::new();
@@ -386,7 +386,7 @@ pub(in crate::conversation) fn around(
 }
 
 fn sql_integer(value: u64) -> rusqlite::types::Value {
-    rusqlite::types::Value::Integer(value as i64)
+    rusqlite::types::Value::Integer(i64::try_from(value).unwrap_or(i64::MAX))
 }
 
 pub(in crate::conversation) fn referenced_hash(

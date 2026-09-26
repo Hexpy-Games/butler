@@ -98,7 +98,7 @@ impl OperationResultReplayRuntime {
             .map_err(OperationResultError::Contract)
     }
 
-    async fn replacement_saves(
+    fn replacement_saves(
         &self,
         original: &ModelRoundMessage,
         replacement: &ModelRoundMessage,
@@ -222,10 +222,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 candidate.content = content.into();
                 candidate.request_segment_kind = Some("older_tool_result_projection".into());
                 if record.delivery_state.is_none() {
-                    if !self
-                        .replacement_saves(message, &candidate, model, butler_data)
-                        .await?
-                    {
+                    if !self.replacement_saves(message, &candidate, model, butler_data)? {
                         continue;
                     }
                     self.journal
@@ -428,17 +425,16 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
             let Some(record) = self.record(call_id).await.map_err(contract_error)? else {
                 return Ok(Default::default());
             };
-            if !durable(&record) {
+            let Some(result) = record.result.as_ref().filter(|_| durable(&record)) else {
                 return Ok(OperationResultMessageReferences {
                     operation_result_call_id: Some(call_id.into()),
                     ..Default::default()
                 });
-            }
+            };
             let reference = self.reference_for(&record).await.map_err(contract_error)?;
             let exact_read = if provider_tool_name != "read_operation_results"
                 && self.selection.exact_read_capability
             {
-                let result = record.result.as_ref().expect("durable record has result");
                 let total_bytes = result.as_str().len();
                 Some(ToolResultExactReadReference {
                     capability: ReadOperationResultsOnly::ReadOperationResults,
@@ -487,6 +483,10 @@ fn contract(code: &'static str) -> BtccError {
     BtccError::new(code, code)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn numeric_argument_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new(
         "operation_result_argument_coercion_failed",

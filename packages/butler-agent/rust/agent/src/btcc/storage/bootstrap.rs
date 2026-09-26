@@ -147,6 +147,10 @@ fn error(code: &'static str) -> StorageError {
     StorageError::new(code, code)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> StorageError {
     StorageError::new("agent_btcc_storage_io_error", error.to_string())
 }

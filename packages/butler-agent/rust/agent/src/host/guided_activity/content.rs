@@ -290,6 +290,10 @@ fn active_action_title(args: &serde_json::Map<String, Value>) -> Option<String> 
         })
 }
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 fn tool_title(name: &str, args: &serde_json::Map<String, Value>) -> String {
     let label = match name {
         "start_work" => "Check request",

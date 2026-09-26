@@ -454,7 +454,7 @@ impl NativeSubsessionService {
             .map_err(storage)?
         {
             self.ensure_child_binding(&stored).await?;
-            self.replay(&stored).await?
+            self.replay(&stored).await?;
         }
         self.recover_directions().await?;
         self.deliver_worker_results().await

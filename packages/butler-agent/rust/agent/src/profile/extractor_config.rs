@@ -80,7 +80,7 @@ fn mutate(
     change: impl FnOnce(&mut Map<String, Value>),
 ) -> ProfileResult<()> {
     let mut config = read_config(data_root);
-    let root = config.as_object_mut().unwrap();
+    let root = crate::json::object_mut(&mut config);
     let personalization = object(root, "personalization");
     let profile = object(personalization, "profiling");
     change(profile);
@@ -95,11 +95,7 @@ fn read_config(data_root: &Path) -> Value {
         .unwrap_or_else(|| Value::Object(Map::new()))
 }
 fn object<'a>(map: &'a mut Map<String, Value>, key: &str) -> &'a mut Map<String, Value> {
-    let value = map.entry(key).or_insert_with(|| Value::Object(Map::new()));
-    if !value.is_object() {
-        *value = Value::Object(Map::new())
-    }
-    value.as_object_mut().unwrap()
+    crate::json::object_field_mut(map, key)
 }
 fn normalize_model(value: &str) -> Option<String> {
     let value = crate::public_text::trim_js_whitespace(value);

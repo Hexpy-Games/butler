@@ -9,8 +9,9 @@ mod wire;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
@@ -214,6 +215,8 @@ impl NativeToolOutput {
         let slots = Arc::new(Semaphore::new(2));
         let worker_admission = Arc::downgrade(&admission);
         let worker_drained = Arc::clone(&drained);
+        // Detached on purpose: the worker ends when the last admission sender drops,
+        // and close waits for it through `drained`.
         tokio::spawn(async move {
             while let Some(job) = receiver.recv().await {
                 match job {
@@ -234,7 +237,7 @@ impl NativeToolOutput {
                         let result = match budget_owner.owned_default_estimator().await {
                             Ok(estimator) => tokio::task::spawn_blocking({
                                 let root = butler_data.clone();
-                                move || reader::read(&root, &estimator, input)
+                                move || reader::read(&root, &estimator, &input)
                             })
                             .await
                             .unwrap_or_else(join_error),
@@ -259,7 +262,7 @@ impl NativeToolOutput {
                             let root = butler_data.clone();
                             let identity = Arc::clone(&identity);
                             let metrics = Arc::clone(&prune_metrics);
-                            move || prune::prune(&root, identity.as_ref(), metrics.as_ref(), input)
+                            move || prune::prune(&root, identity.as_ref(), metrics.as_ref(), &input)
                         })
                         .await
                         .unwrap_or_else(join_error);
@@ -269,10 +272,7 @@ impl NativeToolOutput {
                 }
             }
             if let Some(admission) = worker_admission.upgrade() {
-                admission
-                    .lock()
-                    .expect("tool-output admission poisoned")
-                    .closed = true;
+                admission.lock().closed = true;
             }
             worker_drained.notify_waiters();
         });
@@ -284,10 +284,7 @@ impl NativeToolOutput {
     }
 
     fn enqueue(&self, job: Job) -> ContextResult<()> {
-        let state = self
-            .admission
-            .lock()
-            .expect("tool-output admission poisoned");
+        let state = self.admission.lock();
         if state.closing {
             return Err(ContextError::new(
                 "tool_output_closed",
@@ -363,10 +360,7 @@ impl NativeToolOutput {
 
     pub(crate) async fn close(&self) {
         {
-            let mut state = self
-                .admission
-                .lock()
-                .expect("tool-output admission poisoned");
+            let mut state = self.admission.lock();
             if !state.closing {
                 state.closing = true;
                 self.slots.close();
@@ -377,12 +371,7 @@ impl NativeToolOutput {
             let notified = self.drained.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self
-                .admission
-                .lock()
-                .expect("tool-output admission poisoned")
-                .closed
-            {
+            if self.admission.lock().closed {
                 break;
             }
             notified.await;
@@ -390,6 +379,10 @@ impl NativeToolOutput {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn join_error<T>(error: tokio::task::JoinError) -> ContextResult<T> {
     Err(ContextError::new(
         "tool_output_worker_failed",

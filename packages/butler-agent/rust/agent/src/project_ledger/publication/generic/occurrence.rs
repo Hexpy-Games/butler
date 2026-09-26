@@ -263,6 +263,10 @@ fn locked<T>(
     .map_err(convert)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn convert(error: ProjectWorkPublicationError) -> LedgerEffectError {
     match error {
         ProjectWorkPublicationError::Adapter("project_ledger_effect_occurrence_conflict") => {

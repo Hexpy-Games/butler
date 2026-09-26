@@ -186,6 +186,10 @@ fn contract(code: &str) -> BtccError {
     BtccError::new(code, code)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn ledger_error(error: ProjectLedgerReadError) -> BtccError {
     match error {
         ProjectLedgerReadError::Resolution(code)

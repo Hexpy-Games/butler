@@ -3,7 +3,6 @@
 use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
-use serde_json::json;
 
 use super::{AppProjectSource, AppProjectSummary, AppSessionSummary};
 use crate::gateway::application::{
@@ -205,10 +204,7 @@ pub(super) fn append_created_unpublished(
     clock: &dyn AppIdentityClock,
     project: &AppProjectSummary,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
-    let payload = json!({"project":project})
-        .as_object()
-        .cloned()
-        .expect("project event object");
+    let payload = crate::json::json_object!({"project":project});
     events::append_unpublished(db, "project.created", None, payload, &clock.now_iso())
 }
 
@@ -218,10 +214,7 @@ fn append_created(
     clock: &dyn AppIdentityClock,
     project: &AppProjectSummary,
 ) -> Result<(), AppStorageError> {
-    let payload = json!({"project":project})
-        .as_object()
-        .cloned()
-        .expect("project event object");
+    let payload = crate::json::json_object!({"project":project});
     events::append(
         db,
         subscribers,

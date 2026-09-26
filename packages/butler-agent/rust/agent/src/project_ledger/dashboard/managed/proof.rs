@@ -70,6 +70,7 @@ pub(super) fn validate_history_child(
     occurrence::validate(root, binding, id, kind, child, collation)
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct CurrentChildrenInput<'a> {
     pub root: &'a Path,
     pub binding: &'a ProjectLedgerBinding,

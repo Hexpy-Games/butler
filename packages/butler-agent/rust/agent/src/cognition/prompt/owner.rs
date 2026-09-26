@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 use tokio::sync::{Notify, Semaphore};
 
@@ -24,11 +25,7 @@ struct Active(Arc<Owner>);
 
 impl Drop for Active {
     fn drop(&mut self) {
-        let mut state = self
-            .0
-            .state
-            .lock()
-            .expect("cognition prompt owner poisoned");
+        let mut state = self.0.state.lock();
         state.active -= 1;
         drop(state);
         self.0.idle.notify_waiters();
@@ -66,11 +63,7 @@ impl PromptReadOwner {
                 )
             })?;
         {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .expect("cognition prompt owner poisoned");
+            let mut state = self.inner.state.lock();
             if state.closing {
                 return Err(CognitionError::new(
                     "cognition_prompt_closed",
@@ -96,11 +89,7 @@ impl PromptReadOwner {
 
     pub(super) async fn close(&self) {
         {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .expect("cognition prompt owner poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
         }
         self.inner.permits.close();
@@ -108,14 +97,7 @@ impl PromptReadOwner {
             let notified = self.inner.idle.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self
-                .inner
-                .state
-                .lock()
-                .expect("cognition prompt owner poisoned")
-                .active
-                == 0
-            {
+            if self.inner.state.lock().active == 0 {
                 break;
             }
             notified.await;

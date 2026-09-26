@@ -32,7 +32,7 @@ pub(super) fn render_success(
     options: &Options,
     command: &str,
     data: serde_json::Value,
-    human: String,
+    human: &str,
 ) -> NativeSkillCliResult {
     let stdout = if options.json {
         envelope(true, command, Some(data), None)
@@ -59,7 +59,7 @@ pub(super) fn render_error(
                 false,
                 command,
                 error.data.map(|value| *value),
-                Some(json!({ "code": error.code, "message": error.message })),
+                Some(&json!({ "code": error.code, "message": error.message })),
             ),
             stderr: String::new(),
             exit_code: error.exit_code,
@@ -77,17 +77,16 @@ fn envelope(
     ok: bool,
     command: &str,
     data: Option<serde_json::Value>,
-    error: Option<serde_json::Value>,
+    error: Option<&serde_json::Value>,
 ) -> String {
     format!(
         "{}\n",
-        serde_json::to_string_pretty(&json!({
+        crate::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(serde_json::Value::Null),
             "error": error,
             "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
         }))
-        .expect("JSON envelope serialization cannot fail")
     )
 }

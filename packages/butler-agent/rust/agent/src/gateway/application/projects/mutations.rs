@@ -1,7 +1,6 @@
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::json;
 
 use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;
@@ -40,7 +39,9 @@ impl AppApplication {
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         self.storage
-            .execute(move |db| update_project(db, &subscribers, &project_id, input, clock.as_ref()))
+            .execute(move |db| {
+                update_project(db, &subscribers, &project_id, &input, clock.as_ref())
+            })
             .await
             .map_err(app_error)
     }
@@ -162,7 +163,7 @@ fn update_project(
     db: &mut Connection,
     subscribers: &crate::gateway::application::events::EventSubscribers,
     project_id: &str,
-    input: AppProjectUpdate,
+    input: &AppProjectUpdate,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
@@ -183,13 +184,13 @@ fn update_project(
     };
     tx.execute(
         "UPDATE projects SET display_name=?1,pinned=?2,archived=?3,status=?4,updated_at=?5 WHERE id=?6",
-        params![display_name,if pinned { 1_i64 } else { 0_i64 },if archived { 1_i64 } else { 0_i64 },status,clock.now_iso(),project_id],
+        params![display_name,i64::from(pinned),i64::from(archived),status,clock.now_iso(),project_id],
     )
     .map_err(AppStorageError::sqlite)?;
     let project = read_project(&tx, project_id)?;
     let event = append_project_event(&tx, "project.updated", &project, clock)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppProjectActionResult { project })
 }
 
@@ -213,7 +214,7 @@ fn lifecycle_project(
             .map_err(AppStorageError::sqlite)?;
         let event = append_project_event(&tx, "project.permanently_deleted", &project, clock)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
-        events::publish(subscribers, event);
+        events::publish(subscribers, &event);
         return Ok(AppProjectActionResult { project });
     }
     let display_name = display_name
@@ -223,7 +224,7 @@ fn lifecycle_project(
     let pinned = pinned.unwrap_or(row.pinned);
     tx.execute(
         "UPDATE projects SET display_name=?1,pinned=?2,archived=1,status='archived',updated_at=?3 WHERE id=?4",
-        params![display_name,if pinned { 1_i64 } else { 0_i64 },clock.now_iso(),project_id],
+        params![display_name,i64::from(pinned),clock.now_iso(),project_id],
     )
     .map_err(AppStorageError::sqlite)?;
     let project = read_project(&tx, project_id)?;
@@ -244,9 +245,9 @@ fn lifecycle_project(
         None
     };
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, updated_event);
+    events::publish(subscribers, &updated_event);
     if let Some(event) = deleted_event {
-        events::publish(subscribers, event);
+        events::publish(subscribers, &event);
     }
     Ok(AppProjectActionResult { project })
 }
@@ -267,10 +268,7 @@ fn append_project_event(
         db,
         event_type,
         None,
-        json!({"project":project})
-            .as_object()
-            .cloned()
-            .expect("project event is an object"),
+        crate::json::json_object!({"project":project}),
         &clock.now_iso(),
     )
 }

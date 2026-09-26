@@ -172,7 +172,7 @@ fn image_tool_requires_current_full_access_image_admission() {
     let catalog = catalog();
     let catalog = catalog.snapshot();
     for flag in ["on", "off"] {
-        let no_image = phase_turn("full_access", json!({}));
+        let no_image = phase_turn("full_access", &json!({}));
         let selection = select_phase(GuidedPhaseInput {
             turn: &no_image,
             catalog,
@@ -193,7 +193,7 @@ fn image_tool_requires_current_full_access_image_admission() {
 
         let mut detached_image = image_context();
         detached_image["attachments"] = json!([]);
-        let detached_turn = phase_turn("full_access", detached_image);
+        let detached_turn = phase_turn("full_access", &detached_image);
         let selection = select_phase(GuidedPhaseInput {
             turn: &detached_turn,
             catalog,
@@ -212,7 +212,7 @@ fn image_tool_requires_current_full_access_image_admission() {
             "analyze_attached_image"
         ));
 
-        let mut with_image = phase_turn("full_access", image_context());
+        let mut with_image = phase_turn("full_access", &image_context());
         // Host validates the frozen Models admission and supplies this Turn fact.
         with_image.context["executionPolicy"]["requiredNativeTools"] =
             json!(["analyze_attached_image"]);
@@ -237,7 +237,7 @@ fn image_tool_requires_current_full_access_image_admission() {
 
     let mut stale = image_context();
     stale["imageAdmission"]["capability"]["routeHealth"] = json!("transient_failure");
-    let stale_turn = phase_turn("full_access", stale);
+    let stale_turn = phase_turn("full_access", &stale);
     let selection = select_phase(GuidedPhaseInput {
         turn: &stale_turn,
         catalog,
@@ -257,7 +257,7 @@ fn image_tool_requires_current_full_access_image_admission() {
     ));
 
     // Host never supplies the image capability fact to a read-only Turn.
-    let read_only = phase_turn("read_only", image_context());
+    let read_only = phase_turn("read_only", &image_context());
     let selection = select_phase(GuidedPhaseInput {
         turn: &read_only,
         catalog,
@@ -283,7 +283,7 @@ fn has_provider_tool(tools: &[Value], expected: &str) -> bool {
         .any(|tool| tool.get("name").and_then(Value::as_str) == Some(expected))
 }
 
-fn phase_turn(access_mode: &str, context_bits: Value) -> TurnRecord {
+fn phase_turn(access_mode: &str, context_bits: &Value) -> TurnRecord {
     let mut context = json!({
         "userRef":"user",
         "executionPolicy":{

@@ -89,6 +89,10 @@ pub(super) fn ensure_dir(path: &Path) -> QueueResult<()> {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn io_error(error: std::io::Error) -> NativeQueueError {
     NativeQueueError::new("inbound_queue_io_failed", error.to_string())
 }

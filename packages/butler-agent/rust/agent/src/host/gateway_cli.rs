@@ -181,7 +181,7 @@ async fn execute(
                 Action::Start => "start",
                 Action::Stop => "stop",
                 Action::Restart => "restart",
-                _ => unreachable!(),
+                _ => return Err("gateway action does not control the service".into()),
             };
             let mut response = control::request(&record, command).await?;
             response["pid"] = json!(record.pid);
@@ -205,7 +205,8 @@ async fn execute(
             .await?;
             Ok(json!({"id":"app","running":false,"sessionId":session}))
         }
-        Action::Logs => unreachable!("logs are handled before gateway settings are opened"),
+        // Logs are handled before gateway settings are opened.
+        Action::Logs => Err("gateway logs are not read through settings".into()),
     }
 }
 

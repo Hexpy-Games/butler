@@ -166,7 +166,8 @@ fn disposition(name: &str) -> String {
             encoded.push(char::from(byte));
         } else {
             use std::fmt::Write;
-            write!(&mut encoded, "%{byte:02X}").expect("writing a String cannot fail");
+            // Writing to a String cannot fail.
+            let _ = write!(&mut encoded, "%{byte:02X}");
         }
     }
     format!("inline; filename=\"{fallback}\"; filename*=UTF-8''{encoded}")
@@ -183,7 +184,7 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
             let low = char::from(input.next().ok_or(HttpError::Internal)?)
                 .to_digit(16)
                 .ok_or(HttpError::Internal)?;
-            decoded.push((high * 16 + low) as u8);
+            decoded.push(u8::try_from(high * 16 + low).unwrap_or(u8::MAX));
         } else {
             decoded.push(byte);
         }
@@ -202,6 +203,10 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
     Ok(value)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn multipart_error(error: MultipartError) -> HttpError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         HttpError::PayloadTooLarge

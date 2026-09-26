@@ -24,7 +24,7 @@ pub(super) struct TurnEventInput<'a> {
 pub(super) fn append_if_missing(
     db: &Connection,
     subscribers: &EventSubscribers,
-    input: TurnEventInput<'_>,
+    input: &TurnEventInput<'_>,
 ) -> Result<(), AppStorageError> {
     if has_kind(db, input.turn_id, input.kind)? {
         return Ok(());
@@ -48,7 +48,7 @@ pub(super) fn append_if_missing(
         subscribers,
         "agent.turn_event",
         Some(input.turn_id),
-        object(json!({"session_id":input.session_id,"turn_id":input.turn_id,"event":event}))?,
+        object(&json!({"session_id":input.session_id,"turn_id":input.turn_id,"event":event}))?,
         input.created_at,
     )?;
     Ok(())
@@ -66,7 +66,7 @@ fn has_kind(db: &Connection, turn_id: &str, kind: &str) -> Result<bool, AppStora
     .map_err(AppStorageError::sqlite)
 }
 
-fn object(value: Value) -> Result<Map<String, Value>, AppStorageError> {
+fn object(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
         AppStorageError::new("app_event_payload_invalid", "Event payload is invalid.")
     })

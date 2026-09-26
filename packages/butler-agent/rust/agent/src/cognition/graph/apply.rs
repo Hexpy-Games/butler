@@ -25,6 +25,7 @@ pub(super) enum ApplyStage {
     Bound,
 }
 
+#[derive(Clone, Copy)]
 struct PlanApplication<'a> {
     owner: ProjectionWindowOwner<'a>,
     input: &'a ExtractInput,
@@ -338,10 +339,10 @@ fn assert_candidates_current(
 
 fn meaning_input_hash(input: &ExtractInput) -> CognitionResult<String> {
     let mut value = serde_json::to_value(input).map_err(json_error)?;
-    value
-        .as_object_mut()
-        .expect("input object")
-        .insert("candidates".into(), json!([]));
+    let Some(object) = value.as_object_mut() else {
+        return Err(json_error("meaning input is not an object"));
+    };
+    object.insert("candidates".into(), json!([]));
     Ok(crate::cognition::sources::projection_hash_for_graph(vec![
         json!("meaning-input"),
         value,

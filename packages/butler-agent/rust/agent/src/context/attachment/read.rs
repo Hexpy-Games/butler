@@ -138,13 +138,14 @@ fn read_attachment_bytes(attachment: &AttachmentRef, butler_data: &Path) -> Opti
     if !metadata.is_file() || metadata.len() > MAX_ATTACHMENT_BYTES_TO_READ {
         return None;
     }
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    let mut bytes = Vec::with_capacity(usize::try_from(metadata.len()).unwrap_or(usize::MAX));
     File::open(path)
         .ok()?
         .take(MAX_ATTACHMENT_BYTES_TO_READ + 1)
         .read_to_end(&mut bytes)
         .ok()?;
-    (bytes.len() <= MAX_ATTACHMENT_BYTES_TO_READ as usize).then_some(bytes)
+    (bytes.len() <= usize::try_from(MAX_ATTACHMENT_BYTES_TO_READ).unwrap_or(usize::MAX))
+        .then_some(bytes)
 }
 
 pub(super) fn attachment_content(

@@ -2,7 +2,11 @@
 
 mod inspect;
 
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use rusqlite::{Connection, OpenFlags, params};
 use tokio::sync::mpsc;
@@ -64,14 +68,14 @@ struct ChunkRefs {
 
 impl LegacyMetadataIntegrityService {
     pub(crate) fn new(
-        data_root: PathBuf,
+        data_root: &Path,
         paths: CognitionPathEnvironment,
         box_store: Arc<BoxStoreService>,
         feedback: Arc<FeedbackBufferService>,
     ) -> Self {
         Self {
-            data_root: data_root.clone(),
-            path: paths.memory_root(&data_root).join("metadata.sqlite"),
+            data_root: data_root.to_path_buf(),
+            path: paths.memory_root(data_root).join("metadata.sqlite"),
             paths,
             box_store,
             feedback,
@@ -146,8 +150,7 @@ impl LegacyMetadataIntegrityService {
                     .release(result.is_ok())
                     .map_err(|failure| CognitionError::new(failure.code, failure.message));
                 match (result, released) {
-                    (Err(failure), _) => Err(failure),
-                    (Ok(_), Err(failure)) => Err(failure),
+                    (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                     (Ok(value), Ok(())) => Ok(value),
                 }
             })
@@ -192,7 +195,7 @@ impl LegacyMetadataIntegrityService {
         }
         let (sender, mut receiver) = mpsc::channel(1);
         let path = self.path.clone();
-        let producer = tokio::task::spawn_blocking(move || stream_refs(path, sender));
+        let producer = tokio::task::spawn_blocking(move || stream_refs(&path, &sender));
         let mut counts = LegacyMetadataIntegrityCounts::default();
         let mut missing_box_refs = Vec::new();
         let mut missing_feedback_refs = Vec::new();
@@ -307,10 +310,10 @@ fn remove_missing_links(
 }
 
 fn stream_refs(
-    path: PathBuf,
-    sender: mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
+    path: &PathBuf,
+    sender: &mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
 ) -> CognitionResult<()> {
-    let db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| metadata_error())?;
     db.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|_| metadata_error())?;
@@ -325,9 +328,13 @@ fn stream_refs(
         .map_err(|_| metadata_error())?;
     for offset in (0..SOURCE_CHUNK_LIMIT).step_by(PAGE_SIZE) {
         let ids = chunk_query
-            .query_map(params![PAGE_SIZE as i64, offset as i64], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                params![
+                    i64::try_from(PAGE_SIZE).unwrap_or(i64::MAX),
+                    i64::try_from(offset).unwrap_or(i64::MAX)
+                ],
+                |row| row.get::<_, String>(0),
+            )
             .map_err(|_| metadata_error())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| metadata_error())?;

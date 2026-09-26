@@ -231,7 +231,7 @@ impl Key {
     }
     fn known(name: &str) -> Self {
         Self {
-            encoded: serde_json::to_string(name).expect("field name"),
+            encoded: serde_json::Value::from(name).to_string(),
             decoded: Some(name.into()),
         }
     }
@@ -421,6 +421,10 @@ fn primitive_raw(raw: &str) -> bool {
 fn encode_value(value: &Value) -> Result<String, BtccError> {
     crate::json::stringify(value).map_err(json_error)
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new(
         "guided_tool_provider_serialization_failed",

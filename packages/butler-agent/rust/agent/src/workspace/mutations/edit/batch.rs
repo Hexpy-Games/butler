@@ -9,7 +9,7 @@ struct Target {
     first_index: usize,
     edit_indexes: Vec<usize>,
     start_line: usize,
-    expected_sha256: String,
+    expected_sha256: Option<String>,
 }
 
 struct Ready {
@@ -17,7 +17,7 @@ struct Ready {
     prepared: Prepared,
 }
 
-pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) -> BatchResult {
+pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> BatchResult {
     let mut outcome = BatchResult {
         applied: Vec::new(),
         unchanged: Vec::new(),
@@ -28,7 +28,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
     };
     let mut snapshots: HashMap<String, Snapshot> = HashMap::new();
     let mut texts: HashMap<String, String> = HashMap::new();
-    for edit in &edits {
+    for edit in edits {
         let key = &edit.path.public;
         if !snapshots.contains_key(key) {
             let path = super::super::contracts::GuardedPath {
@@ -67,7 +67,9 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
             texts.insert(key.clone(), text);
             snapshots.insert(key.clone(), snapshot);
         }
-        let snapshot = snapshots.get(key).expect("observed target");
+        let Some(snapshot) = snapshots.get(key) else {
+            continue;
+        };
         if let Err(error) =
             io::prepare_guard(snapshot, edit.input.expected_sha256.as_deref(), false)
         {
@@ -77,13 +79,15 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
         }
     }
     if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, &edits);
+        return preflight_failed(outcome, edits);
     }
     let mut targets = Vec::<Target>::new();
     let mut target_indices = HashMap::<String, usize>::new();
-    for edit in &edits {
+    for edit in edits {
         let key = &edit.path.public;
-        let text = texts.get_mut(key).expect("preflight text");
+        let Some(text) = texts.get_mut(key) else {
+            continue;
+        };
         let location = match locator::locate(text, &edit.input.old_text, edit.input.start_line) {
             Ok(location) => location,
             Err(failure) => {
@@ -91,7 +95,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
                     EditFailure::new(edit.input.index, Some(key.clone()), failure.error);
                 error.occurrences = Some(failure.occurrences);
                 outcome.preflight_failures.push(error);
-                return preflight_failed(outcome, &edits);
+                return preflight_failed(outcome, edits);
             }
         };
         text.replace_range(
@@ -107,19 +111,17 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
                 first_index: edit.input.index,
                 edit_indexes: vec![edit.input.index],
                 start_line: location.start_line,
-                expected_sha256: edit
-                    .input
-                    .expected_sha256
-                    .as_ref()
-                    .expect("batch SHA")
-                    .clone(),
+                expected_sha256: edit.input.expected_sha256.clone(),
             });
         }
     }
     let mut ready = Vec::new();
     for target in targets {
-        let snapshot = snapshots.remove(&target.path).expect("target snapshot");
-        let after = texts.remove(&target.path).expect("target text");
+        let (Some(snapshot), Some(after)) =
+            (snapshots.remove(&target.path), texts.remove(&target.path))
+        else {
+            continue;
+        };
         if snapshot.bytes == after.as_bytes() {
             outcome.unchanged.push((target.first_index, target.path));
             continue;
@@ -127,7 +129,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
         match io::prepare(
             snapshot,
             after.into_bytes(),
-            Some(&target.expected_sha256),
+            target.expected_sha256.as_deref(),
             false,
         ) {
             Ok(prepared) => ready.push(Ready { target, prepared }),
@@ -137,7 +139,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
         }
     }
     if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, &edits);
+        return preflight_failed(outcome, edits);
     }
     let mut remaining = ready.into_iter();
     while let Some(ready_target) = remaining.next() {

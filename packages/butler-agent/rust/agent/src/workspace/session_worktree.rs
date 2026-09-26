@@ -6,9 +6,10 @@ mod relocation;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 
 use serde_json::Map;
 use tokio::sync::oneshot;
@@ -129,11 +130,7 @@ impl NativeSessionWorktrees {
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         let (tx, rx) = oneshot::channel();
         {
-            let state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let state = self.inner.state.lock();
             if state.closing {
                 return Ok(failure(input.action, None, "cancelled"));
             }
@@ -153,11 +150,7 @@ impl NativeSessionWorktrees {
 
     pub(crate) async fn close(&self) {
         {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
             self.inner.shutdown.cancel();
             self.inner.jobs.close();
@@ -184,7 +177,7 @@ impl Owner {
             }
             let stop = joined.clone();
             let watcher = tokio::spawn(async move {
-                tokio::select! { _ = caller.cancelled() => stop.cancel(), _ = stop.cancelled() => {} }
+                tokio::select! { () = caller.cancelled() => stop.cancel(), () = stop.cancelled() => {} }
             });
             let result = self.bind_unlocked(input, &branch, joined.clone()).await;
             joined.cancel();
@@ -199,7 +192,7 @@ impl Owner {
     }
 
     fn session_lock(&self, session_id: &str) -> Arc<SessionLock> {
-        let mut state = self.state.lock().expect("session worktree owner poisoned");
+        let mut state = self.state.lock();
         let lock = state
             .locks
             .get(session_id)
@@ -212,7 +205,7 @@ impl Owner {
     }
 
     fn release_session_lock(&self, session_id: &str, lock: &Arc<SessionLock>) {
-        let mut state = self.state.lock().expect("session worktree owner poisoned");
+        let mut state = self.state.lock();
         if Arc::strong_count(lock) == 1
             && state
                 .locks
@@ -250,15 +243,12 @@ impl Owner {
         let Some(binding) = self.bindings.get_by_session_id(&input.session_id).await? else {
             return Ok(failure(action, Some(branch), "session_binding_required"));
         };
-        let existing_marker = match path::read_marker(binding.metadata.as_ref()) {
-            Ok(value) => value,
-            Err(()) => {
-                return Ok(failure(
-                    action,
-                    Some(branch),
-                    "session_workspace_unavailable",
-                ));
-            }
+        let Ok(existing_marker) = path::read_marker(binding.metadata.as_ref()) else {
+            return Ok(failure(
+                action,
+                Some(branch),
+                "session_workspace_unavailable",
+            ));
         };
         let anchor_path = existing_marker
             .as_ref()
@@ -322,7 +312,9 @@ impl Owner {
             let same = same_marker && git.same_path(&path, &binding.workspace_path).await?;
             (path, true, same)
         } else {
-            let target = target.expect("create target prepared");
+            let Some(target) = target else {
+                return Ok(failure(action, Some(branch), "git_operation_failed"));
+            };
             let mut target_entry = None;
             for entry in &entries {
                 if git
@@ -413,9 +405,8 @@ impl Owner {
                 updated_at: Some(now),
             })
             .await;
-        let persisted = match result {
-            Ok(value) => value,
-            Err(_) => return Ok(failure(action, Some(branch), "binding_persist_failed")),
+        let Ok(persisted) = result else {
+            return Ok(failure(action, Some(branch), "binding_persist_failed"));
         };
         match persisted {
             RebindWorkspaceResult::Missing => {
@@ -452,10 +443,8 @@ impl Owner {
         code: &'static str,
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         if (code == "cancelled" || code == "git_operation_failed")
-            && target.is_some()
-            && git
-                .partial_creation(anchor, target.unwrap(), branch)
-                .await?
+            && let Some(target) = target
+            && git.partial_creation(anchor, target, branch).await?
         {
             return Ok(failure(action, Some(branch), "partial_creation"));
         }

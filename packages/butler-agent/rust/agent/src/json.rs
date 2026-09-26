@@ -16,6 +16,53 @@ pub(crate) use document::{
 };
 mod number;
 pub(crate) use number::{coerce_number, number_from_string};
+mod saturating;
+pub(crate) use saturating::{
+    saturating_i32, saturating_i64, saturating_u16, saturating_u32, saturating_u64,
+    saturating_usize,
+};
+
+/// Builds a JSON object literal as a `serde_json::Map`, so callers can insert
+/// or remove keys without unwrapping `Value::as_object_mut`.
+macro_rules! json_object {
+    ({ $($body:tt)* }) => {
+        match ::serde_json::json!({ $($body)* }) {
+            ::serde_json::Value::Object(map) => map,
+            // `json!({ .. })` always builds an object.
+            _ => ::serde_json::Map::new(),
+        }
+    };
+}
+pub(crate) use json_object;
+
+/// Pretty-prints a JSON value. Writing a `Value` to memory cannot fail; the
+/// compact form is the fallback regardless.
+pub(crate) fn pretty(value: &Value) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+}
+
+/// `value` as a mutable object; any other value is first replaced by `{}`.
+pub(crate) fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+    match value {
+        Value::Object(map) => map,
+        other => {
+            *other = Value::Object(serde_json::Map::new());
+            object_mut(other)
+        }
+    }
+}
+
+/// `parent[key]` as a mutable object; a missing or non-object value becomes `{}`.
+pub(crate) fn object_field_mut<'a>(
+    parent: &'a mut serde_json::Map<String, Value>,
+    key: &str,
+) -> &'a mut serde_json::Map<String, Value> {
+    object_mut(
+        parent
+            .entry(key)
+            .or_insert_with(|| Value::Object(serde_json::Map::new())),
+    )
+}
 
 #[derive(Debug)]
 pub(crate) struct JsonError(String);

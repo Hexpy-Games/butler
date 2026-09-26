@@ -61,7 +61,8 @@ pub(super) fn read(
                 updated_at: row.get(10)?,
                 description: row.get(11)?,
                 preferences_json: row.get(12)?,
-                preferences_revision: row.get::<_, i64>(13)?.max(0) as u64,
+                preferences_revision: u64::try_from(row.get::<_, i64>(13)?.max(0))
+                    .unwrap_or_default(),
             })
         },
     )

@@ -114,7 +114,7 @@ pub(super) fn start_line(value: Option<&Value>) -> Result<Option<usize>, ()> {
     {
         return Err(());
     }
-    Ok(Some(number as usize))
+    Ok(Some(crate::json::saturating_usize(number)))
 }
 
 fn js_number(value: &Value) -> f64 {

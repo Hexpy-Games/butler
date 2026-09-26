@@ -150,22 +150,18 @@ fn hydrate_row(
         .conversation_message_id
         .as_deref()
         .ok_or_else(source_changed)?;
-    if !messages.contains_key(message_id) {
-        messages.insert(
-            message_id.to_owned(),
+    let message = match messages.entry(message_id.to_owned()) {
+        std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+        std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
             canonical
                 .read_message(message_id)
                 .map_err(conversation_error)?
                 .ok_or_else(source_changed)?,
-        );
-    }
-    Ok(hydrate_conversation_source(
-        messages.get(message_id).expect("inserted"),
-        row,
-        f64::INFINITY,
-    )?
-    .text
-    .to_owned())
+        ),
+    };
+    Ok(hydrate_conversation_source(message, row, f64::INFINITY)?
+        .text
+        .to_owned())
 }
 
 pub(super) fn source_row(

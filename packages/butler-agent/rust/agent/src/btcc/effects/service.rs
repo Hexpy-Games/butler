@@ -100,9 +100,8 @@ impl NativeEffectService {
         &self,
         input: &ExecuteEffect,
     ) -> EffectResult<Option<EffectOutcome>> {
-        let resolved = match identity::resolve(input) {
-            Ok(value) => value,
-            Err(_) => return Ok(None),
+        let Ok(resolved) = identity::resolve(input) else {
+            return Ok(None);
         };
         let Some(record) = self
             .journal

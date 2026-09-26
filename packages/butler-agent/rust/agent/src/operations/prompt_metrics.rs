@@ -37,6 +37,10 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
         // Neither is evaluated for invalid usage and getter failures write no row.
         let timestamp = self.clock.now_epoch_millis();
         let attribution = input.usage_attribution;
+        #[expect(
+            clippy::redundant_closure_for_method_calls,
+            reason = "the budget-source trait is private to models"
+        )]
         let snapshot = attribution
             .and_then(|value| value.budget_state_source)
             .map(|source| source.snapshot())
@@ -59,6 +63,10 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_failure(error: std::io::Error) -> ModelRoundError {
     ModelRoundError::InvocationFailure {
         code: error.raw_os_error().map(|value| value.to_string()),

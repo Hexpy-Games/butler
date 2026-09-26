@@ -157,8 +157,7 @@ impl NativeLegacyHot {
                 .release(result.is_ok())
                 .map_err(|failure| failure.code.to_owned());
             match (result, release) {
-                (Err(code), _) => Err(code),
-                (Ok(()), Err(code)) => Err(code),
+                (Err(code), _) | (Ok(()), Err(code)) => Err(code),
                 _ => Ok(entry),
             }
         })
@@ -212,13 +211,9 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
     }
     let source_id = {
         let digest = Sha256::digest(format!("{project}\0{session_id}\0{body}").as_bytes());
-        format!(
-            "save_{}",
-            digest[..16]
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        )
+        let mut hex = format!("{digest:x}");
+        hex.truncate(32);
+        format!("save_{hex}")
     };
     let start = format!("<!-- butler-semantic:{source_id}:start -->");
     let current = match fs::read_to_string(target) {
@@ -263,7 +258,7 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
                 .map_err(|_| "legacy_hot_write_failed")?;
         }
         file.write_all(output.as_bytes())
-            .and_then(|_| file.sync_all())
+            .and_then(|()| file.sync_all())
             .map_err(|_| "legacy_hot_write_failed".to_owned())?;
         fs::rename(temp, target).map_err(|_| "legacy_hot_write_failed".to_owned())
     })();
@@ -316,13 +311,11 @@ fn try_create_lock(path: &Path) -> std::io::Result<()> {
 }
 
 fn contains_secret(value: &str) -> bool {
-    const PATTERNS: [&str; 4] = [
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-        r"\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b",
-        r"\bAKIA[0-9A-Z]{16}\b",
-        r"(?i)\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,}",
-    ];
-    PATTERNS
-        .iter()
-        .any(|pattern| regex::Regex::new(pattern).is_ok_and(|regex| regex.is_match(value)))
+    // Only the last alternative is case-insensitive.
+    static SECRET: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        crate::public_text::fixed_regex(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b|\bAKIA[0-9A-Z]{16}\b|(?i:\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,})",
+        )
+    });
+    SECRET.is_match(value)
 }

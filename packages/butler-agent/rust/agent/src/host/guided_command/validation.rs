@@ -21,12 +21,13 @@ fn valid_with_markers(units: &[u16], next_marker: &mut u32, forbidden: &[u16]) -
         match decoded {
             Ok(character) => valid.push(character),
             Err(error) => {
-                while forbidden.contains(&(*next_marker as u16))
-                    || units.contains(&(*next_marker as u16))
+                while forbidden.contains(&u16::try_from(*next_marker).unwrap_or(u16::MAX))
+                    || units.contains(&u16::try_from(*next_marker).unwrap_or(u16::MAX))
                 {
                     *next_marker += 1;
                 }
-                let character = char::from_u32(*next_marker).expect("private-use marker");
+                // Markers are private-use scalars, which are always valid chars.
+                let character = char::from_u32(*next_marker).unwrap_or(char::REPLACEMENT_CHARACTER);
                 valid.push(character);
                 escaped_units.push((character, error.unpaired_surrogate()));
                 *next_marker += 1;

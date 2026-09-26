@@ -36,7 +36,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
     let server = tokio::spawn(async move {
         loop {
             let accepted = tokio::select! {
-                _ = server_state.cancel.cancelled() => break,
+                () = server_state.cancel.cancelled() => break,
                 accepted = listener.accept() => accepted,
             };
             let Ok((socket, _)) = accepted else {
@@ -56,7 +56,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
         CancellationToken::new(),
     );
     let signal = CancellationToken::new();
-    let result = run_session(
+    let result = Box::pin(run_session(
         transport,
         Operation::CallTool {
             name: "echo".into(),
@@ -64,7 +64,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
         },
         Duration::from_secs(3),
         &signal,
-    )
+    ))
     .await
     .expect("SSE MCP call");
 
@@ -107,7 +107,7 @@ async fn serve_connection(mut socket: TcpStream, state: Arc<FixtureState>) {
         let mut responses = state.responses.lock().await;
         loop {
             let response = tokio::select! {
-                _ = state.cancel.cancelled() => return,
+                () = state.cancel.cancelled() => return,
                 response = responses.recv() => response,
             };
             let Some(response) = response else {

@@ -92,13 +92,10 @@ pub(super) fn parse_and_chunk(lines: &[String], fallback_session_id: &str) -> Pa
                 },
             )
             .unwrap_or(false);
-        if groups.is_empty() || split {
-            groups.push(Vec::new());
+        match groups.last_mut() {
+            Some(group) if !split => group.push(message),
+            _ => groups.push(vec![message]),
         }
-        groups
-            .last_mut()
-            .expect("a group was just created")
-            .push(message);
     }
 
     let normalized_id = normalize_session_id_for_storage(&source_session_id);
@@ -225,7 +222,7 @@ fn index_line(message: &Message) -> String {
             },
         }),
     };
-    serde_json::to_string(&value).expect("serializing a JSON value cannot fail")
+    value.to_string()
 }
 
 pub(super) fn prefix_utf16_8000(value: &str) -> String {

@@ -22,10 +22,10 @@ pub(crate) fn definition() -> Value {
             "path": { "type": "string", "description": "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted." },
             "start_line": { "type": "integer", "minimum": 1 },
             "limit_lines": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Total requested line range, including cursor continuations. Later file lines are outside this request." },
-            "max_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 }
+            "max_bytes": { "type": "integer", "minimum": 1, "maximum": 1_048_576 }
           }, "required": ["path"] }
         },
-        "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 4194304 }, "cursor": { "type": "string" }
+        "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 4_194_304 }, "cursor": { "type": "string" }
       }, "required": ["requests"] },
       "effectBoundary": "none", "concurrencySafe": true, "interruptBehavior": "continue", "transcriptVisibility": "visible"
     })
@@ -85,7 +85,9 @@ pub(super) fn integer(
     if !number.is_finite() {
         return Ok(fallback);
     }
-    Ok(number.floor().max(min as f64).min(max as f64) as usize)
+    Ok(crate::json::saturating_usize(
+        number.floor().max(min as f64).min(max as f64),
+    ))
 }
 pub(super) fn parse_args(call: &Value) -> Result<Value, (&'static str, String)> {
     let object = call.as_object().ok_or((

@@ -48,13 +48,11 @@ pub(crate) async fn closeout(
         let ok = result.get("ok") == Some(&Value::Bool(true)) && written && path.is_some();
         let mut summary = json!({"view":view,"ok":ok,"path":path,"written":written});
         if !ok {
-            summary["error"] = if result.get("ok") != Some(&Value::Bool(true)) {
-                error_summary(&result)
-            } else {
-                let message = if !written {
-                    "Project Ledger render reported success without writing the generated view."
-                } else {
+            summary["error"] = if result.get("ok") == Some(&Value::Bool(true)) {
+                let message = if written {
                     "Project Ledger render reported success without a generated view path."
+                } else {
+                    "Project Ledger render reported success without writing the generated view."
                 };
                 let reason = if path.is_some() {
                     "Rerun Project Ledger render with write enabled and verify the generated view path."
@@ -62,6 +60,8 @@ pub(crate) async fn closeout(
                     "Rerun Project Ledger render with write enabled so the generated view path is available."
                 };
                 json!({"code":"project_ledger_render_not_written","message":message,"next":[],"native_next":[{"tool":"project_ledger_render","args":{"view":view,"write":true},"reason":reason}]})
+            } else {
+                error_summary(&result)
             };
         }
         rendered.push(summary);
@@ -109,7 +109,7 @@ pub(crate) async fn closeout(
 }
 
 fn nullable_text(value: Option<&Value>) -> Value {
-    nonempty(value).map_or(Value::Null, |value| value.into())
+    nonempty(value).map_or(Value::Null, std::convert::Into::into)
 }
 
 fn error_summary(result: &Value) -> Value {

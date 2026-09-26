@@ -6,18 +6,18 @@ use crate::{btcc::BtccError, gateway::AppWorkStreamTurnOutcome};
 impl Store {
     pub(super) fn reconcile_turn(
         &mut self,
-        outcome: AppWorkStreamTurnOutcome,
+        outcome: &AppWorkStreamTurnOutcome,
     ) -> Result<(), BtccError> {
         self.recover_pending()?;
         validate_outcome(&outcome.outcome)?;
         let candidates = self
             .records()?
             .into_iter()
-            .filter(|record| eligible(record, &outcome))
+            .filter(|record| eligible(record, outcome))
             .filter_map(|record| string(&record, "id"))
             .collect::<Vec<_>>();
         for id in candidates {
-            self.reconcile_one(&id, &outcome)?;
+            self.reconcile_one(&id, outcome)?;
         }
         Ok(())
     }

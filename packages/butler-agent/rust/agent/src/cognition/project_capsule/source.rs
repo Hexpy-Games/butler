@@ -206,7 +206,7 @@ pub(super) fn sources_are_current(
         .into_iter()
         .find(|entry| entry.name == project_id)
         .map(|entry| entry.raw);
-    if json_text(&current_registry)? != json_text(&snapshot.registry)? {
+    if json_text(current_registry.as_ref())? != json_text(snapshot.registry.as_ref())? {
         return Ok(false);
     }
     if !tasks::are_current(data_root, &snapshot.tasks, cancellation, deadline)?
@@ -235,9 +235,9 @@ pub(super) fn fingerprint(snapshot: &ProjectCapsuleSourceSnapshot) -> CognitionR
     let bytes =
         serde_json::to_vec(snapshot).map_err(|_| error("project_capsule_source_invalid"))?;
     let digest = Sha256::digest(bytes);
-    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(format!("{digest:x}"))
 }
 
-fn json_text(value: &Option<Value>) -> CognitionResult<String> {
-    serde_json::to_string(value).map_err(|_| error("project_capsule_source_invalid"))
+fn json_text(value: Option<&Value>) -> CognitionResult<String> {
+    serde_json::to_string(&value).map_err(|_| error("project_capsule_source_invalid"))
 }

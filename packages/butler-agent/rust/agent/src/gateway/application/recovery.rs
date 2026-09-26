@@ -84,7 +84,7 @@ fn recover_one(
             "session_queue.changed",
             row.turn_id.as_deref(),
             service::map(
-                json!({"session_id":row.chat_id,"queued_message_id":row.id,"action":"recovered","recovery_reason":"dispatch_lease_expired"}),
+                &json!({"session_id":row.chat_id,"queued_message_id":row.id,"action":"recovered","recovery_reason":"dispatch_lease_expired"}),
             )?,
             now,
         )?;

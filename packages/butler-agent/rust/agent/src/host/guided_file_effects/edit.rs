@@ -33,6 +33,40 @@ struct State {
 fn rejected(code: &str, message: impl Into<String>) -> BtccError {
     BtccError::new(code, message)
 }
+fn observed<'a>(states: &'a HashMap<String, State>, path: &str) -> Result<&'a State, BtccError> {
+    states.get(path).ok_or_else(|| {
+        rejected(
+            "edit_file_target_unobserved",
+            "The edit target was not observed.",
+        )
+    })
+}
+/// The adapter input: `{"edits":[..]}` for a batch, else the single entry.
+fn candidate(batch: bool, entries: Vec<Value>) -> Result<Value, BtccError> {
+    if batch {
+        return Ok(json!({ "edits": entries }));
+    }
+    entries
+        .into_iter()
+        .next()
+        .ok_or_else(|| rejected("invalid_arguments", "edit_file requires one edit."))
+}
+/// The normalized entries in call order.
+fn normalized_entries(normalized: &Value, batch: bool) -> Result<Vec<&Value>, BtccError> {
+    if !batch {
+        return Ok(vec![normalized]);
+    }
+    normalized
+        .get("edits")
+        .and_then(Value::as_array)
+        .map(|entries| entries.iter().collect())
+        .ok_or_else(|| {
+            rejected(
+                "edit_file_reconciliation_mismatch",
+                "The normalized batch has no edits.",
+            )
+        })
+}
 fn sha(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
 }
@@ -100,7 +134,13 @@ pub(super) async fn prepare(
         )
         .map_err(|error| rejected(&error.code, error.message))?
     } else {
-        format!("workspace:{}", edits[0].path)
+        let Some(first) = edits.first() else {
+            return Err(rejected(
+                "invalid_arguments",
+                "edit_file requires one edit.",
+            ));
+        };
+        format!("workspace:{}", first.path)
     };
     Ok(PreparedGuidedFileEffect {
         target,
@@ -181,7 +221,7 @@ fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, b
         })?;
         let hint = match row.get("start_line") {
             None => None,
-            Some(value) => Some(
+            Some(value) => Some(crate::json::saturating_usize(
                 value
                     .as_f64()
                     .filter(|number| {
@@ -194,8 +234,8 @@ fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, b
                             "edit_file_invalid_start_line",
                             "edit_file start_line must be positive.",
                         )
-                    })? as usize,
-            ),
+                    })?,
+            )),
         };
         let expected = match row.get("expected_sha256") {
             None => None,
@@ -233,7 +273,12 @@ fn fresh(
 ) -> Result<Value, BtccError> {
     let mut lines = Vec::with_capacity(edits.len());
     for (index, edit) in edits.iter().enumerate() {
-        let state = states.get_mut(&edit.path).expect("observed path");
+        let Some(state) = states.get_mut(&edit.path) else {
+            return Err(rejected(
+                "edit_file_target_unobserved",
+                "The edit target was not observed.",
+            ));
+        };
         if edit
             .expected
             .as_deref()
@@ -268,22 +313,19 @@ fn fresh(
             "The ordered edits leave every file unchanged.",
         ));
     }
-    let entries: Vec<_> = edits
+    let entries = edits
         .iter()
         .zip(lines)
         .map(|(edit, line)| {
-            let state = states.get(&edit.path).expect("observed path");
-            json!({"path":edit.path,"start_line":line,"old_text":edit.old_text,
-            "new_text":edit.new_text,"before_sha256":state.before,"after_sha256":sha(&state.text)})
+            let state = observed(states, &edit.path)?;
+            Ok(
+                json!({"path":edit.path,"start_line":line,"old_text":edit.old_text,
+            "new_text":edit.new_text,"before_sha256":state.before,"after_sha256":sha(&state.text)}),
+            )
         })
-        .collect();
-    let candidate = if batch {
-        json!({"edits":entries})
-    } else {
-        entries.into_iter().next().expect("single")
-    };
+        .collect::<Result<Vec<_>, BtccError>>()?;
     adapter
-        .normalize_input(&candidate)
+        .normalize_input(&candidate(batch, entries)?)
         .map_err(|error| rejected(&error.code, error.message))
 }
 
@@ -294,11 +336,17 @@ fn recover(
     prior: &EffectRecord,
     adapter: &Arc<dyn EffectAdapter>,
 ) -> Result<Value, BtccError> {
+    let Some(first) = edits.first() else {
+        return Err(rejected(
+            "invalid_arguments",
+            "edit_file requires one edit.",
+        ));
+    };
     let Some(hint) = &prior.recovery_hint else {
         if !batch {
             return legacy::recover(
-                &edits[0],
-                states.get(&edits[0].path).expect("observed path"),
+                first,
+                observed(states, &first.path)?,
                 &prior.identity.input_sha256,
                 adapter,
             );
@@ -318,8 +366,8 @@ fn recover(
                 after_sha256,
             },
         ) if capability == "edit_file" && *start_line > 0 => {
-            vec![json!({"path":edits[0].path,"start_line":start_line,
-                "old_text":edits[0].old_text,"new_text":edits[0].new_text,
+            vec![json!({"path":first.path,"start_line":start_line,
+                "old_text":first.old_text,"new_text":first.new_text,
                 "before_sha256":before_sha256,"after_sha256":after_sha256})]
         }
         (
@@ -340,7 +388,7 @@ fn recover(
                     "before_sha256":hint.before_sha256,"after_sha256":hint.after_sha256}))
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| {
+            .map_err(|()| {
                 rejected(
                     "edit_file_reconciliation_mismatch",
                     "The durable edit path changed.",
@@ -353,13 +401,8 @@ fn recover(
             ));
         }
     };
-    let candidate = if batch {
-        json!({"edits":entries})
-    } else {
-        entries.into_iter().next().expect("single")
-    };
     let normalized = adapter
-        .normalize_input(&candidate)
+        .normalize_input(&candidate(batch, entries)?)
         .map_err(|error| rejected(&error.code, error.message))?;
     let hash =
         effect_input_sha256(&normalized).map_err(|error| rejected(&error.code, error.message))?;
@@ -370,17 +413,10 @@ fn recover(
         ));
     }
     let mut prepared_before = HashMap::<&str, String>::new();
-    for (edit, entry) in edits.iter().zip(if batch {
-        normalized["edits"]
-            .as_array()
-            .expect("batch")
-            .iter()
-            .collect::<Vec<_>>()
-    } else {
-        vec![&normalized]
-    }) {
+    let entries = normalized_entries(&normalized, batch)?;
+    for (edit, entry) in edits.iter().zip(&entries) {
         let path = entry["path"].as_str().unwrap_or("");
-        let state = states.get(path).expect("observed path");
+        let state = observed(states, path)?;
         let before = entry["before_sha256"].as_str().unwrap_or("");
         let after = entry["after_sha256"].as_str().unwrap_or("");
         if edit
@@ -403,7 +439,8 @@ fn recover(
             let text = prepared_before
                 .entry(path)
                 .or_insert_with(|| state.text.clone());
-            let line = entry["start_line"].as_u64().unwrap_or(0) as usize;
+            let line =
+                usize::try_from(entry["start_line"].as_u64().unwrap_or(0)).unwrap_or(usize::MAX);
             let (after_text, actual_line) =
                 prepare_exact_text(text, &edit.old_text, &edit.new_text, Some(line)).map_err(
                     |_| {
@@ -423,15 +460,14 @@ fn recover(
         }
     }
     for (path, text) in prepared_before {
-        let first = if batch {
-            normalized["edits"]
-                .as_array()
-                .expect("batch")
-                .iter()
-                .find(|entry| entry["path"].as_str() == Some(path))
-                .expect("entry")
-        } else {
-            &normalized
+        let Some(first) = entries
+            .iter()
+            .find(|entry| entry["path"].as_str() == Some(path))
+        else {
+            return Err(rejected(
+                "edit_file_reconciliation_mismatch",
+                "The recovered edit has no durable entry.",
+            ));
         };
         if sha(&text) != first["after_sha256"].as_str().unwrap_or("") {
             return Err(rejected(

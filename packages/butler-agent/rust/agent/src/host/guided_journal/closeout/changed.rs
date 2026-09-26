@@ -182,7 +182,7 @@ fn safe_detail(value: &Value) -> Option<Detail> {
                             && *number >= 1.0
                             && *number <= 9_007_199_254_740_991.0
                     })
-                    .map(|number| Some(number as u64)),
+                    .map(|number| Some(crate::json::saturating_u64(number))),
             }
         };
         let (Some(old), Some(new)) = (number("old_line"), number("new_line")) else {

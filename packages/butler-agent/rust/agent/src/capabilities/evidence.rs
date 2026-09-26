@@ -156,7 +156,7 @@ pub(super) fn grep_capability(
     vec![receipt]
 }
 
-pub(super) fn grep_execution(summary: String, references: Value) -> Vec<Value> {
+pub(super) fn grep_execution(summary: &str, references: &Value) -> Vec<Value> {
     vec![json!({"schema":"butler.evidence-receipt.v1",
         "id":format!("receipt-grep_files-{}",Uuid::new_v4()),
         "producer":{"kind":"tool","name":"grep_files"},
@@ -202,7 +202,7 @@ pub(super) fn list_execution(
     count: usize,
     next_cursor: bool,
     truncated: bool,
-    references: Value,
+    references: &Value,
 ) -> Vec<Value> {
     let summary = format!(
         "Discovered {count} workspace files{}",

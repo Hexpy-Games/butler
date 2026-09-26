@@ -3,6 +3,7 @@
 
 mod trust;
 
+use crate::public_text::fixed_regex;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -10,34 +11,50 @@ use regex::Regex;
 use serde_json::{Value, json};
 
 static WRITE_HINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?s)(?:^|[\s;&|])(?:cat|printf|echo)\b.*>{1,2}\s*|(?:^|[\s;&|])tee(?:\s+-a)?\s+|(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync)\b|(?:^|[\s;&|])dd\b[^;&|]*\bof=|(?:^|[\s;&|])(?:sed|perl)\s+-i\b|(?:^|[\s;&|])find\b.*\s-delete(?:\s|$)|\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|write_text|rmSync|unlinkSync|rmdirSync|renameSync|copyFileSync|cpSync|mkdirSync)\b|\bopen\s*\([^)]*,\s*['"][wax]"#).unwrap()
+    fixed_regex(
+        r#"(?s)(?:^|[\s;&|])(?:cat|printf|echo)\b.*>{1,2}\s*|(?:^|[\s;&|])tee(?:\s+-a)?\s+|(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync)\b|(?:^|[\s;&|])dd\b[^;&|]*\bof=|(?:^|[\s;&|])(?:sed|perl)\s+-i\b|(?:^|[\s;&|])find\b.*\s-delete(?:\s|$)|\b(?:writeFileSync|writeFile|appendFileSync|appendFile|createWriteStream|write_text|rmSync|unlinkSync|rmdirSync|renameSync|copyFileSync|cpSync|mkdirSync)\b|\bopen\s*\([^)]*,\s*['"][wax]"#,
+    )
 });
 static REDIRECT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?:^|[\s;&|])(?:\d?>{1,2}|&>)\s*([^\s;&|]+)").unwrap());
+    LazyLock::new(|| fixed_regex(r"(?:^|[\s;&|])(?:\d?>{1,2}|&>)\s*([^\s;&|]+)"));
 static TEE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?:^|[\s;&|])tee(?:\s+-a)?\s+([^\s;&|]+)").unwrap());
+    LazyLock::new(|| fixed_regex(r"(?:^|[\s;&|])tee(?:\s+-a)?\s+([^\s;&|]+)"));
 static FILE_OP: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync)\b([^;&|]*)|(?:^|[\s;&|])(?:sed|perl)\s+-i\b([^;&|]*)").unwrap()
+    fixed_regex(
+        r"(?:^|[\s;&|])(?:touch|mkdir|rm|mv|cp|truncate|install|rsync)\b([^;&|]*)|(?:^|[\s;&|])(?:sed|perl)\s+-i\b([^;&|]*)",
+    )
 });
 static DD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?:^|[\s;&|])dd\b[^;&|]*\bof=([^\s;&|]+)").unwrap());
+    LazyLock::new(|| fixed_regex(r"(?:^|[\s;&|])dd\b[^;&|]*\bof=([^\s;&|]+)"));
 static MENTION: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?:^|[\s"'])(\.project-ledger(?:/[^\s"';&|)]*)?|(?:\$BUTLER_DATA|\$\{BUTLER_DATA\}|~/\.butler)/project-ledger/projects(?:/[^\s"';&|)]*)?|(?:\$HOME|\$\{HOME\})/\.butler/project-ledger/projects(?:/[^\s"';&|)]*)?|/[^\s"']*/project-ledger/projects(?:/[^\s"';&|)]*)?)"#).unwrap()
+    fixed_regex(
+        r#"(?:^|[\s"'])(\.project-ledger(?:/[^\s"';&|)]*)?|(?:\$BUTLER_DATA|\$\{BUTLER_DATA\}|~/\.butler)/project-ledger/projects(?:/[^\s"';&|)]*)?|(?:\$HOME|\$\{HOME\})/\.butler/project-ledger/projects(?:/[^\s"';&|)]*)?|/[^\s"']*/project-ledger/projects(?:/[^\s"';&|)]*)?)"#,
+    )
 });
 static QUOTED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"["']([^"']*(?:\.project-ledger|project-ledger/projects|\.butler/project-ledger)[^"']*)["']"#).unwrap()
+    fixed_regex(
+        r#"["']([^"']*(?:\.project-ledger|project-ledger/projects|\.butler/project-ledger)[^"']*)["']"#,
+    )
 });
 static OPAQUE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b(?:node|bun)\s+(?:-e|--eval)\b|\bpython3?\s+-c\b|\bruby\s+-e\b|\bperl\s+-e\b|\bphp\s+-r\b|\beval\b|base64\s+-d|Buffer\.from|atob\s*\(").unwrap()
+    fixed_regex(
+        r"\b(?:node|bun)\s+(?:-e|--eval)\b|\bpython3?\s+-c\b|\bruby\s+-e\b|\bperl\s+-e\b|\bphp\s+-r\b|\beval\b|base64\s+-d|Buffer\.from|atob\s*\(",
+    )
 });
 static ENCODED: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\beval\b|\bexec\s*\(|\bcompile\s*\(|base64\b|b64decode|fromhex|codecs\.decode|marshal\b|pickle\b|Buffer\.from|atob\s*\(").unwrap()
+    fixed_regex(
+        r"\beval\b|\bexec\s*\(|\bcompile\s*\(|base64\b|b64decode|fromhex|codecs\.decode|marshal\b|pickle\b|Buffer\.from|atob\s*\(",
+    )
 });
 static RISK: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"project.?ledger|\.project|\.butler|BUTLER_DATA|HOME|process|cwd|String\.fromCharCode|Buffer\.from|spawn|child_process").unwrap()
+    fixed_regex(
+        r"project.?ledger|\.project|\.butler|BUTLER_DATA|HOME|process|cwd|String\.fromCharCode|Buffer\.from|spawn|child_process",
+    )
 });
 static ASYNC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\b(?:detached|nohup|setsid|disown|setTimeout|spawn|fork|subprocess|Popen|daemon|start_new_session|multiprocessing)\b|os\.fork").unwrap()
+    fixed_regex(
+        r"\b(?:detached|nohup|setsid|disown|setTimeout|spawn|fork|subprocess|Popen|daemon|start_new_session|multiprocessing)\b|os\.fork",
+    )
 });
 
 pub(super) fn guard(
@@ -110,7 +127,7 @@ fn write_candidates(command: &str) -> Vec<String> {
         .chain(DD.captures_iter(command))
     {
         if let Some(value) = captures.get(1) {
-            result.push(value.as_str().into())
+            result.push(value.as_str().into());
         }
     }
     for captures in FILE_OP.captures_iter(command) {
@@ -134,13 +151,13 @@ fn write_candidates(command: &str) -> Vec<String> {
         && ASYNC.is_match(command)
     {
         if command.contains("process.cwd()") {
-            result.push(".project-ledger".into())
+            result.push(".project-ledger".into());
         }
         if command.contains("process.env.BUTLER_DATA") {
-            result.push("/project-ledger/projects".into())
+            result.push("/project-ledger/projects".into());
         }
         if command.contains("process.env.HOME") {
-            result.push("$HOME/.butler/project-ledger/projects".into())
+            result.push("$HOME/.butler/project-ledger/projects".into());
         }
     }
     result
@@ -200,7 +217,7 @@ fn resolve(candidate: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
     } else {
         cwd.join(candidate)
     };
-    Some(lexical(path))
+    Some(lexical(&path))
 }
 
 fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) -> bool {
@@ -219,7 +236,7 @@ fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) ->
 }
 
 fn real_or_nearest(path: &Path) -> PathBuf {
-    let mut current = lexical(path.to_path_buf());
+    let mut current = lexical(path);
     let mut suffix = Vec::new();
     loop {
         if let Ok(real) = std::fs::canonicalize(&current) {
@@ -228,17 +245,17 @@ fn real_or_nearest(path: &Path) -> PathBuf {
                 .rev()
                 .fold(real, |path, part| path.join(part));
         }
-        let Some(name) = current.file_name().map(|name| name.to_owned()) else {
-            return lexical(path.to_path_buf());
+        let Some(name) = current.file_name().map(std::borrow::ToOwned::to_owned) else {
+            return lexical(path);
         };
         suffix.push(name);
         if !current.pop() {
-            return lexical(path.to_path_buf());
+            return lexical(path);
         }
     }
 }
 
-fn lexical(path: PathBuf) -> PathBuf {
+fn lexical(path: &Path) -> PathBuf {
     let mut result = PathBuf::new();
     for part in path.components() {
         match part {

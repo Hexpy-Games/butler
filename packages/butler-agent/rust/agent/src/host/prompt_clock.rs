@@ -83,8 +83,8 @@ impl NativePromptClock {
         // uses ordinary spaces. No user locale or host locale is substituted.
         Ok(format!(
             "{}, {} {day}, {} at {}:{minute:02}:{second:02} {} {label}",
-            WEEKDAYS[(days + 4).rem_euclid(7) as usize],
-            MONTHS[(month - 1) as usize],
+            WEEKDAYS[usize::try_from((days + 4).rem_euclid(7)).unwrap_or_default()],
+            MONTHS[usize::try_from(month - 1).unwrap_or_default()],
             if year <= 0 { 1 - year } else { year },
             if hour % 12 == 0 { 12 } else { hour % 12 },
             if hour < 12 { "AM" } else { "PM" },

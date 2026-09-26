@@ -170,7 +170,7 @@ pub(super) async fn execute(
             let plan = if let Some(saved) = &claim.plan {
                 serde_json::from_value(saved.clone()).map_err(json_error)?
             } else {
-                validate_and_save(&operation, &claim, &input, &output, false, None).await?
+                validate_and_save(&operation, &claim, &input, &output, None).await?
             };
             (output, plan)
         } else {
@@ -246,7 +246,6 @@ pub(super) async fn execute(
                 &claim,
                 &run.pinned_input,
                 &run.output,
-                true,
                 Some(run.evidence),
             )
             .await?;

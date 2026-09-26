@@ -62,7 +62,7 @@ pub(in crate::profile) fn render(
                 "7. 장기 사용자 프로필 학습을 허용할지 묻습니다. 선택지는 `off`(사용 안 함), `basic`(명시 답변 중심), `deep`(대화에서 더 넓게 학습)이며, 사용자가 명시적으로 허용하지 않으면 `off`로 저장합니다.", "",
                 "설정의 페르소나 프리셋 선택지:",
             ].into_iter().map(str::to_owned).collect(), options, vec![
-                "- 직접 편집".into(), "".into(),
+                "- 직접 편집".into(), String::new(),
                 if known.is_empty() { "이미 확인된 항목: 없음".into() }
                     else { format!("이미 확인된 항목: {}", known.join(", ")) },
                 format!("다음 우선 질문: {next}"),
@@ -88,7 +88,7 @@ pub(in crate::profile) fn render(
                 "7. Ask whether Butler may maintain a long-term user profile. Offer `off` (disabled), `basic` (explicit answers only), and `deep` (broader conversation learning). Store `off` unless the principal explicitly accepts profile learning.", "",
                 "Settings persona preset options:",
             ].into_iter().map(str::to_owned).collect(), options, vec![
-                "- Custom".into(), "".into(),
+                "- Custom".into(), String::new(),
                 if known.is_empty() { "Known fields: none".into() }
                     else { format!("Known fields: {}", known.join(", ")) },
                 format!("Next priority question: {next}"),

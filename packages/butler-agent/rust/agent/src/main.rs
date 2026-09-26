@@ -29,7 +29,7 @@ async fn main() -> std::process::ExitCode {
         return butler_agent::run_native_doctor_cli(installation, command).await;
     }
     if butler_agent::native_mcp_cli_recognizes(&command) {
-        return butler_agent::run_native_mcp_cli(installation, command).await;
+        return Box::pin(butler_agent::run_native_mcp_cli(installation, command)).await;
     }
     if butler_agent::native_personalization_cli_recognizes(&command) {
         return butler_agent::run_native_personalization_cli(installation, command).await;
@@ -47,7 +47,7 @@ async fn main() -> std::process::ExitCode {
         return butler_agent::run_native_automation_cli(installation, command).await;
     }
     if butler_agent::native_update_cli_recognizes(&command) {
-        return butler_agent::run_native_update_cli(installation, command).await;
+        return Box::pin(butler_agent::run_native_update_cli(installation, command)).await;
     }
     if butler_agent::native_status_cli_recognizes(&command) {
         return butler_agent::run_native_status_cli(installation, command).await;
@@ -133,7 +133,7 @@ fn is_skills_command(args: &[std::ffi::OsString]) -> bool {
         match args[index].to_string_lossy().as_ref() {
             "--data" | "--home" => index += 2,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             command => return command == "skills",
         }

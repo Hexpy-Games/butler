@@ -1,7 +1,8 @@
+use parking_lot::Mutex;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -28,10 +29,7 @@ impl DeveloperLogStore {
     }
 
     pub(crate) fn append(&self, entry: &Value) -> io::Result<()> {
-        let _guard = self
-            .mutation
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = self.mutation.lock();
         let destination = self.path();
         self.authority.authorize(&destination)?;
         self.ensure_parent(&destination)?;
@@ -210,10 +208,7 @@ fn count_entries(path: &Path) -> io::Result<usize> {
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .expect("fixed developer log path has a file name")
-        .to_string_lossy();
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
     path.with_file_name(format!(".{name}.retain-{}.tmp", uuid::Uuid::new_v4()))
 }
 

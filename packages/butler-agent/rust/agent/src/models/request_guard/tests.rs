@@ -36,10 +36,10 @@ async fn starts_at_dispatch_resets_idle_and_retained_handle_cannot_rearm() {
         Err(GuardError::Timeout(TimeoutKind::Idle))
     );
     assert!(progress.cancellation().is_cancelled());
-    let before = progress.shared.deadlines.lock().unwrap().progress;
+    let before = progress.shared.deadlines.lock().progress;
     progress.record_progress();
-    assert_eq!(progress.shared.deadlines.lock().unwrap().progress, before);
-    assert!(progress.shared.deadlines.lock().unwrap().disposed);
+    assert_eq!(progress.shared.deadlines.lock().progress, before);
+    assert!(progress.shared.deadlines.lock().disposed);
 }
 
 #[tokio::test(start_paused = true)]
@@ -86,7 +86,7 @@ async fn external_abort_wins_caught_operation_error_and_drop_cancels_inline_requ
     request.abort();
     assert!(request.await.unwrap_err().is_cancelled());
     assert!(progress.cancellation().is_cancelled());
-    assert!(progress.shared.deadlines.lock().unwrap().disposed);
+    assert!(progress.shared.deadlines.lock().disposed);
 }
 
 #[tokio::test(start_paused = true)]
@@ -105,12 +105,12 @@ async fn ordinary_success_and_failure_dispose_deadlines_without_changing_result(
         .await;
         assert_eq!(result, expected.map_err(GuardError::Operation));
         let progress = rx.await.unwrap();
-        assert!(progress.shared.deadlines.lock().unwrap().disposed);
-        let before = progress.shared.deadlines.lock().unwrap().progress;
+        assert!(progress.shared.deadlines.lock().disposed);
+        let before = progress.shared.deadlines.lock().progress;
         tokio::time::advance(Duration::from_secs(100)).await;
         progress.start();
         progress.record_progress();
-        assert_eq!(progress.shared.deadlines.lock().unwrap().progress, before);
+        assert_eq!(progress.shared.deadlines.lock().progress, before);
         let owner = Arc::downgrade(&progress.shared);
         drop(progress);
         assert!(owner.upgrade().is_none());

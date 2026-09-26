@@ -354,7 +354,10 @@ fn js_time(value: std::time::SystemTime) -> Value {
         .duration_since(UNIX_EPOCH)
         .ok()
         .map_or(Value::Null, |duration| {
-            json!(duration.as_secs() as f64 * 1000.0 + duration.subsec_nanos() as f64 / 1_000_000.0)
+            json!(
+                duration.as_secs() as f64 * 1000.0
+                    + f64::from(duration.subsec_nanos()) / 1_000_000.0
+            )
         })
 }
 

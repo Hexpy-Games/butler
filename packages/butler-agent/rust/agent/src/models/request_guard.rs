@@ -1,8 +1,9 @@
 //! One physical request owns its operation, cancellation and inline deadlines.
 //! No task, listener registry or per-Turn map survives this future.
 
+use parking_lot::Mutex;
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Notify;
@@ -54,7 +55,7 @@ impl RequestProgress {
 
     /// Carrier calls this at actual dispatch, after request-body admission.
     pub(super) fn start(&self) {
-        let mut state = self.shared.deadlines.lock().unwrap();
+        let mut state = self.shared.deadlines.lock();
         if state.disposed || self.shared.cancellation.is_cancelled() || state.started.is_some() {
             return;
         }
@@ -66,7 +67,7 @@ impl RequestProgress {
     }
 
     pub(super) fn record_progress(&self) {
-        let mut state = self.shared.deadlines.lock().unwrap();
+        let mut state = self.shared.deadlines.lock();
         if state.disposed || self.shared.cancellation.is_cancelled() {
             return;
         }
@@ -80,7 +81,7 @@ impl RequestProgress {
     async fn deadline(&self) -> TimeoutKind {
         loop {
             let next = {
-                let state = self.shared.deadlines.lock().unwrap();
+                let state = self.shared.deadlines.lock();
                 state.started.map(|start| {
                     let total = (start + self.shared.policy.total, TimeoutKind::Total);
                     match (state.progress, self.shared.policy.idle) {
@@ -99,8 +100,8 @@ impl RequestProgress {
             match next {
                 Some((deadline, kind)) => tokio::select! {
                     biased;
-                    _ = self.shared.changed.notified() => continue,
-                    _ = tokio::time::sleep_until(deadline) => return kind,
+                    () = self.shared.changed.notified() => {}
+                    () = tokio::time::sleep_until(deadline) => return kind,
                 },
                 None => self.shared.changed.notified().await,
             }
@@ -115,7 +116,7 @@ struct RequestScope {
 
 impl Drop for RequestScope {
     fn drop(&mut self) {
-        self.progress.shared.deadlines.lock().unwrap().disposed = true;
+        self.progress.shared.deadlines.lock().disposed = true;
         if !self.settled {
             self.progress.shared.cancellation.cancel();
         }
@@ -151,7 +152,7 @@ where
     tokio::pin!(operation);
     let result = tokio::select! {
         biased;
-        _ = external.cancelled() => Err(GuardError::Cancelled),
+        () = external.cancelled() => Err(GuardError::Cancelled),
         kind = progress.deadline() => {
             progress.shared.cancellation.cancel();
             Err(GuardError::Timeout(kind))

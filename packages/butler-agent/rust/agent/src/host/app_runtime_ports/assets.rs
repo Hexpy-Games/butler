@@ -1,6 +1,9 @@
 //! Claimed App assets from the existing Conversation, image, and Models owners.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde_json::{Value, json};
 
@@ -27,7 +30,7 @@ impl NativeAppAssets {
         images: Arc<NativeAppImageFiles>,
         models: Arc<ModelConfiguration>,
         mcp: Arc<crate::mcp_client::NativeMcpClient>,
-        data_root: PathBuf,
+        data_root: &Path,
     ) -> Self {
         Self {
             conversations,
@@ -53,8 +56,10 @@ impl AppNativeAssetResolver for NativeAppAssets {
                     .get("model_ref")
                     .and_then(Value::as_str)
                     .ok_or(GatewayApplicationError::Internal)?;
-                let catalog =
-                    crate::host::catalog_for_visual_admission(&models, &mcp, model_ref).await?;
+                let catalog = Box::pin(crate::host::catalog_for_visual_admission(
+                    &models, &mcp, model_ref,
+                ))
+                .await?;
                 images
                     .validate_queued_visual(
                         &snapshot.queue_attachments,

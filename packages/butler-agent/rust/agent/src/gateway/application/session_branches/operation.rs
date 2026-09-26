@@ -55,7 +55,7 @@ impl AppApplication {
             }
             SaveOutcome::Created(row, project_event) => {
                 if let Some(event) = project_event {
-                    super::super::events::publish(&self.subscribers, event);
+                    super::super::events::publish(&self.subscribers, &event);
                 }
                 self.resume_branch(row, request, server_shutdown, owner_shutdown)
                     .await
@@ -102,7 +102,7 @@ impl AppApplication {
                 .await
                 .map_err(super::super::app_error)?;
             if let Some(event) = event {
-                super::super::events::publish(&subscribers, event);
+                super::super::events::publish(&subscribers, &event);
             }
             row = self
                 .storage
@@ -170,8 +170,8 @@ impl AppApplication {
         tokio::pin!(provision);
         tokio::select! {
             result = &mut provision => result,
-            _ = server_shutdown.cancelled() => { cancellation.cancel(); provision.await }
-            _ = owner_shutdown.cancelled() => { cancellation.cancel(); provision.await }
+            () = server_shutdown.cancelled() => { cancellation.cancel(); provision.await }
+            () = owner_shutdown.cancelled() => { cancellation.cancel(); provision.await }
         }
     }
 }

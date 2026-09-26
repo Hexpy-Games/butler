@@ -82,7 +82,7 @@ pub(super) fn values(entries: &[Entry]) -> Vec<Value> {
 }
 
 pub(super) fn render(entries: &[Entry]) -> String {
-    let mut lines = vec!["Butler native commands".to_owned(), "".to_owned()];
+    let mut lines = vec!["Butler native commands".to_owned(), String::new()];
     for priority in ["core", "operator", "advanced"] {
         let selected = entries
             .iter()

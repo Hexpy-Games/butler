@@ -42,12 +42,12 @@ impl ExactText {
                         Ok('\r') => output.push_str("\\r"),
                         Ok('\t') => output.push_str("\\t"),
                         Ok(character) if character < ' ' => {
-                            write!(output, "\\u{:04x}", character as u32).expect("String write");
+                            // Writing to a String cannot fail.
+                            let _ = write!(output, "\\u{:04x}", u32::from(character));
                         }
                         Ok(character) => output.push(character),
                         Err(error) => {
-                            write!(output, "\\u{:04x}", error.unpaired_surrogate())
-                                .expect("String write");
+                            let _ = write!(output, "\\u{:04x}", error.unpaired_surrogate());
                         }
                     }
                 }
@@ -88,6 +88,7 @@ pub(crate) struct ToolArtifactSearch {
     pub match_char: Option<usize>,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct SliceInput<'a> {
     pub text: &'a str,
     pub offset_lines: usize,
@@ -162,9 +163,9 @@ pub(crate) fn slice_tool_artifact_text(
     let text = ExactText::from_slice(&exact);
     let newline_count = exact
         .code_units()
-        .filter(|unit| *unit == b'\n' as u16)
+        .filter(|unit| *unit == u16::from(b'\n'))
         .count();
-    let last_newline = exact.code_units().last() == Some(b'\n' as u16);
+    let last_newline = exact.code_units().last() == Some(u16::from(b'\n'));
     Ok(ToolArtifactTextSlice {
         text,
         start_line: input.text[..utf16_byte_ceil(input.text, start)]

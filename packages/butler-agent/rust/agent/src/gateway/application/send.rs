@@ -195,7 +195,7 @@ impl AppApplication {
             match visual {
                 Ok(attachments) => {
                     self.finish_visual(&chat_id, &queued_id, attachments)
-                        .await?
+                        .await?;
                 }
                 Err(error) => {
                     self.fail_admission(&chat_id, &queued_id, &error).await?;
@@ -309,27 +309,28 @@ impl AppApplication {
             .await
         {
             Ok(receipt) => receipt,
-            Err(_) => match self.fence_claim(&claim, &turn_id).await? {
-                false => {
+            Err(_) => {
+                if self.fence_claim(&claim, &turn_id).await? {
+                    match self.dependencies.native_ingress.find(native).await? {
+                        Some(receipt) => receipt,
+                        None => {
+                            self.fail_dispatch(&claim, "app_transport_enqueue_failed")
+                                .await?;
+                            return Err(public(
+                                503,
+                                "app_transport_enqueue_failed",
+                                "The message could not be queued.",
+                            ));
+                        }
+                    }
+                } else {
                     return Err(public(
                         409,
                         "queued_message_claim_lost",
                         "The queued message claim was lost.",
                     ));
                 }
-                true => match self.dependencies.native_ingress.find(native).await? {
-                    Some(receipt) => receipt,
-                    None => {
-                        self.fail_dispatch(&claim, "app_transport_enqueue_failed")
-                            .await?;
-                        return Err(public(
-                            503,
-                            "app_transport_enqueue_failed",
-                            "The message could not be queued.",
-                        ));
-                    }
-                },
-            },
+            }
         };
         if !queue_replay {
             self.publish_native_queued(&claim, &turn_id, &receipt)
@@ -346,7 +347,7 @@ impl AppApplication {
             reply: None,
             replies: Vec::new(),
             turn: turns.turns.into_iter().find(|item| item.id == turn_id),
-            next_cursor: messages.next_cursor as u64,
+            next_cursor: crate::json::saturating_u64(messages.next_cursor),
         })
     }
 }

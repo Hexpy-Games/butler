@@ -47,7 +47,7 @@ impl AppApplication {
                     &subscribers,
                     "turn.queued",
                     Some(&turn),
-                    map(json!({"session_id":chat,"turn_id":turn,"transport":"app",
+                    map(&json!({"session_id":chat,"turn_id":turn,"transport":"app",
                         "queue_id":queue_id,"requested_model_ref":controls.get("model_ref"),
                         "reasoning_effort":controls.get("reasoning_effort")}))?,
                     &now,
@@ -134,7 +134,7 @@ impl AppApplication {
                     &subscribers,
                     "message.created",
                     Some(&turn),
-                    map(json!({"message":message_view}))?,
+                    map(&json!({"message":message_view}))?,
                     &now,
                 )?;
                 events::append(
@@ -142,7 +142,7 @@ impl AppApplication {
                     &subscribers,
                     "turn.state_changed",
                     Some(&turn),
-                    map(json!({"turn":turn_view}))?,
+                    map(&json!({"turn":turn_view}))?,
                     &now,
                 )?;
                 Ok(())
@@ -165,7 +165,7 @@ impl AppApplication {
         self.storage.execute(move|db|{
             db.execute("UPDATE session_queued_messages SET attachments_json=?1,updated_at=?2 WHERE id=?3 AND state='queued'",
                 params![serialized,now,queued]).map_err(AppStorageError::sqlite)?;
-            let payload=map(json!({"session_id":chat,"queued_message_id":queued,"action":"created"}))?;
+            let payload=map(&json!({"session_id":chat,"queued_message_id":queued,"action":"created"}))?;
             events::append(db,&subscribers,"session_queue.changed",None,payload,&now)?; Ok(())
         }).await.map_err(app_error)
     }
@@ -178,7 +178,7 @@ impl AppApplication {
     ) -> Result<(), GatewayApplicationError> {
         let code = match error {
             GatewayApplicationError::Public { code, .. } => code.clone(),
-            _ => "queued_message_admission_failed".to_owned(),
+            GatewayApplicationError::Internal => "queued_message_admission_failed".to_owned(),
         };
         let chat = chat_id.to_owned();
         let queued = queued_id.to_owned();
@@ -186,7 +186,7 @@ impl AppApplication {
         let subscribers = self.subscribers.clone();
         self.storage.execute(move|db|{
             db.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,updated_at=?2 WHERE id=?3 AND state='queued'",params![code,now,queued]).map_err(AppStorageError::sqlite)?;
-            let payload=map(json!({"session_id":chat,"queued_message_id":queued,"action":"failed","safe_error_code":code}))?;
+            let payload=map(&json!({"session_id":chat,"queued_message_id":queued,"action":"failed","safe_error_code":code}))?;
             events::append(db,&subscribers,"session_queue.changed",None,payload,&now)?;Ok(())
         }).await.map_err(app_error)
     }
@@ -247,7 +247,7 @@ impl AppApplication {
             let changed=tx.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?2 WHERE id=?3 AND chat_id=?4 AND state='dispatching' AND claim_id=?5",params![code,now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
             if changed!=1{return Err(AppStorageError::new("queued_message_claim_lost","Queued message claim was lost."))}
             if let Some(turn)=turn_id.as_deref(){tx.execute("UPDATE turns SET state='failed',safe_status_label='Failed',safe_error_code=?1,retryable=1,cancellable=0,updated_at=?2 WHERE id=?3",params![code,now,turn]).map_err(AppStorageError::sqlite)?;}
-            let payload=map(json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"failed","safe_error_code":code}))?;
+            let payload=map(&json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"failed","safe_error_code":code}))?;
             events::append(&tx,&subscribers,"session_queue.changed",turn_id.as_deref(),payload,&now)?;
             tx.commit().map_err(AppStorageError::sqlite)?;Ok(())
         }).await.map_err(app_error)?;
@@ -382,7 +382,7 @@ fn attach_queued_files(
     Ok(())
 }
 
-pub(super) fn map(value: Value) -> Result<Map<String, Value>, AppStorageError> {
+pub(super) fn map(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
         AppStorageError::new(
             "app_event_payload_invalid",

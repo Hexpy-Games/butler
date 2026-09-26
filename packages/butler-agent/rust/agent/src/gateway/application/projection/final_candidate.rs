@@ -275,7 +275,7 @@ fn sanitize(value: Option<&Value>) -> String {
     let body = trim_js_whitespace(&text[start..close]);
     let after = trim_js_whitespace(&text[close + CLOSE.len()..]);
     if !before.is_empty() {
-        return if !body.is_empty() { body } else { after }.into();
+        return if body.is_empty() { after } else { body }.into();
     }
     [body, after]
         .into_iter()

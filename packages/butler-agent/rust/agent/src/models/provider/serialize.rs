@@ -43,9 +43,8 @@ pub(super) fn requested_output_tokens(
     }
     match carrier {
         Carrier::Responses => body.get("max_output_tokens"),
-        Carrier::Anthropic => body.get("max_tokens"),
+        Carrier::Anthropic | Carrier::Chat { .. } => body.get("max_tokens"),
         Carrier::Gemini => body.pointer("/generationConfig/maxOutputTokens"),
-        Carrier::Chat { .. } => body.get("max_tokens"),
     }
     .and_then(Value::as_f64)
 }
@@ -194,8 +193,7 @@ fn responses(
 pub(super) use stable::identity as provider_cache_identity;
 
 fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::ModelRoundError> {
-    if request.bounded_continuation.is_some() {
-        let bounded = request.bounded_continuation.unwrap();
+    if let Some(bounded) = request.bounded_continuation {
         let response = bounded
             .get("responseItemId")
             .and_then(Value::as_str)
@@ -216,10 +214,10 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
                     .ok_or_else(|| continuation_error("bounded_continuation_watermark_invalid"))
             })
             .transpose()?
-            .map_or(-1_i64, |value| value as i64);
+            .map_or(-1_i64, |value| i64::try_from(value).unwrap_or(i64::MAX));
         let (items, ordinals) =
             messages::bounded_items_with_ordinals(request.messages).map_err(continuation_error)?;
-        if response as i64 <= delivered
+        if i64::try_from(response).unwrap_or(i64::MAX) <= delivered
             || ordinals.iter().any(|value| *value >= response)
             || ordinals.windows(2).any(|pair| pair[1] < pair[0])
         {
@@ -231,7 +229,9 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
             items
                 .into_iter()
                 .zip(ordinals)
-                .filter_map(|(item, ordinal)| ((ordinal as i64) > delivered).then_some(item))
+                .filter_map(|(item, ordinal)| {
+                    (i64::try_from(ordinal).unwrap_or(i64::MAX) > delivered).then_some(item)
+                })
                 .collect(),
         ));
     }

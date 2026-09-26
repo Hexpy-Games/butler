@@ -223,8 +223,11 @@ pub(in crate::project_ledger::commands) fn now_iso() -> Result<String, CliFailur
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| io_failure())?;
-    let date = chrono::DateTime::from_timestamp(elapsed.as_secs() as i64, elapsed.subsec_nanos())
-        .ok_or_else(io_failure)?;
+    let date = chrono::DateTime::from_timestamp(
+        i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+        elapsed.subsec_nanos(),
+    )
+    .ok_or_else(io_failure)?;
     Ok(date.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
 }
 

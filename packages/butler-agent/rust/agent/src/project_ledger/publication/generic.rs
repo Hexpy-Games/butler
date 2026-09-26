@@ -22,10 +22,10 @@ use evidence::{Applied, Reconciled};
 
 pub(in crate::project_ledger) fn apply(
     data_root: &Path,
-    request: LedgerEffectRequest,
+    request: &LedgerEffectRequest,
     collation: &LocaleCollation,
 ) -> Result<Value, LedgerEffectError> {
-    match run(data_root, &request, collation, false)? {
+    match run(data_root, request, collation, false)? {
         LedgerEffectReconciliation::Applied(result) => Ok(result),
         LedgerEffectReconciliation::NotApplied => Err(LedgerEffectError::NotApplied),
         LedgerEffectReconciliation::Uncertain => Err(LedgerEffectError::Uncertain),
@@ -34,10 +34,10 @@ pub(in crate::project_ledger) fn apply(
 
 pub(in crate::project_ledger) fn reconcile(
     data_root: &Path,
-    request: LedgerEffectRequest,
+    request: &LedgerEffectRequest,
     collation: &LocaleCollation,
 ) -> Result<LedgerEffectReconciliation, LedgerEffectError> {
-    match run(data_root, &request, collation, true) {
+    match run(data_root, request, collation, true) {
         Ok(result) => Ok(result),
         Err(LedgerEffectError::Conflict) => Err(LedgerEffectError::Conflict),
         Err(_) => Ok(LedgerEffectReconciliation::Uncertain),
@@ -69,13 +69,13 @@ fn run(
     {
         match evidence::reconcile(data_root, &existing, collation)? {
             Reconciled::Applied(applied) => {
-                return result(&scope, request, applied, collation)
+                return result(&scope, request, &applied, collation)
                     .map(LedgerEffectReconciliation::Applied);
             }
             Reconciled::Ready => {
                 let applied =
                     transaction::apply(data_root, &scope, &existing, &request.updates, collation)?;
-                return result(&scope, request, applied, collation)
+                return result(&scope, request, &applied, collation)
                     .map(LedgerEffectReconciliation::Applied);
             }
             Reconciled::NotAppliedWithReceipt if !only_reconcile => {
@@ -91,7 +91,7 @@ fn run(
                 )?;
                 let applied =
                     transaction::apply(data_root, &scope, &next, &request.updates, collation)?;
-                return result(&scope, request, applied, collation)
+                return result(&scope, request, &applied, collation)
                     .map(LedgerEffectReconciliation::Applied);
             }
             Reconciled::NotAppliedWithReceipt | Reconciled::NotApplied => {
@@ -112,7 +112,7 @@ fn run(
         targets,
     )?;
     let applied = transaction::apply(data_root, &scope, &admitted, &request.updates, collation)?;
-    result(&scope, request, applied, collation).map(LedgerEffectReconciliation::Applied)
+    result(&scope, request, &applied, collation).map(LedgerEffectReconciliation::Applied)
 }
 
 fn snapshot(
@@ -134,7 +134,7 @@ fn snapshot(
 fn result(
     scope: &scope::LedgerScope,
     request: &LedgerEffectRequest,
-    applied: Applied,
+    applied: &Applied,
     collation: &LocaleCollation,
 ) -> Result<Value, LedgerEffectError> {
     let current = head::observe(&scope.root, collation)?;
@@ -144,7 +144,7 @@ fn result(
         .map(|update| {
             let mut record = json!({"id":update.id});
             if let Some(kind) = &update.kind {
-                record["kind"] = Value::String(kind.as_str().into())
+                record["kind"] = Value::String(kind.as_str().into());
             }
             record
         })

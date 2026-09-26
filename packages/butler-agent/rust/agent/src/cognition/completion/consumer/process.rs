@@ -1,10 +1,7 @@
 //! Queue authority, registration, then one pending semantic quantum.
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -209,7 +206,7 @@ fn dead_letter(
         io::Write,
     };
     let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(path.parent().expect("DLQ parent"))
+    fs::create_dir_all(root.join("queue"))
         .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))?;
     let mut file = OpenOptions::new()
         .create(true)
@@ -227,7 +224,7 @@ fn dead_letter(
         } else { reason },
     });
     file.write_all(record.to_string().as_bytes())
-        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|()| file.write_all(b"\n"))
         .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))
 }
 

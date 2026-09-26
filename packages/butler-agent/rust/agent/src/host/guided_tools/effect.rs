@@ -129,10 +129,7 @@ pub(super) async fn execute(
     };
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
-        && !*owner
-            .authority_consumed
-            .lock()
-            .expect("authority state poisoned");
+        && !*owner.authority_consumed.lock();
     let approved = if owner.binding.access_mode == AccessMode::AskFirst || resumes_authority {
         match authority::gate(
             owner,
@@ -252,6 +249,10 @@ fn receipt_result(
     JsonDocument::from_encoded(encoded).map_err(wire_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn wire_error(error: crate::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(BtccError::new("guided_tool_result_json", error.to_string()))
 }

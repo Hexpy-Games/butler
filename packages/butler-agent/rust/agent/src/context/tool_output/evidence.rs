@@ -39,35 +39,34 @@ pub(super) fn read(
     if !path.exists() {
         return failure("artifact_not_found");
     }
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(_) => return failure("artifact_unreadable"),
+    let Ok(bytes) = std::fs::read(&path) else {
+        return failure("artifact_unreadable");
     };
     let artifact: Value = match serde_json::from_slice(&bytes) {
         Ok(artifact) => artifact,
         Err(_) => return failure("artifact_unreadable"),
     };
-    if artifact.get("schema").and_then(Value::as_str) != Some(SCHEMA)
-        || !artifact
-            .get("serialized_text")
-            .is_some_and(Value::is_string)
-    {
+    let Some(text) = artifact
+        .get("serialized_text")
+        .and_then(Value::as_str)
+        .filter(|_| artifact.get("schema").and_then(Value::as_str) == Some(SCHEMA))
+    else {
         return failure("artifact_invalid");
-    }
-    let text = artifact["serialized_text"]
-        .as_str()
-        .expect("checked string");
+    };
     let offset_lines = input.offset_lines.map(nonnegative_trunc).unwrap_or(0);
     let offset_chars = input
         .offset_chars
         .filter(|value| value.is_finite())
         .map(nonnegative_trunc);
-    let limit_lines = input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0) as usize;
-    let max_tokens = input
-        .max_tokens
-        .unwrap_or(1_200.0)
-        .trunc()
-        .clamp(50.0, 8_000.0) as usize;
+    let limit_lines =
+        crate::json::saturating_usize(input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0));
+    let max_tokens = crate::json::saturating_usize(
+        input
+            .max_tokens
+            .unwrap_or(1_200.0)
+            .trunc()
+            .clamp(50.0, 8_000.0),
+    );
     let slice = slice_tool_artifact_text(
         estimator,
         SliceInput {
@@ -129,5 +128,5 @@ fn failure(error: &str) -> ContextResult<JsonDocument> {
         .map_err(|error| ContextError::new("tool_evidence_json_error", error.to_string()))
 }
 fn nonnegative_trunc(value: f64) -> usize {
-    value.trunc().max(0.0) as usize
+    crate::json::saturating_usize(value.trunc().max(0.0))
 }

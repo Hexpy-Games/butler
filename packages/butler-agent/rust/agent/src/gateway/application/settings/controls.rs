@@ -188,7 +188,8 @@ pub(super) fn append_controls_event(
     facts: &AppSettingsFacts,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let mut payload = controls_json(controls).as_object().unwrap().clone();
+    let mut controls_value = controls_json(controls);
+    let mut payload = std::mem::take(crate::json::object_mut(&mut controls_value));
     payload.insert("session_id".into(), chat_id.into());
     payload.insert("revision".into(), revision.into());
     payload.insert(

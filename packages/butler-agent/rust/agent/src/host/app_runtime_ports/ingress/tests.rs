@@ -5,7 +5,7 @@ use std::{fs, time::Duration};
 async fn accepted_app_turn_wakes_the_dispatcher_after_queue_admission() {
     let root = std::env::temp_dir().join(format!("butler-app-ingress-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let queue = Arc::new(NativeInboundQueue::new(root.clone()));
+    let queue = Arc::new(NativeInboundQueue::new(&root.clone()));
     let ingress = NativeAppIngress::new(queue.clone());
     let receipt = ingress
         .enqueue(NativeAppTurn {

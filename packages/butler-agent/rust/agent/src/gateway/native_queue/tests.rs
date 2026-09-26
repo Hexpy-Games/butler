@@ -9,7 +9,7 @@ use super::*;
 async fn durable_enqueue_leaves_a_wake_for_the_dispatcher() {
     let root = std::env::temp_dir().join(format!("butler-native-queue-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let queue = NativeInboundQueue::new(root.clone());
+    let queue = NativeInboundQueue::new(&root.clone());
 
     queue
         .enqueue_idempotent(JsonDocument::from_value(&json!({"eventId":"wake-me"})).unwrap())
@@ -25,7 +25,7 @@ async fn durable_enqueue_leaves_a_wake_for_the_dispatcher() {
 fn reclaimed_app_claim_reconciles_without_losing_original_json_or_terminal_history() {
     let root = std::env::temp_dir().join(format!("butler-native-queue-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let queue = NativeInboundQueue::new(root.clone());
+    let queue = NativeInboundQueue::new(&root.clone());
     let first = JsonDocument::from_encoded(
         r#"{"eventId":"app:m1","routingHints":{"appQueueClaimId":"claim-1"},"message":{"text":"\ud83d"}}"#.into(),
     ).unwrap();
@@ -51,7 +51,7 @@ fn reclaimed_app_claim_reconciles_without_losing_original_json_or_terminal_histo
     );
     assert!(queue.complete(&claimed, json!({"delivered":1})).unwrap());
 
-    let reopened = NativeInboundQueue::new(root.clone());
+    let reopened = NativeInboundQueue::new(&root.clone());
     let replay = reopened.claim_eligible(1, |_| true).unwrap().pop().unwrap();
     assert_eq!(replay.record.queue_id, reconciled.queue_id);
     assert!(reopened.complete(&replay, json!({"delivered":1})).unwrap());
@@ -72,7 +72,7 @@ fn reclaimed_app_claim_reconciles_without_losing_original_json_or_terminal_histo
 fn retry_claim_reconciliation_preserves_original_btcc_identity() {
     let root = std::env::temp_dir().join(format!("butler-native-queue-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
-    let queue = NativeInboundQueue::new(root.clone());
+    let queue = NativeInboundQueue::new(&root.clone());
     let first = JsonDocument::from_encoded(
         r#"{"eventId":"app-retry:2:m1:2","routingHints":{"appQueueClaimId":"claim-1","canonicalEventId":"app:m1","turnAttempt":2}}"#.into(),
     ).unwrap();

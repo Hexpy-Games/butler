@@ -172,7 +172,8 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
                 let role = match message.message.role {
                     ConversationRole::User => "user",
                     ConversationRole::Assistant => "assistant",
-                    _ => unreachable!("filtered above"),
+                    // Only user and assistant messages were selected above.
+                    _ => "other",
                 };
                 format!(
                     "{role}: {}",
@@ -215,7 +216,7 @@ impl AppBranchSummarizer for NativeAppBranchSummarizer {
                 .await
                 .map_err(|_| summary_error())?;
             let bound = bound_context(&input.text, &input.model_ref, &metadata.catalog, &catalog)
-                .map_err(|_| summary_error())?;
+                .map_err(|()| summary_error())?;
             let encoded = serde_json::to_string(&bound.value).map_err(|_| summary_error())?;
             let messages = [ModelRoundMessage {
                 role: ModelRoundRole::User,
@@ -328,10 +329,10 @@ fn context_tokens(
     snapshot: &crate::models::ModelCatalogSnapshot,
     catalog: &ModelCatalog,
 ) -> Result<f64, ()> {
-    let serialized = serde_json::to_string(&serde_json::json!({
+    let serialized = serde_json::json!({
         "excerpt":excerpt,"truncated":truncated
-    }))
-    .expect("serializing a JSON value is infallible");
+    })
+    .to_string();
     let text = format!("{SUMMARY_INSTRUCTIONS}\nuser: {serialized}");
     catalog
         .estimate_tokens(snapshot, TokenEstimateInput::Text(&text), Some(model_ref))

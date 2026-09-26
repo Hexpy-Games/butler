@@ -2,10 +2,10 @@ mod async_operations;
 mod extraction;
 mod personalization;
 mod prompt_port;
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
@@ -83,7 +83,7 @@ impl ProfileService {
 
     pub(crate) async fn close(&self) {
         {
-            let mut lifecycle = self.lifecycle.lock().unwrap();
+            let mut lifecycle = self.lifecycle.lock();
             if !lifecycle.closing {
                 lifecycle.closing = true;
                 self.shutdown.cancel();
@@ -164,7 +164,7 @@ impl ProfileService {
                 ("butler_nickname", &input.butler_nickname),
             ] {
                 if value.is_some() {
-                    updated.push(name.into())
+                    updated.push(name.into());
                 }
             }
             let profile = if updated.is_empty() {
@@ -198,7 +198,7 @@ impl ProfileService {
             )?;
             if input.complete {
                 state.status = "complete".into();
-                state.completed_at = Some(host.now_iso())
+                state.completed_at = Some(host.now_iso());
             }
             state.updated_at = host.now_iso();
             state = onboarding::write(&root, &state, host.process_id(), host.now_epoch_millis())?;
@@ -389,7 +389,7 @@ impl ProfileService {
             .await
             .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
                     "profile_closed",
@@ -418,7 +418,7 @@ where
     F: FnOnce() -> ProfileResult<T>,
 {
     let lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(lock, purpose))
+        .try_acquire(&CognitionWriteAcquire::immediate(lock, purpose))
         .map_err(|_| {
             ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
         })?
@@ -428,8 +428,7 @@ where
         ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
     });
     match (result, release) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
     }
 }

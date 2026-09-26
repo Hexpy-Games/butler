@@ -8,7 +8,7 @@ use super::{identity, receipt};
 
 pub(super) fn execution(
     repository: &mut dyn AuthorityRepository,
-    input: AuthorityExecutionInput,
+    input: &AuthorityExecutionInput,
 ) -> AuthorityResult<AuthorityStoredExecution> {
     let record = repository
         .find_ref(&input.request_ref)?

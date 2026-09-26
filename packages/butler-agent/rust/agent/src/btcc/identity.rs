@@ -15,6 +15,12 @@ pub(super) fn content_ref(kind: &str, body: &Value) -> Result<ContentRef, BtccEr
     })
 }
 
+/// Serializes a typed value for a canonical body.
+pub(super) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, BtccError> {
+    serde_json::to_value(value)
+        .map_err(|error| BtccError::new("btcc_json_error", error.to_string()))
+}
+
 pub(super) fn stable_json(value: &Value) -> Result<String, BtccError> {
     crate::json::canonical_json(value, crate::json::CanonicalKeyOrder::Utf16Lexical)
         .map_err(identity_error)
@@ -29,6 +35,10 @@ pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<Strin
     crate::json::stringify_without(value, field).map_err(identity_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn identity_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new("canonical_json", error.to_string())
 }

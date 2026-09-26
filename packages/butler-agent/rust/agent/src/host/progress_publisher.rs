@@ -102,7 +102,7 @@ impl NativeProgressPublisher {
         // The source projection omits these identities from the outbound event
         // object; the enclosing action owns its Turn/session routing fields.
         if public_event["createdAt"].is_null() {
-            public_event.as_object_mut().unwrap().remove("createdAt");
+            crate::json::object_mut(&mut public_event).remove("createdAt");
         }
         let peer = if destination.peer.kind == PeerKind::Thread {
             json!({

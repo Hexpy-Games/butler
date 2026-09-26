@@ -67,7 +67,7 @@ pub(super) fn are_current(
                 Ok(ProjectGraphEvidence {
                     source_id: row.get(0)?,
                     provenance: provenance(
-                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(1)?.as_ref(),
                         expected_row.source_id,
                     ),
                     mention_project: row.get(2)?,
@@ -104,7 +104,7 @@ fn read_project_rows(
         let source_id = row.get(0)?;
         Ok(ProjectGraphEvidence {
             source_id,
-            provenance: provenance(row.get(1)?, source_id),
+            provenance: provenance(row.get::<_, Option<String>>(1)?.as_ref(), source_id),
             mention_project: row.get(2)?,
             text: evidence_text(row.get(3)?, row.get(5)?),
             entity_project: row.get(4)?,
@@ -113,8 +113,8 @@ fn read_project_rows(
     rows.collect()
 }
 
-fn provenance(session_id: Option<String>, source_id: i64) -> String {
-    match session_id.as_deref() {
+fn provenance(session_id: Option<&String>, source_id: i64) -> String {
+    match session_id {
         Some(session) if !session.is_empty() => format!("graph:{session}"),
         _ => format!("graph:{source_id}"),
     }

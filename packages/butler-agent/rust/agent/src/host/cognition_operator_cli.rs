@@ -33,6 +33,10 @@ mod recall;
 #[path = "cognition_operator_cli/recovery.rs"]
 mod recovery;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
@@ -122,7 +126,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let (options, command, prefix) = match parser::parse(&args) {
         Ok(parsed) => parsed,
         Err((name, error, json_requested)) => {
-            return report_error(&name, json_requested, error);
+            return report_error(&name, json_requested, &error);
         }
     };
     let command_name = match command {
@@ -143,7 +147,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 return report_error(
                     &command_name,
                     options.json,
-                    CliError::failed("butler_data_unavailable", message),
+                    &CliError::failed("butler_data_unavailable", message),
                 );
             }
         };
@@ -157,7 +161,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 &command_name,
                 options.json,
-                CliError::failed(error.code, error.message),
+                &CliError::failed(error.code, error.message),
             );
         }
     };
@@ -171,7 +175,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     CycleMetrics::new(Arc::new(MetricFiles::new(data_root.clone()))).record(
                         "health",
                         report.metric_status,
-                        report.metric_dimensions.clone(),
+                        &report.metric_dimensions.clone(),
                     );
                     let data = report.summary;
                     let human = format!(
@@ -271,8 +275,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 options.yes,
                 options.non_interactive,
                 CompletionPublisher::new(
-                    data_root,
-                    paths,
+                    &data_root,
+                    &paths,
                     Arc::new(|| {
                         chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
                     }),
@@ -319,8 +323,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     };
 
     match outcome {
-        Ok((data, human)) => report_success(&options, command_name.as_str(), data, &human),
-        Err(error) => report_error(command_name.as_str(), options.json, error),
+        Ok((data, human)) => report_success(&options, command_name.as_str(), &data, &human),
+        Err(error) => report_error(command_name.as_str(), options.json, &error),
     }
 }
 
@@ -339,9 +343,9 @@ fn display(value: &Value) -> String {
     }
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
-        let raw_text_included = contains_raw_text(&data);
+        let raw_text_included = contains_raw_text(data);
         println!(
             "{}",
             json!({
@@ -375,7 +379,7 @@ fn contains_raw_text(data: &Value) -> bool {
             })
 }
 
-fn report_error(command: &str, json_output: bool, error: CliError) -> ExitCode {
+fn report_error(command: &str, json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
         println!(
             "{}",

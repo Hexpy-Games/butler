@@ -28,7 +28,7 @@ pub(super) async fn serve(
     tokio::pin!(initialization);
     let initialized = tokio::select! {
         result = &mut initialization => result,
-        _ = shutdown.recv() => {
+        () = shutdown.recv() => {
             cancellation.cancel();
             initialization.await
         }
@@ -41,7 +41,7 @@ pub(super) async fn serve(
     let mut waiter = tokio::spawn(service.waiting());
     tokio::select! {
         result = &mut waiter => flatten_wait(result),
-        _ = shutdown.recv() => {
+        () = shutdown.recv() => {
             cancellation.cancel();
             flatten_wait(waiter.await)
         }

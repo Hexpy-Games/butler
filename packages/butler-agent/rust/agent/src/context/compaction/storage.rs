@@ -61,12 +61,18 @@ impl CompactionLock {
         let snapshot = compaction_snapshot_path(data_root, session_id);
         let lock_path = snapshot.with_extension("lock");
         if let Some(parent) = lock_path.parent() {
-            fs::create_dir_all(parent).map_err(lock_io_error)?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(lock_io_error)?;
         }
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            match fs::create_dir(&lock_path) {
+            match tokio::fs::create_dir(&lock_path).await {
                 Ok(()) => return Ok(Self { path: lock_path }),
+                // Only a held lock is worth waiting for; other failures are final.
+                Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => {
+                    return Err(lock_io_error(error));
+                }
                 Err(_) if Instant::now() >= deadline => {
                     return Err(ContextError::new(
                         "context_compaction_lock_timeout",
@@ -85,10 +91,18 @@ impl Drop for CompactionLock {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn snapshot_io_error(error: std::io::Error) -> ContextError {
     ContextError::new("context_compaction_snapshot_error", error.to_string())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn lock_io_error(error: std::io::Error) -> ContextError {
     ContextError::new("context_compaction_lock_error", error.to_string())
 }

@@ -351,7 +351,7 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
     });
     std::fs::write(
         root.join("transcripts/butler_app-general.jsonl"),
-        format!("{}\n{}\n", outbound, delivery),
+        format!("{outbound}\n{delivery}\n"),
     )
     .unwrap();
 

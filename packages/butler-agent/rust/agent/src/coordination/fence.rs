@@ -383,8 +383,14 @@ fn parse_legacy(value: &Value) -> Option<LockInfo> {
     if !pid.is_finite() || pid.fract() != 0.0 || pid <= 0.0 || pid > 9_007_199_254_740_991.0 {
         return None;
     }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "validated above as a positive integer below 2^53"
+    )]
+    let pid = pid as u64;
     Some(LockInfo {
-        pid: pid as u64,
+        pid,
         started_at: row.get("startedAt")?.as_str()?.into(),
         host: row.get("host")?.as_str()?.into(),
         owner_nonce: row.get("owner_nonce")?.as_str()?.into(),

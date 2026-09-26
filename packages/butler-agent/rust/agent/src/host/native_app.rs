@@ -34,6 +34,8 @@ use super::{
 
 pub(crate) struct NativeAppServer {
     listener: Option<GatewayServer>,
+    /// Bound address, kept after the listener stops.
+    address: SocketAddr,
     listener_ready: Arc<AtomicBool>,
     application: Arc<AppApplication>,
     artifacts: Arc<NativeAppMessageFiles>,
@@ -41,10 +43,7 @@ pub(crate) struct NativeAppServer {
 
 impl NativeAppServer {
     pub(crate) fn local_addr(&self) -> SocketAddr {
-        self.listener
-            .as_ref()
-            .expect("App listener address is owned until stop")
-            .local_addr()
+        self.address
     }
 
     pub(crate) async fn open(
@@ -56,7 +55,7 @@ impl NativeAppServer {
         receipt: Arc<ServiceReadiness>,
     ) -> Result<Self, BtccError> {
         let artifacts = Arc::new(NativeAppMessageFiles::new(
-            data_root.to_path_buf(),
+            data_root,
             Arc::new(SystemIdentity),
         ));
         let result = Self::open_with_artifacts(
@@ -106,7 +105,7 @@ impl NativeAppServer {
         ));
         let dependencies = AppApplicationDependencies {
             updates: Arc::new(
-                super::update_cli::open_app_update(data_root.to_path_buf(), installation)
+                super::update_cli::open_app_update(data_root, installation)
                     .map_err(|code| BtccError::new(code, "App update service is unavailable"))?,
             ),
             skills: runtime.skills.clone(),
@@ -117,7 +116,7 @@ impl NativeAppServer {
                 runtime.image_files.clone(),
                 runtime.models.configuration.clone(),
                 runtime.mcp_client.clone(),
-                data_root.to_path_buf(),
+                data_root,
             )),
             executor_readiness: Arc::new(NativeAppReadiness::new(receipt, listener_ready.clone())),
             admission: Arc::new(NativeAppAdmission::new(
@@ -237,6 +236,7 @@ impl NativeAppServer {
             return Err(app_error(error));
         }
         Ok(Self {
+            address: server.local_addr(),
             listener: Some(server),
             listener_ready,
             application,

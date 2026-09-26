@@ -73,11 +73,14 @@ impl MemoryHealthService {
     }
 
     pub(crate) async fn read(&self) -> CognitionResult<MemoryHealthReport> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            .min(i64::MAX as u128) as i64;
+        let now = i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+                .min(i64::MAX as u128),
+        )
+        .unwrap_or(i64::MAX);
         self.read_at(now).await
     }
 
@@ -86,11 +89,14 @@ impl MemoryHealthService {
     }
 
     pub(crate) async fn read_tool(&self, profile: Value) -> CognitionResult<MemoryHealthReport> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            .min(i64::MAX as u128) as i64;
+        let now = i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+                .min(i64::MAX as u128),
+        )
+        .unwrap_or(i64::MAX);
         self.read_at_with_profile(now, Some(profile)).await
     }
 

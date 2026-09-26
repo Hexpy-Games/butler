@@ -19,15 +19,17 @@ struct ProjectedWork {
 
 impl ProjectedWork {
     fn location(self) -> Option<ProjectWorkResultAuthorityLocation> {
-        query::managed_fields(
+        if !query::managed_fields(
             &self.scope_kind,
             self.ledger_project_id.as_deref(),
             self.canonical_head_sha256.as_deref(),
-        )
-        .then(|| ProjectWorkResultAuthorityLocation {
+        ) {
+            return None;
+        }
+        Some(ProjectWorkResultAuthorityLocation {
             work_id: self.work_id,
             app_project_id: self.scope_ref,
-            ledger_project_id: self.ledger_project_id.expect("managed Ledger project ID"),
+            ledger_project_id: self.ledger_project_id?,
         })
     }
 }

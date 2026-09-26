@@ -30,7 +30,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -41,6 +41,9 @@ impl CognitionRegistrationService {
         let clock = self.clock.clone();
         let shutdown = self.shutdown.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;
@@ -120,8 +123,8 @@ async fn run(run: TypedLifecycleRun) -> CognitionResult<()> {
     );
     let lease = tokio::select! {
         biased;
-        _ = shutdown.cancelled() => return Err(aborted()),
-        _ = cancellation.cancelled() => return Err(aborted()),
+        () = shutdown.cancelled() => return Err(aborted()),
+        () = cancellation.cancelled() => return Err(aborted()),
         acquired = acquisition => acquired.map_err(coordination_error)?.ok_or_else(aborted)?,
     };
     tokio::task::spawn_blocking(move || {

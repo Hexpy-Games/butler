@@ -20,9 +20,7 @@ pub(crate) async fn search(
     signal: &CancellationToken,
 ) -> Result<Value, McpClientError> {
     let include_disabled_servers = args.get("include_disabled") == Some(&Value::Bool(true));
-    let capabilities = client
-        .list_capabilities(include_disabled_servers, signal)
-        .await?;
+    let capabilities = Box::pin(client.list_capabilities(include_disabled_servers, signal)).await?;
     let include_disabled = args.get("include_disabled") != Some(&Value::Bool(false));
     let category = text(args, "category");
     let query = terms(text(args, "query"));
@@ -31,7 +29,9 @@ pub(crate) async fn search(
         .get("limit")
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .map_or(20, |value| (value.floor() as usize).clamp(1, 50));
+        .map_or(20, |value| {
+            crate::json::saturating_usize(value.floor()).clamp(1, 50)
+        });
     let disabled_reason = (!call_available).then_some(MCP_DISABLED);
     let recovery_hint = disabled_reason.map(|_| MCP_RECOVERY);
     let mut ranked = Vec::new();
@@ -152,10 +152,7 @@ pub(crate) async fn describe(
             MCP_RECOVERY,
         )));
     }
-    match client
-        .describe_tool_schema(server_id, tool_name, signal)
-        .await
-    {
+    match Box::pin(client.describe_tool_schema(server_id, tool_name, signal)).await {
         Ok(Some(tool)) => {
             let schema = sanitize(
                 tool.get("input_schema")
@@ -358,6 +355,7 @@ fn terms(value: Option<&str>) -> Vec<String> {
     terms
 }
 
+#[derive(Clone, Copy)]
 struct ScoreWeights {
     exact_name: i32,
     tag: i32,

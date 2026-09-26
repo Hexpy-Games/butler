@@ -3,9 +3,10 @@
 mod args;
 mod run;
 
+use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde_json::Value;
@@ -24,9 +25,9 @@ pub(crate) struct NativeExactMemoryQuery {
 }
 
 impl NativeExactMemoryQuery {
-    pub(crate) fn new(data_root: PathBuf, read_concurrency: usize) -> Self {
+    pub(crate) fn new(data_root: &Path, read_concurrency: usize) -> Self {
         Self {
-            path: conversation_store_path(&data_root),
+            path: conversation_store_path(data_root),
             permits: Arc::new(Semaphore::new(read_concurrency.max(1))),
             jobs: TaskTracker::new(),
             closing: Mutex::new(false),
@@ -47,7 +48,7 @@ impl NativeExactMemoryQuery {
         let path = self.path.clone();
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self.closing.lock().expect("exact query owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(CognitionError::new(
                     "closed",
@@ -73,7 +74,7 @@ impl NativeExactMemoryQuery {
 
     pub(crate) async fn close(&self) -> CognitionResult<()> {
         {
-            let mut closing = self.closing.lock().expect("exact query owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();

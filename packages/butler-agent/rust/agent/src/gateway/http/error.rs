@@ -1,3 +1,4 @@
+use axum::http::HeaderValue;
 use axum::{
     body::Body,
     http::{StatusCode, header},
@@ -16,11 +17,11 @@ pub(super) fn json<T: Serialize>(status: StatusCode, value: T) -> Result<Respons
     *response.status_mut() = status;
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        "application/json; charset=utf-8".parse().unwrap(),
+        HeaderValue::from_static("application/json; charset=utf-8"),
     );
     response
         .headers_mut()
-        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
 
@@ -65,7 +66,7 @@ impl From<GatewayApplicationError> for HttpError {
     }
 }
 
-pub(super) fn error_response(error: HttpError) -> Response {
+pub(super) fn error_response(error: &HttpError) -> Response {
     if matches!(error, HttpError::PayloadTooLarge) {
         return super::payload_too_large_response();
     }
@@ -75,7 +76,7 @@ pub(super) fn error_response(error: HttpError) -> Response {
             code,
             message,
         } => (*status, code.as_str(), message.as_str()),
-        HttpError::PayloadTooLarge => unreachable!("handled above"),
+        HttpError::PayloadTooLarge => (413, "payload_too_large", "Request body is too large."),
         HttpError::Internal => (500, "internal_error", "Request failed."),
     };
     let envelope = ApiErrorEnvelope {

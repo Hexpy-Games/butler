@@ -13,7 +13,7 @@ pub(super) fn migrate(connection: &mut Connection) -> Result<(), AppStorageError
         .map_err(AppStorageError::sqlite)
 }
 
-const SPACE_SCHEMA: &str = r#"
+const SPACE_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS app_space_groups (
  id TEXT PRIMARY KEY, title TEXT NOT NULL,
  scope_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
@@ -80,9 +80,9 @@ INSERT OR IGNORE INTO app_space_nodes(node_key,session_id,parent_key,position)
  (SELECT COUNT(*) FROM app_space_nodes n WHERE n.parent_key IS NULL)+
  ROW_NUMBER() OVER(PARTITION BY project_id ORDER BY pinned DESC,updated_at DESC,id)-1
  FROM chats WHERE id!='general';
-"#;
+";
 
-const SESSION_CONTEXT_AND_BRANCH_SCHEMA: &str = r#"
+const SESSION_CONTEXT_AND_BRANCH_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS app_session_context_gate (
  session_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
  owner_kind TEXT NOT NULL CHECK(owner_kind IN ('turn','relocate')), owner_id TEXT NOT NULL
@@ -138,7 +138,7 @@ CREATE TRIGGER IF NOT EXISTS branch_pending_queue_guard BEFORE INSERT ON session
 CREATE TRIGGER IF NOT EXISTS branch_pending_turn_guard BEFORE INSERT ON turns
  WHEN EXISTS(SELECT 1 FROM app_session_branches WHERE target_session_id=NEW.chat_id AND state='prepared')
  BEGIN SELECT RAISE(ABORT,'session_branch_preparing'); END;
-"#;
+";
 
 #[cfg(test)]
 mod tests {

@@ -21,11 +21,11 @@ pub(super) fn interpretations(
     let refs = refs.iter().cloned().collect::<HashMap<_, _>>();
     let ids = refs.keys().cloned().collect::<Vec<_>>();
     let sql = format!(
-        r#"
+        r"
         SELECT DISTINCT c.node_id FROM memory_claims c
         JOIN memory_evidence e ON e.node_id=c.node_id
         WHERE e.source_id IN ({}) ORDER BY c.node_id LIMIT 8
-    "#,
+    ",
         scope::placeholders(ids.len())
     );
     let mut statement = db.prepare(&sql).map_err(db_error)?;
@@ -47,7 +47,7 @@ pub(super) fn interpretations(
         .prepare("SELECT source_id FROM memory_evidence WHERE node_id=?")
         .map_err(db_error)?;
     let changes_sql = format!(
-        r#"
+        r"
         SELECT DISTINCT e.rel_type FROM edges e
         JOIN edge_evidence ee ON ee.edge_id=e.edge_id
         JOIN memory_chunk_sources s ON s.source_id=ee.chunk_source_id
@@ -56,7 +56,7 @@ pub(super) fn interpretations(
         WHERE e.target_node_id=? AND e.status='active' AND c.status='active'
           AND ee.chunk_source_id IN ({})
           AND e.rel_type IN ('supersedes','contradicts','refines')
-    "#,
+    ",
         scope::placeholders(ids.len())
     );
     let mut changes = db.prepare(&changes_sql).map_err(db_error)?;

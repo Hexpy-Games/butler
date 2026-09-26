@@ -46,7 +46,7 @@ pub(super) fn pointers(
     if let Some(checkpoint) = child("latestCheckpointRevisionId")? {
         let item = required(checkpoint, "checkpoint")?;
         let window = required(checkpoint, "resultWindow")?;
-        let end = number(window, "toSequence")? as usize;
+        let end = usize::try_from(number(window, "toSequence")?).unwrap_or(usize::MAX);
         let refs = array(manifest, "resultRefs")?;
         let mentioned = array(item, "referencedResultRefs")?;
         if item.get("revision") != manifest.get("checkpointRevision")
@@ -172,7 +172,7 @@ fn validate_review(
     let failure = || invalid("project_work_managed_record_invalid");
     let review = required(child, "review")?;
     let refs = array(review, "boundResultRefs")?;
-    let sequence = number(child, "boundResultSequence")? as usize;
+    let sequence = usize::try_from(number(child, "boundResultSequence")?).unwrap_or(usize::MAX);
     if text(review, "subject")? != subject
         || (subject == "plan"
             && review

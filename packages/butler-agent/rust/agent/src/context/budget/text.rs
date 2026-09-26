@@ -2,7 +2,7 @@ use super::*;
 use crate::models::TokenEstimateInput;
 
 pub(crate) fn token_budget_to_chars(tokens: f64) -> usize {
-    (tokens.trunc().max(0.0) * 4.0) as usize
+    crate::json::saturating_usize(tokens.trunc().max(0.0) * 4.0)
 }
 
 pub(crate) fn trim_text_to_token_budget(

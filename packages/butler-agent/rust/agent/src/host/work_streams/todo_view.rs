@@ -8,8 +8,8 @@ use crate::btcc::BtccError;
 impl Store {
     pub(super) fn view_todo(
         &mut self,
-        scope: WorkStreamScope,
-        input: Value,
+        scope: &WorkStreamScope,
+        input: &Value,
     ) -> Result<Value, BtccError> {
         self.recover_pending()?;
         let requested = input.get("list_id");
@@ -45,7 +45,7 @@ impl Store {
             .map(|(_, id)| id);
         let id = match (explicit, continuation.as_deref()) {
             (Some(id), Some(current)) if id != current => id.to_owned(),
-            (Some(_), Some(current)) | (None, Some(current)) => current.to_owned(),
+            (Some(_) | None, Some(current)) => current.to_owned(),
             (Some(id), None) => id.to_owned(),
             (None, None) => list_id(requested, &scope.turn_id)?,
         };

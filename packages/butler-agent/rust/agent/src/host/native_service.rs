@@ -76,7 +76,7 @@ impl ServiceLogMode {
         }
     }
 
-    fn write(self, message: String) {
+    fn write(self, message: &str) {
         if self.quiet {
             return;
         }
@@ -244,9 +244,9 @@ async fn serve(
         instance.nonce().to_owned(),
     ));
     if let Err(error) = gateway.start_initial(&config.app).await {
-        logs.write(format!("[native-app] unavailable code={}", error.code));
+        logs.write(&format!("[native-app] unavailable code={}", error.code));
     } else if let Some(active) = app_endpoint.snapshot() {
-        logs.write(format!("[native-app] ready address={}", active.base_url));
+        logs.write(&format!("[native-app] ready address={}", active.base_url));
     }
     let control = match GatewayControlServer::bind(
         config.data_root.clone(),
@@ -277,7 +277,7 @@ async fn serve(
             message,
         ));
     }
-    logs.write(format!("[native-butler] ready model={model}"));
+    logs.write(&format!("[native-butler] ready model={model}"));
     let startup = async {
         runtime.context_maintenance.start();
         runtime.subsessions.recover_dispatches().await?;
@@ -402,7 +402,7 @@ async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<
             Err(error) => break Err(failure(error.code, error.message)),
         };
         if summary.claimed + summary.handled + summary.failed + summary.interrupted > 0 {
-            logs.write(format!(
+            logs.write(&format!(
                 "[inbound-queue] claimed={} handled={} delivered={} failed={} interrupted={}",
                 summary.claimed,
                 summary.handled,
@@ -421,7 +421,7 @@ async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<
                 break lease.map_err(io);
             },
             joined = maintenance.join_next() => break unexpected_maintenance_exit(joined),
-            _ = queue.wait_for_enqueue() => {},
+            () = queue.wait_for_enqueue() => {},
             _ = fallback_poll.tick() => {},
         }
     };

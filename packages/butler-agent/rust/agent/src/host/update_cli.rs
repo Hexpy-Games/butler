@@ -1,6 +1,10 @@
 //! One-shot App package update check and dry run; never starts the App runtime.
 
-use std::{ffi::OsString, path::PathBuf, process::ExitCode};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use serde_json::{Value, json};
 
@@ -9,6 +13,10 @@ use crate::operations::{AppUpdateService, UpdateRequest};
 
 mod agent;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
@@ -53,7 +61,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     }
     let component = options.component.as_deref().unwrap_or("agent");
     if matches!(component, "agent" | "service" | "butler-agent") {
-        return agent::run(installation, &options).await;
+        return Box::pin(agent::run(installation, &options)).await;
     }
     if !matches!(component, "app" | "butler-app" | "app-server") {
         return failure(
@@ -71,11 +79,11 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             2,
         );
     }
-    let data = match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-        Ok(data) => data,
-        Err(_) => return failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1),
+    let Ok(data) = settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1);
     };
-    let service = match open_app_update(data, &installation) {
+    let service = match open_app_update(&data, &installation) {
         Ok(service) => service,
         Err(code) => return failure(options.json, &code, "App updates are unavailable", 1),
     };
@@ -87,7 +95,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         ..UpdateRequest::default()
     };
     let result = if options.dry_run {
-        service.apply(request).await
+        Box::pin(service.apply(request)).await
     } else {
         service.check(request).await
     };
@@ -137,10 +145,10 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
 }
 
 pub(super) fn open_app_update(
-    data: PathBuf,
+    data: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<AppUpdateService, String> {
-    let data = installation.validate_data_root(&data)?;
+    let data = installation.validate_data_root(data)?;
     let version = installation.app_version();
     AppUpdateService::new(data, installation.root().to_path_buf(), version)
 }

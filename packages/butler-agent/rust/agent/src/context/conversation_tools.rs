@@ -4,11 +4,9 @@ mod list;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use serde_json::Value;
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
@@ -58,10 +56,7 @@ impl NativeConversationTools {
         let data_root = self.data_root.clone();
         let (tx, rx) = oneshot::channel();
         {
-            let closing = self
-                .closing
-                .lock()
-                .expect("conversation tools owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -105,10 +100,7 @@ impl NativeConversationTools {
         let conversation = self.conversation.clone();
         let (tx, rx) = oneshot::channel();
         {
-            let closing = self
-                .closing
-                .lock()
-                .expect("conversation tools owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -163,10 +155,7 @@ impl NativeConversationTools {
 
     pub(crate) async fn close(&self) -> ContextResult<()> {
         {
-            let mut closing = self
-                .closing
-                .lock()
-                .expect("conversation tools owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();

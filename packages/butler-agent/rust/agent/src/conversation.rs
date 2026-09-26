@@ -67,6 +67,10 @@ impl ConversationError {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn sqlite(error: rusqlite::Error) -> Self {
         Self::new("conversation_sqlite_error", error.to_string())
     }
@@ -131,7 +135,7 @@ impl AgentConversationStore {
         let lane_clock = Arc::clone(&config.identity_clock);
         let thread = std::thread::Builder::new()
             .name("butler-conversation-sqlite".to_owned())
-            .spawn(move || run_connection_lane(path, lane_clock, receiver, initialized_tx))
+            .spawn(move || run_connection_lane(path, &lane_clock, receiver, initialized_tx))
             .map_err(|error| {
                 ConversationError::new("conversation_thread_spawn_failed", error.to_string())
             })?;
@@ -219,6 +223,8 @@ impl AgentConversationStore {
         drop(lane);
         if let Some(thread) = thread {
             let inner = Arc::clone(&self.inner);
+            // Detached on purpose: close waiters receive the join result, and the join
+            // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await
@@ -262,7 +268,7 @@ impl Drop for StoreInner {
 
 fn run_connection_lane(
     path: PathBuf,
-    clock: Arc<dyn ConversationIdentityClock>,
+    clock: &Arc<dyn ConversationIdentityClock>,
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<ConversationResult<()>>,
 ) -> ConversationResult<()> {

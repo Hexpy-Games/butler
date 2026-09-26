@@ -210,7 +210,7 @@ const RULES: &[Rule] = &[
         from_column: "current_plan_revision_id",
         to_table: "btcc_guided_work_plan_revisions",
         to_column: "plan_revision_id",
-        filter: Some(r#"source.scope_kind != 'project'"#),
+        filter: Some(r"source.scope_kind != 'project'"),
     },
     Rule {
         name: "work_binding",
@@ -395,10 +395,10 @@ const RULES: &[Rule] = &[
         to_table: "btcc_guided_work_plan_revisions",
         to_column: "plan_revision_id",
         filter: Some(
-            r#"NOT EXISTS (
+            r"NOT EXISTS (
       SELECT 1 FROM btcc_guided_works work
       WHERE work.work_id = source.work_id AND work.scope_kind = 'project'
-    )"#,
+    )",
         ),
     },
     Rule {

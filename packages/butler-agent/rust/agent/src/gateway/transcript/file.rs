@@ -16,14 +16,11 @@ pub(super) fn append(
     fs::create_dir_all(&directory).map_err(io_error)?;
     let name: String = session_id
         .encode_utf16()
-        .map(|unit| {
-            if (unit <= 0x7f && (unit as u8).is_ascii_alphanumeric())
-                || [b'.' as u16, b'_' as u16, b'-' as u16].contains(&unit)
-            {
-                char::from_u32(u32::from(unit)).expect("ASCII unit")
-            } else {
-                '_'
+        .map(|unit| match u8::try_from(unit) {
+            Ok(byte) if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') => {
+                char::from(byte)
             }
+            _ => '_',
         })
         .collect();
     let path = directory.join(format!("{name}.jsonl"));
@@ -42,6 +39,10 @@ pub(super) fn append(
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> TranscriptError {
     TranscriptError::new("transcript_append_failed", error.to_string())
 }

@@ -128,13 +128,7 @@ async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
         .expect("repeated close succeeds");
 
     let failed_owner = NativeEmbeddingOwner::new(PathBuf::new()).expect("owner without model load");
-    failed_owner
-        .actor
-        .lock()
-        .expect("embedding actor mutex")
-        .as_ref()
-        .expect("actor")
-        .abort();
+    failed_owner.actor.lock().as_ref().expect("actor").abort();
     let (first, second) = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(failed_owner.close(), failed_owner.close())
     })

@@ -35,7 +35,7 @@ pub(super) async fn create(
 ) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    let request = parse_request(value)
+    let request = parse_request(&value)
         .ok_or_else(|| HttpError::public(400, "invalid_request", "Project source is required."))?;
     let created = state.application.create_project(request).await?;
     json(
@@ -47,7 +47,7 @@ pub(super) async fn create(
     )
 }
 
-fn parse_request(value: Value) -> Option<AppCreateProjectRequest> {
+fn parse_request(value: &Value) -> Option<AppCreateProjectRequest> {
     let object = value.as_object()?;
     let source = match object.get("source")?.as_str()? {
         "scratch" => AppProjectSource::Scratch,

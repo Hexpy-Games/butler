@@ -129,8 +129,8 @@ pub(in crate::cognition::generation) async fn commit_prepared(
         if cancellation.is_cancelled() { return Err(error("memory_operation_aborted")); }
         let current = resolve_generation(data_root, environment, target)?;
         assert_mutation_authority(data_root, environment, target, &current)?;
-        if current.graph_path != handle.graph_path || current.embedding.as_ref().map(|v| v.version())
-            != handle.embedding.as_ref().map(|v| v.version()) {
+        if current.graph_path != handle.graph_path || current.embedding.as_ref().map(super::types::GenerationEmbedding::version)
+            != handle.embedding.as_ref().map(super::types::GenerationEmbedding::version) {
             return Err(error("memory_generation_changed"));
         }
         live.assert_current()?;

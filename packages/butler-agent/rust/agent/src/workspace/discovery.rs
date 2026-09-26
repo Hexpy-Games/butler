@@ -78,7 +78,7 @@ pub(crate) enum WorkspaceListOutcome {
     Listed(WorkspaceListResult),
 }
 
-pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
+pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
     let mut guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.requested_root,
@@ -86,31 +86,23 @@ pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<Worksp
         allow_directories: true,
         protected_roots: &input.protected_roots,
     })?;
-    if guard.ok() {
-        let selected = guard
-            .real
-            .as_ref()
-            .or(guard.absolute.as_ref())
-            .expect("guarded root");
-        if !std::fs::symlink_metadata(guard.absolute.as_ref().expect("guarded absolute path"))?
-            .is_dir()
-            || !std::fs::symlink_metadata(selected)?.is_dir()
-        {
-            guard.reason = Some("not_a_directory");
+    let not_directory = match guard.accepted() {
+        Some((absolute, selected)) => {
+            !std::fs::symlink_metadata(absolute)?.is_dir()
+                || !std::fs::symlink_metadata(selected)?.is_dir()
         }
+        None => false,
+    };
+    if not_directory {
+        guard.reason = Some("not_a_directory");
     }
-    if let Some(reason) = guard.reason {
+    let Some((_, root_path)) = guard.accepted() else {
         return Ok(WorkspaceListOutcome::Rejected(WorkspaceListRejection {
-            reason,
+            reason: guard.reason.unwrap_or("path_rejected"),
             safe_path: guard.safe_path(),
             guard: guard.public_rejection(),
         }));
-    }
-    let root_path = guard
-        .real
-        .as_ref()
-        .or(guard.absolute.as_ref())
-        .expect("guarded root");
+    };
     let displayed_root = root_path
         .strip_prefix(&guard.root)
         .unwrap_or(Path::new(""))
@@ -128,7 +120,7 @@ pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<Worksp
         .map(|pattern| WorkspaceGlob::new(pattern))
         .collect();
     let mut walk = Walk {
-        input: &input,
+        input,
         root: &guard.root,
         include,
         exclude,
@@ -179,7 +171,8 @@ struct Walk<'a> {
 
 impl Walk<'_> {
     fn elapsed(&self) -> u64 {
-        self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+        u64::try_from(self.started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX)
     }
 
     fn stop(&mut self, reason: &'static str) {
@@ -238,24 +231,20 @@ impl Walk<'_> {
                 break;
             }
             let path = child.path();
-            let relative = path
-                .strip_prefix(self.root)
-                .expect("inside workspace root")
-                .to_string_lossy()
-                .replace('\\', "/");
+            let Ok(relative) = path.strip_prefix(self.root) else {
+                continue;
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
             if relative.is_empty()
                 || looks_sensitive(&relative)
                 || protected_path(self.root, &path, &self.input.protected_roots)
             {
                 continue;
             }
-            let metadata = match child.file_type() {
-                Ok(metadata) => metadata,
-                Err(_) => {
-                    self.io_errors += 1;
-                    self.stop("io_error");
-                    break;
-                }
+            let Ok(metadata) = child.file_type() else {
+                self.io_errors += 1;
+                self.stop("io_error");
+                break;
             };
             if metadata.is_dir() {
                 if EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())

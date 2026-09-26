@@ -213,6 +213,10 @@ fn validate_schema(connection: &Connection) -> ConversationResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn source_open_error(error: rusqlite::Error) -> ConversationError {
     ConversationError::new("conversation_source_unavailable", error.to_string())
 }

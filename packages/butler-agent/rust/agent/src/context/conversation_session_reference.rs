@@ -6,9 +6,10 @@ mod source;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde_json::Value;
@@ -31,12 +32,12 @@ pub(crate) struct NativeConversationSessionReference {
 
 impl NativeConversationSessionReference {
     pub(crate) fn new(
-        data_root: PathBuf,
+        data_root: &Path,
         read_concurrency: usize,
         memory_sources: Arc<dyn MemorySourceReferencePort>,
     ) -> Self {
         Self {
-            path: conversation_store_path(&data_root),
+            path: conversation_store_path(data_root),
             memory_sources,
             permits: Arc::new(Semaphore::new(read_concurrency.max(1))),
             jobs: TaskTracker::new(),
@@ -57,10 +58,7 @@ impl NativeConversationSessionReference {
         let memory_sources = self.memory_sources.clone();
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self
-                .closing
-                .lock()
-                .expect("conversation reference owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -87,10 +85,7 @@ impl NativeConversationSessionReference {
 
     pub(crate) async fn close(&self) -> ContextResult<()> {
         {
-            let mut closing = self
-                .closing
-                .lock()
-                .expect("conversation reference owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();
@@ -278,6 +273,10 @@ fn read_now(
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
     ContextError::new("conversation_store_unavailable", error.to_string())
 }

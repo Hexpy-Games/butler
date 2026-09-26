@@ -41,7 +41,7 @@ pub(super) async fn load_artifact(
         "x86_64" => "x64",
         other => other,
     };
-    let platform = format!("{}-{}", os, arch);
+    let platform = format!("{os}-{arch}");
     let app: Vec<&Value> = array
         .iter()
         .filter(|value| value.get("component").and_then(Value::as_str) == Some("app"))
@@ -180,7 +180,7 @@ async fn read_manifest(
 ) -> Result<Vec<u8>, String> {
     if source.starts_with("http://") || source.starts_with("https://") {
         let response = tokio::select! {
-            _ = shutdown.cancelled() => return Err("update_cancelled".into()),
+            () = shutdown.cancelled() => return Err("update_cancelled".into()),
             result = client.get(source).send() => result.map_err(|_| "update_manifest_unavailable")?,
         };
         if !response.status().is_success() {
@@ -189,7 +189,7 @@ async fn read_manifest(
         let mut stream = response.bytes_stream();
         let mut body = Vec::new();
         while let Some(chunk) = tokio::select! {
-            _ = shutdown.cancelled() => return Err("update_cancelled".into()),
+            () = shutdown.cancelled() => return Err("update_cancelled".into()),
             chunk = stream.next() => chunk,
         } {
             let chunk = chunk.map_err(|_| "update_manifest_unavailable")?;

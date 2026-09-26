@@ -18,14 +18,14 @@ pub(super) fn supports(name: &str) -> bool {
     matches!(name, "ingest_task_memory" | "update_explicit_memory")
 }
 
-pub(super) async fn execute(
+pub(super) fn execute(
     owner: &NativeGuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,
     call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     if owner.binding.access_mode != AccessMode::FullAccess {
-        return encoded(json!({
+        return encoded(&json!({
             "ok":false,
             "error":{"code":"memory_write_requires_full_access",
                 "message":"This Turn does not have full access; no memory change was applied."}
@@ -34,9 +34,11 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
         "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id),
-        _ => unreachable!("memory write dispatch checks supports"),
+        // Dispatch routes only supported names here.
+        _ => json!({"ok":false,"error":{"code":"unknown_tool",
+            "message":"This tool is not a memory write tool."}}),
     };
-    encoded(result)
+    encoded(&result)
 }
 
 fn ingest(owner: &NativeGuidedTools, args: &Map<String, Value>) -> Value {
@@ -58,7 +60,7 @@ fn ingest(owner: &NativeGuidedTools, args: &Map<String, Value>) -> Value {
         task_id,
     ) {
         Ok(result) => task_result(result),
-        Err(error) => cognition_failure(error.code, error.message),
+        Err(error) => cognition_failure(error.code, &error.message),
     }
 }
 
@@ -109,7 +111,7 @@ fn update(
         &owner.binding.butler_data,
         &owner.memory_paths,
         &owner.memory_publisher,
-        ExplicitMemoryUpdateInput {
+        &ExplicitMemoryUpdateInput {
             text: text.to_owned(),
             operation_id: Some(call_id.to_owned()),
             project_id: owner.binding.memory.project_id.clone(),
@@ -118,8 +120,8 @@ fn update(
             ..ExplicitMemoryUpdateInput::default()
         },
     ) {
-        Ok(result) => explicit_result(result),
-        Err(error) => cognition_failure(error.code, error.message),
+        Ok(result) => explicit_result(&result),
+        Err(error) => cognition_failure(error.code, &error.message),
     }
 }
 
@@ -182,7 +184,7 @@ fn task_result(result: TaskMemoryIngestionResult) -> Value {
     })
 }
 
-fn explicit_result(result: crate::cognition::ExplicitMemoryUpdateResult) -> Value {
+fn explicit_result(result: &crate::cognition::ExplicitMemoryUpdateResult) -> Value {
     json!({
         "ok":true,
         "record_id":result.record_id,
@@ -200,12 +202,12 @@ fn failure(code: &'static str, message: &'static str) -> Value {
     json!({"ok":false,"error":{"code":code,"message":message}})
 }
 
-fn cognition_failure(code: &'static str, message: String) -> Value {
+fn cognition_failure(code: &'static str, message: &str) -> Value {
     json!({"ok":false,"error":{"code":code,"message":message}})
 }
 
-fn encoded(value: Value) -> Result<JsonDocument, ToolExecutionError> {
-    JsonDocument::from_value(&value).map_err(|error| {
+fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
+    JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(crate::btcc::BtccError::new(
             "guided_memory_write_result_json",
             error.to_string(),
@@ -228,7 +230,7 @@ mod tests {
                 replayed: true,
                 job_id: "internal-job".into(),
             };
-            let value = explicit_result(result);
+            let value = explicit_result(&result);
             assert_eq!(value.as_object().unwrap().len(), 5);
             assert!(value.get("path").is_none());
             assert!(value.get("job_id").is_none());

@@ -20,7 +20,7 @@ impl Scratch {
         Self(std::env::temp_dir().join(format!("butler-mcp-client-{}", uuid::Uuid::new_v4())))
     }
 
-    fn write_registry(&self, server: Value) {
+    fn write_registry(&self, server: &Value) {
         let config = self.0.join("config");
         fs::create_dir_all(&config).unwrap();
         fs::write(
@@ -42,7 +42,7 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
     let scratch = Scratch::new();
     let marker = scratch.0.join("reaped.txt");
     let executable = std::env::current_exe().unwrap();
-    scratch.write_registry(json!({
+    scratch.write_registry(&json!({
         "id":"fixture",
         "display_name":"Fixture",
         "enabled":true,
@@ -57,39 +57,36 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
     );
     let signal = CancellationToken::new();
 
-    let capabilities = tokio::time::timeout(
+    let capabilities = Box::pin(tokio::time::timeout(
         Duration::from_secs(8),
         client.list_capabilities(false, &signal),
-    )
+    ))
     .await
     .unwrap()
     .unwrap();
     assert_eq!(capabilities["servers"][0]["tools"][0]["name"], "echo");
     assert_eq!(
-        client
-            .describe_tool_schema("fixture", "echo", &signal)
+        Box::pin(client.describe_tool_schema("fixture", "echo", &signal))
             .await
             .unwrap()
             .unwrap()["input_schema"]["properties"]["text"]["type"],
         "string"
     );
-    let called = client
-        .call_tool(
-            "fixture",
-            "echo",
-            serde_json::Map::from_iter([("text".into(), json!("stdio-proof"))]),
-            &signal,
-        )
-        .await
-        .unwrap();
+    let called = Box::pin(client.call_tool(
+        "fixture",
+        "echo",
+        serde_json::Map::from_iter([("text".into(), json!("stdio-proof"))]),
+        &signal,
+    ))
+    .await
+    .unwrap();
     assert_eq!(called["result"]["content"][0]["text"], "stdio-proof");
     assert_eq!(
         called["result"]["structuredContent"]["ambient_secret_absent"],
         true
     );
     assert_eq!(
-        client
-            .read_resource("fixture", "file://fixture", &signal)
+        Box::pin(client.read_resource("fixture", "file://fixture", &signal))
             .await
             .unwrap()["result"]["contents"][0]["text"],
         "stdio-resource-proof"
@@ -104,7 +101,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
     let dispatched = scratch.0.join("dispatched.txt");
     let pid_marker = scratch.0.join("pid.txt");
     let executable = std::env::current_exe().unwrap();
-    scratch.write_registry(json!({
+    scratch.write_registry(&json!({
         "id":"fixture",
         "display_name":"Fixture",
         "enabled":true,
@@ -120,9 +117,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
     let signal = CancellationToken::new();
     let call_signal = signal.clone();
     let call = tokio::spawn(async move {
-        client
-            .call_tool("fixture", "hang", serde_json::Map::new(), &call_signal)
-            .await
+        Box::pin(client.call_tool("fixture", "hang", serde_json::Map::new(), &call_signal)).await
     });
 
     tokio::time::timeout(Duration::from_secs(5), async {

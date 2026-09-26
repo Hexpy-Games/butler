@@ -16,7 +16,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         &db,
         "bad",
         "communication",
-        json!({"summary":"  "}),
+        &json!({"summary":"  "}),
         "high",
         "explicit",
         false,
@@ -27,7 +27,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         &db,
         "normalized",
         "communication",
-        json!({"summary":"Concise","butler_should":["Keep this"],"sensitivity":"restricted"}),
+        &json!({"summary":"Concise","butler_should":["Keep this"],"sensitivity":"restricted"}),
         "high",
         "explicit",
         true,
@@ -38,7 +38,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         &db,
         "disallowed",
         "identity",
-        json!({"summary":"Identity"}),
+        &json!({"summary":"Identity"}),
         "low",
         "inference",
         false,
@@ -49,7 +49,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         &db,
         "invalid-time",
         "boundaries",
-        json!({"summary":"Ask first"}),
+        &json!({"summary":"Ask first"}),
         "low",
         "inference",
         false,
@@ -60,7 +60,7 @@ async fn consolidation_hydrates_legacy_rows_and_expires_after_promotion_pass() {
         &db,
         "fractional",
         "epistemic_style",
-        json!({"summary":"Show evidence","evidence_count":2.5,"butler_should":["Preserve exactly"]}),
+        &json!({"summary":"Show evidence","evidence_count":2.5,"butler_should":["Preserve exactly"]}),
         "medium",
         "inference",
         false,
@@ -110,7 +110,7 @@ fn insert(
     db: &rusqlite::Connection,
     id: &str,
     category: &str,
-    payload: Value,
+    payload: &Value,
     confidence: &str,
     source: &str,
     sensitive: bool,
@@ -119,7 +119,7 @@ fn insert(
 ) {
     db.execute(
         "INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status)VALUES(?1,?2,?3,?4,?5,?6,?7,?7,?7,?8,'candidate')",
-        params![id, category, payload.to_string(), source, confidence, sensitive as i64, updated, expires],
+        params![id, category, payload.to_string(), source, confidence, i64::from(sensitive), updated, expires],
     )
     .unwrap();
 }

@@ -12,6 +12,18 @@ const MAX_KEYS: usize = 40;
 const MAX_DEPTH: usize = 6;
 
 pub(super) fn project(value: Value, depth: usize, key: &str) -> Result<Value, BtccError> {
+    // An oversized container keeps a digest of its full encoding.
+    let oversized = depth < MAX_DEPTH
+        && match &value {
+            Value::Array(items) => items.len() > MAX_ITEMS,
+            Value::Object(object) => object.len() > MAX_KEYS,
+            _ => false,
+        };
+    let encoded = if oversized {
+        Some(encode(&value)?)
+    } else {
+        None
+    };
     match value {
         Value::String(text) => {
             let chars = text.encode_utf16().count();
@@ -26,19 +38,7 @@ pub(super) fn project(value: Value, depth: usize, key: &str) -> Result<Value, Bt
         }
         Value::Array(items) if depth < MAX_DEPTH => {
             let count = items.len();
-            if count <= MAX_ITEMS {
-                Ok(Value::Array(
-                    items
-                        .into_iter()
-                        .map(|item| project(item, depth + 1, ""))
-                        .collect::<Result<_, _>>()?,
-                ))
-            } else {
-                let original = Value::Array(items);
-                let encoded = encode(&original)?;
-                let Value::Array(items) = original else {
-                    unreachable!()
-                };
+            if let Some(encoded) = encoded {
                 let selected = items
                     .into_iter()
                     .take(MAX_ITEMS)
@@ -49,15 +49,17 @@ pub(super) fn project(value: Value, depth: usize, key: &str) -> Result<Value, Bt
                 compact.insert("total_items".into(), count.into());
                 compact.insert("sha256".into(), digest(&encoded).into());
                 Ok(Value::Object(compact))
+            } else {
+                Ok(Value::Array(
+                    items
+                        .into_iter()
+                        .map(|item| project(item, depth + 1, ""))
+                        .collect::<Result<_, _>>()?,
+                ))
             }
         }
         Value::Object(object) if depth < MAX_DEPTH => {
             let count = object.len();
-            let original = Value::Object(object);
-            let encoded = (count > MAX_KEYS).then(|| encode(&original)).transpose()?;
-            let Value::Object(object) = original else {
-                unreachable!()
-            };
             let mut entries = object.into_iter().collect::<Vec<_>>();
             entries.sort_by(|(left, _), (right, _)| left.encode_utf16().cmp(right.encode_utf16()));
             let mut projected = Map::new();

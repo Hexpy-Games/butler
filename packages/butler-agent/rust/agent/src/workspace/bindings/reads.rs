@@ -122,7 +122,7 @@ fn hydrate(connection: &Connection, row: SessionRow) -> WorkspaceResult<StoredSe
         created_at: row.created_at,
         updated_at: row.updated_at,
         last_active_at: row.last_active_at,
-        metadata: parse_metadata(row.metadata_json),
+        metadata: parse_metadata(row.metadata_json.as_ref()),
     })
 }
 

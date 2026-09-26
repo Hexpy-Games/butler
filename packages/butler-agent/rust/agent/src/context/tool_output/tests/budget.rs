@@ -20,7 +20,9 @@ async fn source_bun_budget_documents_match_actual_default_model_estimator() {
                 result: ShellCommandResult {
                     stdout: raw["stdout"].as_str().unwrap().into(),
                     stderr: raw["stderr"].as_str().unwrap().into(),
-                    exit_code: raw["exit_code"].as_i64().map(|value| value as i32),
+                    exit_code: raw["exit_code"]
+                        .as_i64()
+                        .map(|value| i32::try_from(value).unwrap()),
                     timed_out: raw["timed_out"].as_bool().unwrap(),
                 },
                 command: Some("printf".into()),

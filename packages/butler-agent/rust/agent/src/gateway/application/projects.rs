@@ -131,21 +131,15 @@ impl AppApplication {
         secret: Option<String>,
     ) -> Result<AppCreateProjectResult, GatewayApplicationError> {
         let source = request.source;
-        let display_name = if source == AppProjectSource::Scratch {
-            Some(folder::validate_name(request.display_name.as_deref())?)
-        } else {
-            request.display_name
-        };
+        let display_name = request.display_name;
         let token = request.folder_selection_token;
         let prepared = tokio::task::spawn_blocking({
             let root = root.clone();
             move || match source {
                 AppProjectSource::Scratch => {
-                    let scratch = folder::create_scratch(
-                        &root,
-                        display_name.as_deref().expect("validated scratch name"),
-                    )?;
-                    Ok((scratch.path.clone(), Some(scratch), display_name))
+                    let name = folder::validate_name(display_name.as_deref())?;
+                    let scratch = folder::create_scratch(&root, &name)?;
+                    Ok((scratch.path.clone(), Some(scratch), Some(name)))
                 }
                 AppProjectSource::ExistingFolder => {
                     let token = token

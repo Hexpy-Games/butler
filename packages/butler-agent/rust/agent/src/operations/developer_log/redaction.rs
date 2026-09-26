@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -5,16 +6,16 @@ use serde_json::{Map, Value};
 
 fn secret_key() -> &'static Regex {
     static VALUE: OnceLock<Regex> = OnceLock::new();
-    VALUE.get_or_init(|| Regex::new(r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret|authorization|credential|session[_-]?key)").expect("constant secret-key regex"))
+    VALUE.get_or_init(|| fixed_regex(r"(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret|authorization|credential|session[_-]?key)"))
 }
 
 fn assignment_patterns() -> &'static [Regex; 4] {
     static VALUE: OnceLock<[Regex; 4]> = OnceLock::new();
     VALUE.get_or_init(|| [
-        Regex::new(r##"(?i)("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*""##).expect("constant JSON secret regex"),
-        Regex::new(r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+").expect("constant secret assignment regex"),
-        Regex::new(r"(?i)\b[A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|ID_TOKEN|PASSWORD|SECRET)[A-Z0-9_]*\s*[:=]\s*\S+").expect("constant environment secret regex"),
-        Regex::new(r"(?i)\bbearer\s+[\w.~+/=-]+").expect("constant bearer regex"),
+        fixed_regex(r#"(?i)("(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)"\s*:\s*)"(?:\\.|[^"\\])*""#),
+        fixed_regex(r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+"),
+        fixed_regex(r"(?i)\b[A-Z0-9_]*(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|ID_TOKEN|PASSWORD|SECRET)[A-Z0-9_]*\s*[:=]\s*\S+"),
+        fixed_regex(r"(?i)\bbearer\s+[\w.~+/=-]+"),
     ])
 }
 

@@ -200,15 +200,18 @@ async fn select_messages(
             move |all| {
                 let mut selected = IndexMap::new();
                 for (index, _) in all.iter().enumerate().filter(|(_, (_, matched))| *matched) {
-                    for selected_index in
-                        indices_around(index, all.len(), direction, limit as usize)
-                    {
+                    for selected_index in indices_around(
+                        index,
+                        all.len(),
+                        direction,
+                        crate::json::saturating_usize(limit),
+                    ) {
                         selected.insert(all[selected_index].0.clone(), ());
-                        if selected.len() >= limit as usize {
+                        if selected.len() >= crate::json::saturating_usize(limit) {
                             break;
                         }
                     }
-                    if selected.len() >= limit as usize {
+                    if selected.len() >= crate::json::saturating_usize(limit) {
                         break;
                     }
                 }
@@ -294,7 +297,7 @@ pub(in crate::context) fn apply_char_budget(
     messages: Vec<ConversationContextMessage>,
     max_chars: f64,
 ) -> (Vec<ConversationContextMessage>, bool) {
-    let max = max_chars.max(0.0) as usize;
+    let max = crate::json::saturating_usize(max_chars.max(0.0));
     let mut selected = Vec::new();
     let mut used = 0;
     for mut message in messages {
@@ -316,7 +319,7 @@ pub(in crate::context) fn apply_char_budget(
             return (selected, true);
         }
         selected.push(message);
-        used += cost
+        used += cost;
     }
     (selected, false)
 }

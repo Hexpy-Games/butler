@@ -8,10 +8,7 @@ use std::{
 use arrow_array::{Array, FixedSizeListArray, Float32Array};
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
-use lancedb::{
-    Error as LanceError,
-    query::{ExecutableQuery, QueryBase, Select},
-};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -41,7 +38,7 @@ pub(crate) async fn prepare_representatives(
     let Some(version) = generation
         .embedding
         .as_ref()
-        .map(|embedding| embedding.version())
+        .map(crate::cognition::GenerationEmbedding::version)
     else {
         return Ok(Vec::new());
     };
@@ -77,14 +74,11 @@ pub(crate) async fn prepare_representatives(
     if !root.exists() {
         return Ok(Vec::new());
     }
-    let connection = match lance_store::connect(&root).await {
-        Ok(connection) => connection,
-        Err(_) => return Ok(Vec::new()),
+    let Ok(connection) = lance_store::connect(&root).await else {
+        return Ok(Vec::new());
     };
-    let table = match lance_store::open(&connection, TABLE).await {
-        Ok(table) => table,
-        Err(LanceError::TableNotFound { .. }) => return Ok(Vec::new()),
-        Err(_) => return Ok(Vec::new()),
+    let Ok(table) = lance_store::open(&connection, TABLE).await else {
+        return Ok(Vec::new());
     };
     let mut prepared = Vec::new();
     for key in &keys {
@@ -144,18 +138,26 @@ pub(crate) async fn prepare_representatives(
             .map(|(unit, _)| unit.unit_id.clone())
             .collect::<Vec<_>>();
         affected_unit_ids.sort();
-        let representative = valid
+        let Some((representative, _)) = valid
             .iter()
             .min_by(|(a, _), (b, _)| a.unit_id.cmp(&b.unit_id))
-            .unwrap()
-            .0;
+        else {
+            continue;
+        };
+        // stable_matches admitted only units with these source fields.
+        let (Some(source_kind), Some(source_observed_at), Some(source_refs_json)) = (
+            representative.source_kind.clone(),
+            normalized_time(representative.source_observed_at.as_deref()),
+            representative.source_ids_json.clone(),
+        ) else {
+            continue;
+        };
         let mut row = persisted.clone();
         row.source_revision = representative.source_revision.clone();
-        row.source_kind = representative.source_kind.clone().unwrap();
+        row.source_kind = source_kind;
         row.conversation_session_id = representative.conversation_session_id.clone();
-        row.source_observed_at =
-            normalized_time(representative.source_observed_at.as_deref()).unwrap();
-        row.source_refs_json = representative.source_ids_json.clone().unwrap();
+        row.source_observed_at = source_observed_at;
+        row.source_refs_json = source_refs_json;
         prepared.push(PreparedRepresentative {
             row,
             affected_unit_ids,
@@ -203,7 +205,7 @@ fn valid_identity(
         || keys
             .iter()
             .any(|item| item.as_str().is_none_or(str::is_empty))
-        || receipt["row_count"].as_u64()? as usize != unique.len()
+        || usize::try_from(receipt["row_count"].as_u64()?).unwrap_or(usize::MAX) != unique.len()
         || !unique.contains(key.as_str())
     {
         return None;

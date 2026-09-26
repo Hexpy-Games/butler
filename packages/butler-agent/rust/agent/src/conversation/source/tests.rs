@@ -100,7 +100,7 @@ async fn canonical_store_reader_matches_bun_scalars_and_rereads_fresh_parts() {
     assert_eq!(scalar_for_part(&message.parts[1], "/03/text"), Some("same"));
     assert_eq!(scalar_for_part(&message.parts[1], "/+1/text"), None);
     for scalar in &scalars {
-        assert!(std::ptr::eq(scalar.message, &message));
+        assert!(std::ptr::eq(scalar.message, &raw const message));
         assert!(
             message
                 .parts
@@ -170,9 +170,8 @@ async fn canonical_store_reader_matches_bun_scalars_and_rereads_fresh_parts() {
 #[tokio::test]
 async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
     let missing = Fixture::new("missing");
-    let error = match ConversationSourceReader::open(&missing.path) {
-        Err(error) => error,
-        Ok(_) => panic!("missing canonical database must fail"),
+    let Err(error) = ConversationSourceReader::open(&missing.path) else {
+        panic!("missing canonical database must fail")
     };
     assert_eq!(error.code, "conversation_source_unavailable");
     assert!(!missing.path.exists());
@@ -180,9 +179,8 @@ async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
     let incomplete = Fixture::new("schema");
     std::fs::create_dir_all(incomplete.path.parent().unwrap()).unwrap();
     rusqlite::Connection::open(&incomplete.path).unwrap();
-    let error = match ConversationSourceReader::open(&incomplete.path) {
-        Err(error) => error,
-        Ok(_) => panic!("incomplete canonical schema must fail"),
+    let Err(error) = ConversationSourceReader::open(&incomplete.path) else {
+        panic!("incomplete canonical schema must fail")
     };
     assert_eq!(error.code, "conversation_source_schema_unavailable");
 

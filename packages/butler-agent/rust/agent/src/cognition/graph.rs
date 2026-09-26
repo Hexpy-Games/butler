@@ -473,6 +473,10 @@ impl Drop for GraphRepository {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn db_error(error: rusqlite::Error) -> CognitionError {
     CognitionError::new("memory_graph_unavailable", error.to_string())
 }

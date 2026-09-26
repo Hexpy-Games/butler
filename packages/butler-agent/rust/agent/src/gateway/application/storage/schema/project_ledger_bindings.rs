@@ -209,7 +209,8 @@ fn unique_id(
             return candidate;
         }
     }
-    unreachable!("all u64 ledger suffixes cannot exist in a finite directory")
+    // Every u64 suffix cannot be taken in a finite directory; stay total anyway.
+    format!("project-ledger-{}", uuid::Uuid::new_v4())
 }
 
 fn key(value: &str) -> String {
@@ -219,6 +220,10 @@ fn key(value: &str) -> String {
 #[cfg(test)]
 mod tests;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn filesystem_error(error: std::io::Error) -> AppStorageError {
     AppStorageError::new(
         "app_project_ledger_path_resolution_failed",

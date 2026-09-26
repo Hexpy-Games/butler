@@ -15,7 +15,7 @@ pub(super) fn invalid_cursor(elapsed_ms: u64) -> Value {
         "evidence_capability_receipts":evidence::grep_limitation("invalid_cursor")})
 }
 
-pub(super) fn guard_rejection(root: &str, rejection: WorkspaceListRejection) -> Value {
+pub(super) fn guard_rejection(root: &str, rejection: &WorkspaceListRejection) -> Value {
     let error = if matches!(
         rejection.reason,
         "directory_not_allowed" | "not_a_directory"
@@ -39,7 +39,7 @@ pub(super) fn success(
     options: &Options,
     query: &str,
     listed: &WorkspaceListResult,
-    searched: SearchResult,
+    searched: &SearchResult,
     cursor: Option<&GrepCursor>,
 ) -> Value {
     let partial: Vec<_> = searched
@@ -53,8 +53,7 @@ pub(super) fn success(
         })
         .collect();
     let mut partial_reasons = Vec::new();
-    for candidate in &partial {
-        let reason = candidate.read.reason.expect("partial reason");
+    for reason in partial.iter().filter_map(|candidate| candidate.read.reason) {
         if !partial_reasons.contains(&reason) {
             partial_reasons.push(reason);
         }
@@ -111,14 +110,11 @@ pub(super) fn success(
         .as_deref()
         .or(searched.processed_candidate.as_deref())
         .or(listed.last_path.as_deref());
-    let next_cursor = if supports_cursor
-        && searched.stopped_within_candidate
-        && (last_match.is_some() || after.is_some())
-    {
-        let (marker, line) = last_match
-            .map(|item| (item.path.as_str(), item.line))
-            .or(after)
-            .expect("window marker");
+    let window_marker = last_match
+        .map(|item| (item.path.as_str(), item.line))
+        .or(after)
+        .filter(|_| supports_cursor && searched.stopped_within_candidate);
+    let next_cursor = if let Some((marker, line)) = window_marker {
         searched
             .window_start
             .as_ref()
@@ -154,7 +150,7 @@ pub(super) fn success(
         None
     };
     let metrics = json!({
-        "elapsed_ms":started.elapsed().as_millis() as u64,
+        "elapsed_ms":u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         "files_considered":listed.files_considered,"files_searched":files_searched,
         "files_skipped":files_skipped,
         "candidate_reads":searched.reads.iter().filter(|candidate| candidate.read.attempted_read).count(),
@@ -185,10 +181,10 @@ pub(super) fn success(
         "max_output_bytes":options.max_output_bytes,"output_truncated":searched.max_output_reached,
         "truncated":truncated || incomplete,"metrics":metrics,
         "evidence_receipts":evidence::grep_execution(
-            format!("Found {} matches for {}{}", searched.matches.len(), options.pattern,
+            &format!("Found {} matches for {}{}", searched.matches.len(), options.pattern,
                 if next_cursor.is_some() { " with bounded continuation" }
                 else if truncated || incomplete { " with a bounded partial result" } else { "" }),
-            receipt_references),
+            &receipt_references),
         "evidence_capability_receipts":evidence::grep_capability(&searched.matches,
             truncated || incomplete, files_searched, files_skipped)
     });

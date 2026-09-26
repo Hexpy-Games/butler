@@ -39,20 +39,19 @@ pub(super) async fn follow(data_root: &Path, installation: &ResolvedInstallation
         Ok(files) => files,
         Err(message) => return report_error(&message),
     };
-    let mut follower = match LogFollower::from_end(&files) {
-        Ok(follower) => follower,
-        Err(_) => return report_error("App gateway logs could not be followed."),
+    let Ok(mut follower) = LogFollower::from_end(&files) else {
+        return report_error("App gateway logs could not be followed.");
     };
-    let mut interrupt =
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()) {
-            Ok(signal) => signal,
-            Err(_) => return report_error("Log follow signal handling is unavailable."),
-        };
-    let mut terminate =
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(signal) => signal,
-            Err(_) => return report_error("Log follow signal handling is unavailable."),
-        };
+    let Ok(mut interrupt) =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+    else {
+        return report_error("Log follow signal handling is unavailable.");
+    };
+    let Ok(mut terminate) =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+    else {
+        return report_error("Log follow signal handling is unavailable.");
+    };
     let mut interval = tokio::time::interval(follow_poll_interval());
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     interval.tick().await;

@@ -4,7 +4,6 @@ mod undo;
 pub(super) use tree_mutations::save_nodes;
 
 use rusqlite::Connection;
-use serde_json::json;
 
 use super::contracts::{
     AppSpaceCommand, AppSpaceMutationResult, AppSpaceOrigin, AppSpaceSmartNotice,
@@ -39,7 +38,7 @@ pub(super) fn execute(
     db: &mut Connection,
     clock: &dyn AppIdentityClock,
     mut history: SpaceHistory,
-    command: AppSpaceCommand,
+    command: &AppSpaceCommand,
     origin: AppSpaceOrigin,
     title: &str,
 ) -> Result<Outcome, GatewayApplicationError> {
@@ -144,10 +143,7 @@ pub(super) fn execute(
         &tx,
         "space.changed",
         None,
-        json!({"revision":after.revision})
-            .as_object()
-            .cloned()
-            .expect("space event is an object"),
+        crate::json::json_object!({"revision":after.revision}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;

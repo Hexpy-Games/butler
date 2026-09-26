@@ -57,6 +57,9 @@ impl ConfiguredPhase {
 pub(crate) struct ConfiguredCycleOptions {
     pub enabled: bool,
     pub total_budget_ms: u64,
+    /// Parsed for parity with the source config, which records these soft
+    /// subphase budgets but never enforces or emits them.
+    #[expect(dead_code, reason = "parity with the source config; never enforced")]
     pub subphase_budgets_ms: [u64; 4],
     pub activation_decay_d: f64,
     pub project_capsule_refresh_limit: usize,
@@ -81,8 +84,10 @@ impl ConfiguredCycleOptions {
                 sub["health"].as_u64().unwrap_or(60_000),
             ],
             activation_decay_d: config["activationDecayD"].as_f64().unwrap_or(0.5),
-            project_capsule_refresh_limit: number("projectCapsuleRefreshLimit", 20)
-                .min(usize::MAX as u64) as usize,
+            project_capsule_refresh_limit: usize::try_from(
+                number("projectCapsuleRefreshLimit", 20).min(usize::MAX as u64),
+            )
+            .unwrap_or(usize::MAX),
         }
     }
 }
@@ -141,7 +146,9 @@ impl ConfiguredCycleService {
             .join("consolidation");
         ensure_data_authority(&self.data_root, &[&root])?;
         let start = Instant::now();
-        let deadline = now_ms().saturating_add(config.total_budget_ms.min(i64::MAX as u64) as i64);
+        let deadline = now_ms().saturating_add(
+            i64::try_from(config.total_budget_ms.min(i64::MAX as u64)).unwrap_or(i64::MAX),
+        );
         let mut result = ConfiguredCycleResult {
             exit_code: 0,
             skipped: false,
@@ -149,7 +156,7 @@ impl ConfiguredCycleService {
             aborted: None,
             failed_phases: Vec::new(),
         };
-        for (phase_index, phase) in ConfiguredPhase::ALL.into_iter().enumerate() {
+        for phase in ConfiguredPhase::ALL {
             if cancellation.is_cancelled() {
                 result.aborted = Some("cancelled");
                 result.exit_code = 1;
@@ -160,10 +167,10 @@ impl ConfiguredCycleService {
                 break;
             }
             let phase_start = Instant::now();
-            // The source records a soft subphase budget but never enforces or emits it.
-            let _phase_soft_budget_ms = config.subphase_budgets_ms[phase_index];
             let output = self.executor.run(phase, deadline, cancellation).await;
-            let duration = phase_start.elapsed().as_millis().min(u64::MAX as u128) as u64;
+            let duration =
+                u64::try_from(phase_start.elapsed().as_millis().min(u128::from(u64::MAX)))
+                    .unwrap_or(u64::MAX);
             let event = match output {
                 Ok(_) if now_ms() >= deadline => {
                     result.aborted = Some("aborted_budget");
@@ -201,11 +208,14 @@ impl ConfiguredCycleService {
 }
 
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX)
 }
 
 async fn append_event(data_root: PathBuf, root: PathBuf, mut event: Value) -> CognitionResult<()> {
@@ -232,14 +242,15 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
     tokio::task::spawn_blocking(move || {
         use std::io::Write;
         ensure_data_authority(&data_root, &[&path])?;
-        std::fs::create_dir_all(path.parent().expect("configured event parent"))
-            .map_err(log_error)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(log_error)?;
+        }
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
             .map_err(log_error)?;
-        writeln!(file, "{}", event).map_err(log_error)?;
+        writeln!(file, "{event}").map_err(log_error)?;
         Ok::<(), CognitionError>(())
     })
     .await
@@ -251,6 +262,10 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
     })?
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn log_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_maintenance_log_failed", error.to_string())
 }

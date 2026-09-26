@@ -25,8 +25,8 @@ async fn canonical_completion_publishes_one_observation_and_one_queue_job_then_d
     .unwrap();
     let observer = Arc::new(
         NativeConversationObserver::new(
-            root.clone(),
-            CognitionPathEnvironment::default(),
+            &root.clone(),
+            &CognitionPathEnvironment::default(),
             clock,
             Arc::new(crate::operations::MetricFiles::new(root.clone())),
         )

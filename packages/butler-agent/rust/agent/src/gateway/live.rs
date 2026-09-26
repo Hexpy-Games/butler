@@ -1,9 +1,10 @@
+use parking_lot::Mutex;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::Infallible,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Poll, Waker},
     time::Duration,
 };
@@ -62,7 +63,7 @@ pub(super) async fn create_live_stream(
                     .into_iter()
                     .take_while(|event| event.id <= high_water)
                 {
-                    state.push_output(event, high_water);
+                    state.push_output(&event, high_water);
                 }
             }
         } else {
@@ -80,8 +81,8 @@ pub(super) async fn create_live_stream(
     })
 }
 
-fn state_lock(state: &Arc<Mutex<LiveState>>) -> std::sync::MutexGuard<'_, LiveState> {
-    state.lock().expect("live event state poisoned")
+fn state_lock(state: &Arc<Mutex<LiveState>>) -> parking_lot::MutexGuard<'_, LiveState> {
+    state.lock()
 }
 
 struct LiveState {
@@ -118,7 +119,7 @@ impl LiveState {
             }
             return None;
         }
-        self.push_output(event, high_water);
+        self.push_output(&event, high_water);
         self.waker.take()
     }
 
@@ -128,7 +129,7 @@ impl LiveState {
         } else {
             let queued = std::mem::take(&mut self.replay_queue);
             for event in queued.into_values() {
-                self.push_output(event, current_high_water);
+                self.push_output(&event, current_high_water);
             }
         }
         self.replaying = false;
@@ -136,11 +137,11 @@ impl LiveState {
         self.replay_overflowed = false;
     }
 
-    fn push_output(&mut self, event: AppEventEnvelope, high_water: u64) {
+    fn push_output(&mut self, event: &AppEventEnvelope, high_water: u64) {
         if event.id as f64 <= self.cursor {
             return;
         }
-        self.push_chunk(format_event(&event), high_water);
+        self.push_chunk(format_event(event), high_water);
         self.cursor = event.id as f64;
     }
 
@@ -194,7 +195,7 @@ impl Stream for LiveEventStream {
             return Poll::Ready(None);
         }
         let chunk = {
-            let mut state = self.state.lock().expect("live event state poisoned");
+            let mut state = self.state.lock();
             let chunk = state.output.pop_front();
             if chunk.is_none() {
                 state.waker = Some(cx.waker().clone());
@@ -212,11 +213,9 @@ impl Stream for LiveEventStream {
 }
 
 fn format_event(event: &AppEventEnvelope) -> Bytes {
-    Bytes::from(format!(
-        "id: {}\ndata: {}\n\n",
-        event.id,
-        serde_json::to_string(event).expect("App event serialization must succeed")
-    ))
+    // An envelope of strings, an integer and a JSON map always serializes.
+    let data = serde_json::to_string(event).unwrap_or_default();
+    Bytes::from(format!("id: {}\ndata: {data}\n\n", event.id))
 }
 
 fn heartbeat_interval() -> Interval {
@@ -232,7 +231,7 @@ fn iso_timestamp_now() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let seconds = duration.as_secs();
-    let days = (seconds / 86_400) as i64;
+    let days = i64::try_from(seconds / 86_400).unwrap_or(i64::MAX);
     let seconds_of_day = seconds % 86_400;
     let (year, month, day) = civil_date(days);
     format!(

@@ -9,10 +9,7 @@ use std::{
 use serde_json::Value;
 
 pub(super) fn visit_jsonl(path: &Path, mut visit: impl FnMut(&str, Result<Value, ()>)) -> usize {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return 0,
-    };
+    let Ok(file) = File::open(path) else { return 0 };
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
     let mut parse_errors = 0;
@@ -51,7 +48,7 @@ pub(super) fn unsigned_count(value: Option<&Value>) -> Option<u64> {
                 && number >= 0.0
                 && number.fract() == 0.0
                 && number < u64::MAX as f64)
-                .then_some(number as u64)
+                .then_some(crate::json::saturating_u64(number))
         })
     })
 }

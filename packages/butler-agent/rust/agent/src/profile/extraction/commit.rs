@@ -103,7 +103,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
                     .map(|value| (*value).to_owned()),
                 expires_or_decay: candidate.expires_or_decay.clone(),
             };
-            if let Some(record) = candidates::upsert_in_db(&tx, input, &host.now_iso())? {
+            if let Some(record) = candidates::upsert_in_db(&tx, &input, &host.now_iso())? {
                 ids.insert(record.id);
             }
         }

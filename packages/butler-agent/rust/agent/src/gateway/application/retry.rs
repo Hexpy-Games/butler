@@ -67,7 +67,7 @@ impl AppApplication {
                     &subscribers,
                     "turn.state_changed",
                     Some(&operation_turn),
-                    service::map(json!({"turn":turn}))?,
+                    service::map(&json!({"turn":turn}))?,
                     &now,
                 )?;
                 delete_assistant_messages(
@@ -218,7 +218,7 @@ fn delete_assistant_messages(
             "message.deleted",
             Some(turn_id),
             service::map(
-                json!({"message_id":id,"chat_id":chat_id,"turn_id":turn_id,"role":"assistant"}),
+                &json!({"message_id":id,"chat_id":chat_id,"turn_id":turn_id,"role":"assistant"}),
             )?,
             now,
         )?;

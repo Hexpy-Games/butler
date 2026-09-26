@@ -292,8 +292,7 @@ impl SqliteSubsessionRepository {
             .execute(move |db| {
                 let mut statement = db
                     .prepare(&format!(
-                        "{} WHERE d.dispatch_state='pending' ORDER BY r.created_at",
-                        SELECT
+                        "{SELECT} WHERE d.dispatch_state='pending' ORDER BY r.created_at"
                     ))
                     .map_err(StorageError::sqlite)?;
                 let rows = statement.query_map([], row).map_err(StorageError::sqlite)?;

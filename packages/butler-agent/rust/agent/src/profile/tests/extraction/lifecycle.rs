@@ -266,11 +266,11 @@ async fn correction_target_revision_is_revalidated_after_provider() {
         .unwrap();
     let (key, evidence) = coverage_identity(&target);
     let db = storage::open(&root.0, true).unwrap();
-    db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES(?1,?2,?3,?4,0,'/text',0,?5,'profile-scalar-v1',?6,?7,'complete',?6)",rusqlite::params![key,target.id,target.parts[0].scalars[0].source_hash,target.parts[0].part_id,target.parts[0].scalars[0].text.len() as i64,target.created_at,evidence]).unwrap();
+    db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES(?1,?2,?3,?4,0,'/text',0,?5,'profile-scalar-v1',?6,?7,'complete',?6)",rusqlite::params![key,target.id,target.parts[0].scalars[0].source_hash,target.parts[0].part_id,i64::try_from(target.parts[0].scalars[0].text.len()).unwrap_or(i64::MAX),target.created_at,evidence]).unwrap();
     drop(db);
     candidates::upsert(
         &root.0,
-        ProfileCandidateInput {
+        &ProfileCandidateInput {
             category: "communication".into(),
             payload: serde_json::json!({"summary":"Old preference"}),
             source_type: "explicit".into(),

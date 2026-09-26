@@ -8,9 +8,10 @@ mod snapshot;
 mod tests;
 mod upload;
 
+use parking_lot::Mutex;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use bytes::Bytes;
@@ -33,7 +34,7 @@ pub(crate) struct NativeAppMessageFiles {
 }
 
 impl NativeAppMessageFiles {
-    pub(crate) fn new(data_root: PathBuf, clock: Arc<dyn AppIdentityClock>) -> Self {
+    pub(crate) fn new(data_root: &Path, clock: Arc<dyn AppIdentityClock>) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),
             clock,
@@ -45,7 +46,7 @@ impl NativeAppMessageFiles {
 
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         {
-            let mut closing = self.closing.lock().expect("App files owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();
@@ -87,7 +88,7 @@ impl NativeAppMessageFiles {
             // Close and registration share a lock; caller cancellation cannot
             // detach file writes from the runtime's shutdown sequence.
             {
-                let closing = closing.lock().expect("App files owner poisoned");
+                let closing = closing.lock();
                 if *closing {
                     return Err(GatewayApplicationError::Internal);
                 }
@@ -114,7 +115,7 @@ impl AppArtifactMaterializer for NativeAppMessageFiles {
         &self,
         request: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>> {
-        self.run_file_job(move |root, clock| materialize::run(root, clock, request))
+        self.run_file_job(move |root, clock| materialize::run(root, clock, &request))
     }
 }
 
@@ -124,10 +125,10 @@ impl AppMessageFileStorage for NativeAppMessageFiles {
     }
 
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        self.run_file_job(move |root, _| upload::prepare(root, file))
+        self.run_file_job(move |root, _| upload::prepare(root, &file))
     }
 
     fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes> {
-        self.run_file_job(move |root, _| upload::read(root, file))
+        self.run_file_job(move |root, _| upload::read(root, &file))
     }
 }

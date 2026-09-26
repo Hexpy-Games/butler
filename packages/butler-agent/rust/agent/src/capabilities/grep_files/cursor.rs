@@ -21,7 +21,7 @@ pub(super) fn decode(value: &Value) -> Option<GrepCursor> {
         return None;
     }
     let bytes = super::super::cursor::decode_buffer_base64url(raw);
-    let decoded: Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let decoded: Value = serde_json::from_slice(&bytes).ok()?;
     let fields = decoded.as_object()?;
     if fields.get("v")?.as_f64()? != 1.0 || fields.get("tool")?.as_str()? != "grep_files" {
         return None;
@@ -56,7 +56,7 @@ pub(super) fn decode(value: &Value) -> Option<GrepCursor> {
             if !number.is_finite() || number < 1.0 || number.fract() != 0.0 {
                 return None;
             }
-            number as usize
+            crate::json::saturating_usize(number)
         })),
     }?;
     let window_start = optional_path("window_start_path")?;
@@ -108,5 +108,5 @@ pub(super) fn encode(cursor: &GrepCursor) -> String {
     if let Some(end) = &cursor.window_end {
         fields.insert("window_end_path".into(), json!(end));
     }
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(fields)).expect("grep cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(fields).to_string())
 }

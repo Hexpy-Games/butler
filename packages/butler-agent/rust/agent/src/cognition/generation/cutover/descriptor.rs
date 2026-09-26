@@ -288,7 +288,7 @@ fn validate_manifest_pair(
         // A ready v2 candidate is activated, an active target is an already
         // applied retry, and a retired target is a rollback candidate.
         Some("ready") => target_format == Some("v2") && projection_mode == "running",
-        Some("active") | Some("retired") => projection_matches_target,
+        Some("active" | "retired") => projection_matches_target,
         _ => false,
     };
     if target_id == previous_id
@@ -337,6 +337,10 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_unavailable(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_generation_unavailable", error.to_string())
 }

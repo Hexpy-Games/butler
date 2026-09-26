@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[cfg(unix)]
@@ -29,7 +29,7 @@ pub(super) struct AutomationStore {
 }
 
 impl AutomationStore {
-    pub(super) fn new(data_root: PathBuf) -> Self {
+    pub(super) fn new(data_root: &Path) -> Self {
         Self {
             root: data_root.join("automations"),
         }
@@ -275,7 +275,7 @@ fn schedule(
                 .ok_or_else(|| {
                     invalid("create_automation interval schedule requires interval_minutes")
                 })?;
-            let interval_minutes = number.trunc() as i64;
+            let interval_minutes = crate::json::saturating_i64(number.trunc());
             if !number.is_finite() || interval_minutes < 1 {
                 return Err(invalid("automation interval_minutes must be at least 1"));
             }

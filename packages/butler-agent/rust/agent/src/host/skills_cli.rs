@@ -37,7 +37,7 @@ pub async fn run_native_skills_cli(
     let outcome = execute(&skills, &options).await;
     skills.close().await;
     match outcome {
-        Ok((command, data, human)) => render_success(&options, command, data, human),
+        Ok((command, data, human)) => render_success(&options, command, data, &human),
         Err(error) => render_error(options.json, &command, error),
     }
 }
@@ -126,7 +126,7 @@ async fn import(
         .or_else(|| option_value(&options.args, "--file"))
         .ok_or_else(|| failure("invalid_arguments", "skills import requires <zip-path>", 2))?;
     let source = PathBuf::from(path);
-    if !source.exists() {
+    if !tokio::fs::try_exists(&source).await.unwrap_or(false) {
         return Err(failure(
             "not_found",
             format!("zip file not found: {path}"),
@@ -134,7 +134,7 @@ async fn import(
         ));
     }
     let root = std::env::temp_dir().join(format!("butler-skill-import-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&root).map_err(io_failure)?;
+    tokio::fs::create_dir_all(&root).await.map_err(io_failure)?;
     let staged = StagedSkillArchive::new(
         source
             .file_name()
@@ -143,7 +143,9 @@ async fn import(
             .to_owned(),
         root,
     );
-    std::fs::copy(&source, staged.path()).map_err(io_failure)?;
+    tokio::fs::copy(&source, staged.path())
+        .await
+        .map_err(io_failure)?;
     let result = skills
         .import(staged, option_value(&options.args, "--project").cloned())
         .await
@@ -348,6 +350,10 @@ fn skill_failure(error: SkillError) -> CommandError {
     failure(error.code, error.message, 1)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_failure(error: std::io::Error) -> CommandError {
     failure("skills_io_failed", error.to_string(), 1)
 }

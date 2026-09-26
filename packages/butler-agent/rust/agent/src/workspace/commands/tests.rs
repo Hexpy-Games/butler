@@ -176,17 +176,29 @@ async fn guided_real_process_spool_offsets_and_close() {
     let tail = payload.split_once("\n--- stdout ---\n").unwrap().1;
     let (stdout, stderr) = tail.split_once("\n--- stderr ---\n").unwrap();
     let stderr_start = payload.find(stderr_marker).unwrap() + stderr_marker.len();
-    assert_eq!(output.payload_source.stdout_start as usize, stdout_start);
-    assert_eq!(output.payload_source.stdout_len as usize, stdout.len());
-    assert_eq!(output.payload_source.stderr_start as usize, stderr_start);
-    assert_eq!(output.payload_source.stderr_len as usize, stderr.len());
+    assert_eq!(
+        usize::try_from(output.payload_source.stdout_start).unwrap_or(usize::MAX),
+        stdout_start
+    );
+    assert_eq!(
+        usize::try_from(output.payload_source.stdout_len).unwrap_or(usize::MAX),
+        stdout.len()
+    );
+    assert_eq!(
+        usize::try_from(output.payload_source.stderr_start).unwrap_or(usize::MAX),
+        stderr_start
+    );
+    assert_eq!(
+        usize::try_from(output.payload_source.stderr_len).unwrap_or(usize::MAX),
+        stderr.len()
+    );
     assert_eq!(stdout, oracle["guided"]["payloadTail"][0]);
     assert_eq!(stderr, oracle["guided"]["payloadTail"][1]);
     assert_eq!(
         output.summary.exit_code,
         oracle["guided"]["summary"]["exitCode"]
             .as_i64()
-            .map(|value| value as i32)
+            .map(|value| i32::try_from(value).unwrap())
     );
     assert_eq!(owner.active_count(), 0);
     owner.close().await;
@@ -211,7 +223,7 @@ fn bun_incremental_decoder_oracle_matches_chunk_boundaries() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|value| value.as_u64().unwrap() as u8)
+                .map(|value| u8::try_from(value.as_u64().unwrap()).unwrap_or(u8::MAX))
                 .collect();
             decoder.write(&bytes, &mut text);
         }
@@ -345,11 +357,14 @@ async fn signalling_a_group_of_only_zombies_succeeds() {
     let pid = leader.id();
     // Not reaped: the exited leader stays a zombie of this process.
     crate::testing::eventually("the unreaped leader to exit", || {
-        pidinfo::<BSDInfo>(pid as i32, 0).is_err()
+        pidinfo::<BSDInfo>(i32::try_from(pid).unwrap_or(i32::MAX), 0).is_err()
     })
     .await;
     assert_eq!(
-        killpg(Pid::from_raw(pid as i32), Signal::SIGKILL),
+        killpg(
+            Pid::from_raw(i32::try_from(pid).unwrap_or(i32::MAX)),
+            Signal::SIGKILL
+        ),
         Err(Errno::EPERM)
     );
     assert_eq!(signal_pid(pid, true), Ok(()));

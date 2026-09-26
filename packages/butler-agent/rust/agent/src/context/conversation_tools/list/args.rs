@@ -84,7 +84,7 @@ pub(super) fn parse(
         return Err("invalid_session_kind");
     }
     let time = match input.get("time") {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => None,
+        None | Some(Value::Null | Value::Bool(false)) => None,
         Some(Value::Number(number)) if number.as_f64() == Some(0.0) => None,
         Some(Value::String(value)) if value.is_empty() => None,
         Some(value) => {
@@ -112,10 +112,9 @@ pub(super) fn parse(
         "includeArchived":include_archived,"time":time.as_ref().map(|(from,to)| json!({"from":from,"to":to,"basis":"conversation"}))});
     let filter = if time.is_none() {
         let mut filter = filter;
-        filter
-            .as_object_mut()
-            .expect("filter object")
-            .shift_remove("time");
+        if let Some(object) = filter.as_object_mut() {
+            object.shift_remove("time");
+        }
         filter
     } else {
         filter
@@ -149,7 +148,9 @@ pub(super) fn parse(
 }
 
 pub(super) fn encode_cursor(cursor: &ListCursor) -> String {
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).expect("cursor serializable"))
+    // A derived struct of strings and numbers always serializes; an empty
+    // cursor would be rejected as invalid on decode.
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).unwrap_or_default())
 }
 fn decode_cursor(text: &str) -> Result<ListCursor, &'static str> {
     let bytes = URL_SAFE_NO_PAD.decode(text).map_err(|_| "invalid_cursor")?;
@@ -174,7 +175,7 @@ fn integer(
     if number.fract() != 0.0 || !number.is_finite() || number < min as f64 || number > max as f64 {
         return Err("invalid_integer");
     }
-    Ok(number as usize)
+    Ok(crate::json::saturating_usize(number))
 }
 fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, &'static str> {
     let Some(value) = value else {

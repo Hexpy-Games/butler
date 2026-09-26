@@ -56,7 +56,7 @@ fn native_next(error: &Map<String, Value>, name: &str, args: &Map<String, Value>
             if command.is_some_and(index_command) {
                 return vec![hint(
                     "project_ledger_index",
-                    Value::Object(scope),
+                    &Value::Object(scope),
                     "Rebuild the compact Project Ledger index for this project.",
                 )];
             }
@@ -66,14 +66,14 @@ fn native_next(error: &Map<String, Value>, name: &str, args: &Map<String, Value>
         scope.insert("kind".into(), "all".into());
         return vec![hint(
             "project_ledger_list",
-            Value::Object(scope),
+            &Value::Object(scope),
             "List records, then retry with the exact id and kind.",
         )];
     }
     if code == "project_ledger_check_failed" {
         return vec![hint(
             "project_ledger_check",
-            Value::Object(scope),
+            &Value::Object(scope),
             "Review data.issues, repair source records, and rerun validation.",
         )];
     }
@@ -99,12 +99,12 @@ fn native_next(error: &Map<String, Value>, name: &str, args: &Map<String, Value>
     }
     vec![hint(
         "project_ledger_show",
-        Value::Object(scope),
+        &Value::Object(scope),
         "Inspect the record, correct the reported arguments or missing evidence, and retry the original lifecycle action.",
     )]
 }
 
-fn hint(tool: &str, args: Value, reason: &str) -> Value {
+fn hint(tool: &str, args: &Value, reason: &str) -> Value {
     json!({"tool":tool,"args":args,"reason":reason})
 }
 

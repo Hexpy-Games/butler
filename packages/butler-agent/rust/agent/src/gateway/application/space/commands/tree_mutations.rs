@@ -76,7 +76,7 @@ pub(super) fn dissolve_group(
         .into_iter()
         .enumerate()
         .map(|(position, mut node)| {
-            node.position = position as i64;
+            node.position = i64::try_from(position).unwrap_or(i64::MAX);
             node
         })
         .collect::<Vec<_>>();
@@ -138,16 +138,12 @@ pub(super) fn group_sessions(
         .into_iter()
         .enumerate()
         .map(|(position, mut node)| {
-            node.position = position as i64;
+            node.position = i64::try_from(position).unwrap_or(i64::MAX);
             node
         })
         .collect::<Vec<_>>();
     save_nodes(db, &siblings)?;
-    let source_position = if origin == AppSpaceOrigin::Smart {
-        1
-    } else {
-        0
-    };
+    let source_position = i64::from(origin == AppSpaceOrigin::Smart);
     let mut target_child = target;
     target_child.parent_key = Some(format!("g:{id}"));
     target_child.position = 1 - source_position;
@@ -179,7 +175,7 @@ pub(super) fn pin(
     };
     db.execute(
         &format!("UPDATE {table} SET pinned=? WHERE id=?"),
-        params![if pinned { 1_i64 } else { 0_i64 }, node.entity_id],
+        params![i64::from(pinned), node.entity_id],
     )
     .map_err(storage_error)?;
     Ok(())
@@ -190,7 +186,7 @@ pub(in crate::gateway::application::space) fn save_nodes(
     nodes: &[AppSpaceNode],
 ) -> Result<(), GatewayApplicationError> {
     for node in nodes {
-        let manual = if node.manual_placement { 1_i64 } else { 0_i64 };
+        let manual = i64::from(node.manual_placement);
         db.execute(
             "UPDATE app_space_nodes SET parent_key=?,position=?,manual_placement=?,revision=revision+1 WHERE node_key=? AND (parent_key IS NOT ? OR position!=? OR manual_placement!=?)",
             params![node.parent_key,node.position,manual,node.key,node.parent_key,node.position,manual],

@@ -25,7 +25,7 @@ pub(super) fn summarize(output: &mut ExtractOutput) {
         let mut next = evidence.clone();
         for quote in &claim.evidence {
             if !next.contains(quote) {
-                next.push(quote.clone())
+                next.push(quote.clone());
             }
         }
         if next.len() > 4 {
@@ -73,24 +73,25 @@ pub(super) fn bounded_evidence_schema(
     schema: &Map<String, Value>,
     passages: usize,
 ) -> Map<String, Value> {
+    fn visit_object(object: &mut Map<String, Value>, max: usize) {
+        if let Some(evidence) = object
+            .get_mut("properties")
+            .and_then(Value::as_object_mut)
+            .and_then(|properties| properties.get_mut("evidence"))
+            .and_then(Value::as_object_mut)
+        {
+            evidence.insert(
+                "items".into(),
+                json!({"type":"integer","minimum":0,"maximum":max.saturating_sub(1)}),
+            );
+        }
+        for child in object.values_mut() {
+            visit(child, max);
+        }
+    }
     fn visit(value: &mut Value, max: usize) {
         match value {
-            Value::Object(object) => {
-                if let Some(evidence) = object
-                    .get_mut("properties")
-                    .and_then(Value::as_object_mut)
-                    .and_then(|properties| properties.get_mut("evidence"))
-                    .and_then(Value::as_object_mut)
-                {
-                    evidence.insert(
-                        "items".into(),
-                        json!({"type":"integer","minimum":0,"maximum":max.saturating_sub(1)}),
-                    );
-                }
-                for child in object.values_mut() {
-                    visit(child, max);
-                }
-            }
+            Value::Object(object) => visit_object(object, max),
             Value::Array(items) => {
                 for child in items {
                     visit(child, max);
@@ -99,9 +100,9 @@ pub(super) fn bounded_evidence_schema(
             _ => {}
         }
     }
-    let mut value = Value::Object(schema.clone());
-    visit(&mut value, passages);
-    value.as_object().expect("object schema").clone()
+    let mut bounded = schema.clone();
+    visit_object(&mut bounded, passages);
+    bounded
 }
 pub(super) fn validate_output(output: &ExtractOutput, input: &ExtractInput) -> CognitionResult<()> {
     if !matches!(

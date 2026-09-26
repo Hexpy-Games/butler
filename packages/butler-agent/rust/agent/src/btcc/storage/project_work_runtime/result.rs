@@ -120,7 +120,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
     for item in &input.works {
         let work = &item.work;
         let WorkScope::Project { project_ref } = &work.scope else {
-            unreachable!()
+            return Err(invalid("project_work_runtime_projection_mismatch"));
         };
         db.execute(
             "INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,ledger_project_id, \

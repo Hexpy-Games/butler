@@ -77,7 +77,7 @@ impl NativeMcpClient {
             if !include_disabled && !server.enabled {
                 continue;
             }
-            servers.push(self.probe_config(&server, signal).await);
+            servers.push(Box::pin(self.probe_config(&server, signal)).await);
         }
         Ok(json!({"servers": servers}))
     }
@@ -88,7 +88,7 @@ impl NativeMcpClient {
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
         let server = self.find_server(server_id)?;
-        Ok(self.probe_config(&server, signal).await)
+        Ok(Box::pin(self.probe_config(&server, signal)).await)
     }
 
     pub(crate) async fn describe_tool_schema(
@@ -123,16 +123,15 @@ impl NativeMcpClient {
                 false,
             ));
         }
-        let result = self
-            .with_server(
-                &server,
-                &secrets,
-                Operation::DescribeTool {
-                    name: tool_name.to_owned(),
-                },
-                signal,
-            )
-            .await?;
+        let result = Box::pin(self.with_server(
+            &server,
+            &secrets,
+            Operation::DescribeTool {
+                name: tool_name.to_owned(),
+            },
+            signal,
+        ))
+        .await?;
         if result.get("found") != Some(&Value::Bool(true)) {
             return Ok(None);
         }
@@ -151,13 +150,13 @@ impl NativeMcpClient {
         arguments: Map<String, Value>,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
-        self.call_tool_with_timeout(
+        Box::pin(self.call_tool_with_timeout(
             server_id,
             tool_name,
             arguments,
             Duration::from_secs(10),
             signal,
-        )
+        ))
         .await
     }
 
@@ -205,9 +204,8 @@ impl NativeMcpClient {
             name: tool_name.to_owned(),
             arguments,
         };
-        let result = self
-            .with_server_timeout(&server, &secrets, request, timeout, signal)
-            .await;
+        let result =
+            Box::pin(self.with_server_timeout(&server, &secrets, request, timeout, signal)).await;
         match result {
             Ok(result) => {
                 let is_error = result.get("isError") == Some(&Value::Bool(true));
@@ -304,16 +302,15 @@ impl NativeMcpClient {
                 false,
             ));
         }
-        let result = self
-            .with_server(
-                &server,
-                &secrets,
-                Operation::ReadResource {
-                    uri: uri.to_owned(),
-                },
-                signal,
-            )
-            .await?;
+        let result = Box::pin(self.with_server(
+            &server,
+            &secrets,
+            Operation::ReadResource {
+                uri: uri.to_owned(),
+            },
+            signal,
+        ))
+        .await?;
         Ok(json!({"server_id":server.id,"uri":uri,"result":result}))
     }
 
@@ -349,13 +346,10 @@ impl NativeMcpClient {
         if signal.is_cancelled() {
             return with_probe_error(base, "MCP discovery was cancelled.");
         }
-        let secrets = match resolve_secrets(server, &self.environment) {
-            Ok(secrets) => secrets,
-            Err(_) => return with_probe_error(base, "MCP server credentials are unavailable."),
+        let Ok(secrets) = resolve_secrets(server, &self.environment) else {
+            return with_probe_error(base, "MCP server credentials are unavailable.");
         };
-        let result = self
-            .with_server(server, &secrets, Operation::Probe, signal)
-            .await;
+        let result = Box::pin(self.with_server(server, &secrets, Operation::Probe, signal)).await;
         match result {
             Ok(probe) => {
                 json!({

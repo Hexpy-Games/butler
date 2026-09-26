@@ -1,10 +1,11 @@
 //! Process-owned daily context maintenance. The service starts this after readiness.
 
+use parking_lot::Mutex;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -55,7 +56,7 @@ impl ContextMaintenance {
     }
 
     pub(crate) fn start(&self) {
-        let mut task = self.task.lock().expect("maintenance task poisoned");
+        let mut task = self.task.lock();
         if task.is_some() || self.cancellation.is_cancelled() {
             return;
         }
@@ -87,7 +88,7 @@ impl ContextMaintenance {
                             if cancellation.is_cancelled() {
                                 break;
                             }
-                            if let Err(error) = daily_schedule::run_due(
+                            if let Err(error) = Box::pin(daily_schedule::run_due(
                                 &data_root,
                                 "session-sync",
                                 &day,
@@ -95,7 +96,7 @@ impl ContextMaintenance {
                                 now_ms,
                                 &cancellation,
                                 daily_cognition.session_sync(&cancellation),
-                            )
+                            ))
                             .await
                             {
                                 eprintln!("[session-sync] {error}");
@@ -121,8 +122,8 @@ impl ContextMaintenance {
                     Err(error) => eprintln!("[context-maintenance] {}", error.code),
                 }
                 tokio::select! {
-                    _ = cancellation.cancelled() => break,
-                    _ = tokio::time::sleep(INTERVAL) => {}
+                    () = cancellation.cancelled() => break,
+                    () = tokio::time::sleep(INTERVAL) => {}
                 }
             }
         }));
@@ -130,7 +131,7 @@ impl ContextMaintenance {
 
     pub(crate) async fn close(&self) {
         self.cancellation.cancel();
-        let task = self.task.lock().expect("maintenance task poisoned").take();
+        let task = self.task.lock().take();
         if let Some(task) = task {
             let _ = task.await;
         }
@@ -218,7 +219,9 @@ fn should_run(data_root: &std::path::Path, day: &str, minute: u16) -> bool {
 }
 
 fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
-    let parent = path.parent().expect("scheduler state has parent");
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "state path has no parent")
+    })?;
     fs::create_dir_all(parent)?;
     let temporary = parent.join(format!(".context-maintenance-{}.tmp", uuid::Uuid::new_v4()));
     let result = (|| {
@@ -246,7 +249,9 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 fn current_epoch_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |time| time.as_millis() as i64)
+        .map_or(0, |time| {
+            i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 fn iso_at(now_ms: i64) -> String {

@@ -11,6 +11,7 @@ use crate::cognition::{
 };
 use crate::conversation::{ConversationMessageWithParts, ConversationSourceReader};
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct RegistrationInput<'a> {
     pub generation_id: &'a str,
     pub plan: &'a CognitionSourcePlan,
@@ -75,19 +76,17 @@ pub(super) fn register(
             .conversation_message_id
             .as_deref()
             .ok_or_else(source_changed)?;
-        if !messages.contains_key(message_id) {
-            let message = input
-                .canonical
-                .read_message(message_id)
-                .map_err(conversation_error)?
-                .ok_or_else(source_changed)?;
-            messages.insert(message_id.to_owned(), message);
-        }
-        let hydrated = hydrate_conversation_source(
-            messages.get(message_id).expect("inserted above"),
-            row,
-            f64::INFINITY,
-        )?;
+        let message = match messages.entry(message_id.to_owned()) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
+                input
+                    .canonical
+                    .read_message(message_id)
+                    .map_err(conversation_error)?
+                    .ok_or_else(source_changed)?,
+            ),
+        };
+        let hydrated = hydrate_conversation_source(message, row, f64::INFINITY)?;
         index::index_source(&tx, &row.source_id, hydrated.text)?;
         registered.push(row.source_id.clone());
     }
@@ -237,7 +236,7 @@ fn insert_windows(
         ])?;
         connection.execute(
             "INSERT INTO memory_projection_windows(window_ref,job_id,ordinal,source_refs_json,state,error_code) VALUES(?1,?2,?3,?4,?5,?6)",
-            params![window,plan.job_id,ordinal as i64,serde_json::to_string(&refs).map_err(json_error)?,"pending",Option::<&str>::None],
+            params![window,plan.job_id,i64::try_from(ordinal).unwrap_or(i64::MAX),serde_json::to_string(&refs).map_err(json_error)?,"pending",Option::<&str>::None],
         ).map_err(db_error)?;
     }
     Ok(())

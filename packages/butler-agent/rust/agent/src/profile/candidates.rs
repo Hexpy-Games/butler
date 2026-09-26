@@ -14,7 +14,7 @@ use store::*;
 
 pub(super) fn upsert(
     data_root: &Path,
-    input: ProfileCandidateInput,
+    input: &ProfileCandidateInput,
     now: &str,
 ) -> ProfileResult<Option<ProfileCandidateRecord>> {
     let consent = storage::read_consent(data_root);
@@ -27,7 +27,7 @@ pub(super) fn upsert(
 
 pub(super) fn upsert_in_db(
     db: &rusqlite::Connection,
-    input: ProfileCandidateInput,
+    input: &ProfileCandidateInput,
     now: &str,
 ) -> ProfileResult<Option<ProfileCandidateRecord>> {
     let summary = normalize_text(
@@ -196,7 +196,7 @@ pub(super) fn upsert_in_db(
         &last_seen,
         expires,
         status,
-        Value::Object(payload.clone()),
+        &Value::Object(payload.clone()),
     )?;
     if status == "promoted" {
         let stable_id = identifier(
@@ -309,7 +309,7 @@ pub(super) fn consolidate(
             write_record(&db, &candidate)?;
             promoted += 1;
         } else {
-            skipped += 1
+            skipped += 1;
         }
     }
     let rejected = expire_old_candidates(&db, now, now_ms)?;
@@ -318,15 +318,15 @@ pub(super) fn consolidate(
     let stable_count = stable.len();
     let generated =
         projection::build_current(data_root, sources, mode, now_ms, now_ms as f64, now.into())?;
-    let written = generated.as_ref().is_some_and(|value| {
+    let written = generated.as_ref().filter(|value| {
         !value.response_hints.is_empty()
             || !value.current_attention.is_empty()
             || !value.caution_hints.is_empty()
     });
-    if written {
-        storage::write_projection(data_root, generated.as_ref().unwrap())?
+    if let Some(generated) = written {
+        storage::write_projection(data_root, generated)?;
     } else {
-        storage::delete_projection(data_root)?
+        storage::delete_projection(data_root)?;
     }
     Ok(ProfileConsolidationResult {
         profiling_enabled: true,
@@ -336,7 +336,7 @@ pub(super) fn consolidate(
         skipped_count: skipped,
         rejected_count: rejected,
         stable_entry_count: stable_count,
-        projection_written: written,
+        projection_written: written.is_some(),
         raw_text_included: false,
     })
 }
@@ -383,7 +383,7 @@ fn write_record(
         text(payload, "last_seen_at").unwrap_or(""),
         text(payload, "expires_or_decay"),
         text(payload, "status").unwrap_or("candidate"),
-        payload.clone(),
+        &payload.clone(),
     )
 }
 

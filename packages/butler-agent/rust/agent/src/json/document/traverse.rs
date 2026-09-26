@@ -185,7 +185,7 @@ impl Iterator for RawUnits<'_> {
                 b't' => 9,
                 b'b' => 8,
                 b'f' => 12,
-                other => other as u16,
+                other => u16::from(other),
             });
         }
         let character = self.raw[self.at..].chars().next()?;
@@ -207,9 +207,9 @@ fn append_units(units: &[u16], output: &mut String) {
             && at + 1 < units.len()
             && (0xdc00..=0xdfff).contains(&units[at + 1])
         {
-            let scalar =
-                0x10000 + (((unit as u32 - 0xd800) << 10) | (units[at + 1] as u32 - 0xdc00));
-            output.push(char::from_u32(scalar).expect("valid UTF-16 pair"));
+            let scalar = 0x10000
+                + (((u32::from(unit) - 0xd800) << 10) | (u32::from(units[at + 1]) - 0xdc00));
+            output.push(char::from_u32(scalar).unwrap_or(char::REPLACEMENT_CHARACTER));
             at += 2;
             continue;
         }
@@ -222,7 +222,9 @@ fn append_units(units: &[u16], output: &mut String) {
             12 => output.push_str("\\f"),
             13 => output.push_str("\\r"),
             0..=31 | 0xd800..=0xdfff => output.push_str(&format!("\\u{unit:04x}")),
-            _ => output.push(char::from_u32(unit as u32).expect("valid BMP unit")),
+            _ => {
+                output.push(char::from_u32(u32::from(unit)).unwrap_or(char::REPLACEMENT_CHARACTER));
+            }
         }
         at += 1;
     }

@@ -25,8 +25,8 @@ pub(super) fn prepare(
     binding: CanonicalMemoryReadBinding,
     current_user_message: String,
     operation_id: String,
-    args: Value,
-    now_iso: String,
+    args: &Value,
+    now_iso: &str,
 ) -> CognitionResult<PreparedRecall> {
     let snapshot = match PublicMemorySnapshot::open(&conversation_store_path(data_root), &binding) {
         Ok(snapshot) => snapshot,
@@ -56,10 +56,12 @@ pub(super) fn prepare(
     crate::cognition::resolve_active_generation(data_root, environment)?;
     let limit = match args.get("limit") {
         None => 6,
-        Some(value) => value
-            .as_f64()
-            .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))
-            .ok_or_else(|| failure("invalid_arguments"))? as usize,
+        Some(value) => crate::json::saturating_usize(
+            value
+                .as_f64()
+                .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))
+                .ok_or_else(|| failure("invalid_arguments"))?,
+        ),
     };
     let scope = match args.get("scope") {
         None if binding
@@ -145,7 +147,7 @@ pub(super) fn prepare(
         as_of: args
             .get("as_of")
             .and_then(Value::as_str)
-            .unwrap_or(&now_iso)
+            .unwrap_or(now_iso)
             .to_owned(),
         as_of_explicit: args.get("as_of").is_some_and(Value::is_string),
         time,

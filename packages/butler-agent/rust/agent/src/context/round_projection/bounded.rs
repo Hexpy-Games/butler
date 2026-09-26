@@ -168,11 +168,10 @@ fn compact(
             body.insert("ok".into(), ok);
         }
         body.insert("output_omitted".into(), true.into());
-        if payload.get("error").is_some_and(js_truthy) {
-            body.insert(
-                "error".into(),
-                payload.shift_remove("error").expect("present error"),
-            );
+        if payload.get("error").is_some_and(js_truthy)
+            && let Some(error) = payload.shift_remove("error")
+        {
+            body.insert("error".into(), error);
         }
         if let Some(reference) = &message.operation_result_reference {
             body.insert(

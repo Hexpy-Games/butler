@@ -33,7 +33,7 @@ pub(super) fn project(rows: &[Value]) -> Vec<Value> {
                     merge_state(&mut blocks[index].value, row);
                     blocks[index].closed = true;
                     if current.as_deref() == Some(&id) {
-                        current = None
+                        current = None;
                     }
                 } else if phase.is_none() {
                     merge_state(&mut blocks[index].value, row);
@@ -211,7 +211,7 @@ fn add_row(block: &mut Block, row: &Map<String, Value>) {
         let current = block.rows[index].as_object().cloned().unwrap_or_default();
         block.rows[index] = Value::Object(merge_tool_row(&current, &next));
     } else {
-        block.rows.push(Value::Object(next))
+        block.rows.push(Value::Object(next));
     }
     merge_state(&mut block.value, row);
 }
@@ -339,10 +339,8 @@ fn merged_state<'a>(current: &'a str, incoming: &'a str) -> &'a str {
 fn rank(value: &str) -> u8 {
     if matches!(value, "running" | "streaming") {
         2
-    } else if matches!(value, "thinking" | "accepted") {
-        1
     } else {
-        0
+        u8::from(matches!(value, "thinking" | "accepted"))
     }
 }
 fn string<'a>(row: &'a Map<String, Value>, key: &str) -> Option<&'a str> {

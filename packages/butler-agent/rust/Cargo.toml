@@ -11,7 +11,68 @@ publish = false
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
-unreachable_pub = "warn"
+unreachable_pub = "deny"
 
 [workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# No panics in production code. Tests may unwrap/expect/panic (clippy.toml).
+# A remaining expect() must carry #[expect(clippy::expect_used, reason = "..")]
+# naming the test that proves its invariant.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+await_holding_lock = "deny"
+# Not yet denied: 1079 of 1700 hits index serde_json::Value by key, which
+# never panics on read (P5 replaces Value with typed structs). The remaining
+# slice/Vec/str indexing is inventoried for a follow-up pass (see P2B notes).
+indexing_slicing = "allow"
+
+# Pedantic lints that are allowed, with the reason each one is noise here:
+# Function length is bounded by module structure (P3) and source-check file caps.
+too_many_lines = "allow"
+# `.map(f).unwrap_or(d)` reads left to right; `map_or(d, f)` inverts it.
+map_unwrap_or = "allow"
+# Counters, token totals and timestamps converted to f64 stay far below 2^52.
+cast_precision_loss = "allow"
+# Modules glob-import their own contract/sibling items; P3 restructures modules.
+wildcard_imports = "allow"
+# Field names mirror persisted wire and storage schemas.
+struct_field_names = "allow"
+# `match` with an explicit else arm is as clear as `if let` .. `else`.
+single_match_else = "allow"
+# Extension checks are case-sensitive on purpose: they mirror the Bun source.
+case_sensitive_file_extension_comparisons = "allow"
+# JS-number mirrors are compared exactly by design (parity with the Bun source).
+float_cmp = "allow"
+# Local helper items next to their only use read better than hoisted ones.
+items_after_statements = "allow"
+# Pairs like `left`/`right`, `before`/`after` are deliberate.
+similar_names = "allow"
+# `a = b.clone()` is clearer than `a.clone_from(&b)`; none are hot paths.
+assigning_clones = "allow"
+# Internal crate: `#[must_use]`/`# Errors` docs on every fn add noise, not safety.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Backticks in prose docs are cosmetic.
+doc_markdown = "allow"
+# `s += &format!(..)` is clearer than `let _ = write!(s, ..)`.
+format_push_string = "allow"
+# `Default::default()` in struct literals avoids repeating long type names.
+default_trait_access = "allow"
+# Module APIs keep uniform fallible signatures; error types are redesigned in P2c.
+unnecessary_wraps = "allow"
+# Methods keep their receiver for symmetry with sibling methods on the owner.
+unused_self = "allow"
+# `Option<Option<T>>` models JSON tri-state fields: absent, explicit null, value.
+option_option = "allow"
+# Counting newlines in small buffers; not worth a `bytecount` dependency.
+naive_bytecount = "allow"
+# Parity fixtures deliberately carry decomposed (non-NFC) text.
+unicode_not_nfc = "allow"

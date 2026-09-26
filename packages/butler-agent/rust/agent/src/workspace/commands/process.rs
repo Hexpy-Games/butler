@@ -103,12 +103,11 @@ fn group_has_only_zombies(group: u32) -> bool {
             return false;
         };
         match pidinfo::<BSDInfo>(pid, 0) {
-            Ok(_) => false,
             // libproc (pinned) reports `..., errno = <n>, message = ...`.
             Err(message) if message.contains(&format!(", errno = {}, ", Errno::ESRCH as i32)) => {
                 matches!(kill(Pid::from_raw(pid), None), Ok(()) | Err(Errno::ESRCH))
             }
-            Err(_) => false,
+            _ => false,
         }
     })
 }
@@ -153,7 +152,7 @@ pub(super) fn signal_command(
 }
 
 #[cfg(unix)]
-pub(super) fn signal_name(status: &ExitStatus) -> Option<String> {
+pub(super) fn signal_name(status: ExitStatus) -> Option<String> {
     use std::os::unix::process::ExitStatusExt;
     status.signal().map(|number| match number {
         2 => "SIGINT".to_owned(),

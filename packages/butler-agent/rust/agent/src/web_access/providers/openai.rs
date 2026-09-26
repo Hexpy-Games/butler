@@ -30,7 +30,7 @@ impl OpenAIWebSearchProvider {
 }
 
 impl SearchProvider for OpenAIWebSearchProvider {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "openai-web-search"
     }
 
@@ -77,7 +77,7 @@ impl SearchProvider for OpenAIWebSearchProvider {
             Ok(SearchOutput {
                 results,
                 provider_overview,
-                duration_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX),
                 provider: self.id().to_owned(),
                 search_requests: 1,
                 search_warnings: Vec::new(),

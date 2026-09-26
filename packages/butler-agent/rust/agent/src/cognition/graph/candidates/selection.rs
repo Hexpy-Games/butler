@@ -106,9 +106,11 @@ fn lexical(
         JOIN memory_chunk_sources s ON s.source_id=a.source_id JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision \
         LEFT JOIN memory_claims mc ON mc.node_id=e.id WHERE {ELIGIBLE})"
     );
-    let corpus_size = db
-        .query_row(&count_sql, params![project, as_of], |r| r.get::<_, i64>(0))
-        .map_err(db_error)? as usize;
+    let corpus_size = usize::try_from(
+        db.query_row(&count_sql, params![project, as_of], |r| r.get::<_, i64>(0))
+            .map_err(db_error)?,
+    )
+    .unwrap_or_default();
     let grams_json = serde_json::to_string(&query_grams).map_err(json_error)?;
     let matched_sql = format!(
         "SELECT DISTINCT p.node_id,p.source_id,p.surface_original FROM memory_alias_postings p \
@@ -139,7 +141,7 @@ fn lexical(
         .chain(documents.iter().flat_map(|(_, grams)| grams))
     {
         if seen.insert(gram) {
-            all_grams.push(gram.clone())
+            all_grams.push(gram.clone());
         }
     }
     let mut df = HashMap::new();
@@ -164,7 +166,7 @@ fn lexical(
             .map_err(db_error)?
         {
             let (gram, count) = row.map_err(db_error)?;
-            df.insert(gram, count as usize);
+            df.insert(gram, usize::try_from(count).unwrap_or_default());
         }
     }
     if query_grams.iter().any(|gram| !df.contains_key(gram)) {
@@ -262,7 +264,7 @@ fn context(
     {
         let (id, _observed_at) = row.map_err(db_error)?;
         if seen.insert(id.clone()) && ids.len() < 4 {
-            ids.push(id)
+            ids.push(id);
         }
     }
     Ok(ids

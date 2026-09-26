@@ -39,7 +39,7 @@ impl AppApplication {
             .await?;
         let row = self
             .storage
-            .execute(move |db| insert_uploaded(db, owner, written))
+            .execute(move |db| insert_uploaded(db, owner.as_ref(), &written))
             .await
             .map_err(app_error)?;
         self.dependencies
@@ -86,8 +86,8 @@ fn ensure_chat(db: &Connection, id: &str) -> Result<(), AppStorageError> {
 
 fn insert_uploaded(
     db: &Connection,
-    owner: Option<String>,
-    file: super::MaterializedResponderFile,
+    owner: Option<&String>,
+    file: &super::MaterializedResponderFile,
 ) -> Result<AppMessageFileSnapshot, AppStorageError> {
     db.execute(
         "INSERT INTO message_files (id,owner_session_id,message_id,kind,mime_type,safe_name,\

@@ -18,6 +18,10 @@ use serde_json::{Value, json};
 
 use super::ResolvedInstallation;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
@@ -154,7 +158,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let parsed = parse(&args);
     let (options, command) = match parsed {
         Ok(parsed) => parsed,
-        Err((command, error)) => return report_error(command, json_requested, error),
+        Err((command, error)) => return report_error(command, json_requested, &error),
     };
     let data_root = match path::resolve_data_root(&options, &installation) {
         Ok(path) => path,
@@ -162,7 +166,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed("native_settings_cli_failed", message),
+                &CliError::failed("native_settings_cli_failed", message),
             );
         }
     };
@@ -254,7 +258,7 @@ fn positionals_without_common_options(args: &[OsString]) -> Vec<String> {
                 }
             }
             "--json" | "--quiet" | "--silent" | "--yes" | "--non-interactive" | "--verbose" => {
-                index += 1
+                index += 1;
             }
             _ => {
                 values.push(value.into_owned());
@@ -270,7 +274,7 @@ fn error_command(args: &[OsString]) -> &'static str {
         .map_or("butler settings", Command::name)
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
         println!(
             "{}",
@@ -288,7 +292,7 @@ fn report_success(options: &Options, command: &str, data: Value, human: &str) ->
     ExitCode::SUCCESS
 }
 
-fn report_error(command: &str, json_output: bool, error: CliError) -> ExitCode {
+fn report_error(command: &str, json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
         println!(
             "{}",

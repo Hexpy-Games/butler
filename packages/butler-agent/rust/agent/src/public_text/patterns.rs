@@ -1,3 +1,4 @@
+use super::{fixed_regex, fixed_regex_ci};
 use std::borrow::Cow;
 
 use regex::Regex;
@@ -75,10 +76,8 @@ impl Patterns {
                     None,
                 ),
             ],
-            json_start: Regex::new(&format!(r"^{SPACE}*[\{{\[]"))
-                .expect("fixed public text pattern"),
-            json_key: Regex::new(r#""(?:eventId|sessionId|payload|arguments|tool_call)""#)
-                .expect("fixed public text pattern"),
+            json_start: fixed_regex(&format!(r"^{SPACE}*[\{{\[]")),
+            json_key: fixed_regex(r#""(?:eventId|sessionId|payload|arguments|tool_call)""#),
         }
     }
 
@@ -97,10 +96,11 @@ pub(super) struct BoundaryPattern {
 
 impl BoundaryPattern {
     fn new(pattern: &str, insensitive: bool, before: bool, after_capture: Option<usize>) -> Self {
-        let regex = regex::RegexBuilder::new(pattern)
-            .case_insensitive(insensitive)
-            .build()
-            .expect("fixed public text pattern");
+        let regex = if insensitive {
+            fixed_regex_ci(pattern)
+        } else {
+            fixed_regex(pattern)
+        };
         Self {
             regex,
             insensitive,
@@ -110,14 +110,15 @@ impl BoundaryPattern {
     }
 
     fn valid(&self, text: &str, captures: &regex::Captures<'_>) -> bool {
-        let whole = captures.get(0).expect("whole regex match");
+        // Group 0 is always present in `Captures`; an absent capture fails the check.
+        let Some(whole) = captures.get(0) else {
+            return false;
+        };
         (!self.before || boundary(text, whole.start(), self.insensitive))
             && self.after_capture.is_none_or(|index| {
-                boundary(
-                    text,
-                    captures.get(index).expect("fixed capture").end(),
-                    self.insensitive,
-                )
+                captures
+                    .get(index)
+                    .is_some_and(|capture| boundary(text, capture.end(), self.insensitive))
             })
     }
 
@@ -141,7 +142,9 @@ impl BoundaryPattern {
                 offset = next_offset(text, &captures);
                 continue;
             }
-            let matched = captures.get(0).expect("whole regex match");
+            let Some(matched) = captures.get(0) else {
+                break;
+            };
             let target = output.get_or_insert_with(|| String::with_capacity(text.len()));
             target.push_str(&text[copied..matched.start()]);
             target.push_str(replacement);
@@ -169,11 +172,12 @@ fn boundary(text: &str, offset: usize, insensitive: bool) -> bool {
 }
 
 fn next_offset(text: &str, captures: &regex::Captures<'_>) -> usize {
-    let start = captures.get(0).expect("whole regex match").start();
-    start
-        + text[start..]
-            .chars()
-            .next()
-            .expect("nonempty fixed match")
-            .len_utf8()
+    // Resume one character after the rejected match; the fixed patterns never
+    // match empty text, so reaching the end stops the scan.
+    let start = captures
+        .get(0)
+        .map_or(text.len(), |matched| matched.start());
+    text.get(start..)
+        .and_then(|rest| rest.chars().next())
+        .map_or(text.len(), |first| start + first.len_utf8())
 }

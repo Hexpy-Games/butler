@@ -72,6 +72,10 @@ impl NativeProjectLedger {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn read_error(error: ProjectLedgerReadError) -> ProjectWorkPublicationError {
     match error {
         ProjectLedgerReadError::Resolution(code)

@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use super::super::{StorageError, StorageResult};
 use super::contracts::*;
 
-const OUTCOME: &str = r#"CASE
+const OUTCOME: &str = r"CASE
   WHEN c.status IN ('cancelled', 'failed') THEN c.status
   WHEN json_type(c.result_json) = 'object' AND (
     json_type(c.result_json, '$.ok') = 'false'
@@ -16,16 +16,16 @@ const OUTCOME: &str = r#"CASE
     )
   ) THEN 'failed'
   ELSE c.status
-END"#;
+END";
 
-const THROUGH_SQL: &str = r#"SELECT COALESCE(MAX(c.rowid), 0)
+const THROUGH_SQL: &str = r"SELECT COALESCE(MAX(c.rowid), 0)
 FROM btcc_guided_tool_calls c
 WHERE c.turn_id = ?1
   OR EXISTS (
     SELECT 1 FROM btcc_guided_work_results work_result
     WHERE work_result.tool_call_id = c.call_id
       AND work_result.work_id = ?2
-  )"#;
+  )";
 
 pub(super) fn discover(
     db: &Connection,
@@ -39,7 +39,7 @@ pub(super) fn discover(
         .map_err(StorageError::sqlite)
     })?;
     let sql = format!(
-        r#"SELECT call_id, turn_id, c.rowid, tool_name, {OUTCOME}, started_at,
+        r"SELECT call_id, turn_id, c.rowid, tool_name, {OUTCOME}, started_at,
   substr(arguments_json, 1, 240), result_sha256
 FROM btcc_guided_tool_calls c
 WHERE (
@@ -59,7 +59,7 @@ WHERE (
   AND (?7 = '' OR {OUTCOME} = ?8)
   AND (?9 = '' OR instr(lower(arguments_json), lower(?10)) > 0)
 ORDER BY c.rowid
-LIMIT ?11"#
+LIMIT ?11"
     );
     let tool = input.tool_name.as_deref().unwrap_or("");
     let status = input.status.as_deref().unwrap_or("");
@@ -95,7 +95,7 @@ LIMIT ?11"#
         .map_err(StorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-    let limit = input.limit.max(0.0) as usize;
+    let limit = crate::json::saturating_usize(input.limit.max(0.0));
     let has_more = entries.len() > limit;
     entries.truncate(limit);
     let next_cursor = has_more
@@ -126,7 +126,7 @@ struct Work {
     canonical_head_sha256: Option<String>,
 }
 
-const WORK_FIELDS: &str = r#"SELECT
+const WORK_FIELDS: &str = r"SELECT
   call.call_id,
   call.tool_name,
   call.status,
@@ -143,7 +143,7 @@ const WORK_FIELDS: &str = r#"SELECT
   work.canonical_head_sha256
 FROM btcc_guided_work_results result
 JOIN btcc_guided_works work ON work.work_id = result.work_id
-JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id"#;
+JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id";
 
 fn map_work(row: &rusqlite::Row<'_>) -> rusqlite::Result<Work> {
     Ok(Work {
@@ -287,13 +287,13 @@ struct Payload {
     hash: Option<String>,
 }
 
-const PAYLOAD_SQL: &str = r#"SELECT
+const PAYLOAD_SQL: &str = r"SELECT
   tool_name,
   raw_arguments,
   result_json,
   result_sha256
 FROM btcc_guided_tool_calls
-WHERE turn_id = ?1 AND call_id = ?2"#;
+WHERE turn_id = ?1 AND call_id = ?2";
 
 fn payload(db: &Connection, turn: &str, call: &str) -> StorageResult<Option<Payload>> {
     db.query_row(PAYLOAD_SQL, params![turn, call], |row| {

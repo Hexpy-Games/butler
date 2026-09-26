@@ -11,6 +11,7 @@ use crate::cognition::{
     lexical,
 };
 
+#[derive(Clone, Copy)]
 pub(super) struct NodeUpsert<'a> {
     pub id: &'a str,
     pub node_type: &'a str,
@@ -118,7 +119,7 @@ pub(super) fn record_mention(
         return Err(error("memory_mention_empty"));
     }
     let span = text.find(surface).map(|offset| byte_start + offset);
-    tx.execute("INSERT OR IGNORE INTO memory_mentions(node_id,source_id,byte_start,byte_end,surface,method) VALUES(?1,?2,?3,?4,?5,?6)",params![node,source,span.map(|x|x as i64),span.map(|x|(x+surface.len()) as i64),surface,if span.is_some(){"literal"}else{"inferred"}]).map_err(db_error)?;
+    tx.execute("INSERT OR IGNORE INTO memory_mentions(node_id,source_id,byte_start,byte_end,surface,method) VALUES(?1,?2,?3,?4,?5,?6)",params![node,source,span.map(|x|i64::try_from(x).unwrap_or(i64::MAX)),span.map(|x|i64::try_from(x+surface.len()).unwrap_or(i64::MAX)),surface,if span.is_some(){"literal"}else{"inferred"}]).map_err(db_error)?;
     Ok(())
 }
 

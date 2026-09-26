@@ -49,7 +49,7 @@ impl AppContextReadPort for NativeAppContextRead {
                 .snapshot()
                 .await
                 .map_err(|_| GatewayApplicationError::Internal)?;
-            let evaluated = snapshot.evaluate_working(WorkingContextBudgetInput {
+            let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
                 model_ref: Some(query.model_ref.clone()),
                 working_context_tokens: 0.0,
                 static_context_tokens: Some(0.0),
@@ -68,7 +68,7 @@ impl AppContextReadPort for NativeAppContextRead {
             let max_output = metadata
                 .max_output_tokens
                 .filter(|value| value.is_finite() && *value > 0.0)
-                .map(|value| value.trunc() as u64);
+                .map(|value| crate::json::saturating_u64(value.trunc()));
             let telemetry_query = query.clone();
             let telemetry =
                 tokio::task::spawn_blocking(move || read_usage(&root, &telemetry_query))
@@ -88,13 +88,18 @@ impl AppContextReadPort for NativeAppContextRead {
                 usage: telemetry.usage,
                 compaction_summary: summary,
                 budget: AppContextBudgetFacts {
-                    context_window_tokens: config.context_window_tokens.max(0.0).trunc() as u64,
-                    reserved_output_tokens: config.reserved_output_tokens.max(0.0).trunc() as u64,
-                    reserved_tool_tokens: config.reserved_tool_tokens.max(0.0).trunc() as u64,
-                    compaction_prompt_reserve_tokens: evaluated
-                        .compaction_prompt_reserve_tokens
-                        .max(0.0)
-                        .trunc() as u64,
+                    context_window_tokens: crate::json::saturating_u64(
+                        config.context_window_tokens.max(0.0).trunc(),
+                    ),
+                    reserved_output_tokens: crate::json::saturating_u64(
+                        config.reserved_output_tokens.max(0.0).trunc(),
+                    ),
+                    reserved_tool_tokens: crate::json::saturating_u64(
+                        config.reserved_tool_tokens.max(0.0).trunc(),
+                    ),
+                    compaction_prompt_reserve_tokens: crate::json::saturating_u64(
+                        evaluated.compaction_prompt_reserve_tokens.max(0.0).trunc(),
+                    ),
                     max_output_tokens: max_output,
                 },
             })
@@ -113,8 +118,10 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
     let mut legacy: Option<(i64, u64)> = None;
     visit_json_lines(&root.join("metrics/prompt-cache-usage.jsonl"), |value| {
         let ts = value.get("ts").and_then(Value::as_i64).unwrap_or(-1);
-        let prompt = positive_tokens(value.get("promptTokens"));
-        if value.get("scope").and_then(Value::as_str) != Some(&scope) || prompt.is_none() {
+        let Some(prompt) = positive_tokens(value.get("promptTokens")) else {
+            return;
+        };
+        if value.get("scope").and_then(Value::as_str) != Some(&scope) {
             return;
         }
         if query
@@ -123,7 +130,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
             .is_some_and(|turn| value.get("turnId").and_then(Value::as_str) == Some(turn))
         {
             if exact.is_none_or(|current| ts >= current.0) {
-                exact = Some((ts, prompt.unwrap()));
+                exact = Some((ts, prompt));
             }
         } else if value.get("turnId").is_none()
             && query
@@ -131,7 +138,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
                 .is_some_and(|start| ts >= start)
             && legacy.is_none_or(|current| ts >= current.0)
         {
-            legacy = Some((ts, prompt.unwrap()));
+            legacy = Some((ts, prompt));
         }
     });
     let mut monitor: Option<(i64, u64)> = None;
@@ -211,7 +218,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
 
 fn positive_tokens(value: Option<&Value>) -> Option<u64> {
     let value = value?.as_f64()?;
-    (value.is_finite() && value > 0.0).then_some(value.round() as u64)
+    (value.is_finite() && value > 0.0).then_some(crate::json::saturating_u64(value.round()))
 }
 
 fn bounded_summary(value: &str) -> String {

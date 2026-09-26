@@ -80,10 +80,12 @@ fn metric_tail_filters_and_projects_events_and_recorder_uses_shared_gate() {
         json!({"schema":"butler.operational-metric.v1","ts":200,"category":"runtime","name":"middle","status":"ok","dimensions":{"api_key":"fake","count":2},"private":"never-copy"}),
         json!({"schema":"butler.operational-metric.v1","ts":300,"category":"runtime","name":"latest","status":"error"}),
     ];
-    let content = events
+    let mut content = events
         .iter()
-        .map(|value| format!("{value}\n"))
-        .collect::<String>();
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    content.push('\n');
     fs::write(metrics.join("operational-events.jsonl"), content).unwrap();
     let filtered = crate::operations::tail_operational_metric_events(&root, Some(200.0), 2);
     assert_eq!(filtered.len(), 2);

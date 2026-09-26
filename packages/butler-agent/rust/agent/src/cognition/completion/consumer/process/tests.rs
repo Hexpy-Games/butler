@@ -50,10 +50,13 @@ impl CognitionCoordinationHost for Facts {
         )
     }
     fn now_epoch_millis(&self) -> i64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64
+        i64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap_or(i64::MAX)
     }
     fn now_iso(&self) -> String {
         NOW.into()
@@ -251,7 +254,7 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
         target: None,
         coordinator,
         clock: Arc::new(|| NOW.into()),
-        catchup_at: Arc::new(std::sync::Mutex::new(None::<Instant>)),
+        catchup_at: Arc::new(parking_lot::Mutex::new(None::<Instant>)),
         shutdown: CancellationToken::new(),
     })
     .await;

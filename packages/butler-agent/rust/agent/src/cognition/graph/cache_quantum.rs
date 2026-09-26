@@ -85,7 +85,7 @@ impl GraphRepository {
         job.owner_nonce = uuid::Uuid::new_v4().to_string();
         job.attempt += 1;
         let changed = tx.execute("UPDATE memory_projection_jobs SET hot_cache_attempt_count=?1,hot_cache_owner_pid=?2,hot_cache_owner_nonce=?3,hot_cache_started_at=?4,hot_cache_state=?5 WHERE job_id=?6 AND json_extract(hot_cache_state,'$.state')='pending'",
-            params![job.attempt,std::process::id() as i64,job.owner_nonce,now,json!({"state":"running","attempt":job.attempt,"owner_pid":std::process::id(),"started_at":now}).to_string(),job.job_id]).map_err(db_error)?;
+            params![job.attempt,i64::from(std::process::id()),job.owner_nonce,now,json!({"state":"running","attempt":job.attempt,"owner_pid":std::process::id(),"started_at":now}).to_string(),job.job_id]).map_err(db_error)?;
         if changed != 1 {
             return Err(error("memory_cache_job_changed"));
         }
@@ -292,7 +292,8 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
         .map_err(db_error)?;
     drop(statement);
     for (job, pid) in rows {
-        let abandoned = pid.is_none_or(|pid| pid == std::process::id() as i64 || !pid_alive(pid));
+        let abandoned =
+            pid.is_none_or(|pid| pid == i64::from(std::process::id()) || !pid_alive(pid));
         if abandoned {
             connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_attempt_count=MAX(0,hot_cache_attempt_count-1),hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?2",
             params![json!({"state":"pending","blocked_by":null}).to_string(),job]).map_err(db_error)?;
@@ -301,11 +302,14 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
     Ok(())
 }
 fn pid_alive(pid: i64) -> bool {
-    if pid <= 0 || pid > i32::MAX as i64 {
+    let Ok(raw) = i32::try_from(pid) else {
+        return false;
+    };
+    if raw <= 0 {
         return false;
     }
     matches!(
-        nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw), None),
         Ok(()) | Err(nix::errno::Errno::EPERM)
     )
 }

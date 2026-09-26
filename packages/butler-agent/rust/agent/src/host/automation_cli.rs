@@ -14,6 +14,10 @@ use render::{redact_json_strings, report_error, report_success, safe_preview};
 
 const STORE_MUTATION_PATHS: &[&str] = &["automations", "automations/.automation-store.lock"];
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
@@ -56,14 +60,10 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::List => "butler automation list",
-            Self::Show(_) => "butler automation show",
-            Self::Run(_) => "butler automation run",
-            Self::Delete(_) => "butler automation delete",
-            Self::MissingId("show") => "butler automation show",
-            Self::MissingId("run") => "butler automation run",
-            Self::MissingId("delete") => "butler automation delete",
-            Self::MissingId(_) => "butler automation",
-            Self::Unknown => "butler automation",
+            Self::Show(_) | Self::MissingId("show") => "butler automation show",
+            Self::Run(_) | Self::MissingId("run") => "butler automation run",
+            Self::Delete(_) | Self::MissingId("delete") => "butler automation delete",
+            Self::MissingId(_) | Self::Unknown => "butler automation",
         }
     }
 }
@@ -102,20 +102,20 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let json_requested = args.iter().any(|arg| arg == "--json");
     let options = match parse(&args) {
         Ok(options) => options,
-        Err((command, error)) => return report_error(command, json_requested, error),
+        Err((command, error)) => return report_error(command, json_requested, &error),
     };
     let Some(command) = Command::parse(&options.positionals) else {
         return report_error(
             command_name(&options.positionals),
             options.json,
-            CliError::invalid("automation requires list, show <id>, run <id>, or delete <id>"),
+            &CliError::invalid("automation requires list, show <id>, run <id>, or delete <id>"),
         );
     };
     if command == Command::Unknown {
         return report_error(
             command.name(),
             options.json,
-            CliError {
+            &CliError {
                 code: "unknown_command",
                 message: format!(
                     "unknown automation command: {}",
@@ -129,47 +129,45 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("automation delete requires --yes or --non-interactive"),
+            &CliError::invalid("automation delete requires --yes or --non-interactive"),
         );
     }
     if let Command::MissingId(action) = &command {
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid(format!("automation {action} requires <id>")),
+            &CliError::invalid(format!("automation {action} requires <id>")),
         );
     }
     if options.status.is_some() && command != Command::List {
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("--status is only supported by automation list"),
+            &CliError::invalid("--status is only supported by automation list"),
         );
     }
     if options.include_deleted && command != Command::List {
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("--include-deleted is only supported by automation list"),
+            &CliError::invalid("--include-deleted is only supported by automation list"),
         );
     }
-    let data_root =
-        match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-            Ok(root) => root,
-            Err(_) => {
-                return report_error(
-                    command.name(),
-                    options.json,
-                    CliError::failed("butler_data_unavailable", "Butler DATA is unavailable."),
-                );
-            }
-        };
+    let Ok(data_root) =
+        settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return report_error(
+            command.name(),
+            options.json,
+            &CliError::failed("butler_data_unavailable", "Butler DATA is unavailable."),
+        );
+    };
     if let Some(id) = command_id(&command) {
         if !valid_id(id) {
             return report_error(
                 command.name(),
                 options.json,
-                CliError::invalid("automation id must contain 1-100 safe characters"),
+                &CliError::invalid("automation id must contain 1-100 safe characters"),
             );
         }
         if matches!(&command, Command::Run(_) | Command::Delete(_)) {
@@ -182,7 +180,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 return report_error(
                     command.name(),
                     options.json,
-                    CliError::failed(
+                    &CliError::failed(
                         "unsafe_path",
                         "automation writes require non-symlink paths inside DATA",
                     ),
@@ -191,7 +189,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         }
     }
 
-    let store = operations::NativeAutomationCliStore::new(data_root);
+    let store = operations::NativeAutomationCliStore::new(&data_root);
     let command_name = command.name();
     let result = match command {
         Command::List => store
@@ -269,11 +267,14 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 );
                 (json!({"automation":automation}), human)
             }),
-        Command::MissingId(_) | Command::Unknown => unreachable!(),
+        // Rejected above; kept total so dispatch needs no panic.
+        Command::MissingId(_) | Command::Unknown => Err(CliError::invalid(
+            "automation requires list, show <id>, run <id>, or delete <id>",
+        )),
     };
     match result {
-        Ok((data, human)) => report_success(&options, command_name, data, &human),
-        Err(error) => report_error(command_name, options.json, error),
+        Ok((data, human)) => report_success(&options, command_name, &data, &human),
+        Err(error) => report_error(command_name, options.json, &error),
     }
 }
 

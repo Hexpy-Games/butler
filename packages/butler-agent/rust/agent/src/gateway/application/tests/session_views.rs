@@ -61,7 +61,7 @@ async fn session_view_projects_progress_for_active_and_terminal_latest_turn() {
                 &subscribers,
                 "progress.summary",
                 Some(&retained_turn),
-                service::map(json!({
+                service::map(&json!({
                     "session_id":"general",
                     "turn_id":retained_turn,
                     "row":{

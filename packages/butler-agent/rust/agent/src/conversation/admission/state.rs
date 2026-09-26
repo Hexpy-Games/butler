@@ -157,11 +157,11 @@ impl ConversationAdmissionTurn {
         };
         let mut state = self.state.lock().await;
         if role == ConversationRole::User && state.request_message_id.is_none() {
-            state.request_message_id = Some(message.message.id)
+            state.request_message_id = Some(message.message.id);
         } else if role == ConversationRole::Assistant
             && (visibility == ConversationVisibility::User || event_kind == "outbound.final")
         {
-            state.public_assistant_message_id = Some(message.message.id)
+            state.public_assistant_message_id = Some(message.message.id);
         }
         Ok(())
     }
@@ -201,10 +201,10 @@ impl ConversationAdmissionTurn {
         let mut state = self.state.lock().await;
         match role {
             ConversationRole::User if state.request_message_id.is_none() => {
-                state.request_message_id = Some(message.message.id)
+                state.request_message_id = Some(message.message.id);
             }
             ConversationRole::Assistant if state.public_assistant_message_id.is_none() => {
-                state.public_assistant_message_id = Some(message.message.id)
+                state.public_assistant_message_id = Some(message.message.id);
             }
             ConversationRole::User | ConversationRole::Assistant => {}
             _ => {

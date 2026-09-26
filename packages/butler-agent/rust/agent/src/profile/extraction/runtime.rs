@@ -93,7 +93,9 @@ pub(super) async fn mark_batch_failed(
     {
         return Ok(());
     }
-    let usage = serde_json::to_string(usage).unwrap();
+    let usage = serde_json::to_string(usage).map_err(|error| {
+        ProfileError::new("profile_data_invalid", format!("usage summary: {error}"))
+    })?;
     with_gate(dependencies, Some(cancellation.clone()), {
         let root = dependencies.root.clone();
         let host = dependencies.host.clone();
@@ -130,8 +132,7 @@ where
             ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
         });
         match (result, released) {
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
             (Ok(value), Ok(())) => Ok(value),
         }
     })

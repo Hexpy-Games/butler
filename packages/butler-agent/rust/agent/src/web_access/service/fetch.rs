@@ -72,7 +72,7 @@ impl WebAccess {
         }
         let response = tokio::select! {
             biased;
-            _ = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
+            () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
             result = request.send() => result.map_err(|_| {
                 WebAccessError::new("web_access_request_failed", "Public web request failed.")
             })?,
@@ -85,18 +85,18 @@ impl WebAccess {
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
-        let mut spool = TemporarySpool::create(&self.inner.data_root).map_err(|_| {
+        let (spool, file) = TemporarySpool::create(&self.inner.data_root).map_err(|_| {
             WebAccessError::new(
                 "web_access_spool_failed",
                 "Public page could not be spooled in DATA.",
             )
         })?;
-        let mut file = TokioFile::from_std(spool.open_file.take().expect("new spool file"));
+        let mut file = TokioFile::from_std(file);
         let mut stream = response.bytes_stream();
         loop {
             let next = tokio::select! {
                 biased;
-                _ = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
+                () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
                 chunk = futures_util::StreamExt::next(&mut stream) => chunk,
             };
             let Some(chunk) = next else { break };

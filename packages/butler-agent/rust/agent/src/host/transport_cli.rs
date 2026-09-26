@@ -76,7 +76,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let json_requested = args.iter().any(|arg| arg == "--json");
     let (options, command) = match parse(&args) {
         Ok(parsed) => parsed,
-        Err(error) => return report_error(error_command(&args), json_requested, error),
+        Err(error) => return report_error(error_command(&args), json_requested, &error),
     };
     if let Err(message) =
         settings_cli::resolve_data_root_override(options.data.clone(), &installation)
@@ -84,7 +84,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         return report_error(
             command.name(),
             options.json,
-            CliError::failed("butler_data_unavailable", message),
+            &CliError::failed("butler_data_unavailable", message),
         );
     }
 
@@ -111,7 +111,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 return report_error(
                     command.name(),
                     options.json,
-                    CliError::invalid(format!("unsupported transport: {transport}")),
+                    &CliError::invalid(format!("unsupported transport: {transport}")),
                 );
             }
             let mut mock = MockTransportAdapter::new("mock");
@@ -132,7 +132,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             )
         }
     };
-    report_success(&options, command.name(), data, &human)
+    report_success(&options, command.name(), &data, &human)
 }
 
 struct MockTransportAdapter {
@@ -235,7 +235,7 @@ fn positionals_without_options(args: &[OsString]) -> Vec<String> {
             }
             value if value.starts_with("--data=") => index += 1,
             "--json" | "--quiet" | "--silent" | "--verbose" | "--yes" | "--non-interactive" => {
-                index += 1
+                index += 1;
             }
             _ => {
                 values.push(value.into_owned());
@@ -257,7 +257,7 @@ fn error_command(args: &[OsString]) -> &'static str {
     }
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
         println!(
             "{}",
@@ -275,7 +275,7 @@ fn report_success(options: &Options, command: &str, data: Value, human: &str) ->
     ExitCode::SUCCESS
 }
 
-fn report_error(command: &str, json_output: bool, error: CliError) -> ExitCode {
+fn report_error(command: &str, json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
         println!(
             "{}",

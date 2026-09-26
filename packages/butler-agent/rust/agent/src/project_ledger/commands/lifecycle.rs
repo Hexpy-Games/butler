@@ -32,7 +32,10 @@ pub(super) fn execute(
             update_attempt(project_root, &request.options, "succeeded")
         }
         LedgerCommand::AttemptFail => update_attempt(project_root, &request.options, "failed"),
-        _ => unreachable!("only lifecycle commands enter lifecycle::execute"),
+        _ => Err(CliFailure::new(
+            "invalid_input",
+            format!("{} is not a lifecycle command", request.command.label()),
+        )),
     };
     envelope(request.command.label(), result)
 }

@@ -92,6 +92,7 @@ impl GuidedCatalogSnapshot {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct GuidedCatalogRead<'a> {
     pub name: &'a str,
     pub definition: &'a Value,

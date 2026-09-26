@@ -69,7 +69,7 @@ impl NativePrincipalAuthority {
     ) -> AuthorityResult<AuthorityDecisionResult> {
         let collation = self.collation.clone();
         let clock = self.clock.clone();
-        self.in_lane(move |repo| decision::decide(repo, input, &collation, &*clock))
+        self.in_lane(move |repo| decision::decide(repo, &input, &collation, &*clock))
             .await
     }
     pub(crate) async fn list_decided(&self) -> AuthorityResult<Vec<AuthorityDecisionResult>> {
@@ -85,7 +85,7 @@ impl NativePrincipalAuthority {
         &self,
         input: AuthorityExecutionInput,
     ) -> AuthorityResult<AuthorityStoredExecution> {
-        self.in_lane(move |repo| execution::execution(repo, input))
+        self.in_lane(move |repo| execution::execution(repo, &input))
             .await
     }
     pub(crate) async fn record_outcome(&self, input: AuthorityOutcomeInput) -> AuthorityResult<()> {

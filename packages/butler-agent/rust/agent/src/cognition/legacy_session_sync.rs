@@ -62,9 +62,11 @@ impl LegacySessionOffsets {
                     key.clone(),
                     LegacySessionOffset {
                         session_id: session_id.to_owned(),
-                        last_line: last_line as usize,
-                        byte_offset: item.get("byteOffset").and_then(Value::as_u64).unwrap_or(0)
-                            as usize,
+                        last_line: usize::try_from(last_line).unwrap_or(usize::MAX),
+                        byte_offset: usize::try_from(
+                            item.get("byteOffset").and_then(Value::as_u64).unwrap_or(0),
+                        )
+                        .unwrap_or(usize::MAX),
                     },
                 );
             }
@@ -108,7 +110,7 @@ impl LegacySessionOffsets {
                     .map_err(|_| failure("legacy_session_offset_write_failed"))?;
             }
             file.write_all(&content)
-                .and_then(|_| file.sync_all())
+                .and_then(|()| file.sync_all())
                 .map_err(|_| failure("legacy_session_offset_write_failed"))?;
             fs::rename(&temp, &path).map_err(|_| failure("legacy_session_offset_write_failed"))?;
             Ok(())

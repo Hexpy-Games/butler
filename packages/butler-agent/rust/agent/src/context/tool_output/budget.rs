@@ -15,7 +15,8 @@ pub(super) fn budget(
     input: BudgetToolOutputInput,
 ) -> ContextResult<BudgetedToolOutput> {
     let requested = input.max_model_tokens.filter(|value| value.is_finite());
-    let max_tokens = requested.unwrap_or(1_200.0).trunc().clamp(200.0, 8_000.0) as usize;
+    let max_tokens =
+        crate::json::saturating_usize(requested.unwrap_or(1_200.0).trunc().clamp(200.0, 8_000.0));
     let mode = match &input.output_mode {
         OutputModeInput::Present(serde_json::Value::String(value)) if value == "full" => "full",
         OutputModeInput::Present(serde_json::Value::String(value))
@@ -23,7 +24,7 @@ pub(super) fn budget(
         {
             "silent_on_success"
         }
-        _ => "auto",
+        OutputModeInput::Present(_) => "auto",
     };
     let success = input.result.exit_code == Some(0) && !input.result.timed_out;
     let validation = input
@@ -91,7 +92,7 @@ pub(super) fn budget(
             exit_code: input.result.exit_code,
             timed_out: input.result.timed_out,
         },
-        raw_tokens: raw_tokens as u64,
+        raw_tokens: crate::json::saturating_u64(raw_tokens),
     };
     identity.before_artifact_write();
     std::fs::write(
@@ -125,7 +126,7 @@ pub(super) fn budget(
     let (stdout, stderr) = if needs_fit {
         let notice = format!(
             "[Butler compacted {} estimated tool-output tokens into a preview.]\nArtifact ID: {id}\nUse read_tool_output_artifact with search or a focused slice for omitted output.",
-            comma_count(raw_tokens as u64),
+            comma_count(crate::json::saturating_u64(raw_tokens)),
         );
         fit_preview(estimator, stdout_view, stderr_view, &notice, max_tokens)?
     } else if suppressed {
@@ -176,6 +177,10 @@ struct StoredResult<'a> {
     timed_out: bool,
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> ContextError {
     ContextError::new("tool_output_io_error", error.to_string())
 }
@@ -276,14 +281,10 @@ fn failure_output_preview(output: &str) -> (ExactText, bool) {
     if line_breaks < 20 && output.encode_utf16().count() <= 1_000 {
         return (ExactText::Plain(output.to_owned()), false);
     }
-    let tail = if line_breaks >= 20 {
-        let preceding_break = output
-            .rmatch_indices('\n')
-            .nth(19)
-            .expect("at least twenty line breaks");
-        &output[preceding_break.0 + 1..]
-    } else {
-        output
+    // Keep the last twenty lines when there are at least twenty line breaks.
+    let tail = match output.rmatch_indices('\n').nth(19) {
+        Some((preceding_break, _)) => output.get(preceding_break + 1..).unwrap_or(output),
+        None => output,
     };
     let total = tail.encode_utf16().count();
     let mut units = "...[output truncated]\n".encode_utf16().collect::<Vec<_>>();
@@ -309,7 +310,7 @@ fn fit_preview(
             }
             estimate_output(estimator, notice, &stderr_text)
         },
-        (max as f64 * 0.45).floor() as usize,
+        crate::json::saturating_usize((max as f64 * 0.45).floor()),
     )?;
     let stderr_text = if stderr_limit > 0 {
         concat_exact("stderr preview:\n", stderr.prefix(stderr_limit))

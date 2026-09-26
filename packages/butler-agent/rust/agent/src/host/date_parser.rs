@@ -74,7 +74,8 @@ impl NativeDateParser {
             .ut_offset();
         let wall = epoch_ms + i64::from(offset) * 1_000;
         let (year, month, day) = crate::js_date::civil_from_days(wall.div_euclid(86_400_000));
-        let minute = (wall.rem_euclid(86_400_000) / 60_000) as u16;
+        // A day has 1440 minutes, so this always fits.
+        let minute = u16::try_from(wall.rem_euclid(86_400_000) / 60_000).unwrap_or_default();
         Ok((format!("{year:04}-{month:02}-{day:02}"), minute))
     }
 
@@ -89,9 +90,9 @@ impl NativeDateParser {
             year.try_into().ok()?,
             month.try_into().ok()?,
             day.try_into().ok()?,
-            (seconds / 3600) as u8,
-            (seconds / 60 % 60) as u8,
-            (seconds % 60) as u8,
+            u8::try_from(seconds / 3600).ok()?,
+            u8::try_from(seconds / 60 % 60).ok()?,
+            u8::try_from(seconds % 60).ok()?,
             0,
             self.zone.as_ref(),
         )

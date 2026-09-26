@@ -109,7 +109,9 @@ pub(super) fn read(
         .is_some_and(|messages| messages.len() > 1)
         && envelope_bytes(&result)? > 24 * 1024
     {
-        let messages = result["messages"].as_array_mut().expect("array above");
+        let Some(messages) = result["messages"].as_array_mut() else {
+            break;
+        };
         messages.pop();
         result["returned"] = json!(messages.len());
         result["truncated"] = json!(true);
@@ -132,7 +134,7 @@ pub(super) fn read(
 
 fn envelope_bytes(value: &Value) -> ContextResult<usize> {
     let mut output = json!({"tool_name":"list_conversation_sessions"});
-    for (key, value) in value.as_object().expect("session result") {
+    for (key, value) in value.as_object().into_iter().flatten() {
         output[key] = value.clone();
     }
     json::stringify(&json!({"ok":true,"output":output}))

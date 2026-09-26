@@ -70,10 +70,9 @@ impl NativeGuidedWork {
         if let decision::ReportDecision::Continue(observation) =
             decision::decide(bound.as_ref(), &self.scope.turn_id, false)?
         {
-            if bound.is_none() {
+            let Some(bound) = bound.as_ref() else {
                 return Ok(CandidateDisposition::Accepted(None));
-            }
-            let bound = bound.as_ref().expect("checked above");
+            };
             if !self
                 .service
                 .claim_closeout_correction(crate::btcc::ClaimCloseoutCorrectionInput {

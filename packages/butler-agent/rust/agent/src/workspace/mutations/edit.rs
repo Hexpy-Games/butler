@@ -20,17 +20,17 @@ use super::contracts::{
 use super::io;
 
 pub(super) fn execute(
-    input: EditMutation,
+    input: &EditMutation,
     paths: Vec<GuardedEdit>,
     observer: &dyn CommitObserver,
 ) -> MutationOutcome {
     if input.batch {
-        MutationOutcome::Batch(batch::execute(paths, observer))
+        MutationOutcome::Batch(batch::execute(&paths, observer))
     } else {
-        MutationOutcome::Single(single(
-            paths.into_iter().next().expect("single guarded edit"),
-            observer,
-        ))
+        MutationOutcome::Single(match paths.into_iter().next() {
+            Some(edit) => single(edit, observer),
+            None => Err(EditFailure::new(0, None, "invalid_arguments")),
+        })
     }
 }
 

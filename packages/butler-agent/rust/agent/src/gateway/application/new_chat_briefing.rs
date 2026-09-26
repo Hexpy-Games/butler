@@ -8,6 +8,10 @@ use crate::gateway::GatewayApplicationError;
 use crate::{cognition, profile};
 
 impl AppApplication {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "explicit arms document the known values beside the default"
+    )]
     pub(super) async fn new_chat_briefing_view(
         &self,
         date: Option<String>,
@@ -86,7 +90,7 @@ impl AppApplication {
                 project
                     .as_ref()
                     .map(|project| project.display_name.as_str()),
-                run_id,
+                run_id.as_ref(),
             ))
         })
         .await
@@ -120,7 +124,8 @@ fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
         0
     };
     let wall = epoch_ms + i64::from(offset) * 1000;
-    Ok((wall.rem_euclid(86_400_000) / 60_000) as u16)
+    // A day has 1440 minutes, so this always fits.
+    Ok(u16::try_from(wall.rem_euclid(86_400_000) / 60_000).unwrap_or_default())
 }
 
 fn generated_view(artifact: &Value, moment: &str, bucket: &str) -> Value {
@@ -182,7 +187,7 @@ fn fallback(
     moment: &str,
     project_id: Option<&str>,
     project_name: Option<&str>,
-    run_id: Option<String>,
+    run_id: Option<&String>,
 ) -> Value {
     let ko = locale == "ko";
     let project_name = project_name.map(|name| if name == "butler" { "Butler" } else { name });

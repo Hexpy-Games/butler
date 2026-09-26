@@ -3,7 +3,7 @@ use serde_json::json;
 
 use super::*;
 
-fn token(payload: Value) -> String {
+fn token(payload: &Value) -> String {
     let body = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&payload).unwrap());
     format!("head.{body}.signature")
@@ -13,7 +13,7 @@ fn token(payload: Value) -> String {
 fn access_token_claims_follow_account_precedence_for_either_base64_alphabet() {
     // account precedence and codex authorization excludes sub fallback
     {
-        let access = token(json!({
+        let access = token(&json!({
             "sub":"subject",
             "https://api.openai.com/auth": {
                 "account_id":"legacy", "chatgpt_account_id":"chatgpt"
@@ -29,7 +29,7 @@ fn access_token_claims_follow_account_precedence_for_either_base64_alphabet() {
             .clone();
         assert_eq!(codex_account_id(&raw, &access).as_deref(), Some("stored"));
 
-        let subject_only = token(json!({"sub":"subject"}));
+        let subject_only = token(&json!({"sub":"subject"}));
         assert_eq!(
             account_id_from_access_token(&subject_only).as_deref(),
             Some("subject")

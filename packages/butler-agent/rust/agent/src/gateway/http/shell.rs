@@ -48,5 +48,7 @@ fn integer(value: Option<&String>) -> Option<usize> {
     if !value.is_finite() || value < 0.0 {
         return None;
     }
-    Some(value.floor().min(usize::MAX as f64) as usize)
+    Some(crate::json::saturating_usize(
+        value.floor().min(usize::MAX as f64),
+    ))
 }

@@ -37,7 +37,7 @@ pub(super) fn admit(
             &sanitized.manifest,
             &source,
             &ImageSourceRecord {
-                size_bytes: file.size_bytes as usize,
+                size_bytes: usize::try_from(file.size_bytes).unwrap_or(usize::MAX),
                 sha256: &file.sha256,
                 storage_revision: &revision,
             },
@@ -134,7 +134,7 @@ pub(super) fn validate(
             manifest,
             &source,
             &ImageSourceRecord {
-                size_bytes: file.size_bytes as usize,
+                size_bytes: usize::try_from(file.size_bytes).unwrap_or(usize::MAX),
                 sha256: &file.sha256,
                 storage_revision: &revision,
             },

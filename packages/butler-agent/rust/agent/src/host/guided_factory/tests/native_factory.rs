@@ -85,7 +85,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         crate::btcc::SqliteSubsessionRepository::new(storage.clone()),
         bindings.clone(),
         Arc::new(crate::host::runtime::NativeSubsessionQueue(Arc::new(
-            crate::gateway::NativeInboundQueue::new(scratch.0.clone()),
+            crate::gateway::NativeInboundQueue::new(&scratch.0.clone()),
         ))),
         Arc::new(EmptyProfiles),
         work.clone(),
@@ -183,12 +183,12 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
     );
     let work_streams = Arc::new(crate::host::NativeWorkStreams::open(scratch.0.clone()).unwrap());
     let automations = crate::operations::NativeAutomationService::open(
-        scratch.0.clone(),
+        &scratch.0.clone(),
         crate::operations::AutomationDependencies {
             parse_date: Arc::new(crate::js_date::parse_iso_millis),
             now_millis: Arc::new(|| 0),
             enqueue: Arc::new(crate::host::NativeAutomationQueue(Arc::new(
-                crate::gateway::NativeInboundQueue::new(scratch.0.clone()),
+                crate::gateway::NativeInboundQueue::new(&scratch.0.clone()),
             ))),
             scheduler_interval: std::time::Duration::from_secs(60),
         },
@@ -208,11 +208,11 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
         )),
         conversation_tools: conversation_tools.clone(),
         memory_query: Arc::new(crate::cognition::NativeExactMemoryQuery::new(
-            scratch.0.clone(),
+            &scratch.0.clone(),
             1,
         )),
         conversation_reference: Arc::new(crate::context::NativeConversationSessionReference::new(
-            scratch.0.clone(),
+            &scratch.0.clone(),
             1,
             Arc::new(crate::host::NativeMemorySourceReader::new(
                 scratch.0.clone(),
@@ -223,14 +223,14 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             scratch.0.clone(),
             Default::default(),
             Arc::new(crate::js_date::parse_iso_millis),
-            Arc::new(|left, right| left.cmp(right)),
+            Arc::new(std::cmp::Ord::cmp),
             Arc::new(|| 0),
             1,
         )),
         memory_paths: Default::default(),
         memory_publisher: Arc::new(crate::cognition::CompletionPublisher::new(
-            scratch.0.clone(),
-            Default::default(),
+            &scratch.0.clone(),
+            &Default::default(),
             Arc::new(|| "now".into()),
         )),
         compactions: ContextCompactionRepository::new(storage.clone()),
@@ -238,7 +238,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             scratch.0.clone(),
         )),
         verified_image_payload: Arc::new(crate::gateway::NativeAppImageFiles::new(
-            scratch.0.clone(),
+            &scratch.0.clone(),
         )),
         butler_data: scratch.0.clone(),
         installation_root: scratch.0.clone(),

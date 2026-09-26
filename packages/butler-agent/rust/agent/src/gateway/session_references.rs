@@ -67,7 +67,8 @@ pub(crate) async fn resolve_session_references(
                     let role = match message.message.role {
                         ConversationRole::User => "user",
                         ConversationRole::Assistant => "assistant",
-                        _ => unreachable!("role-filtered canonical read"),
+                        // The canonical read returns only user and assistant roles.
+                        _ => "other",
                     };
                     format!("{role}: {}", conversation_message_text(message))
                 })

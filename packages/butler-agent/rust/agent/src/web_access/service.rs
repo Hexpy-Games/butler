@@ -1,9 +1,5 @@
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
 use reqwest::{Client, Url, redirect::Policy};
 use serde_json::Value;

@@ -181,8 +181,10 @@ pub(super) async fn route(
             }
             let pins = object.get("pinnedSourceRefs").map(parse_pins).transpose()?;
             let update = AppProjectDashboardPreferencesUpdate {
-                expected_revision: safe_nonnegative_integer(&object["expectedRevision"])
-                    .expect("validated preferences revision"),
+                expected_revision: object
+                    .get("expectedRevision")
+                    .and_then(safe_nonnegative_integer)
+                    .ok_or_else(|| invalid("Invalid preferences patch."))?,
                 description: object
                     .get("description")
                     .and_then(Value::as_str)
@@ -333,7 +335,7 @@ fn safe_nonnegative_integer(value: &Value) -> Option<u64> {
     (number.is_finite()
         && number.fract() == 0.0
         && (0.0..=9_007_199_254_740_991.0).contains(&number))
-    .then_some(number as u64)
+    .then_some(crate::json::saturating_u64(number))
 }
 
 async fn body(request: Request<Body>) -> Result<Value, HttpError> {

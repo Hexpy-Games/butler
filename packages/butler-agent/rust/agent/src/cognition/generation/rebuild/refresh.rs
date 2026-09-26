@@ -171,8 +171,7 @@ pub(crate) async fn refresh_if_changed(
         .release(result.is_ok())
         .map_err(|_| error("memory_write_busy"));
     match (result, released) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(Some(value)),
     }
 }
@@ -217,9 +216,11 @@ fn stage_snapshot(
             File::open(&staged_snapshot)
                 .and_then(|file| file.sync_all())
                 .map_err(io_error)?;
-            File::open(staged_snapshot.parent().unwrap())
-                .and_then(|dir| dir.sync_all())
-                .map_err(io_error)?;
+            if let Some(directory) = staged_snapshot.parent() {
+                File::open(directory)
+                    .and_then(|dir| dir.sync_all())
+                    .map_err(io_error)?;
+            }
             if cancellation.is_cancelled() {
                 return Err(error("memory_operation_aborted"));
             }
@@ -263,11 +264,14 @@ fn stage_snapshot(
     }
     let bytes = fs::metadata(&canonical).map_err(io_error)?.len();
     let sha256 = hash_file(&canonical)?;
-    let duration_ms = started
-        .elapsed()
-        .unwrap_or_default()
-        .as_millis()
-        .min(u64::MAX as u128) as u64;
+    let duration_ms = u64::try_from(
+        started
+            .elapsed()
+            .unwrap_or_default()
+            .as_millis()
+            .min(u128::from(u64::MAX)),
+    )
+    .unwrap_or(u64::MAX);
     Ok(Snapshot {
         path: published,
         sha256,

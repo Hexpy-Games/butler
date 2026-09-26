@@ -72,11 +72,7 @@ impl NativeSessionWorktrees {
     {
         let (tx, rx) = oneshot::channel();
         {
-            let state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let state = self.inner.state.lock();
             if state.closing {
                 return Err(WorkspaceError::new(
                     "session_worktree_owner_closed",
@@ -338,10 +334,18 @@ fn workspace_error(code: &'static str) -> WorkspaceError {
     WorkspaceError::new(code, "Session relocation workspace operation failed")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
     WorkspaceError::new("session_worktree_io", error.to_string())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
     WorkspaceError::new(error.code, "Workspace file owner closed")
 }

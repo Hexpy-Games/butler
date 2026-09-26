@@ -1,5 +1,5 @@
 // Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
-pub(in crate::btcc::storage) const AUTHORITY_SCHEMA: &str = r###"
+pub(in crate::btcc::storage) const AUTHORITY_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS btcc_authority_requests (
   request_id TEXT PRIMARY KEY,
   request_ref TEXT NOT NULL UNIQUE,
@@ -64,4 +64,4 @@ CREATE TABLE IF NOT EXISTS btcc_conversation_permissions (
 );
 CREATE INDEX IF NOT EXISTS idx_btcc_conversation_permissions_owner
 ON btcc_conversation_permissions(owner_session_id, revoked_at);
-"###;
+";

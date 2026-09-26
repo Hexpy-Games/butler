@@ -66,7 +66,7 @@ pub(crate) fn model_context_byte_limit(context_window_tokens: Option<f64>) -> u6
     else {
         return defaults.max_model_facing_bytes;
     };
-    let scaled = (tokens.trunc() * 2.0).max(0.0) as u64;
+    let scaled = crate::json::saturating_u64((tokens.trunc() * 2.0).max(0.0));
     scaled
         .max(defaults.max_model_facing_bytes)
         .min(ceilings.max_model_facing_bytes)

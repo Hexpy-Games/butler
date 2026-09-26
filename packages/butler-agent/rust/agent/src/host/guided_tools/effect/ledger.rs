@@ -242,10 +242,10 @@ impl EffectAdapter for LedgerEffectAdapter {
                 Err(error) => Err(error),
             };
             match result {
-                Ok(result) => public(result).map(AdapterOutcome::Applied),
+                Ok(result) => public(&result).map(AdapterOutcome::Applied),
                 Err(error) => match self.ledger.reconcile_record_effect(request).await {
                     Ok(LedgerEffectReconciliation::Applied(result)) => {
-                        public(result).map(AdapterOutcome::Applied)
+                        public(&result).map(AdapterOutcome::Applied)
                     }
                     Ok(LedgerEffectReconciliation::NotApplied) => {
                         Ok(AdapterOutcome::NotApplied(error))
@@ -274,7 +274,7 @@ impl EffectAdapter for LedgerEffectAdapter {
             let request = self.request(input, key)?;
             match self.ledger.reconcile_record_effect(request).await {
                 Ok(LedgerEffectReconciliation::Applied(result)) => {
-                    public(result).map(AdapterOutcome::Applied)
+                    public(&result).map(AdapterOutcome::Applied)
                 }
                 Ok(LedgerEffectReconciliation::NotApplied) => Ok(AdapterOutcome::NotApplied(
                     adapter_error("not_applied", "not applied"),
@@ -285,7 +285,7 @@ impl EffectAdapter for LedgerEffectAdapter {
     }
 }
 
-fn public(result: Value) -> Result<JsonDocument, EffectFailure> {
+fn public(result: &Value) -> Result<JsonDocument, EffectFailure> {
     let field = |name| {
         result.get(name).cloned().ok_or_else(|| {
             EffectFailure::adapter("Project Ledger publication result is incomplete")

@@ -41,14 +41,13 @@ pub(super) async fn get(
     let Some(ledger_id) = project.ledger_project_id else {
         return Ok(unavailable("unbound"));
     };
-    let snapshot = match application
+    let Ok(snapshot) = application
         .dependencies
         .project_dashboard_ledger
         .snapshot(project.id.clone(), ledger_id)
         .await
-    {
-        Ok(snapshot) => snapshot,
-        Err(_) => return Ok(unavailable("source_unavailable")),
+    else {
+        return Ok(unavailable("source_unavailable"));
     };
     let sessions = application
         .list_sessions(Some("project".into()), Some(project_id.to_owned()))
@@ -72,7 +71,7 @@ pub(super) async fn get(
             .cmp(&a["updatedAt"].as_str())
             .then_with(|| a["id"].as_str().cmp(&b["id"].as_str()))
     });
-    cards = interleave(cards);
+    cards = interleave(&cards);
     let mut lane_counts = LANES
         .into_iter()
         .map(|lane| (lane, 0_u64))
@@ -311,7 +310,7 @@ fn record_lane(status: &str) -> &'static str {
     }
 }
 
-fn interleave(cards: Vec<Value>) -> Vec<Value> {
+fn interleave(cards: &[Value]) -> Vec<Value> {
     let buckets = LANES
         .iter()
         .map(|lane| {

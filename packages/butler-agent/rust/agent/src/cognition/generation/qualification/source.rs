@@ -135,7 +135,7 @@ pub(super) fn valid_source_read_evidence(binding: &SourceBinding, evidence: &Sou
         return false;
     }
     row.byte_start >= 0
-        && row.byte_end <= canonical.bytes as i64
+        && row.byte_end <= i64::try_from(canonical.bytes).unwrap_or(i64::MAX)
         && row.byte_start < row.byte_end
         && evidence.returned_text == canonical.text
 }
@@ -189,9 +189,8 @@ pub(super) fn source_binding_belongs_to_inventory(
         if parts.len() != 4 || decode_base64url(parts[2]).as_deref() != Some(generation_id) {
             return false;
         }
-        let source_id = match decode_base64url(parts[3]) {
-            Some(value) => value,
-            None => return false,
+        let Some(source_id) = decode_base64url(parts[3]) else {
+            return false;
         };
         let Some(row) = binding.source_row.as_ref() else {
             return false;
