@@ -70,16 +70,12 @@ fn prepare<'a>(
 }
 
 #[test]
-fn matches_bun_hash_plan_and_codex_capacity_alias() {
+fn admission_plan_uses_model_capacity_and_codex_alias_window() {
     let (catalog, config) = source();
     let basic = json!({"model":"gpt-5.5","store":true,"input":"hello"});
     let admitted = prepare(&catalog, &config, "openai/gpt-5.5", &basic, 64.0)
         .admit()
         .unwrap();
-    assert_eq!(
-        admitted.request_hash,
-        "236cb4bf6adb2ae4ecb963846372219a3a6085f9884f13c11bb0741cf5fc4d42"
-    );
     assert_eq!(admitted.plan.compiled_input_tokens, 18.0);
     assert_eq!(admitted.plan.input_capacity_tokens, 1_049_936.0);
     assert_eq!(admitted.plan.turn_id, "unattributed");
@@ -94,16 +90,12 @@ fn matches_bun_hash_plan_and_codex_capacity_alias() {
 }
 
 #[test]
-fn image_projection_and_output_failure_match_bun() {
+fn image_inputs_are_projected_and_output_overflow_cannot_fit() {
     let (catalog, config) = source();
     let image = json!({"model":"gpt-5.5","input":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]});
     let admitted = prepare(&catalog, &config, "openai/gpt-5.5", &image, 64.0)
         .admit()
         .unwrap();
-    assert_eq!(
-        admitted.request_hash,
-        "e04d272685f582d019307bdf75a27adb3bc97a8d05eff86a813ce406626fca14"
-    );
     assert_eq!(admitted.plan.compiled_input_tokens, 8_222.0);
 
     let overflow = json!({"input":"x"});

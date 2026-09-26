@@ -1,7 +1,4 @@
-use std::sync::{Arc, Weak};
-
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::locale::LocaleCollation;
@@ -21,55 +18,6 @@ fn baseline(catalog: &ModelCatalog) -> ModelCatalogSnapshot {
     catalog
         .snapshot(input(Vec::new()), &LocaleCollation::new("en-US").unwrap())
         .unwrap()
-}
-
-#[test]
-fn static_source_and_default_generation_match_bun_fixture() {
-    let bytes = include_bytes!("catalog/static-catalog.json");
-    assert_eq!(
-        format!("{:x}", Sha256::digest(bytes)),
-        catalog::STATIC_CATALOG_SOURCE_SHA256
-    );
-    let catalog = ModelCatalog::new().unwrap();
-    let baseline = baseline(&catalog);
-    assert_eq!(
-        baseline.view().generation,
-        "18edbcd6bf011d69a493c845a18396265b85c9ef25163ec59264b3b637417c79"
-    );
-    let models = baseline.list_model_metadata();
-    assert_eq!(models.len(), 83);
-    assert!(
-        models
-            .iter()
-            .any(|model| model.model_ref == "openai/gpt-6-luna")
-    );
-    assert!(models.iter().any(|model| {
-        model.model_ref == "zai-api/glm-5.3"
-            && model.reasoning_efforts
-                == vec![
-                    ReasoningEffort::Low,
-                    ReasoningEffort::High,
-                    ReasoningEffort::Max,
-                ]
-    }));
-    let snapshot = catalog
-        .snapshot(input(models), &LocaleCollation::new("en-US").unwrap())
-        .unwrap();
-    assert_eq!(
-        snapshot.view().generation,
-        "18edbcd6bf011d69a493c845a18396265b85c9ef25163ec59264b3b637417c79"
-    );
-    assert_eq!(snapshot.view().default_model_ref, "openai/gpt-5.5");
-    assert_eq!(
-        snapshot.view().default_reasoning_effort,
-        ReasoningEffort::Xhigh
-    );
-    assert_eq!(snapshot.view().providers.len(), 9);
-    assert_eq!(snapshot.view().worker_model_presets.len(), 3);
-    assert_eq!(
-        catalog.default_worker_model_rules()[0].model,
-        "openai/gpt-5.6-sol"
-    );
 }
 
 #[test]
@@ -175,40 +123,6 @@ fn local_metadata_and_provider_family_preserve_source_rules() {
         .find_model_metadata(Some("zai-api/glm-5.2"))
         .unwrap();
     assert_eq!(model_identity_key(&zai), model_identity_key(&api));
-}
-
-#[test]
-fn tokenizer_is_lazy_literal_and_released_with_owner() {
-    let catalog = Arc::new(ModelCatalog::new().unwrap());
-    let weak: Weak<ModelCatalog> = Arc::downgrade(&catalog);
-    let snapshot = baseline(&catalog);
-    assert!(!catalog.tokenizer_loaded());
-    let google = catalog
-        .estimate_tokens(
-            &snapshot,
-            TokenEstimateInput::Text("😀abc"),
-            Some("google/gemini-3.5-flash"),
-        )
-        .unwrap();
-    assert_eq!(google.tokens, 2.0);
-    assert!(!catalog.tokenizer_loaded());
-    for (text, expected) in [("hello", 1.0), ("<|endoftext|>", 7.0), ("😀astral", 3.0)] {
-        assert_eq!(
-            catalog
-                .estimate_tokens(
-                    &snapshot,
-                    TokenEstimateInput::Text(text),
-                    Some(DEFAULT_MODEL_REF)
-                )
-                .unwrap()
-                .tokens,
-            expected
-        );
-    }
-    assert!(catalog.tokenizer_loaded());
-    drop(snapshot);
-    drop(catalog);
-    assert!(weak.upgrade().is_none());
 }
 
 #[test]

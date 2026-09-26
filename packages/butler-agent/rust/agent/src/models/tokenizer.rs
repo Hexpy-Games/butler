@@ -20,9 +20,4 @@ impl TokenizerOwner {
         // matching js-tiktoken encode(text, [], []).
         Ok(encoding.count_ordinary(text))
     }
-
-    #[cfg(test)]
-    pub(super) fn is_loaded(&self) -> bool {
-        self.encoding.get().is_some()
-    }
 }

@@ -3,10 +3,6 @@ use serde::Deserialize;
 use super::{ModelProviderMetadata, WorkerModelPreset};
 use crate::models::ModelCatalogError;
 
-#[cfg(test)]
-pub(crate) const SOURCE_SHA256: &str =
-    "93ba3b0ff44c3d79f3c975ec0d33057f62ebcafd4c873bd93e1eff0982414495";
-
 #[derive(Deserialize)]
 pub(crate) struct StaticCatalog {
     pub(super) models: Vec<ModelProviderMetadata>,

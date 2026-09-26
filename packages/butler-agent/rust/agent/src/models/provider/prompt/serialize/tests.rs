@@ -89,49 +89,113 @@ fn wire(
 }
 
 #[test]
-fn non_openai_prompt_bodies_match_intercepted_bun_requests() {
-    let usage = usage();
-    let anthropic = request(&ReasoningEffort::High, &usage);
-    assert_eq!(
-        wire(
-            &anthropic,
-            &config("anthropic/claude-haiku-4-5"),
-            Carrier::Anthropic,
-        ),
-        r#"{"model":"claude-haiku-4-5","max_tokens":321,"system":"System","thinking":{"type":"enabled","budget_tokens":8192},"messages":[{"role":"user","content":"Hello"}]}"#
-    );
+fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
+    // non openai prompt bodies match each carrier contract
+    {
+        let usage = usage();
+        let anthropic = request(&ReasoningEffort::High, &usage);
+        assert_eq!(
+            wire(
+                &anthropic,
+                &config("anthropic/claude-haiku-4-5"),
+                Carrier::Anthropic,
+            ),
+            r#"{"model":"claude-haiku-4-5","max_tokens":321,"system":"System","thinking":{"type":"enabled","budget_tokens":8192},"messages":[{"role":"user","content":"Hello"}]}"#
+        );
 
-    let gemini = request(&ReasoningEffort::Low, &usage);
-    assert_eq!(
-        wire(&gemini, &config("google/gemini-3.5-flash"), Carrier::Gemini,),
-        r#"{"systemInstruction":{"parts":[{"text":"System"}]},"generationConfig":{"thinkingConfig":{"thinkingLevel":"LOW"},"maxOutputTokens":321},"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}"#
-    );
+        let gemini = request(&ReasoningEffort::Low, &usage);
+        assert_eq!(
+            wire(&gemini, &config("google/gemini-3.5-flash"), Carrier::Gemini,),
+            r#"{"systemInstruction":{"parts":[{"text":"System"}]},"generationConfig":{"thinkingConfig":{"thinkingLevel":"LOW"},"maxOutputTokens":321},"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}"#
+        );
 
-    let qwen = request(&ReasoningEffort::None, &usage);
-    assert_eq!(
-        wire(
-            &qwen,
-            &config("qwen/qwen3.7-max"),
-            Carrier::Chat { stream: true },
-        ),
-        r#"{"model":"qwen3.7-max","max_tokens":321,"messages":[{"role":"system","content":"System"},{"role":"user","content":"Hello"}],"stream":true,"enable_thinking":false}"#
-    );
-}
-
-#[test]
-fn hosted_responses_schema_matches_intercepted_bun_request() {
-    let usage = usage();
-    let schema = Map::from_iter([("type".into(), json!("object"))]);
-    let mut request = request(&ReasoningEffort::High, &usage);
-    request.response_format = Some(PromptJsonSchema {
-        name: "answer",
-        schema: &schema,
-        strict: Some(false),
-    });
-    assert_eq!(
-        wire(&request, &config("xai/grok-4.5"), Carrier::Responses,),
-        r#"{"model":"grok-4.5","instructions":"System","input":"Hello","reasoning":{"effort":"high"},"text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":false}}}"#
-    );
+        let qwen = request(&ReasoningEffort::None, &usage);
+        assert_eq!(
+            wire(
+                &qwen,
+                &config("qwen/qwen3.7-max"),
+                Carrier::Chat { stream: true },
+            ),
+            r#"{"model":"qwen3.7-max","max_tokens":321,"messages":[{"role":"system","content":"System"},{"role":"user","content":"Hello"}],"stream":true,"enable_thinking":false}"#
+        );
+    }
+    // hosted responses schema matches the responses contract
+    {
+        let usage = usage();
+        let schema = Map::from_iter([("type".into(), json!("object"))]);
+        let mut request = request(&ReasoningEffort::High, &usage);
+        request.response_format = Some(PromptJsonSchema {
+            name: "answer",
+            schema: &schema,
+            strict: Some(false),
+        });
+        assert_eq!(
+            wire(&request, &config("xai/grok-4.5"), Carrier::Responses,),
+            r#"{"model":"grok-4.5","instructions":"System","input":"Hello","reasoning":{"effort":"high"},"text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":false}}}"#
+        );
+    }
+    // openai cache boundary matches the responses contract
+    {
+        let usage = usage();
+        let schema = Map::from_iter([("type".into(), json!("object"))]);
+        let mut request = request(&ReasoningEffort::High, &usage);
+        request.prompt = "StableDynamic";
+        request.instructions = Some("System");
+        request.cache_scope = Some("scope");
+        request.cache_boundary = Some(PromptCacheBoundary {
+            stable_prefix: "Stable",
+            dynamic_suffix: "Dynamic",
+        });
+        request.response_format = Some(PromptJsonSchema {
+            name: "answer",
+            schema: &schema,
+            strict: Some(false),
+        });
+        let mut config = config("openai/gpt-5.6-sol");
+        config.prompt_cache.key_prefix = Some("fixture".into());
+        assert_eq!(
+            wire(&request, &config, Carrier::Responses),
+            r#"{"max_output_tokens":321,"model":"gpt-5.6-sol","store":true,"prompt_cache_key":"fixture:scope","prompt_cache_options":{"mode":"explicit"},"instructions":"System","text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":false}},"reasoning":{"effort":"high"},"input":[{"role":"user","content":[{"type":"input_text","text":"Stable","prompt_cache_breakpoint":{"mode":"explicit"}},{"type":"input_text","text":"Dynamic"}]}]}"#
+        );
+    }
+    // unsupported openai cache boundary keeps flat input and retention
+    {
+        let usage = usage();
+        let mut request = request(&ReasoningEffort::High, &usage);
+        request.prompt = "StableDynamic";
+        request.instructions = Some("System");
+        request.cache_scope = Some("scope");
+        request.cache_boundary = Some(PromptCacheBoundary {
+            stable_prefix: "Stable",
+            dynamic_suffix: "Dynamic",
+        });
+        let mut config = config("openai/gpt-5.5");
+        config.prompt_cache.key_prefix = Some("fixture".into());
+        config.prompt_cache.retention = Some(PromptCacheRetention::Hours24);
+        let wire = body(&request, &config, Carrier::Responses).unwrap();
+        assert_eq!(
+            crate::json::stringify(&wire.body).unwrap(),
+            r#"{"max_output_tokens":321,"model":"gpt-5.5","store":true,"prompt_cache_key":"fixture:scope","prompt_cache_retention":"24h","instructions":"System","reasoning":{"effort":"high"},"input":"StableDynamic"}"#
+        );
+        assert_eq!(wire.cache_retention, Some(PromptCacheRetention::Hours24));
+    }
+    // openai prompt uses configured reasoning only when request omits it
+    {
+        let usage = usage();
+        let explicit = ReasoningEffort::High;
+        let mut request = request(&explicit, &usage);
+        request.reasoning_effort = None;
+        request.instructions = None;
+        request.response_format = None;
+        let mut config = config("openai/gpt-5.5");
+        config.prompt_reasoning_effort = Some(ReasoningEffort::Low);
+        assert_eq!(
+            wire(&request, &config, Carrier::Responses),
+            r#"{"max_output_tokens":321,"model":"gpt-5.5","store":true,"reasoning":{"effort":"low"},"input":"Hello"}"#
+        );
+        request.reasoning_effort = Some(&explicit);
+        assert!(wire(&request, &config, Carrier::Responses).contains(r#""effort":"high""#));
+    }
 }
 
 #[test]
@@ -167,71 +231,6 @@ fn codex_prompt_wraps_unbounded_text_as_user_input() {
     assert_eq!(value["text"]["format"]["name"], "memory_meaning_v4");
     assert_eq!(value["text"]["format"]["strict"], true);
     assert!(value.get("max_output_tokens").is_none());
-}
-
-#[test]
-fn openai_cache_boundary_matches_intercepted_bun_request() {
-    let usage = usage();
-    let schema = Map::from_iter([("type".into(), json!("object"))]);
-    let mut request = request(&ReasoningEffort::High, &usage);
-    request.prompt = "StableDynamic";
-    request.instructions = Some("System");
-    request.cache_scope = Some("scope");
-    request.cache_boundary = Some(PromptCacheBoundary {
-        stable_prefix: "Stable",
-        dynamic_suffix: "Dynamic",
-    });
-    request.response_format = Some(PromptJsonSchema {
-        name: "answer",
-        schema: &schema,
-        strict: Some(false),
-    });
-    let mut config = config("openai/gpt-5.6-sol");
-    config.prompt_cache.key_prefix = Some("fixture".into());
-    assert_eq!(
-        wire(&request, &config, Carrier::Responses),
-        r#"{"max_output_tokens":321,"model":"gpt-5.6-sol","store":true,"prompt_cache_key":"fixture:scope","prompt_cache_options":{"mode":"explicit"},"instructions":"System","text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":false}},"reasoning":{"effort":"high"},"input":[{"role":"user","content":[{"type":"input_text","text":"Stable","prompt_cache_breakpoint":{"mode":"explicit"}},{"type":"input_text","text":"Dynamic"}]}]}"#
-    );
-}
-
-#[test]
-fn unsupported_openai_cache_boundary_keeps_flat_input_and_retention() {
-    let usage = usage();
-    let mut request = request(&ReasoningEffort::High, &usage);
-    request.prompt = "StableDynamic";
-    request.instructions = Some("System");
-    request.cache_scope = Some("scope");
-    request.cache_boundary = Some(PromptCacheBoundary {
-        stable_prefix: "Stable",
-        dynamic_suffix: "Dynamic",
-    });
-    let mut config = config("openai/gpt-5.5");
-    config.prompt_cache.key_prefix = Some("fixture".into());
-    config.prompt_cache.retention = Some(PromptCacheRetention::Hours24);
-    let wire = body(&request, &config, Carrier::Responses).unwrap();
-    assert_eq!(
-        crate::json::stringify(&wire.body).unwrap(),
-        r#"{"max_output_tokens":321,"model":"gpt-5.5","store":true,"prompt_cache_key":"fixture:scope","prompt_cache_retention":"24h","instructions":"System","reasoning":{"effort":"high"},"input":"StableDynamic"}"#
-    );
-    assert_eq!(wire.cache_retention, Some(PromptCacheRetention::Hours24));
-}
-
-#[test]
-fn openai_prompt_uses_configured_reasoning_only_when_request_omits_it() {
-    let usage = usage();
-    let explicit = ReasoningEffort::High;
-    let mut request = request(&explicit, &usage);
-    request.reasoning_effort = None;
-    request.instructions = None;
-    request.response_format = None;
-    let mut config = config("openai/gpt-5.5");
-    config.prompt_reasoning_effort = Some(ReasoningEffort::Low);
-    assert_eq!(
-        wire(&request, &config, Carrier::Responses),
-        r#"{"max_output_tokens":321,"model":"gpt-5.5","store":true,"reasoning":{"effort":"low"},"input":"Hello"}"#
-    );
-    request.reasoning_effort = Some(&explicit);
-    assert!(wire(&request, &config, Carrier::Responses).contains(r#""effort":"high""#));
 }
 
 #[test]
