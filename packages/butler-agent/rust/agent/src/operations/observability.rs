@@ -1,7 +1,6 @@
 //! Bounded native log readers and one-owner follow state.
 
 #[cfg(test)]
-#[path = "observability_tests.rs"]
 mod tests;
 
 use crate::public_text::fixed_regex;

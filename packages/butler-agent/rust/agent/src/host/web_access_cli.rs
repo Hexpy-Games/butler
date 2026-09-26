@@ -1,7 +1,6 @@
 //! One-shot public web diagnostics and page-read commands.
 
 #[cfg(test)]
-#[path = "web_access_cli_tests.rs"]
 mod tests;
 
 use std::{env, ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};

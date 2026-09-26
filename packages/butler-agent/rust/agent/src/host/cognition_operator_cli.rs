@@ -14,23 +14,14 @@ use crate::{
     operations::{CycleMetrics, MetricFiles},
 };
 
-#[path = "cognition_operator_cli/box.rs"]
 mod box_cli;
-#[path = "cognition_operator_cli/feedback.rs"]
 mod feedback;
-#[path = "cognition_operator_cli/ingest.rs"]
 mod ingest;
-#[path = "cognition_operator_cli/knowhow.rs"]
 mod knowhow;
-#[path = "cognition_operator_cli/metadata.rs"]
 mod metadata;
-#[path = "cognition_operator_cli/migration.rs"]
 mod migration;
-#[path = "cognition_operator_cli/parser.rs"]
 mod parser;
-#[path = "cognition_operator_cli/recall.rs"]
 mod recall;
-#[path = "cognition_operator_cli/recovery.rs"]
 mod recovery;
 
 #[expect(

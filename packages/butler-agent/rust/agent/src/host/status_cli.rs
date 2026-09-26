@@ -362,5 +362,4 @@ fn report_error(command: &str, json_output: bool, message: &str) -> ExitCode {
 }
 
 #[cfg(test)]
-#[path = "status_cli_tests.rs"]
 mod tests;

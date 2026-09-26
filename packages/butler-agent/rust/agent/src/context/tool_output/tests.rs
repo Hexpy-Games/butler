@@ -116,9 +116,7 @@ impl Drop for Fixture {
     }
 }
 
-#[path = "tests/budget.rs"]
 mod budget_cases;
 mod integration;
 mod lifecycle;
-#[path = "tests/reader.rs"]
 mod reader_cases;

@@ -403,5 +403,4 @@ fn error(code: CognitionCode) -> CognitionError {
 }
 
 #[cfg(test)]
-#[path = "feedback_buffer/tests.rs"]
 mod tests;

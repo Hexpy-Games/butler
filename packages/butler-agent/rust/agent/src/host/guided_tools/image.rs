@@ -390,5 +390,4 @@ impl Drop for TempImageFile {
 }
 
 #[cfg(test)]
-#[path = "image/tests.rs"]
 mod tests;

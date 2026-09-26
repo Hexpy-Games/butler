@@ -8,7 +8,6 @@ mod paths;
 mod retention;
 
 #[cfg(test)]
-#[path = "box_store/tests.rs"]
 mod tests;
 
 use crate::cognition::CognitionCode;

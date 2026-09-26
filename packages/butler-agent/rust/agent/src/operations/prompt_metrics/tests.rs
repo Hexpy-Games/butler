@@ -2,7 +2,6 @@ use super::*;
 use crate::models::*;
 use std::sync::Mutex;
 
-#[path = "test_support.rs"]
 mod support;
 use support::*;
 

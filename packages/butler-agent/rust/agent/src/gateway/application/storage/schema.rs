@@ -61,5 +61,4 @@ pub(super) fn seed(connection: &Connection, now: &str) -> Result<(), AppStorageE
 }
 
 #[cfg(test)]
-#[path = "schema_tests.rs"]
 mod tests;

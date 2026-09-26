@@ -14,7 +14,6 @@ use tokio::{
     task::JoinHandle,
 };
 
-#[path = "owner_files.rs"]
 mod files;
 
 use super::{ProjectionContext, sync_chat_once, sync_deferred_once, sync_deferred_step};

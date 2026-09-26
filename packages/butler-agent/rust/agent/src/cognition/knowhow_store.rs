@@ -7,7 +7,6 @@ mod quality;
 mod revision;
 
 #[cfg(test)]
-#[path = "knowhow_store/tests.rs"]
 mod tests;
 
 use crate::cognition::CognitionCode;

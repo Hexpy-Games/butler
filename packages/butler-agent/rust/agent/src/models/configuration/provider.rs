@@ -1,6 +1,5 @@
 //! Physical provider request snapshots resolved from current filesystem state.
 
-#[path = "provider/status.rs"]
 mod status;
 
 mod dynamic;

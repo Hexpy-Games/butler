@@ -12,7 +12,6 @@ use crate::{
 };
 
 #[cfg(test)]
-#[path = "consolidate/tests.rs"]
 mod tests;
 
 const READ_ROWS: &str = "SELECT e.edge_id,e.qualifiers,

@@ -7,7 +7,6 @@ mod types;
 mod write;
 
 #[cfg(test)]
-#[path = "project_capsule/tests.rs"]
 mod tests;
 
 use crate::cognition::CognitionCode;

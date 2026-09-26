@@ -1,4 +1,3 @@
-#[path = "nodes.rs"]
 mod nodes;
 
 use std::collections::HashSet;

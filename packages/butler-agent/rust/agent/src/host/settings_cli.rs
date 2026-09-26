@@ -5,7 +5,6 @@ mod config;
 mod config_commands;
 mod path;
 #[cfg(test)]
-#[path = "settings_cli/tests.rs"]
 mod tests;
 
 use std::{

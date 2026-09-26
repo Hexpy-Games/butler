@@ -1,6 +1,5 @@
 //! Prompt-cache and web-search telemetry projections, streamed from DATA logs.
 
-#[path = "usage_availability.rs"]
 mod availability;
 
 use std::{collections::BTreeMap, path::Path};

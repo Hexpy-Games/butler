@@ -1,7 +1,6 @@
 //! Durable registration of vector work after the semantic graph is committed.
 
 #[cfg(test)]
-#[path = "vector_registration/tests.rs"]
 mod tests;
 mod units;
 

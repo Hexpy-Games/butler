@@ -5,7 +5,6 @@ mod serving;
 mod sources;
 
 #[cfg(test)]
-#[path = "memory_health/tests.rs"]
 mod tests;
 
 use crate::cognition::CognitionCode;
