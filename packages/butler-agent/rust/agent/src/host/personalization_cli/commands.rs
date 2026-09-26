@@ -1,6 +1,6 @@
 //! Profile-owned personalization state, import and rendering operations.
 
-use std::{ffi::OsString, fs, io::Read, path::PathBuf};
+use std::{ffi::OsString, io::Read, path::PathBuf};
 
 use serde_json::{Value, json};
 
@@ -181,7 +181,7 @@ pub(super) async fn import(
         })?;
         return import_text(profile, source, text, model).await;
     }
-    let text = fs::read_to_string(file).map_err(|_| {
+    let text = tokio::fs::read_to_string(file).await.map_err(|_| {
         CliError::failed(
             "personalization_input_unavailable",
             "Import input could not be read.",

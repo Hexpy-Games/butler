@@ -217,6 +217,9 @@ impl NativeCommands {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
         let host = Arc::clone(&self.inner.host);
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _active = active;
             guided::dispatch(&*host, input, shutdown, tx).await;
@@ -231,6 +234,9 @@ impl NativeCommands {
         let (active, shutdown) = self.register()?;
         let (tx, rx) = oneshot::channel();
         let host = Arc::clone(&self.inner.host);
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _active = active;
             structured::dispatch(&*host, input, shutdown, tx).await;

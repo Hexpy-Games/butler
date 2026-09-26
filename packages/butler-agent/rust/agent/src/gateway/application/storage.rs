@@ -153,6 +153,8 @@ impl AppStorage {
         drop(lane);
         if let Some(thread) = thread {
             let inner = Arc::clone(&self.inner);
+            // Detached on purpose: close waiters receive the join result, and the join
+            // must finish even when the caller that started closing is cancelled.
             tokio::spawn(async move {
                 let result = join_owner(thread).await;
                 let mut lane = inner.lane.lock().await;

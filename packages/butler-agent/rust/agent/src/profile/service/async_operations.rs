@@ -37,6 +37,9 @@ impl ProfileService {
         let child = caller_cancellation.child_token();
         let operation_child = child.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _permit = permit;
             let _token = token;

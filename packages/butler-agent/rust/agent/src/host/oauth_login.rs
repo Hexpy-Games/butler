@@ -60,8 +60,10 @@ async fn run_native_oauth_login_with_data(
     } else {
         data_root.join(requested_profile)
     };
-    if std::fs::symlink_metadata(&requested_profile).is_ok()
-        && requested_profile.canonicalize().is_err()
+    if tokio::fs::symlink_metadata(&requested_profile)
+        .await
+        .is_ok()
+        && tokio::fs::canonicalize(&requested_profile).await.is_err()
     {
         return Err("OpenAI auth profile path is unavailable".into());
     }

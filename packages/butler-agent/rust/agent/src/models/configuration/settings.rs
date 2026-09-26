@@ -111,62 +111,10 @@ impl ModelConfiguration {
         }
         let _write = self.configuration_writes.acquire().await;
         let path = root.join(".env");
-        let original = match fs::read_to_string(&path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(_) => return Err("Private environment file could not be read.".into()),
-        };
-        let mut lines = original.lines().map(str::to_owned).collect::<Vec<_>>();
-        let replacement = format!(
-            "{key}={}",
-            serde_json::to_string(value).map_err(|_| "Private environment value is invalid.")?
-        );
-        let mut found = false;
-        for line in &mut lines {
-            if line.starts_with(&format!("{key}=")) {
-                *line = replacement.clone();
-                found = true;
-            }
-        }
-        if !found {
-            lines.push(replacement);
-        }
-        let parent = path
-            .parent()
-            .ok_or_else(|| "Private environment path is invalid.".to_owned())?;
-        #[cfg(unix)]
-        {
-            let mut builder = fs::DirBuilder::new();
-            builder.recursive(true).mode(0o700);
-            builder
-                .create(parent)
-                .or_else(|error| {
-                    if error.kind() == std::io::ErrorKind::AlreadyExists && parent.is_dir() {
-                        Ok(())
-                    } else {
-                        Err(error)
-                    }
-                })
-                .map_err(|_| "Private environment directory could not be created.")?;
-        }
-        #[cfg(not(unix))]
-        fs::create_dir_all(parent)
-            .map_err(|_| "Private environment directory could not be created.")?;
-        let mut options = fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        options.mode(0o600);
-        let mut file = options
-            .open(&path)
-            .map_err(|_| "Private environment file could not be written.")?;
-        file.write_all(format!("{}\n", lines.join("\n")).as_bytes())
-            .map_err(|_| "Private environment file could not be written.")?;
-        file.sync_all()
-            .map_err(|_| "Private environment file could not be written.")?;
-        #[cfg(unix)]
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-            .map_err(|_| "Private environment file permissions could not be set.")?;
-        Ok(())
+        let (key, value) = (key.to_owned(), value.to_owned());
+        tokio::task::spawn_blocking(move || write_private_environment(&path, &key, &value))
+            .await
+            .map_err(|_| String::from("Private environment file could not be written."))?
     }
 
     pub(crate) async fn set_default_model(
@@ -201,7 +149,7 @@ impl ModelConfiguration {
     /// Remove only the path selected and validated by the host adapter.
     pub(crate) async fn remove_auth_profile(&self, path: &Path) -> Result<bool, String> {
         let _write = self.configuration_writes.acquire().await;
-        match std::fs::symlink_metadata(path) {
+        match tokio::fs::symlink_metadata(path).await {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(_) => return Err("Auth profile could not be inspected.".into()),
             Ok(metadata)
@@ -212,8 +160,69 @@ impl ModelConfiguration {
             }
             Ok(_) => {}
         }
-        std::fs::remove_file(path)
+        tokio::fs::remove_file(path)
+            .await
             .map_err(|_| String::from("Auth profile could not be removed."))?;
         Ok(true)
     }
+}
+
+/// Replaces or appends `key` in the private `.env` file with owner-only permissions.
+fn write_private_environment(path: &Path, key: &str, value: &str) -> Result<(), String> {
+    let original = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(_) => return Err("Private environment file could not be read.".into()),
+    };
+    let mut lines = original.lines().map(str::to_owned).collect::<Vec<_>>();
+    let replacement = format!(
+        "{key}={}",
+        serde_json::to_string(value).map_err(|_| "Private environment value is invalid.")?
+    );
+    let mut found = false;
+    for line in &mut lines {
+        if line.starts_with(&format!("{key}=")) {
+            *line = replacement.clone();
+            found = true;
+        }
+    }
+    if !found {
+        lines.push(replacement);
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Private environment path is invalid.".to_owned())?;
+    #[cfg(unix)]
+    {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700);
+        builder
+            .create(parent)
+            .or_else(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists && parent.is_dir() {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(|_| "Private environment directory could not be created.")?;
+    }
+    #[cfg(not(unix))]
+    fs::create_dir_all(parent)
+        .map_err(|_| "Private environment directory could not be created.")?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|_| "Private environment file could not be written.")?;
+    file.write_all(format!("{}\n", lines.join("\n")).as_bytes())
+        .map_err(|_| "Private environment file could not be written.")?;
+    file.sync_all()
+        .map_err(|_| "Private environment file could not be written.")?;
+    #[cfg(unix)]
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .map_err(|_| "Private environment file permissions could not be set.")?;
+    Ok(())
 }

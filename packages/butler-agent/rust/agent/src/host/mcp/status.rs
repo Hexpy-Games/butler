@@ -21,13 +21,14 @@ pub(super) async fn text(data_root: &Path) -> Result<String, String> {
     let telemetry = operations::read_prompt_cache_telemetry(data_root, Some(now_ms - 86_400_000.0));
     let control = models.render_text(&telemetry, None);
     let counts = operations::read_mcp_task_counts(data_root);
-    let hot_files = std::fs::read_dir(data_root.join("cognition/memory/hot"))
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".md"))
-        .count();
+    let mut hot_files = 0_usize;
+    if let Ok(mut entries) = tokio::fs::read_dir(data_root.join("cognition/memory/hot")).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if entry.file_name().to_string_lossy().ends_with(".md") {
+                hot_files += 1;
+            }
+        }
+    }
     Ok(format!(
         "Uptime: {}\n{}\nTasks: {} total ({} running, {} done, {} failed)\nContext: native-local session state\nHot cache: {} files",
         uptime(data_root),

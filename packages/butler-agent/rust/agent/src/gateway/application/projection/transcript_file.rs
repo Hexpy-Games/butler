@@ -45,7 +45,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         .as_ref()
         .filter(|value| value.spool_bytes > 0 && value.spool_path != checkpoint.spool_path)
     {
-        let _ = std::fs::remove_file(PathBuf::from(&stale.spool_path));
+        let _ = tokio::fs::remove_file(PathBuf::from(&stale.spool_path)).await;
     }
     let mut read = tokio::task::spawn_blocking(move || {
         super::byte_window::read_record(checkpoint, state.size, state.modified_at_ms)
@@ -66,7 +66,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         Some(event) => super::project_event(context, chat_id, event, read.checkpoint).await?,
     };
     if let Some(path) = completed {
-        let _ = std::fs::remove_file(path);
+        let _ = tokio::fs::remove_file(path).await;
     }
     // An unproven old claim retains its original event and yields this sync.
     // Reporting pending here would replay that same record in a tight loop.

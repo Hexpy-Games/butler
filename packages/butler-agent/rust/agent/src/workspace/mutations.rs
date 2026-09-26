@@ -106,6 +106,9 @@ impl WorkspaceMutations {
         let serial = Arc::clone(&self.inner.serial);
         let observer = Arc::clone(&self.inner.observer);
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _active = active;
             let prepared = tokio::task::spawn_blocking(move || guard::prepare(command)).await;

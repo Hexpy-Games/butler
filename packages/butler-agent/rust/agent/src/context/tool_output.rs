@@ -215,6 +215,8 @@ impl NativeToolOutput {
         let slots = Arc::new(Semaphore::new(2));
         let worker_admission = Arc::downgrade(&admission);
         let worker_drained = Arc::clone(&drained);
+        // Detached on purpose: the worker ends when the last admission sender drops,
+        // and close waits for it through `drained`.
         tokio::spawn(async move {
             while let Some(job) = receiver.recv().await {
                 match job {

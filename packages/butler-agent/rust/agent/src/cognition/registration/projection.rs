@@ -119,6 +119,9 @@ impl CognitionRegistrationService {
         let shutdown = self.shutdown.clone();
         let owners = self.active_windows.clone();
         let (sender, receiver) = oneshot::channel();
+        // Detached on purpose: the operation token/guard moved into the task keeps the
+        // owner's close waiting for it, and the result returns through the oneshot,
+        // so a cancelled caller cannot abandon the operation midway.
         tokio::spawn(async move {
             let _token = token;
             let _permit = permit;

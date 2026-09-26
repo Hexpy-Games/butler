@@ -80,7 +80,8 @@ pub(crate) async fn record_helper_terminal(
     }
     let path = data_root.join("agent-runtime/btcc.sqlite");
     for destination in [data_root.join("agent-runtime"), path.clone()] {
-        if std::fs::symlink_metadata(&destination)
+        if tokio::fs::symlink_metadata(&destination)
+            .await
             .is_ok_and(|metadata| metadata.file_type().is_symlink())
         {
             return Err("restart_handoff_journal_path_ambiguous".into());

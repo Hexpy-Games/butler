@@ -1,6 +1,6 @@
 //! Explicit, command-scoped historical Conversation import.
 
-use std::{ffi::OsString, fs, path::PathBuf, process::ExitCode, sync::Arc};
+use std::{ffi::OsString, path::PathBuf, process::ExitCode, sync::Arc};
 
 use super::{NativeDateParser, ResolvedInstallation, SystemIdentity, settings_cli};
 use crate::{
@@ -126,7 +126,7 @@ async fn execute(installation: ResolvedInstallation, options: Options) -> Result
     };
     let store_path = conversation_store_path(&data);
     if !options.write {
-        let reader = match fs::metadata(&store_path) {
+        let reader = match tokio::fs::metadata(&store_path).await {
             Ok(_) => Some(
                 ConversationSourceReader::open(&store_path).map_err(|error| error.to_string())?,
             ),
