@@ -438,7 +438,7 @@ pub(super) async fn execute(
                 },
             )
             .await
-            .map_err(|error| BtccError::relayed(error.code.clone(), error.code)),
+            .map_err(|error| BtccError::relay(error.code(), error.code(), error)),
         _ => {
             return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",

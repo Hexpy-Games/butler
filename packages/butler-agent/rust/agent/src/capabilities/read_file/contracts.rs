@@ -79,9 +79,8 @@ pub(super) fn integer(
     let Some(value) = value else {
         return Ok(fallback);
     };
-    let number = crate::json::coerce_number(value).map_err(|_| CapabilityError {
-        code: "invalid_number_conversion".into(),
-    })?;
+    let number = crate::json::coerce_number(value)
+        .map_err(|source| CapabilityError::caused("invalid_number_conversion", source))?;
     if !number.is_finite() {
         return Ok(fallback);
     }

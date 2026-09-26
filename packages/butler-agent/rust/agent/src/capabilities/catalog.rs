@@ -15,10 +15,17 @@ pub(crate) use validation::validate_native_arguments;
 
 static SOURCE: &str = include_str!("catalog/catalog.json");
 
-#[derive(Debug, PartialEq, Eq)]
+/// The bundled tool catalog does not match the registered capabilities.
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum CatalogError {
-    InvalidSource(String),
+    /// The bundled catalog JSON could not be parsed.
+    #[error("tool catalog source is invalid: {0}")]
+    InvalidSource(#[source] serde_json::Error),
+    /// A registered capability has no definition in the catalog.
+    #[error("tool catalog is missing registered definition {0}")]
     RegisteredDefinitionMissing(String),
+    /// A registered capability's definition differs from the catalog.
+    #[error("tool catalog definition {0} does not match its registration")]
     RegisteredDefinitionMismatch(String),
 }
 
@@ -49,8 +56,8 @@ impl NativeToolCatalog {
         struct RegisteredSource {
             raw_definitions: HashMap<String, Value>,
         }
-        let parsed: RegisteredSource = serde_json::from_str(source)
-            .map_err(|error| CatalogError::InvalidSource(error.to_string()))?;
+        let parsed: RegisteredSource =
+            serde_json::from_str(source).map_err(CatalogError::InvalidSource)?;
         for name in capabilities.registered_names() {
             let actual = capabilities
                 .definition(name)

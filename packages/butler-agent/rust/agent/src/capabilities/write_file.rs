@@ -82,14 +82,10 @@ pub(super) async fn execute(
     let receiver = owner.submit(command).map_err(owner_error)?;
     let (outcome, elapsed) = receiver
         .await
-        .map_err(|_| CapabilityError {
-            code: "workspace_mutation_completion_lost".into(),
-        })?
+        .map_err(|source| CapabilityError::caused("workspace_mutation_completion_lost", source))?
         .map_err(owner_error)?;
     let MutationOutcome::Write(result) = outcome else {
-        return Err(CapabilityError {
-            code: "workspace_mutation_outcome_mismatch".into(),
-        });
+        return Err(CapabilityError::new("workspace_mutation_outcome_mismatch"));
     };
     Ok(match result {
         Ok(committed) => {
@@ -184,12 +180,6 @@ fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: 
     reference
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
-    CapabilityError {
-        code: error.code().into(),
-    }
+    CapabilityError::caused(error.code(), error)
 }

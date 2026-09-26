@@ -72,9 +72,7 @@ pub(super) async fn execute(
             "maxDirs":limits.max_dirs,"maxDepth":limits.max_depth,
             "elapsedMs":limits.elapsed_ms}
     }))
-    .map_err(|_| CapabilityError {
-        code: "cursor_query_json_failed".into(),
-    })?;
+    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
@@ -99,12 +97,8 @@ pub(super) async fn execute(
             limits,
         })
         .await
-        .map_err(|error| CapabilityError {
-            code: error.code().into(),
-        })?
-        .map_err(|_| CapabilityError {
-            code: "workspace_list_io_error".into(),
-        })?;
+        .map_err(|error| CapabilityError::caused(error.code(), error))?
+        .map_err(|source| CapabilityError::caused("workspace_list_io_error", source))?;
     match outcome {
         WorkspaceListOutcome::Rejected(rejection) => {
             let error = if matches!(
@@ -264,9 +258,8 @@ pub(super) fn integer(
     let Some(value) = value else {
         return Ok(fallback);
     };
-    let number = crate::json::coerce_number(value).map_err(|_| CapabilityError {
-        code: "invalid_number_conversion".into(),
-    })?;
+    let number = crate::json::coerce_number(value)
+        .map_err(|source| CapabilityError::caused("invalid_number_conversion", source))?;
     Ok(if number.is_finite() {
         crate::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
     } else {

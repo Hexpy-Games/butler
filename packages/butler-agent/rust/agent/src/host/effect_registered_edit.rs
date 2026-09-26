@@ -46,7 +46,7 @@ impl RegisteredEditPort for NativeRegisteredEdit {
                     },
                 )
                 .await
-                .map_err(|error| EffectFailure::adapter(error.code))
+                .map_err(|error| EffectFailure::adapter(error.code()).with_source(error))
         })
     }
 }

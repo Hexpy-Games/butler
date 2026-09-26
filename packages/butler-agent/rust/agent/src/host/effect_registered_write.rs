@@ -64,7 +64,7 @@ impl RegisteredWritePort for NativeRegisteredWrite {
                     },
                 )
                 .await
-                .map_err(|error| EffectFailure::adapter(error.code))
+                .map_err(|error| EffectFailure::adapter(error.code()).with_source(error))
         })
     }
 }

@@ -43,10 +43,46 @@ pub(crate) struct CapabilityInvocation<'a> {
     pub installation_root: Option<&'a std::path::Path>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A file or skill capability failed. `code()` is the tool-result code (the
+/// capability's own, or the workspace guard's reason); the source keeps the
+/// underlying I/O, owner or JSON error.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{code}")]
 pub(crate) struct CapabilityError {
-    pub code: String,
+    code: &'static str,
+    #[source]
+    source: Option<Arc<dyn std::error::Error + Send + Sync>>,
 }
+
+impl CapabilityError {
+    pub(crate) fn new(code: &'static str) -> Self {
+        Self { code, source: None }
+    }
+
+    /// A capability failure caused by `source`, reported with `code`.
+    pub(crate) fn caused(
+        code: &'static str,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            code,
+            source: Some(Arc::new(source)),
+        }
+    }
+
+    pub(crate) fn code(&self) -> &'static str {
+        self.code
+    }
+}
+
+/// Wire equality: the same code (causes are diagnostic only).
+impl PartialEq for CapabilityError {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
+}
+
+impl Eq for CapabilityError {}
 
 impl NativeCapabilities {
     pub(crate) fn with_skills(
@@ -83,9 +119,7 @@ impl NativeCapabilities {
             "write_file" => write_file::execute(&self.mutations, input).await,
             "edit_file" => edit_file::execute(&self.mutations, input).await,
             "list_skills" => list_skills::execute(&self.skills, input).await,
-            _ => Err(CapabilityError {
-                code: "unknown_capability".into(),
-            }),
+            _ => Err(CapabilityError::new("unknown_capability")),
         }
     }
     pub(crate) fn registered_names(&self) -> &'static [&'static str] {

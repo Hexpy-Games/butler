@@ -29,9 +29,7 @@ pub(super) async fn execute(
     let catalog = skills
         .runtime_catalog(project_id)
         .await
-        .map_err(|error| CapabilityError {
-            code: error.code().into(),
-        })?;
+        .map_err(|error| CapabilityError::caused(error.code(), error))?;
     let issues: Vec<SkillValidationIssue> = crate::skills::validate(&catalog);
     let projected: Vec<Value> = catalog
         .into_iter()

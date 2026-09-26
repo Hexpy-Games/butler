@@ -83,9 +83,7 @@ pub(super) async fn execute(
             "maxDirs":options.limits.max_dirs,"maxDepth":options.limits.max_depth,
             "elapsedMs":options.limits.elapsed_ms}
     }))
-    .map_err(|_| CapabilityError {
-        code: "cursor_query_json_failed".into(),
-    })?;
+    .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
     let cursor_input = args.get("cursor").filter(|value| {
         !value
             .as_str()
@@ -111,12 +109,8 @@ pub(super) async fn execute(
             limits: options.limits,
         })
         .await
-        .map_err(|error| CapabilityError {
-            code: error.code().into(),
-        })?
-        .map_err(|_| CapabilityError {
-            code: "workspace_grep_io_error".into(),
-        })?;
+        .map_err(|error| CapabilityError::caused(error.code(), error))?
+        .map_err(|source| CapabilityError::caused("workspace_grep_io_error", source))?;
     let listed = match outcome {
         WorkspaceListOutcome::Listed(listed) => listed,
         WorkspaceListOutcome::Rejected(rejection) => {

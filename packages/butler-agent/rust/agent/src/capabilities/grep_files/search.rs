@@ -162,9 +162,8 @@ pub(super) async fn execute(
         for (entry, read) in batch.iter().zip(reads) {
             result.reads.push(CandidateResult {
                 path: entry.path.clone(),
-                read: read.map_err(|error| super::super::CapabilityError {
-                    code: error.code().into(),
-                })?,
+                read: read
+                    .map_err(|error| super::super::CapabilityError::caused(error.code(), error))?,
             });
         }
         let base = offset * 4;

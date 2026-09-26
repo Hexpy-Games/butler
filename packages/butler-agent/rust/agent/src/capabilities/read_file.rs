@@ -52,9 +52,11 @@ pub(super) async fn execute(
         4_194_304,
     )?;
     let bound_root = if let Some(reference) = input.workspace_reference {
-        Some(reference.get().map_err(|error| CapabilityError {
-            code: error.code().to_owned(),
-        })?)
+        Some(
+            reference
+                .get()
+                .map_err(|error| CapabilityError::caused(error.code(), error))?,
+        )
     } else {
         input
             .workspace_path
@@ -71,9 +73,8 @@ pub(super) async fn execute(
         .or_else(|| supplied_root_raw.map(PathBuf::from))
         .unwrap_or_else(|| input.butler_data.to_path_buf());
     let query_value = json!({ "workspace_root": root.to_string_lossy(), "requests": requests.iter().map(Request::query_value).collect::<Vec<_>>(), "max_total_bytes": max_total });
-    let query = cursor::query_hash(&query_value).map_err(|_| CapabilityError {
-        code: "cursor_query_json_failed".into(),
-    })?;
+    let query = cursor::query_hash(&query_value)
+        .map_err(|source| CapabilityError::caused("cursor_query_json_failed", source))?;
     let cursor_input = args.get("cursor").filter(|v| {
         v.as_str()
             .is_none_or(|s| !crate::public_text::trim_js_whitespace(s).is_empty())
@@ -264,19 +265,9 @@ pub(super) async fn execute(
     }
     Ok(result)
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn owner_error(error: crate::workspace::FileOwnerError) -> CapabilityError {
-    CapabilityError {
-        code: error.code().into(),
-    }
+    CapabilityError::caused(error.code(), error)
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn guard_io_error(error: std::io::Error) -> CapabilityError {
     let code = match error.kind() {
         std::io::ErrorKind::NotFound => "ENOENT",
@@ -284,7 +275,7 @@ fn guard_io_error(error: std::io::Error) -> CapabilityError {
         std::io::ErrorKind::NotADirectory => "ENOTDIR",
         _ => "workspace_guard_io",
     };
-    CapabilityError { code: code.into() }
+    CapabilityError::caused(code, error)
 }
 fn make_cursor(
     query: &str,
