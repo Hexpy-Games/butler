@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use crate::cognition::{CognitionResult, FeedbackTarget};
 
 use super::{KnowHowAggregateReport, KnowHowService, entries, error, quality};
+use crate::cognition::CognitionCode;
 
 impl KnowHowService {
     pub(crate) async fn operator_entries(&self) -> CognitionResult<Vec<Value>> {
@@ -77,18 +78,18 @@ pub(super) fn disable(root: &Path, id: &str) -> CognitionResult<Option<Value>> {
     };
     let object = entry
         .as_object_mut()
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let previous_status = object
         .get("status")
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
         .to_owned();
     object.insert("status".into(), json!("disabled"));
     object.insert("updated_at".into(), json!(now_iso()));
     object
         .get_mut("revision_history")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
         .push(json!({
             "at": now_iso(),
             "kind": "operator_disable",
@@ -118,11 +119,11 @@ pub(super) fn retrieve(
         .map(|entry| {
             let match_score = match_score(&entry, &normalized_query, &query_tokens)?;
             let id = string(&entry, "knowhow_id")
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
             let preferred_sources = entry
                 .pointer("/strategy/preferred_sources")
                 .and_then(Value::as_array)
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
             let suppressed = feedback
                 .iter()
                 .filter(|feedback| {
@@ -143,7 +144,7 @@ pub(super) fn retrieve(
             let quality_score = entry
                 .pointer("/quality/score")
                 .and_then(Value::as_f64)
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
             let final_score = if suppressed.is_empty() {
                 round3(match_score * 0.65 + quality_score * 0.35)
             } else {
@@ -201,11 +202,13 @@ pub(super) fn source_quality(root: &Path) -> CognitionResult<Vec<Value>> {
 }
 
 fn match_score(entry: &Value, query: &str, query_tokens: &[String]) -> CognitionResult<f64> {
-    let name = string(entry, "name").ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+    let name =
+        string(entry, "name").ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let aliases = string_array(entry, "/aliases")?;
     let topics = string_array(entry, "/intent_match/topics")?;
     let examples = string_array(entry, "/intent_match/examples")?;
-    let summary = string(entry, "summary").ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+    let summary =
+        string(entry, "summary").ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let buckets = std::iter::once((name, 1.0))
         .chain(aliases.iter().map(|value| (value.as_str(), 0.95)))
         .chain(topics.iter().map(|value| (value.as_str(), 0.8)))
@@ -233,13 +236,13 @@ fn string_array(value: &Value, pointer: &str) -> CognitionResult<Vec<String>> {
     value
         .pointer(pointer)
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
         .iter()
         .map(|value| {
             value
                 .as_str()
                 .map(str::to_owned)
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
         })
         .collect()
 }

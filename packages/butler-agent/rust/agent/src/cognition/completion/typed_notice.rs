@@ -3,6 +3,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +53,8 @@ impl TypedMemorySourceNotice {
 }
 
 fn quote(value: &str) -> CognitionResult<String> {
-    crate::json::stringify(&Value::String(value.to_owned()))
-        .map_err(|error| CognitionError::new("memory_queue_invalid_json", error.to_string()))
+    crate::json::stringify(&Value::String(value.to_owned())).map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryQueueInvalidJson, error.to_string())
+            .with_source(error)
+    })
 }

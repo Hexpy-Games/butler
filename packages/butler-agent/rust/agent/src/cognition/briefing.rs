@@ -2,8 +2,9 @@
 
 mod generation;
 pub(crate) use generation::{
-    BriefingGenerationError, BriefingGenerationService, BriefingInputFuture, BriefingInputSnapshot,
-    BriefingInputSource, BriefingPersona, BriefingProjectSignal, BriefingSettings,
+    BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
+    BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
+    BriefingProjectSignal, BriefingSettings,
 };
 
 use serde_json::Value;

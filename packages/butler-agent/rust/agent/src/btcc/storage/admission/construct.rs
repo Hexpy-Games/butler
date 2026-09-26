@@ -171,6 +171,7 @@ fn insert_initial_turn(
             .and_then(|value| stringify(&value).map_err(crate::btcc::BtccError::from))
             .map_err(|error| {
                 StorageError::new(StorageCode::InvalidContinuationBudget, error.message())
+                    .with_source(error)
             })
         })
         .transpose()?;

@@ -6,6 +6,7 @@ use std::{
 
 use serde_json::Value;
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 pub(in crate::cognition::generation) fn write_json(
@@ -13,7 +14,10 @@ pub(in crate::cognition::generation) fn write_json(
     value: &Value,
 ) -> CognitionResult<()> {
     let parent = path.parent().ok_or_else(|| {
-        CognitionError::new("memory_generation_path_invalid", "path has no parent")
+        CognitionError::new(
+            CognitionCode::MemoryGenerationPathInvalid,
+            "path has no parent",
+        )
     })?;
     create_dir(parent)?;
     let temporary = path.with_extension(format!(
@@ -60,10 +64,10 @@ pub(in crate::cognition::generation) fn create_dir(path: &Path) -> CognitionResu
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn io_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_initialization_io_error", error.to_string())
+    CognitionError::new(
+        CognitionCode::MemoryInitializationIoError,
+        error.to_string(),
+    )
+    .with_source(error)
 }

@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, fs, io::Write, path::Path};
 
+use crate::cognition::CognitionCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -69,7 +70,7 @@ pub(super) fn read(
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(error("continuity_recovery_manifest_read_failed")),
+        Err(_) => return Err(error(CognitionCode::ContinuityRecoveryManifestReadFailed)),
     };
     let value: Value = match serde_json::from_str(&content) {
         Ok(value) => value,
@@ -78,9 +79,9 @@ pub(super) fn read(
     if value["schema_version"] != SCHEMA || value["manifest_id"] != manifest_id {
         return Ok(None);
     }
-    serde_json::from_value(value)
-        .map(Some)
-        .map_err(|_| error("continuity_recovery_manifest_invalid"))
+    serde_json::from_value(value).map(Some).map_err(|source| {
+        error(CognitionCode::ContinuityRecoveryManifestInvalid).with_source(source)
+    })
 }
 
 pub(super) fn required(
@@ -89,7 +90,7 @@ pub(super) fn required(
     manifest_id: &str,
 ) -> CognitionResult<ContinuityRecoveryManifest> {
     read(data_root, paths, manifest_id)?
-        .ok_or_else(|| error("continuity_recovery_manifest_not_found"))
+        .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestNotFound))
 }
 
 pub(super) fn approve(
@@ -99,7 +100,7 @@ pub(super) fn approve(
     candidate_ids: Option<Vec<String>>,
 ) -> CognitionResult<ContinuityRecoveryManifest> {
     if matches!(manifest.status.as_str(), "applied" | "rolled_back") {
-        return Err(error("continuity_recovery_manifest_terminal"));
+        return Err(error(CognitionCode::ContinuityRecoveryManifestTerminal));
     }
     let available = manifest
         .candidates
@@ -120,7 +121,7 @@ pub(super) fn approve(
             .collect::<Vec<_>>(),
     };
     if approved.is_empty() || approved.iter().any(|id| !available.contains(id.as_str())) {
-        return Err(error("continuity_recovery_candidate_invalid"));
+        return Err(error(CognitionCode::ContinuityRecoveryCandidateInvalid));
     }
     approved.sort();
     manifest.status = "approved".into();
@@ -138,7 +139,7 @@ pub(super) fn write(
     let path = manifest_path(data_root, paths, &manifest.manifest_id)?;
     let parent = path
         .parent()
-        .ok_or_else(|| error("continuity_recovery_manifest_path_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestPathInvalid))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -154,7 +155,7 @@ pub(super) fn write(
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error("continuity_recovery_manifest_path_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::ContinuityRecoveryManifestPathInvalid))?;
     let temp = parent.join(format!(".{filename}.{}.tmp", uuid::Uuid::new_v4()));
     let mut created_temp = false;
     let result = (|| {
@@ -169,9 +170,10 @@ pub(super) fn write(
         created_temp = true;
         serde_json::to_writer_pretty(&mut file, manifest).map_err(|failure| {
             CognitionError::new(
-                "continuity_recovery_manifest_write_failed",
+                CognitionCode::ContinuityRecoveryManifestWriteFailed,
                 failure.to_string(),
             )
+            .with_source(failure)
         })?;
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
@@ -215,17 +217,14 @@ pub(super) fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new(
-        "continuity_recovery_manifest_write_failed",
+        CognitionCode::ContinuityRecoveryManifestWriteFailed,
         error.to_string(),
     )
+    .with_source(error)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

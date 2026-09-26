@@ -4,6 +4,7 @@ use std::{
     path::{Component, Path},
 };
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, ensure_data_authority};
 
 const TYPED_SOURCE_ROOTS: [&str; 4] = [
@@ -149,7 +150,13 @@ fn create_destination_parents(
 ) -> CognitionResult<()> {
     let relative = destination_parent
         .strip_prefix(snapshot_root)
-        .map_err(|_| CognitionError::new("memory_data_path_unsafe", "memory_data_path_unsafe"))?;
+        .map_err(|source| {
+            CognitionError::new(
+                CognitionCode::MemoryDataPathUnsafe,
+                "memory_data_path_unsafe",
+            )
+            .with_source(source)
+        })?;
     let mut current = snapshot_root.to_path_buf();
     for component in relative.components() {
         let Component::Normal(name) = component else {
@@ -157,7 +164,7 @@ fn create_destination_parents(
                 continue;
             }
             return Err(CognitionError::new(
-                "memory_data_path_unsafe",
+                CognitionCode::MemoryDataPathUnsafe,
                 "memory_data_path_unsafe",
             ));
         };
@@ -182,9 +189,13 @@ fn create_destination_parents(
 }
 
 fn reject_symlink_components(base: &Path, path: &Path) -> CognitionResult<()> {
-    let relative = path
-        .strip_prefix(base)
-        .map_err(|_| CognitionError::new("memory_data_path_unsafe", "memory_data_path_unsafe"))?;
+    let relative = path.strip_prefix(base).map_err(|source| {
+        CognitionError::new(
+            CognitionCode::MemoryDataPathUnsafe,
+            "memory_data_path_unsafe",
+        )
+        .with_source(source)
+    })?;
     let mut current = base.to_path_buf();
     for component in relative.components() {
         match component {
@@ -192,7 +203,7 @@ fn reject_symlink_components(base: &Path, path: &Path) -> CognitionResult<()> {
             Component::CurDir => continue,
             _ => {
                 return Err(CognitionError::new(
-                    "memory_data_path_unsafe",
+                    CognitionCode::MemoryDataPathUnsafe,
                     "memory_data_path_unsafe",
                 ));
             }
@@ -200,7 +211,7 @@ fn reject_symlink_components(base: &Path, path: &Path) -> CognitionResult<()> {
         match fs::symlink_metadata(&current) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(CognitionError::new(
-                    "memory_data_path_unsafe",
+                    CognitionCode::MemoryDataPathUnsafe,
                     "memory_data_path_unsafe",
                 ));
             }
@@ -281,7 +292,10 @@ fn sync_directory(path: &Path) -> CognitionResult<()> {
 }
 
 fn snapshot_changed() -> CognitionError {
-    CognitionError::new("memory_snapshot_changed", "memory_snapshot_changed")
+    CognitionError::new(
+        CognitionCode::MemorySnapshotChanged,
+        "memory_snapshot_changed",
+    )
 }
 
 #[expect(
@@ -289,5 +303,5 @@ fn snapshot_changed() -> CognitionError {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn io_error(error: io::Error) -> CognitionError {
-    CognitionError::new("memory_snapshot_copy_failed", error.to_string())
+    CognitionError::new(CognitionCode::MemorySnapshotCopyFailed, error.to_string())
 }

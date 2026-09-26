@@ -12,6 +12,7 @@ use crate::{
 };
 
 use super::{SystemIdentity, signals};
+use crate::cognition::CognitionCode;
 
 pub(super) async fn run(
     data: &Path,
@@ -24,7 +25,7 @@ pub(super) async fn run(
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone())
-        .map_err(|message| CognitionError::new("native_signal_unavailable", message))?;
+        .map_err(|message| CognitionError::new(CognitionCode::NativeSignalUnavailable, message))?;
     let result = retry_failed_memory_generation(
         data,
         paths,

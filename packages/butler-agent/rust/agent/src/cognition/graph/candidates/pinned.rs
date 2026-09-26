@@ -1,5 +1,6 @@
 //! Rehydrate only explicitly pinned candidate IDs for operator input repair.
 
+use crate::cognition::CognitionCode;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -48,7 +49,9 @@ pub(in crate::cognition::graph) fn load(
                 continue;
             }
             let bytes = crate::json::serde_serialized_bytes(&CandidateSlices(&result, &group))
-                .map_err(|_| error("memory_extract_invalid_json"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryExtractInvalidJson).with_source(source)
+                })?;
             if bytes > candidate_bytes {
                 continue;
             }
@@ -90,7 +93,8 @@ pub(in crate::cognition::graph) fn assert_source_current(
             return Err(source_changed());
         }
         if matches!(row.source_kind.as_str(), "task_report" | "explicit_record") {
-            hydrate_typed_source(source_root, &row).map_err(|_| source_changed())?;
+            hydrate_typed_source(source_root, &row)
+                .map_err(|source| source_changed().with_source(source))?;
         } else {
             let message_id = row
                 .conversation_message_id
@@ -98,10 +102,10 @@ pub(in crate::cognition::graph) fn assert_source_current(
                 .ok_or_else(source_changed)?;
             let message = canonical
                 .read_message(message_id)
-                .map_err(|_| source_changed())?
+                .map_err(|source| source_changed().with_source(source))?
                 .ok_or_else(source_changed)?;
             hydrate_conversation_source(&message, &row, f64::INFINITY)
-                .map_err(|_| source_changed())?;
+                .map_err(|source| source_changed().with_source(source))?;
         }
     }
     if chunk.1.starts_with("task_report:") || chunk.1.starts_with("explicit_record:") {
@@ -111,7 +115,7 @@ pub(in crate::cognition::graph) fn assert_source_current(
     let notice = if let Some(turn_id) = chunk.3.as_deref() {
         let outcome = canonical
             .read_turn_outcome(turn_id)
-            .map_err(|_| source_changed())?
+            .map_err(|source| source_changed().with_source(source))?
             .ok_or_else(source_changed)?;
         ConversationSourceNotice::Turn {
             session_id,
@@ -132,12 +136,12 @@ pub(in crate::cognition::graph) fn assert_source_current(
         }
     };
     assert_conversation_source_current(canonical, notice, &pinned.revision, now)
-        .map_err(|_| source_changed())
+        .map_err(|source| source_changed().with_source(source))
 }
 
 fn source_changed() -> CognitionError {
-    error("memory_source_changed")
+    error(CognitionCode::MemorySourceChanged)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

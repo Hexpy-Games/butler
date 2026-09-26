@@ -73,7 +73,11 @@ impl NativeConversationObserver {
                         }
                         Job::Completion(input, result) => {
                             let outcome = publisher.publish(&input).map_err(|error| {
-                                ConversationError::port(error.code, error.message.clone(), error)
+                                ConversationError::port(
+                                    error.code(),
+                                    error.message().clone(),
+                                    error,
+                                )
                             });
                             let _ = result.send(outcome);
                         }

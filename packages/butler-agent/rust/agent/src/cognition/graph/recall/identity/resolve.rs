@@ -13,6 +13,7 @@ use super::{
     super::db_error,
     records::{self, Decision, HistoryRef},
 };
+use crate::cognition::CognitionCode;
 
 struct IdentityResolutionContext<'a, SourceCurrent, Now> {
     db: &'a Connection,
@@ -65,7 +66,9 @@ where
         )
         .optional()
         .map_err(db_error)?
-        .ok_or_else(|| CognitionError::new("memory_graph_unavailable", "memory_node_missing"))?;
+        .ok_or_else(|| {
+            CognitionError::new(CognitionCode::MemoryGraphUnavailable, "memory_node_missing")
+        })?;
     let mut head = head
         .0
         .zip(head.1)

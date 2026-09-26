@@ -21,7 +21,9 @@ pub(super) fn capture(
 ) -> StorageResult<ProjectWorkCapturedMaterial> {
     let work = &input.candidate;
     let material_fingerprint = crate::btcc::work::policy::disposition_material_fingerprint(work)
-        .map_err(|e| StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message()))?;
+        .map_err(|e| {
+            StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message()).with_source(e)
+        })?;
     let mut statement = db.prepare(
         "SELECT effect_id,receipt_id,status,journal_revision,updated_at FROM btcc_guided_effects \
          WHERE work_id=?1 ORDER BY effect_id",
@@ -40,8 +42,12 @@ pub(super) fn capture(
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
     let effect_watermark = crate::btcc::identity::digest(
-        &crate::btcc::identity::sqlite_stable_json(&serde_json::Value::Array(rows))
-            .map_err(|e| StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message()))?,
+        &crate::btcc::identity::sqlite_stable_json(&serde_json::Value::Array(rows)).map_err(
+            |e| {
+                StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message())
+                    .with_source(e)
+            },
+        )?,
     );
     let mut blockers_statement = db
         .prepare(

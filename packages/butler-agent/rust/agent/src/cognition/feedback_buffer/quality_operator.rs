@@ -5,6 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::cognition::CognitionCode;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -25,7 +26,7 @@ impl FeedbackBufferService {
         publisher: CompletionPublisher,
     ) -> CognitionResult<Value> {
         if scope != "all_user_sessions" || !source_ref.starts_with("memory-source:v2:") {
-            return Err(error("invalid_scope"));
+            return Err(error(CognitionCode::InvalidScope));
         }
         let data_root = self.data_root.clone();
         let memory_root = self.paths.memory_root(&data_root);
@@ -77,7 +78,7 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
     } = input;
     let operation_path = feedback_path
         .parent()
-        .ok_or_else(|| error("memory_quality_operation_write_failed"))?
+        .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?
         .join("quality-operations.jsonl");
     let operations = read_operations(&operation_path)?;
     let prior = operations
@@ -87,7 +88,7 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
     let owners = read_entries(feedback_path)?;
     let owner = owners.iter().find(|entry| entry.feedback_id == feedback_id);
     if owner.is_none() && prior.is_none() {
-        return Err(error("memory_feedback_entry_not_found"));
+        return Err(error(CognitionCode::MemoryFeedbackEntryNotFound));
     }
 
     let memory_root = paths.memory_root(data_root);
@@ -124,12 +125,12 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
         "scope": scope,
     });
     if expected["feedback_owner_revision"].as_str().is_none() {
-        return Err(error("memory_quality_target_changed"));
+        return Err(error(CognitionCode::MemoryQualityTargetChanged));
     }
     let mut replayed = false;
     let operation = if let Some(prior) = prior {
         if !same_operation(&prior, &expected) {
-            return Err(error("memory_quality_operation_conflict"));
+            return Err(error(CognitionCode::MemoryQualityOperationConflict));
         }
         replayed = true;
         prior
@@ -150,7 +151,7 @@ fn record_exclusion(input: ExclusionOperation<'_>) -> CognitionResult<Value> {
     let mut result = operation
         .as_object()
         .cloned()
-        .ok_or_else(|| error("memory_quality_operation_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryQualityOperationInvalid))?;
     result.insert("replayed".into(), json!(replayed));
     Ok(Value::Object(result))
 }
@@ -159,7 +160,7 @@ fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
     let source = match fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(error("memory_quality_operation_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryQualityOperationReadFailed)),
     };
     Ok(source
         .lines()
@@ -173,7 +174,7 @@ fn read_operations(path: &Path) -> CognitionResult<Vec<Value>> {
 fn append_operation(path: &Path, previous: &[Value], operation: &Value) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| error("memory_quality_operation_write_failed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryQualityOperationWriteFailed))?;
     create_private_dir(parent)?;
     let temporary = parent.join(format!(
         "quality-operations.jsonl.tmp-{}",
@@ -187,22 +188,29 @@ fn append_operation(path: &Path, previous: &[Value], operation: &Value) -> Cogni
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| error("memory_quality_operation_write_failed"))?;
+        let mut file = options.open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+        })?;
         for value in previous.iter().chain(std::iter::once(operation)) {
-            serde_json::to_writer(&mut file, value)
-                .map_err(|_| error("memory_quality_operation_write_failed"))?;
-            file.write_all(b"\n")
-                .map_err(|_| error("memory_quality_operation_write_failed"))?;
+            serde_json::to_writer(&mut file, value).map_err(|source| {
+                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+            })?;
+            file.write_all(b"\n").map_err(|source| {
+                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+            })?;
         }
-        file.sync_all()
-            .map_err(|_| error("memory_quality_operation_write_failed"))?;
-        fs::rename(&temporary, path).map_err(|_| error("memory_quality_operation_write_failed"))?;
+        file.sync_all().map_err(|source| {
+            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+        })?;
         #[cfg(unix)]
         fs::File::open(parent)
             .and_then(|directory| directory.sync_all())
-            .map_err(|_| error("memory_quality_operation_write_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+            })?;
         Ok(())
     })();
     if result.is_err() {
@@ -250,19 +258,20 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::DirBuilderExt;
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error("memory_quality_operation_path_unsafe")),
+            Ok(_) => return Err(error(CognitionCode::MemoryQualityOperationPathUnsafe)),
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error("memory_quality_operation_write_failed")),
+            Err(_) => return Err(error(CognitionCode::MemoryQualityOperationWriteFailed)),
         }
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);
-        builder
-            .create(path)
-            .map_err(|_| error("memory_quality_operation_write_failed"))
+        builder.create(path).map_err(|source| {
+            error(CognitionCode::MemoryQualityOperationWriteFailed).with_source(source)
+        })
     }
     #[cfg(not(unix))]
     {
-        fs::create_dir_all(path).map_err(|_| error("memory_quality_operation_write_failed"))
+        fs::create_dir_all(path)
+            .map_err(|source| error("memory_quality_operation_write_failed").with_source(source))
     }
 }
 
@@ -279,6 +288,6 @@ fn now_iso() -> String {
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned())
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

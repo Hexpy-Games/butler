@@ -1,4 +1,5 @@
 use super::call::{error, json_error};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionResult,
     extraction::{ExtractInput, ExtractOutput, ExtractSummary},
@@ -115,7 +116,7 @@ pub(super) fn validate_output(output: &ExtractOutput, input: &ExtractInput) -> C
         || output.corrections.len() > 16
         || serde_json::to_vec(output).map_err(json_error)?.len() > 65536
     {
-        return Err(error("memory_extract_invalid_output"));
+        return Err(error(CognitionCode::MemoryExtractInvalidOutput));
     }
     let expected = input
         .source_units
@@ -128,7 +129,7 @@ pub(super) fn validate_output(output: &ExtractOutput, input: &ExtractInput) -> C
         .map(String::as_str)
         .collect::<std::collections::HashSet<_>>();
     if output.disposition == "processed" && expected != covered {
-        return Err(error("memory_extract_invalid_output"));
+        return Err(error(CognitionCode::MemoryExtractInvalidOutput));
     }
     Ok(())
 }

@@ -8,6 +8,7 @@ mod transcript_index;
 
 pub(crate) use import::extract_legacy_import_transcript;
 
+use crate::cognition::CognitionCode;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -84,19 +85,19 @@ impl LegacyIndexService {
             move || list_markdown_files(&data_root, &hot_root)
         })
         .await
-        .map_err(|_| error("hot_cache_read_failed"))??;
+        .map_err(|source| error(CognitionCode::HotCacheReadFailed).with_source(source))??;
         let mut outcome = HotCacheBackfillOutcome::default();
         for file in files {
             if cancellation.is_cancelled() {
-                return Err(error("memory_write_aborted"));
+                return Err(error(CognitionCode::MemoryWriteAborted));
             }
             let raw = tokio::fs::read(&file)
                 .await
-                .map_err(|_| error("hot_cache_read_failed"))?;
+                .map_err(|source| error(CognitionCode::HotCacheReadFailed).with_source(source))?;
             let decoded = String::from_utf8_lossy(&raw);
             for (index, block) in markdown_blocks(&decoded).into_iter().enumerate() {
                 if cancellation.is_cancelled() {
-                    return Err(error("memory_write_aborted"));
+                    return Err(error(CognitionCode::MemoryWriteAborted));
                 }
                 outcome.attempted += 1;
                 let digest =
@@ -106,9 +107,11 @@ impl LegacyIndexService {
                 let session_id = format!("hot_maintain_{hex}");
                 match self.index_block(&block, &session_id, cancellation).await {
                     Ok(()) => outcome.indexed += 1,
-                    Err(failure) if failure.code == "memory_write_aborted" => return Err(failure),
+                    Err(failure) if failure.code() == "memory_write_aborted" => {
+                        return Err(failure);
+                    }
                     Err(failure) => {
-                        eprintln!("Warning: hot-cache indexing failed ({})", failure.code);
+                        eprintln!("Warning: hot-cache indexing failed ({})", failure.code());
                         outcome.failed += 1;
                     }
                 }
@@ -125,17 +128,17 @@ impl LegacyIndexService {
     ) -> CognitionResult<()> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| error("hot_cache_clock_unavailable"))?
+            .map_err(|source| error(CognitionCode::HotCacheClockUnavailable).with_source(source))?
             .as_secs() as f64;
         let text = trim_js_whitespace(block);
         let chunks = chunk_text(text);
         if chunks.is_empty() {
-            return Err(error("hot_cache_empty_block"));
+            return Err(error(CognitionCode::HotCacheEmptyBlock));
         }
         let mut vectors = Vec::with_capacity(chunks.len());
         for batch in chunks.chunks(4) {
             if cancellation.is_cancelled() {
-                return Err(error("memory_write_aborted"));
+                return Err(error(CognitionCode::MemoryWriteAborted));
             }
             let request = EmbeddingRequest {
                 texts: batch.to_vec(),
@@ -147,12 +150,12 @@ impl LegacyIndexService {
             };
             let embedded = self.embedding.embed(request, cancellation.clone()).await?;
             if embedded.embeddings.len() != batch.len() {
-                return Err(error("hot_cache_embedding_incomplete"));
+                return Err(error(CognitionCode::HotCacheEmbeddingIncomplete));
             }
             vectors.extend(embedded.embeddings);
         }
         if cancellation.is_cancelled() {
-            return Err(error("memory_write_aborted"));
+            return Err(error(CognitionCode::MemoryWriteAborted));
         }
         let memory_root = self.paths.memory_root(&self.data_root);
         let db_root = memory_root.join("db");
@@ -191,7 +194,7 @@ impl LegacyIndexService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         // Once mutation starts, await it and release the lease after all writes drain.
         let rows = chunks
             .into_iter()
@@ -240,7 +243,7 @@ impl LegacyIndexService {
             }
         })
         .await
-        .map_err(|_| error("hot_cache_receipt_failed"))?
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?
     }
 }
 
@@ -251,10 +254,15 @@ fn list_markdown_files(data_root: &Path, root: &Path) -> CognitionResult<Vec<Pat
     let mut files = Vec::new();
     fn visit(data_root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> CognitionResult<()> {
         ensure_data_authority(data_root, &[dir])?;
-        for entry in fs::read_dir(dir).map_err(|_| error("hot_cache_read_failed"))? {
-            let path = entry.map_err(|_| error("hot_cache_read_failed"))?.path();
+        for entry in fs::read_dir(dir)
+            .map_err(|source| error(CognitionCode::HotCacheReadFailed).with_source(source))?
+        {
+            let path = entry
+                .map_err(|source| error(CognitionCode::HotCacheReadFailed).with_source(source))?
+                .path();
             ensure_data_authority(data_root, &[&path])?;
-            let metadata = fs::metadata(&path).map_err(|_| error("hot_cache_read_failed"))?;
+            let metadata = fs::metadata(&path)
+                .map_err(|source| error(CognitionCode::HotCacheReadFailed).with_source(source))?;
             if metadata.is_dir() {
                 visit(data_root, &path, files)?;
             } else if path.to_string_lossy().ends_with(".md") {
@@ -315,8 +323,8 @@ fn chunk_text(text: &str) -> Vec<String> {
     chunks
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 #[cfg(test)]

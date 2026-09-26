@@ -25,6 +25,7 @@ use super::{
     },
     write::{failure_log_path, project_lock_path},
 };
+use crate::cognition::CognitionCode;
 
 const TASK_LIMIT: usize = 5;
 
@@ -232,12 +233,13 @@ pub(super) fn sources_are_current(
 }
 
 pub(super) fn fingerprint(snapshot: &ProjectCapsuleSourceSnapshot) -> CognitionResult<String> {
-    let bytes =
-        serde_json::to_vec(snapshot).map_err(|_| error("project_capsule_source_invalid"))?;
+    let bytes = serde_json::to_vec(snapshot)
+        .map_err(|source| error(CognitionCode::ProjectCapsuleSourceInvalid).with_source(source))?;
     let digest = Sha256::digest(bytes);
     Ok(format!("{digest:x}"))
 }
 
 fn json_text(value: Option<&Value>) -> CognitionResult<String> {
-    serde_json::to_string(&value).map_err(|_| error("project_capsule_source_invalid"))
+    serde_json::to_string(&value)
+        .map_err(|source| error(CognitionCode::ProjectCapsuleSourceInvalid).with_source(source))
 }

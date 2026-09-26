@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 
 use super::TypedMemorySourceNotice;
 use super::observation::PublishedObservation;
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 pub(super) fn append(
@@ -25,7 +26,7 @@ pub(super) fn append(
         .map_err(sqlite_error)?;
     db.execute_batch("BEGIN EXCLUSIVE").map_err(|error| {
         if matches!(error, rusqlite::Error::SqliteFailure(inner, _) if inner.code == ErrorCode::DatabaseBusy || inner.code == ErrorCode::DatabaseLocked) {
-            CognitionError::new("memory_queue_busy", "memory_queue_busy")
+            CognitionError::new(CognitionCode::MemoryQueueBusy, "memory_queue_busy")
         } else { sqlite_error(error) }
     })?;
     let result = (|| {
@@ -139,7 +140,7 @@ fn append_idempotent(
         .map_err(sqlite_error)?;
     db.execute_batch("BEGIN EXCLUSIVE").map_err(|error| {
         if matches!(error, rusqlite::Error::SqliteFailure(inner, _) if inner.code == ErrorCode::DatabaseBusy || inner.code == ErrorCode::DatabaseLocked) {
-            CognitionError::new("memory_queue_busy", "memory_queue_busy")
+            CognitionError::new(CognitionCode::MemoryQueueBusy, "memory_queue_busy")
         } else {
             sqlite_error(error)
         }
@@ -188,8 +189,10 @@ fn append_idempotent(
 }
 
 fn json_string(value: &str) -> CognitionResult<String> {
-    crate::json::stringify(&Value::String(value.to_owned()))
-        .map_err(|error| CognitionError::new("memory_queue_invalid_json", error.to_string()))
+    crate::json::stringify(&Value::String(value.to_owned())).map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryQueueInvalidJson, error.to_string())
+            .with_source(error)
+    })
 }
 
 fn queued(path: &Path, id: &str) -> CognitionResult<bool> {
@@ -203,8 +206,10 @@ fn queued(path: &Path, id: &str) -> CognitionResult<bool> {
         if line.is_empty() {
             continue;
         }
-        let entry: Value = serde_json::from_str(&line)
-            .map_err(|error| CognitionError::new("memory_queue_invalid_json", error.to_string()))?;
+        let entry: Value = serde_json::from_str(&line).map_err(|error| {
+            CognitionError::new(CognitionCode::MemoryQueueInvalidJson, error.to_string())
+                .with_source(error)
+        })?;
         if entry["job_id"] == id {
             return Ok(true);
         }
@@ -222,9 +227,10 @@ pub(super) fn peek(root: &Path) -> CognitionResult<Option<Value>> {
     for line in BufReader::new(file).lines() {
         let line = line.map_err(io_error)?;
         if !line.is_empty() {
-            return serde_json::from_str(&line)
-                .map(Some)
-                .map_err(|e| CognitionError::new("memory_queue_invalid_json", e.to_string()));
+            return serde_json::from_str(&line).map(Some).map_err(|e| {
+                CognitionError::new(CognitionCode::MemoryQueueInvalidJson, e.to_string())
+                    .with_source(e)
+            });
         }
     }
     Ok(None)
@@ -271,8 +277,10 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
         let mut removed = false;
         for line in BufReader::new(original).lines() {
             let line = line.map_err(io_error)?;
-            let value: Value = serde_json::from_str(&line)
-                .map_err(|e| CognitionError::new("memory_queue_invalid_json", e.to_string()))?;
+            let value: Value = serde_json::from_str(&line).map_err(|e| {
+                CognitionError::new(CognitionCode::MemoryQueueInvalidJson, e.to_string())
+                    .with_source(e)
+            })?;
             if !removed && value["job_id"] == expected {
                 removed = true;
                 continue;
@@ -297,17 +305,9 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
     result
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_queue_io_error", error.to_string())
+    CognitionError::new(CognitionCode::MemoryQueueIoError, error.to_string()).with_source(error)
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn sqlite_error(error: rusqlite::Error) -> CognitionError {
-    CognitionError::new("memory_queue_sqlite_error", error.to_string())
+    CognitionError::new(CognitionCode::MemoryQueueSqliteError, error.to_string()).with_source(error)
 }

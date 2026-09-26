@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::cognition::CognitionCode;
 use serde::Serialize;
 
 use crate::cognition::{CognitionError, CognitionPathEnvironment, CognitionResult};
@@ -46,22 +47,29 @@ pub(crate) fn read_checkpoint(
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(error("memory_consolidation_checkpoint_read_failed")),
+        Err(_) => {
+            return Err(error(
+                CognitionCode::MemoryConsolidationCheckpointReadFailed,
+            ));
+        }
     };
     let mut bytes = Vec::with_capacity(MAX_STATE_JSON_BYTES.min(16 * 1024));
     file.take((MAX_STATE_JSON_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
-        .map_err(|_| error("memory_consolidation_checkpoint_read_failed"))?;
+        .map_err(|source| {
+            error(CognitionCode::MemoryConsolidationCheckpointReadFailed).with_source(source)
+        })?;
     if bytes.len() > MAX_STATE_JSON_BYTES {
-        return Err(error("memory_consolidation_state_too_large"));
+        return Err(error(CognitionCode::MemoryConsolidationStateTooLarge));
     }
-    let checkpoint: Checkpoint = serde_json::from_slice(&bytes)
-        .map_err(|_| error("memory_consolidation_checkpoint_invalid"))?;
+    let checkpoint: Checkpoint = serde_json::from_slice(&bytes).map_err(|source| {
+        error(CognitionCode::MemoryConsolidationCheckpointInvalid).with_source(source)
+    })?;
     if checkpoint.schema != CHECKPOINT_SCHEMA
         || checkpoint.run_id != run_id
         || checkpoint.next_phase_index > Phase::ALL.len()
     {
-        return Err(error("memory_consolidation_checkpoint_invalid"));
+        return Err(error(CognitionCode::MemoryConsolidationCheckpointInvalid));
     }
     Ok(Some(checkpoint))
 }
@@ -72,18 +80,19 @@ pub(crate) fn write_checkpoint(
     checkpoint: &Checkpoint,
 ) -> CognitionResult<()> {
     if checkpoint.schema != CHECKPOINT_SCHEMA || checkpoint.next_phase_index > Phase::ALL.len() {
-        return Err(error("memory_consolidation_checkpoint_invalid"));
+        return Err(error(CognitionCode::MemoryConsolidationCheckpointInvalid));
     }
     let path = checkpoint_path(data_root, environment, &checkpoint.run_id)?;
     write_atomic(&path, checkpoint)
 }
 
 pub(crate) fn write_atomic<T: Serialize>(path: &Path, value: &T) -> CognitionResult<()> {
-    let mut bytes = serde_json::to_vec_pretty(value)
-        .map_err(|_| error("memory_consolidation_state_write_failed"))?;
+    let mut bytes = serde_json::to_vec_pretty(value).map_err(|source| {
+        error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+    })?;
     bytes.push(b'\n');
     if bytes.len() > MAX_STATE_JSON_BYTES {
-        return Err(error("memory_consolidation_state_too_large"));
+        return Err(error(CognitionCode::MemoryConsolidationStateTooLarge));
     }
     let parent = path
         .parent()
@@ -93,7 +102,7 @@ pub(crate) fn write_atomic<T: Serialize>(path: &Path, value: &T) -> CognitionRes
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error("memory_consolidation_state_write_failed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryConsolidationStateWriteFailed))?;
     let temporary = parent.join(format!("{file_name}.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -103,19 +112,24 @@ pub(crate) fn write_atomic<T: Serialize>(path: &Path, value: &T) -> CognitionRes
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| error("memory_consolidation_state_write_failed"))?;
-        file.write_all(&bytes)
-            .map_err(|_| error("memory_consolidation_state_write_failed"))?;
-        file.sync_all()
-            .map_err(|_| error("memory_consolidation_state_write_failed"))?;
-        fs::rename(&temporary, path)
-            .map_err(|_| error("memory_consolidation_state_write_failed"))?;
+        let mut file = options.open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })?;
+        file.write_all(&bytes).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })?;
+        file.sync_all().map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })?;
         #[cfg(unix)]
         File::open(parent)
             .and_then(|directory| directory.sync_all())
-            .map_err(|_| error("memory_consolidation_state_write_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+            })?;
         Ok(())
     })();
     if result.is_err() {
@@ -133,7 +147,7 @@ pub(crate) fn validate_run_id(run_id: &str) -> CognitionResult<()> {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
     {
-        return Err(error("memory_consolidation_run_id_invalid"));
+        return Err(error(CognitionCode::MemoryConsolidationRunIdInvalid));
     }
     Ok(())
 }
@@ -144,18 +158,19 @@ fn create_private_directories(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::DirBuilderExt;
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);
-        builder
-            .create(path)
-            .map_err(|_| error("memory_consolidation_state_write_failed"))
+        builder.create(path).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationStateWriteFailed).with_source(source)
+        })
     }
     #[cfg(not(unix))]
     {
-        fs::create_dir_all(path).map_err(|_| error("memory_consolidation_state_write_failed"))
+        fs::create_dir_all(path)
+            .map_err(|source| error("memory_consolidation_state_write_failed").with_source(source))
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 #[cfg(test)]
@@ -206,7 +221,7 @@ mod tests {
             assert_eq!(
                 checkpoint_path(&root, &environment, "../../outside")
                     .unwrap_err()
-                    .code,
+                    .code(),
                 "memory_consolidation_run_id_invalid"
             );
             let _ = fs::remove_dir_all(root);

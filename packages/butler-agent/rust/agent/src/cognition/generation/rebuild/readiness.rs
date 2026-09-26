@@ -2,6 +2,7 @@
 
 pub(in crate::cognition::generation) mod cache;
 
+use crate::cognition::CognitionCode;
 use std::{collections::HashSet, fs, path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -51,10 +52,10 @@ pub(crate) async fn record(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let MemoryGenerationTarget::Rebuild { .. } = target else {
-        return Err(error("memory_rebuild_invalid_request"));
+        return Err(error(CognitionCode::MemoryRebuildInvalidRequest));
     };
     let handle = resolve_generation(data_root, environment, target)?;
     let lock = environment.consolidation_lock(data_root);
@@ -67,7 +68,7 @@ pub(crate) async fn record(
     let canonical = handle
         .canonical_snapshot_path
         .as_deref()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     ensure_data_authority(
         data_root,
         &[
@@ -88,7 +89,7 @@ pub(crate) async fn record(
     candidate.assert_current(&handle).await?;
     live.assert_current()?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -101,14 +102,14 @@ pub(crate) async fn record(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = async {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = resolve_generation(data_root, environment, target)?;
         assert_mutation_authority(data_root, environment, target, &current)?;
@@ -121,21 +122,24 @@ pub(crate) async fn record(
                 .as_ref()
                 .map(super::super::types::GenerationEmbedding::version)
         {
-            return Err(error("memory_embedding_version_mismatch"));
+            return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
         }
         candidate.assert_current(&current).await?;
         live.assert_current()?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
-        let mut manifest: Value = serde_json::from_slice(
-            &fs::read(&manifest_path).map_err(|_| error("memory_generation_unavailable"))?,
-        )
-        .map_err(|_| error("memory_generation_unavailable"))?;
+        let mut manifest: Value =
+            serde_json::from_slice(&fs::read(&manifest_path).map_err(|source| {
+                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+            })?)
+            .map_err(|source| {
+                error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+            })?;
         if manifest["source_inventory_hash"] != readiness["inventory_hash"]
             || manifest["state"] != "building"
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         let changed = manifest["readiness"]["sha256"] != readiness["sha256"]
             || manifest["acceptance_binding"]["target_evidence_sha256"]
@@ -152,7 +156,7 @@ pub(crate) async fn record(
     .await;
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|value| {
         released?;
         Ok(value)
@@ -168,10 +172,10 @@ pub(crate) async fn compute(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let MemoryGenerationTarget::Rebuild { .. } = target else {
-        return Err(error("memory_rebuild_invalid_request"));
+        return Err(error(CognitionCode::MemoryRebuildInvalidRequest));
     };
     let current = resolve_generation(data_root, environment, target)?;
     let manifest_path = current.root.join("manifest.json");
@@ -179,7 +183,7 @@ pub(crate) async fn compute(
     let canonical = current
         .canonical_snapshot_path
         .as_deref()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     ensure_data_authority(
         data_root,
         &[
@@ -199,9 +203,9 @@ pub(crate) async fn compute(
         graph_facts(&data_for_graph, &current_for_graph, &cancel)
     })
     .await
-    .map_err(|_| error("memory_readiness_unavailable"))??;
+    .map_err(|source| error(CognitionCode::MemoryReadinessUnavailable).with_source(source))??;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let vector_actual_invalid = invalid_persisted_rebuild_vectors(
         data_root,
@@ -210,17 +214,19 @@ pub(crate) async fn compute(
         &facts.historical,
     )
     .await?;
-    let manifest: Value = serde_json::from_slice(
-        &fs::read(&manifest_path).map_err(|_| error("memory_generation_unavailable"))?,
-    )
-    .map_err(|_| error("memory_generation_unavailable"))?;
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(&manifest_path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     let stored: Value = serde_json::from_slice(
-        &fs::read(&snapshot_path).map_err(|_| error("memory_snapshot_changed"))?,
+        &fs::read(&snapshot_path)
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let inventory_hash = manifest["source_inventory_hash"]
         .as_str()
-        .ok_or_else(|| error("memory_inventory_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
     let missing = facts.expected.saturating_sub(facts.registered);
     let unaccounted = missing
         + facts.unexpected
@@ -274,14 +280,14 @@ fn graph_facts(
     let stored = verified_live_inventory(data_root, handle, cancellation)?;
     let as_of = stored["as_of"]
         .as_str()
-        .ok_or_else(|| error("memory_inventory_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
     let canonical = ConversationSourceReader::open(
         handle
             .canonical_snapshot_path
             .as_deref()
-            .ok_or_else(|| error("memory_snapshot_changed"))?,
+            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let graph = GraphRepository::open_readonly(&handle.graph_path)?;
     let source = graph.rebuild_source_readiness(
         &handle.generation_id,
@@ -294,7 +300,7 @@ fn graph_facts(
     let cache_text = match fs::read_to_string(&cache_file) {
         Ok(value) => Some(value),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(_) => return Err(error("memory_readiness_unavailable")),
+        Err(_) => return Err(error(CognitionCode::MemoryReadinessUnavailable)),
     };
     let physical = cache_text
         .as_deref()
@@ -357,7 +363,7 @@ fn graph_facts(
     graph.close()?;
     canonical
         .close()
-        .map_err(|_| error("memory_snapshot_changed"))?;
+        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     Ok(GraphFacts {
         registered: source.registered,
         expected: source.expected_count,
@@ -394,12 +400,12 @@ fn verified_live_inventory(
     let inventory = build_inventory::read(data_root, handle, cancellation)?;
     let stored: Value = serde_json::from_slice(
         &fs::read(handle.source_root.join("memory-source-inventory.json"))
-            .map_err(|_| error("memory_snapshot_changed"))?,
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let as_of = stored["as_of"]
         .as_str()
-        .ok_or_else(|| error("memory_inventory_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
     let live = inventory::read(
         data_root,
         &data_root.join("runtime/conversation-store.sqlite"),
@@ -407,23 +413,24 @@ fn verified_live_inventory(
         cancellation,
     )?;
     let manifest: Value = serde_json::from_slice(
-        &fs::read(handle.root.join("manifest.json"))
-            .map_err(|_| error("memory_generation_unavailable"))?,
+        &fs::read(handle.root.join("manifest.json")).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?,
     )
-    .map_err(|_| error("memory_generation_unavailable"))?;
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     if live.hash != manifest["source_inventory_hash"]
         || live.source_count != inventory.expected_source_count
     {
-        return Err(error("memory_inventory_changed"));
+        return Err(error(CognitionCode::MemoryInventoryChanged));
     }
     Ok(stored)
 }
 
 fn hash(value: &Value) -> CognitionResult<String> {
-    let serialized =
-        crate::json::stringify(value).map_err(|_| error("memory_readiness_unavailable"))?;
+    let serialized = crate::json::stringify(value)
+        .map_err(|source| error(CognitionCode::MemoryReadinessUnavailable).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(serialized.as_bytes())))
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

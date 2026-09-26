@@ -1,5 +1,6 @@
 //! Durable compare-and-swap for the active generation descriptor.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -63,7 +64,7 @@ pub(super) fn commit_descriptor_transition(
     if !valid_generation_id(target_generation_id)
         || next_fields.generation_id != target_generation_id
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let memory_root = environment.memory_root(data_root);
@@ -84,12 +85,12 @@ pub(super) fn commit_descriptor_transition(
     if current_fields != expected_fields
         || !same_json_stringification(&current, expected_descriptor)?
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let target_manifest = fs::read(&target_manifest_path).map_err(io_unavailable)?;
     if sha256(&target_manifest) != expected_target_manifest_sha256 {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     // Recheck containment at the mutation boundary. The lease coordinates other
@@ -118,10 +119,10 @@ pub(super) fn reconcile_committed_manifest_states(
     assert_cutover_lease(data_root, environment, lease)?;
     let expected_fields = parse_descriptor_fields(expected_committed_descriptor)?;
     let Some(previous_generation_id) = expected_fields.previous_generation_id.as_deref() else {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     };
     if previous_generation_id == expected_fields.generation_id {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let memory_root = environment.memory_root(data_root);
@@ -144,7 +145,7 @@ pub(super) fn reconcile_committed_manifest_states(
     if current_fields != expected_fields
         || !same_json_stringification(&current, expected_committed_descriptor)?
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let mut target_manifest = read_manifest(&target_manifest_path, &expected_fields.generation_id)?;
@@ -197,9 +198,9 @@ fn assert_cutover_lease(
 ) -> CognitionResult<()> {
     lease
         .assert_for_path(&environment.consolidation_lock(data_root))
-        .map_err(|_| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
     if lease.owner().purpose != "cutover" {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     Ok(())
 }
@@ -207,13 +208,13 @@ fn assert_cutover_lease(
 fn parse_descriptor_fields(value: &Value) -> CognitionResult<ActiveDescriptorFields> {
     let object = value
         .as_object()
-        .ok_or_else(|| error("memory_generation_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
     let schema = required_string(object.get("schema"))?;
     let generation_id = required_string(object.get("generation_id"))?;
     let previous_generation_id = match object.get("previous_generation_id") {
         Some(Value::Null) => None,
         Some(Value::String(value)) if valid_generation_id(value) => Some(value.clone()),
-        _ => return Err(error("memory_generation_unavailable")),
+        _ => return Err(error(CognitionCode::MemoryGenerationUnavailable)),
     };
     let activated_at = required_string(object.get("activated_at"))?;
     let projection_mode = required_string(object.get("projection_mode"))?;
@@ -221,7 +222,7 @@ fn parse_descriptor_fields(value: &Value) -> CognitionResult<ActiveDescriptorFie
         || !valid_generation_id(&generation_id)
         || !matches!(projection_mode.as_str(), "running" | "paused")
     {
-        return Err(error("memory_generation_unavailable"));
+        return Err(error(CognitionCode::MemoryGenerationUnavailable));
     }
     Ok(ActiveDescriptorFields {
         schema,
@@ -236,14 +237,14 @@ fn required_string(value: Option<&Value>) -> CognitionResult<String> {
     value
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| error("memory_generation_unavailable"))
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))
 }
 
 fn read_manifest(path: &Path, expected_id: &str) -> CognitionResult<Value> {
     let manifest = read_json(path)?;
     let object = manifest
         .as_object()
-        .ok_or_else(|| error("memory_generation_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
     if object.get("schema").and_then(Value::as_str) != Some(GENERATION_MANIFEST_SCHEMA)
         || object.get("generation_id").and_then(Value::as_str) != Some(expected_id)
         || !matches!(
@@ -255,7 +256,7 @@ fn read_manifest(path: &Path, expected_id: &str) -> CognitionResult<Value> {
             Some("building" | "ready" | "active" | "retired")
         )
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     Ok(manifest)
 }
@@ -295,15 +296,16 @@ fn validate_manifest_pair(
         || !target_transition_known
         || !matches!(previous_state, Some("active" | "retired"))
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     Ok(())
 }
 
 fn same_json_stringification(left: &Value, right: &Value) -> CognitionResult<bool> {
-    let left = crate::json::stringify(left).map_err(|_| error("memory_generation_unavailable"))?;
-    let right =
-        crate::json::stringify(right).map_err(|_| error("memory_generation_unavailable"))?;
+    let left = crate::json::stringify(left)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    let right = crate::json::stringify(right)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     Ok(left == right)
 }
 
@@ -313,7 +315,7 @@ fn active_descriptor_path(memory_root: &Path) -> PathBuf {
 
 fn manifest_path(memory_root: &Path, generation_id: &str) -> CognitionResult<PathBuf> {
     if !valid_generation_id(generation_id) {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     Ok(memory_root
         .join("generations")
@@ -330,21 +332,22 @@ fn valid_generation_id(value: &str) -> bool {
 
 fn read_json(path: &Path) -> CognitionResult<Value> {
     let bytes = fs::read(path).map_err(io_unavailable)?;
-    serde_json::from_slice(&bytes).map_err(|_| error("memory_generation_unavailable"))
+    serde_json::from_slice(&bytes)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_unavailable(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_generation_unavailable", error.to_string())
+    CognitionError::new(
+        CognitionCode::MemoryGenerationUnavailable,
+        error.to_string(),
+    )
+    .with_source(error)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

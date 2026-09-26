@@ -33,7 +33,7 @@ async fn canonical_change_while_waiting_rolls_back_and_close_waits_for_operation
     drop(db);
     held.release(false).unwrap();
     let error = running.await.unwrap().unwrap_err();
-    assert_eq!(error.code, "memory_source_changed");
+    assert_eq!(error.code(), "memory_source_changed");
     let graph = Connection::open(fixture.graph_path()).unwrap();
     let jobs = graph.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='memory_projection_jobs'",
@@ -84,7 +84,7 @@ async fn caller_drop_does_not_detach_wait_and_close_cancels_and_drains_it() {
         .register_conversation_source(fixture.input("after-close"))
         .await
         .unwrap_err();
-    assert_eq!(error.code, "cognition_closed");
+    assert_eq!(error.code(), "cognition_closed");
 }
 
 #[tokio::test]
@@ -107,7 +107,7 @@ async fn cancellation_after_initial_check_aborts_acquire_before_schema_mutation(
         .register_conversation_source(input)
         .await
         .unwrap_err();
-    assert_eq!(error.code, "memory_write_aborted");
+    assert_eq!(error.code(), "memory_write_aborted");
 
     let graph = Connection::open(fixture.graph_path()).unwrap();
     let schema_tables: i64 = graph
@@ -138,7 +138,7 @@ async fn oversized_single_grapheme_rolls_back_the_registration_transaction() {
         .register_conversation_source(fixture.input("completion"))
         .await
         .unwrap_err();
-    assert_eq!(error.code, oracle["error"].as_str().unwrap());
+    assert_eq!(error.code(), oracle["error"].as_str().unwrap());
 
     let graph = Connection::open(fixture.graph_path()).unwrap();
     for table in [
@@ -179,5 +179,5 @@ fn generation_errors_and_node_join_preserve_source_contract() {
         },
     )
     .unwrap_err();
-    assert_eq!(error.code, "memory_embedding_metadata_invalid");
+    assert_eq!(error.code(), "memory_embedding_metadata_invalid");
 }

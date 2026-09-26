@@ -130,7 +130,7 @@ async fn poll(
             Err(error) => {
                 // Diagnostic codes only. The durable queue retains failed work;
                 // paths, prompts, credentials and raw provider errors stay private.
-                eprintln!("[native-memory-sync] {}", error.code);
+                eprintln!("[native-memory-sync] {}", error.code());
                 Duration::from_millis(1000)
             }
         };
@@ -158,5 +158,5 @@ impl CognitionVectorSearch for UnavailableNativeVector {
 }
 
 fn error(error: CognitionError) -> BtccError {
-    BtccError::relayed(error.code, error.message)
+    BtccError::relay(error.code(), error.message(), error)
 }

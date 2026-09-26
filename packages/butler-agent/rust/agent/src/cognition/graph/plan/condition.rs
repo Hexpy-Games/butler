@@ -1,6 +1,7 @@
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 pub(super) fn validate(
@@ -44,7 +45,7 @@ fn visit(
         if let Some(reference) = o.get("subject").and_then(Value::as_str) {
             if !refs.contains_key(reference) {
                 return Err(CognitionError::new(
-                    "memory_extract_invalid_ref",
+                    CognitionCode::MemoryExtractInvalidRef,
                     "memory_extract_invalid_ref",
                 ));
             }
@@ -83,7 +84,7 @@ fn visit(
 }
 fn invalid() -> CognitionError {
     CognitionError::new(
-        "memory_extract_invalid_condition",
+        CognitionCode::MemoryExtractInvalidCondition,
         "memory_extract_invalid_condition",
     )
 }

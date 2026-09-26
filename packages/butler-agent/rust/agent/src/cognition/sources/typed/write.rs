@@ -4,6 +4,7 @@ mod task;
 
 pub(crate) use task::ingest_task_outcome_memory;
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -55,7 +56,7 @@ pub(crate) fn update_explicit_memory(
     input: &ExplicitMemoryUpdateInput,
 ) -> CognitionResult<ExplicitMemoryUpdateResult> {
     if crate::public_text::trim_js_whitespace(&input.text).is_empty() {
-        return Err(error("explicit_memory_text_required"));
+        return Err(error(CognitionCode::ExplicitMemoryTextRequired));
     }
     let memory_root = environment.memory_root(data_root);
     let rules_root = memory_root.join("rules");
@@ -107,10 +108,10 @@ pub(crate) fn update_explicit_memory(
             .find(|item| item.operation_id == operation_id)
     }) {
         if operation.revision != revision {
-            return Err(error("memory_source_operation_conflict"));
+            return Err(error(CognitionCode::MemorySourceOperationConflict));
         }
         if read_explicit_record(&memory_root, &record_id)?.is_none() {
-            return Err(error("memory_source_operation_retracted"));
+            return Err(error(CognitionCode::MemorySourceOperationRetracted));
         }
         true
     } else {
@@ -219,7 +220,7 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
         || path.components().count() != 1
         || path.file_name().and_then(|name| name.to_str()) != Some(value)
     {
-        return Err(error("explicit_memory_record_id_invalid"));
+        return Err(error(CognitionCode::ExplicitMemoryRecordIdInvalid));
     }
     Ok(())
 }
@@ -227,11 +228,11 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
 fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| error("memory_data_path_unsafe"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error("memory_data_path_unsafe"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
     let temporary = parent.join(format!(
         ".{file_name}.{}.{}.tmp",
         std::process::id(),
@@ -264,7 +265,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
 fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| error("memory_data_path_unsafe"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryDataPathUnsafe))?;
     let existed = path.exists();
     let mut options = OpenOptions::new();
     options.create(true).append(true);
@@ -292,18 +293,16 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", error.to_string())
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())
+        .with_source(error)
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())
+        .with_source(error)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

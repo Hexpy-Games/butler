@@ -1,5 +1,6 @@
 //! Validate current model metadata before writing a building generation policy.
 
+use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -25,39 +26,41 @@ pub(super) async fn run(
     policy: ProjectionModelPolicyInput,
 ) -> Result<Value, CognitionError> {
     if policy.primary_model == policy.fallback_model {
-        return Err(error("memory_rebuild_invalid_model_policy"));
+        return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
     }
-    let os = nix::sys::utsname::uname().map_err(|_| error("native_environment_unavailable"))?;
+    let os = nix::sys::utsname::uname()
+        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(data, &home, &os.release().to_string_lossy());
-    let collation =
-        Arc::new(LocaleCollation::new("en-US").map_err(|_| error("native_locale_unavailable"))?);
+    let collation = Arc::new(
+        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+    );
     let models = NativeProcessModels::new(
         data.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|_| error("native_model_setup_failed"))?;
+    .map_err(|_| error(CognitionCode::NativeModelSetupFailed))?;
     let current = models
         .configuration
         .read()
         .await
-        .map_err(|_| error("native_model_setup_failed"))?;
+        .map_err(|_| error(CognitionCode::NativeModelSetupFailed))?;
     for (model, effort) in [
         (&policy.primary_model, &policy.primary_effort),
         (&policy.fallback_model, &policy.fallback_effort),
     ] {
         let Some(metadata) = current.catalog.find_model_metadata(Some(model)) else {
-            return Err(error("memory_rebuild_invalid_model_policy"));
+            return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
         };
         let parsed = serde_json::from_value::<ReasoningEffort>(json!(effort))
-            .map_err(|_| error("memory_rebuild_invalid_model_policy"))?;
+            .map_err(|_| error(CognitionCode::MemoryRebuildInvalidModelPolicy))?;
         if !metadata.runtime_supported || !metadata.reasoning_efforts.contains(&parsed) {
-            return Err(error("memory_rebuild_invalid_model_policy"));
+            return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
         }
     }
     let coordinator = Arc::new(
@@ -65,7 +68,7 @@ pub(super) async fn run(
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone())
-        .map_err(|message| CognitionError::new("native_signal_unavailable", message))?;
+        .map_err(|message| CognitionError::new(CognitionCode::NativeSignalUnavailable, message))?;
     let result = set_extractor_memory_generation(
         data,
         paths,
@@ -83,6 +86,6 @@ pub(super) async fn run(
     )
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

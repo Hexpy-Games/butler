@@ -12,6 +12,7 @@ use super::{
     read::{error, resolve_generation},
     types::{GenerationEmbedding, validate_native_embedding_identity},
 };
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, embedding::NativeEmbeddingIdentity,
@@ -36,7 +37,7 @@ pub(crate) fn bind_native_embedding_identity(
 
     let current = resolve_generation(data_root, environment, target)?;
     if current != *handle || current.embedding.is_some() {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     assert_mutation_authority(data_root, environment, target, &current)?;
 
@@ -44,12 +45,13 @@ pub(crate) fn bind_native_embedding_identity(
     assert_write_authority(data_root, environment, &current, &manifest_path, &lock_path)?;
     let mut manifest = read_manifest_value(&manifest_path)?;
     if !is_eligible_empty_target(&manifest, target, &current.generation_id) {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
 
     let embedding = GenerationEmbedding::Native(observed.clone());
-    manifest["embedding"] =
-        serde_json::to_value(&embedding).map_err(|_| error("memory_embedding_metadata_invalid"))?;
+    manifest["embedding"] = serde_json::to_value(&embedding).map_err(|source| {
+        error(CognitionCode::MemoryEmbeddingMetadataInvalid).with_source(source)
+    })?;
     write_manifest_atomically(
         data_root,
         environment,
@@ -111,8 +113,10 @@ fn is_eligible_empty_target(
 }
 
 fn read_manifest_value(path: &Path) -> Result<Value, CognitionError> {
-    let bytes = fs::read(path).map_err(|_| error("memory_generation_unavailable"))?;
-    serde_json::from_slice(&bytes).map_err(|_| error("memory_generation_unavailable"))
+    let bytes = fs::read(path)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn assert_write_authority(
@@ -144,7 +148,7 @@ fn write_manifest_atomically(
 ) -> Result<(), CognitionError> {
     let parent = manifest_path
         .parent()
-        .ok_or_else(|| error("memory_generation_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
     let temporary = manifest_path.with_extension(format!(
         "{}.{}.tmp",
         std::process::id(),
@@ -183,10 +187,10 @@ fn write_manifest_atomically(
     result
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn write_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_initialization_io_error", error.to_string())
+    CognitionError::new(
+        CognitionCode::MemoryInitializationIoError,
+        error.to_string(),
+    )
+    .with_source(error)
 }

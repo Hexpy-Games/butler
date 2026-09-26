@@ -1,41 +1,507 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CognitionError {
-    pub code: &'static str,
-    pub message: String,
+//! Failures of Cognition memory: registration, graph, generations, hot cache,
+
+use std::error::Error;
+use std::sync::Arc;
+
+wire_codes! {
+    /// Wire codes of Cognition failures.
+    pub(crate) enum CognitionCode {
+        ActivationRequiresCatchup = "activation_requires_catchup",
+        BackendUnavailable = "backend_unavailable",
+        CanonicalSourceUnavailable = "canonical_source_unavailable",
+        Closed = "closed",
+        CognitionClosed = "cognition_closed",
+        CognitionFeedbackReadFailed = "cognition_feedback_read_failed",
+        CognitionMigrationApplyFailed = "cognition_migration_apply_failed",
+        CognitionMigrationBackupFailed = "cognition_migration_backup_failed",
+        CognitionMigrationMoveFailed = "cognition_migration_move_failed",
+        CognitionMigrationReadFailed = "cognition_migration_read_failed",
+        CognitionMigrationWriteFailed = "cognition_migration_write_failed",
+        CognitionProjectionUnconfigured = "cognition_projection_unconfigured",
+        CognitionPromptClosed = "cognition_prompt_closed",
+        CognitionPromptReadFailed = "cognition_prompt_read_failed",
+        CognitionPromptWorkerFailed = "cognition_prompt_worker_failed",
+        CognitionSourceJsonError = "cognition_source_json_error",
+        CompletionObservationClockInvalid = "completion_observation_clock_invalid",
+        CompletionObservationConflict = "completion_observation_conflict",
+        CompletionObservationGenerationInvalid = "completion_observation_generation_invalid",
+        CompletionObservationIdentityMissing = "completion_observation_identity_missing",
+        CompletionObservationIoError = "completion_observation_io_error",
+        CompletionObservationJsonError = "completion_observation_json_error",
+        CompletionObservationPathInvalid = "completion_observation_path_invalid",
+        ConsolidationAborted = "consolidation_aborted",
+        ConsolidationCheckpointChanged = "consolidation_checkpoint_changed",
+        ContinuityProjectWorkspaceUnresolved = "continuity_project_workspace_unresolved",
+        ContinuityRecoveryApprovalRequired = "continuity_recovery_approval_required",
+        ContinuityRecoveryCandidateInvalid = "continuity_recovery_candidate_invalid",
+        ContinuityRecoveryInventoryReadFailed = "continuity_recovery_inventory_read_failed",
+        ContinuityRecoveryManifestInvalid = "continuity_recovery_manifest_invalid",
+        ContinuityRecoveryManifestNotFound = "continuity_recovery_manifest_not_found",
+        ContinuityRecoveryManifestPathInvalid = "continuity_recovery_manifest_path_invalid",
+        ContinuityRecoveryManifestReadFailed = "continuity_recovery_manifest_read_failed",
+        ContinuityRecoveryManifestTerminal = "continuity_recovery_manifest_terminal",
+        ContinuityRecoveryManifestWriteFailed = "continuity_recovery_manifest_write_failed",
+        ContinuityRecoveryNotApplied = "continuity_recovery_not_applied",
+        ContinuityRecoveryProjectBindingChanged = "continuity_recovery_project_binding_changed",
+        ContinuityRecoveryProjectRequired = "continuity_recovery_project_required",
+        ContinuityRecoveryRollbackConflict = "continuity_recovery_rollback_conflict",
+        ContinuityRecoverySnapshotConflict = "continuity_recovery_snapshot_conflict",
+        ContinuityRecoveryWorkerFailed = "continuity_recovery_worker_failed",
+        ContradictoryRoleFilter = "contradictory_role_filter",
+        CursorExpired = "cursor_expired",
+        EmbedAssetDownloadFailed = "embed_asset_download_failed",
+        EmbedAssetHashMismatch = "embed_asset_hash_mismatch",
+        EmbedAssetPathUnsafe = "embed_asset_path_unsafe",
+        EmbedAssetRangeInvalid = "embed_asset_range_invalid",
+        EmbedAssetUnavailable = "embed_asset_unavailable",
+        EmbedAssetVersionConflict = "embed_asset_version_conflict",
+        EmbedDimensionInvalid = "embed_dimension_invalid",
+        EmbedGraphemeTooLong = "embed_grapheme_too_long",
+        EmbedIdentityInvalid = "embed_identity_invalid",
+        EmbedInferenceFailed = "embed_inference_failed",
+        EmbedInputTooLong = "embed_input_too_long",
+        EmbedInvalidRequest = "embed_invalid_request",
+        EmbedModelInputUnsupported = "embed_model_input_unsupported",
+        EmbedModelUnavailable = "embed_model_unavailable",
+        EmbedOutputInvalid = "embed_output_invalid",
+        EmbedOwnerClosed = "embed_owner_closed",
+        EmbedQueueFull = "embed_queue_full",
+        EmbedRequestCancelled = "embed_request_cancelled",
+        EmbedRequestDeadline = "embed_request_deadline",
+        EmbedRequestTooLarge = "embed_request_too_large",
+        EmbedResplitLimit = "embed_resplit_limit",
+        EmbedResponseTooLarge = "embed_response_too_large",
+        EmbedTokenizationFailed = "embed_tokenization_failed",
+        EmbedTokenizerLimitUnavailable = "embed_tokenizer_limit_unavailable",
+        EmbedTokenizerUnavailable = "embed_tokenizer_unavailable",
+        EmbedWorkerProtocolInvalid = "embed_worker_protocol_invalid",
+        EmbedWorkerUnavailable = "embed_worker_unavailable",
+        ExplicitMemoryRecordIdInvalid = "explicit_memory_record_id_invalid",
+        ExplicitMemoryTextRequired = "explicit_memory_text_required",
+        HotCacheClockUnavailable = "hot_cache_clock_unavailable",
+        HotCacheDestinationLocked = "hot_cache_destination_locked",
+        HotCacheEmbeddingIncomplete = "hot_cache_embedding_incomplete",
+        HotCacheEmptyBlock = "hot_cache_empty_block",
+        HotCacheEntryEmpty = "hot_cache_entry_empty",
+        HotCacheEntryInvalid = "hot_cache_entry_invalid",
+        HotCacheEntryTooLarge = "hot_cache_entry_too_large",
+        HotCacheEvidenceInvalid = "hot_cache_evidence_invalid",
+        HotCacheIoFailed = "hot_cache_io_failed",
+        HotCacheReadFailed = "hot_cache_read_failed",
+        HotCacheReceiptFailed = "hot_cache_receipt_failed",
+        HotCacheSecretRejected = "hot_cache_secret_rejected",
+        HotCacheWriteFailed = "hot_cache_write_failed",
+        InvalidArguments = "invalid_arguments",
+        InvalidArray = "invalid_array",
+        InvalidClock = "invalid_clock",
+        InvalidCursor = "invalid_cursor",
+        InvalidLimit = "invalid_limit",
+        InvalidMatchMode = "invalid_match_mode",
+        InvalidOrder = "invalid_order",
+        InvalidProjectFilter = "invalid_project_filter",
+        InvalidRoleFilter = "invalid_role_filter",
+        InvalidRuntimeBinding = "invalid_runtime_binding",
+        InvalidScope = "invalid_scope",
+        InvalidScopeValue = "invalid_scope_value",
+        InvalidString = "invalid_string",
+        InvalidTime = "invalid_time",
+        Json = "json",
+        LegacyClockUnavailable = "legacy_clock_unavailable",
+        LegacyDiagnosticFailed = "legacy_diagnostic_failed",
+        LegacyEmbeddingIncomplete = "legacy_embedding_incomplete",
+        LegacyMemoryWriterDisabledForV2 = "legacy_memory_writer_disabled_for_v2",
+        LegacyRecallInvalidCue = "legacy_recall_invalid_cue",
+        LegacyRecallReadFailed = "legacy_recall_read_failed",
+        LegacySessionClockUnavailable = "legacy_session_clock_unavailable",
+        LegacySessionGraphFailed = "legacy_session_graph_failed",
+        LegacySessionIdInvalid = "legacy_session_id_invalid",
+        LegacySessionIndexTimeout = "legacy_session_index_timeout",
+        LegacySessionOffsetReadFailed = "legacy_session_offset_read_failed",
+        LegacySessionOffsetWriteFailed = "legacy_session_offset_write_failed",
+        LegacySessionReceiptFailed = "legacy_session_receipt_failed",
+        LegacyTranscriptReadFailed = "legacy_transcript_read_failed",
+        LegacyVectorInvalidRows = "legacy_vector_invalid_rows",
+        LegacyVectorSchemaMismatch = "legacy_vector_schema_mismatch",
+        LegacyVectorStoreUnavailable = "legacy_vector_store_unavailable",
+        MemoryAcceptanceEvidenceChanged = "memory_acceptance_evidence_changed",
+        MemoryAcceptanceEvidenceInvalid = "memory_acceptance_evidence_invalid",
+        MemoryAcceptanceIncomplete = "memory_acceptance_incomplete",
+        MemoryAcceptanceInvalid = "memory_acceptance_invalid",
+        MemoryAcceptancePerformanceInvalid = "memory_acceptance_performance_invalid",
+        MemoryAcceptanceVersionMismatch = "memory_acceptance_version_mismatch",
+        MemoryBoxContentReadFailed = "memory_box_content_read_failed",
+        MemoryBoxContentRemoveFailed = "memory_box_content_remove_failed",
+        MemoryBoxIndexInsertFailed = "memory_box_index_insert_failed",
+        MemoryBoxIndexInvalid = "memory_box_index_invalid",
+        MemoryBoxIndexPathUnsafe = "memory_box_index_path_unsafe",
+        MemoryBoxIndexReadFailed = "memory_box_index_read_failed",
+        MemoryBoxIndexWriteFailed = "memory_box_index_write_failed",
+        MemoryBoxItemPathUnsafe = "memory_box_item_path_unsafe",
+        MemoryBoxItemsPathUnsafe = "memory_box_items_path_unsafe",
+        MemoryBoxItemsReadFailed = "memory_box_items_read_failed",
+        MemoryBoxManifestIdInvalid = "memory_box_manifest_id_invalid",
+        MemoryBoxManifestInvalid = "memory_box_manifest_invalid",
+        MemoryBoxManifestMissing = "memory_box_manifest_missing",
+        MemoryBoxManifestPathUnsafe = "memory_box_manifest_path_unsafe",
+        MemoryBoxManifestReadFailed = "memory_box_manifest_read_failed",
+        MemoryBoxManifestWriteFailed = "memory_box_manifest_write_failed",
+        MemoryBoxReportWriteFailed = "memory_box_report_write_failed",
+        MemoryBoxRetentionClockInvalid = "memory_box_retention_clock_invalid",
+        MemoryBoxRetentionDeleteFailed = "memory_box_retention_delete_failed",
+        MemoryBoxRetentionPathUnsafe = "memory_box_retention_path_unsafe",
+        MemoryBoxRootPathUnsafe = "memory_box_root_path_unsafe",
+        MemoryBoxStoreIoFailed = "memory_box_store_io_failed",
+        MemoryCacheJobChanged = "memory_cache_job_changed",
+        MemoryCacheOperationFailed = "memory_cache_operation_failed",
+        MemoryCatchupJsonError = "memory_catchup_json_error",
+        MemoryConsolidationCheckpointInvalid = "memory_consolidation_checkpoint_invalid",
+        MemoryConsolidationCheckpointReadFailed = "memory_consolidation_checkpoint_read_failed",
+        MemoryConsolidationInvalidQualifiers = "memory_consolidation_invalid_qualifiers",
+        MemoryConsolidationOperationFailed = "memory_consolidation_operation_failed",
+        MemoryConsolidationRunIdInvalid = "memory_consolidation_run_id_invalid",
+        MemoryConsolidationStateTooLarge = "memory_consolidation_state_too_large",
+        MemoryConsolidationStateWriteFailed = "memory_consolidation_state_write_failed",
+        MemoryConsolidationV2Required = "memory_consolidation_v2_required",
+        MemoryDataPathUnsafe = "memory_data_path_unsafe",
+        MemoryEmbeddingMetadataInvalid = "memory_embedding_metadata_invalid",
+        MemoryEmbeddingVersionMismatch = "memory_embedding_version_mismatch",
+        MemoryExtractBindingOversize = "memory_extract_binding_oversize",
+        MemoryExtractCancelled = "memory_extract_cancelled",
+        MemoryExtractCandidateChanged = "memory_extract_candidate_changed",
+        MemoryExtractCorrectionUnresolved = "memory_extract_correction_unresolved",
+        MemoryExtractInputExceedsBudget = "memory_extract_input_exceeds_budget",
+        MemoryExtractInvalidBasis = "memory_extract_invalid_basis",
+        MemoryExtractInvalidBinding = "memory_extract_invalid_binding",
+        MemoryExtractInvalidCondition = "memory_extract_invalid_condition",
+        MemoryExtractInvalidCorrection = "memory_extract_invalid_correction",
+        MemoryExtractInvalidEvidence = "memory_extract_invalid_evidence",
+        MemoryExtractInvalidIdentityReuse = "memory_extract_invalid_identity_reuse",
+        MemoryExtractInvalidInput = "memory_extract_invalid_input",
+        MemoryExtractInvalidJson = "memory_extract_invalid_json",
+        MemoryExtractInvalidMeaning = "memory_extract_invalid_meaning",
+        MemoryExtractInvalidOutput = "memory_extract_invalid_output",
+        MemoryExtractInvalidQuote = "memory_extract_invalid_quote",
+        MemoryExtractInvalidReasoningEffort = "memory_extract_invalid_reasoning_effort",
+        MemoryExtractInvalidRef = "memory_extract_invalid_ref",
+        MemoryExtractInvalidRelation = "memory_extract_invalid_relation",
+        MemoryExtractInvalidScope = "memory_extract_invalid_scope",
+        MemoryExtractMixedSourceRoles = "memory_extract_mixed_source_roles",
+        MemoryExtractNeedsContext = "memory_extract_needs_context",
+        MemoryExtractProviderFailed = "memory_extract_provider_failed",
+        MemoryExtractSourceCoverage = "memory_extract_source_coverage",
+        MemoryExtractSourceWindowExceedsBudget = "memory_extract_source_window_exceeds_budget",
+        MemoryExtractStageChanged = "memory_extract_stage_changed",
+        MemoryExtractTimeout = "memory_extract_timeout",
+        MemoryExtractUnsupported = "memory_extract_unsupported",
+        MemoryFeedbackBufferReadFailed = "memory_feedback_buffer_read_failed",
+        MemoryFeedbackBufferWriteFailed = "memory_feedback_buffer_write_failed",
+        MemoryFeedbackEntryNotFound = "memory_feedback_entry_not_found",
+        MemoryFeedbackStatusInvalid = "memory_feedback_status_invalid",
+        MemoryGenerationChanged = "memory_generation_changed",
+        MemoryGenerationNotReady = "memory_generation_not_ready",
+        MemoryGenerationPathInvalid = "memory_generation_path_invalid",
+        MemoryGenerationRecoveryRequired = "memory_generation_recovery_required",
+        MemoryGenerationUnavailable = "memory_generation_unavailable",
+        MemoryGenerationVersionUnsupported = "memory_generation_version_unsupported",
+        MemoryGraphClosed = "memory_graph_closed",
+        MemoryGraphFailed = "memory_graph_failed",
+        MemoryGraphUnavailable = "memory_graph_unavailable",
+        MemoryHealthReadFailed = "memory_health_read_failed",
+        MemoryIdentityCycle = "memory_identity_cycle",
+        MemoryIdentityHistoryInvalid = "memory_identity_history_invalid",
+        MemoryIdentityHistoryLimit = "memory_identity_history_limit",
+        MemoryIdentityJobInvalid = "memory_identity_job_invalid",
+        MemoryIdentityNodeMissing = "memory_identity_node_missing",
+        MemoryIdentitySourceNotRegistered = "memory_identity_source_not_registered",
+        MemoryImportMarkerReadFailed = "memory_import_marker_read_failed",
+        MemoryImportMarkerWriteFailed = "memory_import_marker_write_failed",
+        MemoryInitializationIoError = "memory_initialization_io_error",
+        MemoryInitializationRequiresRebuild = "memory_initialization_requires_rebuild",
+        MemoryInitializationSourceUnreadable = "memory_initialization_source_unreadable",
+        MemoryInputRepairCandidatesIncomplete = "memory_input_repair_candidates_incomplete",
+        MemoryInputRepairInvalidRequest = "memory_input_repair_invalid_request",
+        MemoryInputRepairPreconditionChanged = "memory_input_repair_precondition_changed",
+        MemoryInventoryChanged = "memory_inventory_changed",
+        MemoryInventoryIncomplete = "memory_inventory_incomplete",
+        MemoryKnowhowEntriesPathUnsafe = "memory_knowhow_entries_path_unsafe",
+        MemoryKnowhowEntriesReadFailed = "memory_knowhow_entries_read_failed",
+        MemoryKnowhowEntriesWriteFailed = "memory_knowhow_entries_write_failed",
+        MemoryKnowhowEntryIdInvalid = "memory_knowhow_entry_id_invalid",
+        MemoryKnowhowEntryInvalid = "memory_knowhow_entry_invalid",
+        MemoryKnowhowEntryNotFound = "memory_knowhow_entry_not_found",
+        MemoryKnowhowEntryPathUnsafe = "memory_knowhow_entry_path_unsafe",
+        MemoryKnowhowEntryReadFailed = "memory_knowhow_entry_read_failed",
+        MemoryKnowhowEntryWriteFailed = "memory_knowhow_entry_write_failed",
+        MemoryKnowhowIndexWriteFailed = "memory_knowhow_index_write_failed",
+        MemoryKnowhowIoFailed = "memory_knowhow_io_failed",
+        MemoryKnowhowRootPathUnsafe = "memory_knowhow_root_path_unsafe",
+        MemoryKnowhowRootReadFailed = "memory_knowhow_root_read_failed",
+        MemoryKnowhowRootWriteFailed = "memory_knowhow_root_write_failed",
+        MemoryMaintenanceLogFailed = "memory_maintenance_log_failed",
+        MemoryMeaningChanged = "memory_meaning_changed",
+        MemoryMentionEmpty = "memory_mention_empty",
+        MemoryMetadataIntegrityFailed = "memory_metadata_integrity_failed",
+        MemoryOperationAborted = "memory_operation_aborted",
+        MemoryOriginCollationUnavailable = "memory_origin_collation_unavailable",
+        MemoryProjectRegistryReadFailed = "memory_project_registry_read_failed",
+        MemoryProjectionAborted = "memory_projection_aborted",
+        MemoryProjectionDuplicateRevision = "memory_projection_duplicate_revision",
+        MemoryProjectionJobNotFound = "memory_projection_job_not_found",
+        MemoryProjectionModelChangeBusy = "memory_projection_model_change_busy",
+        MemoryProjectionOperationFailed = "memory_projection_operation_failed",
+        MemoryProjectionPlanMissing = "memory_projection_plan_missing",
+        MemoryProjectionSourceInvalid = "memory_projection_source_invalid",
+        MemoryProjectionWindowChanged = "memory_projection_window_changed",
+        MemoryQualificationIoError = "memory_qualification_io_error",
+        MemoryQualityOperationConflict = "memory_quality_operation_conflict",
+        MemoryQualityOperationInvalid = "memory_quality_operation_invalid",
+        MemoryQualityOperationPathUnsafe = "memory_quality_operation_path_unsafe",
+        MemoryQualityOperationReadFailed = "memory_quality_operation_read_failed",
+        MemoryQualityOperationWriteFailed = "memory_quality_operation_write_failed",
+        MemoryQualityTargetChanged = "memory_quality_target_changed",
+        MemoryQueueBusy = "memory_queue_busy",
+        MemoryQueueInvalidJson = "memory_queue_invalid_json",
+        MemoryQueueIoError = "memory_queue_io_error",
+        MemoryQueueSqliteError = "memory_queue_sqlite_error",
+        MemoryReadinessUnavailable = "memory_readiness_unavailable",
+        MemoryRebuildInvalidModelPolicy = "memory_rebuild_invalid_model_policy",
+        MemoryRebuildInvalidRequest = "memory_rebuild_invalid_request",
+        MemoryRebuildIoError = "memory_rebuild_io_error",
+        MemoryRebuildPathOverrideUnsupported = "memory_rebuild_path_override_unsupported",
+        MemoryRebuildPrepareFailed = "memory_rebuild_prepare_failed",
+        MemoryRebuildQuantumBudget = "memory_rebuild_quantum_budget",
+        MemoryRebuildSourcesIncomplete = "memory_rebuild_sources_incomplete",
+        MemoryRecallClosed = "memory_recall_closed",
+        MemoryRecallOperationFailed = "memory_recall_operation_failed",
+        MemoryRecallUnavailable = "memory_recall_unavailable",
+        MemoryRegistrationOperationFailed = "memory_registration_operation_failed",
+        MemoryRollbackRequiresCatchup = "memory_rollback_requires_catchup",
+        MemoryRollbackUnavailable = "memory_rollback_unavailable",
+        MemoryRuntimeVersionUnavailable = "memory_runtime_version_unavailable",
+        MemorySchemaMigrationRequired = "memory_schema_migration_required",
+        MemorySnapshotChanged = "memory_snapshot_changed",
+        MemorySnapshotCopyFailed = "memory_snapshot_copy_failed",
+        MemorySourceChanged = "memory_source_changed",
+        MemorySourceIndexChanged = "memory_source_index_changed",
+        MemorySourceIndexSpanMismatch = "memory_source_index_span_mismatch",
+        MemorySourceIneligible = "memory_source_ineligible",
+        MemorySourceNotFound = "memory_source_not_found",
+        MemorySourceNotTerminal = "memory_source_not_terminal",
+        MemorySourceOperationConflict = "memory_source_operation_conflict",
+        MemorySourceOperationRetracted = "memory_source_operation_retracted",
+        MemorySourceOriginUnclassified = "memory_source_origin_unclassified",
+        MemorySourceQualityEventInvalid = "memory_source_quality_event_invalid",
+        MemorySourceQualityPathUnsafe = "memory_source_quality_path_unsafe",
+        MemorySourceQualityReadFailed = "memory_source_quality_read_failed",
+        MemorySourceTextMissing = "memory_source_text_missing",
+        MemorySourceUnavailable = "memory_source_unavailable",
+        MemorySyncClosed = "memory_sync_closed",
+        MemorySyncDlqError = "memory_sync_dlq_error",
+        MemorySyncEntryInvalid = "memory_sync_entry_invalid",
+        MemorySyncLegacyEntryUnsupported = "memory_sync_legacy_entry_unsupported",
+        MemorySyncOperationFailed = "memory_sync_operation_failed",
+        MemorySyncSourceUnavailable = "memory_sync_source_unavailable",
+        MemoryTranscriptQueryIndexUnavailable = "memory_transcript_query_index_unavailable",
+        MemoryTranscriptReadFailed = "memory_transcript_read_failed",
+        MemoryVectorBatchLimit = "memory_vector_batch_limit",
+        MemoryVectorReceiptMismatch = "memory_vector_receipt_mismatch",
+        MemoryVectorRepairInvalidRequest = "memory_vector_repair_invalid_request",
+        MemoryVectorRepairPreimageChanged = "memory_vector_repair_preimage_changed",
+        MemoryVectorRowsInvalid = "memory_vector_rows_invalid",
+        MemoryVectorSchemaMismatch = "memory_vector_schema_mismatch",
+        MemoryVectorStoreUnavailable = "memory_vector_store_unavailable",
+        MemoryVectorUnitChanged = "memory_vector_unit_changed",
+        MemoryWriteAborted = "memory_write_aborted",
+        MemoryWriteBusy = "memory_write_busy",
+        MemoryWriteLockUnavailable = "memory_write_lock_unavailable",
+        MemoryWriteTimeout = "memory_write_timeout",
+        NativeEnvironmentUnavailable = "native_environment_unavailable",
+        NativeLocaleUnavailable = "native_locale_unavailable",
+        NativeModelSetupFailed = "native_model_setup_failed",
+        NativeSignalUnavailable = "native_signal_unavailable",
+        NativeVectorInvalidQuery = "native_vector_invalid_query",
+        NativeVectorUnavailable = "native_vector_unavailable",
+        NotFound = "not_found",
+        ProjectCapsuleInspectFailed = "project_capsule_inspect_failed",
+        ProjectCapsuleLockUnavailable = "project_capsule_lock_unavailable",
+        ProjectCapsuleLocked = "project_capsule_locked",
+        ProjectCapsulePathInvalid = "project_capsule_path_invalid",
+        ProjectCapsuleProjectIdInvalid = "project_capsule_project_id_invalid",
+        ProjectCapsuleProjectIdRequired = "project_capsule_project_id_required",
+        ProjectCapsuleSourceInvalid = "project_capsule_source_invalid",
+        ProjectCapsuleSourceReadFailed = "project_capsule_source_read_failed",
+        ProjectCapsuleWorkerFailed = "project_capsule_worker_failed",
+        ProjectCapsuleWriteFailed = "project_capsule_write_failed",
+        QueryCompletionLost = "query_completion_lost",
+        QueryJoinFailed = "query_join_failed",
+        QueryTermsConflict = "query_terms_conflict",
+        RecallBindingFailed = "recall_binding_failed",
+        RecallMemoryInvalidTime = "recall_memory invalid time",
+        RecallMemoryRequiresCue = "recall_memory requires cue",
+        RecallResultEncodingFailed = "recall_result_encoding_failed",
+        SerializationBudget = "serialization_budget",
+        StaleCursor = "stale_cursor",
+        Store = "store",
+        TaskMemoryReportUnavailable = "task_memory_report_unavailable",
+        TermsNotAllowed = "terms_not_allowed",
+        TermsRequired = "terms_required",
+        VectorStoreUnavailable = "vector_store_unavailable",
+    }
+}
+
+/// A shareable underlying error (errors are cloned to every waiter).
+pub(crate) type CognitionSource = Arc<dyn Error + Send + Sync>;
+
+/// Failures of Cognition memory: registration, graph, generations, hot cache,
+/// feedback, know-how, capsules and recovery.
+///
+/// `code()` is the persisted wire code, `message()` the user-facing text and
+/// `Display` renders `code: message`.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum CognitionError {
+    /// A Cognition check failed: invalid input or stored record, changed source,
+    /// busy or aborted writer, closed owner. Nothing lower-level failed.
+    #[error("{code}: {message}")]
+    Detected {
+        code: CognitionCode,
+        message: String,
+    },
+    /// A port or domain Cognition depends on failed (Conversation, the write
+    /// gate, the model provider, host embedding workers); `code` and `message`
+    /// are that implementation's own.
+    #[error("{code}: {message}")]
+    Port {
+        code: &'static str,
+        message: String,
+        #[source]
+        source: Option<CognitionSource>,
+    },
+    /// A lower-level operation (filesystem, SQLite, LanceDB, JSON, embedding,
+    /// task join) failed; `code` names what Cognition was doing and `source` is
+    /// the cause.
+    #[error("{code}: {message}")]
+    Failed {
+        code: CognitionCode,
+        message: String,
+        #[source]
+        source: CognitionSource,
+    },
 }
 
 impl CognitionError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
+    pub(crate) fn new(code: CognitionCode, message: impl Into<String>) -> Self {
+        Self::Detected {
             code,
             message: message.into(),
         }
     }
-}
 
-impl std::fmt::Display for CognitionError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
+    /// Surfaces a port implementation's failure with its own code and message.
+    pub(crate) fn port(
+        code: &'static str,
+        message: impl Into<String>,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::Port {
+            code,
+            message: message.into(),
+            source: Some(Arc::new(source)),
+        }
+    }
+
+    /// A port implementation's failure that has no underlying error.
+    #[cfg(test)]
+    pub(crate) fn relayed(code: &'static str, message: impl Into<String>) -> Self {
+        Self::Port {
+            code,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Records `source` as the cause of a detected failure, keeping its code
+    /// and message. An error that already carries a cause is returned as is.
+    #[must_use]
+    pub(crate) fn with_source(self, source: impl Error + Send + Sync + 'static) -> Self {
+        match self {
+            Self::Detected { code, message } => Self::Failed {
+                code,
+                message,
+                source: Arc::new(source),
+            },
+            other => other,
+        }
+    }
+
+    /// Replaces the message, keeping the code; the original error becomes the
+    /// source (used when a retry loop gives up on a failure it already saw).
+    #[must_use]
+    pub(crate) fn with_message(self, message: impl Into<String>) -> Self {
+        match self {
+            Self::Port { code, .. } => Self::Port {
+                code,
+                message: message.into(),
+                source: Some(Arc::new(self)),
+            },
+            Self::Detected { code, .. } | Self::Failed { code, .. } => Self::Failed {
+                code,
+                message: message.into(),
+                source: Arc::new(self),
+            },
+        }
+    }
+
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Detected { code, .. } | Self::Failed { code, .. } => code.as_str(),
+            Self::Port { code, .. } => code,
+        }
+    }
+
+    /// The user-facing message.
+    pub(crate) fn message(&self) -> String {
+        match self {
+            Self::Detected { message, .. }
+            | Self::Failed { message, .. }
+            | Self::Port { message, .. } => message.clone(),
+        }
     }
 }
 
-impl std::error::Error for CognitionError {}
+/// Wire equality: the same code and message (causes are diagnostic only).
+impl PartialEq for CognitionError {
+    fn eq(&self, other: &Self) -> bool {
+        self.code() == other.code() && self.message() == other.message()
+    }
+}
+
+impl Eq for CognitionError {}
+
 pub(crate) type CognitionResult<T> = Result<T, CognitionError>;
-
-impl From<super::CognitionSourceError> for CognitionError {
-    fn from(error: super::CognitionSourceError) -> Self {
-        Self::new(error.code, error.message)
-    }
-}
 
 impl From<crate::coordination::CoordinationError> for CognitionError {
     fn from(error: crate::coordination::CoordinationError) -> Self {
-        Self::new(error.code(), error.message())
+        Self::port(error.code(), error.message(), error)
     }
 }
 
 impl From<crate::conversation::ConversationError> for CognitionError {
     fn from(error: crate::conversation::ConversationError) -> Self {
-        Self::new(error.code(), error.message())
+        Self::port(error.code(), error.message(), error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CognitionCode;
+
+    #[test]
+    fn wire_codes_are_stable() {
+        let codes: Vec<&str> = CognitionCode::ALL
+            .iter()
+            .map(|code| code.as_str())
+            .collect();
+        let expected: Vec<&str> = include_str!("wire_codes.txt").lines().collect();
+        assert_eq!(codes, expected);
     }
 }

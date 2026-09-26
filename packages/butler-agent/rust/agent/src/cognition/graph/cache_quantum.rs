@@ -1,5 +1,6 @@
 //! Candidate-generation cache claim, current evidence, and durable receipt transitions.
 
+use crate::cognition::CognitionCode;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -87,7 +88,7 @@ impl GraphRepository {
         let changed = tx.execute("UPDATE memory_projection_jobs SET hot_cache_attempt_count=?1,hot_cache_owner_pid=?2,hot_cache_owner_nonce=?3,hot_cache_started_at=?4,hot_cache_state=?5 WHERE job_id=?6 AND json_extract(hot_cache_state,'$.state')='pending'",
             params![job.attempt,i64::from(std::process::id()),job.owner_nonce,now,json!({"state":"running","attempt":job.attempt,"owner_pid":std::process::id(),"started_at":now}).to_string(),job.job_id]).map_err(db_error)?;
         if changed != 1 {
-            return Err(error("memory_cache_job_changed"));
+            return Err(error(CognitionCode::MemoryCacheJobChanged));
         }
         tx.commit().map_err(db_error)?;
         Ok(Some(job))
@@ -99,7 +100,7 @@ impl GraphRepository {
     ) -> CognitionResult<()> {
         let exists = self.connection()?.query_row("SELECT 1 FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE j.job_id=?1 AND j.revision=?2 AND j.generation=?3 AND j.hot_cache_owner_nonce=?4 AND json_extract(j.hot_cache_state,'$.state')='running'",
             params![job.job_id,job.revision,job.generation,job.owner_nonce], |_| Ok(())).optional().map_err(db_error)?;
-        exists.ok_or_else(|| error("memory_source_changed"))
+        exists.ok_or_else(|| error(CognitionCode::MemorySourceChanged))
     }
 
     pub(in crate::cognition) fn cache_windows(
@@ -118,7 +119,7 @@ impl GraphRepository {
             .map_err(db_error)?
             .unwrap_or_else(|| "0".into())
             .parse::<i64>()
-            .map_err(|_| error("hot_cache_evidence_invalid"))?;
+            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
         let mut query = connection.prepare("SELECT window_ref,input_json,output_json,normalized_plan_json FROM memory_projection_windows WHERE job_id=?1 AND state='complete' ORDER BY ordinal,window_ref").map_err(db_error)?;
         let stored = query
             .query_map([&job.job_id], |row| {
@@ -137,9 +138,9 @@ impl GraphRepository {
             let output: ExtractOutput = serde_json::from_str(
                 output_json
                     .as_deref()
-                    .ok_or_else(|| error("hot_cache_evidence_invalid"))?,
+                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
             )
-            .map_err(|_| error("hot_cache_evidence_invalid"))?;
+            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
             let Some(summary) = output
                 .summary
                 .as_ref()
@@ -150,23 +151,26 @@ impl GraphRepository {
             let input: ExtractInput = serde_json::from_str(
                 input_json
                     .as_deref()
-                    .ok_or_else(|| error("hot_cache_evidence_invalid"))?,
+                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
             )
-            .map_err(|_| error("hot_cache_evidence_invalid"))?;
+            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
             let plan: Value = serde_json::from_str(
                 plan_json
                     .as_deref()
-                    .ok_or_else(|| error("hot_cache_evidence_invalid"))?,
+                    .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?,
             )
-            .map_err(|_| error("hot_cache_evidence_invalid"))?;
+            .map_err(|source| error(CognitionCode::HotCacheEvidenceInvalid).with_source(source))?;
             let refs = plan
                 .get("refs")
                 .and_then(Value::as_object)
-                .ok_or_else(|| error("hot_cache_evidence_invalid"))?;
-            let validated = validate_quotes_for_apply(&input, &summary.evidence)
-                .map_err(|_| error("hot_cache_evidence_invalid"))?;
-            let resolved = resolve_quotes(connection, &input, &validated)
-                .map_err(|_| error("hot_cache_evidence_invalid"))?;
+                .ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?;
+            let validated =
+                validate_quotes_for_apply(&input, &summary.evidence).map_err(|source| {
+                    error(CognitionCode::HotCacheEvidenceInvalid).with_source(source)
+                })?;
+            let resolved = resolve_quotes(connection, &input, &validated).map_err(|source| {
+                error(CognitionCode::HotCacheEvidenceInvalid).with_source(source)
+            })?;
             let mut source_refs = Vec::new();
             let mut bases = Vec::new();
             let mut classes = Vec::new();
@@ -177,7 +181,7 @@ impl GraphRepository {
                 }
                 let row = connection.query_row("SELECT s.basis,s.role,s.source_kind,s.origin_kind FROM memory_source_leaves s JOIN memory_chunks c ON c.memory_chunk_id=s.episode_id AND c.current_revision=s.revision JOIN memory_projection_jobs j ON j.episode_id=s.episode_id AND j.revision=s.revision WHERE s.source_id=?1 AND j.generation=?2 LIMIT 1",
                     params![quote.source_id,job.generation], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?,row.get::<_,String>(3)?)))
-                    .optional().map_err(db_error)?.ok_or_else(|| error("hot_cache_evidence_invalid"))?;
+                    .optional().map_err(db_error)?.ok_or_else(|| error(CognitionCode::HotCacheEvidenceInvalid))?;
                 bases.push(row.0);
                 classes.push(match row.2.as_str() {
                     "task_report" => "task_report",
@@ -189,7 +193,7 @@ impl GraphRepository {
                 source_refs.push(quote.source_id);
             }
             if source_refs.is_empty() {
-                return Err(error("hot_cache_evidence_invalid"));
+                return Err(error(CognitionCode::HotCacheEvidenceInvalid));
             }
             bases.sort();
             bases.dedup();
@@ -259,7 +263,7 @@ impl GraphRepository {
                 params![entry_id,job.generation,i64::from(*admitted),reason,item.to_string()]).map_err(db_error)?;
         }
         if tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=?2,hot_cache_next_attempt_at=NULL,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?3 AND hot_cache_owner_nonce=?4 AND json_extract(hot_cache_state,'$.state')='running'",
-            params![json!({"state":"complete","completed_units":1,"total_units":1}).to_string(),receipt.to_string(),job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error("memory_cache_job_changed")); }
+            params![json!({"state":"complete","completed_units":1,"total_units":1}).to_string(),receipt.to_string(),job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
         tx.commit().map_err(db_error)
     }
 
@@ -313,6 +317,6 @@ fn pid_alive(pid: i64) -> bool {
         Ok(()) | Err(nix::errno::Errno::EPERM)
     )
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

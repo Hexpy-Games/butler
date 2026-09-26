@@ -5,6 +5,7 @@ mod health;
 pub(in crate::cognition) use format::physical_entries;
 pub(in crate::cognition) use health::read as read_hot_cache_health;
 
+use crate::cognition::CognitionCode;
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
@@ -37,10 +38,10 @@ pub(crate) async fn advance(
     cancellation: &CancellationToken,
 ) -> CognitionResult<bool> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let MemoryGenerationTarget::Rebuild { .. } = target else {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     };
     let handle = resolve_generation(data_root, environment, target)?;
     let lock = environment.consolidation_lock(data_root);
@@ -68,8 +69,8 @@ pub(crate) async fn advance(
     );
     let lease = acquisition
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let data_root = data_root.to_owned();
     let environment = environment.clone();
     let target = target.clone();
@@ -78,9 +79,9 @@ pub(crate) async fn advance(
         let result = (|| {
             lease
                 .assert_for_path(&lock)
-                .map_err(|_| error("memory_write_busy"))?;
+                .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
             if cancellation.is_cancelled() {
-                return Err(error("memory_operation_aborted"));
+                return Err(error(CognitionCode::MemoryOperationAborted));
             }
             let current = resolve_generation(&data_root, &environment, &target)?;
             assert_mutation_authority(&data_root, &environment, &target, &current)?;
@@ -88,14 +89,14 @@ pub(crate) async fn advance(
         })();
         let released = lease
             .release(result.is_ok())
-            .map_err(|_| error("memory_write_busy"));
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         result.and_then(|value| {
             released?;
             Ok(value)
         })
     })
     .await
-    .map_err(|_| error("memory_cache_operation_failed"))?
+    .map_err(|source| error(CognitionCode::MemoryCacheOperationFailed).with_source(source))?
 }
 
 fn run_claimed(
@@ -119,10 +120,10 @@ fn run_claimed(
     };
     let produced = (|| {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         if job.generation != handle.generation_id {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         assert_source_current(handle, &job)?;
         graph.assert_cache_job_current(&job)?;
@@ -146,9 +147,10 @@ fn run_claimed(
             let canonical = handle
                 .canonical_snapshot_path
                 .as_deref()
-                .ok_or_else(|| error("memory_snapshot_changed"))?;
-            let reader = ConversationSourceReader::open(canonical)
-                .map_err(|_| error("memory_snapshot_changed"))?;
+                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+            let reader = ConversationSourceReader::open(canonical).map_err(|source| {
+                error(CognitionCode::MemorySnapshotChanged).with_source(source)
+            })?;
             let candidate = graph.valid_rebuild_cache_entries(
                 &handle.generation_id,
                 std::slice::from_ref(&window.entry),
@@ -156,7 +158,9 @@ fn run_claimed(
                 &reader,
                 &now,
             );
-            let closed = reader.close().map_err(|_| error("memory_snapshot_changed"));
+            let closed = reader
+                .close()
+                .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source));
             let candidate = candidate.and_then(|value| {
                 closed?;
                 Ok(value)
@@ -203,8 +207,8 @@ fn run_claimed(
     if let Err(failure) = &produced {
         let _ = graph.fail_cache_job(
             &job,
-            if failure.code.starts_with("hot_cache_") {
-                failure.code
+            if failure.code().starts_with("hot_cache_") {
+                failure.code()
             } else {
                 "hot_cache_io_failed"
             },
@@ -228,22 +232,22 @@ fn reconcile_missing(
     }
     let stored: Value = serde_json::from_slice(
         &fs::read(handle.source_root.join("memory-source-inventory.json"))
-            .map_err(|_| error("memory_snapshot_changed"))?,
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let as_of = stored["as_of"]
         .as_str()
-        .ok_or_else(|| error("memory_inventory_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
     let canonical = handle
         .canonical_snapshot_path
         .as_deref()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
-    let reader =
-        ConversationSourceReader::open(canonical).map_err(|_| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    let reader = ConversationSourceReader::open(canonical)
+        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let text = match fs::read_to_string(cache) {
         Ok(value) => value,
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error("hot_cache_io_failed")),
+        Err(_) => return Err(error(CognitionCode::HotCacheIoFailed)),
     };
     let physical = physical_entries(&text);
     let valid = graph.valid_rebuild_cache_entries(
@@ -258,7 +262,7 @@ fn reconcile_missing(
         super::rebuild::readiness::cache::evaluate(&rows, &outcomes, &valid, &handle.generation_id);
     reader
         .close()
-        .map_err(|_| error("memory_snapshot_changed"))?;
+        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     graph.requeue_missing_rebuild_cache(&handle.generation_id, &evidence.actual_invalid_jobs)?;
     Ok(())
 }
@@ -276,28 +280,28 @@ fn assert_source_current(
             kind,
             id,
         )?
-        .ok_or_else(|| error("memory_source_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
         if owner.revision != job.revision || owner.content_hash != job.source_hash {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
         return Ok(());
     }
     let canonical = handle
         .canonical_snapshot_path
         .as_ref()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
-    let reader =
-        ConversationSourceReader::open(canonical).map_err(|_| error("memory_source_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
+    let reader = ConversationSourceReader::open(canonical)
+        .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
     let session = job
         .session_id
         .as_deref()
-        .ok_or_else(|| error("memory_source_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
     let outcome = (|| {
         let notice = if let Some(turn) = job.source_key.strip_prefix("conversation_turn:") {
             let turn_outcome = reader
                 .read_turn_outcome(turn)
-                .map_err(|_| error("memory_source_changed"))?
-                .ok_or_else(|| error("memory_source_changed"))?;
+                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?
+                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
             ConversationSourceNotice::Turn {
                 session_id: session,
                 turn_id: turn,
@@ -312,12 +316,14 @@ fn assert_source_current(
                 extraction_version: &job.extraction_version,
             }
         } else {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         };
         assert_conversation_source_current(&reader, notice, &job.revision, &now())
-            .map_err(|_| error("memory_source_changed"))
+            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))
     })();
-    let closed = reader.close().map_err(|_| error("memory_source_changed"));
+    let closed = reader
+        .close()
+        .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source));
     outcome.and(closed)
 }
 
@@ -334,20 +340,22 @@ fn write_entry(
     valid: &HashSet<String>,
     job: &ClaimedCacheJob,
 ) -> CognitionResult<Written> {
-    let parent = path.parent().ok_or_else(|| error("hot_cache_io_failed"))?;
-    fs::create_dir_all(parent).map_err(|_| error("hot_cache_io_failed"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| error(CognitionCode::HotCacheIoFailed))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
     let existing = match fs::read_to_string(path) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error("hot_cache_io_failed")),
+        Err(_) => return Err(error(CognitionCode::HotCacheIoFailed)),
     };
     let rendered = format::render(
         &existing,
         Some(entry),
         valid,
         chrono::Utc::now().timestamp_millis(),
-    )
-    .map_err(error)?;
+    )?;
     let temp = parent.join(format!(".cache-{}.tmp", uuid::Uuid::new_v4()));
     ensure_data_authority(data_root, &[path, parent, &temp])?;
     let written: CognitionResult<()> = (|| {
@@ -355,14 +363,16 @@ fn write_entry(
             .write(true)
             .create_new(true)
             .open(&temp)
-            .map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
         file.write_all(rendered.body.as_bytes())
-            .map_err(|_| error("hot_cache_io_failed"))?;
-        file.sync_all().map_err(|_| error("hot_cache_io_failed"))?;
-        fs::rename(&temp, path).map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
+        file.sync_all()
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
+        fs::rename(&temp, path)
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
         File::open(parent)
             .and_then(|file| file.sync_all())
-            .map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
         Ok(())
     })();
     if written.is_err() {
@@ -376,10 +386,11 @@ fn write_entry(
             .create(true)
             .append(true)
             .open(audit)
-            .map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
         file.write_all(rendered.audit.as_bytes())
-            .map_err(|_| error("hot_cache_io_failed"))?;
-        file.sync_all().map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
+        file.sync_all()
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
     }
     let excluded = rendered.excluded;
     let excluded_entries = excluded
@@ -403,6 +414,6 @@ fn write_entry(
 fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

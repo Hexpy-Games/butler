@@ -58,7 +58,7 @@ pub async fn run(
             stderr: String::new(),
             exit_code: 0,
         },
-        Err(error) => failure(json_mode, error.code, &error.message, 1),
+        Err(error) => failure(json_mode, error.code(), &error.message(), 1),
     }
 }
 

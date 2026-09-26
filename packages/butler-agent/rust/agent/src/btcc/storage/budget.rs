@@ -47,7 +47,7 @@ pub(super) fn transition(
         json(&raw, StorageCode::InvalidContinuationBudget)?,
         &write.binding.turn_id,
     )
-    .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.message()))?;
+    .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.message()).with_source(e))?;
     let event: TurnContinuationBudgetEvent =
         serde_json::from_value(write.event.clone()).map_err(|e| {
             error(StorageCode::InvalidContinuationBudgetEvent, e.to_string()).with_source(e)

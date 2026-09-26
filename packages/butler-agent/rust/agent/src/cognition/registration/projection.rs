@@ -20,6 +20,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::{Clock, CognitionRegistrationService, closed};
+use crate::cognition::CognitionCode;
 use crate::cognition::{extraction::CognitionVectorSearch, graph::GraphRepository};
 use crate::{
     cognition::{
@@ -95,7 +96,7 @@ impl CognitionRegistrationService {
             .as_ref()
             .ok_or_else(|| {
                 CognitionError::new(
-                    "cognition_projection_unconfigured",
+                    CognitionCode::CognitionProjectionUnconfigured,
                     "cognition_projection_unconfigured",
                 )
             })?
@@ -105,7 +106,7 @@ impl CognitionRegistrationService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
@@ -137,11 +138,12 @@ impl CognitionRegistrationService {
             .await;
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_projection_operation_failed",
+                CognitionCode::MemoryProjectionOperationFailed,
                 "memory_projection_operation_failed",
             )
+            .with_source(source)
         })?
     }
 }
@@ -248,8 +250,8 @@ async fn execute(
             let job = claim.job_id.clone();
             let window = claim.window_ref.clone();
             let nonce = claim.owner_nonce.clone();
-            let code = error.code;
-            let repair_exhausted = error.message.starts_with("repair_exhausted:");
+            let code = error.code();
+            let repair_exhausted = error.message().starts_with("repair_exhausted:");
             let clock = operation.clock.clone();
             let invoked = adapter_entered.load(Ordering::Acquire);
             settlement
@@ -376,7 +378,7 @@ impl Operation {
                 .is_some_and(CancellationToken::is_cancelled)
         {
             return Err(CognitionError::new(
-                "memory_write_aborted",
+                CognitionCode::MemoryWriteAborted,
                 "memory_write_aborted",
             ));
         }
@@ -396,7 +398,8 @@ impl Operation {
         } else {
             tokio::select! {biased;() = self.shutdown.cancelled()=>return Err(write_aborted()),result=acquire=>result.map_err(CognitionError::from)?}
         };
-        lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))
+        lease
+            .ok_or_else(|| CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy"))
     }
     async fn write<T: Send + 'static>(
         &self,
@@ -456,15 +459,16 @@ fn assert_current(state: &State, now: &str) -> CognitionResult<()> {
 }
 
 fn write_aborted() -> CognitionError {
-    CognitionError::new("memory_write_aborted", "memory_write_aborted")
+    CognitionError::new(CognitionCode::MemoryWriteAborted, "memory_write_aborted")
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
-    CognitionError::new("memory_projection_operation_failed", error.to_string())
+    CognitionError::new(
+        CognitionCode::MemoryProjectionOperationFailed,
+        error.to_string(),
+    )
+    .with_source(error)
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

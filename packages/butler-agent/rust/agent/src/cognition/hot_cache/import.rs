@@ -1,5 +1,6 @@
 //! Named owner operations used by the source memory-ingest command.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -35,13 +36,13 @@ impl LegacyIndexService {
     ) -> CognitionResult<String> {
         let body = trim_js_whitespace(summary).to_owned();
         if body.is_empty() {
-            return Err(error("hot_cache_entry_empty"));
+            return Err(error(CognitionCode::HotCacheEntryEmpty));
         }
         if body.encode_utf16().count() > 8_000 {
-            return Err(error("hot_cache_entry_too_large"));
+            return Err(error(CognitionCode::HotCacheEntryTooLarge));
         }
         if super::super::continuity_recovery::hot_cache::compact::contains_secret(&body) {
-            return Err(error("hot_cache_secret_rejected"));
+            return Err(error(CognitionCode::HotCacheSecretRejected));
         }
         let data_root = data_root.to_owned();
         let memory_root = paths.memory_root(&data_root);
@@ -95,12 +96,12 @@ impl LegacyIndexService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         let result = tokio::task::spawn_blocking(move || {
             let result = (|| {
                 lease
                     .assert_for_path(&coordination_lock)
-                    .map_err(|_| error("memory_write_busy"))?;
+                    .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
                 write_cache_entry(
                     &data_root,
                     &cache,
@@ -118,7 +119,7 @@ impl LegacyIndexService {
             }
         })
         .await
-        .map_err(|_| error("hot_cache_write_failed"))?;
+        .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
         result?;
         Ok(index_text)
     }
@@ -135,7 +136,7 @@ pub(crate) fn extract_legacy_import_transcript(
     let timestamp = i64::try_from(
         SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| error("memory_graph_unavailable"))?
+            .map_err(|source| error(CognitionCode::MemoryGraphUnavailable).with_source(source))?
             .as_secs(),
     )
     .unwrap_or(i64::MAX);
@@ -148,7 +149,9 @@ pub(crate) fn extract_legacy_import_transcript(
         None,
         timestamp,
     )
-    .map_err(|code| CognitionError::new("memory_graph_unavailable", code))
+    .map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.code()).with_source(error)
+    })
 }
 
 fn write_cache_entry(
@@ -162,14 +165,15 @@ fn write_cache_entry(
 ) -> CognitionResult<()> {
     let parent = cache
         .parent()
-        .ok_or_else(|| error("hot_cache_write_failed"))?;
-    fs::create_dir_all(parent).map_err(|_| error("hot_cache_write_failed"))?;
+        .ok_or_else(|| error(CognitionCode::HotCacheWriteFailed))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
     ensure_data_authority(data_root, &[parent, cache, lock_path, temp, audit])?;
     let _lock = acquire_cache_lock(lock_path)?;
     let current = match fs::read(cache) {
         Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error("hot_cache_write_failed")),
+        Err(_) => return Err(error(CognitionCode::HotCacheWriteFailed)),
     };
     if current.contains(marker) {
         return Ok(());
@@ -192,7 +196,7 @@ fn preserve_audit(data_root: &Path, path: &Path, body: &str) -> CognitionResult<
     let current = match fs::read(path) {
         Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(error("hot_cache_write_failed")),
+        Err(_) => return Err(error(CognitionCode::HotCacheWriteFailed)),
     };
     if current.contains(body.trim()) {
         return Ok(());
@@ -224,12 +228,13 @@ fn write_atomic(data_root: &Path, path: &Path, temp: &Path, body: &str) -> Cogni
         }
         let mut file = options
             .open(temp)
-            .map_err(|_| error("hot_cache_write_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
         created_temp = true;
         file.write_all(body.as_bytes())
             .and_then(|()| file.sync_all())
-            .map_err(|_| error("hot_cache_write_failed"))?;
-        fs::rename(temp, path).map_err(|_| error("hot_cache_write_failed"))
+            .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))?;
+        fs::rename(temp, path)
+            .map_err(|source| error(CognitionCode::HotCacheWriteFailed).with_source(source))
     })();
     if created_temp {
         let _ = fs::remove_file(temp);
@@ -255,13 +260,17 @@ fn acquire_cache_lock(path: &Path) -> CognitionResult<CacheLock> {
                 .and_then(|modified| SystemTime::now().duration_since(modified).ok())
                 .is_some_and(|age| age > HOT_CACHE_LOCK_STALE_AFTER);
             if stale {
-                fs::remove_file(path).map_err(|_| error("hot_cache_destination_locked"))?;
-                create_private_lock(path).map_err(|_| error("hot_cache_destination_locked"))?;
+                fs::remove_file(path).map_err(|source| {
+                    error(CognitionCode::HotCacheDestinationLocked).with_source(source)
+                })?;
+                create_private_lock(path).map_err(|source| {
+                    error(CognitionCode::HotCacheDestinationLocked).with_source(source)
+                })?;
                 return Ok(CacheLock(path.to_owned()));
             }
-            Err(error("hot_cache_destination_locked"))
+            Err(error(CognitionCode::HotCacheDestinationLocked))
         }
-        Err(_) => Err(error("hot_cache_destination_locked")),
+        Err(_) => Err(error(CognitionCode::HotCacheDestinationLocked)),
     }
 }
 
@@ -277,6 +286,6 @@ fn create_private_lock(path: &Path) -> std::io::Result<()> {
     writeln!(file, "{}", std::process::id())
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::{error, field};
+use crate::cognition::CognitionCode;
 use crate::cognition::generation::qualification::{
     ValidatedEvidence, assert_evidence_current, assert_evidence_file_facts_current,
     validate_evidence,
@@ -24,7 +25,7 @@ impl StoredQualification {
         generation_id: &str,
         manifest: &Value,
         readiness: &Value,
-        error_code: &'static str,
+        error_code: CognitionCode,
     ) -> CognitionResult<Self> {
         let binding = manifest
             .get("acceptance_binding")
@@ -36,11 +37,11 @@ impl StoredQualification {
         let evidence_root = generation_root.join(root_ref);
         ensure_data_authority(data_root, &[generation_root, &acceptance, &evidence_root])?;
         let commit = option_env!("BUTLER_MEMORY_VERIFIED_COMMIT")
-            .ok_or_else(|| error("memory_acceptance_version_mismatch"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
         let extraction = field(manifest, "extraction_version")?;
         let embedding = manifest["embedding"]["version"]
             .as_str()
-            .ok_or_else(|| error("memory_acceptance_version_mismatch"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
         if binding["target_generation_id"] != generation_id
             || binding["target_source_inventory_hash"] != manifest["source_inventory_hash"]
             || binding["target_readiness_sha256"] != readiness["sha256"]
@@ -85,7 +86,7 @@ fn safe_ref(value: &str) -> CognitionResult<&Path> {
             .components()
             .any(|part| !matches!(part, std::path::Component::Normal(_)))
     {
-        return Err(error("memory_acceptance_invalid"));
+        return Err(error(CognitionCode::MemoryAcceptanceInvalid));
     }
     Ok(path)
 }

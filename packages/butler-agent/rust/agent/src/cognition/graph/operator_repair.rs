@@ -9,6 +9,7 @@ pub(crate) use policy::ProjectionModelPolicyInput;
 pub(in crate::cognition) use repair::CandidateInputRepairResult;
 pub(in crate::cognition) use request::CandidateInputRepairRequest;
 
+use crate::cognition::CognitionCode;
 use std::path::Path;
 
 use crate::{
@@ -46,6 +47,6 @@ impl super::GraphRepository {
     }
 }
 
-pub(super) fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+pub(super) fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

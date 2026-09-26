@@ -6,6 +6,7 @@ use serde_json::{Map, Value, json};
 use crate::cognition::CognitionResult;
 
 use super::{error, manifest, paths};
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub(crate) struct BoxRetentionReport {
@@ -15,7 +16,7 @@ pub(crate) struct BoxRetentionReport {
 
 pub(super) fn prune_expired(root: &Path, now_epoch_ms: i64) -> CognitionResult<BoxRetentionReport> {
     let now_iso = crate::js_date::format_iso_millis(now_epoch_ms)
-        .ok_or_else(|| error("memory_box_retention_clock_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxRetentionClockInvalid))?;
     let mut report = BoxRetentionReport::default();
     visit_manifests(root, |item_dir, manifest_path, value| {
         if !is_expired_candidate(&value, now_epoch_ms)? {
@@ -25,7 +26,7 @@ pub(super) fn prune_expired(root: &Path, now_epoch_ms: i64) -> CognitionResult<B
         let files = value
             .get("files")
             .and_then(Value::as_array)
-            .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
         if !all_box_owned(files)? {
             return Ok(());
         }
@@ -42,13 +43,14 @@ pub(super) fn prune_expired(root: &Path, now_epoch_ms: i64) -> CognitionResult<B
         let manifest_target = paths::validate_manifest_target(manifest_path, item_dir)?;
         let mut forgotten = value;
         mark_forgotten(&mut forgotten, &now_iso)?;
-        serde_json::to_vec_pretty(&forgotten)
-            .map_err(|_| error("memory_box_manifest_write_failed"))?;
+        serde_json::to_vec_pretty(&forgotten).map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
         for path in paths {
             match fs::remove_file(&path) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(error("memory_box_retention_delete_failed")),
+                Err(_) => return Err(error(CognitionCode::MemoryBoxRetentionDeleteFailed)),
             }
         }
         manifest::write_manifest_value(&manifest_target, &forgotten)?;
@@ -65,13 +67,14 @@ fn visit_manifests(
     if paths::canonical_items_root(root)?.is_none() {
         return Ok(());
     }
-    let entries =
-        fs::read_dir(root.join("items")).map_err(|_| error("memory_box_items_read_failed"))?;
+    let entries = fs::read_dir(root.join("items"))
+        .map_err(|source| error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source))?;
     for entry in entries {
-        let entry = entry.map_err(|_| error("memory_box_items_read_failed"))?;
+        let entry = entry
+            .map_err(|source| error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source))?;
         if !entry
             .file_type()
-            .map_err(|_| error("memory_box_items_read_failed"))?
+            .map_err(|source| error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source))?
             .is_dir()
         {
             continue;
@@ -88,7 +91,7 @@ fn is_expired_candidate(value: &Value, now_epoch_ms: i64) -> CognitionResult<boo
     let retention = value
         .get("retention")
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
     if retention.get("pinned").is_some_and(js_truthy) {
         return Ok(false);
     }
@@ -104,7 +107,7 @@ fn all_box_owned(files: &[Value]) -> CognitionResult<bool> {
     for file in files {
         let object = file
             .as_object()
-            .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
         if object.get("ownership").and_then(Value::as_str) != Some("box-owned") {
             return Ok(false);
         }
@@ -115,7 +118,7 @@ fn all_box_owned(files: &[Value]) -> CognitionResult<bool> {
 fn relative_path(file: &Value) -> CognitionResult<Option<String>> {
     let object = file
         .as_object()
-        .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
     let Some(value) = object
         .get("box_relative_path")
         .filter(|value| js_truthy(value))
@@ -125,23 +128,23 @@ fn relative_path(file: &Value) -> CognitionResult<Option<String>> {
     value
         .as_str()
         .map(|value| Some(value.to_owned()))
-        .ok_or_else(|| error("memory_box_retention_path_unsafe"))
+        .ok_or_else(|| error(CognitionCode::MemoryBoxRetentionPathUnsafe))
 }
 
 fn mark_forgotten(value: &mut Value, now_iso: &str) -> CognitionResult<()> {
     let object = value
         .as_object_mut()
-        .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
     object.insert("status".into(), json!("forgotten"));
     object.insert("updated_at".into(), json!(now_iso));
     let quality: &mut Map<String, Value> = object
         .get_mut("quality")
         .and_then(Value::as_object_mut)
-        .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
     let signals = quality
         .get_mut("signals")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| error("memory_box_manifest_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestInvalid))?;
     signals.push(json!("retention_pruned"));
     Ok(())
 }

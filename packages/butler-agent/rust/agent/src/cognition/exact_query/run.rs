@@ -19,6 +19,7 @@ use super::{
     CognitionError, CognitionResult,
     args::{self, QueryArgs},
 };
+use crate::cognition::CognitionCode;
 
 const PAGE: usize = 1_000;
 const MAX_SCAN: usize = 50_000;
@@ -54,16 +55,16 @@ pub(super) fn query(
         binding.project_id.as_deref(),
     ) {
         Ok(args) => args,
-        Err(error) => return Ok(failure("invalid_arguments", &[error])),
+        Err(error) => return Ok(failure("invalid_arguments", &[error.as_str()])),
     };
     let result = run(&snapshot, &args);
     match result {
         Ok(result) => Ok(result),
-        Err(error) if error.code == "invalid_cursor" => {
+        Err(error) if error.code() == "invalid_cursor" => {
             Ok(failure("invalid_arguments", &["invalid_cursor"]))
         }
-        Err(error) if error.code == "invalid_scope" || error.code == "stale_cursor" => {
-            Ok(failure(error.code, &[]))
+        Err(error) if error.code() == "invalid_scope" || error.code() == "stale_cursor" => {
+            Ok(failure(error.code(), &[]))
         }
         Err(_) => Ok(failure(
             "backend_unavailable",
@@ -75,7 +76,7 @@ pub(super) fn query(
 fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Value> {
     let revision = snapshot.revision().map_err(store_error)?;
     let identity = json::stringify(&args.filter_identity)
-        .map_err(|e| CognitionError::new("json", e.to_string()))?;
+        .map_err(|e| CognitionError::new(CognitionCode::Json, e.to_string()).with_source(e))?;
     let filter_hash = format!("{:x}", Sha256::digest(identity.as_bytes()));
     let cursor = args.cursor.as_deref().map(decode_cursor).transpose()?;
     if cursor
@@ -83,13 +84,13 @@ fn run(snapshot: &PublicMemorySnapshot, args: &QueryArgs) -> CognitionResult<Val
         .is_some_and(|c| c.filter_hash != filter_hash || c.revision != revision)
     {
         return Err(CognitionError::new(
-            "stale_cursor",
+            CognitionCode::StaleCursor,
             "Query cursor revision or filters changed",
         ));
     }
     if !snapshot.validate_scope(&args.scope).map_err(store_error)? {
         return Err(CognitionError::new(
-            "invalid_scope",
+            CognitionCode::InvalidScope,
             "Conversation scope is invalid",
         ));
     }
@@ -277,28 +278,29 @@ fn scalar_matches(text: &str, args: &QueryArgs) -> bool {
 }
 
 fn decode_cursor(value: &str) -> CognitionResult<Cursor> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(value)
-        .map_err(|_| CognitionError::new("invalid_cursor", "Malformed cursor"))?;
-    let parsed: Cursor = serde_json::from_slice(&bytes)
-        .map_err(|_| CognitionError::new("invalid_cursor", "Malformed cursor"))?;
+    let bytes = URL_SAFE_NO_PAD.decode(value).map_err(|source| {
+        CognitionError::new(CognitionCode::InvalidCursor, "Malformed cursor").with_source(source)
+    })?;
+    let parsed: Cursor = serde_json::from_slice(&bytes).map_err(|source| {
+        CognitionError::new(CognitionCode::InvalidCursor, "Malformed cursor").with_source(source)
+    })?;
     if parsed.schema != "butler.query-memory-cursor.v2" {
         return Err(CognitionError::new(
-            "invalid_cursor",
+            CognitionCode::InvalidCursor,
             "Unexpected cursor schema",
         ));
     }
     Ok(parsed)
 }
 fn encode_cursor(value: &Cursor) -> CognitionResult<String> {
-    let encoded =
-        json::stringify(&json!(value)).map_err(|e| CognitionError::new("json", e.to_string()))?;
+    let encoded = json::stringify(&json!(value))
+        .map_err(|e| CognitionError::new(CognitionCode::Json, e.to_string()).with_source(e))?;
     Ok(URL_SAFE_NO_PAD.encode(encoded.as_bytes()))
 }
 fn envelope_bytes(value: &Value) -> CognitionResult<usize> {
     json::stringify(&json!({"ok":true,"output":value}))
         .map(|v| v.len())
-        .map_err(|e| CognitionError::new("json", e.to_string()))
+        .map_err(|e| CognitionError::new(CognitionCode::Json, e.to_string()).with_source(e))
 }
 fn failure(code: &str, diagnostics: &[&str]) -> Value {
     json!({"ok":false,"code":code,"diagnostics":diagnostics})
@@ -308,5 +310,5 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn store_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new("store", error.to_string())
+    CognitionError::new(CognitionCode::Store, error.to_string())
 }

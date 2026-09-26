@@ -145,7 +145,7 @@ fn registration_rolls_back_partial_rows_and_reports_episode_stage() {
     let failure =
         refresh_vector_units_for_job(&mut connection, "job", &[source("text")], "now").unwrap_err();
     assert_eq!(failure.stage, VectorRegistrationStage::Episode);
-    assert_eq!(failure.error.message, "vector-failure");
+    assert_eq!(failure.error.message(), "vector-failure");
     let count: i64 = connection
         .query_row("SELECT COUNT(*) FROM memory_vector_units", [], |row| {
             row.get(0)
@@ -166,7 +166,7 @@ fn registration_rejects_a_stale_current_chunk_before_opening_a_transaction() {
     let failure =
         refresh_vector_units_for_job(&mut connection, "job", &[source("text")], "now").unwrap_err();
     assert_eq!(failure.stage, VectorRegistrationStage::Node);
-    assert_eq!(failure.error.code, "memory_source_changed");
+    assert_eq!(failure.error.code(), "memory_source_changed");
     assert_eq!(
         connection
             .query_row("SELECT COUNT(*) FROM memory_vector_units", [], |row| {

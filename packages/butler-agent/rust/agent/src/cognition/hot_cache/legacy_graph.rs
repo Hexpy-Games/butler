@@ -4,6 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::cognition::CognitionCode;
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
 
@@ -19,7 +22,7 @@ pub(super) fn extract_and_save(
     project: &str,
     source: Option<&str>,
     timestamp: i64,
-) -> Result<usize, String> {
+) -> CognitionResult<usize> {
     let extraction = rules::extract(data_root, text, project)?;
     if extraction.entities.is_empty() {
         return Ok(0);
@@ -28,7 +31,7 @@ pub(super) fn extract_and_save(
     let mut connection = open_legacy_graph(data_root, memory_root)?;
     let transaction = connection
         .transaction()
-        .map_err(|_| "memory_graph_unavailable".to_owned())?;
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     let mut id_map = HashMap::new();
 
     for entity in &extraction.entities {
@@ -41,14 +44,14 @@ pub(super) fn extract_and_save(
                     properties=excluded.properties",
                 params![id, entity.kind, entity.name, entity.project, timestamp],
             )
-            .map_err(|_| "memory_graph_unavailable".to_owned())?;
+            .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
         transaction
             .execute(
                 "INSERT INTO entity_mentions (entity_id,session_id,timestamp,snippet,source,project)
                  VALUES (?1,?2,?3,?4,?5,?6)",
                 params![id, session_id, timestamp, snippet, source, project],
             )
-            .map_err(|_| "memory_graph_unavailable".to_owned())?;
+            .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
         id_map.insert(entity_key(entity.kind, &entity.name), id);
     }
 
@@ -71,26 +74,29 @@ pub(super) fn extract_and_save(
 
     transaction
         .commit()
-        .map_err(|_| "memory_graph_unavailable".to_owned())?;
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     Ok(extraction.entities.len())
 }
 
-fn open_legacy_graph(data_root: &Path, memory_root: &Path) -> Result<Connection, String> {
+fn open_legacy_graph(data_root: &Path, memory_root: &Path) -> CognitionResult<Connection> {
     let descriptor_path = memory_root.join("active-generation.json");
-    ensure_data_authority(data_root, &[memory_root, &descriptor_path])
-        .map_err(|failure| failure.code.to_owned())?;
+    ensure_data_authority(data_root, &[memory_root, &descriptor_path])?;
     match fs::read_to_string(&descriptor_path) {
         Ok(text) => {
-            let descriptor = serde_json::from_str::<serde_json::Value>(&text)
-                .map_err(|_| "memory_generation_unavailable".to_owned())?;
+            let descriptor =
+                serde_json::from_str::<serde_json::Value>(&text).map_err(|source| {
+                    legacy(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+                })?;
             if descriptor.get("schema").and_then(serde_json::Value::as_str)
                 == Some("butler.memory-active-generation.v2")
             {
-                return Err("legacy_memory_writer_disabled_for_v2".to_owned());
+                return Err(legacy(CognitionCode::LegacyMemoryWriterDisabledForV2));
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => return Err("memory_generation_unavailable".to_owned()),
+        Err(error) => {
+            return Err(legacy(CognitionCode::MemoryGenerationUnavailable).with_source(error));
+        }
     }
 
     let db_directory = memory_root.join("db");
@@ -101,25 +107,24 @@ fn open_legacy_graph(data_root: &Path, memory_root: &Path) -> Result<Connection,
     ensure_data_authority(
         data_root,
         &[&db_directory, &db_path, &wal_path, &shm_path, &journal_path],
-    )
-    .map_err(|failure| failure.code.to_owned())?;
-    fs::create_dir_all(&db_directory).map_err(|_| "memory_graph_unavailable".to_owned())?;
+    )?;
+    fs::create_dir_all(&db_directory)
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     ensure_data_authority(
         data_root,
         &[&db_directory, &db_path, &wal_path, &shm_path, &journal_path],
-    )
-    .map_err(|failure| failure.code.to_owned())?;
+    )?;
 
-    let connection =
-        Connection::open(&db_path).map_err(|_| "memory_graph_unavailable".to_owned())?;
+    let connection = Connection::open(&db_path)
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     connection
         .execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
-        .map_err(|_| "memory_graph_unavailable".to_owned())?;
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     ensure_schema(&connection)?;
     Ok(connection)
 }
 
-fn ensure_schema(connection: &Connection) -> Result<(), String> {
+fn ensure_schema(connection: &Connection) -> CognitionResult<()> {
     connection
         .execute_batch(
             "CREATE TABLE IF NOT EXISTS entities (
@@ -155,7 +160,7 @@ fn ensure_schema(connection: &Connection) -> Result<(), String> {
             CREATE INDEX IF NOT EXISTS idx_mentions_session ON entity_mentions(session_id);
             CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);",
         )
-        .map_err(|_| "memory_graph_unavailable".to_owned())?;
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     let _ = connection.execute("ALTER TABLE entity_mentions ADD COLUMN source TEXT", []);
     let _ = connection.execute("ALTER TABLE entity_mentions ADD COLUMN project TEXT", []);
     Ok(())
@@ -168,7 +173,7 @@ fn upsert_edge(
     edge: &ExtractedEdge,
     session_id: &str,
     timestamp: i64,
-) -> Result<(), String> {
+) -> CognitionResult<()> {
     connection
         .execute(
             "INSERT INTO edges (source_id,target_id,rel_type,weight,properties,session_id,created_at)
@@ -177,7 +182,7 @@ fn upsert_edge(
                 weight=weight+1.0,session_id=excluded.session_id",
             params![source_id, target_id, edge.relation, session_id, timestamp],
         )
-        .map_err(|_| "memory_graph_unavailable".to_owned())?;
+        .map_err(|source| legacy(CognitionCode::MemoryGraphUnavailable).with_source(source))?;
     Ok(())
 }
 
@@ -206,3 +211,8 @@ fn sidecar(path: &Path, suffix: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests;
+
+/// Legacy graph failures carry their code as the message, as before.
+fn legacy(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
+}

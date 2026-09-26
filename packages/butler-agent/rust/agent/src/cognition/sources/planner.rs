@@ -10,6 +10,7 @@ use super::types::{
     CognitionSourceError, CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice,
     PreparedConversationSource,
 };
+use crate::cognition::CognitionCode;
 use crate::cognition::{MEMORY_SOURCE_WINDOW_BYTES, split_historical_source_spans};
 
 pub(crate) fn prepare_conversation_source(
@@ -55,17 +56,17 @@ pub(in crate::cognition) fn assert_conversation_source_current(
 ) -> Result<(), CognitionSourceError> {
     match prepare_conversation_source(reader, notice, now) {
         Ok(PreparedConversationSource::Plan(plan)) if plan.revision == expected_revision => Ok(()),
-        Ok(_) => Err(error("memory_source_changed")),
+        Ok(_) => Err(error(CognitionCode::MemorySourceChanged)),
         Err(error)
             if matches!(
-                error.code,
+                error.code(),
                 "memory_source_not_terminal"
                     | "memory_source_ineligible"
                     | "memory_source_text_missing"
             ) =>
         {
-            Err(super::types::CognitionSourceError::new(
-                "memory_source_changed",
+            Err(crate::cognition::CognitionError::new(
+                CognitionCode::MemorySourceChanged,
                 "memory_source_changed",
             ))
         }
@@ -84,13 +85,13 @@ fn turn(
     let turn = reader.read_turn(turn_id)?;
     let outcome = reader.read_turn_outcome(turn_id)?;
     let (Some(turn), Some(outcome)) = (turn, outcome) else {
-        return Err(error("memory_source_not_terminal"));
+        return Err(error(CognitionCode::MemorySourceNotTerminal));
     };
     if turn.session_id != session_id
         || outcome.generation != outcome_generation
         || !matches!(turn.status.as_str(), "complete" | "failed" | "aborted")
     {
-        return Err(error("memory_source_not_terminal"));
+        return Err(error(CognitionCode::MemorySourceNotTerminal));
     }
     let request = outcome
         .request_message_id
@@ -135,17 +136,17 @@ fn standalone(
     now: &str,
 ) -> Result<PreparedConversationSource, CognitionSourceError> {
     let Some(message) = reader.read_message(message_id)? else {
-        return Err(error("memory_source_not_terminal"));
+        return Err(error(CognitionCode::MemorySourceNotTerminal));
     };
     if message.message.session_id != session_id
         || message.message.turn_id.is_some()
         || !eligible_standalone(&message)
     {
-        return Err(error("memory_source_not_terminal"));
+        return Err(error(CognitionCode::MemorySourceNotTerminal));
     }
     let actual_hash = recovered_parts_hash(&message)?;
     if actual_hash != source_hash {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
     let episode_id = projection_hash(vec![
         "canonical-conversation-message".into(),
@@ -172,7 +173,7 @@ fn eligible_turn_messages(
     assistant_id: Option<&String>,
 ) -> Result<Vec<ConversationMessageWithParts>, CognitionSourceError> {
     let Some(request) = request else {
-        return Err(error("memory_source_ineligible"));
+        return Err(error(CognitionCode::MemorySourceIneligible));
     };
     if request.message.role != ConversationRole::User
         || !matches!(
@@ -181,7 +182,7 @@ fn eligible_turn_messages(
         )
         || request.message.origin_kind != ConversationOriginKind::UserInput
     {
-        return Err(error("memory_source_ineligible"));
+        return Err(error(CognitionCode::MemorySourceIneligible));
     }
     let assistant = assistant_id
         .map(|id| reader.read_message(id))
@@ -194,7 +195,7 @@ fn eligible_turn_messages(
                 && message.message.origin_kind == ConversationOriginKind::AssistantPublic
         })
     {
-        return Err(error("memory_source_ineligible"));
+        return Err(error(CognitionCode::MemorySourceIneligible));
     }
     Ok(match assistant {
         Some(value) => vec![request, value],
@@ -321,7 +322,7 @@ fn plan(input: PlanInput<'_>) -> Result<CognitionSourcePlan, CognitionSourceErro
         }
     }
     if rows.is_empty() {
-        return Err(error("memory_source_text_missing"));
+        return Err(error(CognitionCode::MemorySourceTextMissing));
     }
     let windows = rows.iter().map(|row| vec![row.source_id.clone()]).collect();
     let source_hash = revision.clone();
@@ -383,6 +384,6 @@ fn number(value: f64) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn error(code: &'static str) -> CognitionSourceError {
-    CognitionSourceError::new(code, code)
+fn error(code: crate::cognition::CognitionCode) -> CognitionSourceError {
+    crate::cognition::CognitionError::new(code, code.as_str())
 }

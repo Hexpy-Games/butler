@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
 use super::{db_error, index, invalidation, jobs};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourcePlan, CognitionSourceRow,
     ConversationSourceNotice, MEMORY_SOURCE_WINDOW_BYTES, assert_conversation_source_current,
@@ -220,7 +221,7 @@ fn insert_windows(
             let (start, end) = source_span(connection, source_id)?;
             if end - start > MEMORY_SOURCE_WINDOW_BYTES {
                 return Err(CognitionError::new(
-                    "memory_extract_source_window_exceeds_budget",
+                    CognitionCode::MemoryExtractSourceWindowExceedsBudget,
                     "memory_extract_source_window_exceeds_budget",
                 ));
             }
@@ -287,9 +288,9 @@ fn expand(connection: &Connection, source_id: &str) -> CognitionResult<Vec<Strin
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }

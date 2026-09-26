@@ -1,5 +1,6 @@
 //! Legacy indexing receipts written after the vector rows, even if graph extraction warns.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -30,7 +31,7 @@ pub(super) fn record(
     let graph_seconds = i64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| error("hot_cache_clock_unavailable"))?
+            .map_err(|source| error(CognitionCode::HotCacheClockUnavailable).with_source(source))?
             .as_secs(),
     )
     .unwrap_or(i64::MAX);
@@ -43,29 +44,32 @@ pub(super) fn record(
         Some("hot-cache"),
         graph_seconds,
     ) {
-        eprintln!("Warning: graph extraction failed ({failure})");
+        eprintln!("Warning: graph extraction failed ({})", failure.code());
     }
     let indexed_at = DateTime::<Utc>::from(std::time::SystemTime::now())
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    fs::create_dir_all(&db).map_err(|_| error("hot_cache_receipt_failed"))?;
+    fs::create_dir_all(&db)
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
     let mut receipt = append_private(&provenance)?;
-    writeln!(receipt, "{}", json!({"session_id":session_id,"source_session_id":session_id,"project":"butler","source":"hot-cache","topic":null,"source_message_ids":[],"indexed_at":indexed_at,"chunk_count":chunk_count})).map_err(|_| error("hot_cache_receipt_failed"))?;
+    writeln!(receipt, "{}", json!({"session_id":session_id,"source_session_id":session_id,"project":"butler","source":"hot-cache","topic":null,"source_message_ids":[],"indexed_at":indexed_at,"chunk_count":chunk_count})).map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
     let value = json!({"table":"butler_memory","row_count":row_count,"updated_at":indexed_at,"last_session_id":session_id,"last_source_session_id":session_id,"last_source_message_ids":[],"last_chunk_count":chunk_count});
-    let serialized =
-        serde_json::to_vec_pretty(&value).map_err(|_| error("hot_cache_receipt_failed"))?;
+    let serialized = serde_json::to_vec_pretty(&value)
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
     ensure_data_authority(data_root, &[temp])?;
     let result: CognitionResult<()> = (|| {
         let mut output = create_private(temp)?;
         if let Ok(metadata) = fs::metadata(&stats) {
-            fs::set_permissions(temp, metadata.permissions())
-                .map_err(|_| error("hot_cache_receipt_failed"))?;
+            fs::set_permissions(temp, metadata.permissions()).map_err(|source| {
+                error(CognitionCode::HotCacheReceiptFailed).with_source(source)
+            })?;
         }
         output
             .write_all(&serialized)
             .and_then(|()| output.write_all(b"\n"))
             .and_then(|()| output.sync_all())
-            .map_err(|_| error("hot_cache_receipt_failed"))?;
-        fs::rename(temp, &stats).map_err(|_| error("hot_cache_receipt_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
+        fs::rename(temp, &stats)
+            .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
         Ok(())
     })();
     if result.is_err() {
@@ -74,8 +78,9 @@ pub(super) fn record(
     result?;
     let parent = log
         .parent()
-        .ok_or_else(|| error("hot_cache_receipt_failed"))?;
-    fs::create_dir_all(parent).map_err(|_| error("hot_cache_receipt_failed"))?;
+        .ok_or_else(|| error(CognitionCode::HotCacheReceiptFailed))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
     let mut output = append_private(&log)?;
     let date = indexed_at.replace('T', " ");
     writeln!(
@@ -83,7 +88,7 @@ pub(super) fn record(
         "[{}] index.ts | project=butler session={session_id} | chunks={chunk_count}",
         &date[..19]
     )
-    .map_err(|_| error("hot_cache_receipt_failed"))?;
+    .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))?;
     Ok(())
 }
 
@@ -113,7 +118,9 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
     let graph_seconds = i64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| error("legacy_session_clock_unavailable"))?
+            .map_err(|source| {
+                error(CognitionCode::LegacySessionClockUnavailable).with_source(source)
+            })?
             .as_secs(),
     )
     .unwrap_or(i64::MAX);
@@ -126,15 +133,20 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
         Some(source),
         graph_seconds,
     );
-    if let Err(code) = graph {
+    if let Err(error) = graph {
+        let code = error.code();
         if strict {
-            return Err(CognitionError::new("legacy_session_graph_failed", code));
+            return Err(
+                CognitionError::new(CognitionCode::LegacySessionGraphFailed, code)
+                    .with_source(error),
+            );
         }
         eprintln!("Warning: graph extraction failed ({code})");
     }
     let indexed_at = DateTime::<Utc>::from(std::time::SystemTime::now())
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    fs::create_dir_all(&db).map_err(|_| error("legacy_session_receipt_failed"))?;
+    fs::create_dir_all(&db)
+        .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?;
     let mut receipt = append_private(&provenance)?;
     writeln!(
         receipt,
@@ -145,26 +157,31 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
             "source_message_ids": [], "indexed_at": indexed_at, "chunk_count": chunk_count,
         })
     )
-    .map_err(|_| error("legacy_session_receipt_failed"))?;
+    .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?;
     let value = json!({
         "table": "butler_memory", "row_count": row_count, "updated_at": indexed_at,
         "last_session_id": session_id, "last_source_session_id": source_session_id,
         "last_source_message_ids": [], "last_chunk_count": chunk_count,
     });
-    let serialized =
-        serde_json::to_vec_pretty(&value).map_err(|_| error("legacy_session_receipt_failed"))?;
+    let serialized = serde_json::to_vec_pretty(&value)
+        .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?;
     let result: CognitionResult<()> = (|| {
         let mut output = create_private(temp)?;
         if let Ok(metadata) = fs::metadata(&stats) {
-            fs::set_permissions(temp, metadata.permissions())
-                .map_err(|_| error("legacy_session_receipt_failed"))?;
+            fs::set_permissions(temp, metadata.permissions()).map_err(|source| {
+                error(CognitionCode::LegacySessionReceiptFailed).with_source(source)
+            })?;
         }
         output
             .write_all(&serialized)
             .and_then(|()| output.write_all(b"\n"))
             .and_then(|()| output.sync_all())
-            .map_err(|_| error("legacy_session_receipt_failed"))?;
-        fs::rename(temp, &stats).map_err(|_| error("legacy_session_receipt_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::LegacySessionReceiptFailed).with_source(source)
+            })?;
+        fs::rename(temp, &stats).map_err(|source| {
+            error(CognitionCode::LegacySessionReceiptFailed).with_source(source)
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -173,15 +190,16 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
     result?;
     let parent = log
         .parent()
-        .ok_or_else(|| error("legacy_session_receipt_failed"))?;
-    fs::create_dir_all(parent).map_err(|_| error("legacy_session_receipt_failed"))?;
+        .ok_or_else(|| error(CognitionCode::LegacySessionReceiptFailed))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?;
     let mut output = append_private(&log)?;
     writeln!(
         output,
         "[{}] index.ts | project={project} session={session_id} | chunks={chunk_count}",
         indexed_at.replace('T', " ").get(..19).unwrap_or("")
     )
-    .map_err(|_| error("legacy_session_receipt_failed"))?;
+    .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?;
     Ok(())
 }
 
@@ -201,8 +219,8 @@ pub(super) struct LegacyReceiptInput<'a> {
     pub temp: &'a Path,
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 fn append_private(path: &Path) -> CognitionResult<std::fs::File> {
@@ -215,7 +233,7 @@ fn append_private(path: &Path) -> CognitionResult<std::fs::File> {
     }
     options
         .open(path)
-        .map_err(|_| error("hot_cache_receipt_failed"))
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))
 }
 
 fn create_private(path: &Path) -> CognitionResult<std::fs::File> {
@@ -228,5 +246,5 @@ fn create_private(path: &Path) -> CognitionResult<std::fs::File> {
     }
     options
         .open(path)
-        .map_err(|_| error("hot_cache_receipt_failed"))
+        .map_err(|source| error(CognitionCode::HotCacheReceiptFailed).with_source(source))
 }

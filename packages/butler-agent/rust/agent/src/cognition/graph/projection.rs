@@ -6,6 +6,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Value, json};
 
 use super::{db_error, jobs};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 use crate::coordination::CognitionProcessStatus;
 
@@ -286,12 +287,12 @@ fn parse_optional(value: Option<&str>) -> CognitionResult<Option<Value>> {
 fn stringify(value: &Value) -> CognitionResult<String> {
     crate::json::stringify(value).map_err(json_error)
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }
 fn changed() -> CognitionError {
     CognitionError::new(
-        "memory_projection_window_changed",
+        CognitionCode::MemoryProjectionWindowChanged,
         "memory_projection_window_changed",
     )
 }

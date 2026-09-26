@@ -1,5 +1,6 @@
 mod artifact;
 mod contracts;
+mod error;
 mod prompt;
 #[cfg(test)]
 mod tests;
@@ -18,8 +19,8 @@ use crate::{
 };
 
 pub(crate) use contracts::{
-    BriefingGenerationError, BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource,
-    BriefingPersona, BriefingProjectSignal, BriefingSettings,
+    BriefingGenerationCode, BriefingGenerationError, BriefingInputFuture, BriefingInputSnapshot,
+    BriefingInputSource, BriefingPersona, BriefingProjectSignal, BriefingSettings,
 };
 use contracts::{error, prepared_fingerprint};
 use usage::Usage;
@@ -126,7 +127,7 @@ impl BriefingGenerationService {
                 general = Some(path);
                 generated += 1;
             }
-            Err(error) if error.code == "new_chat_briefing_cancelled" => return Err(error),
+            Err(error) if error.code() == "new_chat_briefing_cancelled" => return Err(error),
             Err(_) => failed += 1,
         }
         for project in &input.projects {
@@ -155,7 +156,7 @@ impl BriefingGenerationService {
                     project_paths.push(path);
                     generated += 1;
                 }
-                Err(error) if error.code == "new_chat_briefing_cancelled" => return Err(error),
+                Err(error) if error.code() == "new_chat_briefing_cancelled" => return Err(error),
                 Err(_) => failed += 1,
             }
         }
@@ -231,7 +232,13 @@ impl BriefingGenerationService {
                 ProviderPromptLifecycle::none(),
             )
             .await
-            .map_err(|_| error("new_chat_briefing_model_failed", "Briefing model failed"))?;
+            .map_err(|source| {
+                error(
+                    BriefingGenerationCode::NewChatBriefingModelFailed,
+                    "Briefing model failed",
+                )
+                .with_source(source)
+            })?;
         ensure_active(cancellation)?;
         usage.push(
             if response.model.is_empty() {
@@ -267,25 +274,44 @@ impl BriefingGenerationService {
             .coordinator
             .acquire(request, CognitionWaitClass::Background)
             .await
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()))?
-            .ok_or_else(|| error("memory_write_busy", "Memory writer is busy"))?;
-        lease
-            .assert_for_path(&lock)
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()))?;
+            .map_err(|failure| {
+                error(
+                    BriefingGenerationCode::NewChatBriefingWriteFailed,
+                    failure.message(),
+                )
+                .with_source(failure)
+            })?
+            .ok_or_else(|| {
+                error(
+                    BriefingGenerationCode::MemoryWriteBusy,
+                    "Memory writer is busy",
+                )
+            })?;
+        lease.assert_for_path(&lock).map_err(|failure| {
+            error(
+                BriefingGenerationCode::NewChatBriefingWriteFailed,
+                failure.message(),
+            )
+            .with_source(failure)
+        })?;
         let current = self.source.snapshot().await?;
         ensure_active(cancellation)?;
         if prepared_fingerprint(input, project.map(|project| project.id.as_str()))
             != prepared_fingerprint(&current, project.map(|project| project.id.as_str()))
         {
             return Err(error(
-                "memory_source_changed",
+                BriefingGenerationCode::MemorySourceChanged,
                 "Briefing inputs changed before commit",
             ));
         }
         let result = write::write(&path, &artifact);
-        let release = lease
-            .release(result.is_ok())
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()));
+        let release = lease.release(result.is_ok()).map_err(|failure| {
+            error(
+                BriefingGenerationCode::NewChatBriefingWriteFailed,
+                failure.message(),
+            )
+            .with_source(failure)
+        });
         release?;
         result?;
         Ok(path.to_string_lossy().into_owned())
@@ -305,7 +331,7 @@ fn metrics(input: &BriefingMetrics) -> Map<String, Value> {
 fn ensure_active(cancellation: &CancellationToken) -> Result<(), BriefingGenerationError> {
     if cancellation.is_cancelled() {
         Err(error(
-            "new_chat_briefing_cancelled",
+            BriefingGenerationCode::NewChatBriefingCancelled,
             "Briefing generation cancelled",
         ))
     } else {

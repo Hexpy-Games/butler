@@ -12,6 +12,7 @@ use super::super::{
 use super::{
     descriptor, error, field, manifest_path, qualification::StoredQualification, read_manifest,
 };
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle, MemoryGenerationTarget,
@@ -31,13 +32,13 @@ pub(crate) async fn rollback(
     super::repair_pending(data_root, environment, coordinator.clone(), cancellation).await?;
     let descriptor = descriptor::capture_active_descriptor(data_root, environment)?;
     if expected_active.is_some_and(|expected| descriptor.fields.generation_id != expected) {
-        return Err(error("memory_rollback_unavailable"));
+        return Err(error(CognitionCode::MemoryRollbackUnavailable));
     }
     let previous_id = descriptor
         .fields
         .previous_generation_id
         .as_deref()
-        .ok_or_else(|| error("memory_rollback_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryRollbackUnavailable))?;
     let path = manifest_path(data_root, environment, previous_id)?;
     let (previous, previous_sha) = read_manifest(&path, previous_id)?;
     let format = field(&previous, "format")?;
@@ -53,7 +54,7 @@ pub(crate) async fn rollback(
             .get("acceptance_binding")
             .is_none_or(Value::is_null);
     if !matches!(format, "v2" | "legacy") {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     if format == "v2" && !bootstrap {
         let needs_build = previous["readiness"]["ready"] != true
@@ -101,7 +102,7 @@ pub(crate) async fn rollback(
         if bootstrap {
             let root = path
                 .parent()
-                .ok_or_else(|| error("memory_generation_unavailable"))?
+                .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?
                 .to_owned();
             let handle = MemoryGenerationHandle {
                 generation_id: previous_id.to_owned(),
@@ -122,22 +123,23 @@ pub(crate) async fn rollback(
             };
             let handle = resolve_generation(data_root, environment, &target)?;
             let witness = CandidateWitness::open(data_root, &handle).await?;
-            assert_live_inventory_matches_candidate(data_root, &handle, cancellation)
-                .map_err(|_| error("memory_rollback_requires_catchup"))?;
+            assert_live_inventory_matches_candidate(data_root, &handle, cancellation).map_err(
+                |source| error(CognitionCode::MemoryRollbackRequiresCatchup).with_source(source),
+            )?;
             let readiness =
                 compute_rebuild_readiness(data_root, environment, &target, cancellation).await?;
             if readiness["sha256"] != previous["readiness"]["sha256"] || readiness["ready"] != true
             {
-                return Err(error("memory_rollback_requires_catchup"));
+                return Err(error(CognitionCode::MemoryRollbackRequiresCatchup));
             }
             qualification = Some(StoredQualification::open(
                 data_root,
                 path.parent()
-                    .ok_or_else(|| error("memory_generation_unavailable"))?,
+                    .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?,
                 previous_id,
                 &previous,
                 &readiness,
-                "memory_rollback_requires_catchup",
+                CognitionCode::MemoryRollbackRequiresCatchup,
             )?);
             witness.assert_current(&handle).await?;
             candidate = Some((handle, witness));
@@ -150,7 +152,7 @@ pub(crate) async fn rollback(
     let lock = environment.consolidation_lock(data_root);
     ensure_data_authority(data_root, &[&lock, &path])?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -163,15 +165,15 @@ pub(crate) async fn rollback(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let mut cas_committed = false;
     let result = async {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         live.assert_current()?;
         if let Some((handle, witness)) = &candidate {
@@ -182,7 +184,7 @@ pub(crate) async fn rollback(
         }
         let (_, current_sha) = read_manifest(&path, previous_id)?;
         if current_sha != previous_sha {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         let next = json!({
             "schema":"butler.memory-active-generation.v2",
@@ -212,7 +214,7 @@ pub(crate) async fn rollback(
     .await;
     let released = lease
         .release(cas_committed)
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|descriptor| {
         released?;
         Ok(json!({"descriptor":descriptor,"rollback_pending":format=="v2" && bootstrap,"readiness":if bootstrap {Value::Null} else {previous["readiness"].clone()}}))
@@ -234,7 +236,7 @@ fn live_inventory_matches(
     let handle = resolve_generation(data_root, environment, &target)?;
     match assert_live_inventory_matches_candidate(data_root, &handle, cancellation) {
         Ok(()) => Ok(true),
-        Err(error) if error.code == "memory_inventory_changed" => Ok(false),
+        Err(error) if error.code() == "memory_inventory_changed" => Ok(false),
         Err(error) => Err(error),
     }
 }
@@ -261,30 +263,30 @@ async fn resume_for_build(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = descriptor::capture_active_descriptor(data_root, environment)?;
-        let current_json =
-            crate::json::stringify(&current.raw).map_err(|_| error("memory_generation_changed"))?;
+        let current_json = crate::json::stringify(&current.raw)
+            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
         let expected_json = crate::json::stringify(expected_descriptor)
-            .map_err(|_| error("memory_generation_changed"))?;
+            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
         if current_json != expected_json
             || current.fields.previous_generation_id.as_deref() != Some(generation_id)
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         let (mut manifest, _) = read_manifest(&path, generation_id)?;
         if manifest["format"] != "v2"
             || !matches!(manifest["state"].as_str(), Some("retired" | "building"))
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         if manifest["state"] == "retired" {
             manifest["state"] = json!("building");
@@ -294,7 +296,7 @@ async fn resume_for_build(
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result?;
     released
 }

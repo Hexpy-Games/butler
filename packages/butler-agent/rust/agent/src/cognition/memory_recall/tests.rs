@@ -63,11 +63,11 @@ fn cursor_keeps_metadata_only_and_ttl_is_from_creation() {
     );
     assert_eq!(store.read(&decimal_wire, 300_999).unwrap().offset, 1);
     assert_eq!(
-        store.read(&wire, 301_001).unwrap_err().code,
+        store.read(&wire, 301_001).unwrap_err().code(),
         "cursor_expired"
     );
     assert_eq!(
-        store.read("invalid", 301_001).unwrap_err().code,
+        store.read("invalid", 301_001).unwrap_err().code(),
         "invalid_arguments"
     );
 }
@@ -136,7 +136,7 @@ async fn caller_drop_does_not_abandon_admitted_recall_and_close_drains_it() {
         .await
         .expect("close must release an accepted operation waiting for admission");
     assert_eq!(
-        reader.recall(request()).await.unwrap_err().code,
+        reader.recall(request()).await.unwrap_err().code(),
         "memory_recall_closed"
     );
 }

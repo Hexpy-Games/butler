@@ -1,6 +1,7 @@
 //! Public v2 recall arguments and canonical caller binding. Graph retrieval stays
 //! in the recall operation; this short read never retains a Conversation handle.
 
+use crate::cognition::CognitionCode;
 use std::path::Path;
 
 use serde_json::{Value, json};
@@ -44,12 +45,12 @@ pub(super) fn prepare(
         .map(trim_js_whitespace)
         .unwrap_or("");
     if cue.is_empty() {
-        return Err(failure("recall_memory requires cue"));
+        return Err(failure(CognitionCode::RecallMemoryRequiresCue));
     }
     if trim_js_whitespace(&current_user_message).is_empty()
         || trim_js_whitespace(&operation_id).is_empty()
     {
-        return Err(failure("invalid_runtime_binding"));
+        return Err(failure(CognitionCode::InvalidRuntimeBinding));
     }
     // The public wrapper binds Conversation first; its v2 executor then resolves
     // the active generation before validating query arguments.
@@ -60,7 +61,7 @@ pub(super) fn prepare(
             value
                 .as_f64()
                 .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))
-                .ok_or_else(|| failure("invalid_arguments"))?,
+                .ok_or_else(|| failure(CognitionCode::InvalidArguments))?,
         ),
     };
     let scope = match args.get("scope") {
@@ -78,7 +79,7 @@ pub(super) fn prepare(
         {
             value
         }
-        _ => return Err(failure("invalid_arguments")),
+        _ => return Err(failure(CognitionCode::InvalidArguments)),
     };
     let project_filter = match args.get("project_filter") {
         None => "any",
@@ -87,7 +88,7 @@ pub(super) fn prepare(
         {
             value
         }
-        _ => return Err(failure("invalid_arguments")),
+        _ => return Err(failure(CognitionCode::InvalidArguments)),
     };
     let project_ids = strings(args.get("project_ids"), 16, 512)?;
     let session_ids = strings(args.get("session_ids"), 32, 512)?;
@@ -102,9 +103,9 @@ pub(super) fn prepare(
     };
     if !snapshot
         .validate_scope(&public_scope)
-        .map_err(|e| CognitionError::new("backend_unavailable", e.code()))?
+        .map_err(|e| CognitionError::new(CognitionCode::BackendUnavailable, e.code()))?
     {
-        return Err(failure("invalid_scope"));
+        return Err(failure(CognitionCode::InvalidScope));
     }
     let time = args
         .get("time")
@@ -116,9 +117,10 @@ pub(super) fn prepare(
                     Some("conversation" | "event")
                 );
             if !valid {
-                return Err(failure("recall_memory invalid time"));
+                return Err(failure(CognitionCode::RecallMemoryInvalidTime));
             }
-            serde_json::from_value(value.clone()).map_err(|_| failure("invalid_arguments"))
+            serde_json::from_value(value.clone())
+                .map_err(|source| failure(CognitionCode::InvalidArguments).with_source(source))
         })
         .transpose()?;
     let runtime = RecallRuntime {
@@ -141,7 +143,7 @@ pub(super) fn prepare(
             _ => RecallScope::AllUserSessions,
         },
         project_filter: serde_json::from_value(json!(project_filter))
-            .map_err(|_| failure("invalid_arguments"))?,
+            .map_err(|source| failure(CognitionCode::InvalidArguments).with_source(source))?,
         project_ids,
         session_ids,
         as_of: args
@@ -171,21 +173,23 @@ fn strings(
     let values = value
         .as_array()
         .filter(|items| items.len() <= max_items)
-        .ok_or_else(|| failure("invalid_arguments"))?;
+        .ok_or_else(|| failure(CognitionCode::InvalidArguments))?;
     values
         .iter()
         .map(|value| {
-            let value = value.as_str().ok_or_else(|| failure("invalid_arguments"))?;
+            let value = value
+                .as_str()
+                .ok_or_else(|| failure(CognitionCode::InvalidArguments))?;
             if trim_js_whitespace(value).is_empty()
                 || grapheme_segments(value).count() > max_graphemes
             {
-                return Err(failure("invalid_arguments"));
+                return Err(failure(CognitionCode::InvalidArguments));
             }
             Ok(trim_js_whitespace(value).to_owned())
         })
         .collect()
 }
 
-fn failure(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn failure(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

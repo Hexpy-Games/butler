@@ -59,7 +59,7 @@ impl HostDependencies for RuntimeOwners {
                 .memory_query
                 .close()
                 .await
-                .map_err(|e| BtccError::relayed(e.code, e.message));
+                .map_err(|e| BtccError::relayed(e.code(), e.message()));
             let conversation_reference = self
                 .conversation_reference
                 .close()

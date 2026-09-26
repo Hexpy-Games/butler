@@ -1,5 +1,6 @@
 //! Short-lived candidate witness retained across qualification preparation.
 
+use crate::cognition::CognitionCode;
 use std::{fs, os::unix::fs::MetadataExt, path::Path};
 
 use lancedb::{Error as LanceError, Table};
@@ -32,14 +33,16 @@ impl LiveWitness {
                 &data_root.join("butler.config.json"),
             ],
         )?;
-        let canonical_identity =
-            metadata(&canonical_path)?.ok_or_else(|| error("memory_inventory_changed"))?;
+        let canonical_identity = metadata(&canonical_path)?
+            .ok_or_else(|| error(CognitionCode::MemoryInventoryChanged))?;
         let canonical =
             Connection::open_with_flags(&canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| error("memory_inventory_changed"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryInventoryChanged).with_source(source)
+                })?;
         let canonical_data_version = canonical
             .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|_| error("memory_inventory_changed"))?;
+            .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))?;
         Ok(Self {
             canonical,
             canonical_identity,
@@ -54,12 +57,12 @@ impl LiveWitness {
         let data_version: i64 = self
             .canonical
             .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|_| error("memory_inventory_changed"))?;
+            .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))?;
         if metadata(&canonical_path)?.as_ref() != Some(&self.canonical_identity)
             || data_version != self.canonical_data_version
             || typed_facts(&self.data_root)? != self.typed
         {
-            return Err(error("memory_inventory_changed"));
+            return Err(error(CognitionCode::MemoryInventoryChanged));
         }
         Ok(())
     }
@@ -72,9 +75,9 @@ impl LiveWitness {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|_| error("memory_source_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
         if revision != expected {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
         Ok(())
     }
@@ -129,13 +132,13 @@ fn entries(root: &Path) -> CognitionResult<Vec<String>> {
     let values = match fs::read_dir(root) {
         Ok(value) => value,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(error("memory_inventory_changed")),
+        Err(_) => return Err(error(CognitionCode::MemoryInventoryChanged)),
     };
     let mut names = values
         .map(|entry| {
             entry
                 .map(|entry| entry.file_name().to_string_lossy().into_owned())
-                .map_err(|_| error("memory_inventory_changed"))
+                .map_err(|source| error(CognitionCode::MemoryInventoryChanged).with_source(source))
         })
         .collect::<CognitionResult<Vec<_>>>()?;
     names.sort();
@@ -166,15 +169,17 @@ impl CandidateWitness {
         ensure_data_authority(data_root, &paths)?;
         let graph =
             Connection::open_with_flags(&handle.graph_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| error("memory_generation_changed"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryGenerationChanged).with_source(source)
+                })?;
         let table = if lance.exists() {
-            let connection = lance_store::connect(&lance)
-                .await
-                .map_err(|_| error("memory_generation_changed"))?;
+            let connection = lance_store::connect(&lance).await.map_err(|source| {
+                error(CognitionCode::MemoryGenerationChanged).with_source(source)
+            })?;
             match lance_store::open(&connection, "butler_memory").await {
                 Ok(table) => Some(table),
                 Err(LanceError::TableNotFound { .. }) => None,
-                Err(_) => return Err(error("memory_generation_changed")),
+                Err(_) => return Err(error(CognitionCode::MemoryGenerationChanged)),
             }
         } else {
             None
@@ -193,31 +198,32 @@ impl CandidateWitness {
         handle: &MemoryGenerationHandle,
     ) -> CognitionResult<()> {
         if self.facts(handle).await? != self.initial {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         Ok(())
     }
 
     async fn facts(&self, handle: &MemoryGenerationHandle) -> CognitionResult<Value> {
         if let Some(table) = &self.table {
-            table
-                .checkout_latest()
-                .await
-                .map_err(|_| error("memory_generation_changed"))?;
+            table.checkout_latest().await.map_err(|source| {
+                error(CognitionCode::MemoryGenerationChanged).with_source(source)
+            })?;
         }
-        let manifest: Value = serde_json::from_slice(
-            &fs::read(handle.root.join("manifest.json"))
-                .map_err(|_| error("memory_generation_changed"))?,
-        )
-        .map_err(|_| error("memory_generation_changed"))?;
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(handle.root.join("manifest.json")).map_err(
+                |source| error(CognitionCode::MemoryGenerationChanged).with_source(source),
+            )?)
+            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
         let cache = handle.root.join("hot/cache.md");
         let cache_sha = if let Some(metadata) = metadata(&cache)? {
             if metadata["bytes"].as_u64().unwrap_or(u64::MAX) > 20 * 1024 {
-                return Err(error("memory_generation_not_ready"));
+                return Err(error(CognitionCode::MemoryGenerationNotReady));
             }
             Some(format!(
                 "{:x}",
-                Sha256::digest(fs::read(&cache).map_err(|_| error("memory_generation_changed"))?)
+                Sha256::digest(fs::read(&cache).map_err(|source| {
+                    error(CognitionCode::MemoryGenerationChanged).with_source(source)
+                })?)
             ))
         } else {
             None
@@ -225,14 +231,11 @@ impl CandidateWitness {
         let graph_data_version: i64 = self
             .graph
             .query_row("PRAGMA main.data_version", [], |row| row.get(0))
-            .map_err(|_| error("memory_generation_changed"))?;
+            .map_err(|source| error(CognitionCode::MemoryGenerationChanged).with_source(source))?;
         let version = match &self.table {
-            Some(table) => Some(
-                table
-                    .version()
-                    .await
-                    .map_err(|_| error("memory_generation_changed"))?,
-            ),
+            Some(table) => Some(table.version().await.map_err(|source| {
+                error(CognitionCode::MemoryGenerationChanged).with_source(source)
+            })?),
             None => None,
         };
         Ok(json!({
@@ -265,10 +268,10 @@ fn metadata(path: &Path) -> CognitionResult<Option<Value>> {
             "ctime_sec":item.ctime(),"ctime_nsec":item.ctime_nsec()}),
         )),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(error("memory_generation_changed")),
+        Err(_) => Err(error(CognitionCode::MemoryGenerationChanged)),
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

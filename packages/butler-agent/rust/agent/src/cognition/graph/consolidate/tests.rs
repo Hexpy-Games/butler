@@ -68,7 +68,7 @@ fn v2_recomputes_support_in_qualifier_order_and_rejects_legacy_schema() {
     assert_eq!(
         run(&mut legacy, now, 1.0)
             .expect_err("legacy schema must not report success")
-            .code,
+            .code(),
         "memory_consolidation_v2_required"
     );
 }

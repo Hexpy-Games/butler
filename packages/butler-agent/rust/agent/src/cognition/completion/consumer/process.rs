@@ -1,5 +1,6 @@
 //! Queue authority, registration, then one pending semantic quantum.
 
+use crate::cognition::CognitionCode;
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
@@ -75,7 +76,7 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         Ok(caught_up) => caught_up,
         Err(catchup_error) => match queue_error {
             Some(queue_error) => {
-                eprintln!("[native-memory-sync-catchup] {}", catchup_error.code);
+                eprintln!("[native-memory-sync-catchup] {}", catchup_error.code());
                 return Err(queue_error);
             }
             None => return Err(catchup_error),
@@ -105,12 +106,12 @@ async fn process_entry(
     entry: &Value,
 ) -> CognitionResult<bool> {
     if entry["schema_version"] != "butler.memory-sync-request.v3" {
-        return Err(error("memory_sync_legacy_entry_unsupported"));
+        return Err(error(CognitionCode::MemorySyncLegacyEntryUnsupported));
     }
     let job_id = entry["job_id"]
         .as_str()
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| error("memory_sync_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
     let source = &entry["source"];
     if matches!(
         source["kind"].as_str(),
@@ -119,7 +120,7 @@ async fn process_entry(
         return typed::process(input, root, entry, job_id).await;
     }
     if source["kind"] != "conversation_turn" {
-        return Err(error("memory_sync_source_unavailable"));
+        return Err(error(CognitionCode::MemorySyncSourceUnavailable));
     }
     let Some(observation) = super::super::observation::read_verified(root, job_id)? else {
         return reject_invalid(root, entry, job_id, &(input.clock)());
@@ -132,13 +133,13 @@ async fn process_entry(
     }
     let session = source["session_id"]
         .as_str()
-        .ok_or_else(|| error("memory_sync_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
     let turn = source["turn_id"]
         .as_str()
-        .ok_or_else(|| error("memory_sync_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
     let generation = source["outcome_generation"]
         .as_f64()
-        .ok_or_else(|| error("memory_sync_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))?;
     let handle = resolve_active_generation(&input.data_root, &input.environment)?;
     let registered = input
         .registration
@@ -161,14 +162,14 @@ async fn process_entry(
         .await;
     let registered = match registered {
         Ok(outcome) => outcome,
-        Err(error) if error.code == "memory_source_ineligible" => {
+        Err(error) if error.code() == "memory_source_ineligible" => {
             return super::super::queue::ack(root, job_id);
         }
         Err(error) => {
             if input.shutdown.is_cancelled() {
                 return Ok(false);
             }
-            let _ = dead_letter(root, entry, error.code, &(input.clock)());
+            let _ = dead_letter(root, entry, error.code(), &(input.clock)());
             return Ok(false);
         }
     };
@@ -206,13 +207,16 @@ fn dead_letter(
         io::Write,
     };
     let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(root.join("queue"))
-        .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))?;
+    fs::create_dir_all(root.join("queue")).map_err(|e| {
+        CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
+    })?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))?;
+        .map_err(|e| {
+            CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
+        })?;
     let record = serde_json::json!({
         "timestamp":now,
         "session_id":entry["source"]["session_id"],
@@ -225,7 +229,9 @@ fn dead_letter(
     });
     file.write_all(record.to_string().as_bytes())
         .and_then(|()| file.write_all(b"\n"))
-        .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))
+        .map_err(|e| {
+            CognitionError::new(CognitionCode::MemorySyncDlqError, e.to_string()).with_source(e)
+        })
 }
 
 pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
@@ -234,7 +240,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     }
     let handle = match resolve_input_generation(input) {
         Ok(handle) => handle,
-        Err(error) if error.code == "memory_generation_unavailable" => return Ok(false),
+        Err(error) if error.code() == "memory_generation_unavailable" => return Ok(false),
         Err(error) => return Err(error),
     };
     input
@@ -259,18 +265,16 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     };
     let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
         let canonical = ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
-            .map_err(|e| CognitionError::new(e.code(), e.message()))?;
+            .map_err(CognitionError::from)?;
         let outcome = canonical
             .read_turn_outcome(turn_id)
-            .map_err(|e| CognitionError::new(e.code(), e.message()))?
-            .ok_or_else(|| error("memory_source_changed"))?;
-        canonical
-            .close()
-            .map_err(|e| CognitionError::new(e.code(), e.message()))?;
+            .map_err(CognitionError::from)?
+            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
+        canonical.close().map_err(CognitionError::from)?;
         ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Turn {
             session_id: pending
                 .session_id
-                .ok_or_else(|| error("memory_source_changed"))?,
+                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
             turn_id: turn_id.into(),
             outcome_generation: outcome.generation,
             extraction_version: pending.extraction_version,
@@ -279,7 +283,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
         ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Standalone {
             session_id: pending
                 .session_id
-                .ok_or_else(|| error("memory_source_changed"))?,
+                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
             message_id: message_id.into(),
             source_hash: pending.source_hash,
             extraction_version: pending.extraction_version,
@@ -293,9 +297,9 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
             kind,
             record_id,
         )?
-        .ok_or_else(|| error("memory_source_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
         if owner.content_hash != pending.source_hash {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
         ProjectionSourceNotice::Typed {
             source_kind: kind.into(),
@@ -305,7 +309,7 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
             operation_id: owner.operation_id,
         }
     } else {
-        return Err(error("memory_projection_source_invalid"));
+        return Err(error(CognitionCode::MemoryProjectionSourceInvalid));
     };
     let projected = input
         .registration
@@ -346,8 +350,8 @@ pub(super) fn canonical_path(
         .unwrap_or_else(|| conversation_store_path(data_root))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 #[cfg(test)]

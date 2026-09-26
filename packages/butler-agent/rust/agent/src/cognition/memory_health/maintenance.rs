@@ -7,6 +7,7 @@ use std::{
 use serde_json::Value;
 
 use super::{MaintenanceStatus, error};
+use crate::cognition::CognitionCode;
 use crate::{cognition::CognitionResult, js_date};
 
 const STALE_AFTER_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
@@ -45,7 +46,7 @@ pub(super) fn read(root: &Path, now: i64) -> CognitionResult<MaintenanceState> {
             match reader.read_until(b'\n', &mut line) {
                 Ok(0) => break,
                 Ok(_) => {}
-                Err(_) => return Err(error("memory_health_read_failed")),
+                Err(_) => return Err(error(CognitionCode::MemoryHealthReadFailed)),
             }
             if line.iter().all(u8::is_ascii_whitespace) {
                 continue;

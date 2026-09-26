@@ -4,6 +4,7 @@ mod migration;
 use rusqlite::{Connection, OptionalExtension};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<()> {
@@ -18,7 +19,7 @@ pub(super) fn ensure(connection: &mut Connection, now: &str) -> CognitionResult<
         .is_some();
     if legacy {
         return Err(CognitionError::new(
-            "memory_schema_migration_required",
+            CognitionCode::MemorySchemaMigrationRequired,
             "memory_schema_migration_required",
         ));
     }

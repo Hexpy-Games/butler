@@ -10,6 +10,7 @@ use super::{
         QueryResult,
     },
 };
+use crate::cognition::CognitionCode;
 
 pub(super) fn validate_case(
     item: &AcceptanceCase,
@@ -26,7 +27,7 @@ pub(super) fn validate_case(
         || !super::io::valid_sha(&item.trace_sha256)
         || !super::io::safe_ref(&item.trace_ref)
     {
-        return Err(invalid("memory_acceptance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceInvalid));
     }
 
     let trace: CaseTrace = capture.read_json(&item.trace_ref, &item.trace_sha256)?;
@@ -46,10 +47,10 @@ pub(super) fn validate_case(
             let result_id = reference
                 .result_id
                 .as_deref()
-                .ok_or_else(|| invalid("memory_acceptance_evidence_invalid"))?;
+                .ok_or_else(|| invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid))?;
             let result: QueryResult = capture.read_json(reference.path(), &reference.sha256)?;
             if result.result_id != result_id {
-                return Err(invalid("memory_acceptance_evidence_invalid"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
             }
             Ok(result)
         })
@@ -64,10 +65,10 @@ pub(super) fn validate_case(
             let result_id = reference
                 .result_id
                 .as_deref()
-                .ok_or_else(|| invalid("memory_acceptance_evidence_invalid"))?;
+                .ok_or_else(|| invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid))?;
             let result: OwnerResult = capture.read_json(reference.path(), &reference.sha256)?;
             if result.result_id != result_id {
-                return Err(invalid("memory_acceptance_evidence_invalid"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
             }
             Ok(result)
         })
@@ -176,7 +177,7 @@ pub(super) fn validate_case(
             .iter()
             .any(|source| !trace.observed_source_handles.contains(&source.handle))
     {
-        return Err(invalid("memory_acceptance_evidence_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
     }
 
     for source in &trace.source_observations {
@@ -204,7 +205,7 @@ pub(super) fn validate_case(
                     capture,
                 )?)
         {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
     }
 
@@ -224,7 +225,7 @@ pub(super) fn validate_case(
     if (item.path == "public_app_btcc" || item.path == "native_tool")
         && trace.query.result_refs.is_empty()
     {
-        return Err(invalid("memory_acceptance_evidence_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
     }
     if item.path == "public_app_btcc"
         && (trace.completion_ids.is_empty() || trace.projection_job_ids.is_empty())
@@ -244,7 +245,7 @@ pub(super) fn validate_case(
         || item.uses_real_extractor && trace.extractor_attempt_refs.is_empty()
         || item.uses_real_embedding && trace.embedding_receipt_refs.is_empty()
     {
-        return Err(invalid("memory_acceptance_evidence_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
     }
     Ok(())
 }

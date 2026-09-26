@@ -193,7 +193,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     );
                     Ok((data, human))
                 }
-                Err(error) => Err(CliError::failed(error.code, error.message)),
+                Err(error) => Err(CliError::failed(error.code(), error.message())),
             }
         }
         Command::MemoryRecall => recall::run(&data_root, &paths, &options.operator_args),
@@ -251,7 +251,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                         )),
                     }
                 }
-                Err(error) => Err(CliError::failed(error.code, error.message)),
+                Err(error) => Err(CliError::failed(error.code(), error.message())),
             }
         }
         Command::MetadataInspect | Command::MetadataRepairLinks | Command::MetadataCheck => {

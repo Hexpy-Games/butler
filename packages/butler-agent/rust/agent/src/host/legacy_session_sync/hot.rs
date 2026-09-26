@@ -120,7 +120,7 @@ impl NativeLegacyHot {
                 &target.with_extension("md.lock"),
             ],
         )
-        .map_err(|failure| failure.code.to_owned())?;
+        .map_err(|failure| failure.code().to_owned())?;
         let lease = self
             .coordinator
             .acquire(
@@ -190,9 +190,9 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
     } = *input;
     let parent = target.parent().ok_or("legacy_hot_write_failed")?;
     fs::create_dir_all(parent).map_err(|_| "legacy_hot_write_failed")?;
-    ensure_data_authority(data, &[target, temp]).map_err(|failure| failure.code.to_owned())?;
+    ensure_data_authority(data, &[target, temp]).map_err(|failure| failure.code().to_owned())?;
     let lock_path = target.with_extension("md.lock");
-    ensure_data_authority(data, &[&lock_path]).map_err(|failure| failure.code.to_owned())?;
+    ensure_data_authority(data, &[&lock_path]).map_err(|failure| failure.code().to_owned())?;
     let _lock = acquire_lock(&lock_path)?;
     let now: DateTime<Utc> = SystemTime::now().into();
     if topic.is_some() {

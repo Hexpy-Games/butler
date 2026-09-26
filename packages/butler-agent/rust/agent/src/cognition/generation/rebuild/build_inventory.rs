@@ -1,5 +1,6 @@
 //! Verify and enumerate the immutable prepare snapshot before any build work.
 
+use crate::cognition::CognitionCode;
 use std::{fs, path::Path};
 
 use serde::Deserialize;
@@ -45,41 +46,43 @@ pub(crate) fn read(
     cancellation: &CancellationToken,
 ) -> CognitionResult<BuildInventory> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let stored_path = handle.source_root.join("memory-source-inventory.json");
     let canonical = handle
         .canonical_snapshot_path
         .as_ref()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     let manifest_path = handle.root.join("manifest.json");
     ensure_data_authority(
         data_root,
         &[&handle.source_root, canonical, &stored_path, &manifest_path],
     )?;
     let stored: Value = serde_json::from_slice(
-        &fs::read(&stored_path).map_err(|_| error("memory_snapshot_changed"))?,
+        &fs::read(&stored_path)
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     if stored["schema"] != "butler.memory-source-inventory.v1" {
-        return Err(error("memory_snapshot_changed"));
+        return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     let as_of = stored["as_of"]
         .as_str()
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     let actual = inventory::read(&handle.source_root, canonical, as_of, cancellation)?;
     let manifest: Value = serde_json::from_slice(
-        &fs::read(&manifest_path).map_err(|_| error("memory_snapshot_changed"))?,
+        &fs::read(&manifest_path)
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?,
     )
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     if actual.value != stored || manifest["source_inventory_hash"] != actual.hash {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
     let mut typed = serde_json::from_value::<Vec<BuildTypedRecord>>(stored["typed"].clone())
-        .map_err(|_| error("memory_snapshot_changed"))?;
+        .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     let conversations =
         serde_json::from_value::<Vec<BuildConversationRecord>>(stored["entries"].clone())
-            .map_err(|_| error("memory_snapshot_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     typed.sort_by(|left, right| {
         let left_key = left.source_key();
         let right_key = right.source_key();
@@ -87,7 +90,7 @@ pub(crate) fn read(
     });
     for pair in typed.windows(2) {
         if pair[0].source_key() == pair[1].source_key() {
-            return Err(error("memory_snapshot_changed"));
+            return Err(error(CognitionCode::MemorySnapshotChanged));
         }
     }
     Ok(BuildInventory {
@@ -106,15 +109,15 @@ pub(crate) fn assert_registered(
         &handle.graph_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
-    .map_err(|_| error("memory_generation_unavailable"))?;
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     for entry in &inventory.conversations {
         let exists = connection.query_row(
             "SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision \
              WHERE c.memory_chunk_id=?1 AND c.current_revision=?2 LIMIT 1",
             params![entry.episode_id, entry.revision], |_| Ok(()),
-        ).optional().map_err(|_| error("memory_generation_unavailable"))?;
+        ).optional().map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
         if exists.is_none() {
-            return Err(error("memory_rebuild_sources_incomplete"));
+            return Err(error(CognitionCode::MemoryRebuildSourcesIncomplete));
         }
     }
     for record in &inventory.typed {
@@ -123,14 +126,14 @@ pub(crate) fn assert_registered(
             "SELECT 1 FROM memory_chunks c JOIN memory_projection_jobs j ON j.episode_id=c.memory_chunk_id AND j.revision=c.current_revision \
              WHERE c.source_key=?1 AND c.current_revision=?2 LIMIT 1",
             params![key, record.revision], |_| Ok(()),
-        ).optional().map_err(|_| error("memory_generation_unavailable"))?;
+        ).optional().map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
         if exists.is_none() {
-            return Err(error("memory_rebuild_sources_incomplete"));
+            return Err(error(CognitionCode::MemoryRebuildSourcesIncomplete));
         }
     }
-    connection
-        .close()
-        .map_err(|_| error("memory_generation_unavailable"))
+    connection.close().map_err(|(_, source)| {
+        error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+    })
 }
 
 pub(crate) fn typed_cursor(
@@ -146,6 +149,6 @@ pub(crate) fn typed_cursor(
     })
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

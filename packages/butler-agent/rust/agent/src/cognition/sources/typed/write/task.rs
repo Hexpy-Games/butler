@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use super::{TaskMemoryIngestionResult, error, io_error, write_atomic};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionPathEnvironment, CognitionResult, CompletionPublisher, TypedMemorySourceNotice,
@@ -20,8 +21,8 @@ pub(crate) fn ingest_task_outcome_memory(
     let reader = WorkRecordReader::new(data_root);
     let projection = reader
         .task_memory_projection(task_id)
-        .map_err(|_| error("memory_source_unavailable"))?
-        .ok_or_else(|| error("task_memory_report_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::TaskMemoryReportUnavailable))?;
     let memory_root = environment.memory_root(data_root);
     let task_memory_root = memory_root.join("tasks");
     let memory_path = task_memory_root.join(format!("{}.md", slug(task_id)));
@@ -87,11 +88,11 @@ pub(crate) fn ingest_task_outcome_memory(
         "task_report",
         &projection.report.record_id,
     )?
-    .ok_or_else(|| error("memory_source_unavailable"))?;
+    .ok_or_else(|| error(CognitionCode::MemorySourceUnavailable))?;
     if owner.revision != projection.report.source_revision
         || owner.record_id != projection.report.record_id
     {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
     let notice = TypedMemorySourceNotice::TaskReport {
         record_id: owner.record_id,

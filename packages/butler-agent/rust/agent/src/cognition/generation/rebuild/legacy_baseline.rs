@@ -2,6 +2,7 @@
 //! active `legacy` baseline generation so the rebuild has a predecessor.
 
 use super::*;
+use crate::cognition::CognitionCode;
 
 pub(super) async fn ensure(
     data_root: &Path,
@@ -29,17 +30,17 @@ pub(super) async fn ensure(
         )
         .await
         .map_err(gate_error)?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if descriptor.exists() {
             return validate_active_descriptor(data_root, &descriptor);
         }
         let second = inventory::read(data_root, canonical, now, cancellation)?;
         if second.hash != first.hash || second.canonical_revision != first.canonical_revision {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
         let generations = memory_root.join("generations");
         durable::create_dir(&generations)?;
@@ -52,7 +53,9 @@ pub(super) async fn ensure(
             }
             ensure_data_authority(data_root, &[&path, &manifest])?;
             let value: Value = serde_json::from_slice(&fs::read(&manifest).map_err(io_error)?)
-                .map_err(|_| error("memory_generation_unavailable"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+                })?;
             if value["format"] == "legacy"
                 && value["initialization_origin"] == "legacy"
                 && value["state"] == "active"
@@ -60,10 +63,10 @@ pub(super) async fn ensure(
             {
                 let id = value["generation_id"]
                     .as_str()
-                    .ok_or_else(|| error("memory_generation_unavailable"))?;
+                    .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?;
                 if path.file_name().and_then(|name| name.to_str()) != Some(id) || reusable.is_some()
                 {
-                    return Err(error("memory_generation_recovery_required"));
+                    return Err(error(CognitionCode::MemoryGenerationRecoveryRequired));
                 }
                 reusable = Some(id.to_owned());
             }
@@ -76,7 +79,9 @@ pub(super) async fn ensure(
             ensure_data_authority(data_root, &[&root])?;
             durable::create_dir(&root)?;
             let legacy_hash = crate::json::stringify(&json!(["legacy-baseline", id, first.hash]))
-                .map_err(|_| error("memory_inventory_incomplete"))?;
+                .map_err(|source| {
+                error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
+            })?;
             durable::write_json(
                 &root.join("manifest.json"),
                 &json!({
@@ -103,7 +108,7 @@ pub(super) async fn ensure(
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     match (result, released) {
         (Err(error), _) | (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => Ok(()),
@@ -112,17 +117,18 @@ pub(super) async fn ensure(
 
 fn validate_active_descriptor(data_root: &Path, path: &Path) -> CognitionResult<()> {
     ensure_data_authority(data_root, &[path])?;
-    let descriptor: Value = serde_json::from_slice(
-        &fs::read(path).map_err(|_| error("memory_generation_unavailable"))?,
-    )
-    .map_err(|_| error("memory_generation_unavailable"))?;
+    let descriptor: Value =
+        serde_json::from_slice(&fs::read(path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     if descriptor["schema"] != "butler.memory-active-generation.v2"
         || descriptor["generation_id"]
             .as_str()
             .filter(|id| !id.is_empty())
             .is_none()
     {
-        return Err(error("memory_generation_unavailable"));
+        return Err(error(CognitionCode::MemoryGenerationUnavailable));
     }
     Ok(())
 }

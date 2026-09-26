@@ -38,7 +38,7 @@ pub(super) async fn run(
             let chunk = service
                 .inspect(id)
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?
+                .map_err(|error| CliError::failed(error.code(), error.message()))?
                 .ok_or_else(|| {
                     CliError::failed("not_found", format!("memory chunk not found: {id}"))
                 })?;
@@ -57,7 +57,7 @@ pub(super) async fn run(
             let report = service
                 .repair_links(coordinator)
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?;
+                .map_err(|error| CliError::failed(error.code(), error.message()))?;
             let data = integrity_data(
                 report.integrity.chunk_count,
                 &report.integrity.missing_box_refs,
@@ -80,7 +80,7 @@ pub(super) async fn run(
             let report = service
                 .check_with_references()
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?;
+                .map_err(|error| CliError::failed(error.code(), error.message()))?;
             let human = format!(
                 "metadata integrity: missingBox={} missingFeedback={}",
                 report.missing_box_refs.len(),

@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use unicode_normalization::UnicodeNormalization;
 
 use super::{CognitionResult, ExtractInput, db_error, json_error};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         lexical,
@@ -42,7 +43,7 @@ pub(super) fn select(
         .iter()
         .map(|u| u.observed_at.as_str())
         .max()
-        .ok_or_else(|| super::error("memory_extract_invalid_input"))?;
+        .ok_or_else(|| super::error(CognitionCode::MemoryExtractInvalidInput))?;
     let project = input.bound_project_id.as_deref();
     let mut channels = alias(db, project, as_of, cue)?;
     let (lexical, partial) = lexical(db, project, as_of, cue, deadline)?;

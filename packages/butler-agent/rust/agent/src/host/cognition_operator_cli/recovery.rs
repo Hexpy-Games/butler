@@ -42,7 +42,7 @@ pub(super) async fn run(
             let view = service
                 .plan(project_id, &workspace)
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             let data = view_value(&view)?;
             Ok((
                 data,
@@ -65,7 +65,7 @@ pub(super) async fn run(
             let view = service
                 .inspect(manifest_id)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| {
                     CliError::failed(
                         "not_found",
@@ -116,7 +116,7 @@ pub(super) async fn run(
             let view = service
                 .approve(manifest_id, candidate_ids)
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             Ok((
                 view_value(&view)?,
                 format!(
@@ -139,7 +139,7 @@ pub(super) async fn run(
             let manifest_view = service
                 .inspect(manifest_id)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| {
                     CliError::failed(
                         "not_found",
@@ -156,7 +156,7 @@ pub(super) async fn run(
             } else {
                 service.rollback(manifest_id, &workspace).await
             }
-            .map_err(service_error)?;
+            .map_err(|error| service_error(&error))?;
             action_value(&action, subcommand)
         }
         _ => Err(CliError::failed(
@@ -221,7 +221,7 @@ fn canonical_project_workspace(
 
 fn registered_workspace(data_root: &Path, project_id: &str) -> Result<Option<PathBuf>, CliError> {
     let app_db = data_root.join("app-server/butler-client.sqlite");
-    ensure_data_authority(data_root, &[&app_db]).map_err(service_error)?;
+    ensure_data_authority(data_root, &[&app_db]).map_err(|error| service_error(&error))?;
     if app_db.exists()
         && let Ok(database) = Connection::open_with_flags(&app_db, OpenFlags::SQLITE_OPEN_READ_ONLY)
     {
@@ -242,7 +242,7 @@ fn registered_workspace(data_root: &Path, project_id: &str) -> Result<Option<Pat
     }
 
     let config = data_root.join("butler.config.json");
-    ensure_data_authority(data_root, &[&config]).map_err(service_error)?;
+    ensure_data_authority(data_root, &[&config]).map_err(|error| service_error(&error))?;
     let Ok(content) = fs::read_to_string(config) else {
         return Ok(None);
     };
@@ -311,6 +311,6 @@ fn require_yes(yes: bool, non_interactive: bool, command: &str) -> Result<(), Cl
     }
 }
 
-fn service_error(error: crate::cognition::CognitionError) -> CliError {
-    CliError::failed(error.code, error.message)
+fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+    CliError::failed(error.code(), error.message())
 }

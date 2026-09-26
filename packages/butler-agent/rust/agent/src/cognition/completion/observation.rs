@@ -1,3 +1,4 @@
+use crate::cognition::CognitionCode;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -34,9 +35,10 @@ pub(super) fn publish(
     let generation_json: Value = if generation.is_finite() {
         serde_json::from_str(&generation.to_string()).map_err(|error| {
             CognitionError::new(
-                "completion_observation_generation_invalid",
+                CognitionCode::CompletionObservationGenerationInvalid,
                 error.to_string(),
             )
+            .with_source(error)
         })?
     } else {
         Value::Null
@@ -71,7 +73,7 @@ pub(super) fn publish(
                 && canonical(old).ok() == canonical(&observation).ok()
         });
         if !valid {
-            return Err(error("completion_observation_conflict"));
+            return Err(error(CognitionCode::CompletionObservationConflict));
         }
     } else {
         write_atomic(&path, &observation)?;
@@ -87,7 +89,7 @@ pub(super) fn publish(
 fn required(value: &str) -> CognitionResult<&str> {
     let trimmed = crate::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
-        Err(error("completion_observation_identity_missing"))
+        Err(error(CognitionCode::CompletionObservationIdentityMissing))
     } else {
         Ok(trimmed)
     }
@@ -134,7 +136,11 @@ fn canonical(value: &Value) -> CognitionResult<String> {
     // Known observation keys are ASCII; serde_json's sorted map is the source
     // locale-sorted canonical object order for this record shape.
     serde_json::to_string(value).map_err(|error| {
-        CognitionError::new("completion_observation_json_error", error.to_string())
+        CognitionError::new(
+            CognitionCode::CompletionObservationJsonError,
+            error.to_string(),
+        )
+        .with_source(error)
     })
 }
 
@@ -145,7 +151,7 @@ fn sha(bytes: &[u8]) -> String {
 fn write_atomic(path: &Path, value: &Value) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| error("completion_observation_path_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::CompletionObservationPathInvalid))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -159,7 +165,9 @@ fn write_atomic(path: &Path, value: &Value) -> CognitionResult<()> {
     fs::create_dir_all(parent).map_err(io_error)?;
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| error("completion_observation_clock_invalid"))?
+        .map_err(|source| {
+            error(CognitionCode::CompletionObservationClockInvalid).with_source(source)
+        })?
         .as_millis();
     let temp = path.with_extension(format!("json.{}.{millis}.tmp", std::process::id()));
     let result = (|| {
@@ -181,13 +189,13 @@ fn write_atomic(path: &Path, value: &Value) -> CognitionResult<()> {
     result
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("completion_observation_io_error", error.to_string())
+    CognitionError::new(
+        CognitionCode::CompletionObservationIoError,
+        error.to_string(),
+    )
+    .with_source(error)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

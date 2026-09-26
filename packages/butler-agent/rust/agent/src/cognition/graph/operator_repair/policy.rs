@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use super::error;
+use crate::cognition::CognitionCode;
 use crate::cognition::CognitionResult;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -46,7 +47,7 @@ pub(super) fn configure_projection_model_policy(
         )
         .map_err(super::super::db_error)?;
     if running {
-        return Err(error("memory_projection_model_change_busy"));
+        return Err(error(CognitionCode::MemoryProjectionModelChangeBusy));
     }
     tx.execute(
         "INSERT INTO memory_projection_model_policy \
@@ -65,8 +66,8 @@ pub(super) fn configure_projection_model_policy(
         ],
     )
     .map_err(super::super::db_error)?;
-    let configured =
-        read_projection_model_policy(&tx)?.ok_or_else(|| error("memory_graph_failed"))?;
+    let configured = read_projection_model_policy(&tx)?
+        .ok_or_else(|| error(CognitionCode::MemoryGraphFailed))?;
     tx.commit().map_err(super::super::db_error)?;
     Ok(configured)
 }

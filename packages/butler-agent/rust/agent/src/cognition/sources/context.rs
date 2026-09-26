@@ -5,6 +5,7 @@ use crate::conversation::{
 use crate::segmentation::grapheme_segments;
 
 use super::types::{CognitionSourceError, CognitionSourceRow, PriorPublicContext};
+use crate::cognition::CognitionCode;
 
 const CONTEXT_BYTES: usize = 4 * 1_024;
 
@@ -68,7 +69,11 @@ pub(crate) fn read_prior_public_context(
         candidate.push(unit.clone());
         candidate.extend(kept.iter().cloned());
         let json = serde_json::to_string(&candidate).map_err(|error| {
-            CognitionSourceError::new("cognition_source_json_error", error.to_string())
+            crate::cognition::CognitionError::new(
+                CognitionCode::CognitionSourceJsonError,
+                error.to_string(),
+            )
+            .with_source(error)
         })?;
         if json.len() <= CONTEXT_BYTES {
             kept = candidate;

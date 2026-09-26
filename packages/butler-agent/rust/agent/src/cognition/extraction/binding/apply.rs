@@ -1,4 +1,5 @@
 use super::*;
+use crate::cognition::CognitionCode;
 use crate::cognition::extraction::{ExtractCorrection, ExtractNode, ExtractRelation};
 
 pub(in crate::cognition) fn apply(
@@ -10,50 +11,50 @@ pub(in crate::cognition) fn apply(
     let decisions = value
         .get("decisions")
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
     if decisions.len() != batch.targets.len() || decisions.len() > 4 {
-        return Err(error("memory_extract_invalid_binding"));
+        return Err(error(CognitionCode::MemoryExtractInvalidBinding));
     }
     let mut seen = HashSet::new();
     let mut warnings = Vec::new();
     for decision in decisions {
         let o = decision
             .as_object()
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         if o.len() != 4
             || !["target", "candidate", "span", "support"]
                 .iter()
                 .all(|k| o.contains_key(*k))
         {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         let reference = o["target"]
             .as_str()
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         if !seen.insert(reference) {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         let target = batch
             .targets
             .iter()
             .find(|t| t.local_ref == reference)
-            .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         let support = o["support"]
             .as_array()
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         let refs = support
             .iter()
             .map(Value::as_str)
             .collect::<Option<Vec<_>>>()
             .filter(|refs| refs.len() <= 4)
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         let span = o["span"].as_str();
         if !o["span"].is_null() && span.is_none() {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         let Some(selected) = o["candidate"].as_str() else {
             if !o["candidate"].is_null() || span.is_some() || !refs.is_empty() {
-                return Err(error("memory_extract_invalid_binding"));
+                return Err(error(CognitionCode::MemoryExtractInvalidBinding));
             }
             if target.change {
                 warnings.push(json!({"code":"correction_unresolved","target_ref":reference}));
@@ -63,18 +64,18 @@ pub(in crate::cognition) fn apply(
         let candidate = target
             .candidates
             .get(selected)
-            .ok_or_else(|| error("memory_extract_invalid_identity_reuse"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidIdentityReuse))?;
         let historical = target
             .historical_refs
             .get(selected)
-            .ok_or_else(|| error("memory_extract_invalid_identity_reuse"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidIdentityReuse))?;
         if !refs.iter().any(|r| target.current_refs.contains(*r))
             || !refs.iter().any(|r| historical.contains(*r))
             || refs
                 .iter()
                 .any(|r| !target.current_refs.contains(*r) && !historical.contains(*r))
         {
-            return Err(error("memory_extract_invalid_identity_reuse"));
+            return Err(error(CognitionCode::MemoryExtractInvalidIdentityReuse));
         }
         let evidence = refs
             .iter()
@@ -83,20 +84,20 @@ pub(in crate::cognition) fn apply(
                     .quotes
                     .get(*r)
                     .cloned()
-                    .ok_or_else(|| error("memory_extract_invalid_identity_reuse"))
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidIdentityReuse))
             })
             .collect::<CognitionResult<Vec<_>>>()?;
         if !target.change {
             if span.is_some()
                 || !(candidate.node_type == "entity" || candidate.node_type == "project")
             {
-                return Err(error("memory_extract_invalid_binding"));
+                return Err(error(CognitionCode::MemoryExtractInvalidBinding));
             }
             let node = output
                 .nodes
                 .iter_mut()
                 .find(|n| n.local_ref == reference)
-                .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
             node.node_type = candidate.node_type.clone();
             node.resolution = NodeResolution::Reuse {
                 node_ref: candidate.ref_id.clone(),
@@ -106,11 +107,11 @@ pub(in crate::cognition) fn apply(
             continue;
         }
         if candidate.node_type == "entity" || candidate.node_type == "project" {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         let chosen = span.and_then(|r| target.spans.get(r));
         if span.is_some() && chosen.is_none_or(|s| s.candidate != selected) {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         let Some(chosen) = chosen else {
             warnings.push(json!({"code":"correction_unresolved","target_ref":reference}));
@@ -120,7 +121,7 @@ pub(in crate::cognition) fn apply(
             .claims
             .iter()
             .position(|c| c.local_ref == reference)
-            .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         let meta = candidate.claim.as_ref();
         let endpoint_refs = ["subject_ref", "object_ref"]
             .into_iter()
@@ -155,7 +156,7 @@ pub(in crate::cognition) fn apply(
             || !previous.is_char_boundary(chosen.start)
             || !previous.is_char_boundary(chosen.end)
         {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         claim.statement = format!(
             "{}{}{}",
@@ -193,7 +194,7 @@ pub(in crate::cognition) fn apply(
         output.claims[claim_index].object_ref = object.clone();
         if let Some(relation) = relation {
             let (Some(from_ref), Some(to_ref)) = (subject, object) else {
-                return Err(error("memory_extract_invalid_correction"));
+                return Err(error(CognitionCode::MemoryExtractInvalidCorrection));
             };
             output.relations.push(ExtractRelation {
                 claim_ref: claim_ref.clone(),
@@ -232,17 +233,17 @@ fn endpoint(
         .candidates
         .iter()
         .find(|n| n.ref_id == id)
-        .ok_or_else(|| error("memory_extract_correction_unresolved"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractCorrectionUnresolved))?;
     let past = historical_quote(candidate)
-        .ok_or_else(|| error("memory_extract_correction_unresolved"))?
+        .ok_or_else(|| error(CognitionCode::MemoryExtractCorrectionUnresolved))?
         .0;
     if candidate.node_type != "entity" && candidate.node_type != "project" {
-        return Err(error("memory_extract_correction_unresolved"));
+        return Err(error(CognitionCode::MemoryExtractCorrectionUnresolved));
     }
     let first = evidence
         .first()
         .cloned()
-        .ok_or_else(|| error("memory_extract_invalid_correction"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidCorrection))?;
     let local_ref = format!("n{}", output.nodes.len());
     output.nodes.push(ExtractNode {
         local_ref: local_ref.clone(),
@@ -268,21 +269,21 @@ pub(in crate::cognition) fn apply_repair(
     let decisions = value
         .get_mut("decisions")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
     for decision in decisions {
         let o = decision
             .as_object_mut()
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         let current = o
             .remove("current_support")
             .and_then(|v| v.as_array().cloned())
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         let historical = o
             .remove("selected_historical_support")
             .and_then(|v| v.as_array().cloned())
-            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidBinding))?;
         if current.len() > 3 || historical.len() > 1 {
-            return Err(error("memory_extract_invalid_binding"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBinding));
         }
         o.insert(
             "support".into(),

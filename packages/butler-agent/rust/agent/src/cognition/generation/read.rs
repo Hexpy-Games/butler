@@ -4,6 +4,7 @@ use super::types::{
     ActiveDescriptor, GenerationEmbedding, GenerationManifest, MemoryGenerationHandle,
     MemoryGenerationTarget, validate_generation_embedding,
 };
+use crate::cognition::CognitionCode;
 use crate::cognition::CognitionError;
 use crate::cognition::CognitionPathEnvironment;
 use crate::cognition::paths::node_join;
@@ -22,7 +23,7 @@ pub(crate) fn resolve_generation(
         } => {
             let descriptor = read_descriptor(&memory_root)?;
             if descriptor.generation_id != *expected_generation {
-                return Err(error("memory_generation_changed"));
+                return Err(error(CognitionCode::MemoryGenerationChanged));
             }
             descriptor.generation_id
         }
@@ -35,7 +36,7 @@ pub(crate) fn resolve_generation(
         || !matches!(manifest.format.as_str(), "v2" | "legacy")
         || manifest.generation_id != generation_id
     {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     if let Some(embedding) = &manifest.embedding {
         validate_generation_embedding(embedding)?;
@@ -52,7 +53,7 @@ pub(crate) fn resolve_generation(
             || manifest.canonical_snapshot_id.as_deref() != Some(canonical_snapshot_id)
             || snapshot.is_none())
     {
-        return Err(error("memory_snapshot_changed"));
+        return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     let root = if manifest.format == "legacy" {
         memory_root.join("db")
@@ -66,7 +67,7 @@ pub(crate) fn resolve_generation(
             .as_deref()
             .and_then(Path::parent)
             .and_then(Path::parent)
-            .ok_or_else(|| error("memory_snapshot_changed"))?
+            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?
             .to_owned()
     };
     Ok(MemoryGenerationHandle {
@@ -113,11 +114,11 @@ pub(crate) fn resolve_projection_generation(
     }
     let manifest = read_manifest(&memory_root, generation_id)?;
     if manifest.state.as_deref() != Some("building") {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let snapshot_id = manifest
         .canonical_snapshot_id
-        .ok_or_else(|| error("memory_snapshot_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     resolve_generation(
         data_root,
         environment,
@@ -136,7 +137,13 @@ pub(crate) fn active_memory_descriptor_exists(
         .memory_root(data_root)
         .join("active-generation.json")
         .try_exists()
-        .map_err(|error| CognitionError::new("memory_generation_unavailable", error.to_string()))
+        .map_err(|error| {
+            CognitionError::new(
+                CognitionCode::MemoryGenerationUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)
+        })
 }
 
 pub(super) fn read_descriptor(memory_root: &Path) -> Result<ActiveDescriptor, CognitionError> {
@@ -144,10 +151,10 @@ pub(super) fn read_descriptor(memory_root: &Path) -> Result<ActiveDescriptor, Co
     let schema = string(&value, "schema");
     let generation_id = string(&value, "generation_id");
     let Some(generation_id) = generation_id.filter(|id| !id.is_empty()) else {
-        return Err(error("memory_generation_unavailable"));
+        return Err(error(CognitionCode::MemoryGenerationUnavailable));
     };
     if schema != Some("butler.memory-active-generation.v2") {
-        return Err(error("memory_generation_unavailable"));
+        return Err(error(CognitionCode::MemoryGenerationUnavailable));
     }
     Ok(ActiveDescriptor {
         generation_id: generation_id.to_owned(),
@@ -171,8 +178,10 @@ pub(super) fn read_manifest(
 }
 
 fn read_json(path: &Path) -> Result<Value, CognitionError> {
-    let bytes = std::fs::read(path).map_err(|_| error("memory_generation_unavailable"))?;
-    serde_json::from_slice(&bytes).map_err(|_| error("memory_generation_unavailable"))
+    let bytes = std::fs::read(path)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn read_manifest_file(
@@ -187,24 +196,26 @@ fn read_manifest_file(
         .to_owned();
     let format = string(&value, "format").unwrap_or_default().to_owned();
     if schema != "butler.memory-generation.v2" || stored_generation != generation_id {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     let embedding_value = value.get("embedding");
     let embedding = if !validate_runtime_embedding || embedding_value.is_some_and(Value::is_null) {
         None
     } else {
         let embedding_value =
-            embedding_value.ok_or_else(|| error("memory_embedding_metadata_invalid"))?;
+            embedding_value.ok_or_else(|| error(CognitionCode::MemoryEmbeddingMetadataInvalid))?;
         let object = embedding_value
             .as_object()
-            .ok_or_else(|| error("memory_embedding_metadata_invalid"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryEmbeddingMetadataInvalid))?;
         if !object.contains_key("bun_runtime_version")
             && string(embedding_value, "schema") != Some("butler.native-embedding-identity.v1")
         {
-            return Err(error("memory_embedding_metadata_invalid"));
+            return Err(error(CognitionCode::MemoryEmbeddingMetadataInvalid));
         }
         let embedding: GenerationEmbedding = serde_json::from_value(embedding_value.clone())
-            .map_err(|_| error("memory_embedding_metadata_invalid"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryEmbeddingMetadataInvalid).with_source(source)
+            })?;
         validate_generation_embedding(&embedding)?;
         Some(embedding)
     };
@@ -233,10 +244,10 @@ pub(in crate::cognition::generation) fn safe_generation_id(
     {
         Ok(())
     } else {
-        Err(error("memory_generation_version_unsupported"))
+        Err(error(CognitionCode::MemoryGenerationVersionUnsupported))
     }
 }
 
-pub(super) fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+pub(super) fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

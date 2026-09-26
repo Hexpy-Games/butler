@@ -11,6 +11,7 @@ use crate::{
 };
 
 use super::{entries::EntryPath, error};
+use crate::cognition::CognitionCode;
 
 pub(super) struct Snapshot {
     pub entries: Vec<EntryPath>,
@@ -25,18 +26,18 @@ pub(super) fn targeted_feedback(
     let strategy = entry
         .get("strategy")
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let preferred_sources = strategy
         .get("preferred_sources")
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let targets = preferred_sources
         .iter()
         .map(|source| {
             source
                 .as_str()
                 .map(|source| format!("source:{source}"))
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
         })
         .collect::<CognitionResult<Vec<_>>>()?;
     Ok(active_feedback
@@ -61,7 +62,7 @@ pub(super) fn revise_from_feedback(
     let now = now_iso();
     let object = next
         .as_object_mut()
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     object.insert(
         "status".into(),
         json!(if disable { "disabled" } else { "needs_review" }),
@@ -71,16 +72,16 @@ pub(super) fn revise_from_feedback(
     let quality = object
         .get_mut("quality")
         .and_then(Value::as_object_mut)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let score = quality
         .get("score")
         .and_then(Value::as_f64)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     quality.insert("score".into(), json!(round3((score - 0.25).max(0.0))));
     let negative_feedback_count = quality
         .get("negative_feedback_count")
         .and_then(Value::as_u64)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     quality.insert(
         "negative_feedback_count".into(),
         json!(negative_feedback_count.saturating_add(targeted.len() as u64)),
@@ -89,11 +90,11 @@ pub(super) fn revise_from_feedback(
     let refs = object
         .get_mut("refs")
         .and_then(Value::as_object_mut)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let feedback_ids = refs
         .get_mut("feedback_ids")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     for feedback in targeted {
         let id = Value::String(feedback.feedback_id.clone());
         if !feedback_ids.contains(&id) {
@@ -104,7 +105,7 @@ pub(super) fn revise_from_feedback(
     let history = object
         .get_mut("revision_history")
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     history.push(json!({
         "at": now_iso(),
         "kind": "feedback_revision",
@@ -123,13 +124,13 @@ pub(super) fn demote_for_source_quality(
         .and_then(Value::as_object)
         .and_then(|strategy| strategy.get("preferred_sources"))
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let scores = preferred_sources
         .iter()
         .map(|source| {
             let source = source
                 .as_str()
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
             Ok(quality_by_source.get(source).copied())
         })
         .collect::<CognitionResult<Vec<_>>>()?;
@@ -146,7 +147,7 @@ pub(super) fn demote_for_source_quality(
     };
     let object = entry
         .as_object_mut()
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     object.insert("status".into(), json!(next_status));
     object.insert("updated_at".into(), json!(now_iso()));
     Ok(true)
@@ -156,7 +157,7 @@ fn string<'a>(value: &'a Value, field: &str) -> CognitionResult<&'a str> {
     value
         .get(field)
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
 }
 
 fn now_iso() -> String {

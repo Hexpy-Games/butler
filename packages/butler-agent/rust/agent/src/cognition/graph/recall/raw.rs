@@ -6,6 +6,7 @@ use rusqlite::{Connection, params_from_iter, types::Value};
 use serde::Serialize;
 
 use super::{db_error, scope};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionResult, lexical, recall::RecallRequest};
 
 #[derive(Clone, Debug)]
@@ -162,10 +163,7 @@ pub(super) fn select(
     })
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_error(error: serde_json::Error) -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new("memory_graph_unavailable", error.to_string())
+    crate::cognition::CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+        .with_source(error)
 }

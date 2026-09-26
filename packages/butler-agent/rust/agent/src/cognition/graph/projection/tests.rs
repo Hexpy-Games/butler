@@ -57,7 +57,7 @@ fn claim_pins_exact_input_and_enforces_nonce() {
     assert_eq!(
         pin_input(&connection, "window", "wrong", &json!({}), None)
             .unwrap_err()
-            .code,
+            .code(),
         "memory_projection_window_changed"
     );
 }

@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use crate::cognition::CognitionResult;
 
 use super::{BoxStoreService, error, index, manifest, paths};
+use crate::cognition::CognitionCode;
 
 impl BoxStoreService {
     pub(crate) async fn operator_list(&self, limit: usize) -> CognitionResult<Vec<Value>> {
@@ -26,8 +27,9 @@ impl BoxStoreService {
             let Some(manifest) = read_manifest(&root, &id)? else {
                 return Ok(None);
             };
-            let manifest = serde_json::to_value(&manifest)
-                .map_err(|_| error("memory_box_manifest_invalid"))?;
+            let manifest = serde_json::to_value(&manifest).map_err(|source| {
+                error(CognitionCode::MemoryBoxManifestInvalid).with_source(source)
+            })?;
             Ok(Some(json!({
                 "item": item_summary(&manifest),
                 "manifest": manifest,
@@ -60,7 +62,7 @@ impl BoxStoreService {
                     let content = match fs::read(&path) {
                         Ok(bytes) => Value::String(String::from_utf8_lossy(&bytes).into_owned()),
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Value::Null,
-                        Err(_) => return Err(error("memory_box_content_read_failed")),
+                        Err(_) => return Err(error(CognitionCode::MemoryBoxContentReadFailed)),
                     };
                     raw.push(json!({
                         "role": file.role,
@@ -69,8 +71,9 @@ impl BoxStoreService {
                     }));
                 }
             }
-            let manifest = serde_json::to_value(&manifest)
-                .map_err(|_| error("memory_box_manifest_invalid"))?;
+            let manifest = serde_json::to_value(&manifest).map_err(|source| {
+                error(CognitionCode::MemoryBoxManifestInvalid).with_source(source)
+            })?;
             Ok(Some(json!({
                 "item": item_summary(&manifest),
                 "manifest": manifest,
@@ -104,15 +107,16 @@ impl BoxStoreService {
                     match fs::remove_file(path) {
                         Ok(()) => {}
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(_) => return Err(error("memory_box_content_remove_failed")),
+                        Err(_) => return Err(error(CognitionCode::MemoryBoxContentRemoveFailed)),
                     }
                 }
             }
             manifest.status = manifest::ItemStatus::Forgotten;
             manifest.updated_at = now_iso();
             manifest.quality.signals.push(format!("forgotten:{mode}"));
-            let value = serde_json::to_value(&manifest)
-                .map_err(|_| error("memory_box_manifest_write_failed"))?;
+            let value = serde_json::to_value(&manifest).map_err(|source| {
+                error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+            })?;
             let path = item_dir.join("manifest.json");
             let path = paths::validate_manifest_target(&path, &item_dir)?;
             manifest::write_manifest_value(&path, &value)?;
@@ -127,7 +131,7 @@ impl BoxStoreService {
 
 fn read_manifest(root: &Path, id: &str) -> CognitionResult<Option<manifest::BoxManifest>> {
     if !paths::safe_item_id(id) {
-        return Err(error("memory_box_manifest_id_invalid"));
+        return Err(error(CognitionCode::MemoryBoxManifestIdInvalid));
     }
     let item_dir = root.join("items").join(id);
     manifest::read_manifest_for_dir(root, &item_dir, id)

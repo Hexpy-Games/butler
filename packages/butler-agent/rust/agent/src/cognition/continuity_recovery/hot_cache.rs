@@ -2,6 +2,7 @@
 
 pub(in crate::cognition) mod compact;
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -28,7 +29,7 @@ pub(super) fn read_text(path: &Path) -> CognitionResult<String> {
     match fs::read(path) {
         Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).into_owned()),
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(_) => Err(error("hot_cache_io_failed")),
+        Err(_) => Err(error(CognitionCode::HotCacheIoFailed)),
     }
 }
 
@@ -40,7 +41,7 @@ pub(super) fn replay_result(
     rollback: bool,
 ) -> CognitionResult<Option<ContinuityRecoveryAction>> {
     let Some(manifest) = manifest::read(data_root, paths, manifest_id)? else {
-        return Err(error("continuity_recovery_manifest_not_found"));
+        return Err(error(CognitionCode::ContinuityRecoveryManifestNotFound));
     };
     validate_manifest_cache(&manifest, workspace)?;
     let current_hash = sha256(read_text(Path::new(&manifest.before.path))?.as_bytes());
@@ -86,17 +87,17 @@ pub(super) fn apply(
         });
     }
     if manifest.status != "approved" || manifest.approved_candidate_ids.is_empty() {
-        return Err(error("continuity_recovery_approval_required"));
+        return Err(error(CognitionCode::ContinuityRecoveryApprovalRequired));
     }
     lease
         .assert_for_path(lock_path)
-        .map_err(|_| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
     let cache = Path::new(&manifest.before.path);
     let _lock = lock_destination(cache)?;
     validate_destination(cache, workspace)?;
     let before_body = read_text(cache)?;
     if sha256(before_body.as_bytes()) != manifest.before.sha256 {
-        return Err(error("continuity_recovery_snapshot_conflict"));
+        return Err(error(CognitionCode::ContinuityRecoverySnapshotConflict));
     }
     let approved = manifest
         .approved_candidate_ids
@@ -164,26 +165,28 @@ pub(super) fn rollback(
         });
     }
     if manifest.status != "applied" || manifest.after.is_none() {
-        return Err(error("continuity_recovery_not_applied"));
+        return Err(error(CognitionCode::ContinuityRecoveryNotApplied));
     }
     if manifest
         .after
         .as_ref()
         .is_some_and(|after| after.sha256 != current_hash)
     {
-        return Err(error("continuity_recovery_rollback_conflict"));
+        return Err(error(CognitionCode::ContinuityRecoveryRollbackConflict));
     }
     lease
         .assert_for_path(lock_path)
-        .map_err(|_| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
     let _lock = lock_destination(cache)?;
     validate_destination(cache, workspace)?;
     if sha256(read_text(cache)?.as_bytes()) != current_hash {
-        return Err(error("continuity_recovery_rollback_conflict"));
+        return Err(error(CognitionCode::ContinuityRecoveryRollbackConflict));
     }
     let bytes = STANDARD
         .decode(&manifest.before.body_base64)
-        .map_err(|_| error("continuity_recovery_manifest_invalid"))?;
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryManifestInvalid).with_source(source)
+        })?;
     let body = String::from_utf8_lossy(&bytes);
     write_atomic(cache, &body)?;
     manifest.status = "rolled_back".into();
@@ -219,13 +222,13 @@ fn append_semantic_entry(
         created_at,
     } = entry;
     if body.trim().is_empty() {
-        return Err(error("hot_cache_entry_empty"));
+        return Err(error(CognitionCode::HotCacheEntryEmpty));
     }
     if body.encode_utf16().count() > 8_000 {
-        return Err(error("hot_cache_entry_too_large"));
+        return Err(error(CognitionCode::HotCacheEntryTooLarge));
     }
     if compact::contains_secret(body) {
-        return Err(error("hot_cache_secret_rejected"));
+        return Err(error(CognitionCode::HotCacheSecretRejected));
     }
     let source_id = format!("recovery_{manifest_id}_{candidate_id}");
     let marker = format!("<!-- butler-semantic:{source_id}:start -->");
@@ -261,7 +264,9 @@ fn validate_manifest_cache(
 ) -> CognitionResult<()> {
     let expected = project_cache_path(workspace)?;
     if Path::new(&manifest.before.path) != expected {
-        return Err(error("continuity_recovery_project_binding_changed"));
+        return Err(error(
+            CognitionCode::ContinuityRecoveryProjectBindingChanged,
+        ));
     }
     Ok(())
 }
@@ -281,8 +286,9 @@ impl Drop for DestinationLock {
 fn lock_destination(cache: &Path) -> CognitionResult<DestinationLock> {
     let parent = cache
         .parent()
-        .ok_or_else(|| error("hot_cache_destination_locked"))?;
-    fs::create_dir_all(parent).map_err(|_| error("hot_cache_destination_locked"))?;
+        .ok_or_else(|| error(CognitionCode::HotCacheDestinationLocked))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::HotCacheDestinationLocked).with_source(source))?;
     let lock = cache.with_extension("md.lock");
     match create_lock(&lock) {
         Ok(()) => Ok(DestinationLock(lock)),
@@ -293,13 +299,17 @@ fn lock_destination(cache: &Path) -> CognitionResult<DestinationLock> {
                 .and_then(|modified| SystemTime::now().duration_since(modified).ok())
                 .is_some_and(|age| age > LOCK_STALE_AFTER);
             if !stale {
-                return Err(error("hot_cache_destination_locked"));
+                return Err(error(CognitionCode::HotCacheDestinationLocked));
             }
-            fs::remove_file(&lock).map_err(|_| error("hot_cache_destination_locked"))?;
-            create_lock(&lock).map_err(|_| error("hot_cache_destination_locked"))?;
+            fs::remove_file(&lock).map_err(|source| {
+                error(CognitionCode::HotCacheDestinationLocked).with_source(source)
+            })?;
+            create_lock(&lock).map_err(|source| {
+                error(CognitionCode::HotCacheDestinationLocked).with_source(source)
+            })?;
             Ok(DestinationLock(lock))
         }
-        Err(_) => Err(error("hot_cache_destination_locked")),
+        Err(_) => Err(error(CognitionCode::HotCacheDestinationLocked)),
     }
 }
 
@@ -316,12 +326,15 @@ fn create_lock(path: &Path) -> std::io::Result<()> {
 }
 
 fn write_atomic(path: &Path, body: &str) -> CognitionResult<()> {
-    let parent = path.parent().ok_or_else(|| error("hot_cache_io_failed"))?;
-    fs::create_dir_all(parent).map_err(|_| error("hot_cache_io_failed"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| error(CognitionCode::HotCacheIoFailed))?;
+    fs::create_dir_all(parent)
+        .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| error("hot_cache_io_failed"))?;
+        .ok_or_else(|| error(CognitionCode::HotCacheIoFailed))?;
     let temp = parent.join(format!(".{filename}.{}.tmp", uuid::Uuid::new_v4()));
     let mut created_temp = false;
     let result = (|| {
@@ -334,12 +347,14 @@ fn write_atomic(path: &Path, body: &str) -> CognitionResult<()> {
         }
         let mut file = options
             .open(&temp)
-            .map_err(|_| error("hot_cache_io_failed"))?;
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
         created_temp = true;
         file.write_all(body.as_bytes())
-            .map_err(|_| error("hot_cache_io_failed"))?;
-        file.sync_all().map_err(|_| error("hot_cache_io_failed"))?;
-        fs::rename(&temp, path).map_err(|_| error("hot_cache_io_failed"))
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
+        file.sync_all()
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))?;
+        fs::rename(&temp, path)
+            .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))
     })();
     if created_temp {
         let _ = fs::remove_file(temp);
@@ -349,7 +364,7 @@ fn write_atomic(path: &Path, body: &str) -> CognitionResult<()> {
 
 fn ensure_project_gitignore(cache: &Path) -> CognitionResult<()> {
     let Some(parent) = cache.parent() else {
-        return Err(error("hot_cache_io_failed"));
+        return Err(error(CognitionCode::HotCacheIoFailed));
     };
     if parent.file_name().and_then(|name| name.to_str()) != Some(".butler") {
         return Ok(());
@@ -368,7 +383,7 @@ fn ensure_project_gitignore(cache: &Path) -> CognitionResult<()> {
     options
         .open(path)
         .and_then(|mut file| file.write_all(b"*\n"))
-        .map_err(|_| error("hot_cache_io_failed"))
+        .map_err(|source| error(CognitionCode::HotCacheIoFailed).with_source(source))
 }
 
 fn preserve_audit(path: &Path, body: &str) -> CognitionResult<()> {
@@ -396,6 +411,6 @@ fn sha256(body: &[u8]) -> String {
     format!("{:x}", Sha256::digest(body))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

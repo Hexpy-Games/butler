@@ -1,6 +1,7 @@
 //! Current source authority for a claimed semantic window.
 
 use super::{CognitionResult, State};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, assert_conversation_source_current, sources::read_typed_record,
 };
@@ -64,5 +65,5 @@ pub(super) fn assert_notice_current(
 }
 
 fn changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }

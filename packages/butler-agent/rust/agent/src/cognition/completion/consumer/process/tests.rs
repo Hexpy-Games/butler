@@ -261,7 +261,7 @@ async fn malformed_queue_head_keeps_its_error_after_canonical_catchup() {
     registration.close().await;
 
     let error = result.expect_err("malformed queue entry remains the primary failure");
-    assert_eq!(error.code, "memory_sync_legacy_entry_unsupported");
+    assert_eq!(error.code(), "memory_sync_legacy_entry_unsupported");
     assert_eq!(std::fs::read_to_string(queue_path).unwrap(), malformed);
     let cursor: String = Connection::open(generation.graph_path)
         .unwrap()

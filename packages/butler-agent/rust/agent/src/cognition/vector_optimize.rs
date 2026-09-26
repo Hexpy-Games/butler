@@ -1,6 +1,7 @@
 //! Native Lance maintenance for the selected active memory generation.
 //! Connections, tables, and their bounded caches live only for one run.
 
+use crate::cognition::CognitionCode;
 use std::{
     collections::HashSet,
     path::PathBuf,
@@ -73,11 +74,11 @@ impl NativeVectorOptimizeService {
         // Legacy CLI opens the table first and reports unavailable if absent.
         // No connection or model is loaded until optimize is actually requested.
         let _operation = tokio::select! {
-            () = cancellation.cancelled() => return Err(error("memory_write_aborted")),
+            () = cancellation.cancelled() => return Err(error(CognitionCode::MemoryWriteAborted)),
             () = tokio::time::sleep(remaining(deadline_at_epoch_ms)?) =>
-                return Err(error("memory_write_busy")),
+                return Err(error(CognitionCode::MemoryWriteBusy)),
             permit = self.store.one_at_a_time.acquire() =>
-                permit.map_err(|_| error("vector_store_unavailable"))?,
+                permit.map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?,
         };
         check_entry(cancellation, deadline_at_epoch_ms)?;
         let Some(table) = self.store.open(&generation).await? else {
@@ -104,11 +105,11 @@ impl NativeVectorOptimizeService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|_| error("memory_write_busy"))?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         lease
             .assert_for_path(&lock_path)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         let target = MemoryGenerationTarget::Active {
             expected_generation: generation.generation_id.clone(),
         };
@@ -131,12 +132,12 @@ impl NativeVectorOptimizeService {
                     .collect::<Vec<_>>()
                     .join(",")
             );
-            let deleted = table
-                .delete(&predicate)
-                .await
-                .map_err(|_| error("vector_store_unavailable"))?;
-            vectors_pruned += usize::try_from(deleted.num_deleted_rows)
-                .map_err(|_| error("vector_store_unavailable"))?;
+            let deleted = table.delete(&predicate).await.map_err(|source| {
+                error(CognitionCode::VectorStoreUnavailable).with_source(source)
+            })?;
+            vectors_pruned += usize::try_from(deleted.num_deleted_rows).map_err(|source| {
+                error(CognitionCode::VectorStoreUnavailable).with_source(source)
+            })?;
         }
         // A compaction failure is optional in the legacy path. Compact files
         // only: pruning old Lance versions would erase retained rollback data.
@@ -154,7 +155,7 @@ impl NativeVectorOptimizeService {
             };
         lease
             .release(true)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         Ok(VectorOptimizeOutcome::Metrics {
             caches_compacted: 0,
             summaries_re_embedded: 0,
@@ -182,7 +183,7 @@ impl NativeLanceStore {
         }
         let connection = lance_store::connect(&uri)
             .await
-            .map_err(|_| error("vector_store_unavailable"))?;
+            .map_err(|source| error(CognitionCode::VectorStoreUnavailable).with_source(source))?;
         match lance_store::open(&connection, "butler_memory").await {
             Ok(table) => Ok(Some(table)),
             Err(_) => Ok(None),
@@ -193,17 +194,17 @@ impl NativeLanceStore {
 async fn read_removable_keys(path: PathBuf) -> CognitionResult<Vec<String>> {
     tokio::task::spawn_blocking(move || GraphRepository::open(&path)?.removable_vector_keys())
         .await
-        .map_err(|_| error("memory_graph_unavailable"))?
+        .map_err(|source| error(CognitionCode::MemoryGraphUnavailable).with_source(source))?
 }
 
 fn remaining(deadline_at_epoch_ms: i64) -> CognitionResult<Duration> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| error("memory_write_busy"))?
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
         .as_millis();
     let millis = i128::from(deadline_at_epoch_ms) - i128::try_from(now).unwrap_or(i128::MAX);
     if millis <= 0 {
-        return Err(error("memory_write_busy"));
+        return Err(error(CognitionCode::MemoryWriteBusy));
     }
     Ok(Duration::from_millis(
         u64::try_from(millis).unwrap_or(u64::MAX),
@@ -212,12 +213,12 @@ fn remaining(deadline_at_epoch_ms: i64) -> CognitionResult<Duration> {
 
 fn check_entry(cancellation: &CancellationToken, deadline_at_epoch_ms: i64) -> CognitionResult<()> {
     if cancellation.is_cancelled() {
-        Err(error("memory_write_aborted"))
+        Err(error(CognitionCode::MemoryWriteAborted))
     } else {
         remaining(deadline_at_epoch_ms).map(|_| ())
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

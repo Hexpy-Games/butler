@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 
 use serde::Serialize;
 
+use crate::cognition::CognitionCode;
 use crate::cognition::recall::{RecallRequirement, RecallResultItem};
 use crate::cognition::{CognitionError, CognitionResult};
 
@@ -27,7 +28,10 @@ pub(super) fn bytes<T: Serialize + ?Sized>(response: &T) -> CognitionResult<usiz
         ok: true,
         output: Output { ok: true, response },
     })
-    .map_err(|_| CognitionError::new("serialization_budget", "serialization_budget"))
+    .map_err(|source| {
+        CognitionError::new(CognitionCode::SerializationBudget, "serialization_budget")
+            .with_source(source)
+    })
 }
 
 pub(super) fn minimum(

@@ -90,8 +90,8 @@ pub async fn run_native_consolidation_cli(
                 return failure(
                     parsed.json,
                     "butler cognition consolidation status",
-                    error.code,
-                    error.code,
+                    error.code(),
+                    error.code(),
                     1,
                 );
             }
@@ -102,8 +102,8 @@ pub async fn run_native_consolidation_cli(
                 return failure(
                     parsed.json,
                     "butler cognition consolidation status",
-                    error.code,
-                    error.code,
+                    error.code(),
+                    error.code(),
                     1,
                 );
             }
@@ -116,8 +116,8 @@ pub async fn run_native_consolidation_cli(
                 return failure(
                     parsed.json,
                     "butler cognition consolidation status",
-                    error.code,
-                    error.code,
+                    error.code(),
+                    error.code(),
                     1,
                 );
             }
@@ -250,8 +250,8 @@ pub async fn run_native_consolidation_cli(
         Err(error) => failure(
             parsed.json,
             "butler cognition consolidation run --manual",
-            error.code,
-            &error.message,
+            error.code(),
+            &error.message(),
             1,
         ),
     }

@@ -1,5 +1,6 @@
 //! Named operator reads and mutations over the canonical feedback buffer.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -27,7 +28,9 @@ impl FeedbackBufferService {
             read_entries(&path).map(|entries| entries.iter().map(entry_value).collect())
         })
         .await
-        .map_err(|_| operator_error("memory_feedback_buffer_read_failed"))?
+        .map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+        })?
     }
 
     pub(crate) async fn operator_read(&self, id: &str) -> CognitionResult<Option<Value>> {
@@ -44,7 +47,9 @@ impl FeedbackBufferService {
             })
         })
         .await
-        .map_err(|_| operator_error("memory_feedback_buffer_read_failed"))?
+        .map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+        })?
     }
 
     pub(crate) async fn operator_add(
@@ -89,7 +94,7 @@ impl FeedbackBufferService {
             "discarded" => FeedbackStatus::Discarded,
             "superseded" => FeedbackStatus::Superseded,
             "needs_clarification" => FeedbackStatus::NeedsClarification,
-            _ => return Err(operator_error("memory_feedback_status_invalid")),
+            _ => return Err(operator_error(CognitionCode::MemoryFeedbackStatusInvalid)),
         };
         let id = id.to_owned();
         let now = now_iso();
@@ -98,7 +103,7 @@ impl FeedbackBufferService {
             let entry = entries
                 .iter_mut()
                 .find(|entry| entry.feedback_id == id)
-                .ok_or_else(|| operator_error("memory_feedback_entry_not_found"))?;
+                .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackEntryNotFound))?;
             entry.status = next_status;
             entry.updated_at = now;
             let result = entry_value(entry);
@@ -154,7 +159,7 @@ impl FeedbackBufferService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| operator_error("memory_write_busy"))?;
+            .ok_or_else(|| operator_error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
             let result = operation(path);
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
@@ -164,7 +169,9 @@ impl FeedbackBufferService {
             }
         })
         .await
-        .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?
+        .map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?
     }
 }
 
@@ -179,7 +186,11 @@ pub(super) fn read_entries(path: &Path) -> CognitionResult<Vec<FeedbackEntry>> {
     let source = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(operator_error("memory_feedback_buffer_read_failed")),
+        Err(_) => {
+            return Err(operator_error(
+                CognitionCode::MemoryFeedbackBufferReadFailed,
+            ));
+        }
     };
     let fallback_iso = now_iso();
     let mut reader = std::io::BufReader::new(source);
@@ -216,7 +227,7 @@ fn push_entry(record: &[u8], fallback_iso: &str, entries: &mut Vec<FeedbackEntry
 fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| operator_error("memory_feedback_buffer_write_failed"))?;
+        .ok_or_else(|| operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
     create_private_dir(parent)?;
     let temporary = parent.join(format!("feedback.md.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
@@ -227,30 +238,34 @@ fn write_entries(path: &Path, entries: &[FeedbackEntry]) -> CognitionResult<()> 
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut output = options
-            .open(&temporary)
-            .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
+        let mut output = options.open(&temporary).map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
         for (index, entry) in entries.iter().enumerate() {
             if index > 0 {
-                output
-                    .write_all(b"\n")
-                    .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
+                output.write_all(b"\n").map_err(|source| {
+                    operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed)
+                        .with_source(source)
+                })?;
             }
             let formatted = format_entry(entry);
             let formatted = formatted.strip_suffix('\n').unwrap_or(&formatted);
-            output
-                .write_all(formatted.as_bytes())
-                .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
+            output.write_all(formatted.as_bytes()).map_err(|source| {
+                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+            })?;
         }
-        output
-            .sync_all()
-            .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
-        fs::rename(&temporary, path)
-            .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
+        output.sync_all().map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
         #[cfg(unix)]
         File::open(parent)
             .and_then(|directory| directory.sync_all())
-            .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))?;
+            .map_err(|source| {
+                operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+            })?;
         Ok(())
     })();
     if result.is_err() {
@@ -276,7 +291,9 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
                 Err(error)
             }
         })
-        .map_err(|_| operator_error("memory_feedback_buffer_write_failed"))
+        .map_err(|source| {
+            operator_error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })
 }
 
 fn entry_value(entry: &FeedbackEntry) -> Value {
@@ -336,6 +353,6 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-fn operator_error(code: &'static str) -> CognitionError {
+fn operator_error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Cognition feedback operator operation failed")
 }

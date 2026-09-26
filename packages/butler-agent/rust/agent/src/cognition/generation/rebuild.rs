@@ -9,6 +9,7 @@ mod refresh;
 mod tests;
 mod typed_snapshot;
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
@@ -63,14 +64,14 @@ pub(crate) async fn prepare(
     icu_version: String,
 ) -> CognitionResult<PreparedRebuild> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     if unicode_version.is_empty() || icu_version.is_empty() {
-        return Err(error("memory_runtime_version_unavailable"));
+        return Err(error(CognitionCode::MemoryRuntimeVersionUnavailable));
     }
     let memory_root = environment.memory_root(&data_root);
     if memory_root != data_root.join("cognition/memory") {
-        return Err(error("memory_rebuild_path_override_unsupported"));
+        return Err(error(CognitionCode::MemoryRebuildPathOverrideUnsupported));
     }
     let generations = memory_root.join("generations");
     let lock = environment.consolidation_lock(&data_root);
@@ -105,10 +106,10 @@ pub(crate) async fn prepare(
         )
     })
     .await
-    .map_err(|_| error("memory_rebuild_prepare_failed"))??;
+    .map_err(|source| error(CognitionCode::MemoryRebuildPrepareFailed).with_source(source))??;
     let mut staged_cleanup = StagedCleanup(Some(staged.clone()));
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -122,22 +123,22 @@ pub(crate) async fn prepare(
         )
         .await
         .map_err(gate_error)?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = inventory::read(&data_root, &canonical, &now, &cancellation)?;
         if current.canonical_revision != snapshot.canonical_revision
             || current.hash != snapshot.source_inventory_hash
         {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
         if published.exists() {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         ensure_data_authority(&data_root, &[&staged, &published, &lock])?;
         let snapshot_id = snapshot_id(&generation_id, &snapshot.source_inventory_hash)?;
@@ -172,7 +173,7 @@ pub(crate) async fn prepare(
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     match (result, released) {
         (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
@@ -197,7 +198,7 @@ fn stage(
 ) -> CognitionResult<Staged> {
     let result = (|| {
         if staged.exists() {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         let live_path = data_root.join("runtime/conversation-store.sqlite");
         let live = inventory::read(data_root, &live_path, as_of, cancellation)?;
@@ -206,17 +207,19 @@ fn stage(
         durable::create_dir(
             snapshot_path
                 .parent()
-                .ok_or_else(|| error("memory_snapshot_changed"))?,
+                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
         )?;
         let start = SystemTime::now();
         let db = Connection::open_with_flags(&live_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| error("memory_snapshot_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
         let path = snapshot_path
             .to_str()
-            .ok_or_else(|| error("memory_snapshot_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
         db.execute("VACUUM INTO ?1", params![path])
-            .map_err(|_| error("memory_snapshot_changed"))?;
-        db.close().map_err(|_| error("memory_snapshot_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
+        db.close().map_err(|(_, source)| {
+            error(CognitionCode::MemorySnapshotChanged).with_source(source)
+        })?;
         File::open(&snapshot_path)
             .and_then(|file| file.sync_all())
             .map_err(io_error)?;
@@ -226,18 +229,18 @@ fn stage(
                 .map_err(io_error)?;
         }
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         typed_snapshot::copy_typed_sources(data_root, &snapshot_root)?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let snapshot = inventory::read(&snapshot_root, &snapshot_path, as_of, cancellation)?;
         if snapshot.hash != live.hash
             || snapshot.value != live.value
             || snapshot.canonical_revision != live.canonical_revision
         {
-            return Err(error("memory_snapshot_changed"));
+            return Err(error(CognitionCode::MemorySnapshotChanged));
         }
         durable::write_json(
             &snapshot_root.join("memory-source-inventory.json"),
@@ -286,7 +289,7 @@ pub(crate) fn inspect(
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte) || byte == b'-')
     {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     let root = environment
         .memory_root(data_root)
@@ -295,14 +298,15 @@ pub(crate) fn inspect(
     let graph = root.join("graph.sqlite");
     let manifest_path = root.join("manifest.json");
     ensure_data_authority(data_root, &[&root, &graph, &manifest_path])?;
-    let manifest: Value = serde_json::from_slice(
-        &fs::read(manifest_path).map_err(|_| error("memory_generation_unavailable"))?,
-    )
-    .map_err(|_| error("memory_generation_unavailable"))?;
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(manifest_path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     if manifest["schema"] != "butler.memory-generation.v2"
         || manifest["generation_id"] != generation_id
     {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     if !graph.is_file() {
         return Ok(
@@ -311,10 +315,10 @@ pub(crate) fn inspect(
         );
     }
     let db = Connection::open_with_flags(&graph, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| error("memory_generation_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     let count = |sql: &str| -> CognitionResult<i64> {
         db.query_row(sql, [], |row| row.get(0))
-            .map_err(|_| error("memory_generation_unavailable"))
+            .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
     };
     let stored_cursor: Option<String> = db
         .query_row(
@@ -323,7 +327,7 @@ pub(crate) fn inspect(
             |row| row.get(0),
         )
         .optional()
-        .map_err(|_| error("memory_generation_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     let typed_cursor = stored_cursor
         .and_then(|value| serde_json::from_str::<Value>(&value).ok())
         .filter(|value| value["snapshot_id"] == manifest["canonical_snapshot_id"])
@@ -354,7 +358,7 @@ fn snapshot_id(generation_id: &str, inventory_hash: &str) -> CognitionResult<Str
         generation_id,
         inventory_hash
     ]))
-    .map_err(|_| error("memory_snapshot_changed"))?;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(bytes.as_bytes())))
 }
 fn hash_file(path: &Path) -> CognitionResult<String> {
@@ -371,12 +375,8 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
     }
     Ok(format!("{:x}", hash.finalize()))
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_rebuild_io_error", error.to_string())
+    CognitionError::new(CognitionCode::MemoryRebuildIoError, error.to_string()).with_source(error)
 }
 /// A caller cancellation observed while waiting for the write gate is an abort,
 /// not contention: `memory_write_busy` is retryable for callers.
@@ -386,12 +386,12 @@ fn io_error(error: std::io::Error) -> CognitionError {
 )]
 fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
     if matches!(failure, crate::coordination::CoordinationError::Aborted) {
-        error("memory_operation_aborted")
+        error(CognitionCode::MemoryOperationAborted)
     } else {
-        error("memory_write_busy")
+        error(CognitionCode::MemoryWriteBusy)
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

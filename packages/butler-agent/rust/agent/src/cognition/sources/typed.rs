@@ -12,6 +12,7 @@ pub(crate) use write::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
 use crate::work_records::{ReadAvailability, WorkRecordReader, task_id_from_memory_record_id};
 
@@ -161,7 +162,7 @@ pub(in crate::cognition) fn hydrate_typed_source(
 }
 
 fn changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
 
 pub(in crate::cognition) fn read_task_report(
@@ -322,6 +323,7 @@ fn rule_root(memory_root: &Path) -> std::path::PathBuf {
     memory_root.join("rules")
 }
 
-fn unavailable(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", error.to_string())
+fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())
+        .with_source(error)
 }

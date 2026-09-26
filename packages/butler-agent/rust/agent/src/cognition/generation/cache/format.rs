@@ -1,5 +1,6 @@
 //! Pure formatting and compaction for structured generation hot-cache entries.
 
+use crate::cognition::{CognitionCode, CognitionError};
 use crate::public_text::fixed_regex;
 use std::{collections::HashSet, sync::OnceLock};
 
@@ -53,7 +54,7 @@ pub(super) fn render(
     new_entry: Option<&Value>,
     valid_entry_ids: &HashSet<String>,
     now_epoch_ms: i64,
-) -> Result<RenderedCache, &'static str> {
+) -> Result<RenderedCache, CognitionError> {
     let candidate = new_entry.map(parse_candidate).transpose()?;
     let candidate_block = candidate.as_ref().map(render_entry_block).transpose()?;
     let candidate_id = candidate.as_ref().map(|entry| entry.entry_id.clone());
@@ -274,25 +275,25 @@ struct SemanticBlock {
     end: usize,
 }
 
-fn parse_candidate(value: &Value) -> Result<SourceBackedHotCacheEntry, &'static str> {
-    let mut entry: SourceBackedHotCacheEntry =
-        serde_json::from_value(value.clone()).map_err(|_| "hot_cache_entry_invalid")?;
+fn parse_candidate(value: &Value) -> Result<SourceBackedHotCacheEntry, CognitionError> {
+    let mut entry: SourceBackedHotCacheEntry = serde_json::from_value(value.clone())
+        .map_err(|source| invalid(CognitionCode::HotCacheEntryInvalid).with_source(source))?;
     if entry.entry_id.is_empty()
         || entry.episode_id.is_empty()
         || entry.source_revision.is_empty()
         || entry.source_time.is_empty()
     {
-        return Err("hot_cache_entry_invalid");
+        return Err(invalid(CognitionCode::HotCacheEntryInvalid));
     }
     let body = trim_js_whitespace(&entry.summary);
     if body.is_empty() {
-        return Err("hot_cache_entry_empty");
+        return Err(invalid(CognitionCode::HotCacheEntryEmpty));
     }
     if body.encode_utf16().count() > MAX_ENTRY_BODY_UTF16 {
-        return Err("hot_cache_entry_too_large");
+        return Err(invalid(CognitionCode::HotCacheEntryTooLarge));
     }
     if contains_secret(body) {
-        return Err("hot_cache_secret_rejected");
+        return Err(invalid(CognitionCode::HotCacheSecretRejected));
     }
     entry.summary = body.to_owned();
     Ok(entry)
@@ -329,7 +330,7 @@ fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
     })
 }
 
-fn render_entry_block(entry: &SourceBackedHotCacheEntry) -> Result<String, &'static str> {
+fn render_entry_block(entry: &SourceBackedHotCacheEntry) -> Result<String, CognitionError> {
     let source_id = &entry.entry_id;
     let marker_id = safe_marker_id(source_id);
     let project_id = entry
@@ -339,7 +340,8 @@ fn render_entry_block(entry: &SourceBackedHotCacheEntry) -> Result<String, &'sta
         .filter(|value| !value.is_empty());
     let project_label = project_id.unwrap_or("global");
     let session_id = entry.session_id.as_deref().unwrap_or("null");
-    let metadata = serde_json::to_string(entry).map_err(|_| "hot_cache_entry_invalid")?;
+    let metadata = serde_json::to_string(entry)
+        .map_err(|source| invalid(CognitionCode::HotCacheEntryInvalid).with_source(source))?;
 
     let mut lines = vec![
         format!("<!-- butler-semantic:{marker_id}:start -->"),
@@ -453,4 +455,8 @@ fn contains_secret(value: &str) -> bool {
             fixed_regex(r"(?i)-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b|\bAKIA[0-9A-Z]{16}\b|\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,}")
         })
         .is_match(value)
+}
+
+fn invalid(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -127,7 +127,7 @@ async fn index_rebuild_reports_skips_and_count_rebuilds_only_when_missing() {
             .manifest_exists("box_malformed")
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "memory_box_manifest_invalid"
     );
     let report = service.rebuild_index().await.unwrap();
@@ -153,7 +153,7 @@ async fn index_rebuild_reports_skips_and_count_rebuilds_only_when_missing() {
     assert_eq!(service.count_indexed().await.unwrap(), 1);
     fs::write(&index, "not a SQLite database").unwrap();
     assert_eq!(
-        service.count_indexed().await.unwrap_err().code,
+        service.count_indexed().await.unwrap_err().code(),
         "memory_box_index_invalid"
     );
     fs::remove_dir_all(root).unwrap();
@@ -246,7 +246,7 @@ async fn retention_prevalidates_every_path_before_deleting_any_file_in_an_item()
         .retention(crate::js_date::parse_iso_millis(NOW).unwrap())
         .await
         .unwrap_err();
-    assert_eq!(error.code, "memory_box_retention_path_unsafe");
+    assert_eq!(error.code(), "memory_box_retention_path_unsafe");
     assert_eq!(
         fs::read_to_string(item.join("content/main.txt")).unwrap(),
         "must survive"
@@ -268,7 +268,7 @@ async fn retention_prevalidates_every_path_before_deleting_any_file_in_an_item()
             .manifest_exists("box_missing")
             .await
             .unwrap_err();
-        assert_eq!(error.code, "memory_box_root_path_unsafe");
+        assert_eq!(error.code(), "memory_box_root_path_unsafe");
         assert!(
             !outside
                 .join("consolidation/locks/consolidation.lock")

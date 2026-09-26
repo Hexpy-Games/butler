@@ -51,7 +51,7 @@ async fn active_cancellation_kills_and_reaps_child() {
     .expect("cancel and reap bounded")
     .err()
     .expect("active request cancelled");
-    assert_eq!(failure.code, "embed_request_cancelled");
+    assert_eq!(failure.code(), "embed_request_cancelled");
     assert!(process.is_none());
     let status = std::process::Command::new("ps")
         .args(["-p", &pid.to_string(), "-o", "pid="])
@@ -105,7 +105,7 @@ async fn slow_initialization_outlives_first_deadline_and_keeps_ready_child() {
     .expect("initialization settles")
     .err()
     .expect("first caller expires");
-    assert_eq!(failure.code, "embed_request_deadline");
+    assert_eq!(failure.code(), "embed_request_deadline");
     let ready = process.as_mut().expect("owner keeps initialized child");
     assert!(ready.initialized);
     assert!(ready.child.try_wait().expect("child status").is_none());
@@ -135,11 +135,11 @@ async fn concurrent_and_repeated_close_finish_even_when_actor_fails() {
     .await
     .expect("concurrent close after actor abort completes");
     assert_eq!(
-        first.expect_err("aborted actor fails").code,
+        first.expect_err("aborted actor fails").code(),
         "embed_worker_unavailable"
     );
     assert_eq!(
-        second.expect_err("aborted actor fails").code,
+        second.expect_err("aborted actor fails").code(),
         "embed_worker_unavailable"
     );
 }

@@ -1,5 +1,6 @@
 //! One command-owned serving catchup after a bootstrap rollback.
 
+use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -41,7 +42,7 @@ pub(super) async fn run(
     if result["next_step"] == "build" {
         let target = result["target_generation_id"]
             .as_str()
-            .ok_or_else(|| error("memory_generation_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?;
         build =
             Some(build::run(data_root, paths, coordinator.clone(), target, cancellation).await?);
         result = rollback_memory_rebuild(
@@ -60,7 +61,7 @@ pub(super) async fn run(
     }
     let target = result["descriptor"]["generation_id"]
         .as_str()
-        .ok_or_else(|| error("memory_generation_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?;
     let first_status = inspect_memory_rebuild(data_root, paths, target)?;
     let bootstrap = first_status["manifest"]["format"] == "v2"
         && first_status["manifest"]["initialization_origin"] == "empty"
@@ -104,21 +105,23 @@ async fn serving_catchup(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     let generation = crate::cognition::resolve_active_generation(data_root, paths)?;
-    let os = nix::sys::utsname::uname().map_err(|_| error("native_environment_unavailable"))?;
+    let os = nix::sys::utsname::uname()
+        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
-    let collation =
-        Arc::new(LocaleCollation::new("en-US").map_err(|_| error("native_locale_unavailable"))?);
+    let collation = Arc::new(
+        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+    );
     let models = NativeProcessModels::new(
         data_root.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|error| CognitionError::new("native_model_setup_failed", error.code()))?;
+    .map_err(|error| CognitionError::new(CognitionCode::NativeModelSetupFailed, error.code()))?;
     let embedding = Arc::new(NativeEmbeddingOwner::new(data_root.to_owned())?);
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(NativeGenerationVectorAdapter::new(
@@ -145,10 +148,7 @@ async fn serving_catchup(
     let result = consumer.catchup_once(cancellation).await;
     consumer.close().await;
     registration.close().await;
-    let closed = embedding
-        .close()
-        .await
-        .map_err(|error| CognitionError::new(error.code, error.message));
+    let closed = embedding.close().await;
     let report = result?;
     closed?;
     Ok(json!({
@@ -160,6 +160,6 @@ async fn serving_catchup(
     }))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -167,7 +167,7 @@ async fn changed_selected_source_blocks_capsule_replacement_and_releases_project
     lease.release(result.is_ok()).unwrap();
     drop(project_lock);
 
-    assert_eq!(result.unwrap_err().code, "memory_source_changed");
+    assert_eq!(result.unwrap_err().code(), "memory_source_changed");
     assert_eq!(fs::read_to_string(&target).unwrap(), "existing capsule\n");
     assert!(!write::project_lock_path(&root, &paths, "alpha").exists());
     let _ = fs::remove_dir_all(root);
@@ -188,7 +188,7 @@ async fn escaped_cognition_root_is_rejected_before_any_lock_file() {
         .refresh("alpha", None, &cancellation, deadline)
         .await
         .unwrap_err();
-    assert_eq!(failure.code, "memory_data_path_unsafe");
+    assert_eq!(failure.code(), "memory_data_path_unsafe");
     assert!(fs::read_dir(&outside).unwrap().next().is_none());
 
     let _ = fs::remove_dir_all(root);
@@ -229,7 +229,7 @@ async fn cancellation_before_commit_preserves_capsule_and_releases_claims() {
     lease.release(result.is_ok()).unwrap();
     drop(project_lock);
 
-    assert_eq!(result.unwrap_err().code, "memory_write_aborted");
+    assert_eq!(result.unwrap_err().code(), "memory_write_aborted");
     assert_eq!(fs::read_to_string(&target).unwrap(), "existing capsule\n");
     assert!(!write::project_lock_path(&root, &paths, "alpha").exists());
     let next_lease = coordinator

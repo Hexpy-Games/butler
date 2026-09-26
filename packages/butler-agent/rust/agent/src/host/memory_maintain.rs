@@ -1,5 +1,6 @@
 //! Existing operator memory-maintain CLI over the configured Cognition cycle.
 
+use crate::cognition::CognitionCode;
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use serde_json::{Value, json};
@@ -53,7 +54,7 @@ pub async fn run(
     let health = MemoryHealthService::new(options.data.clone(), paths.clone(), coordinator.clone());
     let before = match health.read().await {
         Ok(value) => value,
-        Err(error) => return fail(options.json, error.code, &error.message, 1),
+        Err(error) => return fail(options.json, error.code(), &error.message(), 1),
     };
     let cancellation = CancellationToken::new();
     let signal_task = match signals(cancellation.clone()) {
@@ -65,7 +66,7 @@ pub async fn run(
         Err(error) => {
             signal_task.abort();
             let _ = signal_task.await;
-            return fail(options.json, error.code, &error.message, 1);
+            return fail(options.json, error.code(), &error.message(), 1);
         }
     };
     let backfill = LegacyIndexService::new(
@@ -81,7 +82,7 @@ pub async fn run(
             let _ = embedding.close().await;
             signal_task.abort();
             let _ = signal_task.await;
-            return fail(options.json, error.code, &error.message, 1);
+            return fail(options.json, error.code(), &error.message(), 1);
         }
         Ok(value) => value,
     };
@@ -95,7 +96,7 @@ pub async fn run(
                 let _ = embedding.close().await;
                 signal_task.abort();
                 let _ = signal_task.await;
-                return fail(options.json, error.code, &error.message, 1);
+                return fail(options.json, error.code(), &error.message(), 1);
             }
         }
     };
@@ -118,13 +119,13 @@ pub async fn run(
     let _ = signal_task.await;
     let outcome = match (outcome, closed) {
         (Err(error), _) | (Ok(_), Err(error)) => {
-            return fail(options.json, error.code, &error.message, 1);
+            return fail(options.json, error.code(), &error.message(), 1);
         }
         (Ok(value), Ok(())) => value,
     };
     let after = match health.read().await {
         Ok(value) => value,
-        Err(error) => return fail(options.json, error.code, &error.message, 1),
+        Err(error) => return fail(options.json, error.code(), &error.message(), 1),
     };
     let data = json!({
         "exitCode":outcome.exit_code,"skipped":outcome.skipped,"phasesRun":outcome.phases_run,
@@ -169,14 +170,16 @@ async fn run_active(
     cancellation: &CancellationToken,
 ) -> crate::cognition::CognitionResult<crate::cognition::ConfiguredCycleResult> {
     let generation = resolve_active_generation(&options.data, paths)?;
-    let os = nix::sys::utsname::uname().map_err(|_| error("native_environment_unavailable"))?;
+    let os = nix::sys::utsname::uname()
+        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(&options.data, &home, &os.release().to_string_lossy());
-    let collation =
-        Arc::new(LocaleCollation::new("en-US").map_err(|_| error("native_locale_unavailable"))?);
+    let collation = Arc::new(
+        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+    );
     let models = NativeProcessModels::new(
         options.data.clone(),
         environment.model,
@@ -184,7 +187,7 @@ async fn run_active(
         collation,
     )
     .map_err(|error| {
-        crate::cognition::CognitionError::new("native_model_setup_failed", error.code())
+        crate::cognition::CognitionError::new(CognitionCode::NativeModelSetupFailed, error.code())
     })?;
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(NativeGenerationVectorAdapter::new(
@@ -322,8 +325,8 @@ fn expand_home(value: &str) -> PathBuf {
         PathBuf::from(value)
     }
 }
-fn error(code: &'static str) -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new(code, code)
+fn error(code: CognitionCode) -> crate::cognition::CognitionError {
+    crate::cognition::CognitionError::new(code, code.as_str())
 }
 fn fail(json_mode: bool, code: &str, message: &str, exit_code: u8) -> NativeConsolidationCliResult {
     NativeConsolidationCliResult {

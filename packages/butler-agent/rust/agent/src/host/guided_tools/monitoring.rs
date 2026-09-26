@@ -64,7 +64,7 @@ impl MonitoringReaders {
             .memory_health
             .read_tool(profile)
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message))?;
+            .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
         self.metrics.record(
             "health",
             report.metric_status,

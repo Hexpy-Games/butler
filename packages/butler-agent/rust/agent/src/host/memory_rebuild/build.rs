@@ -1,5 +1,6 @@
 //! Bounded snapshot-backed rebuild work without activation.
 
+use crate::cognition::CognitionCode;
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -47,7 +48,7 @@ pub(super) async fn run(
     let metadata = inspect_memory_rebuild(data_root, paths, generation_id)?;
     let snapshot_id = metadata["manifest"]["canonical_snapshot_id"]
         .as_str()
-        .ok_or_else(|| error("memory_snapshot_changed"))?
+        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?
         .to_owned();
     let target = MemoryGenerationTarget::Rebuild {
         generation_id: generation_id.to_owned(),
@@ -55,21 +56,23 @@ pub(super) async fn run(
     };
     let handle = resolve_generation(data_root, paths, &target)?;
     let inventory = read_build_inventory(data_root, &handle, cancellation)?;
-    let os = nix::sys::utsname::uname().map_err(|_| error("native_environment_unavailable"))?;
+    let os = nix::sys::utsname::uname()
+        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
-    let collation =
-        Arc::new(LocaleCollation::new("en-US").map_err(|_| error("native_locale_unavailable"))?);
+    let collation = Arc::new(
+        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+    );
     let models = NativeProcessModels::new(
         data_root.to_owned(),
         environment.model,
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|error| CognitionError::new("native_model_setup_failed", error.code()))?;
+    .map_err(|error| CognitionError::new(CognitionCode::NativeModelSetupFailed, error.code()))?;
     let embedding = Arc::new(NativeEmbeddingOwner::new(data_root.to_owned())?);
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(NativeGenerationVectorAdapter::new(
@@ -108,10 +111,7 @@ pub(super) async fn run(
     .await;
     consumer.close().await;
     registration.close().await;
-    let closed = embedding
-        .close()
-        .await
-        .map_err(|e| CognitionError::new(e.code, e.message));
+    let closed = embedding.close().await;
     match (result, closed) {
         (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
@@ -147,10 +147,10 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
     let mut conversation_registered = 0;
     loop {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         if catchup_quanta == MAX_CATCHUP_QUANTA {
-            return Err(error("memory_rebuild_quantum_budget"));
+            return Err(error(CognitionCode::MemoryRebuildQuantumBudget));
         }
         let outcome = consumer.catchup_once(cancellation).await?;
         catchup_quanta += 1;
@@ -165,7 +165,9 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
             canonical_snapshot_id,
             ..
         } => canonical_snapshot_id,
-        MemoryGenerationTarget::Active { .. } => return Err(error("memory_generation_changed")),
+        MemoryGenerationTarget::Active { .. } => {
+            return Err(error(CognitionCode::MemoryGenerationChanged));
+        }
     };
     let typed_cursor = rebuild_typed_cursor(handle, snapshot_id)?;
     let start = match typed_cursor {
@@ -175,12 +177,12 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
             .iter()
             .position(|item| item.source_key() == cursor)
             .map(|index| index + 1)
-            .ok_or_else(|| error("memory_source_changed"))?,
+            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?,
     };
     let mut typed_registered = 0;
     for record in inventory.typed.iter().skip(start).take(MAX_TYPED_QUANTA) {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         registration
             .register_typed_source(RegisterTypedSourceInput {
@@ -198,30 +200,30 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
         typed_registered += 1;
     }
     if inventory.typed.len().saturating_sub(start) > MAX_TYPED_QUANTA {
-        return Err(error("memory_rebuild_quantum_budget"));
+        return Err(error(CognitionCode::MemoryRebuildQuantumBudget));
     }
     assert_rebuild_sources_registered(handle, &inventory)?;
     let mut projection_quanta = 0;
     loop {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         if projection_quanta == MAX_PROJECTION_QUANTA {
-            return Err(error("memory_rebuild_quantum_budget"));
+            return Err(error(CognitionCode::MemoryRebuildQuantumBudget));
         }
         match consumer.poll_once().await? {
             MemorySyncPoll::Processed => projection_quanta += 1,
             MemorySyncPoll::Idle => break,
-            MemorySyncPoll::Deferred => return Err(error("memory_write_busy")),
+            MemorySyncPoll::Deferred => return Err(error(CognitionCode::MemoryWriteBusy)),
         }
     }
     let mut cache_quanta = 0;
     loop {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         if cache_quanta == MAX_CACHE_QUANTA {
-            return Err(error("memory_rebuild_quantum_budget"));
+            return Err(error(CognitionCode::MemoryRebuildQuantumBudget));
         }
         if !advance_rebuild_cache(data_root, paths, coordinator.clone(), &target, cancellation)
             .await?
@@ -250,6 +252,6 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
         "vector_reconciliation":vector_reconciliation,
     }))
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

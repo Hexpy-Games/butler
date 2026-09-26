@@ -6,6 +6,7 @@ use crate::{cognition::CognitionResult, public_text::trim_js_whitespace};
 
 use super::super::{check_active, error, types::TaskSummary};
 use super::read_text;
+use crate::cognition::CognitionCode;
 
 struct Candidate {
     id: String,
@@ -25,15 +26,19 @@ pub(super) fn recent(
     let rows = match fs::read_dir(&tasks_root) {
         Ok(rows) => rows,
         Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(error("project_capsule_source_read_failed")),
+        Err(_) => return Err(error(CognitionCode::ProjectCapsuleSourceReadFailed)),
     };
     let mut candidates = Vec::new();
     for row in rows {
         check_active(cancellation, deadline)?;
-        let row = row.map_err(|_| error("project_capsule_source_read_failed"))?;
+        let row = row.map_err(|source| {
+            error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+        })?;
         if !row
             .file_type()
-            .map_err(|_| error("project_capsule_source_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+            })?
             .is_dir()
         {
             continue;

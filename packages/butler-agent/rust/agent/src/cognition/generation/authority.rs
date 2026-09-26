@@ -2,6 +2,7 @@ use std::path::Path;
 
 use super::read::{error, read_descriptor, read_manifest};
 use super::{MemoryGenerationHandle, MemoryGenerationTarget};
+use crate::cognition::CognitionCode;
 use crate::cognition::CognitionError;
 use crate::cognition::CognitionPathEnvironment;
 
@@ -33,5 +34,5 @@ pub(crate) fn assert_mutation_authority(
     };
     valid
         .then_some(())
-        .ok_or_else(|| error("memory_generation_changed"))
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }

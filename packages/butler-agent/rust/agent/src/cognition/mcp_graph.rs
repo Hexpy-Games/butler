@@ -15,13 +15,31 @@ struct Entity {
     hops: Option<u32>,
 }
 
+/// Failures reading the legacy graph for the MCP graph tool. `Display` is the
+/// text returned to the tool caller.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum LegacyGraphReadError {
+    /// The active-generation descriptor could not be read or parsed.
+    #[error("memory_generation_unavailable: {0}")]
+    GenerationUnavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
+    /// A v2 memory generation is active, so the legacy graph is retired.
+    #[error("legacy_memory_writer_disabled_for_v2")]
+    WriterDisabled,
+    /// The legacy graph database could not be queried.
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+    /// A stored entity or the response could not be encoded or decoded.
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
 pub(crate) fn read_mcp_legacy_graph(
     data_root: &Path,
     query: &str,
     entity_type: Option<&str>,
     project: Option<&str>,
     max_hops: u32,
-) -> Result<String, String> {
+) -> Result<String, LegacyGraphReadError> {
     let memory_root = data_root.join("cognition/memory");
     reject_generation_writer(&memory_root)?;
     let db_path = memory_root.join("db/graph.sqlite");
@@ -31,10 +49,8 @@ pub(crate) fn read_mcp_legacy_graph(
     let connection = Connection::open_with_flags(
         db_path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|error| error.to_string())?;
-    let matches = find_entities(&connection, query, entity_type, project)
-        .map_err(|error| error.to_string())?;
+    )?;
+    let matches = find_entities(&connection, query, entity_type, project)?;
     if matches.is_empty() {
         return Ok(json!({"entities": [], "relationships": []}).to_string());
     }
@@ -45,9 +61,7 @@ pub(crate) fn read_mcp_legacy_graph(
     for entity in matches.iter().take(5) {
         seen.insert(entity.id.clone());
         entities.push(entity_value(entity)?);
-        for related in related_entities(&connection, &entity.id, max_hops)
-            .map_err(|error| error.to_string())?
-        {
+        for related in related_entities(&connection, &entity.id, max_hops)? {
             if project.is_some_and(|project| related.project.as_deref() != Some(project)) {
                 continue;
             }
@@ -61,21 +75,22 @@ pub(crate) fn read_mcp_legacy_graph(
             }));
         }
     }
-    serde_json::to_string_pretty(&json!({"entities": entities, "relationships": relationships}))
-        .map_err(|error| error.to_string())
+    Ok(serde_json::to_string_pretty(
+        &json!({"entities": entities, "relationships": relationships}),
+    )?)
 }
 
-fn reject_generation_writer(memory_root: &Path) -> Result<(), String> {
+fn reject_generation_writer(memory_root: &Path) -> Result<(), LegacyGraphReadError> {
     let descriptor = memory_root.join("active-generation.json");
     let bytes = match std::fs::read(descriptor) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(format!("memory_generation_unavailable: {error}")),
+        Err(error) => return Err(LegacyGraphReadError::GenerationUnavailable(error.into())),
     };
     let value: Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("memory_generation_unavailable: {error}"))?;
+        .map_err(|error| LegacyGraphReadError::GenerationUnavailable(error.into()))?;
     if value["schema"] == "butler.memory-active-generation.v2" {
-        return Err("legacy_memory_writer_disabled_for_v2".into());
+        return Err(LegacyGraphReadError::WriterDisabled);
     }
     Ok(())
 }
@@ -152,11 +167,11 @@ fn entity_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Entity> {
     })
 }
 
-fn entity_value(entity: &Entity) -> Result<Value, String> {
+fn entity_value(entity: &Entity) -> Result<Value, LegacyGraphReadError> {
     let properties: Value = if entity.properties.is_empty() {
         json!({})
     } else {
-        serde_json::from_str(&entity.properties).map_err(|error| error.to_string())?
+        serde_json::from_str(&entity.properties)?
     };
     let mut value = Map::new();
     value.insert("id".into(), Value::String(entity.id.clone()));

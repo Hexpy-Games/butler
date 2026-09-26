@@ -14,6 +14,7 @@ use super::{
     CognitionNamespaceMigrationManifest, CognitionNamespaceMigrationPlan, FileStats, MigrationMove,
     SCHEMA, failure,
 };
+use crate::cognition::CognitionCode;
 
 pub(super) fn build_plan(
     data_root: &Path,
@@ -116,7 +117,7 @@ pub(super) fn apply_locked(
                     now_millis(),
                     None,
                     Vec::new(),
-                    vec![error.message],
+                    vec![error.message()],
                     "failed",
                 );
                 write_manifest(data_root, Path::new(&plan.manifest_path), &failed)?;
@@ -224,16 +225,21 @@ fn visit(
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(_) => return Err(failure("cognition_migration_read_failed")),
+        Err(_) => return Err(failure(CognitionCode::CognitionMigrationReadFailed)),
     };
     if metadata.is_dir() {
-        let canonical =
-            fs::canonicalize(path).map_err(|_| failure("cognition_migration_read_failed"))?;
+        let canonical = fs::canonicalize(path).map_err(|source| {
+            failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
+        })?;
         if !visited.insert(canonical) {
             return Ok(());
         }
-        for entry in fs::read_dir(path).map_err(|_| failure("cognition_migration_read_failed"))? {
-            let entry = entry.map_err(|_| failure("cognition_migration_read_failed"))?;
+        for entry in fs::read_dir(path).map_err(|source| {
+            failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
+        })? {
+            let entry = entry.map_err(|source| {
+                failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
+            })?;
             if entry.file_name() == ".DS_Store" {
                 continue;
             }
@@ -265,11 +271,12 @@ fn write_manifest(
 ) -> CognitionResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| failure("cognition_migration_write_failed"))?;
+        .ok_or_else(|| failure(CognitionCode::CognitionMigrationWriteFailed))?;
     mutable_paths::ensure_data_authority(data_root, &[parent, path])?;
     create_private_dir(parent)?;
-    let mut bytes = serde_json::to_vec_pretty(manifest)
-        .map_err(|_| failure("cognition_migration_write_failed"))?;
+    let mut bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
+        failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
+    })?;
     bytes.push(b'\n');
     let mut options = OpenOptions::new();
     options.write(true).create(true).truncate(true);
@@ -278,47 +285,59 @@ fn write_manifest(
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options
-        .open(path)
-        .map_err(|_| failure("cognition_migration_write_failed"))?;
+    let mut file = options.open(path).map_err(|source| {
+        failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source)
+    })?;
     file.write_all(&bytes)
         .and_then(|()| file.sync_all())
-        .map_err(|_| failure("cognition_migration_write_failed"))
+        .map_err(|source| failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source))
 }
 
 fn move_directory(data_root: &Path, from: &Path, to: &Path) -> CognitionResult<()> {
     let parent = to
         .parent()
-        .ok_or_else(|| failure("cognition_migration_move_failed"))?;
+        .ok_or_else(|| failure(CognitionCode::CognitionMigrationMoveFailed))?;
     mutable_paths::ensure_data_authority(data_root, &[from, parent, to])?;
     create_private_dir(parent)?;
     if to.try_exists().unwrap_or(false) && file_stats(data_root, to)?.files == 0 {
-        remove_path(to).map_err(|_| failure("cognition_migration_move_failed"))?;
+        remove_path(to).map_err(|source| {
+            failure(CognitionCode::CognitionMigrationMoveFailed).with_source(source)
+        })?;
     }
     match fs::rename(from, to) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {
             copy_tree(data_root, from, to)?;
-            remove_path(from).map_err(|_| failure("cognition_migration_move_failed"))
+            remove_path(from).map_err(|source| {
+                failure(CognitionCode::CognitionMigrationMoveFailed).with_source(source)
+            })
         }
-        Err(_) => Err(failure("cognition_migration_move_failed")),
+        Err(_) => Err(failure(CognitionCode::CognitionMigrationMoveFailed)),
     }
 }
 
 fn copy_tree(data_root: &Path, from: &Path, to: &Path) -> CognitionResult<()> {
     mutable_paths::ensure_data_authority(data_root, &[from, to])?;
-    let metadata = fs::metadata(from).map_err(|_| failure("cognition_migration_backup_failed"))?;
+    let metadata = fs::metadata(from).map_err(|source| {
+        failure(CognitionCode::CognitionMigrationBackupFailed).with_source(source)
+    })?;
     if metadata.is_dir() {
         create_private_dir(to)?;
-        for entry in fs::read_dir(from).map_err(|_| failure("cognition_migration_backup_failed"))? {
-            let entry = entry.map_err(|_| failure("cognition_migration_backup_failed"))?;
+        for entry in fs::read_dir(from).map_err(|source| {
+            failure(CognitionCode::CognitionMigrationBackupFailed).with_source(source)
+        })? {
+            let entry = entry.map_err(|source| {
+                failure(CognitionCode::CognitionMigrationBackupFailed).with_source(source)
+            })?;
             copy_tree(data_root, &entry.path(), &to.join(entry.file_name()))?;
         }
     } else if metadata.is_file() {
         if let Some(parent) = to.parent() {
             create_private_dir(parent)?;
         }
-        fs::copy(from, to).map_err(|_| failure("cognition_migration_backup_failed"))?;
+        fs::copy(from, to).map_err(|source| {
+            failure(CognitionCode::CognitionMigrationBackupFailed).with_source(source)
+        })?;
     }
     Ok(())
 }
@@ -349,7 +368,7 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
                 Err(error)
             }
         })
-        .map_err(|_| failure("cognition_migration_write_failed"))
+        .map_err(|source| failure(CognitionCode::CognitionMigrationWriteFailed).with_source(source))
 }
 
 fn now_millis() -> i64 {

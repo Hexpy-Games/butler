@@ -21,7 +21,10 @@ pub(super) async fn run(
     match subcommand {
         "list" => {
             let limit = numeric_option(rest, "--limit", 100, 500);
-            let items = service.operator_list(limit).await.map_err(service_error)?;
+            let items = service
+                .operator_list(limit)
+                .await
+                .map_err(|error| service_error(&error))?;
             let human = if items.is_empty() {
                 "No Box items.".to_owned()
             } else {
@@ -48,7 +51,7 @@ pub(super) async fn run(
             let value = service
                 .operator_show(id)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| not_found(id))?;
             Ok((
                 value.clone(),
@@ -66,7 +69,7 @@ pub(super) async fn run(
             let value = service
                 .operator_inspect(id, include_raw)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| not_found(id))?;
             Ok((
                 value.clone(),
@@ -92,12 +95,15 @@ pub(super) async fn run(
             let value = service
                 .operator_forget(id, &mode)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| not_found(id))?;
             Ok((value, format!("Box item forgotten: {id}")))
         }
         "rebuild-index" => {
-            let report = service.rebuild_index().await.map_err(service_error)?;
+            let report = service
+                .rebuild_index()
+                .await
+                .map_err(|error| service_error(&error))?;
             let data = serde_json::to_value(&report).map_err(|_| {
                 CliError::failed("invalid_output", "Could not serialize Box index report")
             })?;
@@ -159,6 +165,6 @@ fn not_found(id: &str) -> CliError {
     CliError::failed("not_found", format!("Box item not found: {id}"))
 }
 
-fn service_error(error: crate::cognition::CognitionError) -> CliError {
-    CliError::failed(error.code, error.message)
+fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+    CliError::failed(error.code(), error.message())
 }

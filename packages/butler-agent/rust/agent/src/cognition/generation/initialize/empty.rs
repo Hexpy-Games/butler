@@ -4,6 +4,7 @@ use std::{fs, path::Path};
 
 use rusqlite::{Connection, OpenFlags};
 
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{CognitionError, CognitionResult},
     conversation::{ConversationSourceReader, conversation_store_path},
@@ -18,7 +19,7 @@ pub(super) fn assert_truly_empty(
     if memory_root
         .join("active-generation.json")
         .try_exists()
-        .map_err(|_| unreadable())?
+        .map_err(|source| unreadable().with_source(source))?
         || has_entries(&memory_root.join("generations"))?
     {
         return Err(requires_rebuild());
@@ -28,7 +29,7 @@ pub(super) fn assert_truly_empty(
     }
     if !WorkRecordReader::new(data_root)
         .task_ids()
-        .map_err(|_| unreadable())?
+        .map_err(|source| unreadable().with_source(source))?
         .is_empty()
         || nonempty_text(&cognition_root.join("feedback/feedback.md"))?
     {
@@ -60,30 +61,39 @@ pub(super) fn assert_truly_empty(
 }
 
 fn conversation_has_sources(path: &Path) -> CognitionResult<bool> {
-    if !path.try_exists().map_err(|_| unreadable())? {
+    if !path
+        .try_exists()
+        .map_err(|source| unreadable().with_source(source))?
+    {
         return Ok(false);
     }
-    let reader = ConversationSourceReader::open(path).map_err(|_| unreadable())?;
+    let reader =
+        ConversationSourceReader::open(path).map_err(|source| unreadable().with_source(source))?;
     let count = reader
         .count_source_bearing_messages()
-        .map_err(|_| unreadable())?;
-    reader.close().map_err(|_| unreadable())?;
+        .map_err(|source| unreadable().with_source(source))?;
+    reader
+        .close()
+        .map_err(|source| unreadable().with_source(source))?;
     Ok(count > 0)
 }
 
 fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
-    if !path.try_exists().map_err(|_| unreadable())? {
+    if !path
+        .try_exists()
+        .map_err(|source| unreadable().with_source(source))?
+    {
         return Ok(false);
     }
     let db = open(path)?;
     let mut statement = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        .map_err(|_| unreadable())?;
+        .map_err(|source| unreadable().with_source(source))?;
     let names = statement
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|_| unreadable())?
+        .map_err(|source| unreadable().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| unreadable())?;
+        .map_err(|source| unreadable().with_source(source))?;
     for name in names {
         if matches!(
             name.as_str(),
@@ -96,7 +106,7 @@ fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
             .query_row(&format!("SELECT COUNT(*) FROM \"{safe}\""), [], |row| {
                 row.get(0)
             })
-            .map_err(|_| unreadable())?;
+            .map_err(|source| unreadable().with_source(source))?;
         if count > 0 {
             return Ok(true);
         }
@@ -105,7 +115,8 @@ fn sqlite_has_rows(path: &Path) -> CognitionResult<bool> {
 }
 
 fn open(path: &Path) -> CognitionResult<Connection> {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_| unreadable())
+    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|source| unreadable().with_source(source))
 }
 
 fn nonempty_text(path: &Path) -> CognitionResult<bool> {
@@ -122,7 +133,7 @@ fn has_entries(path: &Path) -> CognitionResult<bool> {
             .next()
             .transpose()
             .map(|entry| entry.is_some())
-            .map_err(|_| unreadable()),
+            .map_err(|source| unreadable().with_source(source)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(_) => Err(unreadable()),
     }
@@ -140,8 +151,12 @@ fn has_source_files(path: &Path) -> CognitionResult<bool> {
     if !metadata.is_dir() {
         return Err(unreadable());
     }
-    for entry in fs::read_dir(path).map_err(|_| unreadable())? {
-        if has_source_files(&entry.map_err(|_| unreadable())?.path())? {
+    for entry in fs::read_dir(path).map_err(|source| unreadable().with_source(source))? {
+        if has_source_files(
+            &entry
+                .map_err(|source| unreadable().with_source(source))?
+                .path(),
+        )? {
             return Ok(true);
         }
     }
@@ -150,13 +165,13 @@ fn has_source_files(path: &Path) -> CognitionResult<bool> {
 
 fn requires_rebuild() -> CognitionError {
     CognitionError::new(
-        "memory_initialization_requires_rebuild",
+        CognitionCode::MemoryInitializationRequiresRebuild,
         "memory_initialization_requires_rebuild",
     )
 }
 fn unreadable() -> CognitionError {
     CognitionError::new(
-        "memory_initialization_source_unreadable",
+        CognitionCode::MemoryInitializationSourceUnreadable,
         "memory_initialization_source_unreadable",
     )
 }

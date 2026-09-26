@@ -11,6 +11,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::{GraphRepository, db_error, vector_registration::source_row};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionResult, CognitionSourceRow, sources::hydrate_typed_source};
 use crate::conversation::ConversationSourceReader;
 
@@ -306,5 +307,8 @@ fn string_array(value: &Value, field: &str) -> CognitionResult<Vec<String>> {
         .collect()
 }
 fn invalid_inventory() -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new("memory_inventory_changed", "memory_inventory_changed")
+    crate::cognition::CognitionError::new(
+        CognitionCode::MemoryInventoryChanged,
+        "memory_inventory_changed",
+    )
 }

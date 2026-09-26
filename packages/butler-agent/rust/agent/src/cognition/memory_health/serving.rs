@@ -9,6 +9,7 @@ use std::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::{Value, json};
 
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionPathEnvironment,
@@ -243,14 +244,17 @@ fn pending_quality(data_root: &Path, generation: &str, db: &Connection) -> rusql
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|_| {
+        .map_err(|source| {
             crate::cognition::CognitionError::new(
-                "memory_health_read_failed",
+                CognitionCode::MemoryHealthReadFailed,
                 "Feedback receipt unavailable",
             )
+            .with_source(source)
         })
     })
-    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+    // The rusqlite error type cannot carry a Cognition error; the probe only
+    // needs to know the receipt lookup failed.
+    .map_err(|_receipt_error| rusqlite::Error::InvalidQuery)?;
     let mut count = 0;
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         let Ok(value) = serde_json::from_str::<Value>(&line) else {

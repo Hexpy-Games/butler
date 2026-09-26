@@ -187,7 +187,7 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
         .expect("cancelled acquisition must settle")
         .unwrap();
     assert_eq!(
-        outcome.err().expect("acquisition must fail").code,
+        outcome.err().expect("acquisition must fail").code(),
         "memory_operation_aborted"
     );
     assert_eq!(fs::read_dir(&generations).unwrap().count(), 0);
@@ -261,7 +261,7 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     };
     let (rejected, ()) = tokio::join!(record, change_after_compute);
     let rejected = rejected.unwrap_err();
-    assert_eq!(rejected.code, "memory_generation_changed");
+    assert_eq!(rejected.code(), "memory_generation_changed");
     assert_eq!(fs::read(&manifest).unwrap(), original);
 
     fs::remove_file(cache).unwrap();
@@ -375,6 +375,6 @@ async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
         held.release(false).unwrap();
     };
     let (outcome, ()) = tokio::join!(pending, change);
-    assert_eq!(outcome.unwrap_err().code, "memory_generation_changed");
+    assert_eq!(outcome.unwrap_err().code(), "memory_generation_changed");
     assert!(!handle.root.join("butler.lance").exists());
 }

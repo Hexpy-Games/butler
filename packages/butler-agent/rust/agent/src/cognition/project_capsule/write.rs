@@ -21,6 +21,7 @@ use super::{
     source::{ensure_source_authority, sources_are_current},
     types::PreparedCapsule,
 };
+use crate::cognition::CognitionCode;
 
 const PROJECT_LOCK_STALE_AFTER: Duration = Duration::from_secs(10 * 60);
 
@@ -69,7 +70,7 @@ pub(super) fn acquire_project_lock(
     ensure_data_authority(data_root, &[&path, &stale_path])?;
     create_private_dir(
         path.parent()
-            .ok_or_else(|| error("project_capsule_path_invalid"))?,
+            .ok_or_else(|| error(CognitionCode::ProjectCapsulePathInvalid))?,
     )?;
 
     match create_lock_file(&path, false) {
@@ -81,14 +82,15 @@ pub(super) fn acquire_project_lock(
             });
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-        Err(_) => return Err(error("project_capsule_lock_unavailable")),
+        Err(_) => return Err(error(CognitionCode::ProjectCapsuleLockUnavailable)),
     }
 
     if !stale_lock(&path) {
-        return Err(error("project_capsule_locked"));
+        return Err(error(CognitionCode::ProjectCapsuleLocked));
     }
     ensure_data_authority(data_root, &[&path, &stale_path])?;
-    fs::rename(&path, &stale_path).map_err(|_| error("project_capsule_locked"))?;
+    fs::rename(&path, &stale_path)
+        .map_err(|source| error(CognitionCode::ProjectCapsuleLocked).with_source(source))?;
     match create_lock_file(&path, true) {
         Ok(file) => {
             let _ = fs::remove_file(&stale_path);
@@ -100,7 +102,7 @@ pub(super) fn acquire_project_lock(
         }
         Err(_) => {
             let _ = fs::remove_file(&stale_path);
-            Err(error("project_capsule_locked"))
+            Err(error(CognitionCode::ProjectCapsuleLocked))
         }
     }
 }
@@ -161,17 +163,17 @@ pub(super) fn commit(
         cancellation,
         deadline,
     )? {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
     if super::source::fingerprint(&prepared.snapshot)? != prepared.source_revision {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
     check_active(cancellation, deadline)?;
 
     let parent = prepared
         .path
         .parent()
-        .ok_or_else(|| error("project_capsule_path_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::ProjectCapsulePathInvalid))?;
     ensure_data_authority(data_root, &[parent, &prepared.path, lock_path])?;
     create_private_dir(parent)?;
     let temporary = unique_sidecar(&prepared.path, "tmp");
@@ -185,7 +187,7 @@ pub(super) fn commit(
         .and_then(|()| File::open(parent)?.sync_all());
     if write_result.is_err() {
         let _ = fs::remove_file(&temporary);
-        return Err(error("project_capsule_write_failed"));
+        return Err(error(CognitionCode::ProjectCapsuleWriteFailed));
     }
     Ok(prepared.path.clone())
 }
@@ -283,11 +285,12 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
         builder.recursive(true).mode(0o700);
         builder
             .create(path)
-            .map_err(|_| error("project_capsule_write_failed"))
+            .map_err(|source| error(CognitionCode::ProjectCapsuleWriteFailed).with_source(source))
     }
     #[cfg(not(unix))]
     {
-        fs::create_dir_all(path).map_err(|_| error("project_capsule_write_failed"))
+        fs::create_dir_all(path)
+            .map_err(|source| error("project_capsule_write_failed").with_source(source))
     }
 }
 

@@ -36,7 +36,7 @@ pub(super) fn run(
             ..LegacyRecallRequest::default()
         },
     )
-    .map_err(|error| CliError::failed(error.code, error.message))?;
+    .map_err(|error| CliError::failed(error.code(), error.message()))?;
     let root = data_root.to_string_lossy();
     let results = response
         .items

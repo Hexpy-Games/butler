@@ -7,6 +7,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
 use crate::conversation::ConversationSourceReader;
 
@@ -69,7 +70,7 @@ pub(super) fn superseded_sources(
             }
             let loser = string(&record, "literal_loser").ok_or_else(|| {
                 CognitionError::new(
-                    "memory_identity_history_invalid",
+                    CognitionCode::MemoryIdentityHistoryInvalid,
                     "memory_identity_history_invalid",
                 )
             })?;
@@ -156,7 +157,7 @@ fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResu
     } = input;
     let mut value = record.as_object().cloned().ok_or_else(|| {
         CognitionError::new(
-            "memory_identity_history_invalid",
+            CognitionCode::MemoryIdentityHistoryInvalid,
             "memory_identity_history_invalid",
         )
     })?;
@@ -269,7 +270,7 @@ fn normalized_source(connection: &Connection, row: &CognitionSourceRow) -> Cogni
         .map_err(db_error)?
         .ok_or_else(|| {
             CognitionError::new(
-                "memory_identity_source_not_registered",
+                CognitionCode::MemoryIdentitySourceNotRegistered,
                 "memory_identity_source_not_registered",
             )
         })?;
@@ -299,14 +300,14 @@ pub(super) fn redirect_chain(connection: &Connection, id: &str) -> CognitionResu
         let Some(next) = next else { return Ok(output) };
         if output.contains(&next) {
             return Err(CognitionError::new(
-                "memory_identity_cycle",
+                CognitionCode::MemoryIdentityCycle,
                 "memory_identity_cycle",
             ));
         }
         output.push(next);
     }
     Err(CognitionError::new(
-        "memory_identity_history_limit",
+        CognitionCode::MemoryIdentityHistoryLimit,
         "memory_identity_history_limit",
     ))
 }
@@ -319,7 +320,7 @@ fn add_locators(
 ) -> CognitionResult<()> {
     if !is_sha(job) {
         return Err(CognitionError::new(
-            "memory_identity_job_invalid",
+            CognitionCode::MemoryIdentityJobInvalid,
             "memory_identity_job_invalid",
         ));
     }

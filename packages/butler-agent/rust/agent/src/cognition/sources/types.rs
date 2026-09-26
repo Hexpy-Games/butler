@@ -1,7 +1,5 @@
 use std::borrow::Cow;
 
-use crate::conversation::ConversationError;
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ConversationSourceNotice<'a> {
     Turn {
@@ -84,31 +82,5 @@ pub(crate) struct PriorPublicContext {
     pub basis: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CognitionSourceError {
-    pub code: &'static str,
-    pub message: String,
-}
-
-impl CognitionSourceError {
-    pub(super) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-impl From<ConversationError> for CognitionSourceError {
-    fn from(error: ConversationError) -> Self {
-        Self::new(error.code(), error.message())
-    }
-}
-
-impl std::fmt::Display for CognitionSourceError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for CognitionSourceError {}
+/// Source readers report ordinary Cognition errors.
+pub(crate) type CognitionSourceError = crate::cognition::CognitionError;

@@ -10,6 +10,7 @@ use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionEmbeddingPort, CognitionError, CognitionPathEnvironment,
@@ -99,7 +100,7 @@ impl NativeMemorySyncConsumer {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let closing = self.closing.lock();
             if *closing {
@@ -127,11 +128,12 @@ impl NativeMemorySyncConsumer {
             let _permit = permit;
             let _ = sender.send(process::poll(input).await);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_sync_operation_failed",
+                CognitionCode::MemorySyncOperationFailed,
                 "memory_sync_operation_failed",
             )
+            .with_source(source)
         })?
     }
 
@@ -146,7 +148,7 @@ impl NativeMemorySyncConsumer {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let closing = self.closing.lock();
             if *closing || cancellation.is_cancelled() {
@@ -177,13 +179,13 @@ impl NativeMemorySyncConsumer {
             let result = match paused(&input) {
                 Err(error) => Err(error),
                 Ok(true) => Err(CognitionError::new(
-                    "memory_write_busy",
+                    CognitionCode::MemoryWriteBusy,
                     "memory_write_busy",
                 )),
                 Ok(false) => {
                     tokio::select! {
                         result = catchup::run_once(&input) => result,
-                        () = cancellation.cancelled() => { operation.cancel(); Err(CognitionError::new("memory_operation_aborted", "memory_operation_aborted")) },
+                        () = cancellation.cancelled() => { operation.cancel(); Err(CognitionError::new(CognitionCode::MemoryOperationAborted, "memory_operation_aborted")) },
                     }
                 }
             };
@@ -196,11 +198,12 @@ impl NativeMemorySyncConsumer {
                 recovered_message_cursor: report.recovered_message_cursor,
             }));
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_sync_operation_failed",
+                CognitionCode::MemorySyncOperationFailed,
                 "memory_sync_operation_failed",
             )
+            .with_source(source)
         })?
     }
 
@@ -235,5 +238,5 @@ fn paused(input: &process::Input) -> CognitionResult<bool> {
 }
 
 fn closed() -> CognitionError {
-    CognitionError::new("memory_sync_closed", "memory_sync_closed")
+    CognitionError::new(CognitionCode::MemorySyncClosed, "memory_sync_closed")
 }

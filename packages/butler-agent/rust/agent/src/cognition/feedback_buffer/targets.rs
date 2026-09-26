@@ -5,6 +5,7 @@ use std::{fs::File, io::BufReader, path::Path};
 use crate::cognition::CognitionResult;
 
 use super::{FeedbackBufferService, append_line, error, parse_entry, read_line};
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct FeedbackTarget {
@@ -25,7 +26,9 @@ impl FeedbackBufferService {
             .join("feedback/feedback.md");
         tokio::task::spawn_blocking(move || active_targets_in_file(&path, now_epoch_ms))
             .await
-            .map_err(|_| error("memory_feedback_buffer_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+            })?
     }
 }
 
@@ -33,7 +36,7 @@ fn active_targets_in_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Vec
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(error("memory_feedback_buffer_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryFeedbackBufferReadFailed)),
     };
     let fallback_iso = crate::js_date::format_iso_millis(now_epoch_ms)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());

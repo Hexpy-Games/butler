@@ -70,14 +70,17 @@ pub(super) fn read_chunk_with_refs(
     path: &Path,
     memory_chunk_id: &str,
 ) -> CognitionResult<Option<LegacyMemoryChunkWithRefs>> {
-    if !path.try_exists().map_err(|_| metadata_error())? {
+    if !path
+        .try_exists()
+        .map_err(|source| metadata_error().with_source(source))?
+    {
         return Ok(None);
     }
     ensure_data_authority(data_root, &[path])?;
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let chunk = db
         .query_row(
             "SELECT memory_chunk_id,schema_version,status,scope,project_id,summary,text_ref,text_hash,privacy_class,freshness_class,source,created_at,updated_at,consolidated_at,consolidation_run_id,superseded_by FROM memory_chunks WHERE memory_chunk_id=?1",
@@ -109,13 +112,13 @@ pub(super) fn read_chunk_with_refs(
             },
         )
         .optional()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let Some(mut chunk) = chunk else {
         return Ok(None);
     };
     let mut statement = db
         .prepare("SELECT ref_type,ref_id FROM memory_chunk_origins WHERE memory_chunk_id=?1 ORDER BY ref_type,ref_id")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     chunk.origins = statement
         .query_map([memory_chunk_id], |row| {
             Ok(LegacyMemoryOriginRef {
@@ -123,12 +126,12 @@ pub(super) fn read_chunk_with_refs(
                 ref_id: row.get(1)?,
             })
         })
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut statement = db
         .prepare("SELECT box_item_id,relation FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     chunk.box_refs = statement
         .query_map([memory_chunk_id], |row| {
             Ok(LegacyMemoryBoxRef {
@@ -136,12 +139,12 @@ pub(super) fn read_chunk_with_refs(
                 relation: row.get(1)?,
             })
         })
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut statement = db
         .prepare("SELECT feedback_id,relation FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     chunk.feedback_refs = statement
         .query_map([memory_chunk_id], |row| {
             Ok(LegacyMemoryFeedbackRef {
@@ -149,12 +152,12 @@ pub(super) fn read_chunk_with_refs(
                 relation: row.get(1)?,
             })
         })
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut statement = db
         .prepare("SELECT graph_ref_type,graph_ref_id,relation FROM memory_chunk_graph_refs WHERE memory_chunk_id=?1 ORDER BY graph_ref_type,graph_ref_id,relation")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     chunk.graph_refs = statement
         .query_map([memory_chunk_id], |row| {
             Ok(LegacyMemoryGraphRef {
@@ -163,12 +166,12 @@ pub(super) fn read_chunk_with_refs(
                 relation: row.get(2)?,
             })
         })
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut statement = db
         .prepare("SELECT vector_store,vector_table,vector_row_id,embedding_model,embedding_dimension,indexed_at FROM memory_chunk_vector_refs WHERE memory_chunk_id=?1 ORDER BY vector_store,vector_table,vector_row_id")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     chunk.vector_refs = statement
         .query_map([memory_chunk_id], |row| {
             Ok(LegacyMemoryVectorRef {
@@ -180,8 +183,8 @@ pub(super) fn read_chunk_with_refs(
                 indexed_at: row.get(5)?,
             })
         })
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     Ok(Some(chunk))
 }

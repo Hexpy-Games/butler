@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::cognition::CognitionResult;
 
 use super::invalid;
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug)]
 pub(in crate::cognition::generation) struct CapturedEvidenceRef {
@@ -27,12 +28,12 @@ pub(super) struct CaptureStore {
 
 impl CaptureStore {
     pub(super) fn new(acceptance_path: &Path, evidence_root: &Path) -> CognitionResult<Self> {
-        let acceptance_path = acceptance_path
-            .canonicalize()
-            .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
-        let evidence_root = evidence_root
-            .canonicalize()
-            .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+        let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
+        let evidence_root = evidence_root.canonicalize().map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
         Ok(Self {
             acceptance_path,
             evidence_root,
@@ -51,7 +52,7 @@ impl CaptureStore {
         expected_sha256: &str,
     ) -> CognitionResult<T> {
         if !valid_sha(expected_sha256) || !safe_ref(relative_ref) {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
         if relative_ref == "acceptance" {
             let path = self.acceptance_path.clone();
@@ -60,11 +61,11 @@ impl CaptureStore {
                 .map(|(value, _)| value);
         }
         let path = self.evidence_root.join(relative_ref);
-        let canonical = path
-            .canonicalize()
-            .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+        let canonical = path.canonicalize().map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
         if !canonical.starts_with(&self.evidence_root) {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
         self.read_json_at::<T>(&canonical, relative_ref, Some(expected_sha256))
             .map(|(value, _)| value)
@@ -76,7 +77,7 @@ impl CaptureStore {
         expected_sha256: &str,
     ) -> CognitionResult<()> {
         if !valid_sha(expected_sha256) || !safe_ref(relative_ref) {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
         if relative_ref == "acceptance" {
             let path = self.acceptance_path.clone();
@@ -84,11 +85,11 @@ impl CaptureStore {
             return Ok(());
         }
         let path = self.evidence_root.join(relative_ref);
-        let canonical = path
-            .canonicalize()
-            .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+        let canonical = path.canonicalize().map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
         if !canonical.starts_with(&self.evidence_root) {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
         self.capture_file(&canonical, relative_ref, Some(expected_sha256))?;
         Ok(())
@@ -107,16 +108,17 @@ impl CaptureStore {
         let (mut file, before) = open_stable_file(path)?;
         let mut reader = HashingReader::new(&mut file);
         let mut deserializer = serde_json::Deserializer::from_reader(&mut reader);
-        let value = T::deserialize(&mut deserializer)
-            .map_err(|_| invalid("memory_acceptance_evidence_invalid"))?;
-        deserializer
-            .end()
-            .map_err(|_| invalid("memory_acceptance_evidence_invalid"))?;
+        let value = T::deserialize(&mut deserializer).map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+        })?;
+        deserializer.end().map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+        })?;
         drop(deserializer);
         let actual_sha256 = reader.finish();
         let after = stable_identity(&file, path)?;
         if before != after || expected_sha256.is_some_and(|expected| expected != actual_sha256) {
-            return Err(invalid("memory_acceptance_evidence_changed"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
         }
         self.remember(relative_ref, actual_sha256.clone(), after)?;
         Ok((value, actual_sha256))
@@ -132,9 +134,9 @@ impl CaptureStore {
         let mut hasher = Sha256::new();
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
-            let count = file
-                .read(&mut buffer)
-                .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+            let count = file.read(&mut buffer).map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+            })?;
             if count == 0 {
                 break;
             }
@@ -143,7 +145,7 @@ impl CaptureStore {
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, path)?;
         if before != after || expected_sha256.is_some_and(|expected| expected != actual_sha256) {
-            return Err(invalid("memory_acceptance_evidence_changed"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
         }
         self.remember(relative_ref, actual_sha256, after)
     }
@@ -156,7 +158,7 @@ impl CaptureStore {
     ) -> CognitionResult<()> {
         if let Some(prior) = self.files.get(relative_ref) {
             if prior.sha256 != sha256 || prior.file_identity != file_identity {
-                return Err(invalid("memory_acceptance_evidence_changed"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             return Ok(());
         }
@@ -177,26 +179,26 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
     acceptance_path: &Path,
     evidence_root: &Path,
 ) -> CognitionResult<()> {
-    let evidence_root = evidence_root
-        .canonicalize()
-        .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
-    let acceptance_path = acceptance_path
-        .canonicalize()
-        .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+    let evidence_root = evidence_root.canonicalize().map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
+    let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
 
     for expected in &input.files {
         let path = if expected.relative_ref == "acceptance" {
             acceptance_path.clone()
         } else {
             if !safe_ref(&expected.relative_ref) {
-                return Err(invalid("memory_acceptance_evidence_changed"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             let path = evidence_root.join(&expected.relative_ref);
-            let canonical = path
-                .canonicalize()
-                .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+            let canonical = path.canonicalize().map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+            })?;
             if !canonical.starts_with(&evidence_root) {
-                return Err(invalid("memory_acceptance_evidence_changed"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             canonical
         };
@@ -204,9 +206,9 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
         let mut hasher = Sha256::new();
         let mut buffer = vec![0_u8; 64 * 1024];
         loop {
-            let count = file
-                .read(&mut buffer)
-                .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+            let count = file.read(&mut buffer).map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+            })?;
             if count == 0 {
                 break;
             }
@@ -215,7 +217,7 @@ pub(in crate::cognition::generation) fn assert_evidence_current(
         let actual_sha256 = format!("{:x}", hasher.finalize());
         let after = stable_identity(&file, &path)?;
         if before != after || before != expected.file_identity || actual_sha256 != expected.sha256 {
-            return Err(invalid("memory_acceptance_evidence_changed"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
         }
     }
     Ok(())
@@ -226,53 +228,58 @@ pub(in crate::cognition::generation) fn assert_evidence_file_facts_current(
     acceptance_path: &Path,
     evidence_root: &Path,
 ) -> CognitionResult<()> {
-    let evidence_root = evidence_root
-        .canonicalize()
-        .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
-    let acceptance_path = acceptance_path
-        .canonicalize()
-        .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+    let evidence_root = evidence_root.canonicalize().map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
+    let acceptance_path = acceptance_path.canonicalize().map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
 
     for expected in &input.files {
         let path = if expected.relative_ref == "acceptance" {
             acceptance_path.clone()
         } else {
             if !safe_ref(&expected.relative_ref) {
-                return Err(invalid("memory_acceptance_evidence_changed"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             let path = evidence_root.join(&expected.relative_ref);
-            let canonical = path
-                .canonicalize()
-                .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+            let canonical = path.canonicalize().map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+            })?;
             if !canonical.starts_with(&evidence_root) {
-                return Err(invalid("memory_acceptance_evidence_changed"));
+                return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
             }
             canonical
         };
-        let file = File::open(&path).map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+        let file = File::open(&path).map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
         if stable_identity(&file, &path)? != expected.file_identity {
-            return Err(invalid("memory_acceptance_evidence_changed"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
         }
     }
     Ok(())
 }
 
 fn open_stable_file(path: &Path) -> CognitionResult<(File, String)> {
-    let file = File::open(path).map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+    let file = File::open(path).map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
     let before = stable_identity(&file, path)?;
     Ok((file, before))
 }
 
 fn stable_identity(file: &File, path: &Path) -> CognitionResult<String> {
-    let handle = file
-        .metadata()
-        .map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
-    let current_path =
-        fs::metadata(path).map_err(|_| invalid("memory_acceptance_evidence_changed"))?;
+    let handle = file.metadata().map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
+    let current_path = fs::metadata(path).map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
     let handle_identity = metadata_identity(&handle);
     let path_identity = metadata_identity(&current_path);
     if handle_identity != path_identity {
-        return Err(invalid("memory_acceptance_evidence_changed"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceChanged));
     }
     Ok(handle_identity)
 }

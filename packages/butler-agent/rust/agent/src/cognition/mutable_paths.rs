@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::{CognitionError, CognitionResult};
+use crate::cognition::CognitionCode;
 
 pub(crate) fn ensure_data_authority(
     data_root: &Path,
@@ -26,7 +27,7 @@ fn canonicalize_nearest_existing(path: &Path) -> CognitionResult<PathBuf> {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|_| unsafe_path())?
+            .map_err(|source| unsafe_path().with_source(source))?
             .join(path)
     };
     let mut ancestor = absolute.as_path();
@@ -48,7 +49,8 @@ fn canonicalize_nearest_existing(path: &Path) -> CognitionResult<PathBuf> {
             Err(_) => return Err(unsafe_path()),
         }
     }
-    let mut resolved = fs::canonicalize(ancestor).map_err(|_| unsafe_path())?;
+    let mut resolved =
+        fs::canonicalize(ancestor).map_err(|source| unsafe_path().with_source(source))?;
     for component in suffix.iter().rev() {
         match Path::new(component).components().next() {
             Some(Component::Normal(name)) => resolved.push(name),
@@ -66,7 +68,7 @@ fn canonicalize_nearest_existing(path: &Path) -> CognitionResult<PathBuf> {
 
 fn unsafe_path() -> CognitionError {
     CognitionError::new(
-        "memory_data_path_unsafe",
+        CognitionCode::MemoryDataPathUnsafe,
         "Cognition path is outside mutable DATA",
     )
 }

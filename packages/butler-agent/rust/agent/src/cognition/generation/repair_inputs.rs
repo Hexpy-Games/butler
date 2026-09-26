@@ -1,5 +1,6 @@
 //! Explicit candidate-input preview and repair for a selected generation.
 
+use crate::cognition::CognitionCode;
 use std::{fs, path::Path, sync::Arc};
 
 use serde_json::{Value, to_value};
@@ -41,12 +42,16 @@ pub(crate) async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionRe
     } = request;
     read::safe_generation_id(generation_id)?;
     let size = fs::metadata(input_path)
-        .map_err(|_| error("memory_input_repair_invalid_request"))?
+        .map_err(|source| {
+            error(CognitionCode::MemoryInputRepairInvalidRequest).with_source(source)
+        })?
         .len();
     if size > 32 * 1024 {
-        return Err(error("memory_input_repair_invalid_request"));
+        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
     }
-    let bytes = fs::read(input_path).map_err(|_| error("memory_input_repair_invalid_request"))?;
+    let bytes = fs::read(input_path).map_err(|source| {
+        error(CognitionCode::MemoryInputRepairInvalidRequest).with_source(source)
+    })?;
     let request = GraphCandidateInputRepairRequest::parse(&bytes)?;
     let memory_root = environment.memory_root(data_root);
     let descriptor = read::read_descriptor(&memory_root)?;
@@ -60,10 +65,10 @@ pub(crate) async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionRe
             generation_id: generation_id.to_owned(),
             canonical_snapshot_id: manifest
                 .canonical_snapshot_id
-                .ok_or_else(|| error("memory_snapshot_changed"))?,
+                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
         }
     } else {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     };
     let handle = resolve_generation(data_root, environment, &target)?;
     let canonical_path = handle
@@ -97,14 +102,14 @@ pub(crate) async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionRe
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = resolve_generation(data_root, environment, &target)?;
         assert_mutation_authority(data_root, environment, &target, &current)?;
@@ -112,11 +117,11 @@ pub(crate) async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionRe
             || current.source_root != handle.source_root
             || current.canonical_snapshot_path != handle.canonical_snapshot_path
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         ensure_data_authority(data_root, &[&current.graph_path, &canonical_path, &lock])?;
         let canonical = ConversationSourceReader::open(&canonical_path)
-            .map_err(|_| error("memory_source_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
         let mut graph = if dry_run {
             GraphRepository::open_readonly(&current.graph_path)?
         } else {
@@ -131,17 +136,18 @@ pub(crate) async fn run(request: CandidateInputRepairRequest<'_>) -> CognitionRe
             now,
         )?;
         graph.close()?;
-        to_value(repaired).map_err(|_| error("memory_graph_failed"))
+        to_value(repaired)
+            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|value| {
         released?;
         Ok(value)
     })
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

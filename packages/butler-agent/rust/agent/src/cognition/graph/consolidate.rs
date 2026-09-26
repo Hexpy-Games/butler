@@ -1,5 +1,6 @@
 //! Source-compatible v2 edge support consolidation.
 
+use crate::cognition::CognitionCode;
 use std::collections::HashMap;
 
 use rusqlite::{Connection, Transaction};
@@ -52,7 +53,7 @@ pub(super) fn run(
 ) -> CognitionResult<GraphConsolidateMetrics> {
     if !has_v2_edges(connection)? {
         return Err(CognitionError::new(
-            "memory_consolidation_v2_required",
+            CognitionCode::MemoryConsolidationV2Required,
             "memory_consolidation_v2_required",
         ));
     }
@@ -115,8 +116,10 @@ fn prepare_row(row: &SourceRow, now_ms: i64, decay_d: f64) -> CognitionResult<Pr
     } else {
         &row.qualifiers
     };
-    let mut qualifiers = serde_json::from_str::<Map<String, Value>>(qualifiers_json)
-        .map_err(|_| error("memory_consolidation_invalid_qualifiers"))?;
+    let mut qualifiers =
+        serde_json::from_str::<Map<String, Value>>(qualifiers_json).map_err(|source| {
+            error(CognitionCode::MemoryConsolidationInvalidQualifiers).with_source(source)
+        })?;
     let age_days = row
         .latest_observed_at
         .as_deref()
@@ -131,8 +134,9 @@ fn prepare_row(row: &SourceRow, now_ms: i64, decay_d: f64) -> CognitionResult<Pr
         Value::from(row.support_count),
     );
     qualifiers.insert("decayed_support".to_owned(), json_number(decayed_support));
-    let next_qualifiers = serde_json::to_string(&qualifiers)
-        .map_err(|_| error("memory_consolidation_invalid_qualifiers"))?;
+    let next_qualifiers = serde_json::to_string(&qualifiers).map_err(|source| {
+        error(CognitionCode::MemoryConsolidationInvalidQualifiers).with_source(source)
+    })?;
     Ok(PreparedRow {
         source: row.clone(),
         next_qualifiers,
@@ -184,13 +188,13 @@ fn verify_and_write(
 }
 
 fn source_changed() -> CognitionError {
-    error("memory_source_changed")
+    error(CognitionCode::MemorySourceChanged)
 }
 
 fn db_error(_: rusqlite::Error) -> CognitionError {
-    error("memory_graph_unavailable")
+    error(CognitionCode::MemoryGraphUnavailable)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

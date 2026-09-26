@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -79,7 +80,7 @@ pub(super) fn save(
     let value = serde_json::to_value(result).map_err(json_error)?;
     if stages.get(key).is_some_and(|saved| saved != &value) {
         return Err(CognitionError::new(
-            "memory_extract_stage_changed",
+            CognitionCode::MemoryExtractStageChanged,
             "memory_extract_stage_changed",
         ));
     }
@@ -126,12 +127,12 @@ pub(super) fn save_plan(
 fn stringify(value: &Value) -> CognitionResult<String> {
     crate::json::stringify(value).map_err(json_error)
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }
 fn changed() -> CognitionError {
     CognitionError::new(
-        "memory_projection_window_changed",
+        CognitionCode::MemoryProjectionWindowChanged,
         "memory_projection_window_changed",
     )
 }

@@ -20,6 +20,7 @@ use super::super::{
     qualification_witness::{CandidateWitness, LiveWitness},
     rebuild::{assert_live_inventory_matches_candidate, compute_rebuild_readiness},
 };
+use crate::cognition::CognitionCode;
 
 pub(crate) async fn activate(
     data_root: &Path,
@@ -32,13 +33,13 @@ pub(crate) async fn activate(
 ) -> CognitionResult<Value> {
     super::repair_pending(data_root, environment, coordinator.clone(), cancellation).await?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let descriptor = descriptor::capture_active_descriptor(data_root, environment)?;
     if expected_active.is_some_and(|expected| descriptor.fields.generation_id != expected)
         || descriptor.fields.generation_id == generation_id
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let path = manifest_path(data_root, environment, generation_id)?;
     let (manifest, manifest_sha) = read_manifest(&path, generation_id)?;
@@ -50,7 +51,7 @@ pub(crate) async fn activate(
         || stored_readiness["ready"] != true
         || binding.is_none_or(Value::is_null)
     {
-        return Err(error("activation_requires_catchup"));
+        return Err(error(CognitionCode::ActivationRequiresCatchup));
     }
     let inventory_hash = field(&manifest, "source_inventory_hash")?;
     let snapshot_id = field(&manifest, "canonical_snapshot_id")?;
@@ -72,22 +73,22 @@ pub(crate) async fn activate(
         || readiness["evidence_sha256"] != stored_readiness["evidence_sha256"]
         || readiness["inventory_hash"] != inventory_hash
     {
-        return Err(error("activation_requires_catchup"));
+        return Err(error(CognitionCode::ActivationRequiresCatchup));
     }
     let qualification = StoredQualification::open(
         data_root,
         path.parent()
-            .ok_or_else(|| error("memory_generation_unavailable"))?,
+            .ok_or_else(|| error(CognitionCode::MemoryGenerationUnavailable))?,
         generation_id,
         &manifest,
         &readiness,
-        "activation_requires_catchup",
+        CognitionCode::ActivationRequiresCatchup,
     )?;
     qualification.assert_current()?;
     let lock = environment.consolidation_lock(data_root);
     ensure_data_authority(data_root, &[&lock, &path])?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -100,15 +101,15 @@ pub(crate) async fn activate(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let mut cas_committed = false;
     let result = async {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         candidate.assert_current(&handle).await?;
         live.assert_current()?;
@@ -118,7 +119,7 @@ pub(crate) async fn activate(
             || current_manifest["source_inventory_hash"] != inventory_hash
             || current_manifest["readiness"]["sha256"] != readiness["sha256"]
         {
-            return Err(error("activation_requires_catchup"));
+            return Err(error(CognitionCode::ActivationRequiresCatchup));
         }
         let next = json!({
             "schema":"butler.memory-active-generation.v2",
@@ -148,7 +149,7 @@ pub(crate) async fn activate(
     .await;
     let released = lease
         .release(cas_committed)
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|value| {
         released?;
         Ok(value)

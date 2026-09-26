@@ -62,10 +62,12 @@ impl ProfileConsolidation {
             .consolidate_profile_candidates()
             .await
             .map_err(profile_error)?;
-        let mut consolidated = serde_json::to_value(consolidated).map_err(|_| PhaseError {
-            code: "consolidation_profile_metrics_failed",
-            message: "consolidation_profile_metrics_failed".into(),
-            metrics: Map::new(),
+        let mut consolidated = serde_json::to_value(consolidated).map_err(|source| {
+            PhaseError::new(
+                "consolidation_profile_metrics_failed",
+                "consolidation_profile_metrics_failed",
+            )
+            .with_source(source)
         })?;
         let mut metrics = std::mem::take(crate::json::object_mut(&mut consolidated));
         let more = crate::json::json_object!({
@@ -95,11 +97,11 @@ impl ProfileConsolidation {
         });
         metrics.extend(more);
         if capture.model_error.is_some() {
-            return Err(PhaseError {
-                code: "profile_consolidation_incomplete_coverage",
-                message: "profile consolidation has unfinished source coverage".into(),
-                metrics,
-            });
+            return Err(PhaseError::new(
+                "profile_consolidation_incomplete_coverage",
+                "profile consolidation has unfinished source coverage",
+            )
+            .with_metrics(metrics));
         }
         Ok(metrics)
     }
@@ -109,26 +111,10 @@ fn now_ms() -> i64 {
     chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis()
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn profile_error(error: crate::profile::ProfileError) -> PhaseError {
-    PhaseError {
-        code: error.code(),
-        message: error.code().into(),
-        metrics: Map::new(),
-    }
+    PhaseError::new(error.code(), error.code()).with_source(error)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn feedback_error(error: crate::cognition::CognitionError) -> PhaseError {
-    PhaseError {
-        code: error.code,
-        message: error.code.into(),
-        metrics: Map::new(),
-    }
+    PhaseError::new(error.code(), error.code()).with_source(error)
 }

@@ -1,6 +1,7 @@
 //! Canonical source-backed candidate hydration and currentness.
 
 use super::*;
+use crate::cognition::CognitionCode;
 use crate::cognition::graph::{input, plan::NormalizedPlan};
 use indexmap::IndexSet;
 use rusqlite::OptionalExtension;
@@ -36,31 +37,37 @@ pub(in crate::cognition::graph) fn assert_current(
                 .optional()
                 .map_err(db_error)?;
             if eligible.is_none() {
-                return Err(error("memory_extract_candidate_changed"));
+                return Err(error(CognitionCode::MemoryExtractCandidateChanged));
             }
             let row = input::source_row(db, &evidence.source_ref)?
-                .ok_or_else(|| error("memory_extract_candidate_changed"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryExtractCandidateChanged))?;
             if row.episode_id != evidence.episode_ref
                 || row.revision != evidence.revision
                 || row.content_hash != evidence.content_hash
             {
-                return Err(error("memory_extract_candidate_changed"));
+                return Err(error(CognitionCode::MemoryExtractCandidateChanged));
             }
             if matches!(row.source_kind.as_str(), "task_report" | "explicit_record") {
-                crate::cognition::sources::hydrate_typed_source(source_root, &row)
-                    .map_err(|_| error("memory_extract_candidate_changed"))?;
+                crate::cognition::sources::hydrate_typed_source(source_root, &row).map_err(
+                    |source| {
+                        error(CognitionCode::MemoryExtractCandidateChanged).with_source(source)
+                    },
+                )?;
                 continue;
             }
             let message_id = row
                 .conversation_message_id
                 .as_deref()
-                .ok_or_else(|| error("memory_extract_candidate_changed"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryExtractCandidateChanged))?;
             let message = canonical
                 .read_message(message_id)
-                .map_err(|_| error("memory_extract_candidate_changed"))?
-                .ok_or_else(|| error("memory_extract_candidate_changed"))?;
-            crate::cognition::hydrate_conversation_source(&message, &row, f64::INFINITY)
-                .map_err(|_| error("memory_extract_candidate_changed"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryExtractCandidateChanged).with_source(source)
+                })?
+                .ok_or_else(|| error(CognitionCode::MemoryExtractCandidateChanged))?;
+            crate::cognition::hydrate_conversation_source(&message, &row, f64::INFINITY).map_err(
+                |source| error(CognitionCode::MemoryExtractCandidateChanged).with_source(source),
+            )?;
         }
     }
     Ok(())
@@ -152,7 +159,7 @@ pub(super) fn hydrate(
             let message = canonical
                 .read_message(message_id)
                 .map_err(crate::cognition::CognitionError::from)?
-                .ok_or_else(|| error("memory_source_changed"))?;
+                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
             crate::cognition::hydrate_conversation_source(&message, &row, f64::INFINITY)?
                 .text
                 .to_owned()

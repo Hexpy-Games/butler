@@ -13,6 +13,7 @@ use crate::cognition::{
 };
 
 use super::{error, queue::Pending};
+use crate::cognition::CognitionCode;
 
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
@@ -35,15 +36,15 @@ pub(super) fn spawn_worker(
         .stderr(Stdio::null())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|_| error("embed_worker_unavailable"))?;
+        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| error("embed_worker_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::EmbedWorkerUnavailable))?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| error("embed_worker_unavailable"))?;
+        .ok_or_else(|| error(CognitionCode::EmbedWorkerUnavailable))?;
     Ok(WorkerChild {
         child,
         stdin,
@@ -61,14 +62,14 @@ pub(super) async fn initialize(process: &mut WorkerChild, id: u64) -> CognitionR
         resplit: false,
         max_embeddings: None,
     };
-    let mut frame =
-        serde_json::to_vec(&request).map_err(|_| error("embed_worker_protocol_invalid"))?;
+    let mut frame = serde_json::to_vec(&request)
+        .map_err(|_| error(CognitionCode::EmbedWorkerProtocolInvalid))?;
     frame.push(b'\n');
     let response = round_trip(process, &frame, id).await?;
     match response.result {
         WorkerResult::Ready => Ok(()),
         WorkerResult::Error { code } => Err(worker_error(&code)),
-        _ => Err(error("embed_worker_protocol_invalid")),
+        _ => Err(error(CognitionCode::EmbedWorkerProtocolInvalid)),
     }
 }
 
@@ -84,7 +85,7 @@ pub(super) async fn exchange(
         }
         WorkerResult::Error { code } => Ok(Err(worker_error(&code))),
         WorkerResult::Ready | WorkerResult::Tokenization(_) | WorkerResult::Closed => {
-            Err(error("embed_worker_protocol_invalid"))
+            Err(error(CognitionCode::EmbedWorkerProtocolInvalid))
         }
     }
 }
@@ -98,12 +99,12 @@ async fn round_trip(
         .stdin
         .write_all(frame)
         .await
-        .map_err(|_| error("embed_worker_unavailable"))?;
+        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
     process
         .stdin
         .flush()
         .await
-        .map_err(|_| error("embed_worker_unavailable"))?;
+        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
     let mut response = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 8192];
     loop {
@@ -111,22 +112,22 @@ async fn round_trip(
             .stdout
             .read(&mut chunk)
             .await
-            .map_err(|_| error("embed_worker_unavailable"))?;
+            .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
         if count == 0 || response.len() + count > MAX_RESPONSE_BYTES + 1 {
-            return Err(error("embed_worker_protocol_invalid"));
+            return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
         }
         response.extend_from_slice(&chunk[..count]);
         if let Some(newline) = response.iter().position(|byte| *byte == b'\n') {
             if newline + 1 != response.len() || newline > MAX_RESPONSE_BYTES {
-                return Err(error("embed_worker_protocol_invalid"));
+                return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
             }
             break;
         }
     }
-    let response: WorkerResponse =
-        serde_json::from_slice(&response).map_err(|_| error("embed_worker_protocol_invalid"))?;
+    let response: WorkerResponse = serde_json::from_slice(&response)
+        .map_err(|_| error(CognitionCode::EmbedWorkerProtocolInvalid))?;
     if response.id != id {
-        return Err(error("embed_worker_protocol_invalid"));
+        return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
     }
     Ok(response)
 }
@@ -156,16 +157,16 @@ fn validate_result(item: &Pending, result: &NativeEmbeddingResult) -> CognitionR
             vector.len() != metadata.dimension || vector.iter().any(|value| !value.is_finite())
         })
     {
-        return Err(error("embed_worker_protocol_invalid"));
+        return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
     }
     if item.resplit {
         if result.embedded_texts.as_ref().map(Vec::len) != Some(result.embeddings.len())
             || result.omitted_count.is_none()
         {
-            return Err(error("embed_worker_protocol_invalid"));
+            return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
         }
     } else if result.embedded_texts.is_some() || result.omitted_count.is_some() {
-        return Err(error("embed_worker_protocol_invalid"));
+        return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
     }
     Ok(())
 }
@@ -179,28 +180,28 @@ pub(super) async fn kill_and_reap(child: &mut Option<WorkerChild>) {
 
 fn worker_error(code: &str) -> CognitionError {
     let code = match code {
-        "embed_asset_path_unsafe" => "embed_asset_path_unsafe",
-        "embed_asset_unavailable" => "embed_asset_unavailable",
-        "embed_asset_download_failed" => "embed_asset_download_failed",
-        "embed_asset_range_invalid" => "embed_asset_range_invalid",
-        "embed_asset_hash_mismatch" => "embed_asset_hash_mismatch",
-        "embed_asset_version_conflict" => "embed_asset_version_conflict",
-        "embed_tokenizer_unavailable" => "embed_tokenizer_unavailable",
-        "embed_tokenizer_limit_unavailable" => "embed_tokenizer_limit_unavailable",
-        "embed_model_unavailable" => "embed_model_unavailable",
-        "embed_model_input_unsupported" => "embed_model_input_unsupported",
-        "embed_identity_invalid" => "embed_identity_invalid",
-        "embed_invalid_request" => "embed_invalid_request",
-        "embed_request_too_large" => "embed_request_too_large",
-        "embed_response_too_large" => "embed_response_too_large",
-        "embed_input_too_long" => "embed_input_too_long",
-        "embed_grapheme_too_long" => "embed_grapheme_too_long",
-        "embed_resplit_limit" => "embed_resplit_limit",
-        "embed_tokenization_failed" => "embed_tokenization_failed",
-        "embed_inference_failed" => "embed_inference_failed",
-        "embed_output_invalid" => "embed_output_invalid",
-        "embed_dimension_invalid" => "embed_dimension_invalid",
-        _ => "embed_worker_protocol_invalid",
+        "embed_asset_path_unsafe" => CognitionCode::EmbedAssetPathUnsafe,
+        "embed_asset_unavailable" => CognitionCode::EmbedAssetUnavailable,
+        "embed_asset_download_failed" => CognitionCode::EmbedAssetDownloadFailed,
+        "embed_asset_range_invalid" => CognitionCode::EmbedAssetRangeInvalid,
+        "embed_asset_hash_mismatch" => CognitionCode::EmbedAssetHashMismatch,
+        "embed_asset_version_conflict" => CognitionCode::EmbedAssetVersionConflict,
+        "embed_tokenizer_unavailable" => CognitionCode::EmbedTokenizerUnavailable,
+        "embed_tokenizer_limit_unavailable" => CognitionCode::EmbedTokenizerLimitUnavailable,
+        "embed_model_unavailable" => CognitionCode::EmbedModelUnavailable,
+        "embed_model_input_unsupported" => CognitionCode::EmbedModelInputUnsupported,
+        "embed_identity_invalid" => CognitionCode::EmbedIdentityInvalid,
+        "embed_invalid_request" => CognitionCode::EmbedInvalidRequest,
+        "embed_request_too_large" => CognitionCode::EmbedRequestTooLarge,
+        "embed_response_too_large" => CognitionCode::EmbedResponseTooLarge,
+        "embed_input_too_long" => CognitionCode::EmbedInputTooLong,
+        "embed_grapheme_too_long" => CognitionCode::EmbedGraphemeTooLong,
+        "embed_resplit_limit" => CognitionCode::EmbedResplitLimit,
+        "embed_tokenization_failed" => CognitionCode::EmbedTokenizationFailed,
+        "embed_inference_failed" => CognitionCode::EmbedInferenceFailed,
+        "embed_output_invalid" => CognitionCode::EmbedOutputInvalid,
+        "embed_dimension_invalid" => CognitionCode::EmbedDimensionInvalid,
+        _ => CognitionCode::EmbedWorkerProtocolInvalid,
     };
     error(code)
 }

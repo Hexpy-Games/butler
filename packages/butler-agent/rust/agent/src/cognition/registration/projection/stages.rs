@@ -12,6 +12,7 @@ use std::{
 };
 
 use super::{Operation, ProjectionDependencies, assert_current, json_error};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, GraphProgress, MemoryGenerationTarget,
     extraction::{
@@ -162,7 +163,7 @@ pub(super) async fn execute(
         if claim.previous_state == PreviousWindowState::Planned || claim.output.is_some() {
             let value = claim.output.clone().ok_or_else(|| {
                 CognitionError::new(
-                    "memory_projection_plan_missing",
+                    CognitionCode::MemoryProjectionPlanMissing,
                     "memory_projection_plan_missing",
                 )
             })?;
@@ -228,7 +229,7 @@ pub(super) async fn execute(
                 Ok(Ok(result)) => result,
                 Ok(Err(_problem)) if provider_cancel.is_cancelled() => {
                     return Err(CognitionError::new(
-                        "memory_extract_cancelled",
+                        CognitionCode::MemoryExtractCancelled,
                         "memory_extract_cancelled",
                     ));
                 }
@@ -236,7 +237,7 @@ pub(super) async fn execute(
                 Err(_) => {
                     provider_cancel.cancel();
                     return Err(CognitionError::new(
-                        "memory_extract_timeout",
+                        CognitionCode::MemoryExtractTimeout,
                         "memory_extract_timeout",
                     ));
                 }

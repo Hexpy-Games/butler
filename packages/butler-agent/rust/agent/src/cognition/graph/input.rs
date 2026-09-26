@@ -8,6 +8,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow, extraction::ExtractInput,
     extraction::ProjectionContextUnit, extraction::ProjectionSourceUnit,
@@ -58,7 +59,7 @@ pub(super) fn build(
         };
         if !eligible {
             return Err(CognitionError::new(
-                "memory_source_ineligible",
+                CognitionCode::MemorySourceIneligible,
                 "memory_source_ineligible",
             ));
         }
@@ -195,7 +196,7 @@ fn enforce_budget(input: &mut ExtractInput) -> CognitionResult<()> {
     }
     if json_bytes(input)? > 24_576 {
         return Err(CognitionError::new(
-            "memory_extract_input_exceeds_budget",
+            CognitionCode::MemoryExtractInputExceedsBudget,
             "memory_extract_input_exceeds_budget",
         ));
     }
@@ -209,8 +210,9 @@ fn json_bytes<T: serde::Serialize>(value: &T) -> CognitionResult<usize> {
     )
 }
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

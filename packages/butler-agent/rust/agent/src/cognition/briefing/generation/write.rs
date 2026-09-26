@@ -7,6 +7,7 @@ use std::{
 use serde_json::Value;
 
 use super::contracts::{BriefingGenerationError, error};
+use crate::cognition::BriefingGenerationCode;
 
 pub(super) fn artifact_path(root: &Path, date: &str, project_id: Option<&str>) -> PathBuf {
     let day = root.join("cognition/consolidation/briefings").join(date);
@@ -21,7 +22,7 @@ pub(super) fn artifact_path(root: &Path, date: &str, project_id: Option<&str>) -
 pub(super) fn write(path: &Path, artifact: &Value) -> Result<(), BriefingGenerationError> {
     let parent = path.parent().ok_or_else(|| {
         error(
-            "new_chat_briefing_write_failed",
+            BriefingGenerationCode::NewChatBriefingWriteFailed,
             "Missing artifact directory",
         )
     })?;
@@ -83,5 +84,8 @@ pub(super) fn safe_segment(value: &str) -> String {
 }
 
 fn io_error(failure: impl std::fmt::Display) -> BriefingGenerationError {
-    error("new_chat_briefing_write_failed", failure.to_string())
+    error(
+        BriefingGenerationCode::NewChatBriefingWriteFailed,
+        failure.to_string(),
+    )
 }

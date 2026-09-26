@@ -1,3 +1,4 @@
+use crate::cognition::CognitionResult;
 use crate::public_text::{fixed_regex, fixed_regex_ci};
 use std::{collections::HashSet, fs, path::Path, sync::OnceLock};
 
@@ -48,7 +49,7 @@ pub(super) fn extract(
     data_root: &Path,
     text: &str,
     project: &str,
-) -> Result<ExtractionResult, String> {
+) -> CognitionResult<ExtractionResult> {
     let projects = known_projects(data_root)?;
     let mut result = ExtractionResult::default();
     let mut seen = HashSet::new();
@@ -140,9 +141,9 @@ pub(super) fn mention_snippet(text: &str) -> String {
     crate::public_text::trim_js_whitespace(&prefix).to_owned()
 }
 
-fn known_projects(data_root: &Path) -> Result<Vec<String>, String> {
+fn known_projects(data_root: &Path) -> CognitionResult<Vec<String>> {
     let path = data_root.join("butler.config.json");
-    ensure_data_authority(data_root, &[&path]).map_err(|failure| failure.code.to_owned())?;
+    ensure_data_authority(data_root, &[&path])?;
     let Ok(raw) = fs::read_to_string(path) else {
         return Ok(Vec::new());
     };

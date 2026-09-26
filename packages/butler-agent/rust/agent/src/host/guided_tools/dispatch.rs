@@ -411,12 +411,12 @@ pub(super) async fn execute(
                 args,
             )
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "query_memory" => owner
             .query
             .query(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "read_conversation_session" => owner
             .conversations
             .read(owner.binding.memory.clone(), args)

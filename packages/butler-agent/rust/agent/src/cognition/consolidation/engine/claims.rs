@@ -1,6 +1,7 @@
 //! Short checkpoint claim and commit operations over the shared writer fence.
 
 use super::*;
+use crate::cognition::CognitionCode;
 
 impl CycleService {
     pub(super) async fn with_lease<T>(
@@ -16,7 +17,7 @@ impl CycleService {
             .await
             .map_err(CognitionError::from)?
             .ok_or_else(|| {
-                CognitionError::new("memory_write_busy", "Consolidation lock is held")
+                CognitionError::new(CognitionCode::MemoryWriteBusy, "Consolidation lock is held")
             })?;
         let outcome = run();
         let released = lease.release(outcome.is_ok()).map_err(CognitionError::from);
@@ -42,7 +43,7 @@ impl CycleService {
         self.with_lease(Some(cancellation), || {
             if cancellation.is_cancelled() {
                 return Err(CognitionError::new(
-                    "consolidation_aborted",
+                    CognitionCode::ConsolidationAborted,
                     "Consolidation was cancelled",
                 ));
             }
@@ -61,7 +62,7 @@ impl CycleService {
                         != CognitionProcessStatus::DefinitelyDead;
                 if locally_active || other_active {
                     return Err(CognitionError::new(
-                        "memory_write_busy",
+                        CognitionCode::MemoryWriteBusy,
                         "Consolidation phase is active",
                     ));
                 }
@@ -71,7 +72,7 @@ impl CycleService {
                 || (!resume && current.next_phase_index != index)
             {
                 return Err(CognitionError::new(
-                    "consolidation_checkpoint_changed",
+                    CognitionCode::ConsolidationCheckpointChanged,
                     "Checkpoint changed",
                 ));
             }
@@ -106,11 +107,14 @@ impl CycleService {
                     .then(|| expected.clone())
             })
             .ok_or_else(|| {
-                CognitionError::new("consolidation_checkpoint_changed", "Checkpoint missing")
+                CognitionError::new(
+                    CognitionCode::ConsolidationCheckpointChanged,
+                    "Checkpoint missing",
+                )
             })?;
             if current != *expected {
                 return Err(CognitionError::new(
-                    "consolidation_checkpoint_changed",
+                    CognitionCode::ConsolidationCheckpointChanged,
                     "Checkpoint changed",
                 ));
             }

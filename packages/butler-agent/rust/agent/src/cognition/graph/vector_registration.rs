@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow, hydrate_conversation_source,
     sources::hydrate_typed_source,
@@ -199,7 +200,7 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
 }
 
 fn digest(values: Vec<Value>) -> CognitionResult<String> {
-    crate::cognition::sources::projection_hash_for_graph(values).map_err(Into::into)
+    crate::cognition::sources::projection_hash_for_graph(values)
 }
 
 fn json_array(values: &[String]) -> CognitionResult<String> {
@@ -213,25 +214,27 @@ fn json_string(value: Option<&str>) -> CognitionResult<String> {
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value)
-        .map_err(|error| CognitionError::new("memory_graph_unavailable", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+            .with_source(error)
+    })
 }
 
 fn option_value(value: Option<&str>) -> Value {
     value.map_or(Value::Null, |value| Value::String(value.to_owned()))
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }
 
 fn job_not_found() -> CognitionError {
     CognitionError::new(
-        "memory_projection_job_not_found",
+        CognitionCode::MemoryProjectionJobNotFound,
         "memory_projection_job_not_found",
     )
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }

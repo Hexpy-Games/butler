@@ -116,10 +116,8 @@ impl PhaseExecutor for NativeCyclePhases {
                     .briefing
                     .generate(run_id, std::time::SystemTime::now().into(), cancellation)
                     .await
-                    .map_err(|error| PhaseError {
-                        code: error.code,
-                        message: error.message,
-                        metrics: Map::new(),
+                    .map_err(|error| {
+                        PhaseError::new(error.code(), error.message()).with_source(error)
                     }),
                 Phase::MetricsSummary => {
                     self.metrics.record(
@@ -148,16 +146,8 @@ impl PhaseExecutor for NativeCyclePhases {
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn cognition_phase_error(error: crate::cognition::CognitionError) -> PhaseError {
-    PhaseError {
-        code: error.code,
-        message: error.code.into(),
-        metrics: Map::new(),
-    }
+    PhaseError::new(error.code(), error.code()).with_source(error)
 }
 
 impl CycleEventSink for CycleMetrics {

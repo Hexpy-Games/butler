@@ -37,6 +37,7 @@ use rusqlite::{Connection, OpenFlags};
 
 use super::{CognitionError, CognitionResult};
 
+use crate::cognition::CognitionCode;
 pub(in crate::cognition) use cache_quantum::ClaimedCacheJob;
 pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
@@ -453,15 +454,15 @@ impl GraphRepository {
     }
 
     fn connection(&self) -> CognitionResult<&Connection> {
-        self.connection
-            .as_ref()
-            .ok_or_else(|| CognitionError::new("memory_graph_closed", "memory_graph_closed"))
+        self.connection.as_ref().ok_or_else(|| {
+            CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
+        })
     }
 
     fn connection_mut(&mut self) -> CognitionResult<&mut Connection> {
-        self.connection
-            .as_mut()
-            .ok_or_else(|| CognitionError::new("memory_graph_closed", "memory_graph_closed"))
+        self.connection.as_mut().ok_or_else(|| {
+            CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
+        })
     }
 }
 
@@ -473,10 +474,6 @@ impl Drop for GraphRepository {
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn db_error(error: rusqlite::Error) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }

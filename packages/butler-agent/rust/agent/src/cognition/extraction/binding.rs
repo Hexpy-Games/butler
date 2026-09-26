@@ -7,6 +7,7 @@ use super::{
     CandidateSearchInput, CognitionCandidateSearch, ExtractCandidate, ExtractInput, ExtractOutput,
     Meaning, NodeResolution, Passage, QuoteRef,
 };
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
@@ -105,11 +106,11 @@ pub(super) fn repair_schema(batch: &BindingBatch) -> Map<String, Value> {
     };
     crate::json::json_object!({"type":"object","additionalProperties":false,"required":["decisions"],"properties":{"decisions":{"type":"array","maxItems":4,"items":item}}})
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
-fn json_error(e: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", e.to_string())
+fn json_error(e: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, e.to_string()).with_source(e)
 }
 
 #[cfg(test)]

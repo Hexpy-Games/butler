@@ -7,6 +7,7 @@ mod targets;
 
 pub(crate) use targets::FeedbackTarget;
 
+use crate::cognition::CognitionCode;
 use std::{
     collections::HashSet,
     fs::File,
@@ -125,7 +126,9 @@ impl FeedbackBufferService {
             .join("feedback/feedback.md");
         tokio::task::spawn_blocking(move || matching_ids_in_file(&path, &ids))
             .await
-            .map_err(|_| error("memory_feedback_buffer_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+            })?
     }
 }
 
@@ -133,7 +136,7 @@ fn matching_ids_in_file(path: &Path, ids: &HashSet<String>) -> CognitionResult<H
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashSet::new()),
-        Err(_) => return Err(error("memory_feedback_buffer_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryFeedbackBufferReadFailed)),
     };
     let mut reader = BufReader::new(file);
     let mut found = HashSet::new();
@@ -162,7 +165,7 @@ fn count_feedback_file(path: &Path, now_epoch_ms: i64) -> CognitionResult<Feedba
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(FeedbackCounts::default());
         }
-        Err(_) => return Err(error("memory_feedback_buffer_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryFeedbackBufferReadFailed)),
     };
 
     let fallback_iso = crate::js_date::format_iso_millis(now_epoch_ms)
@@ -201,9 +204,9 @@ fn read_line(reader: &mut impl BufRead) -> CognitionResult<Option<Line>> {
     let mut terminated = false;
     loop {
         let (count, has_newline) = {
-            let available = reader
-                .fill_buf()
-                .map_err(|_| error("memory_feedback_buffer_read_failed"))?;
+            let available = reader.fill_buf().map_err(|source| {
+                error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+            })?;
             if available.is_empty() {
                 break;
             }
@@ -395,7 +398,7 @@ fn js_string(value: &serde_json::Value) -> String {
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
+fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Could not read the bounded feedback buffer")
 }
 

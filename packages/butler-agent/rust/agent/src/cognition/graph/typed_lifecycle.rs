@@ -3,6 +3,7 @@
 use rusqlite::{Connection, params};
 
 use super::{GraphRepository, db_error};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, sources::TypedMemoryLifecycle};
 
 #[derive(Clone, Copy)]
@@ -63,8 +64,10 @@ fn lifecycle_state_json(input: &TypedLifecycleInput<'_>) -> CognitionResult<Stri
         TypedMemoryLifecycle::Current => return Err(source_changed()),
     };
     let encode = |value: &str| {
-        serde_json::to_string(value)
-            .map_err(|error| CognitionError::new("memory_graph_unavailable", error.to_string()))
+        serde_json::to_string(value).map_err(|error| {
+            CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+                .with_source(error)
+        })
     };
     Ok(format!(
         "{{\"disposition\":{},\"source_kind\":{},\"record_id\":{},\"revision\":{}}}",
@@ -76,7 +79,7 @@ fn lifecycle_state_json(input: &TypedLifecycleInput<'_>) -> CognitionResult<Stri
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
 
 #[cfg(test)]

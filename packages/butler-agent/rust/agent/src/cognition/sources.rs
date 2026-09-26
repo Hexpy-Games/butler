@@ -29,8 +29,7 @@ pub(in crate::cognition) use typed::{
 };
 pub(in crate::cognition) use typed_plan::{TypedPlan, prepare as prepare_typed_source};
 pub(crate) use types::{
-    CognitionSourceError, CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice,
-    PreparedConversationSource,
+    CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, PreparedConversationSource,
 };
 
 #[cfg(test)]

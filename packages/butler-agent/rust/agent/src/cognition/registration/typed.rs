@@ -6,6 +6,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use super::{CognitionRegistrationService, closed, join_error};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
@@ -41,7 +42,7 @@ impl CognitionRegistrationService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
@@ -63,11 +64,12 @@ impl CognitionRegistrationService {
             let result = run(input, environment, coordinator, clock, shutdown).await;
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_registration_operation_failed",
+                CognitionCode::MemoryRegistrationOperationFailed,
                 "memory_registration_operation_failed",
             )
+            .with_source(source)
         })?
     }
 }
@@ -131,13 +133,13 @@ async fn run(
                 return Err(source_changed());
             }
             let canonical = ConversationSourceReader::open(&prepared.canonical_path)
-                .map_err(|_| source_changed())?;
+                .map_err(|source| source_changed().with_source(source))?;
             let mut graph = match GraphRepository::open(&current.graph_path) {
                 Ok(graph) => graph,
                 Err(error) => {
                     return Err(canonical
                         .close()
-                        .map_err(|_| source_changed())
+                        .map_err(|source| source_changed().with_source(source))
                         .err()
                         .unwrap_or(error));
                 }
@@ -172,7 +174,9 @@ async fn run(
                 graph.progress(&result.job_id)
             })();
             let graph_close = graph.close();
-            let canonical_close = canonical.close().map_err(|_| source_changed());
+            let canonical_close = canonical
+                .close()
+                .map_err(|source| source_changed().with_source(source));
             registered.and_then(|progress| {
                 graph_close?;
                 canonical_close?;
@@ -237,8 +241,8 @@ fn prepare_typed(
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
 fn aborted() -> CognitionError {
-    CognitionError::new("memory_write_aborted", "memory_write_aborted")
+    CognitionError::new(CognitionCode::MemoryWriteAborted, "memory_write_aborted")
 }

@@ -11,6 +11,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::{CognitionError, CognitionResult};
+use crate::cognition::CognitionCode;
 
 pub(in crate::cognition) struct FeedbackSourceRow<'a> {
     pub source_id: &'a str,
@@ -176,8 +177,9 @@ fn receipt_matches(operation: &Value, raw: &str) -> bool {
         && receipt["feedback_owner_revision"] == operation["feedback_owner_revision"]
 }
 
-fn unavailable(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", error.to_string())
+fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())
+        .with_source(error)
 }
 
 #[cfg(test)]

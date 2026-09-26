@@ -1,5 +1,6 @@
 //! Durable claim and receipt transitions for current vector units.
 
+use crate::cognition::CognitionCode;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -126,14 +127,14 @@ pub(super) fn claim(
         let (Some(source_kind), Some(source_observed_at), Some(source_refs_json)) =
             (source_kind, source_observed_at, source_refs_json)
         else {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         };
         let changed = tx.execute(
             "UPDATE memory_vector_units SET state='running',error_code=NULL,attempt_count=attempt_count+1,owner_pid=?1,owner_nonce=?2,started_at=?3,next_attempt_at=NULL,provider_invoked=0,outcome_known=1,invocation_ref=NULL WHERE unit_id=?4 AND state='pending'",
             params![i64::from(std::process::id()),nonce,now,unit_id],
         ).map_err(db_error)?;
         if changed != 1 {
-            return Err(error("memory_vector_unit_changed"));
+            return Err(error(CognitionCode::MemoryVectorUnitChanged));
         }
         units.push(ClaimedVectorUnit {
             unit_id,
@@ -191,7 +192,7 @@ pub(super) fn assert_current(
             params![unit.unit_id,unit.owner_nonce,generation,unit.source_revision], |_| Ok(1)
         ).optional().map_err(db_error)?;
         if current.is_none() {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         }
     }
     Ok(())
@@ -268,8 +269,8 @@ pub(super) fn current_candidate(
             .as_bytes()
         )
     );
-    let parsed: serde_json::Value =
-        serde_json::from_str(&receipt).map_err(|_| error("memory_vector_receipt_mismatch"))?;
+    let parsed: serde_json::Value = serde_json::from_str(&receipt)
+        .map_err(|source| error(CognitionCode::MemoryVectorReceiptMismatch).with_source(source))?;
     Ok(chunk == hit.embedding_chunk_id
         && key == hit.vector_key
         && parsed.get("generation").and_then(|v| v.as_str()) == Some(generation)
@@ -284,7 +285,7 @@ pub(super) fn invoked(
     let tx = connection.transaction().map_err(db_error)?;
     for unit in units {
         if tx.execute("UPDATE memory_vector_units SET provider_invoked=1,outcome_known=0,invocation_ref=?1 WHERE unit_id=?2 AND state='running' AND owner_nonce=?3", params![unit.owner_nonce,unit.unit_id,unit.owner_nonce]).map_err(db_error)? !=1 {
-            return Err(error("memory_vector_unit_changed"));
+            return Err(error(CognitionCode::MemoryVectorUnitChanged));
         }
     }
     tx.commit().map_err(db_error)
@@ -297,7 +298,7 @@ pub(super) fn received(
     let tx = connection.transaction().map_err(db_error)?;
     for unit in units {
         if tx.execute("UPDATE memory_vector_units SET outcome_known=1 WHERE unit_id=?1 AND state='running' AND owner_nonce=?2 AND provider_invoked=1", params![unit.unit_id,unit.owner_nonce]).map_err(db_error)? !=1 {
-            return Err(error("memory_vector_unit_changed"));
+            return Err(error(CognitionCode::MemoryVectorUnitChanged));
         }
     }
     tx.commit().map_err(db_error)
@@ -310,12 +311,12 @@ pub(super) fn complete(
     now: &str,
 ) -> CognitionResult<()> {
     if units.is_empty() {
-        return Err(error("memory_vector_batch_limit"));
+        return Err(error(CognitionCode::MemoryVectorBatchLimit));
     }
     let tx = connection.transaction().map_err(db_error)?;
     for unit in units {
         if tx.execute("UPDATE memory_vector_units SET state='complete',error_code=NULL,owner_pid=NULL,owner_nonce=NULL,started_at=NULL,receipt_json=?1,outcome_known=1 WHERE unit_id=?2 AND owner_nonce=?3 AND state='running'", params![receipt,unit.unit_id,unit.owner_nonce]).map_err(db_error)? !=1 {
-            return Err(error("memory_vector_unit_changed"));
+            return Err(error(CognitionCode::MemoryVectorUnitChanged));
         }
     }
     refresh(&tx, &units[0].job_id, now)?;
@@ -329,7 +330,7 @@ pub(super) fn fail(
     now: &str,
 ) -> CognitionResult<()> {
     if units.is_empty() {
-        return Err(error("memory_vector_batch_limit"));
+        return Err(error(CognitionCode::MemoryVectorBatchLimit));
     }
     let tx = connection.transaction().map_err(db_error)?;
     for unit in units {
@@ -420,8 +421,8 @@ fn refresh(connection: &Connection, job: &str, now: &str) -> CognitionResult<()>
     Ok(())
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 impl super::GraphRepository {

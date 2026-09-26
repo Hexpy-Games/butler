@@ -1,4 +1,5 @@
 use super::*;
+use crate::cognition::CognitionCode;
 
 struct Requested {
     local_ref: String,
@@ -114,7 +115,7 @@ pub(in crate::cognition) async fn prepare(
         for id in &target.evidence {
             let passage = passages
                 .get(crate::json::saturating_usize(*id))
-                .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
             let reference = format!("{}u{id}", target.local_ref);
             current_refs.insert(reference.clone());
             quotes.insert(reference.clone(), passage.quote.clone());
@@ -186,7 +187,7 @@ pub(in crate::cognition) async fn prepare(
             .len()
             > 3072
         {
-            return Err(error("memory_extract_binding_oversize"));
+            return Err(error(CognitionCode::MemoryExtractBindingOversize));
         }
         let mut proposed = batch.prompt.clone();
         append_to_prompt(&mut proposed, entry.clone(), evidence.clone());

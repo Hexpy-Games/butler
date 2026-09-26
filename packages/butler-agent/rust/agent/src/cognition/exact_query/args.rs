@@ -1,3 +1,4 @@
+use crate::cognition::CognitionCode;
 use serde_json::{Map, Value, json};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -22,7 +23,7 @@ pub(super) fn parse(
     args: &Value,
     current_session_id: &str,
     project_id: Option<&str>,
-) -> Result<QueryArgs, &'static str> {
+) -> Result<QueryArgs, CognitionCode> {
     let query = match args.get("query").filter(|value| value.is_string()) {
         None => None,
         Some(value) => Some(string(value, 2048, true)?.to_owned()),
@@ -32,31 +33,31 @@ pub(super) fn parse(
         args.get("match_mode"),
         "phrase",
         &["phrase", "any", "all"],
-        "invalid_match_mode",
+        CognitionCode::InvalidMatchMode,
     )?;
     if query.is_some() && (!terms.is_empty() || mode != "phrase") {
-        return Err("query_terms_conflict");
+        return Err(CognitionCode::QueryTermsConflict);
     }
     if mode != "phrase" && terms.is_empty() {
-        return Err("terms_required");
+        return Err(CognitionCode::TermsRequired);
     }
     if mode == "phrase" && !terms.is_empty() {
-        return Err("terms_not_allowed");
+        return Err(CognitionCode::TermsNotAllowed);
     }
     let speaker = enum_value(
         args.get("speaker"),
         "any",
         &["any", "user", "butler"],
-        "invalid_role_filter",
+        CognitionCode::InvalidRoleFilter,
     )?;
     let event = enum_value(
         args.get("event_kind"),
         "any",
         &["any", "inbound", "outbound"],
-        "invalid_role_filter",
+        CognitionCode::InvalidRoleFilter,
     )?;
     if speaker == "user" && event == "outbound" || speaker == "butler" && event == "inbound" {
-        return Err("contradictory_role_filter");
+        return Err(CognitionCode::ContradictoryRoleFilter);
     }
     let role = if speaker == "user" || event == "inbound" {
         Some("user")
@@ -69,7 +70,7 @@ pub(super) fn parse(
         args.get("order"),
         "earliest",
         &["earliest", "latest"],
-        "invalid_order",
+        CognitionCode::InvalidOrder,
     )?;
     let limit = match args.get("limit").filter(|value| value.is_number()) {
         None => 10,
@@ -77,7 +78,7 @@ pub(super) fn parse(
             let n = v
                 .as_f64()
                 .filter(|n| n.is_finite() && n.fract() == 0.0 && (1.0..=50.0).contains(n))
-                .ok_or("invalid_limit")?;
+                .ok_or(CognitionCode::InvalidLimit)?;
             crate::json::saturating_usize(n)
         }
     };
@@ -90,7 +91,7 @@ pub(super) fn parse(
             "all_user_sessions"
         },
         &["current_session", "current_project", "all_user_sessions"],
-        "invalid_scope_value",
+        CognitionCode::InvalidScopeValue,
     )?;
     let session_ids = strings(
         args.get("session_ids").filter(|value| value.is_array()),
@@ -101,7 +102,7 @@ pub(super) fn parse(
         args.get("project_filter"),
         "any",
         &["any", "unassigned", "selected"],
-        "invalid_project_filter",
+        CognitionCode::InvalidProjectFilter,
     )?;
     let project_ids = strings(
         args.get("project_ids").filter(|value| value.is_array()),
@@ -109,28 +110,28 @@ pub(super) fn parse(
         512,
     )?;
     if (project_filter == "selected") == project_ids.is_empty() {
-        return Err("invalid_project_filter");
+        return Err(CognitionCode::InvalidProjectFilter);
     }
     let time = match args.get("time").filter(|value| !value.is_null()) {
         None => None,
         Some(value) => {
             if value.get("basis").and_then(Value::as_str) != Some("conversation") {
-                return Err("invalid_time");
+                return Err(CognitionCode::InvalidTime);
             }
             let (from_ms, from) = timestamp(
                 value
                     .get("from")
                     .and_then(Value::as_str)
-                    .ok_or("invalid_time")?,
+                    .ok_or(CognitionCode::InvalidTime)?,
             )?;
             let (to_ms, to) = timestamp(
                 value
                     .get("to")
                     .and_then(Value::as_str)
-                    .ok_or("invalid_time")?,
+                    .ok_or(CognitionCode::InvalidTime)?,
             )?;
             if from_ms >= to_ms {
-                return Err("invalid_time");
+                return Err(CognitionCode::InvalidTime);
             }
             Some((from, to))
         }
@@ -152,7 +153,11 @@ pub(super) fn parse(
     let cursor = args
         .get("cursor")
         .filter(|value| value.is_string())
-        .map(|v| v.as_str().ok_or("invalid_cursor").map(str::to_owned))
+        .map(|v| {
+            v.as_str()
+                .ok_or(CognitionCode::InvalidCursor)
+                .map(str::to_owned)
+        })
         .transpose()?;
     let mut identity = Map::new();
     identity.insert(
@@ -198,8 +203,8 @@ fn enum_value<'a>(
     value: Option<&'a Value>,
     fallback: &'a str,
     allowed: &[&str],
-    error: &'static str,
-) -> Result<&'a str, &'static str> {
+    error: CognitionCode,
+) -> Result<&'a str, CognitionCode> {
     let value = value
         .filter(|v| !v.is_null())
         .map(|v| v.as_str().unwrap_or(""))
@@ -207,31 +212,31 @@ fn enum_value<'a>(
     allowed.contains(&value).then_some(value).ok_or(error)
 }
 
-fn string(value: &Value, max: usize, allow_empty: bool) -> Result<&str, &'static str> {
-    let value = value.as_str().ok_or("invalid_string")?;
+fn string(value: &Value, max: usize, allow_empty: bool) -> Result<&str, CognitionCode> {
+    let value = value.as_str().ok_or(CognitionCode::InvalidString)?;
     if (!allow_empty && value.trim().is_empty())
         || UnicodeSegmentation::graphemes(value, true).count() > max
     {
-        return Err("invalid_string");
+        return Err(CognitionCode::InvalidString);
     }
     Ok(value)
 }
 
-fn strings(value: Option<&Value>, max: usize, chars: usize) -> Result<Vec<String>, &'static str> {
+fn strings(value: Option<&Value>, max: usize, chars: usize) -> Result<Vec<String>, CognitionCode> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
     let array = value
         .as_array()
         .filter(|v| v.len() <= max)
-        .ok_or("invalid_array")?;
+        .ok_or(CognitionCode::InvalidArray)?;
     array
         .iter()
         .map(|v| string(v, chars, false).map(str::to_owned))
         .collect()
 }
 
-fn timestamp(value: &str) -> Result<(i64, String), &'static str> {
+fn timestamp(value: &str) -> Result<(i64, String), CognitionCode> {
     let bytes = value.as_bytes();
     let prefix = bytes.len() >= 12
         && [0, 1, 2, 3, 5, 6, 8, 9]
@@ -251,9 +256,10 @@ fn timestamp(value: &str) -> Result<(i64, String), &'static str> {
                 && tail[5].is_ascii_digit()
         };
     if !prefix || !zone {
-        return Err("invalid_time");
+        return Err(CognitionCode::InvalidTime);
     }
-    let millis = crate::js_date::parse_date_millis(value, &|_| None).ok_or("invalid_time")?;
-    let formatted = crate::js_date::format_iso_millis(millis).ok_or("invalid_time")?;
+    let millis =
+        crate::js_date::parse_date_millis(value, &|_| None).ok_or(CognitionCode::InvalidTime)?;
+    let formatted = crate::js_date::format_iso_millis(millis).ok_or(CognitionCode::InvalidTime)?;
     Ok((millis, formatted))
 }

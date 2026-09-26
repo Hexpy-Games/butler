@@ -2,6 +2,7 @@
 
 mod plan;
 
+use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
 use serde::Serialize;
@@ -92,7 +93,9 @@ impl CognitionNamespaceMigrationService {
         let paths = self.paths.clone();
         tokio::task::spawn_blocking(move || plan::build_plan(&data_root, &paths))
             .await
-            .map_err(|_| failure("cognition_migration_read_failed"))?
+            .map_err(|source| {
+                failure(CognitionCode::CognitionMigrationReadFailed).with_source(source)
+            })?
     }
 
     pub(crate) async fn apply(&self) -> CognitionResult<CognitionNamespaceMigrationManifest> {
@@ -109,7 +112,7 @@ impl CognitionNamespaceMigrationService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| failure("memory_write_busy"))?;
+            .ok_or_else(|| failure(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
             let result = plan::apply_locked(&data_root, &paths);
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
@@ -119,10 +122,12 @@ impl CognitionNamespaceMigrationService {
             }
         })
         .await
-        .map_err(|_| failure("cognition_migration_apply_failed"))?
+        .map_err(|source| {
+            failure(CognitionCode::CognitionMigrationApplyFailed).with_source(source)
+        })?
     }
 }
 
-fn failure(code: &'static str) -> CognitionError {
+fn failure(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Cognition namespace migration failed")
 }

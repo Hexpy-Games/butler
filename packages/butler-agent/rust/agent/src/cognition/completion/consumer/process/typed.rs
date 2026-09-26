@@ -3,6 +3,7 @@
 use serde_json::Value;
 
 use super::{Input, dead_letter, error};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     ConsumeTypedLifecycleInput, MemoryGenerationTarget, RegisterTypedSourceInput,
     resolve_active_generation,
@@ -19,7 +20,7 @@ pub(super) async fn process(
         Ok(processed) => Ok(processed),
         Err(_failure) if input.shutdown.is_cancelled() => Ok(false),
         Err(failure) => {
-            dead_letter(root, entry, failure.code, &(input.clock)())?;
+            dead_letter(root, entry, failure.code(), &(input.clock)())?;
             Ok(false)
         }
     }
@@ -35,7 +36,7 @@ async fn process_current(
     let kind = match source["kind"].as_str() {
         Some("task_report") => "task_report",
         Some("explicit_record") if source["record_kind"] == "rule" => "explicit_record",
-        _ => return Err(error("memory_sync_source_unavailable")),
+        _ => return Err(error(CognitionCode::MemorySyncSourceUnavailable)),
     };
     let record_id = required(source, "record_id")?;
     let revision = required(source, "revision")?;
@@ -58,7 +59,7 @@ async fn process_current(
             Some(TypedMemoryLifecycle::Forgotten) => TypedMemoryLifecycle::Forgotten,
             Some(TypedMemoryLifecycle::Superseded) => TypedMemoryLifecycle::Superseded,
             Some(TypedMemoryLifecycle::Current) | None => {
-                return Err(error("memory_source_changed"));
+                return Err(error(CognitionCode::MemorySourceChanged));
             }
         };
         input
@@ -76,7 +77,7 @@ async fn process_current(
             .await?;
         return super::super::super::queue::ack(root, job_id);
     }
-    let owner = owner.ok_or_else(|| error("memory_source_changed"))?;
+    let owner = owner.ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
     let progress = input
         .registration
         .register_typed_source(RegisterTypedSourceInput {
@@ -103,5 +104,5 @@ fn required<'a>(source: &'a Value, key: &str) -> crate::cognition::CognitionResu
     source[key]
         .as_str()
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| error("memory_sync_entry_invalid"))
+        .ok_or_else(|| error(CognitionCode::MemorySyncEntryInvalid))
 }

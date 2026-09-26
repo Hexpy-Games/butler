@@ -65,7 +65,10 @@ impl FeedbackResolvePort for LockProbe {
                 ))
                 .map_err(CognitionError::from)?
                 .ok_or_else(|| {
-                    CognitionError::new("test_lock_busy", "KnowHow held the lock during resolve")
+                    CognitionError::relayed(
+                        "test_lock_busy",
+                        "KnowHow held the lock during resolve",
+                    )
                 })?;
             lease.release(true).map_err(CognitionError::from)?;
             self.resolved

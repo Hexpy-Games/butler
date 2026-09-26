@@ -1,5 +1,6 @@
 //! Source-compatible legacy memory vectors, never the active generation store.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -52,7 +53,7 @@ impl LegacyLanceWriter {
     ) -> impl std::future::Future<Output = CognitionResult<usize>> + Send + 'a {
         let lease_check = lease
             .assert_for_path(&self.paths.consolidation_lock(&self.data_root))
-            .map_err(|_| error("memory_write_busy"));
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         async move {
             lease_check?;
             validate_rows(session_id, rows)?;
@@ -70,39 +71,36 @@ impl LegacyLanceWriter {
 
             // The connect may create the database directory. It is deliberately
             // below both DATA authority and the held write gate.
-            let connection = lance_store::connect(&lance_root)
-                .await
-                .map_err(|_| error("legacy_vector_store_unavailable"))?;
+            let connection = lance_store::connect(&lance_root).await.map_err(|source| {
+                error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+            })?;
             let table = match lance_store::open(&connection, TABLE).await {
                 Ok(table) => table,
                 Err(lancedb::Error::TableNotFound { .. }) => connection
                     .create_empty_table(TABLE, expected_schema.clone())
                     .execute()
                     .await
-                    .map_err(|_| error("legacy_vector_store_unavailable"))?,
-                Err(_) => return Err(error("legacy_vector_store_unavailable")),
+                    .map_err(|source| {
+                        error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+                    })?,
+                Err(_) => return Err(error(CognitionCode::LegacyVectorStoreUnavailable)),
             };
-            let actual_schema = table
-                .schema()
-                .await
-                .map_err(|_| error("legacy_vector_store_unavailable"))?;
+            let actual_schema = table.schema().await.map_err(|source| {
+                error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+            })?;
             if !same_columns(&actual_schema, &expected_schema) {
-                return Err(error("legacy_vector_schema_mismatch"));
+                return Err(error(CognitionCode::LegacyVectorSchemaMismatch));
             }
             let predicate = format!("session_id = '{session_id}'");
-            table
-                .delete(&predicate)
-                .await
-                .map_err(|_| error("legacy_vector_store_unavailable"))?;
-            table
-                .add(batch)
-                .execute()
-                .await
-                .map_err(|_| error("legacy_vector_store_unavailable"))?;
-            table
-                .count_rows(None)
-                .await
-                .map_err(|_| error("legacy_vector_store_unavailable"))
+            table.delete(&predicate).await.map_err(|source| {
+                error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+            })?;
+            table.add(batch).execute().await.map_err(|source| {
+                error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+            })?;
+            table.count_rows(None).await.map_err(|source| {
+                error(CognitionCode::LegacyVectorStoreUnavailable).with_source(source)
+            })
         }
     }
 }
@@ -114,7 +112,7 @@ fn validate_rows(session_id: &str, rows: &[LegacyVectorRow]) -> CognitionResult<
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
         || rows.is_empty()
     {
-        return Err(error("legacy_vector_invalid_rows"));
+        return Err(error(CognitionCode::LegacyVectorInvalidRows));
     }
     for (index, row) in rows.iter().enumerate() {
         if row.session_id != session_id
@@ -124,7 +122,7 @@ fn validate_rows(session_id: &str, rows: &[LegacyVectorRow]) -> CognitionResult<
             || row.vector.len() != VECTOR_DIMENSION
             || row.vector.iter().any(|value| !value.is_finite())
         {
-            return Err(error("legacy_vector_invalid_rows"));
+            return Err(error(CognitionCode::LegacyVectorInvalidRows));
         }
     }
     Ok(())
@@ -186,7 +184,8 @@ fn record_batch(rows: &[LegacyVectorRow], schema: &SchemaRef) -> CognitionResult
         strings(|row| &row.topic),
         Arc::new(vectors),
     ];
-    RecordBatch::try_new(schema.clone(), arrays).map_err(|_| error("legacy_vector_invalid_rows"))
+    RecordBatch::try_new(schema.clone(), arrays)
+        .map_err(|source| error(CognitionCode::LegacyVectorInvalidRows).with_source(source))
 }
 
 fn guard_lance_write_paths(data_root: &Path, table_root: &Path) -> CognitionResult<()> {
@@ -206,16 +205,16 @@ fn guard_lance_write_paths(data_root: &Path, table_root: &Path) -> CognitionResu
     for path in &writable {
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(error("memory_data_path_unsafe"));
+                return Err(error(CognitionCode::MemoryDataPathUnsafe));
             }
             Ok(_) => {}
             Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error("memory_data_path_unsafe")),
+            Err(_) => return Err(error(CognitionCode::MemoryDataPathUnsafe)),
         }
     }
     Ok(())
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

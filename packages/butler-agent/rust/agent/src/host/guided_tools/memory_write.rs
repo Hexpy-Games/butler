@@ -60,7 +60,7 @@ fn ingest(owner: &NativeGuidedTools, args: &Map<String, Value>) -> Value {
         task_id,
     ) {
         Ok(result) => task_result(result),
-        Err(error) => cognition_failure(error.code, &error.message),
+        Err(error) => cognition_failure(error.code(), &error.message()),
     }
 }
 
@@ -121,7 +121,7 @@ fn update(
         },
     ) {
         Ok(result) => explicit_result(&result),
-        Err(error) => cognition_failure(error.code, &error.message),
+        Err(error) => cognition_failure(error.code(), &error.message()),
     }
 }
 

@@ -26,6 +26,7 @@ use super::{
     NativeDateParser, NativeProcessEnvironment, NativeProcessModels, ProfileConversationSources,
     SystemIdentity,
 };
+use crate::cognition::BriefingGenerationCode;
 
 pub(super) struct NativeBriefingGeneration {
     generator: BriefingGenerationService,
@@ -161,26 +162,32 @@ impl BriefingInputSource for NativeBriefingSource {
             .local_day_and_minute(epoch_ms)
             .map(|(_, minute)| minute)
             .map_err(|failure| {
-                BriefingGenerationError::new("new_chat_briefing_time_failed", failure.message())
+                BriefingGenerationError::new(
+                    BriefingGenerationCode::NewChatBriefingTimeFailed,
+                    failure.message(),
+                )
+                .with_source(failure)
             })
     }
     fn snapshot(&self) -> BriefingInputFuture<'_> {
         Box::pin(async move {
             let read = self.models.read().await.map_err(|failure| {
                 BriefingGenerationError::new(
-                    "new_chat_briefing_settings_failed",
+                    BriefingGenerationCode::NewChatBriefingSettingsFailed,
                     failure.to_string(),
                 )
+                .with_source(failure)
             })?;
             let app_path = self.app_database_path.clone();
             let app_settings =
                 tokio::task::spawn_blocking(move || read_new_chat_briefing_settings(&app_path))
                     .await
-                    .map_err(|_| {
+                    .map_err(|source| {
                         BriefingGenerationError::new(
-                            "new_chat_briefing_app_read_failed",
+                            BriefingGenerationCode::NewChatBriefingAppReadFailed,
                             "App briefing read worker failed",
                         )
+                        .with_source(source)
                     })?;
             let settings = settings(&read.config, Some(&app_settings), &read.catalog);
             if matches!(settings, BriefingSettings::Unavailable { .. }) {
@@ -201,23 +208,25 @@ impl BriefingInputSource for NativeBriefingSource {
                 .await
                 .map_err(|failure| {
                     BriefingGenerationError::new(
-                        "new_chat_briefing_profile_failed",
+                        BriefingGenerationCode::NewChatBriefingProfileFailed,
                         failure.message(),
                     )
+                    .with_source(failure)
                 })?;
             let app_path = self.app_database_path.clone();
             let app_projects =
                 tokio::task::spawn_blocking(move || read_new_chat_briefing_projects(&app_path))
                     .await
-                    .map_err(|_| {
+                    .map_err(|source| {
                         BriefingGenerationError::new(
-                            "new_chat_briefing_app_read_failed",
+                            BriefingGenerationCode::NewChatBriefingAppReadFailed,
                             "App project read worker failed",
                         )
+                        .with_source(source)
                     })?
                     .map_err(|_| {
                         BriefingGenerationError::new(
-                            "new_chat_briefing_app_read_failed",
+                            BriefingGenerationCode::NewChatBriefingAppReadFailed,
                             "App project snapshot could not be read",
                         )
                     })?;
@@ -245,7 +254,7 @@ impl BriefingInputSource for NativeBriefingSource {
                 .await
                 .map_err(|failure| {
                     BriefingGenerationError::new(
-                        "new_chat_briefing_ledger_failed",
+                        BriefingGenerationCode::NewChatBriefingLedgerFailed,
                         format!("{failure:?}"),
                     )
                 })?

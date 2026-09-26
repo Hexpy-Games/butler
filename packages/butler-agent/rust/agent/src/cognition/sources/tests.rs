@@ -201,7 +201,7 @@ async fn canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_cont
             "2026-09-14T00:00:04.000Z",
         )
         .unwrap_err()
-        .code,
+        .code(),
         "memory_source_not_terminal"
     );
     assert_eq!(plan.rows.len(), 3);
@@ -221,7 +221,7 @@ async fn canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_cont
     assert_eq!(
         hydrate_conversation_source(&current, &invalid_boundary, 1.0)
             .unwrap_err()
-            .code,
+            .code(),
         "memory_source_changed"
     );
     let context = read_prior_public_context(&reader, "cs_source", &plan.rows).unwrap();
@@ -339,7 +339,7 @@ async fn canonical_writer_standalone_preserves_part_order_and_rejects_changed_ha
         "2026-09-14T00:00:04.000Z",
     )
     .unwrap_err();
-    assert_eq!(error.code, "memory_source_changed");
+    assert_eq!(error.code(), "memory_source_changed");
 }
 
 #[tokio::test]

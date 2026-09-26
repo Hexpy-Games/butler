@@ -15,6 +15,7 @@ use super::{
     CognitionError, CognitionPathEnvironment, CognitionResult, active_memory_descriptor_exists,
     mutable_paths::ensure_data_authority,
 };
+use crate::cognition::CognitionCode;
 
 pub(crate) type ConfiguredPhaseFuture<'a> =
     Pin<Box<dyn Future<Output = CognitionResult<Value>> + Send + 'a>>;
@@ -183,11 +184,11 @@ impl ConfiguredCycleService {
                 Err(error) if cancellation.is_cancelled() => {
                     result.aborted = Some("cancelled");
                     result.exit_code = 1;
-                    json!({"phase":phase.name(),"status":"error","duration_ms":duration,"error":{"name":error.code,"message":error.code,"stack_tail":""}})
+                    json!({"phase":phase.name(),"status":"error","duration_ms":duration,"error":{"name":error.code(),"message":error.code(),"stack_tail":""}})
                 }
                 Err(error) => {
                     result.failed_phases.push(phase.name());
-                    json!({"phase":phase.name(),"status":"error","duration_ms":duration,"error":{"name":error.code,"message":error.code,"stack_tail":""}})
+                    json!({"phase":phase.name(),"status":"error","duration_ms":duration,"error":{"name":error.code(),"message":error.code(),"stack_tail":""}})
                 }
             };
             append_event(self.data_root.clone(), root.clone(), event).await?;
@@ -254,20 +255,18 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
         Ok::<(), CognitionError>(())
     })
     .await
-    .map_err(|_| {
+    .map_err(|source| {
         CognitionError::new(
-            "memory_maintenance_log_failed",
+            CognitionCode::MemoryMaintenanceLogFailed,
             "memory_maintenance_log_failed",
         )
+        .with_source(source)
     })?
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn log_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("memory_maintenance_log_failed", error.to_string())
+    CognitionError::new(CognitionCode::MemoryMaintenanceLogFailed, error.to_string())
+        .with_source(error)
 }
 
 #[cfg(test)]

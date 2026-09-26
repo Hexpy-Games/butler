@@ -10,6 +10,7 @@ mod revision;
 #[path = "knowhow_store/tests.rs"]
 mod tests;
 
+use crate::cognition::CognitionCode;
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
 
 use crate::{
@@ -144,7 +145,7 @@ impl KnowHowService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
             let result = operation(root);
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
@@ -154,10 +155,10 @@ impl KnowHowService {
             }
         })
         .await
-        .map_err(|_| error("memory_knowhow_io_failed"))?
+        .map_err(|source| error(CognitionCode::MemoryKnowhowIoFailed).with_source(source))?
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
+fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "KnowHow operation failed")
 }

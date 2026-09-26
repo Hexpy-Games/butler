@@ -37,7 +37,7 @@ impl MemorySourceReferencePort for NativeMemorySourceReader {
                     origin_kind: candidate.origin_kind.clone(),
                 })
             })
-            .map_err(|error| ContextError::port(error.code, error.message.clone(), error))?;
+            .map_err(|error| ContextError::port(error.code(), error.message().clone(), error))?;
         Ok(ResolvedMemorySource {
             scalar: resolved.scalar,
             source_hash: resolved.source_hash,

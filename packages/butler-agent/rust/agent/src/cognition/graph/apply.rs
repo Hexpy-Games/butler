@@ -4,6 +4,7 @@ pub(in crate::cognition::graph) mod context;
 mod edges;
 mod nodes;
 
+use crate::cognition::CognitionCode;
 use context::resolve_quotes;
 use nodes::{insert_alias, insert_claim, record_mention, update_summary, upsert_node};
 
@@ -64,7 +65,7 @@ pub(super) fn commit_meaning(
         .map_err(db_error)?;
     if let Some((old_hash, old_output)) = previous {
         if old_hash != hash || old_output != output_json {
-            return Err(error("memory_meaning_changed"));
+            return Err(error(CognitionCode::MemoryMeaningChanged));
         }
         tx.commit().map_err(db_error)?;
         return Ok(());
@@ -142,7 +143,7 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
         let id = plan
             .refs
             .get(&node.local_ref)
-            .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         upsert_node(
             tx,
             nodes::NodeUpsert {
@@ -195,7 +196,7 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
         let id = plan
             .refs
             .get(&claim.local_ref)
-            .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         upsert_node(
             tx,
             nodes::NodeUpsert {
@@ -258,7 +259,7 @@ fn apply_plan(tx: &Transaction<'_>, application: PlanApplication<'_>) -> Cogniti
             .claims
             .iter()
             .find(|claim| claim.local_ref == relation.claim_ref)
-            .ok_or_else(|| error("memory_extract_invalid_relation"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRelation))?;
         edges::add(
             tx,
             edges::EdgeInput {
@@ -340,13 +341,13 @@ fn assert_candidates_current(
 fn meaning_input_hash(input: &ExtractInput) -> CognitionResult<String> {
     let mut value = serde_json::to_value(input).map_err(json_error)?;
     let Some(object) = value.as_object_mut() else {
-        return Err(json_error("meaning input is not an object"));
+        return Err(CognitionError::new(
+            CognitionCode::MemoryExtractInvalidJson,
+            "meaning input is not an object",
+        ));
     };
     object.insert("candidates".into(), json!([]));
-    Ok(crate::cognition::sources::projection_hash_for_graph(vec![
-        json!("meaning-input"),
-        value,
-    ])?)
+    crate::cognition::sources::projection_hash_for_graph(vec![json!("meaning-input"), value])
 }
 fn increment_graph_revision(tx: &Connection) -> CognitionResult<()> {
     tx.execute(
@@ -359,18 +360,19 @@ fn increment_graph_revision(tx: &Connection) -> CognitionResult<()> {
 fn stringify<T: serde::Serialize>(value: &T) -> CognitionResult<String> {
     crate::json::stringify(&serde_json::to_value(value).map_err(json_error)?).map_err(json_error)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 fn changed() -> CognitionError {
-    error("memory_projection_window_changed")
+    error(CognitionCode::MemoryProjectionWindowChanged)
 }
 fn candidate_changed() -> CognitionError {
-    error("memory_extract_candidate_changed")
+    error(CognitionCode::MemoryExtractCandidateChanged)
 }
 fn source_changed() -> CognitionError {
-    error("memory_source_changed")
+    error(CognitionCode::MemorySourceChanged)
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

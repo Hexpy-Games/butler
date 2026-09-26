@@ -18,6 +18,7 @@ use crate::{
 };
 
 use super::NativeEmbeddingOwner;
+use crate::cognition::CognitionCode;
 
 pub(super) struct NativeLegacySessionSync {
     data_root: PathBuf,
@@ -63,14 +64,14 @@ impl NativeLegacySessionSync {
                 &transcript_root,
             ],
         )
-        .map_err(|failure| failure.code.to_owned())?;
+        .map_err(|failure| failure.code().to_owned())?;
         let mut offsets = tokio::task::spawn_blocking({
             let root = data_root.clone();
             let memory = memory_root.clone();
             move || {
                 std::fs::create_dir_all(memory.join("db")).map_err(|_| {
                     crate::cognition::CognitionError::new(
-                        "legacy_session_offset_write_failed",
+                        CognitionCode::LegacySessionOffsetWriteFailed,
                         "legacy_session_offset_write_failed",
                     )
                 })?;
@@ -79,7 +80,7 @@ impl NativeLegacySessionSync {
         })
         .await
         .map_err(|_| "legacy_session_offset_read_failed".to_owned())?
-        .map_err(|failure| failure.code.to_owned())?;
+        .map_err(|failure| failure.code().to_owned())?;
         let mut sessions = self
             .bindings
             .list_sessions(Some(vec![
@@ -99,7 +100,7 @@ impl NativeLegacySessionSync {
                 normalize_session_id_for_storage(&session.session_id)
             ));
             ensure_data_authority(&data_root, &[&path])
-                .map_err(|failure| failure.code.to_owned())?;
+                .map_err(|failure| failure.code().to_owned())?;
             if !path.exists() {
                 continue;
             }
@@ -124,7 +125,7 @@ impl NativeLegacySessionSync {
             })
             .await
             .map_err(|_| "legacy_transcript_read_failed".to_owned())?
-            .map_err(|failure| failure.code.to_owned())?;
+            .map_err(|failure| failure.code().to_owned())?;
             if !lines.is_empty() {
                 let line_count = lines.len();
                 let (message_count, chunks) =
@@ -136,7 +137,7 @@ impl NativeLegacySessionSync {
                 })
                 .await
                 .map_err(|_| "legacy_query_index_failed".to_owned())?;
-                query.map_err(|failure| failure.code.to_owned())?;
+                query.map_err(|failure| failure.code().to_owned())?;
                 if message_count == 0 {
                     let root = data_root.clone();
                     let memory = memory_root.clone();
@@ -153,7 +154,7 @@ impl NativeLegacySessionSync {
                     })
                     .await
                     .map_err(|_| "legacy_diagnostic_failed".to_owned())?
-                    .map_err(|failure| failure.code.to_owned())?;
+                    .map_err(|failure| failure.code().to_owned())?;
                 }
                 for chunk in chunks {
                     if cancellation.is_cancelled() {
@@ -192,7 +193,7 @@ impl NativeLegacySessionSync {
                             )
                             .await
                             {
-                                eprintln!("[session-sync] hot index failed: {}", failure.code);
+                                eprintln!("[session-sync] hot index failed: {}", failure.code());
                             }
                         }
                         Err(code) => eprintln!("[session-sync] hot save failed: {code}"),
@@ -210,7 +211,7 @@ impl NativeLegacySessionSync {
                         &admission,
                     )
                     .await
-                    .map_err(|failure| failure.code.to_owned())?;
+                    .map_err(|failure| failure.code().to_owned())?;
                 }
             }
             offsets.insert(key, next);
@@ -220,7 +221,7 @@ impl NativeLegacySessionSync {
             tokio::task::spawn_blocking(move || offsets.save(&data_root, &memory_root))
                 .await
                 .map_err(|_| "legacy_session_offset_write_failed".to_owned())?
-                .map_err(|failure| failure.code.to_owned())?;
+                .map_err(|failure| failure.code().to_owned())?;
         }
         println!("[session-sync] legacySessions={visited}");
         Ok(())
@@ -238,7 +239,7 @@ where
             cancellation.cancel();
             // A Lance mutation already admitted must finish while its write lease remains held.
             let _ = future.await;
-            Err(CognitionError::new("legacy_session_index_timeout", "legacy_session_index_timeout"))
+            Err(CognitionError::new(CognitionCode::LegacySessionIndexTimeout, "legacy_session_index_timeout"))
         }
     }
 }

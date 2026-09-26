@@ -1,3 +1,4 @@
+use crate::cognition::CognitionCode;
 use crate::public_text::fixed_regex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -38,7 +39,7 @@ pub(super) fn plan(
 ) -> CognitionResult<ContinuityRecoveryManifest> {
     let project_id = crate::public_text::trim_js_whitespace(project_id);
     if project_id.is_empty() {
-        return Err(error("continuity_recovery_project_required"));
+        return Err(error(CognitionCode::ContinuityRecoveryProjectRequired));
     }
     let cache = hot_cache::project_cache_path(workspace)?;
     let before_body = hot_cache::read_text(&cache)?;
@@ -193,12 +194,15 @@ fn processed_completion_turn_ids(
     if !observations.exists() || !receipts.exists() {
         return Ok(HashSet::new());
     }
-    let files = fs::read_dir(&observations)
-        .map_err(|_| error("continuity_recovery_inventory_read_failed"))?;
+    let files = fs::read_dir(&observations).map_err(|source| {
+        error(CognitionCode::ContinuityRecoveryInventoryReadFailed).with_source(source)
+    })?;
     let mut turns = HashSet::new();
     for file in files {
         let path = file
-            .map_err(|_| error("continuity_recovery_inventory_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::ContinuityRecoveryInventoryReadFailed).with_source(source)
+            })?
             .path();
         ensure_data_authority(data_root, &[&path])?;
         if path.extension().and_then(|value| value.to_str()) != Some("json") {
@@ -320,9 +324,12 @@ fn sha256(value: &[u8]) -> String {
 }
 
 fn conversation_error(error: &crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new("continuity_recovery_inventory_read_failed", error.message())
+    CognitionError::new(
+        CognitionCode::ContinuityRecoveryInventoryReadFailed,
+        error.message(),
+    )
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::cognition::{CognitionError, CognitionResult};
 
 use super::ScopedPromptFeedback;
+use crate::cognition::CognitionCode;
 
 struct Entry {
     id: String,
@@ -18,7 +19,10 @@ struct Entry {
 }
 
 fn error(error: &std::io::Error) -> CognitionError {
-    CognitionError::new("cognition_feedback_read_failed", error.to_string())
+    CognitionError::new(
+        CognitionCode::CognitionFeedbackReadFailed,
+        error.to_string(),
+    )
 }
 
 fn parse(block: &str) -> Entry {

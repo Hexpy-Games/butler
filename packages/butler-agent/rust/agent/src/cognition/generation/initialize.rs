@@ -3,6 +3,7 @@
 pub(super) mod durable;
 mod empty;
 
+use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
 use serde_json::json;
@@ -27,7 +28,7 @@ pub(crate) async fn initialize_empty_memory_generation(
     icu_version: String,
 ) -> CognitionResult<MemoryGenerationHandle> {
     if unicode_version.is_empty() || icu_version.is_empty() {
-        return Err(error("memory_runtime_version_unavailable"));
+        return Err(error(CognitionCode::MemoryRuntimeVersionUnavailable));
     }
     let lock_path = environment.consolidation_lock(&data_root);
     let lease = coordinator
@@ -37,7 +38,7 @@ pub(crate) async fn initialize_empty_memory_generation(
         )
         .await
         .map_err(CognitionError::from)?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = initialize_locked(
         &data_root,
         &environment,
@@ -100,6 +101,6 @@ fn initialize_locked(
     durable::write_json(&memory_root.join("active-generation.json"), &active)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -2,12 +2,17 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::types::CognitionSourceError;
+use crate::cognition::CognitionCode;
 
 pub(in crate::cognition) fn projection_hash(
     values: Vec<Value>,
 ) -> Result<String, CognitionSourceError> {
     let json = crate::json::stringify(&Value::Array(values)).map_err(|error| {
-        CognitionSourceError::new("cognition_source_json_error", error.to_string())
+        crate::cognition::CognitionError::new(
+            CognitionCode::CognitionSourceJsonError,
+            error.to_string(),
+        )
+        .with_source(error)
     })?;
     Ok(sha256(json.as_bytes()))
 }
@@ -30,8 +35,12 @@ pub(super) fn recovered_parts_hash(
     Ok(sha256(json.as_bytes()))
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionSourceError {
-    CognitionSourceError::new("cognition_source_json_error", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionSourceError {
+    crate::cognition::CognitionError::new(
+        CognitionCode::CognitionSourceJsonError,
+        error.to_string(),
+    )
+    .with_source(error)
 }
 
 pub(super) fn sha256(bytes: &[u8]) -> String {

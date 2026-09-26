@@ -1,5 +1,6 @@
 //! One source-current checked vector quantum, sharing the Host embedding owner.
 
+use crate::cognition::CognitionCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{Input, canonical_path, resolve_input_generation};
@@ -57,7 +58,7 @@ pub(super) async fn process(
             && assert_current(input, &generation, &units, true).is_ok()
         {
             let mut graph = GraphRepository::open(&generation.graph_path)?;
-            graph.fail_vector_quantum(&units, failure.code, &(input.clock)())?;
+            graph.fail_vector_quantum(&units, failure.code(), &(input.clock)())?;
             graph.close()?;
         }
     }
@@ -130,11 +131,11 @@ async fn run_claimed(
         })
         || embedded.omitted_count.unwrap_or(0) > 0
     {
-        return Err(error("memory_vector_receipt_mismatch"));
+        return Err(error(CognitionCode::MemoryVectorReceiptMismatch));
     }
     let observed = embedded.metadata;
     if observed.pooling != "cls" {
-        return Err(error("memory_embedding_version_mismatch"));
+        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
     }
     let rows = units
         .iter()
@@ -165,10 +166,10 @@ async fn run_claimed(
         {
             value.clone()
         }
-        _ => return Err(error("memory_embedding_version_mismatch")),
+        _ => return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch)),
     };
     if pinned.version() != observed.version {
-        return Err(error("memory_embedding_version_mismatch"));
+        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
     }
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
     let receipt = store.upsert(&lease, &target, &current, &rows).await?;
@@ -180,7 +181,7 @@ async fn run_claimed(
             .as_ref()
             .is_none_or(|value| value.version() != observed.version)
     {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let mut graph = GraphRepository::open(&current.graph_path)?;
     graph.complete_vector_quantum(units, &receipt, &(input.clock)())?;
@@ -208,11 +209,11 @@ async fn acquire(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     lease
         .assert_for_path(&lock)
-        .map_err(|_| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
     Ok(lease)
 }
 
@@ -222,7 +223,7 @@ fn assert_generation_current(
     require_admission: bool,
 ) -> CognitionResult<()> {
     if require_admission && input.shutdown.is_cancelled() {
-        return Err(error("memory_write_aborted"));
+        return Err(error(CognitionCode::MemoryWriteAborted));
     }
     let target = input
         .target
@@ -232,14 +233,14 @@ fn assert_generation_current(
         });
     let current = resolve_generation(&input.data_root, &input.environment, &target)?;
     if current.generation_id != generation.generation_id {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     if current
         .embedding
         .as_ref()
         .is_some_and(|value| value.native_identity().is_none())
     {
-        return Err(error("memory_embedding_version_mismatch"));
+        return Err(error(CognitionCode::MemoryEmbeddingVersionMismatch));
     }
     ensure_data_authority(&input.data_root, &[&current.root, &current.graph_path])?;
     assert_mutation_authority(&input.data_root, &input.environment, &target, &current)
@@ -261,7 +262,7 @@ fn assert_current(
     let canonical = if requires_conversation {
         Some(
             ConversationSourceReader::open(&canonical_path(generation, &input.data_root))
-                .map_err(|_| error("memory_source_changed"))?,
+                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?,
         )
     } else {
         None
@@ -276,24 +277,24 @@ fn assert_current(
                 kind,
                 record_id,
             )?
-            .ok_or_else(|| error("memory_source_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
             if owner.revision != unit.source_revision || owner.content_hash != unit.source_hash {
-                return Err(error("memory_source_changed"));
+                return Err(error(CognitionCode::MemorySourceChanged));
             }
             continue;
         }
         let reader = canonical
             .as_ref()
-            .ok_or_else(|| error("memory_source_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
         let session_id = unit
             .session_id
             .as_deref()
-            .ok_or_else(|| error("memory_source_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
         let notice = if let Some(turn_id) = unit.source_key.strip_prefix("conversation_turn:") {
             let outcome = reader
                 .read_turn_outcome(turn_id)
-                .map_err(|_| error("memory_source_changed"))?
-                .ok_or_else(|| error("memory_source_changed"))?;
+                .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?
+                .ok_or_else(|| error(CognitionCode::MemorySourceChanged))?;
             ConversationSourceNotice::Turn {
                 session_id,
                 turn_id,
@@ -308,7 +309,7 @@ fn assert_current(
                 extraction_version: &unit.extraction_version,
             }
         } else {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         };
         assert_conversation_source_current(
             reader,
@@ -320,7 +321,7 @@ fn assert_current(
     if let Some(canonical) = canonical {
         canonical
             .close()
-            .map_err(|_| error("memory_source_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?;
     }
     Ok(())
 }
@@ -340,7 +341,7 @@ fn row(
         version,
     );
     let observed = DateTime::parse_from_rfc3339(&unit.source_observed_at)
-        .map_err(|_| error("memory_vector_rows_invalid"))?
+        .map_err(|source| error(CognitionCode::MemoryVectorRowsInvalid).with_source(source))?
         .with_timezone(&Utc)
         .to_rfc3339_opts(SecondsFormat::Millis, true);
     Ok(GenerationVectorRow {
@@ -367,6 +368,6 @@ fn epoch_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

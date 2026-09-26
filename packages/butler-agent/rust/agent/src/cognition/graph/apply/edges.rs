@@ -4,6 +4,7 @@ use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
 use super::{resolve_quotes, stringify};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult,
     extraction::{ExtractInput, ExtractOutput, NodeResolution, QuoteRef},
@@ -156,17 +157,21 @@ fn evidence_rows(
     Ok(())
 }
 fn hash(value: Vec<Value>) -> CognitionResult<String> {
-    Ok(crate::cognition::sources::projection_hash_for_graph(value)?)
+    crate::cognition::sources::projection_hash_for_graph(value)
 }
 fn invalid_ref() -> CognitionError {
-    CognitionError::new("memory_extract_invalid_ref", "memory_extract_invalid_ref")
+    CognitionError::new(
+        CognitionCode::MemoryExtractInvalidRef,
+        "memory_extract_invalid_ref",
+    )
 }
 fn candidate_changed() -> CognitionError {
     CognitionError::new(
-        "memory_extract_candidate_changed",
+        CognitionCode::MemoryExtractCandidateChanged,
         "memory_extract_candidate_changed",
     )
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

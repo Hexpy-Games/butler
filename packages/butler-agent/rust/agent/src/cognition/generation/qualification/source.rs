@@ -8,6 +8,7 @@ use super::{
     io::{self, sha256},
     types::{QueryObservation, SourceBinding, SourceIdentity, SourceObservation, SourceRead},
 };
+use crate::cognition::CognitionCode;
 
 pub(super) struct ReturnedResult<'a> {
     pub result_id: &'a str,
@@ -40,8 +41,9 @@ pub(super) fn memory_inventory_hash(inventory: &Value) -> CognitionResult<String
             .unwrap_or(fallback);
         normalized.insert(field.to_owned(), value);
     }
-    let serialized = crate::json::stringify(&Value::Object(normalized))
-        .map_err(|_| invalid("memory_acceptance_evidence_invalid"))?;
+    let serialized = crate::json::stringify(&Value::Object(normalized)).map_err(|source| {
+        invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+    })?;
     Ok(sha256(serialized.as_bytes()))
 }
 

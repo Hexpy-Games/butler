@@ -19,6 +19,7 @@ use super::{
     response::VectorFacts,
     validate,
 };
+use crate::cognition::CognitionCode;
 
 pub(crate) type DateParsePort = Arc<dyn Fn(&str) -> Option<i64> + Send + Sync>;
 pub(crate) type LocaleComparePort = Arc<dyn Fn(&str, &str) -> Ordering + Send + Sync>;
@@ -52,7 +53,7 @@ impl NativeMemoryRecall {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let closing = self.lifecycle.lock();
             if *closing {
@@ -62,8 +63,9 @@ impl NativeMemoryRecall {
         };
         let root = self.data_root.clone();
         let environment = self.environment.clone();
-        let now = crate::js_date::format_iso_millis((self.clock)())
-            .ok_or_else(|| CognitionError::new("invalid_clock", "Invalid recall clock"))?;
+        let now = crate::js_date::format_iso_millis((self.clock)()).ok_or_else(|| {
+            CognitionError::new(CognitionCode::InvalidClock, "Invalid recall clock")
+        })?;
         let prepared = tokio::task::spawn_blocking(move || {
             let _token = token;
             let _permit = permit;
@@ -78,19 +80,24 @@ impl NativeMemoryRecall {
             )
         })
         .await
-        .map_err(|_| {
-            CognitionError::new("recall_binding_failed", "Recall binding read failed")
+        .map_err(|source| {
+            CognitionError::new(
+                CognitionCode::RecallBindingFailed,
+                "Recall binding read failed",
+            )
+            .with_source(source)
         })??;
         let request = match prepared {
             super::tool::PreparedRecall::BindingFailure(value) => return Ok(value),
             super::tool::PreparedRecall::Request(request) => *request,
         };
         let result = self.recall(request).await?;
-        let mut value = serde_json::to_value(result).map_err(|_| {
+        let mut value = serde_json::to_value(result).map_err(|source| {
             CognitionError::new(
-                "recall_result_encoding_failed",
+                CognitionCode::RecallResultEncodingFailed,
                 "Recall result encoding failed",
             )
+            .with_source(source)
         })?;
         if let Some(object) = value.as_object_mut() {
             object.insert("ok".into(), true.into());
@@ -181,11 +188,12 @@ impl NativeMemoryRecall {
             .await;
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_recall_operation_failed",
+                CognitionCode::MemoryRecallOperationFailed,
                 "memory_recall_operation_failed",
             )
+            .with_source(source)
         })?
     }
 
@@ -219,7 +227,7 @@ async fn operation(
     metrics: Option<Arc<dyn super::metrics::RecallMetricSink>>,
 ) -> CognitionResult<RecallResponse> {
     let _permit = tokio::select! {
-        result=admission.acquire_owned()=>result.map_err(|_|closed())?,
+        result=admission.acquire_owned()=>result.map_err(|source| closed().with_source(source))?,
         ()=shutdown.cancelled()=>return Err(closed()),
     };
     if shutdown.is_cancelled() {
@@ -274,11 +282,11 @@ async fn operation(
                 Ok(Err(error)) => {
                     vector.code =
                         Some(
-                            if error.message.chars().all(|ch| {
+                            if error.message().chars().all(|ch| {
                                 ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'
-                            }) && !error.message.is_empty()
+                            }) && !error.message().is_empty()
                             {
-                                error.message
+                                error.message()
                             } else {
                                 "vector_unavailable".into()
                             },
@@ -324,9 +332,15 @@ async fn operation(
         }
     })
     .await
-    .map_err(|error| CognitionError::new("memory_recall_operation_failed", error.to_string()))?
+    .map_err(|error| {
+        CognitionError::new(
+            CognitionCode::MemoryRecallOperationFailed,
+            error.to_string(),
+        )
+        .with_source(error)
+    })?
 }
 
 fn closed() -> CognitionError {
-    CognitionError::new("memory_recall_closed", "memory_recall_closed")
+    CognitionError::new(CognitionCode::MemoryRecallClosed, "memory_recall_closed")
 }

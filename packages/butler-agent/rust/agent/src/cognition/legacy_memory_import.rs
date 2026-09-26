@@ -1,5 +1,6 @@
 //! Source-shaped command-scoped import planning and marker ownership.
 
+use crate::cognition::CognitionCode;
 use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::Value;
@@ -46,11 +47,11 @@ impl LegacyMemoryImportService {
         let raw = fs::read(&transcript_path).map_err(|failure| {
             if failure.kind() == std::io::ErrorKind::NotFound {
                 CognitionError::new(
-                    "not_found",
+                    CognitionCode::NotFound,
                     format!("transcript not found for session: {requested_session_id}"),
                 )
             } else {
-                error("memory_transcript_read_failed")
+                error(CognitionCode::MemoryTranscriptReadFailed)
             }
         })?;
         let content = String::from_utf8_lossy(&raw);
@@ -122,7 +123,7 @@ impl LegacyMemoryImportService {
         let content = match fs::read(&path) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(_) => return Err(error("memory_import_marker_read_failed")),
+            Err(_) => return Err(error(CognitionCode::MemoryImportMarkerReadFailed)),
         };
         Ok(content
             .lines()
@@ -133,16 +134,20 @@ impl LegacyMemoryImportService {
         let memory_root = self.paths.memory_root(&self.data_root);
         let db_root = memory_root.join("db");
         ensure_data_authority(&self.data_root, &[&memory_root, &db_root])?;
-        fs::create_dir_all(&db_root).map_err(|_| error("memory_import_marker_write_failed"))
+        fs::create_dir_all(&db_root).map_err(|source| {
+            error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+        })
     }
 
     pub(crate) fn mark_imported(&self, session_id: &str) -> CognitionResult<()> {
         let path = self.imported_marker_path();
         let parent = path
             .parent()
-            .ok_or_else(|| error("memory_import_marker_write_failed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryImportMarkerWriteFailed))?;
         ensure_data_authority(&self.data_root, &[parent, &path])?;
-        fs::create_dir_all(parent).map_err(|_| error("memory_import_marker_write_failed"))?;
+        fs::create_dir_all(parent).map_err(|source| {
+            error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+        })?;
         let mut options = fs::OpenOptions::new();
         options.append(true).create(true);
         #[cfg(unix)]
@@ -150,10 +155,12 @@ impl LegacyMemoryImportService {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(path)
-            .map_err(|_| error("memory_import_marker_write_failed"))?;
-        writeln!(file, "{session_id}").map_err(|_| error("memory_import_marker_write_failed"))
+        let mut file = options.open(path).map_err(|source| {
+            error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+        })?;
+        writeln!(file, "{session_id}").map_err(|source| {
+            error(CognitionCode::MemoryImportMarkerWriteFailed).with_source(source)
+        })
     }
 
     fn imported_marker_path(&self) -> PathBuf {
@@ -221,7 +228,7 @@ fn resolve_project_key(data_root: &std::path::Path, raw: &str) -> CognitionResul
     let config = match fs::read(&config_path) {
         Ok(bytes) => serde_json::from_slice::<Value>(&bytes).ok(),
         Err(failure) if failure.kind() == std::io::ErrorKind::NotFound => None,
-        Err(_) => return Err(error("memory_project_registry_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryProjectRegistryReadFailed)),
     };
     let projects = match config.as_ref().and_then(|value| value.get("projects")) {
         Some(Value::Array(projects)) => projects.iter().collect::<Vec<_>>(),
@@ -283,6 +290,6 @@ fn encode_project_path_key(path: &std::path::Path) -> String {
         .collect()
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

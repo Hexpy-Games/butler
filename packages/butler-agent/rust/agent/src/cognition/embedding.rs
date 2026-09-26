@@ -21,8 +21,36 @@ const ORT_WRAPPER_VERSION: &str = "2.0.0-rc.13";
 const MAX_EMBEDDINGS: usize = 32;
 const EXPECTED_DIMENSION: usize = 1024;
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct EmbeddingFailure(pub(crate) &'static str);
+/// A failure of the private embedding worker. Only `code` crosses the worker
+/// protocol; the source stays in the worker for diagnostics.
+#[derive(Debug, thiserror::Error)]
+#[error("{code}")]
+pub(crate) struct EmbeddingFailure {
+    code: &'static str,
+    #[source]
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
+
+impl EmbeddingFailure {
+    fn new(code: &'static str) -> Self {
+        Self { code, source: None }
+    }
+
+    fn caused<E>(code: &'static str) -> impl FnOnce(E) -> Self
+    where
+        E: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        move |source| Self {
+            code,
+            source: Some(source.into()),
+        }
+    }
+
+    /// The worker protocol code.
+    pub(crate) fn code(&self) -> &'static str {
+        self.code
+    }
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct NativeEmbeddingIdentity {
@@ -87,7 +115,7 @@ impl NativeEmbeddingEngine {
                 &model_file,
             ],
         )
-        .map_err(|_| EmbeddingFailure("embed_asset_path_unsafe"))?;
+        .map_err(EmbeddingFailure::caused("embed_asset_path_unsafe"))?;
         for path in [
             &tokenizer_file,
             &tokenizer_config,
@@ -95,17 +123,17 @@ impl NativeEmbeddingEngine {
             &model_file,
         ] {
             if !path.is_file() {
-                return Err(EmbeddingFailure("embed_asset_unavailable"));
+                return Err(EmbeddingFailure::new("embed_asset_unavailable"));
             }
         }
         let tokenizer_asset_sha256 =
             aggregate_hash(&root, &["tokenizer.json", "tokenizer_config.json"])?;
         let model_asset_sha256 = aggregate_hash(&root, &["config.json", MODEL_FILE])?;
         let mut strict_tokenizer = Tokenizer::from_file(&tokenizer_file)
-            .map_err(|_| EmbeddingFailure("embed_tokenizer_unavailable"))?;
+            .map_err(EmbeddingFailure::caused("embed_tokenizer_unavailable"))?;
         strict_tokenizer
             .with_truncation(None)
-            .map_err(|_| EmbeddingFailure("embed_tokenizer_unavailable"))?;
+            .map_err(EmbeddingFailure::caused("embed_tokenizer_unavailable"))?;
         strict_tokenizer.with_padding(None);
         let max_tokens = [
             positive_json_integer(&tokenizer_config, "model_max_length"),
@@ -114,18 +142,19 @@ impl NativeEmbeddingEngine {
         .into_iter()
         .flatten()
         .min()
-        .ok_or(EmbeddingFailure("embed_tokenizer_limit_unavailable"))?;
+        .ok_or(EmbeddingFailure::new("embed_tokenizer_limit_unavailable"))?;
         let builder =
-            Session::builder().map_err(|_| EmbeddingFailure("embed_model_unavailable"))?;
+            Session::builder().map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
+        // Builder errors own the (non-Send) builder, so they cannot be kept.
         let builder = builder
             .with_intra_threads(1)
-            .map_err(|_| EmbeddingFailure("embed_model_unavailable"))?;
+            .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
         let mut builder = builder
             .with_inter_threads(1)
-            .map_err(|_| EmbeddingFailure("embed_model_unavailable"))?;
+            .map_err(|_builder_error| EmbeddingFailure::new("embed_model_unavailable"))?;
         let session = builder
             .commit_from_file(&model_file)
-            .map_err(|_| EmbeddingFailure("embed_model_unavailable"))?;
+            .map_err(EmbeddingFailure::caused("embed_model_unavailable"))?;
         if session.inputs().is_empty()
             || session.inputs().iter().any(|input| {
                 !matches!(
@@ -134,7 +163,7 @@ impl NativeEmbeddingEngine {
                 )
             })
         {
-            return Err(EmbeddingFailure("embed_model_input_unsupported"));
+            return Err(EmbeddingFailure::new("embed_model_input_unsupported"));
         }
         let runtime_build_info_sha256 = hash_bytes(ort::info().as_bytes());
         let mut checked_identity = NativeEmbeddingIdentity {
@@ -157,7 +186,7 @@ impl NativeEmbeddingEngine {
         };
         checked_identity.version = hash_bytes(
             &serde_json::to_vec(&checked_identity)
-                .map_err(|_| EmbeddingFailure("embed_identity_invalid"))?,
+                .map_err(EmbeddingFailure::caused("embed_identity_invalid"))?,
         );
         let mut unchecked_identity = checked_identity.clone();
         unchecked_identity.preprocessing =
@@ -167,7 +196,7 @@ impl NativeEmbeddingEngine {
         unchecked_identity.version.clear();
         unchecked_identity.version = hash_bytes(
             &serde_json::to_vec(&unchecked_identity)
-                .map_err(|_| EmbeddingFailure("embed_identity_invalid"))?,
+                .map_err(EmbeddingFailure::caused("embed_identity_invalid"))?,
         );
         Ok(Self {
             strict_tokenizer,
@@ -207,10 +236,10 @@ impl NativeEmbeddingEngine {
             || texts.len() > MAX_EMBEDDINGS
             || (checked && texts.iter().any(String::is_empty))
         {
-            return Err(EmbeddingFailure("embed_invalid_request"));
+            return Err(EmbeddingFailure::new("embed_invalid_request"));
         }
         if max_embeddings.is_some_and(|n| n == 0 || n > MAX_EMBEDDINGS) {
-            return Err(EmbeddingFailure("embed_invalid_request"));
+            return Err(EmbeddingFailure::new("embed_invalid_request"));
         }
         let prepared = if checked && resplit {
             self.resplit(texts)?
@@ -218,7 +247,7 @@ impl NativeEmbeddingEngine {
             texts.to_vec()
         };
         if prepared.len() > MAX_EMBEDDINGS && max_embeddings.is_none() {
-            return Err(EmbeddingFailure("embed_request_too_large"));
+            return Err(EmbeddingFailure::new("embed_request_too_large"));
         }
         let limit = max_embeddings.unwrap_or(prepared.len()).min(prepared.len());
         let omitted_count = prepared.len() - limit;
@@ -228,7 +257,7 @@ impl NativeEmbeddingEngine {
         for text in &embedded_texts {
             let mut encoded = self.encode(text)?;
             if checked && encoded.len() > self.max_tokens {
-                return Err(EmbeddingFailure("embed_input_too_long"));
+                return Err(EmbeddingFailure::new("embed_input_too_long"));
             }
             if !checked && encoded.len() > self.max_tokens {
                 // transformers.js 3.8.1 truncates the already postprocessed
@@ -255,7 +284,7 @@ impl NativeEmbeddingEngine {
     fn encode(&self, text: &str) -> Result<Encoding, EmbeddingFailure> {
         self.strict_tokenizer
             .encode(text, true)
-            .map_err(|_| EmbeddingFailure("embed_tokenization_failed"))
+            .map_err(EmbeddingFailure::caused("embed_tokenization_failed"))
     }
 
     fn resplit(&self, texts: &[String]) -> Result<Vec<String>, EmbeddingFailure> {
@@ -267,14 +296,14 @@ impl NativeEmbeddingEngine {
             } else {
                 let graphemes: Vec<&str> = text.graphemes(true).collect();
                 if graphemes.len() <= 1 {
-                    return Err(EmbeddingFailure("embed_grapheme_too_long"));
+                    return Err(EmbeddingFailure::new("embed_grapheme_too_long"));
                 }
                 let mid = graphemes.len().div_ceil(2);
                 pending.push(graphemes[mid..].concat());
                 pending.push(graphemes[..mid].concat());
             }
             if pending.len() + result.len() > 1024 {
-                return Err(EmbeddingFailure("embed_resplit_limit"));
+                return Err(EmbeddingFailure::new("embed_resplit_limit"));
             }
         }
         Ok(result)
@@ -288,33 +317,33 @@ impl NativeEmbeddingEngine {
                 "input_ids" => encoded.get_ids(),
                 "attention_mask" => encoded.get_attention_mask(),
                 "token_type_ids" => encoded.get_type_ids(),
-                _ => return Err(EmbeddingFailure("embed_model_input_unsupported")),
+                _ => return Err(EmbeddingFailure::new("embed_model_input_unsupported")),
             }
             .iter()
             .map(|value| i64::from(*value))
             .collect();
             let tensor = Tensor::from_array(([1usize, len], values))
-                .map_err(|_| EmbeddingFailure("embed_inference_failed"))?;
+                .map_err(EmbeddingFailure::caused("embed_inference_failed"))?;
             inputs.push((input.name().to_owned(), tensor));
         }
         let outputs = self
             .session
             .run(inputs)
-            .map_err(|_| EmbeddingFailure("embed_inference_failed"))?;
+            .map_err(EmbeddingFailure::caused("embed_inference_failed"))?;
         let output = ["last_hidden_state", "logits", "token_embeddings"]
             .into_iter()
             .find_map(|name| outputs.get(name))
-            .ok_or(EmbeddingFailure("embed_output_invalid"))?;
+            .ok_or(EmbeddingFailure::new("embed_output_invalid"))?;
         let (shape, data) = output
             .try_extract_tensor::<f32>()
-            .map_err(|_| EmbeddingFailure("embed_output_invalid"))?;
+            .map_err(EmbeddingFailure::caused("embed_output_invalid"))?;
         if shape.len() != 3
             || shape[0] != 1
             || shape[1] != i64::try_from(len).unwrap_or(i64::MAX)
             || shape[2] != i64::try_from(EXPECTED_DIMENSION).unwrap_or(i64::MAX)
             || data.len() != len * EXPECTED_DIMENSION
         {
-            return Err(EmbeddingFailure("embed_dimension_invalid"));
+            return Err(EmbeddingFailure::new("embed_dimension_invalid"));
         }
         let mut vector = vec![0.0_f32; EXPECTED_DIMENSION];
         if checked {
@@ -323,7 +352,7 @@ impl NativeEmbeddingEngine {
             let mask = encoded.get_attention_mask();
             let count: u32 = mask.iter().sum();
             if count == 0 {
-                return Err(EmbeddingFailure("embed_output_invalid"));
+                return Err(EmbeddingFailure::new("embed_output_invalid"));
             }
             for (position, active) in mask.iter().enumerate() {
                 if *active == 0 {
@@ -340,7 +369,7 @@ impl NativeEmbeddingEngine {
             .map(|value| f64::from(*value) * f64::from(*value))
             .sum();
         if !squared.is_finite() || squared <= 0.0 {
-            return Err(EmbeddingFailure("embed_output_invalid"));
+            return Err(EmbeddingFailure::new("embed_output_invalid"));
         }
         #[expect(
             clippy::cast_possible_truncation,
@@ -351,7 +380,7 @@ impl NativeEmbeddingEngine {
             *value /= norm;
         }
         if vector.iter().any(|value| !value.is_finite()) {
-            return Err(EmbeddingFailure("embed_output_invalid"));
+            return Err(EmbeddingFailure::new("embed_output_invalid"));
         }
         Ok(vector)
     }
@@ -371,7 +400,7 @@ fn aggregate_hash(root: &Path, files: &[&str]) -> Result<String, EmbeddingFailur
     for relative in files {
         let digest = hash_file(&root.join(relative))?;
         let pair = serde_json::to_vec(&(relative, digest))
-            .map_err(|_| EmbeddingFailure("embed_asset_identity_unavailable"))?;
+            .map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
         aggregate.update(pair);
     }
     Ok(format!("{:x}", aggregate.finalize()))
@@ -379,13 +408,13 @@ fn aggregate_hash(root: &Path, files: &[&str]) -> Result<String, EmbeddingFailur
 
 fn hash_file(path: &PathBuf) -> Result<String, EmbeddingFailure> {
     let mut file =
-        File::open(path).map_err(|_| EmbeddingFailure("embed_asset_identity_unavailable"))?;
+        File::open(path).map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
     let mut digest = Sha256::new();
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let count = file
             .read(&mut buffer)
-            .map_err(|_| EmbeddingFailure("embed_asset_identity_unavailable"))?;
+            .map_err(EmbeddingFailure::caused("embed_asset_identity_unavailable"))?;
         if count == 0 {
             break;
         }

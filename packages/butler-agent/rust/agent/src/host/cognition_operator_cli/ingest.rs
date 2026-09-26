@@ -28,11 +28,11 @@ pub(super) async fn run(
     let importer = LegacyMemoryImportService::new(data_root.clone(), paths.clone());
     let mut plan = importer
         .plan(session_id)
-        .map_err(|error| CliError::failed(error.code, error.message))?;
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
     let project = bound_project(&data_root, &plan).await?;
     importer
         .resolve_project(&mut plan, project.as_deref())
-        .map_err(|error| CliError::failed(error.code, error.message))?;
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
     let mut data = plan_data(&plan, dry_run);
     if dry_run {
         return Ok((
@@ -48,11 +48,11 @@ pub(super) async fn run(
 
     importer
         .prepare_apply()
-        .map_err(|error| CliError::failed(error.code, error.message))?;
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
     if plan.message_count == 0
         || importer
             .already_imported(&plan.session_id)
-            .map_err(|error| CliError::failed(error.code, error.message))?
+            .map_err(|error| CliError::failed(error.code(), error.message()))?
     {
         data["applied"] = json!(true);
         return Ok((
@@ -114,7 +114,7 @@ pub(super) async fn run(
         {
             Ok(text) => text,
             Err(error) => {
-                warnings.push(warning(&chunk.chunk_id, "hot_cache", error.code));
+                warnings.push(warning(&chunk.chunk_id, "hot_cache", error.code()));
                 record_raw_graph(
                     &data_root,
                     &paths,
@@ -150,7 +150,7 @@ pub(super) async fn run(
                     )
                     .await
                 {
-                    warnings.push(warning(&chunk.chunk_id, "hot_index", error.code));
+                    warnings.push(warning(&chunk.chunk_id, "hot_index", error.code()));
                 }
             }
             Err(code) => warnings.push(warning(&chunk.chunk_id, "embedding_setup", &code)),
@@ -167,11 +167,11 @@ pub(super) async fn run(
 
     let marker_result = importer
         .mark_imported(&plan.session_id)
-        .map_err(|error| CliError::failed(error.code, error.message));
+        .map_err(|error| CliError::failed(error.code(), error.message()));
     if let Some(embedding) = embedding
         && let Err(error) = embedding.close().await
     {
-        warnings.push(warning(&plan.session_id, "embedding_close", error.code));
+        warnings.push(warning(&plan.session_id, "embedding_close", error.code()));
     }
     marker_result?;
     data["applied"] = json!(true);
@@ -210,7 +210,7 @@ async fn bound_project(
     let path = session_store_path(data_root);
     let runtime = data_root.join("runtime");
     ensure_data_authority(data_root, &[&runtime, &path])
-        .map_err(|error| CliError::failed(error.code, error.message))?;
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
     let store = SessionBindingStore::open(SessionBindingStoreConfig {
         path,
         storage_profile: WorkspaceStorageProfile::Durable,
@@ -320,7 +320,7 @@ fn ensure_index_owner<'a>(
             None => embedding
                 .insert(Arc::new(
                     crate::host::NativeEmbeddingOwner::new(data_root.to_owned())
-                        .map_err(|error| error.code)?,
+                        .map_err(|error| error.code())?,
                 ))
                 .clone(),
         };
@@ -352,7 +352,7 @@ fn record_raw_graph(
         &plan.project,
     ) {
         Ok(count) => *graph_count += count,
-        Err(error) => warnings.push(warning(&chunk.chunk_id, "graph_extract", error.code)),
+        Err(error) => warnings.push(warning(&chunk.chunk_id, "graph_extract", error.code())),
     }
 }
 

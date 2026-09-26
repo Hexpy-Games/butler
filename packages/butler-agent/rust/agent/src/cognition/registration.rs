@@ -24,6 +24,7 @@ use super::{
 use crate::conversation::ConversationSourceReader;
 use crate::coordination::{CognitionWriteAcquire, CognitionWriteCoordinator, CognitionWriteLease};
 
+use crate::cognition::CognitionCode;
 pub(crate) use projection::{ProjectSemanticWindowInput, ProjectionSourceNotice};
 pub(crate) use typed::RegisterTypedSourceInput;
 pub(crate) use types::OwnedConversationSourceNotice as CognitionConversationSourceNotice;
@@ -115,7 +116,7 @@ impl CognitionRegistrationService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
@@ -137,11 +138,12 @@ impl CognitionRegistrationService {
             let result = operation(environment, coordinator, clock, shutdown, input).await;
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_registration_operation_failed",
+                CognitionCode::MemoryRegistrationOperationFailed,
                 "memory_registration_operation_failed",
             )
+            .with_source(source)
         })?
     }
 
@@ -415,7 +417,7 @@ async fn acquire(
             result = acquire => result.map_err(CognitionError::from)?,
         }
     };
-    lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))
+    lease.ok_or_else(|| CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy"))
 }
 
 fn mutate<T>(
@@ -451,23 +453,26 @@ fn check_cancelled(
 }
 
 fn aborted() -> CognitionError {
-    CognitionError::new("memory_projection_aborted", "memory_projection_aborted")
+    CognitionError::new(
+        CognitionCode::MemoryProjectionAborted,
+        "memory_projection_aborted",
+    )
 }
 fn write_aborted() -> CognitionError {
     CognitionError::new(
-        "memory_write_aborted",
+        CognitionCode::MemoryWriteAborted,
         "Memory writer acquisition was aborted",
     )
 }
 fn closed() -> CognitionError {
-    CognitionError::new("cognition_closed", "cognition_closed")
+    CognitionError::new(CognitionCode::CognitionClosed, "cognition_closed")
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
-    CognitionError::new("memory_registration_operation_failed", error.to_string())
+    CognitionError::new(
+        CognitionCode::MemoryRegistrationOperationFailed,
+        error.to_string(),
+    )
+    .with_source(error)
 }
 
 #[cfg(test)]

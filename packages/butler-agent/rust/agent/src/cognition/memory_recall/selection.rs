@@ -8,6 +8,7 @@ use std::{
     path::Path,
 };
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionResult, MemoryGenerationHandle,
     graph::{
@@ -96,7 +97,11 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
         .map(|reader| reader.read_recent_public_message_ids(&input.runtime.session_id))
         .transpose()
         .map_err(|error| {
-            crate::cognition::CognitionError::new("canonical_source_unavailable", error.to_string())
+            crate::cognition::CognitionError::new(
+                CognitionCode::CanonicalSourceUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)
         })?
         .unwrap_or_default();
     let semantic = graph.semantic_seeds(

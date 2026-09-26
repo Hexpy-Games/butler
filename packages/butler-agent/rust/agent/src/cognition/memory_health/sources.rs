@@ -15,6 +15,7 @@ use crate::{
 };
 
 use super::{MaintenanceStatus, MemoryHealthReport, error, maintenance};
+use crate::cognition::CognitionCode;
 
 const STALE_AFTER_MS: i64 = 7 * 24 * 60 * 60 * 1_000;
 #[derive(Default)]
@@ -246,11 +247,12 @@ fn scan_files(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(FileStats::default());
         }
-        Err(_) => return Err(error("memory_health_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemoryHealthReadFailed)),
     };
     let mut stats = FileStats::default();
     for row in rows {
-        let row = row.map_err(|_| error("memory_health_read_failed"))?;
+        let row =
+            row.map_err(|source| error(CognitionCode::MemoryHealthReadFailed).with_source(source))?;
         let name = row.file_name();
         let name = name.to_string_lossy();
         if !name.ends_with(suffix) || excluded_name == Some(name.as_ref()) {

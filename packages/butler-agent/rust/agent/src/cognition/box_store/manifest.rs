@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 use crate::cognition::{CognitionError, CognitionResult};
 
 use super::{error, paths};
+use crate::cognition::CognitionCode;
 
 pub(super) const ITEM_SCHEMA: &str = "butler.cognition.box.item.v1";
 
@@ -219,12 +220,12 @@ pub(super) fn read_manifest_for_dir(
     let Some((value, _)) = read_manifest_value_for_dir(root, item_dir)? else {
         return Ok(None);
     };
-    let manifest: BoxManifest =
-        serde_json::from_value(value).map_err(|_| error("memory_box_manifest_invalid"))?;
+    let manifest: BoxManifest = serde_json::from_value(value)
+        .map_err(|source| error(CognitionCode::MemoryBoxManifestInvalid).with_source(source))?;
     let issues = validate_manifest(&manifest, expected_id);
     if !issues.is_empty() {
         return Err(CognitionError::new(
-            "memory_box_manifest_invalid",
+            CognitionCode::MemoryBoxManifestInvalid,
             issues.join("; "),
         ));
     }
@@ -244,13 +245,13 @@ pub(super) fn read_manifest_value_for_dir(
         return Ok(None);
     };
     let value = serde_json::from_reader(BufReader::new(file))
-        .map_err(|_| error("memory_box_manifest_invalid"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxManifestInvalid).with_source(source))?;
     Ok(Some((value, path)))
 }
 
 pub(super) fn manifest_exists(root: &Path, id: &str) -> CognitionResult<bool> {
     if !paths::safe_item_id(id) {
-        return Err(error("memory_box_manifest_id_invalid"));
+        return Err(error(CognitionCode::MemoryBoxManifestIdInvalid));
     }
     let item_dir = root.join("items").join(id);
     let Some(items_root) = paths::canonical_items_root(root)? else {
@@ -258,7 +259,7 @@ pub(super) fn manifest_exists(root: &Path, id: &str) -> CognitionResult<bool> {
     };
     let item_root = match paths::canonical_item_root(&items_root, &item_dir) {
         Ok(path) => path,
-        Err(error) if error.code == "memory_box_manifest_missing" => return Ok(false),
+        Err(error) if error.code() == "memory_box_manifest_missing" => return Ok(false),
         Err(error) => return Err(error),
     };
     let path = item_dir.join("manifest.json");
@@ -267,7 +268,7 @@ pub(super) fn manifest_exists(root: &Path, id: &str) -> CognitionResult<bool> {
     };
     serde_json::from_reader::<_, Value>(BufReader::new(file))
         .map(|_| true)
-        .map_err(|_| error("memory_box_manifest_invalid"))
+        .map_err(|source| error(CognitionCode::MemoryBoxManifestInvalid).with_source(source))
 }
 
 pub(super) fn validate_manifest(manifest: &BoxManifest, expected_id: &str) -> Vec<String> {
@@ -293,7 +294,7 @@ pub(super) fn validate_manifest(manifest: &BoxManifest, expected_id: &str) -> Ve
 
 pub(super) fn write_manifest_value(path: &Path, manifest: &Value) -> CognitionResult<()> {
     let mut bytes = serde_json::to_vec_pretty(manifest)
-        .map_err(|_| error("memory_box_manifest_write_failed"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source))?;
     bytes.push(b'\n');
     let parent = path
         .parent()
@@ -302,7 +303,7 @@ pub(super) fn write_manifest_value(path: &Path, manifest: &Value) -> CognitionRe
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
-        .ok_or_else(|| error("memory_box_manifest_write_failed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryBoxManifestWriteFailed))?;
     let temporary = parent.join(format!("{file_name}.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -312,18 +313,24 @@ pub(super) fn write_manifest_value(path: &Path, manifest: &Value) -> CognitionRe
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| error("memory_box_manifest_write_failed"))?;
-        file.write_all(&bytes)
-            .map_err(|_| error("memory_box_manifest_write_failed"))?;
-        file.sync_all()
-            .map_err(|_| error("memory_box_manifest_write_failed"))?;
-        fs::rename(&temporary, path).map_err(|_| error("memory_box_manifest_write_failed"))?;
+        let mut file = options.open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
+        file.write_all(&bytes).map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
+        file.sync_all().map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+        })?;
         #[cfg(unix)]
         File::open(parent)
             .and_then(|directory| directory.sync_all())
-            .map_err(|_| error("memory_box_manifest_write_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryBoxManifestWriteFailed).with_source(source)
+            })?;
         Ok(())
     })();
     if result.is_err() {

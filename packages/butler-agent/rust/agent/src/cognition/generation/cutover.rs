@@ -5,6 +5,7 @@ mod descriptor;
 mod qualification;
 mod rollback;
 
+use crate::cognition::CognitionCode;
 use std::{fs, path::Path, sync::Arc};
 
 use serde_json::Value;
@@ -49,7 +50,7 @@ pub(crate) async fn repair_pending(
         return Ok(());
     }
     if target_manifest["state"] != "active" && previous_manifest["state"] != "active" {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let lease = coordinator
         .acquire(
@@ -62,10 +63,10 @@ pub(crate) async fn repair_pending(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = if cancellation.is_cancelled() {
-        Err(error("memory_operation_aborted"))
+        Err(error(CognitionCode::MemoryOperationAborted))
     } else {
         descriptor::reconcile_committed_manifest_states(
             data_root,
@@ -76,7 +77,7 @@ pub(crate) async fn repair_pending(
     };
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result?;
     released
 }
@@ -97,13 +98,14 @@ fn manifest_path(
 }
 
 fn read_manifest(path: &Path, generation_id: &str) -> CognitionResult<(Value, String)> {
-    let bytes = fs::read(path).map_err(|_| error("memory_generation_unavailable"))?;
-    let manifest: Value =
-        serde_json::from_slice(&bytes).map_err(|_| error("memory_generation_unavailable"))?;
+    let bytes = fs::read(path)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
+    let manifest: Value = serde_json::from_slice(&bytes)
+        .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))?;
     if manifest["schema"] != "butler.memory-generation.v2"
         || manifest["generation_id"] != generation_id
     {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     Ok((manifest, format!("{:x}", Sha256::digest(bytes))))
 }
@@ -111,9 +113,9 @@ fn read_manifest(path: &Path, generation_id: &str) -> CognitionResult<(Value, St
 fn field<'a>(value: &'a Value, key: &str) -> CognitionResult<&'a str> {
     value[key]
         .as_str()
-        .ok_or_else(|| error("memory_generation_changed"))
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

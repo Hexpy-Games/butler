@@ -81,7 +81,8 @@ fn v2_descriptor_refuses_legacy_graph_creation() {
             Some("hot-cache"),
             1234
         )
-        .unwrap_err(),
+        .unwrap_err()
+        .code(),
         "legacy_memory_writer_disabled_for_v2"
     );
     assert!(!memory.join("db/graph.sqlite").exists());

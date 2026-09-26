@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
 
 use super::*;
+use crate::cognition::CognitionCode;
 
 struct LegacyTranscriptInput<'a> {
     text: &'a str,
@@ -90,12 +91,12 @@ impl LegacyIndexService {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
         {
-            return Err(error("legacy_session_id_invalid"));
+            return Err(error(CognitionCode::LegacySessionIdInvalid));
         }
         let mut vectors = Vec::with_capacity(chunks.len());
         for batch in chunks.chunks(4) {
             if cancellation.is_cancelled() {
-                return Err(error("memory_write_aborted"));
+                return Err(error(CognitionCode::MemoryWriteAborted));
             }
             let result = self
                 .embedding
@@ -112,16 +113,16 @@ impl LegacyIndexService {
                 )
                 .await?;
             if result.embeddings.len() != batch.len() {
-                return Err(error("legacy_embedding_incomplete"));
+                return Err(error(CognitionCode::LegacyEmbeddingIncomplete));
             }
             vectors.extend(result.embeddings);
         }
         if cancellation.is_cancelled() {
-            return Err(error("memory_write_aborted"));
+            return Err(error(CognitionCode::MemoryWriteAborted));
         }
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| error("legacy_clock_unavailable"))?
+            .map_err(|source| error(CognitionCode::LegacyClockUnavailable).with_source(source))?
             .as_secs_f64();
         let rows: Vec<LegacyVectorRow> = chunks
             .into_iter()
@@ -191,7 +192,7 @@ impl LegacyIndexService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         // Once the Lance mutation begins, keep the lease until all writes finish.
         let row_count = match self.writer.upsert_session(&lease, session_id, &rows).await {
             Ok(count) => count,
@@ -230,6 +231,6 @@ impl LegacyIndexService {
             }
         })
         .await
-        .map_err(|_| error("legacy_session_receipt_failed"))?
+        .map_err(|source| error(CognitionCode::LegacySessionReceiptFailed).with_source(source))?
     }
 }

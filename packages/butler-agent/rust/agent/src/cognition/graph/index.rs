@@ -2,6 +2,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, lexical};
 
 pub(super) fn index_source(
@@ -21,7 +22,7 @@ pub(super) fn index_source(
         .is_none_or(|(start, end)| end - start != i64::try_from(text.len()).unwrap_or(i64::MAX))
     {
         return Err(CognitionError::new(
-            "memory_source_index_span_mismatch",
+            CognitionCode::MemorySourceIndexSpanMismatch,
             "memory_source_index_span_mismatch",
         ));
     }
@@ -39,7 +40,7 @@ pub(super) fn index_source(
             Ok(())
         } else {
             Err(CognitionError::new(
-                "memory_source_index_changed",
+                CognitionCode::MemorySourceIndexChanged,
                 "memory_source_index_changed",
             ))
         };

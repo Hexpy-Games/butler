@@ -9,6 +9,7 @@ use super::super::{
     json_array, json_error, json_string, option_value, source_changed, stringify,
 };
 use super::{chunks, vector_unit_id};
+use crate::cognition::CognitionCode;
 
 #[derive(Clone)]
 pub(super) struct NodeRow {
@@ -32,7 +33,7 @@ pub(super) fn job_chunk(
         .map_err(db_error)?
         .ok_or_else(|| {
             CognitionError::new(
-                "memory_projection_job_not_found",
+                CognitionCode::MemoryProjectionJobNotFound,
                 "memory_projection_job_not_found",
             )
         })?;

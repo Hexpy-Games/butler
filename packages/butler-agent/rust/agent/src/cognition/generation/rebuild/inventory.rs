@@ -1,5 +1,6 @@
 //! Snapshot inventory from canonical Conversation and the source typed registry.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs,
     path::Path,
@@ -98,7 +99,7 @@ pub(super) fn read(
     cancellation: &CancellationToken,
 ) -> CognitionResult<SourceInventory> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     ensure_data_authority(
         data_root,
@@ -111,7 +112,7 @@ pub(super) fn read(
         ],
     )?;
     let reader = ConversationSourceReader::open(canonical_path)
-        .map_err(|_| error("memory_inventory_incomplete"))?;
+        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let request = RecallRequest {
         cue: String::new(),
         seed_phrases: Vec::new(),
@@ -137,8 +138,8 @@ pub(super) fn read(
         },
     };
     let deadline = millis().saturating_add(60_000);
-    let collation =
-        LocaleCollation::new("en-US").map_err(|_| error("memory_inventory_incomplete"))?;
+    let collation = LocaleCollation::new("en-US")
+        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let scanned = read_canonical_inventory(
         Some(&reader),
         &request,
@@ -153,9 +154,9 @@ pub(super) fn read(
     )?;
     reader
         .close()
-        .map_err(|_| error("memory_inventory_incomplete"))?;
+        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     if !scanned.available || scanned.partial || cancellation.is_cancelled() {
-        return Err(error("memory_inventory_incomplete"));
+        return Err(error(CognitionCode::MemoryInventoryIncomplete));
     }
     // JS prepare classifies historical unknown origins first. This native
     // packet preserves the original canonical bytes, so unclassified origins
@@ -167,7 +168,7 @@ pub(super) fn read(
         .unwrap_or(0)
         > 0
     {
-        return Err(error("memory_source_origin_unclassified"));
+        return Err(error(CognitionCode::MemorySourceOriginUnclassified));
     }
     let mut exclusions = scanned.exclusions;
     exclusions.retain(|_, count| *count > 0);
@@ -193,9 +194,10 @@ pub(super) fn read(
         typed_lifecycle: &typed_lifecycle,
         history: [],
     };
-    let hash = digest(
-        &serde_json::to_vec(&hash_material).map_err(|_| error("memory_inventory_incomplete"))?,
-    );
+    let hash =
+        digest(&serde_json::to_vec(&hash_material).map_err(|source| {
+            error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
+        })?);
     let source_count = entries
         .iter()
         .map(|entry| entry.source_unit_count)
@@ -218,16 +220,16 @@ pub(super) fn read(
         typed: &typed,
         typed_lifecycle: &typed_lifecycle,
     })
-    .map_err(|_| error("memory_inventory_incomplete"))?;
+    .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let connection = Connection::open_with_flags(canonical_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| error("memory_inventory_incomplete"))?;
+        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let canonical_revision = connection
         .query_row(
             "SELECT revision FROM conversation_public_source_state WHERE singleton=1",
             [],
             |row| row.get(0),
         )
-        .map_err(|_| error("memory_inventory_incomplete"))?;
+        .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     Ok(SourceInventory {
         value,
         hash,
@@ -244,57 +246,60 @@ fn typed_registry(
     let tasks = WorkRecordReader::new(data_root);
     let mut task_ids = tasks
         .task_ids()
-        .map_err(|_| error("memory_source_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?;
     task_ids.sort();
     let mut typed = Vec::new();
     let mut lifecycle = Vec::new();
     for task_id in task_ids {
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let report = tasks
             .read_memory_report(&task_id, ReadAvailability::Strict)
-            .map_err(|_| error("memory_source_unavailable"))?;
+            .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?;
         let Some(report) = report else {
             continue;
         };
         let record = read_task_report(data_root, &task_memory_record_id(&task_id))?
-            .ok_or_else(|| error("memory_source_unavailable"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceUnavailable))?;
         typed.push(entry(record)?);
         let binding_path = data_root
             .join("tasks")
             .join(&task_id)
             .join("memory-report-binding.json");
-        let mut binding: Value = serde_json::from_slice(
-            &fs::read(binding_path).map_err(|_| error("memory_source_unavailable"))?,
-        )
-        .map_err(|_| error("memory_source_unavailable"))?;
+        let mut binding: Value =
+            serde_json::from_slice(&fs::read(binding_path).map_err(|source| {
+                error(CognitionCode::MemorySourceUnavailable).with_source(source)
+            })?)
+            .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?;
         binding
             .as_object_mut()
-            .ok_or_else(|| error("memory_source_unavailable"))?
+            .ok_or_else(|| error(CognitionCode::MemorySourceUnavailable))?
             .insert("text".into(), Value::String(report.text));
         lifecycle.push(json!({"source_kind":"task_report","task_id":task_id,"report":binding}));
     }
     let rules = data_root.join("cognition/memory/rules");
     if rules.is_dir() {
         let mut names = fs::read_dir(&rules)
-            .map_err(|_| error("memory_source_unavailable"))?
+            .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?
             .map(|item| item.map(|value| value.file_name().to_string_lossy().into_owned()))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| error("memory_source_unavailable"))?;
+            .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?;
         names.sort();
         for name in names
             .into_iter()
             .filter(|name| name.ends_with(".source.json"))
         {
             if cancellation.is_cancelled() {
-                return Err(error("memory_operation_aborted"));
+                return Err(error(CognitionCode::MemoryOperationAborted));
             }
             let record_id = name.trim_end_matches(".source.json");
-            let bytes =
-                fs::read(rules.join(&name)).map_err(|_| error("memory_source_unavailable"))?;
-            let binding: Value =
-                serde_json::from_slice(&bytes).map_err(|_| error("memory_source_unavailable"))?;
+            let bytes = fs::read(rules.join(&name)).map_err(|source| {
+                error(CognitionCode::MemorySourceUnavailable).with_source(source)
+            })?;
+            let binding: Value = serde_json::from_slice(&bytes).map_err(|source| {
+                error(CognitionCode::MemorySourceUnavailable).with_source(source)
+            })?;
             if binding["schema"] != "butler.explicit-rule-binding.v1"
                 || binding["record_id"] != record_id
             {
@@ -313,8 +318,8 @@ fn typed_registry(
     let quality = data_root.join("cognition/feedback/quality-operations.jsonl");
     let mut operations = Vec::new();
     if quality.is_file() {
-        let content =
-            fs::read_to_string(quality).map_err(|_| error("memory_source_unavailable"))?;
+        let content = fs::read_to_string(quality)
+            .map_err(|source| error(CognitionCode::MemorySourceUnavailable).with_source(source))?;
         for line in content.trim().lines() {
             if let Ok(value) = serde_json::from_str::<Value>(line)
                 && value["schema"] == "butler.memory-source-quality-operation.v1"
@@ -346,7 +351,7 @@ fn entry(record: crate::cognition::sources::TypedMemoryRecord) -> CognitionResul
         json!(record.source_kind),
         json!(record.record_id),
     ])
-    .map_err(|_| error("memory_inventory_incomplete"))?;
+    .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))?;
     let mut source_ids = Vec::new();
     for span in split_historical_source_spans(&record.text, 32_768.0) {
         source_ids.push(
@@ -360,7 +365,9 @@ fn entry(record: crate::cognition::sources::TypedMemoryRecord) -> CognitionResul
                 json!(span.end),
                 json!(record.content_hash),
             ])
-            .map_err(|_| error("memory_inventory_incomplete"))?,
+            .map_err(|source| {
+                error(CognitionCode::MemoryInventoryIncomplete).with_source(source)
+            })?,
         );
     }
     Ok(TypedEntry {
@@ -393,6 +400,6 @@ fn millis() -> i64 {
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

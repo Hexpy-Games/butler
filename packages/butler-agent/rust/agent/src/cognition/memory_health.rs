@@ -8,6 +8,7 @@ mod sources;
 #[path = "memory_health/tests.rs"]
 mod tests;
 
+use crate::cognition::CognitionCode;
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -112,10 +113,10 @@ impl MemoryHealthService {
             sources::read(&data_root, &paths, &coordinator, now_epoch_ms, profile)
         })
         .await
-        .map_err(|_| error("memory_health_read_failed"))?
+        .map_err(|source| error(CognitionCode::MemoryHealthReadFailed).with_source(source))?
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
+fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Could not read Cognition memory health")
 }

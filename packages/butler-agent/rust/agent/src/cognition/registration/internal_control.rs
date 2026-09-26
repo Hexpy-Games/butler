@@ -6,6 +6,7 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::{Clock, ConversationRegistrationOutcome, RegisterConversationSourceInput};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationHandle,
@@ -121,5 +122,5 @@ fn supersede(
 }
 
 fn changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }

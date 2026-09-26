@@ -1,5 +1,6 @@
 //! Explicit failed-stage reset under the existing generation write authority.
 
+use crate::cognition::CognitionCode;
 use std::{fs, path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -26,7 +27,7 @@ pub(crate) async fn run(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     read::safe_generation_id(generation_id)?;
     let request = repair_input.map(read_request).transpose()?;
@@ -42,10 +43,10 @@ pub(crate) async fn run(
             generation_id: generation_id.to_owned(),
             canonical_snapshot_id: manifest
                 .canonical_snapshot_id
-                .ok_or_else(|| error("memory_snapshot_changed"))?,
+                .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
         }
     } else {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     };
     let handle = resolve_generation(data_root, environment, &target)?;
     let lock = environment.consolidation_lock(data_root);
@@ -58,7 +59,7 @@ pub(crate) async fn run(
         &[&memory_root, &manifest_path, &handle.graph_path, &lock],
     )?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -71,14 +72,14 @@ pub(crate) async fn run(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = resolve_generation(data_root, environment, &target)?;
         assert_mutation_authority(data_root, environment, &target, &current)?;
@@ -92,7 +93,7 @@ pub(crate) async fn run(
                     .as_ref()
                     .map(super::types::GenerationEmbedding::version)
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
         let mut graph = GraphRepository::open(&current.graph_path)?;
@@ -102,7 +103,7 @@ pub(crate) async fn run(
                 .embedding
                 .as_ref()
                 .map(super::types::GenerationEmbedding::version)
-                .ok_or_else(|| error("memory_vector_repair_preimage_changed"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
             let count = graph.repair_selected_invalid_vectors(generation_id, version, request)?;
             json!({"semantic_windows":0,"vector_units":count,"cache_jobs":0})
         } else {
@@ -115,7 +116,7 @@ pub(crate) async fn run(
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|value| {
         released?;
         Ok(value)
@@ -123,13 +124,13 @@ pub(crate) async fn run(
 }
 
 fn read_request(path: &Path) -> CognitionResult<VectorRepairRequest> {
-    let value: Value = serde_json::from_slice(
-        &fs::read(path).map_err(|_| error("memory_vector_repair_invalid_request"))?,
-    )
-    .map_err(|_| error("memory_vector_repair_invalid_request"))?;
+    let value: Value = serde_json::from_slice(&fs::read(path).map_err(|source| {
+        error(CognitionCode::MemoryVectorRepairInvalidRequest).with_source(source)
+    })?)
+    .map_err(|source| error(CognitionCode::MemoryVectorRepairInvalidRequest).with_source(source))?;
     VectorRepairRequest::parse(value)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

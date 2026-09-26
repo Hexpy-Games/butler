@@ -31,8 +31,9 @@ const R2_STATES: &[&str] = &[
 const R3_STATES: &[&str] = &["admitted", "delivery_committed", "delivered", "cancelled"];
 
 fn stable_json(value: &Value) -> StorageResult<String> {
-    btcc_stable_json(value)
-        .map_err(|error| StorageError::new(StorageCode::CanonicalJson, error.message()))
+    btcc_stable_json(value).map_err(|error| {
+        StorageError::new(StorageCode::CanonicalJson, error.message()).with_source(error)
+    })
 }
 
 pub(super) struct LegacyTurn {

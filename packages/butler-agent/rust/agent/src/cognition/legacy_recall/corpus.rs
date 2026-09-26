@@ -13,6 +13,7 @@ use crate::{
 use super::types::{
     LegacyRecallCandidate, LegacyRecallCorpus, LegacyRecallOriginalSource, LegacyRecallSource,
 };
+use crate::cognition::CognitionCode;
 
 const FILE_CANDIDATE_SUMMARY_CHARS: usize = 420;
 
@@ -123,12 +124,8 @@ fn read_text(data_root: &Path, path: &Path) -> CognitionResult<String> {
         .unwrap_or_default())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn read_error(error: std::io::Error) -> CognitionError {
-    CognitionError::new("legacy_recall_read_failed", error.to_string())
+    CognitionError::new(CognitionCode::LegacyRecallReadFailed, error.to_string()).with_source(error)
 }
 
 fn append_hot_file(

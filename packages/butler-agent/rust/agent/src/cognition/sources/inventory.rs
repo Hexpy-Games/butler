@@ -15,6 +15,7 @@ use crate::conversation::{
 };
 
 use super::identity::{projection_hash, recovered_parts_hash};
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug)]
 pub(in crate::cognition) struct CanonicalInventoryEntry {
@@ -325,7 +326,7 @@ impl Scan<'_> {
             outcome.turn_id.clone().into(),
         ])?;
         let generation = Number::from_f64(outcome.generation).ok_or_else(|| {
-            CognitionError::new("memory_source_unavailable", "invalid_generation")
+            CognitionError::new(CognitionCode::MemorySourceUnavailable, "invalid_generation")
         })?;
         self.entries
             .push(entry(&episode_id, &scalars, Value::Number(generation))?);
@@ -396,6 +397,7 @@ fn origin(value: ConversationOriginKind) -> &'static str {
 fn hash(values: Vec<Value>) -> CognitionResult<String> {
     projection_hash(values).map_err(unavailable)
 }
-fn unavailable(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", error.to_string())
+fn unavailable(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, error.to_string())
+        .with_source(error)
 }

@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use crate::cognition::CognitionCode;
 use tokio_util::sync::CancellationToken;
 use unicode_normalization::UnicodeNormalization;
 
@@ -45,7 +46,7 @@ impl NativeGenerationVectorAdapter {
         let expected = generation
             .embedding
             .as_ref()
-            .ok_or_else(|| error("native_vector_unavailable"))?;
+            .ok_or_else(|| error(CognitionCode::NativeVectorUnavailable))?;
         compatibility::preflight(expected)?;
         let source = if request.vector_queries.is_empty() {
             vec![request.cue.clone()]
@@ -119,12 +120,12 @@ impl CognitionVectorSearch for NativeGenerationVectorAdapter {
             if generation.source_root != input.source_root
                 || generation.embedding.as_ref() != input.embedding
             {
-                return Err(error("memory_generation_changed"));
+                return Err(error(CognitionCode::MemoryGenerationChanged));
             }
             let expected = generation
                 .embedding
                 .as_ref()
-                .ok_or_else(|| error("native_vector_unavailable"))?;
+                .ok_or_else(|| error(CognitionCode::NativeVectorUnavailable))?;
             compatibility::preflight(expected)?;
             let response = self
                 .embedding
@@ -165,6 +166,6 @@ fn grapheme_chunks(text: &str) -> Vec<String> {
     chunks
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -10,7 +10,7 @@ impl ConfiguredPhaseExecutor for PhaseFixture {
     ) -> ConfiguredPhaseFuture<'a> {
         Box::pin(async move {
             if phase == ConfiguredPhase::Consolidate {
-                Err(CognitionError::new(
+                Err(CognitionError::relayed(
                     "fixture_consolidate_failed",
                     "fixture_consolidate_failed",
                 ))

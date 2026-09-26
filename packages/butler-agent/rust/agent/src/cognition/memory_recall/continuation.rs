@@ -21,6 +21,7 @@ use super::{
     cursor::{CursorStore, Page},
     envelope,
 };
+use crate::cognition::CognitionCode;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run(
@@ -174,7 +175,7 @@ pub(super) fn run(
             |evidence| {
                 let Some(row) = rows.get(&item.episode_ref) else {
                     return Err(CognitionError::new(
-                        "memory_recall_unavailable",
+                        CognitionCode::MemoryRecallUnavailable,
                         "memory_recall_unavailable",
                     ));
                 };
@@ -253,5 +254,5 @@ pub(super) fn run(
 }
 
 pub(super) fn stale() -> CognitionError {
-    CognitionError::new("stale_cursor", "stale_cursor")
+    CognitionError::new(CognitionCode::StaleCursor, "stale_cursor")
 }

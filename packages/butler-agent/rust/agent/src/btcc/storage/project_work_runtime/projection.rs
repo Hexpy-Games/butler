@@ -185,8 +185,9 @@ pub(super) fn prepare_disposition(
                 note: item.note.clone(),
             })
             .collect::<Vec<_>>();
-        crate::btcc::work::policy::apply_work_action_updates(current, &updates)
-            .map_err(|e| StorageError::new(StorageCode::ProjectWorkProgressInvalid, e.message()))?
+        crate::btcc::work::policy::apply_work_action_updates(current, &updates).map_err(|e| {
+            StorageError::new(StorageCode::ProjectWorkProgressInvalid, e.message()).with_source(e)
+        })?
     };
     if command.input.disposition == DispositionStatus::Completed {
         let blocker = db.query_row(

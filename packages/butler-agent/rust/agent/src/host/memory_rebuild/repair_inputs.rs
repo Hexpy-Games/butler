@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{SystemIdentity, signals};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CandidateInputRepairRequest, CognitionError, CognitionPathEnvironment,
@@ -27,7 +28,7 @@ pub(super) async fn run(
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone())
-        .map_err(|message| CognitionError::new("native_signal_unavailable", message))?;
+        .map_err(|message| CognitionError::new(CognitionCode::NativeSignalUnavailable, message))?;
     let now = SystemIdentity.now_iso();
     let result = repair_memory_candidate_inputs(CandidateInputRepairRequest {
         data_root: data,

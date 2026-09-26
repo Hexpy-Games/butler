@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use super::{error, hash_file, inventory, io_error, snapshot_id, typed_snapshot};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget, ensure_data_authority,
@@ -40,7 +41,7 @@ pub(crate) async fn refresh_if_changed(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Option<String>> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let memory_root = environment.memory_root(data_root);
     let generation_root = memory_root.join("generations").join(generation_id);
@@ -78,7 +79,7 @@ pub(crate) async fn refresh_if_changed(
         inventory::read(&data, &canonical_copy, &as_of, &token)
     })
     .await
-    .map_err(|_| error("memory_inventory_incomplete"))??;
+    .map_err(|source| error(CognitionCode::MemoryInventoryIncomplete).with_source(source))??;
     live_witness.assert_current()?;
     live_witness.assert_public_revision(live.canonical_revision)?;
     if live.hash == old_inventory_hash {
@@ -120,12 +121,12 @@ pub(crate) async fn refresh_if_changed(
         )
     })
     .await
-    .map_err(|_| error("memory_snapshot_changed"))??;
+    .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))??;
     live_witness.assert_current()?;
     live_witness.assert_public_revision(live.canonical_revision)?;
     candidate.assert_current(&old_handle).await?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let new_snapshot_id = snapshot_id(generation_id, &live.hash)?;
     let lease = coordinator
@@ -139,11 +140,11 @@ pub(crate) async fn refresh_if_changed(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = async {
-        lease.assert_for_path(&lock).map_err(|_| error("memory_write_busy"))?;
-        if cancellation.is_cancelled() { return Err(error("memory_operation_aborted")); }
+        lease.assert_for_path(&lock).map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
         live_witness.assert_current()?;
         live_witness.assert_public_revision(live.canonical_revision)?;
         candidate.assert_current(&old_handle).await?;
@@ -162,14 +163,14 @@ pub(crate) async fn refresh_if_changed(
         current["registered_source_count"] = json!(0);
         current["unaccounted_source_count"] = json!(live.source_count);
         current["required_acceptance_passed"] = json!(false);
-        current.as_object_mut().ok_or_else(|| error("memory_generation_changed"))?.remove("readiness");
+        current.as_object_mut().ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))?.remove("readiness");
         ensure_data_authority(data_root, &[&manifest_path, &snapshot.path, &lock])?;
         durable::write_json(&manifest_path, &current)?;
         Ok(new_snapshot_id.clone())
     }.await;
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     match (result, released) {
         (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(Some(value)),
@@ -190,29 +191,33 @@ fn stage_snapshot(
     let started = SystemTime::now();
     if !published.exists() {
         if staged.exists() {
-            return Err(error("memory_snapshot_changed"));
+            return Err(error(CognitionCode::MemorySnapshotChanged));
         }
         let staged_snapshot = staged.join("runtime/conversation-store.sqlite");
         let result = (|| {
             durable::create_dir(
                 staged_snapshot
                     .parent()
-                    .ok_or_else(|| error("memory_snapshot_changed"))?,
+                    .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
             )?;
             let source = data_root.join("runtime/conversation-store.sqlite");
             ensure_data_authority(data_root, &[&source, &staged_snapshot])?;
             let db = Connection::open_with_flags(&source, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| error("memory_snapshot_changed"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemorySnapshotChanged).with_source(source)
+                })?;
             db.execute(
                 "VACUUM INTO ?1",
                 params![
                     staged_snapshot
                         .to_str()
-                        .ok_or_else(|| error("memory_snapshot_changed"))?
+                        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?
                 ],
             )
-            .map_err(|_| error("memory_snapshot_changed"))?;
-            db.close().map_err(|_| error("memory_snapshot_changed"))?;
+            .map_err(|source| error(CognitionCode::MemorySnapshotChanged).with_source(source))?;
+            db.close().map_err(|(_, source)| {
+                error(CognitionCode::MemorySnapshotChanged).with_source(source)
+            })?;
             File::open(&staged_snapshot)
                 .and_then(|file| file.sync_all())
                 .map_err(io_error)?;
@@ -222,7 +227,7 @@ fn stage_snapshot(
                     .map_err(io_error)?;
             }
             if cancellation.is_cancelled() {
-                return Err(error("memory_operation_aborted"));
+                return Err(error(CognitionCode::MemoryOperationAborted));
             }
             typed_snapshot::copy_typed_sources(data_root, staged)?;
             let copied = inventory::read(staged, &staged_snapshot, as_of, cancellation)?;
@@ -232,14 +237,14 @@ fn stage_snapshot(
                 copied.canonical_revision,
             ) != (expected.0.as_str(), &expected.1, expected.2)
             {
-                return Err(error("memory_snapshot_changed"));
+                return Err(error(CognitionCode::MemorySnapshotChanged));
             }
             durable::write_json(&staged.join("memory-source-inventory.json"), &copied.value)?;
             File::open(staged)
                 .and_then(|dir| dir.sync_all())
                 .map_err(io_error)?;
             if published.exists() {
-                return Err(error("memory_snapshot_changed"));
+                return Err(error(CognitionCode::MemorySnapshotChanged));
             }
             fs::rename(staged, &published).map_err(io_error)?;
             File::open(generation_root)
@@ -260,7 +265,7 @@ fn stage_snapshot(
         actual.canonical_revision,
     ) != (expected.0.as_str(), &expected.1, expected.2)
     {
-        return Err(error("memory_snapshot_changed"));
+        return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     let bytes = fs::metadata(&canonical).map_err(io_error)?.len();
     let sha256 = hash_file(&canonical)?;
@@ -300,18 +305,22 @@ fn assert_building_inactive(
         || active["schema"] != "butler.memory-active-generation.v2"
         || active["generation_id"] == generation_id
     {
-        return Err(error("memory_snapshot_changed"));
+        return Err(error(CognitionCode::MemorySnapshotChanged));
     }
     Ok(())
 }
 
 fn read_json(path: &Path) -> CognitionResult<Value> {
-    serde_json::from_slice(&fs::read(path).map_err(|_| error("memory_generation_unavailable"))?)
-        .map_err(|_| error("memory_generation_unavailable"))
+    serde_json::from_slice(
+        &fs::read(path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?,
+    )
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn field<'a>(value: &'a Value, name: &str) -> CognitionResult<&'a str> {
     value[name]
         .as_str()
-        .ok_or_else(|| error("memory_generation_changed"))
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }

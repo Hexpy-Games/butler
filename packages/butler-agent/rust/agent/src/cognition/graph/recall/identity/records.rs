@@ -9,6 +9,7 @@ use crate::cognition::{
 };
 
 use super::super::db_error;
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct HistoryRef {
@@ -46,7 +47,11 @@ pub(super) fn for_job(db: &Connection, job: &str) -> CognitionResult<Vec<Decisio
         return Ok(Vec::new());
     };
     serde_json::from_str(&value).map_err(|error| {
-        crate::cognition::CognitionError::new("memory_graph_unavailable", error.to_string())
+        crate::cognition::CognitionError::new(
+            CognitionCode::MemoryGraphUnavailable,
+            error.to_string(),
+        )
+        .with_source(error)
     })
 }
 

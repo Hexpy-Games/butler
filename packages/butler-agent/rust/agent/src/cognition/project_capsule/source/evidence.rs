@@ -11,6 +11,7 @@ use crate::cognition::{CognitionResult, mutable_paths::ensure_data_authority};
 
 use super::super::{check_active, error, types::ProjectTextEvidence};
 use super::{read_text, sanitize_project_memory_id};
+use crate::cognition::CognitionCode;
 
 pub(super) fn memory_evidence(
     data_root: &Path,
@@ -28,23 +29,27 @@ pub(super) fn memory_evidence(
     let rows = match fs::read_dir(&directory) {
         Ok(rows) => rows,
         Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(_) => return Err(error("project_capsule_source_read_failed")),
+        Err(_) => return Err(error(CognitionCode::ProjectCapsuleSourceReadFailed)),
     };
     let mut files: Vec<(PathBuf, f64)> = Vec::new();
     for row in rows {
         check_active(cancellation, deadline)?;
-        let row = row.map_err(|_| error("project_capsule_source_read_failed"))?;
+        let row = row.map_err(|source| {
+            error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+        })?;
         if !row
             .file_type()
-            .map_err(|_| error("project_capsule_source_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+            })?
             .is_file()
             || !row.file_name().to_string_lossy().ends_with(".md")
         {
             continue;
         }
-        let metadata = row
-            .metadata()
-            .map_err(|_| error("project_capsule_source_read_failed"))?;
+        let metadata = row.metadata().map_err(|source| {
+            error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+        })?;
         let mtime = metadata
             .modified()
             .map(system_time_millis)
@@ -100,13 +105,19 @@ pub(super) fn explicit_feedback(
         return Ok(feedback);
     }
     ensure_data_authority(data_root, &[&directory])?;
-    let rows = fs::read_dir(&directory).map_err(|_| error("project_capsule_source_read_failed"))?;
+    let rows = fs::read_dir(&directory).map_err(|source| {
+        error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+    })?;
     for row in rows {
         check_active(cancellation, deadline)?;
-        let row = row.map_err(|_| error("project_capsule_source_read_failed"))?;
+        let row = row.map_err(|source| {
+            error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+        })?;
         if !row
             .file_type()
-            .map_err(|_| error("project_capsule_source_read_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::ProjectCapsuleSourceReadFailed).with_source(source)
+            })?
             .is_file()
             || !row.file_name().to_string_lossy().ends_with(".md")
         {
@@ -152,7 +163,7 @@ fn project_matcher(project_id: &str) -> CognitionResult<regex::Regex> {
     RegexBuilder::new(&pattern)
         .case_insensitive(true)
         .build()
-        .map_err(|_| error("project_capsule_project_id_invalid"))
+        .map_err(|source| error(CognitionCode::ProjectCapsuleProjectIdInvalid).with_source(source))
 }
 
 fn system_time_millis(time: SystemTime) -> f64 {

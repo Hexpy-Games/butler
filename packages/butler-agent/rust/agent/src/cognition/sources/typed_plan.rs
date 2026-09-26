@@ -9,6 +9,7 @@ use crate::cognition::{
 
 use super::identity::projection_hash;
 use super::typed::TypedMemoryRecord;
+use crate::cognition::CognitionCode;
 
 const MEMORY_EXTRACTION_VERSION: &str = "memory-extract-v3";
 
@@ -52,7 +53,7 @@ pub(in crate::cognition) fn prepare(record: &TypedMemoryRecord) -> CognitionResu
     for span in split_historical_source_spans(&record.text, MEMORY_SOURCE_WINDOW_BYTES) {
         if span.end - span.start > crate::json::saturating_usize(MEMORY_SOURCE_WINDOW_BYTES) {
             return Err(CognitionError::new(
-                "memory_source_unavailable",
+                CognitionCode::MemorySourceUnavailable,
                 "A grapheme exceeds the memory source window limit",
             ));
         }
@@ -115,5 +116,5 @@ pub(in crate::cognition) fn prepare(record: &TypedMemoryRecord) -> CognitionResu
 }
 
 fn unavailable(message: impl Into<String>) -> CognitionError {
-    CognitionError::new("memory_source_unavailable", message)
+    CognitionError::new(CognitionCode::MemorySourceUnavailable, message)
 }

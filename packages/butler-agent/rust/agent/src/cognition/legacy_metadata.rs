@@ -20,6 +20,7 @@ use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWr
 const SOURCE_CHUNK_LIMIT: usize = 10_000;
 const PAGE_SIZE: usize = 100;
 
+use crate::cognition::CognitionCode;
 pub(crate) use inspect::LegacyMemoryChunkWithRefs;
 use inspect::read_chunk_with_refs;
 
@@ -94,7 +95,7 @@ impl LegacyMetadataIntegrityService {
             read_chunk_with_refs(&data_root, &path, &memory_chunk_id)
         })
         .await
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
     }
 
     pub(crate) async fn check(&self) -> CognitionResult<LegacyMetadataIntegrityCounts> {
@@ -112,7 +113,10 @@ impl LegacyMetadataIntegrityService {
         let mut repaired_box_refs = 0;
         let mut repaired_feedback_refs = 0;
         if (planned_box_refs > 0 || planned_feedback_refs > 0)
-            && self.path.try_exists().map_err(|_| metadata_error())?
+            && self
+                .path
+                .try_exists()
+                .map_err(|source| metadata_error().with_source(source))?
         {
             let lock_path = self.paths.consolidation_lock(&self.data_root);
             ensure_data_authority(
@@ -130,7 +134,9 @@ impl LegacyMetadataIntegrityService {
                 )
                 .await
                 .map_err(CognitionError::from)?
-                .ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))?;
+                .ok_or_else(|| {
+                    CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
+                })?;
             let data_root = self.data_root.clone();
             let path = self.path.clone();
             let descriptor = self
@@ -141,8 +147,9 @@ impl LegacyMetadataIntegrityService {
             let feedback = before.missing_feedback_refs;
             let result = tokio::task::spawn_blocking(move || {
                 let result = (|| {
-                    lease.assert_for_path(&lock_path).map_err(|_| {
-                        CognitionError::new("memory_write_busy", "memory_write_busy")
+                    lease.assert_for_path(&lock_path).map_err(|source| {
+                        CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy")
+                            .with_source(source)
                     })?;
                     remove_missing_links(&data_root, &path, &descriptor, &boxes, &feedback)
                 })();
@@ -153,7 +160,7 @@ impl LegacyMetadataIntegrityService {
                 }
             })
             .await
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| metadata_error().with_source(source))?;
             (repaired_box_refs, repaired_feedback_refs) = result?;
         }
         let integrity = self.check_with_references().await?;
@@ -184,7 +191,11 @@ impl LegacyMetadataIntegrityService {
         Vec<MissingFeedbackRef>,
     )> {
         ensure_data_authority(&self.data_root, &[&self.path])?;
-        if !self.path.try_exists().map_err(|_| metadata_error())? {
+        if !self
+            .path
+            .try_exists()
+            .map_err(|source| metadata_error().with_source(source))?
+        {
             return Ok((
                 LegacyMetadataIntegrityCounts::default(),
                 Vec::new(),
@@ -257,7 +268,9 @@ impl LegacyMetadataIntegrityService {
             }
         }
         drop(receiver);
-        let producer_result = producer.await.map_err(|_| metadata_error())?;
+        let producer_result = producer
+            .await
+            .map_err(|source| metadata_error().with_source(source))?;
         outcome?;
         producer_result?;
         Ok((counts, missing_box_refs, missing_feedback_refs))
@@ -274,18 +287,20 @@ fn remove_missing_links(
     ensure_data_authority(data_root, &[path, active_descriptor])?;
     if active_descriptor
         .try_exists()
-        .map_err(|_| metadata_error())?
+        .map_err(|source| metadata_error().with_source(source))?
     {
         return Err(CognitionError::new(
-            "legacy_memory_writer_disabled_for_v2",
+            CognitionCode::LegacyMemoryWriterDisabledForV2,
             "legacy_memory_writer_disabled_for_v2",
         ));
     }
     let mut db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| metadata_error())?;
-    let transaction = db.transaction().map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
+    let transaction = db
+        .transaction()
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut repaired_box_refs = 0;
     let mut repaired_feedback_refs = 0;
     for reference in boxes {
@@ -294,16 +309,18 @@ fn remove_missing_links(
                 "DELETE FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 AND box_item_id=?2",
                 params![reference.memory_chunk_id, reference.box_item_id],
             )
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| metadata_error().with_source(source))?;
     }
     for reference in feedback {
         repaired_feedback_refs += transaction.execute(
             "DELETE FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 AND feedback_id=?2",
             params![reference.memory_chunk_id, reference.feedback_id],
         )
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     }
-    transaction.commit().map_err(|_| metadata_error())?;
+    transaction
+        .commit()
+        .map_err(|source| metadata_error().with_source(source))?;
     Ok((repaired_box_refs, repaired_feedback_refs))
 }
 
@@ -312,18 +329,18 @@ fn stream_refs(
     sender: &mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
 ) -> CognitionResult<()> {
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     db.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut chunk_query = db
         .prepare("SELECT memory_chunk_id FROM memory_chunks ORDER BY updated_at DESC, memory_chunk_id DESC LIMIT ?1 OFFSET ?2")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut box_query = db
         .prepare("SELECT box_item_id FROM memory_chunk_box_refs WHERE memory_chunk_id=?1 ORDER BY box_item_id,relation")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     let mut feedback_query = db
         .prepare("SELECT feedback_id FROM memory_chunk_feedback_refs WHERE memory_chunk_id=?1 ORDER BY feedback_id,relation")
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| metadata_error().with_source(source))?;
     for offset in (0..SOURCE_CHUNK_LIMIT).step_by(PAGE_SIZE) {
         let ids = chunk_query
             .query_map(
@@ -333,9 +350,9 @@ fn stream_refs(
                 ],
                 |row| row.get::<_, String>(0),
             )
-            .map_err(|_| metadata_error())?
+            .map_err(|source| metadata_error().with_source(source))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| metadata_error().with_source(source))?;
         if ids.is_empty() {
             break;
         }
@@ -345,14 +362,14 @@ fn stream_refs(
                 memory_chunk_id: id.clone(),
                 box_ids: box_query
                     .query_map([&id], |row| row.get::<_, String>(0))
-                    .map_err(|_| metadata_error())?
+                    .map_err(|source| metadata_error().with_source(source))?
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| metadata_error())?,
+                    .map_err(|source| metadata_error().with_source(source))?,
                 feedback_ids: feedback_query
                     .query_map([&id], |row| row.get::<_, String>(0))
-                    .map_err(|_| metadata_error())?
+                    .map_err(|source| metadata_error().with_source(source))?
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| metadata_error())?,
+                    .map_err(|source| metadata_error().with_source(source))?,
             });
         }
         if sender.blocking_send(Ok(batch)).is_err() {
@@ -364,7 +381,7 @@ fn stream_refs(
 
 fn metadata_error() -> CognitionError {
     CognitionError::new(
-        "memory_metadata_integrity_failed",
+        CognitionCode::MemoryMetadataIntegrityFailed,
         "Could not read legacy memory metadata integrity",
     )
 }

@@ -7,6 +7,7 @@ use std::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, ensure_data_authority};
 
 const SCHEMA: &str = "
@@ -89,7 +90,7 @@ pub(super) fn index(
         &wal_path,
         &shm_path,
     )?;
-    fs::create_dir_all(&query_dir).map_err(|_| unavailable())?;
+    fs::create_dir_all(&query_dir).map_err(|source| unavailable().with_source(source))?;
     ensure_query_authority(
         data_root,
         &query_dir,
@@ -256,9 +257,9 @@ fn js_trim(value: &str) -> String {
 fn current_iso_timestamp() -> CognitionResult<String> {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| unavailable())?
+        .map_err(|source| unavailable().with_source(source))?
         .as_millis();
-    let millis = i64::try_from(millis).map_err(|_| unavailable())?;
+    let millis = i64::try_from(millis).map_err(|source| unavailable().with_source(source))?;
     crate::js_date::format_iso_millis(millis).ok_or_else(unavailable)
 }
 
@@ -268,7 +269,7 @@ fn db_error(_: rusqlite::Error) -> CognitionError {
 
 fn unavailable() -> CognitionError {
     CognitionError::new(
-        "memory_transcript_query_index_unavailable",
+        CognitionCode::MemoryTranscriptQueryIndexUnavailable,
         "memory_transcript_query_index_unavailable",
     )
 }

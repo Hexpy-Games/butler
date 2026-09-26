@@ -150,7 +150,7 @@ async fn mark_registration_error(
     deadline: i64,
 ) {
     if matches!(
-        error.code,
+        error.code(),
         "memory_source_changed" | "memory_generation_changed"
     ) {
         return;
@@ -163,7 +163,7 @@ async fn mark_registration_error(
             assert_current(state, &clock())?;
             state
                 .graph
-                .mark_vector_registration_failure(&job, error.code, stage)
+                .mark_vector_registration_failure(&job, error.code(), stage)
         })
         .await;
 }

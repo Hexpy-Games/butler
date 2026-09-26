@@ -1,5 +1,6 @@
 //! Set the extractor policy of an inactive building generation.
 
+use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, to_value};
@@ -30,13 +31,13 @@ pub(crate) async fn run(
     let descriptor = read::read_descriptor(&memory_root)?;
     let manifest = read::read_manifest(&memory_root, generation_id)?;
     if descriptor.generation_id == generation_id || manifest.state.as_deref() != Some("building") {
-        return Err(error("memory_generation_changed"));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let target = MemoryGenerationTarget::Rebuild {
         generation_id: generation_id.to_owned(),
         canonical_snapshot_id: manifest
             .canonical_snapshot_id
-            .ok_or_else(|| error("memory_snapshot_changed"))?,
+            .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?,
     };
     let handle = resolve_generation(data_root, environment, &target)?;
     let lock = environment.consolidation_lock(data_root);
@@ -59,36 +60,37 @@ pub(crate) async fn run(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = (|| {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         let current = resolve_generation(data_root, environment, &target)?;
         assert_mutation_authority(data_root, environment, &target, &current)?;
         if current.graph_path != handle.graph_path {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         ensure_data_authority(data_root, &[&current.graph_path, &lock])?;
         let mut graph = GraphRepository::open(&current.graph_path)?;
         graph.ensure_schema(now)?;
         let configured = graph.configure_projection_model_policy(policy, now)?;
         graph.close()?;
-        to_value(configured).map_err(|_| error("memory_graph_failed"))
+        to_value(configured)
+            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
     })();
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     result.and_then(|value| {
         released?;
         Ok(value)
     })
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

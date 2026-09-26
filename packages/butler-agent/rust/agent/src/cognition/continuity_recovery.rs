@@ -5,6 +5,7 @@ pub(in crate::cognition) mod hot_cache;
 mod manifest;
 mod workspace;
 
+use crate::cognition::CognitionCode;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -97,7 +98,9 @@ impl ContinuityRecoveryService {
             view(manifest)
         })
         .await
-        .map_err(|_| error("continuity_recovery_worker_failed"))?
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryWorkerFailed).with_source(source)
+        })?
     }
 
     pub(crate) async fn inspect(
@@ -113,7 +116,9 @@ impl ContinuityRecoveryService {
                 .transpose()
         })
         .await
-        .map_err(|_| error("continuity_recovery_worker_failed"))?
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryWorkerFailed).with_source(source)
+        })?
     }
 
     pub(crate) async fn approve(
@@ -130,7 +135,7 @@ impl ContinuityRecoveryService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
         let manifest_id = manifest_id.to_owned();
@@ -138,7 +143,7 @@ impl ContinuityRecoveryService {
             let result = (|| {
                 lease
                     .assert_for_path(&lock_path)
-                    .map_err(|_| error("memory_write_busy"))?;
+                    .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
                 let current = manifest::required(&data_root, &paths, &manifest_id)?;
                 let updated = manifest::approve(&data_root, &paths, current, candidate_ids)?;
                 view(updated)
@@ -150,7 +155,9 @@ impl ContinuityRecoveryService {
             }
         })
         .await
-        .map_err(|_| error("continuity_recovery_worker_failed"))?
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryWorkerFailed).with_source(source)
+        })?
     }
 
     pub(crate) async fn apply(
@@ -187,7 +194,9 @@ impl ContinuityRecoveryService {
             move || hot_cache::replay_result(&data_root, &paths, &manifest_id, &workspace, rollback)
         })
         .await
-        .map_err(|_| error("continuity_recovery_worker_failed"))??;
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryWorkerFailed).with_source(source)
+        })??;
         if let Some(action) = is_replayed {
             return Ok(action);
         }
@@ -201,7 +210,7 @@ impl ContinuityRecoveryService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
             let result = if rollback {
                 hot_cache::rollback(
@@ -229,7 +238,9 @@ impl ContinuityRecoveryService {
             }
         })
         .await
-        .map_err(|_| error("continuity_recovery_worker_failed"))?
+        .map_err(|source| {
+            error(CognitionCode::ContinuityRecoveryWorkerFailed).with_source(source)
+        })?
     }
 }
 
@@ -269,6 +280,6 @@ fn view(manifest: ContinuityRecoveryManifest) -> CognitionResult<ContinuityRecov
     })
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -2,6 +2,7 @@ use super::{
     ExtractAlias, ExtractClaim, ExtractInput, ExtractNode, ExtractOutput, ExtractRelation,
     NodeResolution, QuoteRef,
 };
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -83,7 +84,7 @@ pub(in crate::cognition) fn source_passages(input: &ExtractInput) -> CognitionRe
             }
         }
         if covered != unit.text.len() {
-            return Err(error("memory_extract_source_coverage"));
+            return Err(error(CognitionCode::MemoryExtractSourceCoverage));
         }
     }
     Ok(passages)
@@ -94,14 +95,14 @@ pub(in crate::cognition) fn meaning_prompt(
     passages: &[Passage],
 ) -> CognitionResult<Value> {
     let Some(first) = input.source_units.first() else {
-        return Err(error("memory_extract_invalid_input"));
+        return Err(error(CognitionCode::MemoryExtractInvalidInput));
     };
     if input
         .source_units
         .iter()
         .any(|unit| unit.role != first.role)
     {
-        return Err(error("memory_extract_mixed_source_roles"));
+        return Err(error(CognitionCode::MemoryExtractMixedSourceRoles));
     }
     let parts = Value::Array(
         passages
@@ -119,7 +120,7 @@ pub(in crate::cognition) fn meaning_prompt(
             .collect(),
     );
     if crate::json::stringify(&parts).map_err(json_error)?.len() > 4096 {
-        return Err(error("memory_extract_source_window_exceeds_budget"));
+        return Err(error(CognitionCode::MemoryExtractSourceWindowExceedsBudget));
     }
     let mut context = Vec::new();
     for unit in input
@@ -162,9 +163,9 @@ pub(in crate::cognition) fn meaning_to_output(
 ) -> CognitionResult<ExtractOutput> {
     if meaning.status != "processed" {
         return Err(error(if meaning.status == "needs_context" {
-            "memory_extract_needs_context"
+            CognitionCode::MemoryExtractNeedsContext
         } else {
-            "memory_extract_unsupported"
+            CognitionCode::MemoryExtractUnsupported
         }));
     }
     let scope = if input.bound_project_id.is_some() {
@@ -179,7 +180,7 @@ pub(in crate::cognition) fn meaning_to_output(
     let quotes = |value: &Value| -> CognitionResult<Vec<QuoteRef>> {
         value
             .as_array()
-            .ok_or_else(|| error("memory_extract_invalid_evidence"))?
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidEvidence))?
             .iter()
             .map(|x| {
                 passages
@@ -187,7 +188,7 @@ pub(in crate::cognition) fn meaning_to_output(
                         x.as_f64().unwrap_or(f64::NAN),
                     ))
                     .map(|p| p.quote.clone())
-                    .ok_or_else(|| error("memory_extract_invalid_evidence"))
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidEvidence))
             })
             .collect()
     };
@@ -209,7 +210,7 @@ pub(in crate::cognition) fn meaning_to_output(
                         passages
                             .get(crate::json::saturating_usize(*x))
                             .map(|passage| passage.quote.clone())
-                            .ok_or_else(|| error("memory_extract_invalid_evidence"))
+                            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidEvidence))
                     })
                     .collect::<CognitionResult<_>>()?,
             })
@@ -220,11 +221,11 @@ pub(in crate::cognition) fn meaning_to_output(
     for (i, item) in meaning.items.iter().enumerate() {
         let o = item
             .as_object()
-            .ok_or_else(|| error("memory_extract_invalid_meaning"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidMeaning))?;
         let kind = o
             .get("kind")
             .and_then(Value::as_str)
-            .ok_or_else(|| error("memory_extract_invalid_meaning"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidMeaning))?;
         let evidence = quotes(o.get("evidence").unwrap_or(&Value::Null))?;
         let subject = o
             .get("subject")
@@ -284,7 +285,7 @@ pub(in crate::cognition) fn meaning_to_output(
             condition: None,
             requirement: if kind == "requires" {
                 Some(json!({"action":o.get("action").and_then(Value::as_str),
-                    "condition":validation::map_condition(o.get("condition").ok_or_else(||error("memory_extract_invalid_condition"))?)}))
+                    "condition":validation::map_condition(o.get("condition").ok_or_else(||error(CognitionCode::MemoryExtractInvalidCondition))?)}))
             } else {
                 None
             },
@@ -295,12 +296,12 @@ pub(in crate::cognition) fn meaning_to_output(
         });
         if relation {
             relations.push(ExtractRelation {
-                from_ref: subject.ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                from_ref: subject.ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 to_ref: o
                     .get("to")
                     .and_then(Value::as_f64)
                     .map(|x| format!("n{}", crate::json::saturating_usize(x)))
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 relation: o
                     .get("predicate")
                     .and_then(Value::as_str)
@@ -314,24 +315,24 @@ pub(in crate::cognition) fn meaning_to_output(
     for attribute in &meaning.attributes {
         let o = attribute
             .as_object()
-            .ok_or_else(|| error("memory_extract_invalid_output"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidOutput))?;
         match o.get("kind").and_then(Value::as_str) {
             Some("alias") => {
                 let index = usize::try_from(
                     o.get("entity")
                         .and_then(Value::as_u64)
-                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 )
                 .unwrap_or(usize::MAX);
                 let text = o
                     .get("name")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| error("memory_extract_invalid_output"))?
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidOutput))?
                     .to_owned();
                 let evidence = quotes(o.get("evidence").unwrap_or(&Value::Null))?;
                 nodes
                     .get_mut(index)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?
                     .aliases
                     .push(ExtractAlias { text, evidence });
             }
@@ -339,28 +340,28 @@ pub(in crate::cognition) fn meaning_to_output(
                 let index = usize::try_from(
                     o.get("item")
                         .and_then(Value::as_u64)
-                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 )
                 .unwrap_or(usize::MAX);
                 claims
                     .get_mut(index)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?
                     .salience = "high".into();
             }
             Some("validity") => {
                 let index = usize::try_from(
                     o.get("item")
                         .and_then(Value::as_u64)
-                        .ok_or_else(|| error("memory_extract_invalid_ref"))?,
+                        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?,
                 )
                 .unwrap_or(usize::MAX);
                 let claim = claims
                     .get_mut(index)
-                    .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+                    .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
                 claim.valid_from = o.get("from").and_then(Value::as_str).map(str::to_owned);
                 claim.valid_to = o.get("to").and_then(Value::as_str).map(str::to_owned);
             }
-            _ => return Err(error("memory_extract_invalid_output")),
+            _ => return Err(error(CognitionCode::MemoryExtractInvalidOutput)),
         }
     }
     Ok(ExtractOutput {
@@ -387,9 +388,10 @@ fn basis(role: &str) -> &'static str {
         _ => "inference",
     }
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

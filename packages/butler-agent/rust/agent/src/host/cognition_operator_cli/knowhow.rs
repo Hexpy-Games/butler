@@ -25,7 +25,10 @@ pub(super) async fn run(
     let subcommand = rest.first().map(String::as_str).unwrap_or("list");
     match subcommand {
         "list" => {
-            let entries = service.operator_entries().await.map_err(service_error)?;
+            let entries = service
+                .operator_entries()
+                .await
+                .map_err(|error| service_error(&error))?;
             let human = if entries.is_empty() {
                 "No know-how entries.".to_owned()
             } else {
@@ -49,7 +52,7 @@ pub(super) async fn run(
             let entry = service
                 .operator_read(id)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| {
                     CliError::failed("not_found", format!("know-how not found: {id}"))
                 })?;
@@ -70,7 +73,7 @@ pub(super) async fn run(
             let entry = service
                 .operator_disable(id)
                 .await
-                .map_err(service_error)?
+                .map_err(|error| service_error(&error))?
                 .ok_or_else(|| {
                     CliError::failed("not_found", format!("know-how not found: {id}"))
                 })?;
@@ -97,11 +100,11 @@ pub(super) async fn run(
             let targets = feedback
                 .active_targets(now_millis())
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             let result = service
                 .operator_retrieve(&query, limit, &targets)
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             let selected = &result["selected"];
             let human = if selected.is_null() {
                 "No applicable know-how.".to_owned()
@@ -118,7 +121,7 @@ pub(super) async fn run(
             let summaries = service
                 .operator_source_quality()
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             let human = if summaries.is_empty() {
                 "No source-quality events.".to_owned()
             } else {
@@ -142,7 +145,7 @@ pub(super) async fn run(
             let report = service
                 .operator_rebuild_index()
                 .await
-                .map_err(service_error)?;
+                .map_err(|error| service_error(&error))?;
             Ok((
                 report.clone(),
                 format!(
@@ -218,6 +221,6 @@ fn now_millis() -> i64 {
     .unwrap_or(i64::MAX)
 }
 
-fn service_error(error: crate::cognition::CognitionError) -> CliError {
-    CliError::failed(error.code, error.message)
+fn service_error(error: &crate::cognition::CognitionError) -> CliError {
+    CliError::failed(error.code(), error.message())
 }

@@ -139,7 +139,7 @@ fn active_and_rebuild_resolution_keep_source_roots_and_refresh_authority() {
             &rebuild,
         )
         .unwrap_err()
-        .code,
+        .code(),
         "memory_generation_changed"
     );
 }
@@ -186,7 +186,7 @@ fn active_read_resolves_only_the_current_descriptor_and_manifest() {
     assert_eq!(
         resolve_active_generation(Path::new("canonical"), &environment)
             .unwrap_err()
-            .code,
+            .code(),
         "memory_generation_unavailable"
     );
 }
@@ -202,7 +202,7 @@ fn malformed_descriptor_and_loose_generation_id_keep_source_errors() {
     assert_eq!(
         resolve_generation(Path::new("ignored"), &environment, &target)
             .unwrap_err()
-            .code,
+            .code(),
         "memory_generation_version_unsupported"
     );
 }

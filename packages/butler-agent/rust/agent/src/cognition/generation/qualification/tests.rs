@@ -63,7 +63,7 @@ fn acceptance_without_its_own_implementation_revision_is_rejected_without_git_lo
     )
     .unwrap_err();
     let _ = fs::remove_dir_all(root);
-    assert_eq!(error.code, "memory_acceptance_version_mismatch");
+    assert_eq!(error.code(), "memory_acceptance_version_mismatch");
 }
 
 #[test]

@@ -10,6 +10,7 @@ mod write;
 #[path = "project_capsule/tests.rs"]
 mod tests;
 
+use crate::cognition::CognitionCode;
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -51,13 +52,15 @@ impl ProjectCapsuleService {
     ) -> CognitionResult<ProjectCapsuleInspectReport> {
         let project_id = crate::public_text::trim_js_whitespace(project_id).to_owned();
         if project_id.is_empty() {
-            return Err(error("project_capsule_project_id_required"));
+            return Err(error(CognitionCode::ProjectCapsuleProjectIdRequired));
         }
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
         tokio::task::spawn_blocking(move || inspect::read(&data_root, &paths, &project_id))
             .await
-            .map_err(|_| error("project_capsule_worker_failed"))?
+            .map_err(|source| {
+                error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source)
+            })?
     }
 
     pub(crate) async fn refresh(
@@ -70,7 +73,7 @@ impl ProjectCapsuleService {
         check_active(cancellation, deadline_at_epoch_ms)?;
         let project_id = crate::public_text::trim_js_whitespace(project_id).to_owned();
         if project_id.is_empty() {
-            return Err(error("project_capsule_project_id_required"));
+            return Err(error(CognitionCode::ProjectCapsuleProjectIdRequired));
         }
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -87,7 +90,7 @@ impl ProjectCapsuleService {
                         &paths,
                         &project_id,
                         "lock",
-                        &failure.message,
+                        &failure.message(),
                     );
                     return Err(failure);
                 }
@@ -107,7 +110,7 @@ impl ProjectCapsuleService {
                         &paths,
                         &project_id,
                         "refresh",
-                        &failure.message,
+                        &failure.message(),
                     );
                     return Err(failure);
                 }
@@ -115,7 +118,7 @@ impl ProjectCapsuleService {
             Ok((prepared, project_lock))
         })
         .await
-        .map_err(|_| error("project_capsule_worker_failed"))??;
+        .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))??;
 
         check_active(cancellation, deadline_at_epoch_ms)?;
         let data_root = self.data_root.clone();
@@ -125,7 +128,7 @@ impl ProjectCapsuleService {
             source::ensure_source_authority(&data_root, &paths, &target)
         })
         .await
-        .map_err(|_| error("project_capsule_worker_failed"))??;
+        .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))??;
         let lock_path = self.paths.consolidation_lock(&self.data_root);
         let coordinator = self.coordinator.clone();
         let request = CognitionWriteAcquire {
@@ -161,7 +164,7 @@ impl ProjectCapsuleService {
             }
         })
         .await
-        .map_err(|_| error("project_capsule_worker_failed"))?
+        .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))?
     }
 
     pub(crate) async fn refresh_registered(
@@ -177,7 +180,7 @@ impl ProjectCapsuleService {
             source::read_registry_entries(&data_root, &cancellation_for_read, deadline_at_epoch_ms)
         })
         .await
-        .map_err(|_| error("project_capsule_worker_failed"))??
+        .map_err(|source| error(CognitionCode::ProjectCapsuleWorkerFailed).with_source(source))??
         .into_iter()
         .take(max_projects)
         .collect::<Vec<_>>();
@@ -207,10 +210,10 @@ pub(crate) fn check_active(
     deadline_at_epoch_ms: i64,
 ) -> CognitionResult<()> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_write_aborted"));
+        return Err(error(CognitionCode::MemoryWriteAborted));
     }
     if now_epoch_ms() >= deadline_at_epoch_ms {
-        return Err(error("memory_write_timeout"));
+        return Err(error(CognitionCode::MemoryWriteTimeout));
     }
     Ok(())
 }
@@ -228,14 +231,14 @@ fn now_epoch_ms() -> i64 {
 
 fn unavailable_lease(cancellation: &CancellationToken, deadline: i64) -> CognitionError {
     if cancellation.is_cancelled() {
-        error("memory_write_aborted")
+        error(CognitionCode::MemoryWriteAborted)
     } else if now_epoch_ms() >= deadline {
-        error("memory_write_timeout")
+        error(CognitionCode::MemoryWriteTimeout)
     } else {
-        error("memory_write_busy")
+        error(CognitionCode::MemoryWriteBusy)
     }
 }
 
-pub(super) fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+pub(super) fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

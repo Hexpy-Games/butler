@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use super::error;
+use crate::cognition::CognitionCode;
 use crate::cognition::CognitionResult;
 
 const INPUT_REPAIR_SCHEMA: &str = "butler.memory-candidate-input-repair.v1";
@@ -27,24 +28,25 @@ pub(in crate::cognition) struct CandidateInputRepairRequest {
 impl CandidateInputRepairRequest {
     pub(in crate::cognition) fn parse(bytes: &[u8]) -> CognitionResult<Self> {
         if bytes.len() > MAX_REPAIR_REQUEST_BYTES {
-            return Err(error("memory_input_repair_invalid_request"));
+            return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
         }
-        let value: Value = serde_json::from_slice(bytes)
-            .map_err(|_| error("memory_input_repair_invalid_request"))?;
+        let value: Value = serde_json::from_slice(bytes).map_err(|source| {
+            error(CognitionCode::MemoryInputRepairInvalidRequest).with_source(source)
+        })?;
         let object = value
             .as_object()
             .filter(|object| {
                 object.len() == 2 && object.contains_key("schema") && object.contains_key("windows")
             })
-            .ok_or_else(|| error("memory_input_repair_invalid_request"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
         if object.get("schema").and_then(Value::as_str) != Some(INPUT_REPAIR_SCHEMA) {
-            return Err(error("memory_input_repair_invalid_request"));
+            return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
         }
         let rows = object
             .get("windows")
             .and_then(Value::as_array)
             .filter(|rows| !rows.is_empty() && rows.len() <= MAX_REPAIR_WINDOWS)
-            .ok_or_else(|| error("memory_input_repair_invalid_request"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
         let mut windows = Vec::with_capacity(rows.len());
         let mut seen = HashSet::with_capacity(rows.len());
         for row in rows {
@@ -67,7 +69,7 @@ impl CandidateInputRepairRequest {
                     .iter()
                     .all(|key| fields.contains_key(*key))
                 })
-                .ok_or_else(|| error("memory_input_repair_invalid_request"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
             let window_ref = required_sha(fields.get("window_ref"))?;
             let expected_input_sha256 = required_sha(fields.get("expected_input_sha256"))?;
             let expected_attempt_count = safe_attempt_count(fields.get("expected_attempt_count"))?;
@@ -76,7 +78,7 @@ impl CandidateInputRepairRequest {
                 Some(value) => Some(required_sha(Some(value))?),
             };
             if !seen.insert(window_ref.clone()) {
-                return Err(error("memory_input_repair_invalid_request"));
+                return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
             }
             windows.push(CandidateInputRepairExpected {
                 window_ref,
@@ -92,22 +94,22 @@ impl CandidateInputRepairRequest {
 fn required_sha(value: Option<&Value>) -> CognitionResult<String> {
     let value = value
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_input_repair_invalid_request"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInputRepairInvalidRequest))?;
     if !valid_sha(value) {
-        return Err(error("memory_input_repair_invalid_request"));
+        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
     }
     Ok(value.to_owned())
 }
 
 fn safe_attempt_count(value: Option<&Value>) -> CognitionResult<i64> {
     let Some(number) = value.and_then(Value::as_f64) else {
-        return Err(error("memory_input_repair_invalid_request"));
+        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
     };
     if !number.is_finite()
         || number.fract() != 0.0
         || !(0.0..=9_007_199_254_740_991.0).contains(&number)
     {
-        return Err(error("memory_input_repair_invalid_request"));
+        return Err(error(CognitionCode::MemoryInputRepairInvalidRequest));
     }
     Ok(crate::json::saturating_i64(number))
 }

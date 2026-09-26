@@ -16,6 +16,7 @@ use tokio_util::task::TaskTracker;
 use crate::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 
 use super::{CognitionError, CognitionResult};
+use crate::cognition::CognitionCode;
 
 pub(crate) struct NativeExactMemoryQuery {
     path: PathBuf,
@@ -44,14 +45,17 @@ impl NativeExactMemoryQuery {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| CognitionError::new("closed", "Exact memory query is closing"))?;
+            .map_err(|source| {
+                CognitionError::new(CognitionCode::Closed, "Exact memory query is closing")
+                    .with_source(source)
+            })?;
         let path = self.path.clone();
         let (sender, receiver) = oneshot::channel();
         {
             let closing = self.closing.lock();
             if *closing {
                 return Err(CognitionError::new(
-                    "closed",
+                    CognitionCode::Closed,
                     "Exact memory query is closing",
                 ));
             }
@@ -62,13 +66,20 @@ impl NativeExactMemoryQuery {
                 })
                 .await
                 .unwrap_or_else(|error| {
-                    Err(CognitionError::new("query_join_failed", error.to_string()))
+                    Err(CognitionError::new(
+                        CognitionCode::QueryJoinFailed,
+                        error.to_string(),
+                    ))
                 });
                 let _ = sender.send(result);
             });
         }
-        receiver.await.map_err(|_| {
-            CognitionError::new("query_completion_lost", "Exact query ended without result")
+        receiver.await.map_err(|source| {
+            CognitionError::new(
+                CognitionCode::QueryCompletionLost,
+                "Exact query ended without result",
+            )
+            .with_source(source)
         })?
     }
 

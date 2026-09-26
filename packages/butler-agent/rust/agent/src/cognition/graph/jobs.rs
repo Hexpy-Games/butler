@@ -2,6 +2,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, ConversationSourceNotice, assert_conversation_source_current,
 };
@@ -132,7 +133,7 @@ pub(super) fn replay(
     drop(statement);
     if rows.len() > 1 {
         return Err(CognitionError::new(
-            "memory_projection_duplicate_revision",
+            CognitionCode::MemoryProjectionDuplicateRevision,
             "memory_projection_duplicate_revision",
         ));
     }
@@ -140,8 +141,10 @@ pub(super) fn replay(
         tx.commit().map_err(db_error)?;
         return Ok(None);
     };
-    let mut ids: Vec<String> = serde_json::from_str(&encoded)
-        .map_err(|error| CognitionError::new("memory_graph_unavailable", error.to_string()))?;
+    let mut ids: Vec<String> = serde_json::from_str(&encoded).map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+            .with_source(error)
+    })?;
     if let Some(id) = completion_id.filter(|value| !value.is_empty())
         && !ids.iter().any(|value| value == id)
     {
@@ -175,13 +178,15 @@ pub(super) fn progress(connection: &Connection, job_id: &str) -> CognitionResult
     )) = row
     else {
         return Err(CognitionError::new(
-            "memory_projection_job_not_found",
+            CognitionCode::MemoryProjectionJobNotFound,
             "memory_projection_job_not_found",
         ));
     };
     let parse = |value: &str| {
-        serde_json::from_str(value)
-            .map_err(|error| CognitionError::new("memory_graph_unavailable", error.to_string()))
+        serde_json::from_str(value).map_err(|error| {
+            CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+                .with_source(error)
+        })
     };
     let source_value: Value = parse(&source)?;
     let semantic_value: Value = parse(&semantic)?;
@@ -207,8 +212,10 @@ pub(super) fn progress(connection: &Connection, job_id: &str) -> CognitionResult
     } else {
         "partial"
     };
-    let observed_completion_job_ids = serde_json::from_str(&ids)
-        .map_err(|error| CognitionError::new("memory_graph_unavailable", error.to_string()))?;
+    let observed_completion_job_ids = serde_json::from_str(&ids).map_err(|error| {
+        CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+            .with_source(error)
+    })?;
     Ok(GraphProgress {
         job_id,
         observed_completion_job_ids,

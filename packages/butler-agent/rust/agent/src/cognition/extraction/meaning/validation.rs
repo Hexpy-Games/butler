@@ -1,5 +1,6 @@
 //! Validate source meaning schema and reference bounds before constructing graph facts.
 
+use crate::cognition::CognitionCode;
 use std::collections::HashSet;
 
 use serde_json::{Map, Value};
@@ -30,7 +31,7 @@ pub(super) fn validate(value: Value, passages: &[Passage]) -> CognitionResult<Me
         let size = crate::segmentation::grapheme_segments(name).count();
         if size > 256 {
             return Err(CognitionError::new(
-                "memory_extract_invalid_output",
+                CognitionCode::MemoryExtractInvalidOutput,
                 format!(
                     "memory_extract_invalid_output entity={index} field=name graphemes={size} limit=256"
                 ),
@@ -118,7 +119,7 @@ pub(super) fn validate(value: Value, passages: &[Passage]) -> CognitionResult<Me
             _ => return Err(invalid_meaning()),
         }
     }
-    serde_json::from_value(value).map_err(|_| invalid_meaning())
+    serde_json::from_value(value).map_err(|source| invalid_meaning().with_source(source))
 }
 
 fn condition(
@@ -128,26 +129,26 @@ fn condition(
     atoms: &mut usize,
 ) -> CognitionResult<()> {
     if depth > 4 {
-        return Err(error("memory_extract_invalid_condition"));
+        return Err(error(CognitionCode::MemoryExtractInvalidCondition));
     }
     let o = value
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_extract_invalid_condition"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidCondition))?;
     if o.contains_key("subject") {
         if o.len() != 2 || !o.contains_key("state") {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
         nullable_entity(o.get("subject"), entities)?;
         if string(o.get("state"))?.trim().is_empty() {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
         *atoms += 1;
         if *atoms > 16 {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
     } else if o.contains_key("not") {
         if o.len() != 1 {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
         condition(o.get("not"), entities, depth + 1, atoms)?;
     } else {
@@ -156,17 +157,17 @@ fn condition(
         } else if o.contains_key("any") {
             "any"
         } else {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         };
         if o.len() != 1 {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
         let children = o
             .get(key)
             .and_then(Value::as_array)
-            .ok_or_else(|| error("memory_extract_invalid_condition"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidCondition))?;
         if children.is_empty() || children.len() > 16 {
-            return Err(error("memory_extract_invalid_condition"));
+            return Err(error(CognitionCode::MemoryExtractInvalidCondition));
         }
         for child in children {
             condition(Some(child), entities, depth + 1, atoms)?;
@@ -233,9 +234,9 @@ fn nullable_string(value: Option<&Value>) -> CognitionResult<()> {
 fn entity(value: Option<&Value>, entities: usize) -> CognitionResult<usize> {
     let n = value
         .and_then(Value::as_u64)
-        .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
     if usize::try_from(n).unwrap_or(usize::MAX) >= entities {
-        return Err(error("memory_extract_invalid_ref"));
+        return Err(error(CognitionCode::MemoryExtractInvalidRef));
     }
     Ok(usize::try_from(n).unwrap_or(usize::MAX))
 }
@@ -249,24 +250,24 @@ fn nullable_entity(value: Option<&Value>, entities: usize) -> CognitionResult<()
 fn evidence(value: Option<&Value>, passages: &[Passage]) -> CognitionResult<()> {
     let items = value
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_extract_invalid_evidence"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidEvidence))?;
     if items.is_empty() || items.len() > 4 {
-        return Err(error("memory_extract_invalid_evidence"));
+        return Err(error(CognitionCode::MemoryExtractInvalidEvidence));
     }
     let mut seen = HashSet::new();
     for item in items {
         let Some(id) = item.as_u64() else {
-            return Err(error("memory_extract_invalid_evidence"));
+            return Err(error(CognitionCode::MemoryExtractInvalidEvidence));
         };
         if usize::try_from(id).unwrap_or(usize::MAX) >= passages.len() || !seen.insert(id) {
-            return Err(error("memory_extract_invalid_evidence"));
+            return Err(error(CognitionCode::MemoryExtractInvalidEvidence));
         }
     }
     Ok(())
 }
 fn invalid_meaning() -> CognitionError {
-    error("memory_extract_invalid_meaning")
+    error(CognitionCode::MemoryExtractInvalidMeaning)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

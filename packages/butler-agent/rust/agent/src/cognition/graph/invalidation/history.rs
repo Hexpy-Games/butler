@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::{db_error, redirect_chain, source};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, hydrate_conversation_source};
 use crate::conversation::ConversationSourceReader;
 
@@ -30,7 +31,7 @@ pub(super) fn node(connection: &Connection, id: &str) -> CognitionResult<Node> {
         )
         .optional()
         .map_err(db_error)?
-        .ok_or_else(|| CognitionError::new("memory_identity_node_missing", "memory_identity_node_missing"))
+        .ok_or_else(|| CognitionError::new(CognitionCode::MemoryIdentityNodeMissing, "memory_identity_node_missing"))
 }
 
 pub(super) fn valid_preimage(
@@ -217,7 +218,11 @@ pub(super) fn records_for_job(connection: &Connection, job: &str) -> CognitionRe
     match value {
         None => Ok(Vec::new()),
         Some(value) => serde_json::from_str(&value).map_err(|error| {
-            CognitionError::new("memory_identity_history_invalid", error.to_string())
+            CognitionError::new(
+                CognitionCode::MemoryIdentityHistoryInvalid,
+                error.to_string(),
+            )
+            .with_source(error)
         }),
     }
 }

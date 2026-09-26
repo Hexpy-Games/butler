@@ -47,7 +47,7 @@ pub(super) async fn run(
             let entries = service
                 .operator_entries()
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?;
+                .map_err(|error| CliError::failed(error.code(), error.message()))?;
             let summaries = entries.iter().map(list_summary).collect::<Vec<_>>();
             let human = if entries.is_empty() {
                 "No feedback entries.".to_owned()
@@ -80,7 +80,7 @@ pub(super) async fn run(
                     option_value(rest, "--promotion-target").unwrap_or_else(|| "discard".into()),
                 )
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?;
+                .map_err(|error| CliError::failed(error.code(), error.message()))?;
             let id = string(&entry, "feedback_id");
             Ok((
                 json!({ "entry": entry }),
@@ -95,7 +95,7 @@ pub(super) async fn run(
             let Some(entry) = service
                 .operator_read(id)
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?
+                .map_err(|error| CliError::failed(error.code(), error.message()))?
             else {
                 return Err(CliError::failed(
                     "not_found",
@@ -170,10 +170,10 @@ pub(super) async fn run(
                         )
                         .await
                         .map_err(|error| {
-                            if error.code == "memory_feedback_entry_not_found" {
+                            if error.code() == "memory_feedback_entry_not_found" {
                                 CliError::failed("not_found", format!("feedback not found: {id}"))
                             } else {
-                                CliError::failed(error.code, error.message)
+                                CliError::failed(error.code(), error.message())
                             }
                         })?,
                 )
@@ -184,10 +184,10 @@ pub(super) async fn run(
                 .operator_resolve(id, &status)
                 .await
                 .map_err(|error| {
-                    if error.code == "memory_feedback_entry_not_found" {
+                    if error.code() == "memory_feedback_entry_not_found" {
                         CliError::failed("not_found", format!("feedback not found: {id}"))
                     } else {
-                        CliError::failed(error.code, error.message)
+                        CliError::failed(error.code(), error.message())
                     }
                 })?;
             let data = if let Some(quality_operation) = quality_operation {
@@ -211,7 +211,7 @@ pub(super) async fn run(
             let (removed, remaining) = service
                 .operator_clear_resolved()
                 .await
-                .map_err(|error| CliError::failed(error.code, error.message))?;
+                .map_err(|error| CliError::failed(error.code(), error.message()))?;
             Ok((
                 json!({ "removed": removed, "remaining": remaining }),
                 format!("Feedback cleared: removed={removed} remaining={remaining}"),

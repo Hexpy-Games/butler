@@ -1,5 +1,6 @@
 //! Rebuild qualification: verify without a write gate, then commit one bound result.
 
+use crate::cognition::CognitionCode;
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -47,14 +48,14 @@ pub(crate) async fn validate(
     verified_implementation_commit: Option<&str>,
 ) -> CognitionResult<Value> {
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     if generation_id.len() != 36
         || !generation_id
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte) || byte == b'-')
     {
-        return Err(error("memory_generation_version_unsupported"));
+        return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     }
     let memory_root = environment.memory_root(data_root);
     let generation_root = memory_root.join("generations").join(generation_id);
@@ -80,17 +81,17 @@ pub(crate) async fn validate(
     candidate.assert_current(&handle).await?;
     live.assert_current()?;
     if readiness["ready"] != true {
-        return Err(error("memory_generation_not_ready"));
+        return Err(error(CognitionCode::MemoryGenerationNotReady));
     }
     let inventory_hash = field(&manifest, "source_inventory_hash")?;
     let extraction_version = field(&manifest, "extraction_version")?;
     let embedding_version = manifest["embedding"]["version"]
         .as_str()
-        .ok_or_else(|| error("memory_acceptance_version_mismatch"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryAcceptanceVersionMismatch))?;
     let acceptance_path = acceptance_path.to_owned();
     let evidence_root = acceptance_path
         .parent()
-        .ok_or_else(|| error("memory_acceptance_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryAcceptanceInvalid))?
         .to_owned();
     let validation_path = acceptance_path.clone();
     let validation_root = evidence_root.clone();
@@ -107,12 +108,14 @@ pub(crate) async fn validate(
         )
     })
     .await
-    .map_err(|_| error("memory_acceptance_evidence_invalid"))??;
+    .map_err(|source| {
+        error(CognitionCode::MemoryAcceptanceEvidenceInvalid).with_source(source)
+    })??;
     if verified_implementation_commit != Some(evidence.implementation_commit.as_str()) {
-        return Err(error("memory_acceptance_version_mismatch"));
+        return Err(error(CognitionCode::MemoryAcceptanceVersionMismatch));
     }
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let staged_path = generation_root.join(format!(".qualification-{}", uuid::Uuid::new_v4()));
     ensure_data_authority(data_root, &[&staged_path])?;
@@ -125,7 +128,7 @@ pub(crate) async fn validate(
         stage_bundle(&stage_data, &stage_input, &stage_target, &stage_files)
     })
     .await
-    .map_err(|_| error("memory_qualification_io_error"))??;
+    .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))??;
     assert_evidence_current(&evidence, &acceptance_path, &evidence_root)?;
     candidate.assert_current(&handle).await?;
     live.assert_current()?;
@@ -133,12 +136,12 @@ pub(crate) async fn validate(
     if fresh["sha256"] != readiness["sha256"]
         || fresh["evidence_sha256"] != readiness["evidence_sha256"]
     {
-        return Err(error("memory_generation_not_ready"));
+        return Err(error(CognitionCode::MemoryGenerationNotReady));
     }
     candidate.assert_current(&handle).await?;
     live.assert_current()?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let lease = coordinator
         .acquire(
@@ -151,14 +154,14 @@ pub(crate) async fn validate(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let result = async {
         lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"))?;
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
         if cancellation.is_cancelled() {
-            return Err(error("memory_operation_aborted"));
+            return Err(error(CognitionCode::MemoryOperationAborted));
         }
         candidate.assert_current(&handle).await?;
         live.assert_current()?;
@@ -168,7 +171,7 @@ pub(crate) async fn validate(
             || current["extraction_version"] != extraction_version
             || current["embedding"]["version"] != embedding_version
         {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         let qualification = generation_root.join("qualification");
         let old = generation_root.join(format!(".qualification-old-{}", uuid::Uuid::new_v4()));
@@ -178,13 +181,15 @@ pub(crate) async fn validate(
         )?;
         let had_prior = qualification.exists();
         if had_prior {
-            fs::rename(&qualification, &old).map_err(|_| error("memory_qualification_io_error"))?;
+            fs::rename(&qualification, &old).map_err(|source| {
+                error(CognitionCode::MemoryQualificationIoError).with_source(source)
+            })?;
         }
         if fs::rename(&staged_path, &qualification).is_err() {
             if had_prior {
                 let _ = fs::rename(&old, &qualification);
             }
-            return Err(error("memory_qualification_io_error"));
+            return Err(error(CognitionCode::MemoryQualificationIoError));
         }
         staged.0 = None;
         if File::open(&generation_root)
@@ -196,7 +201,7 @@ pub(crate) async fn validate(
             if had_prior {
                 let _ = fs::rename(&old, &qualification);
             }
-            return Err(error("memory_qualification_io_error"));
+            return Err(error(CognitionCode::MemoryQualificationIoError));
         }
         current["state"] = json!("ready");
         current["registered_source_count"] = readiness["registered"].clone();
@@ -223,7 +228,7 @@ pub(crate) async fn validate(
     .await;
     let released = lease
         .release(result.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     let (manifest, old) = result?;
     if let Some(old) = old {
         let _ = fs::remove_dir_all(old);
@@ -241,7 +246,7 @@ fn stage_bundle(
     durable::create_dir(stage)?;
     let verification_root = acceptance_path
         .parent()
-        .ok_or_else(|| error("memory_acceptance_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryAcceptanceInvalid))?;
     for expected in files {
         let (source, target) = if expected.relative_ref == "acceptance" {
             (acceptance_path.to_owned(), stage.join("acceptance.json"))
@@ -254,18 +259,20 @@ fn stage_bundle(
         ensure_data_authority(data_root, &[stage, &target])?;
         let parent = target
             .parent()
-            .ok_or_else(|| error("memory_qualification_io_error"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryQualificationIoError))?;
         durable::create_dir(parent)?;
         copy_checked(&source, &target, &expected.sha256)?;
     }
     File::open(stage)
         .and_then(|dir| dir.sync_all())
-        .map_err(|_| error("memory_qualification_io_error"))?;
+        .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))?;
     Ok(())
 }
 
 fn copy_checked(source: &Path, target: &Path, expected_sha: &str) -> CognitionResult<()> {
-    let mut source = File::open(source).map_err(|_| error("memory_acceptance_evidence_changed"))?;
+    let mut source = File::open(source).map_err(|source| {
+        error(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+    })?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -275,41 +282,45 @@ fn copy_checked(source: &Path, target: &Path, expected_sha: &str) -> CognitionRe
     }
     let mut target = options
         .open(target)
-        .map_err(|_| error("memory_qualification_io_error"))?;
+        .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 64 * 1024];
     loop {
-        let count = source
-            .read(&mut buffer)
-            .map_err(|_| error("memory_acceptance_evidence_changed"))?;
+        let count = source.read(&mut buffer).map_err(|source| {
+            error(CognitionCode::MemoryAcceptanceEvidenceChanged).with_source(source)
+        })?;
         if count == 0 {
             break;
         }
         hasher.update(&buffer[..count]);
-        target
-            .write_all(&buffer[..count])
-            .map_err(|_| error("memory_qualification_io_error"))?;
+        target.write_all(&buffer[..count]).map_err(|source| {
+            error(CognitionCode::MemoryQualificationIoError).with_source(source)
+        })?;
     }
     if format!("{:x}", hasher.finalize()) != expected_sha {
-        return Err(error("memory_acceptance_evidence_changed"));
+        return Err(error(CognitionCode::MemoryAcceptanceEvidenceChanged));
     }
     target
         .sync_all()
-        .map_err(|_| error("memory_qualification_io_error"))?;
+        .map_err(|source| error(CognitionCode::MemoryQualificationIoError).with_source(source))?;
     Ok(())
 }
 
 fn read_manifest(path: &Path) -> CognitionResult<Value> {
-    serde_json::from_slice(&fs::read(path).map_err(|_| error("memory_generation_unavailable"))?)
-        .map_err(|_| error("memory_generation_unavailable"))
+    serde_json::from_slice(
+        &fs::read(path).map_err(|source| {
+            error(CognitionCode::MemoryGenerationUnavailable).with_source(source)
+        })?,
+    )
+    .map_err(|source| error(CognitionCode::MemoryGenerationUnavailable).with_source(source))
 }
 
 fn field<'a>(value: &'a Value, name: &str) -> CognitionResult<&'a str> {
     value[name]
         .as_str()
-        .ok_or_else(|| error("memory_generation_changed"))
+        .ok_or_else(|| error(CognitionCode::MemoryGenerationChanged))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

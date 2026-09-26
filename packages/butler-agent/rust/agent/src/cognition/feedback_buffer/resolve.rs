@@ -17,6 +17,7 @@ use super::{
     FeedbackBufferService, FeedbackEntry, FeedbackStatus, append_line, error, parse_entry,
     read_line,
 };
+use crate::cognition::CognitionCode;
 
 const STANDARD_FIELDS: [&str; 12] = [
     "created_at",
@@ -50,7 +51,7 @@ impl FeedbackBufferService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         let id = id.to_owned();
         let now_ms =
             chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis();
@@ -63,7 +64,9 @@ impl FeedbackBufferService {
             }
         })
         .await
-        .map_err(|_| error("memory_feedback_buffer_write_failed"))?
+        .map_err(|source| {
+            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?
     }
 }
 
@@ -77,11 +80,13 @@ impl crate::cognition::FeedbackResolvePort for FeedbackBufferService {
 }
 
 fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
-    let source = File::open(path).map_err(|_| error("memory_feedback_buffer_read_failed"))?;
+    let source = File::open(path).map_err(|source| {
+        error(CognitionCode::MemoryFeedbackBufferReadFailed).with_source(source)
+    })?;
     let mut reader = BufReader::new(source);
     let parent = path
         .parent()
-        .ok_or_else(|| error("memory_feedback_buffer_write_failed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryFeedbackBufferWriteFailed))?;
     let temporary = parent.join(format!("feedback.md.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -91,9 +96,9 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut output = options
-            .open(&temporary)
-            .map_err(|_| error("memory_feedback_buffer_write_failed"))?;
+        let mut output = options.open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
         let fallback_iso = crate::js_date::format_iso_millis(now_ms)
             .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".into());
         let mut record = Vec::new();
@@ -116,16 +121,20 @@ fn rewrite_resolved(path: &Path, id: &str, now_ms: i64) -> CognitionResult<()> {
             write_record(&mut output, &record, id, &fallback_iso, &mut found)?;
         }
         if !found {
-            return Err(error("memory_feedback_entry_not_found"));
+            return Err(error(CognitionCode::MemoryFeedbackEntryNotFound));
         }
-        output
-            .sync_all()
-            .map_err(|_| error("memory_feedback_buffer_write_failed"))?;
-        fs::rename(&temporary, path).map_err(|_| error("memory_feedback_buffer_write_failed"))?;
+        output.sync_all().map_err(|source| {
+            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, path).map_err(|source| {
+            error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+        })?;
         #[cfg(unix)]
         File::open(parent)
             .and_then(|directory| directory.sync_all())
-            .map_err(|_| error("memory_feedback_buffer_write_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source)
+            })?;
         Ok(())
     })();
     if result.is_err() {
@@ -153,7 +162,7 @@ fn write_record(
     }
     output
         .write_all(format_entry(&entry).as_bytes())
-        .map_err(|_| error("memory_feedback_buffer_write_failed"))
+        .map_err(|source| error(CognitionCode::MemoryFeedbackBufferWriteFailed).with_source(source))
 }
 
 pub(super) fn format_entry(entry: &FeedbackEntry) -> String {

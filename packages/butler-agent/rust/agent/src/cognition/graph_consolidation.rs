@@ -1,5 +1,6 @@
 //! Short leased v2 edge consolidation in the active generation.
 
+use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
 use super::{
@@ -42,7 +43,7 @@ impl GraphConsolidationService {
         )?;
         let handle = resolve_active_generation(&self.data_root, &self.paths)?;
         if handle.generation_id != expected_generation {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         mutable_paths::ensure_data_authority(&self.data_root, &[&handle.root, &handle.graph_path])?;
         let lease = self
@@ -53,14 +54,14 @@ impl GraphConsolidationService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
         let expected = expected_generation.to_owned();
         tokio::task::spawn_blocking(move || {
             let result = (|| {
                 let current = resolve_active_generation(&data_root, &paths)?;
-                if current.generation_id != expected { return Err(error("memory_generation_changed")); }
+                if current.generation_id != expected { return Err(error(CognitionCode::MemoryGenerationChanged)); }
                 let mut graph = GraphRepository::open(&current.graph_path)?;
                 let metrics = graph.consolidate(now_ms, decay_d)?;
                 graph.close()?;
@@ -68,10 +69,10 @@ impl GraphConsolidationService {
             })();
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result,released) { (Err(error),_) | (Ok(_),Err(error)) => Err(error), (Ok(value),Ok(())) => Ok(value) }
-        }).await.map_err(|_| error("memory_consolidation_operation_failed"))?
+        }).await.map_err(|source| error(CognitionCode::MemoryConsolidationOperationFailed).with_source(source))?
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

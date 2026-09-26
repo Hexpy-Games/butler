@@ -1,5 +1,6 @@
 //! Source-compatible persisted node representative correction before rebuild readiness.
 
+use crate::cognition::CognitionCode;
 use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
@@ -27,10 +28,10 @@ pub(crate) async fn run(
     cancellation: &CancellationToken,
 ) -> CognitionResult<Value> {
     let MemoryGenerationTarget::Rebuild { .. } = target else {
-        return Err(error("memory_rebuild_invalid_request"));
+        return Err(error(CognitionCode::MemoryRebuildInvalidRequest));
     };
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let handle = resolve_generation(data_root, environment, target)?;
     if handle.embedding.is_none() {
@@ -55,7 +56,7 @@ pub(crate) async fn run(
     let evidence = graph.load_vector_representative_evidence(&handle.generation_id)?;
     graph.close()?;
     if cancellation.is_cancelled() {
-        return Err(error("memory_operation_aborted"));
+        return Err(error(CognitionCode::MemoryOperationAborted));
     }
     let prepared = prepare_representatives(
         data_root,
@@ -122,27 +123,27 @@ pub(in crate::cognition::generation) async fn commit_prepared(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     let outcome = async {
-        lease.assert_for_path(&lock).map_err(|_| error("memory_write_busy"))?;
-        if cancellation.is_cancelled() { return Err(error("memory_operation_aborted")); }
+        lease.assert_for_path(&lock).map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source))?;
+        if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
         let current = resolve_generation(data_root, environment, target)?;
         assert_mutation_authority(data_root, environment, target, &current)?;
         if current.graph_path != handle.graph_path || current.embedding.as_ref().map(super::types::GenerationEmbedding::version)
             != handle.embedding.as_ref().map(super::types::GenerationEmbedding::version) {
-            return Err(error("memory_generation_changed"));
+            return Err(error(CognitionCode::MemoryGenerationChanged));
         }
         live.assert_current()?;
         candidate.assert_current(&current).await?;
-        if cancellation.is_cancelled() { return Err(error("memory_operation_aborted")); }
+        if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
         let store = NativeGenerationVectorStore::new(data_root.to_owned(), environment.clone());
         let mut affected_unit_ids = prepared.iter()
             .flat_map(|item| item.affected_unit_ids.iter().cloned()).collect::<Vec<_>>();
         let rows = prepared.into_iter().map(|item| item.row).collect::<Vec<_>>();
         let mut repaired_vector_keys = Vec::new();
         for batch in rows.chunks(4) {
-            if cancellation.is_cancelled() { return Err(error("memory_operation_aborted")); }
+            if cancellation.is_cancelled() { return Err(error(CognitionCode::MemoryOperationAborted)); }
             // An admitted SDK mutation is awaited to completion while this lease remains held.
             store.upsert(&lease, target, &current, batch).await?;
             repaired_vector_keys.extend(batch.iter().map(|row| row.vector_key.clone()));
@@ -154,7 +155,7 @@ pub(in crate::cognition::generation) async fn commit_prepared(
     }.await;
     let released = lease
         .release(outcome.is_ok())
-        .map_err(|_| error("memory_write_busy"));
+        .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
     outcome.and_then(|value| {
         released?;
         Ok(value)
@@ -164,6 +165,6 @@ pub(in crate::cognition::generation) async fn commit_prepared(
 fn empty() -> Value {
     json!({"repaired_vector_keys":[],"affected_unit_ids":[]})
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

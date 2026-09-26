@@ -7,6 +7,7 @@ use crate::cognition::{
 };
 
 use super::super::{db_error, scope};
+use crate::cognition::CognitionCode;
 
 #[derive(Deserialize)]
 struct RequirementValue {
@@ -68,8 +69,12 @@ pub(super) fn requirements(
             .query_row([&node_id], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(db_error)?;
         let Some(json) = json else { continue };
-        let value: RequirementValue = serde_json::from_str(&json).map_err(|_| {
-            CognitionError::new("memory_graph_unavailable", "memory_graph_unavailable")
+        let value: RequirementValue = serde_json::from_str(&json).map_err(|source| {
+            CognitionError::new(
+                CognitionCode::MemoryGraphUnavailable,
+                "memory_graph_unavailable",
+            )
+            .with_source(source)
         })?;
         let Some(reference) = refs
             .iter()

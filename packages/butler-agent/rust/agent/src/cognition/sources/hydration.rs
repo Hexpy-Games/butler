@@ -9,6 +9,7 @@ use crate::conversation::{
 use crate::segmentation::grapheme_segments;
 
 use super::types::{CognitionSourceError, CognitionSourceRow, HydratedConversationSource};
+use crate::cognition::CognitionCode;
 
 pub(crate) fn hydrate_conversation_source<'a>(
     message: &'a ConversationMessageWithParts,
@@ -105,5 +106,8 @@ fn origin(value: ConversationOriginKind) -> &'static str {
 }
 
 fn changed() -> CognitionSourceError {
-    CognitionSourceError::new("memory_source_changed", "memory_source_changed")
+    crate::cognition::CognitionError::new(
+        CognitionCode::MemorySourceChanged,
+        "memory_source_changed",
+    )
 }

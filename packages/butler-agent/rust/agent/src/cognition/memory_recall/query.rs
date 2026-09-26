@@ -16,6 +16,7 @@ use super::{
     response::{self, VectorFacts},
     selection,
 };
+use crate::cognition::CognitionCode;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn initial(
@@ -33,7 +34,7 @@ pub(super) fn initial(
 ) -> CognitionResult<RecallResponse> {
     let (canonical, graph) = open_sources(generation)?;
     let now_iso = crate::js_date::format_iso_millis(now_millis())
-        .ok_or_else(|| CognitionError::new("invalid_arguments", "invalid_arguments"));
+        .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"));
     let result = now_iso.and_then(|now_iso| {
         let graph_started = Instant::now();
         let graph_deadline = deadline_at - 2_000;
@@ -154,7 +155,7 @@ pub(super) fn continue_page(
 ) -> CognitionResult<RecallResponse> {
     let (canonical, graph) = open_sources(generation)?;
     let now_iso = crate::js_date::format_iso_millis(now_millis())
-        .ok_or_else(|| CognitionError::new("invalid_arguments", "invalid_arguments"));
+        .ok_or_else(|| CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments"));
     let result = now_iso.and_then(|now_iso| {
         continuation::run(
             &graph,
@@ -192,7 +193,7 @@ fn open_sources(
             Err(error) if error.code() == "conversation_source_schema_unavailable" => None,
             Err(error) => {
                 return Err(CognitionError::new(
-                    "canonical_source_unavailable",
+                    CognitionCode::CanonicalSourceUnavailable,
                     error.to_string(),
                 ));
             }
@@ -213,6 +214,9 @@ fn close_sources(
     let canonical_close = canonical
         .map(ConversationSourceReader::close)
         .transpose()
-        .map_err(|error| CognitionError::new("canonical_source_unavailable", error.to_string()));
+        .map_err(|error| {
+            CognitionError::new(CognitionCode::CanonicalSourceUnavailable, error.to_string())
+                .with_source(error)
+        });
     graph_close.and(canonical_close).and(result)
 }

@@ -1,5 +1,6 @@
 //! Bounded canonical outcome/recovered-source reconciliation after queue work.
 
+use crate::cognition::CognitionCode;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
@@ -47,7 +48,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
     }
     let handle = match resolve_input_generation(input) {
         Ok(handle) => handle,
-        Err(error) if error.code == "memory_generation_unavailable" => {
+        Err(error) if error.code() == "memory_generation_unavailable" => {
             return Ok(CatchupReport::default());
         }
         Err(error) => return Err(error),
@@ -61,7 +62,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
         Err(error) if error.code() == "conversation_source_unavailable" => {
             return Ok(CatchupReport::default());
         }
-        Err(error) => return Err(CognitionError::new(error.code(), error.message())),
+        Err(error) => return Err(CognitionError::from(error)),
     };
     let mut outcomes = canonical
         .read_recall_outcome_page(cursors.outcome.as_deref(), Some(255))
@@ -162,7 +163,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
             ) => ingested += 1,
             Err(error)
                 if matches!(
-                    error.code,
+                    error.code(),
                     "memory_source_ineligible" | "memory_source_not_terminal"
                 ) => {}
             Err(error) => return Err(error),
@@ -197,8 +198,8 @@ fn recovered_source_hash(
     Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_catchup_json_error", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryCatchupJsonError, error.to_string()).with_source(error)
 }
 
 async fn save_cursors(
@@ -215,7 +216,7 @@ async fn save_cursors(
         )
         .await
         .map_err(CognitionError::from)?
-        .ok_or_else(|| error("memory_write_busy"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
     lease.assert_for_path(&lock).map_err(CognitionError::from)?;
     let target = input
         .target
@@ -234,6 +235,6 @@ async fn save_cursors(
     result.and(released)
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

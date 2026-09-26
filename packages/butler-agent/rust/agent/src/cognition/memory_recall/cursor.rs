@@ -7,6 +7,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::recall::{
     RecallAssociationStep, RecallCoverage, RecallRequest, RecallStatus,
 };
@@ -109,8 +110,10 @@ pub(super) fn argument_hash(input: &RecallRequest, as_of: &str) -> CognitionResu
             project_id: input.runtime.project_id.as_deref(),
         },
     };
-    let bytes = serde_json::to_vec(&value)
-        .map_err(|_| CognitionError::new("invalid_arguments", "invalid_arguments"))?;
+    let bytes = serde_json::to_vec(&value).map_err(|source| {
+        CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments")
+            .with_source(source)
+    })?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
@@ -126,9 +129,9 @@ pub(super) fn encode(key: &str, offset: usize) -> String {
 fn decode(cursor: &str) -> CognitionResult<WireCursor> {
     let bytes = URL_SAFE_NO_PAD
         .decode(cursor)
-        .map_err(|_| invalid_arguments())?;
+        .map_err(|source| invalid_arguments().with_source(source))?;
     let value: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|_| invalid_arguments())?;
+        serde_json::from_slice(&bytes).map_err(|source| invalid_arguments().with_source(source))?;
     let schema = value.get("schema").and_then(serde_json::Value::as_str);
     let key = value.get("key").and_then(serde_json::Value::as_str);
     let offset = value.get("offset").and_then(serde_json::Value::as_f64);
@@ -151,7 +154,7 @@ fn decode(cursor: &str) -> CognitionResult<WireCursor> {
 }
 
 fn invalid_arguments() -> CognitionError {
-    CognitionError::new("invalid_arguments", "invalid_arguments")
+    CognitionError::new(CognitionCode::InvalidArguments, "invalid_arguments")
 }
 
 impl CursorStore {
@@ -159,11 +162,10 @@ impl CursorStore {
         let wire = decode(cursor)?;
         let mut state = self.0.lock();
         state.expire(now);
-        let inventory = state
-            .entries
-            .get(&wire.key)
-            .cloned()
-            .ok_or_else(|| CognitionError::new("cursor_expired", "cursor_expired"))?;
+        let inventory =
+            state.entries.get(&wire.key).cloned().ok_or_else(|| {
+                CognitionError::new(CognitionCode::CursorExpired, "cursor_expired")
+            })?;
         state.touch(&wire.key);
         Ok(Page {
             key: wire.key,

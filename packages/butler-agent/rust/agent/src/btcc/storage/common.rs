@@ -16,8 +16,9 @@ pub(super) fn json(value: &str, code: StorageCode) -> StorageResult<Value> {
 }
 
 pub(super) fn canonical_json(value: &Value) -> StorageResult<String> {
-    sqlite_stable_json(value)
-        .map_err(|error| StorageError::new(StorageCode::CanonicalJson, error.message()))
+    sqlite_stable_json(value).map_err(|error| {
+        StorageError::new(StorageCode::CanonicalJson, error.message()).with_source(error)
+    })
 }
 
 /// ECMAScript JSON.stringify object enumeration over an insertion-preserving Value.

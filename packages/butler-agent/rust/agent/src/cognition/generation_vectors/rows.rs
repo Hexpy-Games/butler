@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::cognition::CognitionCode;
 use arrow_array::{
     Array, ArrayRef, FixedSizeListArray, RecordBatch, StringArray, types::Float32Type,
 };
@@ -93,7 +94,7 @@ impl NativeGenerationVectorStore {
         let lock = self.paths.consolidation_lock(&self.data_root);
         let lease_check = lease
             .assert_for_path(&lock)
-            .map_err(|_| error("memory_write_busy"));
+            .map_err(|source| error(CognitionCode::MemoryWriteBusy).with_source(source));
         async move {
             lease_check?;
             if rows.is_empty()
@@ -106,7 +107,7 @@ impl NativeGenerationVectorStore {
                         || row.embedding_chunk_id.len() != 64
                 })
             {
-                return Err(error("memory_vector_rows_invalid"));
+                return Err(error(CognitionCode::MemoryVectorRowsInvalid));
             }
             assert_mutation_authority(&self.data_root, &self.paths, target, generation)?;
             let root = generation.root.join("butler.lance");
@@ -124,9 +125,9 @@ impl NativeGenerationVectorStore {
                     &table_root.join("_deletions"),
                 ],
             )?;
-            let connection = lance_store::connect(&root)
-                .await
-                .map_err(|_| error("memory_vector_store_unavailable"))?;
+            let connection = lance_store::connect(&root).await.map_err(|source| {
+                error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
+            })?;
             let schema = schema();
             let table = match lance_store::open(&connection, TABLE).await {
                 Ok(table) => table,
@@ -134,8 +135,10 @@ impl NativeGenerationVectorStore {
                     .create_empty_table(TABLE, schema.clone())
                     .execute()
                     .await
-                    .map_err(|_| error("memory_vector_store_unavailable"))?,
-                Err(_) => return Err(error("memory_vector_store_unavailable")),
+                    .map_err(|source| {
+                        error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
+                    })?,
+                Err(_) => return Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
             };
             check_schema(&table, &schema).await?;
             let predicate = format!(
@@ -146,18 +149,19 @@ impl NativeGenerationVectorStore {
                     .join(",")
             );
             // Started SDK writes are awaited to completion while the caller holds the lease.
-            table
-                .delete(&predicate)
-                .await
-                .map_err(|_| error("memory_vector_store_unavailable"))?;
+            table.delete(&predicate).await.map_err(|source| {
+                error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
+            })?;
             table
                 .add(batch(rows, schema)?)
                 .execute()
                 .await
-                .map_err(|_| error("memory_vector_store_unavailable"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source)
+                })?;
             let receipt = persisted_receipt_in_table(&table, generation, rows)
                 .await?
-                .ok_or_else(|| error("memory_vector_receipt_mismatch"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryVectorReceiptMismatch))?;
             Ok(receipt)
         }
     }
@@ -181,11 +185,11 @@ pub(crate) async fn persisted_receipt(
     }
     let connection = lance_store::connect(&root)
         .await
-        .map_err(|_| error("memory_vector_store_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
     let table = match lance_store::open(&connection, TABLE).await {
         Ok(table) => table,
         Err(lancedb::Error::TableNotFound { .. }) => return Ok(None),
-        Err(_) => return Err(error("memory_vector_store_unavailable")),
+        Err(_) => return Err(error(CognitionCode::MemoryVectorStoreUnavailable)),
     };
     persisted_receipt_in_table(&table, generation, rows).await
 }
@@ -209,10 +213,10 @@ async fn persisted_receipt_in_table(
         .limit(rows.len() + 1)
         .execute()
         .await
-        .map_err(|_| error("memory_vector_store_unavailable"))?
+        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?
         .try_collect::<Vec<_>>()
         .await
-        .map_err(|_| error("memory_vector_store_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
     let mut seen = Vec::new();
     for batch in batches {
         for index in 0..batch.num_rows() {
@@ -301,7 +305,7 @@ async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<()
     let actual = table
         .schema()
         .await
-        .map_err(|_| error("memory_vector_store_unavailable"))?;
+        .map_err(|source| error(CognitionCode::MemoryVectorStoreUnavailable).with_source(source))?;
     if actual.fields().len() != expected.fields().len()
         || actual.fields().iter().zip(expected.fields()).any(|(a, b)| {
             a.name() != b.name()
@@ -309,7 +313,7 @@ async fn check_schema(table: &Table, expected: &SchemaRef) -> CognitionResult<()
                 || a.is_nullable() != b.is_nullable()
         })
     {
-        return Err(error("memory_vector_schema_mismatch"));
+        return Err(error(CognitionCode::MemoryVectorSchemaMismatch));
     }
     Ok(())
 }
@@ -346,11 +350,12 @@ fn batch(rows: &[GenerationVectorRow], schema: SchemaRef) -> CognitionResult<Rec
             ),
         ),
     ];
-    RecordBatch::try_new(schema, arrays).map_err(|_| error("memory_vector_rows_invalid"))
+    RecordBatch::try_new(schema, arrays)
+        .map_err(|source| error(CognitionCode::MemoryVectorRowsInvalid).with_source(source))
 }
 
 pub(super) fn text(batch: &RecordBatch, column: usize, row: usize) -> CognitionResult<String> {
-    optional_text(batch, column, row)?.ok_or_else(|| error("memory_vector_rows_invalid"))
+    optional_text(batch, column, row)?.ok_or_else(|| error(CognitionCode::MemoryVectorRowsInvalid))
 }
 pub(super) fn optional_text(
     batch: &RecordBatch,
@@ -361,9 +366,9 @@ pub(super) fn optional_text(
         .column(column)
         .as_any()
         .downcast_ref::<StringArray>()
-        .ok_or_else(|| error("memory_vector_rows_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryVectorRowsInvalid))?;
     Ok((!strings.is_null(row)).then(|| strings.value(row).to_owned()))
 }
-pub(super) fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+pub(super) fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

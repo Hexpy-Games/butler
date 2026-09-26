@@ -2,6 +2,7 @@
 //! The caller owns bounded blocking admission; graph and canonical readers are
 //! opened only for this operation and drop before the resolved scalar escapes.
 
+use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -53,7 +54,9 @@ impl NativeMemorySourceReference {
         let source_id = decode_handle(handle, &generation.generation_id)?;
         let graph = GraphRecallReader::open(&generation.graph_path)?;
         let mut rows = graph.source_rows(std::slice::from_ref(&source_id))?;
-        let row = rows.pop().ok_or_else(|| error("memory_source_not_found"))?;
+        let row = rows
+            .pop()
+            .ok_or_else(|| error(CognitionCode::MemorySourceNotFound))?;
         let project_id = graph.source_project_id(&row.episode_id)?;
         let candidate = MemorySourceCandidate {
             source_kind: row.source_kind.clone(),
@@ -62,12 +65,12 @@ impl NativeMemorySourceReference {
             origin_kind: row.origin_kind.clone(),
         };
         if !authorize(&candidate) {
-            return Err(error("invalid_scope"));
+            return Err(error(CognitionCode::InvalidScope));
         }
         let canonical = if row.source_kind == "conversation" {
             Some(
                 ConversationSourceReader::open(&conversation_store_path(&generation.source_root))
-                    .map_err(|_| error("memory_source_changed"))?,
+                    .map_err(|source| error(CognitionCode::MemorySourceChanged).with_source(source))?,
             )
         } else {
             None
@@ -86,7 +89,7 @@ impl NativeMemorySourceReference {
             compare_locale: |a: &str, b: &str| a.cmp(b),
         });
         let Some(RecallSourceResolution::Value(source)) = hydrated.remove(&source_id) else {
-            return Err(error("memory_source_changed"));
+            return Err(error(CognitionCode::MemorySourceChanged));
         };
         Ok(ResolvedMemorySource {
             generation_id: generation.generation_id,
@@ -106,7 +109,7 @@ impl NativeMemorySourceReference {
 fn decode_handle(handle: &str, generation_id: &str) -> CognitionResult<String> {
     let parts = handle.split(':').collect::<Vec<_>>();
     if parts.len() != 4 || parts[0] != "memory-source" || parts[1] != "v2" {
-        return Err(error("memory_source_not_found"));
+        return Err(error(CognitionCode::MemorySourceNotFound));
     }
     let decode = |value: &str| {
         URL_SAFE_NO_PAD
@@ -114,13 +117,13 @@ fn decode_handle(handle: &str, generation_id: &str) -> CognitionResult<String> {
             .ok()
             .and_then(|bytes| String::from_utf8(bytes).ok())
     };
-    let referenced = decode(parts[2]).ok_or_else(|| error("memory_source_not_found"))?;
+    let referenced = decode(parts[2]).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))?;
     if referenced != generation_id {
-        return Err(error("memory_source_changed"));
+        return Err(error(CognitionCode::MemorySourceChanged));
     }
-    decode(parts[3]).ok_or_else(|| error("memory_source_not_found"))
+    decode(parts[3]).ok_or_else(|| error(CognitionCode::MemorySourceNotFound))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

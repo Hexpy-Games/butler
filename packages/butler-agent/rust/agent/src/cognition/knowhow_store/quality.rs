@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::cognition::CognitionResult;
 
 use super::error;
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct SourceQualitySummary {
@@ -40,20 +41,24 @@ pub(super) fn aggregate(root: &Path) -> CognitionResult<Vec<SourceQualitySummary
     let path = root.join("source-quality.jsonl");
     let file = match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_file() => {
-            let canonical_root =
-                fs::canonicalize(root).map_err(|_| error("memory_source_quality_read_failed"))?;
-            let canonical =
-                fs::canonicalize(&path).map_err(|_| error("memory_source_quality_read_failed"))?;
+            let canonical_root = fs::canonicalize(root).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })?;
+            let canonical = fs::canonicalize(&path).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })?;
             if !canonical.starts_with(&canonical_root) {
-                return Err(error("memory_source_quality_path_unsafe"));
+                return Err(error(CognitionCode::MemorySourceQualityPathUnsafe));
             }
-            File::open(canonical).map_err(|_| error("memory_source_quality_read_failed"))?
+            File::open(canonical).map_err(|source| {
+                error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+            })?
         }
-        Ok(_) => return Err(error("memory_source_quality_path_unsafe")),
+        Ok(_) => return Err(error(CognitionCode::MemorySourceQualityPathUnsafe)),
         Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Vec::new());
         }
-        Err(_) => return Err(error("memory_source_quality_read_failed")),
+        Err(_) => return Err(error(CognitionCode::MemorySourceQualityReadFailed)),
     };
 
     let mut groups: IndexMap<(String, String), Accumulator> = IndexMap::new();
@@ -61,9 +66,9 @@ pub(super) fn aggregate(root: &Path) -> CognitionResult<Vec<SourceQualitySummary
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = reader
-            .read_until(b'\n', &mut line)
-            .map_err(|_| error("memory_source_quality_read_failed"))?;
+        let read = reader.read_until(b'\n', &mut line).map_err(|source| {
+            error(CognitionCode::MemorySourceQualityReadFailed).with_source(source)
+        })?;
         if read == 0 {
             break;
         }
@@ -75,13 +80,13 @@ pub(super) fn aggregate(root: &Path) -> CognitionResult<Vec<SourceQualitySummary
         };
         let object = value
             .as_object()
-            .ok_or_else(|| error("memory_source_quality_event_invalid"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceQualityEventInvalid))?;
         let source_id = string(object, "source_id")?;
         let tool_name = string(object, "tool_name")?;
         let success = object
             .get("success")
             .and_then(Value::as_bool)
-            .ok_or_else(|| error("memory_source_quality_event_invalid"))?;
+            .ok_or_else(|| error(CognitionCode::MemorySourceQualityEventInvalid))?;
         let negative = object.get("user_feedback").and_then(Value::as_str) == Some("negative");
         let freshness = number(object, "freshness_score")?;
         let latency = number(object, "latency_ms")?;
@@ -161,7 +166,7 @@ fn string(object: &serde_json::Map<String, Value>, field: &str) -> CognitionResu
         .get(field)
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| error("memory_source_quality_event_invalid"))
+        .ok_or_else(|| error(CognitionCode::MemorySourceQualityEventInvalid))
 }
 
 fn number(object: &serde_json::Map<String, Value>, field: &str) -> CognitionResult<f64> {
@@ -169,7 +174,7 @@ fn number(object: &serde_json::Map<String, Value>, field: &str) -> CognitionResu
         .get(field)
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .ok_or_else(|| error("memory_source_quality_event_invalid"))
+        .ok_or_else(|| error(CognitionCode::MemorySourceQualityEventInvalid))
 }
 
 fn round3(value: f64) -> f64 {

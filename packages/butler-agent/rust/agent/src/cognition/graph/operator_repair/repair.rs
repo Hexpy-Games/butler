@@ -10,6 +10,7 @@ use super::{
     error,
     request::{CandidateInputRepairExpected, CandidateInputRepairRequest},
 };
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{CognitionResult, extraction::ExtractInput},
     conversation::ConversationSourceReader,
@@ -54,24 +55,26 @@ pub(super) fn repair_candidate_inputs(
     let mut result = CandidateInputRepairResult::default();
     for expected in &request.windows {
         let row = read_repair_window(&tx, expected, current_generation)?
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
         validate_repair_window(&tx, expected, &row, dry_run)?;
 
         // validate_repair_window admitted only rows with a prior input and digest.
         let (Some(prior_input_json), Some(prior_sha)) =
             (row.input_json.as_deref(), row.input_sha256.as_deref())
         else {
-            return Err(error("memory_input_repair_precondition_changed"));
+            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
         };
         let pinned_value = parse_input_value(prior_input_json)?;
-        let pinned: ExtractInput = serde_json::from_value(pinned_value.clone())
-            .map_err(|_| error("memory_input_repair_precondition_changed"))?;
+        let pinned: ExtractInput =
+            serde_json::from_value(pinned_value.clone()).map_err(|source| {
+                error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
+            })?;
         if pinned.schema != EXTRACT_INPUT_SCHEMA
             || pinned.window_ref != expected.window_ref
             || pinned.episode_ref != row.episode_id
             || pinned.revision != row.revision
         {
-            return Err(error("memory_input_repair_precondition_changed"));
+            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
         }
         super::super::candidates::assert_pinned_source_current(
             &tx,
@@ -85,7 +88,7 @@ pub(super) fn repair_candidate_inputs(
         let candidate_ids = candidate_source
             .get("candidates")
             .and_then(Value::as_array)
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
             .iter()
             .map(|candidate| {
                 candidate
@@ -93,7 +96,7 @@ pub(super) fn repair_candidate_inputs(
                     .and_then(Value::as_str)
                     .filter(|value| !value.is_empty())
                     .map(str::to_owned)
-                    .ok_or_else(|| error("memory_input_repair_precondition_changed"))
+                    .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))
             })
             .collect::<CognitionResult<Vec<_>>>()?;
 
@@ -106,16 +109,16 @@ pub(super) fn repair_candidate_inputs(
             &candidate_ids,
             candidate_budget,
         )?;
-        let refreshed_value =
-            serde_json::to_value(&refreshed).map_err(|_| error("memory_graph_failed"))?;
+        let refreshed_value = serde_json::to_value(&refreshed)
+            .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))?;
         let mut repaired = pinned_value.clone();
         repaired
             .as_object_mut()
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
             .insert("candidates".into(), refreshed_value.clone());
         let serialized = stringify(&repaired)?;
         if serialized.len() > MAX_EXTRACT_INPUT_BYTES {
-            return Err(error("memory_extract_input_exceeds_budget"));
+            return Err(error(CognitionCode::MemoryExtractInputExceedsBudget));
         }
 
         let refreshed_refs = refreshed
@@ -126,7 +129,7 @@ pub(super) fn repair_candidate_inputs(
             .iter()
             .any(|reference| !refreshed_refs.contains(reference.as_str()))
         {
-            return Err(error("memory_input_repair_candidates_incomplete"));
+            return Err(error(CognitionCode::MemoryInputRepairCandidatesIncomplete));
         }
 
         let digest = extract_input_sha256(&serialized)?;
@@ -142,7 +145,7 @@ pub(super) fn repair_candidate_inputs(
         }
         let pinned_candidates = pinned_value
             .get("candidates")
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
         if stringify(pinned_candidates)? == stringify(&refreshed_value)? {
             result.receipts.push(json!({
                 "window_ref": expected.window_ref,
@@ -194,7 +197,7 @@ pub(super) fn repair_candidate_inputs(
             )
             .map_err(super::super::db_error)?;
         if changed != 1 {
-            return Err(error("memory_input_repair_precondition_changed"));
+            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
         }
         result.repaired += 1;
         result.receipts.push(json!({
@@ -251,7 +254,7 @@ fn validate_repair_window(
     let prior_input = row
         .input_json
         .as_deref()
-        .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
     if !state_allowed
         || row.owner_nonce.is_some()
         || row.owner_pid.is_some()
@@ -260,7 +263,7 @@ fn validate_repair_window(
         || row.attempt_count != expected.expected_attempt_count
         || extract_input_sha256(prior_input)? != expected.expected_input_sha256
     {
-        return Err(error("memory_input_repair_precondition_changed"));
+        return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
     }
     if !dry_run {
         let unknown: bool = tx
@@ -275,7 +278,7 @@ fn validate_repair_window(
             )
             .map_err(super::super::db_error)?;
         if unknown {
-            return Err(error("memory_input_repair_precondition_changed"));
+            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
         }
     }
     Ok(())
@@ -309,22 +312,25 @@ fn load_candidate_source(
         )
         .optional()
         .map_err(super::super::db_error)?;
-    let archived = archived.ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
-    let receipt: Value = serde_json::from_str(&archived)
-        .map_err(|_| error("memory_input_repair_precondition_changed"))?;
+    let archived =
+        archived.ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
+    let receipt: Value = serde_json::from_str(&archived).map_err(|source| {
+        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
+    })?;
     let prior_json = receipt
         .get("prior_input_json")
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
     let prior_sha = receipt
         .get("prior_input_sha256")
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
     if prior_sha != candidate_sha || extract_input_sha256(prior_json)? != candidate_sha {
-        return Err(error("memory_input_repair_precondition_changed"));
+        return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
     }
-    let candidate_source: Value = serde_json::from_str(prior_json)
-        .map_err(|_| error("memory_input_repair_precondition_changed"))?;
+    let candidate_source: Value = serde_json::from_str(prior_json).map_err(|source| {
+        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
+    })?;
     for field in [
         "schema",
         "episode_ref",
@@ -336,12 +342,12 @@ fn load_candidate_source(
     ] {
         let prior = candidate_source
             .get(field)
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
         let current = pinned
             .get(field)
-            .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?;
         if stringify(prior)? != stringify(current)? {
-            return Err(error("memory_input_repair_precondition_changed"));
+            return Err(error(CognitionCode::MemoryInputRepairPreconditionChanged));
         }
     }
     Ok(candidate_source)
@@ -351,21 +357,21 @@ fn remaining_candidate_bytes(pinned: &Value) -> CognitionResult<usize> {
     let mut empty_candidate_input = pinned.clone();
     empty_candidate_input
         .as_object_mut()
-        .ok_or_else(|| error("memory_input_repair_precondition_changed"))?
+        .ok_or_else(|| error(CognitionCode::MemoryInputRepairPreconditionChanged))?
         .insert("candidates".into(), Value::Array(Vec::new()));
     let base = stringify(&empty_candidate_input)?.len();
     MAX_EXTRACT_INPUT_BYTES
         .checked_sub(base)
         .and_then(|remaining| remaining.checked_add(2))
         .filter(|remaining| *remaining >= 2)
-        .ok_or_else(|| error("memory_extract_input_exceeds_budget"))
+        .ok_or_else(|| error(CognitionCode::MemoryExtractInputExceedsBudget))
 }
 
 fn extract_input_sha256(serialized: &str) -> CognitionResult<String> {
-    Ok(crate::cognition::sources::projection_hash_for_graph(vec![
+    crate::cognition::sources::projection_hash_for_graph(vec![
         Value::String("extract-input".into()),
         Value::String(serialized.into()),
-    ])?)
+    ])
 }
 
 fn repair_receipt_ref(
@@ -373,18 +379,21 @@ fn repair_receipt_ref(
     prior_sha256: &str,
     repaired_sha256: &str,
 ) -> CognitionResult<String> {
-    Ok(crate::cognition::sources::projection_hash_for_graph(vec![
+    crate::cognition::sources::projection_hash_for_graph(vec![
         Value::String("candidate-input-repair".into()),
         Value::String(window_ref.into()),
         Value::String(prior_sha256.into()),
         Value::String(repaired_sha256.into()),
-    ])?)
+    ])
 }
 
 fn parse_input_value(serialized: &str) -> CognitionResult<Value> {
-    serde_json::from_str(serialized).map_err(|_| error("memory_input_repair_precondition_changed"))
+    serde_json::from_str(serialized).map_err(|source| {
+        error(CognitionCode::MemoryInputRepairPreconditionChanged).with_source(source)
+    })
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value).map_err(|_| error("memory_graph_failed"))
+    crate::json::stringify(value)
+        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }

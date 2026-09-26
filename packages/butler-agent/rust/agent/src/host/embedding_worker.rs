@@ -135,7 +135,7 @@ async fn handle(
                 match NativeEmbeddingEngine::load(data_root) {
                     Ok(loaded) => *engine = Some(loaded),
                     Err(error) => {
-                        return WorkerResponse::error(id, error.0);
+                        return WorkerResponse::error(id, error.code());
                     }
                 }
             }
@@ -159,7 +159,7 @@ async fn handle(
                 WorkerOperation::Close => Ok(WorkerResult::Closed),
             }
             .unwrap_or_else(|error| WorkerResult::Error {
-                code: error.0.to_owned(),
+                code: error.code().to_owned(),
             })
         }
     };

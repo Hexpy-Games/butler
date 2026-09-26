@@ -22,7 +22,7 @@ pub(super) async fn run(
         let manifest = service
             .apply()
             .await
-            .map_err(|error| CliError::failed(error.code, error.message))?;
+            .map_err(|error| CliError::failed(error.code(), error.message()))?;
         if matches!(manifest.status.as_str(), "conflict" | "failed") {
             return Err(CliError::failed(
                 "invalid_state",
@@ -50,7 +50,7 @@ pub(super) async fn run(
     let mut plan = service
         .plan()
         .await
-        .map_err(|error| CliError::failed(error.code, error.message))?;
+        .map_err(|error| CliError::failed(error.code(), error.message()))?;
     plan.dry_run = dry_run;
     let human = format!(
         "status={}\nlegacyFiles={} legacyBytes={}\ncognitionFiles={} cognitionBytes={}{}",

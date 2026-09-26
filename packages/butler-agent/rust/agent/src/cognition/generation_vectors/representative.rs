@@ -13,6 +13,7 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::rows::{COLUMNS, GenerationVectorRow, optional_text, text};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionResult, MemoryGenerationHandle, ensure_data_authority, graph::VectorReadinessRow,
     lance_store,
@@ -167,7 +168,10 @@ pub(crate) async fn prepare_representatives(
 }
 
 fn aborted() -> crate::cognition::CognitionError {
-    crate::cognition::CognitionError::new("memory_operation_aborted", "memory_operation_aborted")
+    crate::cognition::CognitionError::new(
+        CognitionCode::MemoryOperationAborted,
+        "memory_operation_aborted",
+    )
 }
 
 fn valid_identity(

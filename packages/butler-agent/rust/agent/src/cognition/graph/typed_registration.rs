@@ -8,6 +8,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{GraphRegistration, db_error, index, invalidation, jobs};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, sources, sources::TypedPlan};
 use crate::conversation::ConversationSourceReader;
 
@@ -108,5 +109,5 @@ pub(super) fn register_typed(
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }

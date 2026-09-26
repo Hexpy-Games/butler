@@ -31,6 +31,7 @@ use super::{
     memory_maintain::signals,
 };
 
+use crate::cognition::CognitionCode;
 use options::{Operation, parse};
 
 pub async fn run(
@@ -235,7 +236,7 @@ pub async fn run(
                 repair_inputs::run(&options.data, &paths, generation, path, *dry_run).await
             }
             None => Err(CognitionError::new(
-                "memory_rebuild_invalid_request",
+                CognitionCode::MemoryRebuildInvalidRequest,
                 "memory_rebuild_invalid_request",
             )),
         },
@@ -253,7 +254,7 @@ pub async fn run(
             stderr: String::new(),
             exit_code: 0,
         },
-        Err(error) => failure(options.json, error.code, &error.message, 1),
+        Err(error) => failure(options.json, error.code(), &error.message(), 1),
     }
 }
 
@@ -280,12 +281,15 @@ async fn classify_before_prepare(
         .map_err(CognitionError::from)?
         .ok_or_else(|| {
             CognitionError::new(
-                "memory_write_lock_unavailable",
+                CognitionCode::MemoryWriteLockUnavailable,
                 "historical classification lock unavailable",
             )
         })?;
     let collation = Arc::new(LocaleCollation::new("en").map_err(|error| {
-        CognitionError::new("memory_origin_collation_unavailable", error.to_string())
+        CognitionError::new(
+            CognitionCode::MemoryOriginCollationUnavailable,
+            error.to_string(),
+        )
     })?);
     let store = AgentConversationStore::open(ConversationStoreConfig {
         path: canonical,
@@ -293,14 +297,11 @@ async fn classify_before_prepare(
         collation,
     })
     .await
-    .map_err(|error| CognitionError::new(error.code(), error.message()))?;
+    .map_err(CognitionError::from)?;
     let result = classify_historical_origins(data_root.to_path_buf(), &store, cancellation)
         .await
-        .map_err(|error| CognitionError::new(error.code(), error.message()));
-    let closed = store
-        .close()
-        .await
-        .map_err(|error| CognitionError::new(error.code(), error.message()));
+        .map_err(CognitionError::from);
+    let closed = store.close().await.map_err(CognitionError::from);
     drop(lease);
     result?;
     closed?;

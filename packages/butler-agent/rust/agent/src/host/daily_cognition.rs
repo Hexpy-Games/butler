@@ -154,7 +154,7 @@ impl DailyCognitionJobs {
             return Err("memory_write_aborted".into());
         }
         if !active_memory_descriptor_exists(&self.data_root, &self.paths)
-            .map_err(|error| error.code.to_owned())?
+            .map_err(|error| error.code().to_owned())?
         {
             return self.legacy.run(cancellation).await;
         }
@@ -162,7 +162,7 @@ impl DailyCognitionJobs {
             .consumer
             .catchup_once(cancellation)
             .await
-            .map_err(|error| error.code.to_owned())?;
+            .map_err(|error| error.code().to_owned())?;
         println!(
             "[session-sync] available={} scanned={} ingested={} wrapped={}",
             result.available, result.scanned, result.ingested, result.wrapped,
@@ -187,7 +187,7 @@ impl DailyCognitionJobs {
                 ..RunCycle::default()
             })
             .await
-            .map_err(|error| error.code.to_owned())?;
+            .map_err(|error| error.code().to_owned())?;
         let configured = self.run_configured(cancellation).await?;
         let generic_ok = matches!(
             generic.status,
@@ -220,12 +220,12 @@ impl DailyCognitionJobs {
         let config = ConfiguredCycleOptions::load(&self.data_root);
         if !config.enabled
             || !active_memory_descriptor_exists(&self.data_root, &self.paths)
-                .map_err(|error| error.code.to_owned())?
+                .map_err(|error| error.code().to_owned())?
         {
             return Ok(ConfiguredCycleResult::skipped());
         }
         let generation = resolve_active_generation(&self.data_root, &self.paths)
-            .map_err(|error| error.code.to_owned())?;
+            .map_err(|error| error.code().to_owned())?;
         let phases = Arc::new(NativeConfiguredPhases {
             consumer: self.consumer.clone(),
             consolidate: GraphConsolidationService::new(
@@ -251,6 +251,6 @@ impl DailyCognitionJobs {
         ConfiguredCycleService::new(self.data_root.clone(), self.paths.clone(), phases)
             .run(&config, cancellation)
             .await
-            .map_err(|error| error.code.to_owned())
+            .map_err(|error| error.code().to_owned())
     }
 }

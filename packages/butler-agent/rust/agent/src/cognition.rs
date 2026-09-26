@@ -46,8 +46,9 @@ mod windows;
 
 pub(crate) use box_store::BoxStoreService;
 pub(crate) use briefing::{
-    BriefingGenerationError, BriefingGenerationService, BriefingInputFuture, BriefingInputSnapshot,
-    BriefingInputSource, BriefingPersona, BriefingProjectSignal, BriefingSettings,
+    BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
+    BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
+    BriefingProjectSignal, BriefingSettings,
 };
 pub(crate) use briefing::{latest_completed_briefing_run_id, read_new_chat_briefing};
 pub(crate) use completion::{
@@ -71,7 +72,7 @@ pub(crate) use embedding_port::{
     CognitionEmbeddingPort, EmbeddingFuture, EmbeddingMode, EmbeddingRequest,
     EmbeddingRequestClass, WorkerOperation, WorkerRequest, WorkerResponse, WorkerResult,
 };
-pub(crate) use error::{CognitionError, CognitionResult};
+pub(crate) use error::{CognitionCode, CognitionError, CognitionResult};
 pub(crate) use exact_query::NativeExactMemoryQuery;
 pub(crate) use extraction::{CandidateSearchInput, CognitionVectorSearch, VectorSearchFuture};
 pub(crate) use feedback_buffer::{FeedbackBufferService, FeedbackTarget};
@@ -126,10 +127,10 @@ pub(crate) use source_reference::{MemorySourceCandidate, NativeMemorySourceRefer
 pub(in crate::cognition) use sources::assert_conversation_source_current;
 
 pub(crate) use sources::{
-    CognitionSourceError, CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice,
-    ExplicitMemoryUpdateInput, ExplicitMemoryUpdateResult, PreparedConversationSource,
-    TaskMemoryIngestionResult, hydrate_conversation_source, ingest_task_outcome_memory,
-    prepare_conversation_source, read_prior_public_context, update_explicit_memory,
+    CognitionSourcePlan, CognitionSourceRow, ConversationSourceNotice, ExplicitMemoryUpdateInput,
+    ExplicitMemoryUpdateResult, PreparedConversationSource, TaskMemoryIngestionResult,
+    hydrate_conversation_source, ingest_task_outcome_memory, prepare_conversation_source,
+    read_prior_public_context, update_explicit_memory,
 };
 pub(crate) use vector_optimize::{NativeVectorOptimizeService, VectorOptimizeOutcome};
 pub(crate) use windows::{

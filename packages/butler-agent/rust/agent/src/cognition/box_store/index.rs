@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use crate::cognition::{CognitionError, CognitionResult};
 
 use super::{error, index_io, manifest, paths};
+use crate::cognition::CognitionCode;
 use manifest::BoxManifest;
 
 const INDEX_REPORT_SCHEMA: &str = "butler.cognition.box.index-rebuild-report.v1";
@@ -38,18 +39,24 @@ pub(super) fn rebuild_index(root: &Path) -> CognitionResult<BoxIndexReport> {
 
     let result = (|| {
         index_io::create_private_file(&temporary)?;
-        let mut database =
-            Connection::open(&temporary).map_err(|_| error("memory_box_index_write_failed"))?;
+        let mut database = Connection::open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source)
+        })?;
         create_schema(&database)?;
 
         if paths::canonical_items_root(root)?.is_some() {
-            let entries = fs::read_dir(root.join("items"))
-                .map_err(|_| error("memory_box_items_read_failed"))?;
+            let entries = fs::read_dir(root.join("items")).map_err(|source| {
+                error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source)
+            })?;
             for entry in entries {
-                let entry = entry.map_err(|_| error("memory_box_items_read_failed"))?;
+                let entry = entry.map_err(|source| {
+                    error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source)
+                })?;
                 if !entry
                     .file_type()
-                    .map_err(|_| error("memory_box_items_read_failed"))?
+                    .map_err(|source| {
+                        error(CognitionCode::MemoryBoxItemsReadFailed).with_source(source)
+                    })?
                     .is_dir()
                 {
                     continue;
@@ -70,19 +77,19 @@ pub(super) fn rebuild_index(root: &Path) -> CognitionResult<BoxIndexReport> {
                     }
                 };
 
-                let transaction = database
-                    .transaction()
-                    .map_err(|_| error("memory_box_index_write_failed"))?;
+                let transaction = database.transaction().map_err(|source| {
+                    error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source)
+                })?;
                 let inserted = insert_manifest(&transaction, &manifest, &manifest_path);
                 let committed = inserted.and_then(|()| {
-                    transaction
-                        .commit()
-                        .map_err(|_| error("memory_box_index_insert_failed"))
+                    transaction.commit().map_err(|source| {
+                        error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source)
+                    })
                 });
                 if let Err(error) = committed {
                     skipped.push(BoxIndexSkip {
                         path: manifest_path.to_string_lossy().into_owned(),
-                        issues: vec![error.code.into()],
+                        issues: vec![error.code().into()],
                     });
                 } else {
                     indexed_count += 1;
@@ -90,10 +97,12 @@ pub(super) fn rebuild_index(root: &Path) -> CognitionResult<BoxIndexReport> {
             }
         }
 
-        database
-            .close()
-            .map_err(|_| error("memory_box_index_write_failed"))?;
-        fs::rename(&temporary, &index_path).map_err(|_| error("memory_box_index_write_failed"))?;
+        database.close().map_err(|(_, source)| {
+            error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, &index_path).map_err(|source| {
+            error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source)
+        })?;
         let report = BoxIndexReport {
             schema: INDEX_REPORT_SCHEMA,
             rebuilt_at: index_io::now_iso(),
@@ -121,53 +130,56 @@ pub(super) fn count_indexed(root: &Path) -> CognitionResult<usize> {
     let path = root.join("index.sqlite");
     if !path
         .try_exists()
-        .map_err(|_| error("memory_box_index_read_failed"))?
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?
     {
         rebuild_index(root)?;
     }
-    let canonical_root =
-        fs::canonicalize(root).map_err(|_| error("memory_box_index_read_failed"))?;
-    let canonical_index =
-        fs::canonicalize(&path).map_err(|_| error("memory_box_index_read_failed"))?;
+    let canonical_root = fs::canonicalize(root)
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
+    let canonical_index = fs::canonicalize(&path)
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
     if !canonical_index.starts_with(&canonical_root) {
-        return Err(error("memory_box_index_path_unsafe"));
+        return Err(error(CognitionCode::MemoryBoxIndexPathUnsafe));
     }
     let database =
         Connection::open_with_flags(&canonical_index, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| error("memory_box_index_read_failed"))?;
+            .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
     database
         .query_row("SELECT COUNT(*) FROM box_items", [], |row| {
             row.get::<_, i64>(0)
         })
-        .map_err(|_| error("memory_box_index_invalid"))
-        .and_then(|count| usize::try_from(count).map_err(|_| error("memory_box_index_invalid")))
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))
+        .and_then(|count| {
+            usize::try_from(count)
+                .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))
+        })
 }
 
 pub(super) fn list_indexed(root: &Path, limit: usize) -> CognitionResult<Vec<Value>> {
     let path = root.join("index.sqlite");
     if !path
         .try_exists()
-        .map_err(|_| error("memory_box_index_read_failed"))?
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?
     {
         rebuild_index(root)?;
     }
-    let canonical_root =
-        fs::canonicalize(root).map_err(|_| error("memory_box_index_read_failed"))?;
-    let canonical_index =
-        fs::canonicalize(&path).map_err(|_| error("memory_box_index_read_failed"))?;
+    let canonical_root = fs::canonicalize(root)
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
+    let canonical_index = fs::canonicalize(&path)
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
     if !canonical_index.starts_with(&canonical_root) {
-        return Err(error("memory_box_index_path_unsafe"));
+        return Err(error(CognitionCode::MemoryBoxIndexPathUnsafe));
     }
     let database =
         Connection::open_with_flags(&canonical_index, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| error("memory_box_index_read_failed"))?;
+            .map_err(|source| error(CognitionCode::MemoryBoxIndexReadFailed).with_source(source))?;
     let mut statement = database
         .prepare(
             "SELECT box_item_id,schema_version,kind,status,title,summary,privacy_class,\
              retention_class,freshness_class,created_at,captured_at,updated_at,manifest_path,content_hash \
              FROM box_items ORDER BY created_at DESC,box_item_id DESC LIMIT ?1",
         )
-        .map_err(|_| error("memory_box_index_invalid"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))?;
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
     let rows = statement
         .query_map(params![limit], |row| {
@@ -188,9 +200,9 @@ pub(super) fn list_indexed(root: &Path, limit: usize) -> CognitionResult<Vec<Val
                 "content_hash": row.get::<_, Option<String>>(13)?,
             }))
         })
-        .map_err(|_| error("memory_box_index_invalid"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(|_| error("memory_box_index_invalid"))
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))
 }
 
 fn create_schema(database: &Connection) -> CognitionResult<()> {
@@ -230,7 +242,7 @@ fn create_schema(database: &Connection) -> CognitionResult<()> {
              CREATE INDEX idx_box_item_refs_ref ON box_item_refs(ref_type, ref_id);
              CREATE INDEX idx_box_item_tags_tag ON box_item_tags(tag);",
         )
-        .map_err(|_| error("memory_box_index_write_failed"))
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexWriteFailed).with_source(source))
 }
 
 fn insert_manifest(
@@ -263,7 +275,7 @@ fn insert_manifest(
                 content_hash,
             ],
         )
-        .map_err(|_| error("memory_box_index_insert_failed"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source))?;
 
     for file in &manifest.files {
         database
@@ -281,7 +293,7 @@ fn insert_manifest(
                     file.mtime,
                 ],
             )
-            .map_err(|_| error("memory_box_index_insert_failed"))?;
+            .map_err(|source| error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source))?;
     }
     let origins = [
         ("session_id", manifest.origin.session_id.as_deref()),
@@ -303,7 +315,9 @@ fn insert_manifest(
                 "INSERT OR IGNORE INTO box_item_origins VALUES (?1, ?2, ?3)",
                 params![manifest.box_item_id, kind, id],
             )
-            .map_err(|_| error("memory_box_index_insert_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source)
+            })?;
     }
     for (kind, ids, relation) in [
         ("memory_chunk", &manifest.refs.memory_chunk_ids, "evidence"),
@@ -328,7 +342,9 @@ fn insert_manifest(
                 "INSERT OR IGNORE INTO box_item_tags VALUES (?1, ?2)",
                 params![manifest.box_item_id, tag],
             )
-            .map_err(|_| error("memory_box_index_insert_failed"))?;
+            .map_err(|source| {
+                error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source)
+            })?;
     }
     Ok(())
 }
@@ -345,16 +361,16 @@ fn insert_ref(
             "INSERT OR IGNORE INTO box_item_refs VALUES (?1, ?2, ?3, ?4)",
             params![item_id, kind, ref_id, relation],
         )
-        .map_err(|_| error("memory_box_index_insert_failed"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxIndexInsertFailed).with_source(source))?;
     Ok(())
 }
 
 fn issues_from_error(error: &CognitionError) -> Vec<String> {
-    if error.code == "memory_box_manifest_invalid"
-        && error.message != "Cognition Box operation failed"
+    if error.code() == "memory_box_manifest_invalid"
+        && error.message() != "Cognition Box operation failed"
     {
-        error.message.split("; ").map(str::to_owned).collect()
+        error.message().split("; ").map(str::to_owned).collect()
     } else {
-        vec![error.code.into()]
+        vec![error.code().into()]
     }
 }

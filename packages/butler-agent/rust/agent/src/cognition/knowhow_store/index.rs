@@ -12,6 +12,7 @@ use serde_json::Value;
 use crate::cognition::CognitionResult;
 
 use super::{entries, error, quality::SourceQualitySummary};
+use crate::cognition::CognitionCode;
 
 pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> CognitionResult<usize> {
     ensure_private_dir(root)?;
@@ -20,8 +21,9 @@ pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> Cognitio
     let temporary = root.join(format!("index.sqlite.tmp-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         create_private_file(&temporary)?;
-        let mut database =
-            Connection::open(&temporary).map_err(|_| error("memory_knowhow_index_write_failed"))?;
+        let mut database = Connection::open(&temporary).map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
         create_schema(&database)?;
         let mut indexed = 0;
         for entry_path in &entry_paths {
@@ -29,13 +31,13 @@ pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> Cognitio
             if !entries::validate(&entry).is_empty() {
                 continue;
             }
-            let transaction = database
-                .transaction()
-                .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+            let transaction = database.transaction().map_err(|source| {
+                error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+            })?;
             insert_entry(&transaction, &entry)?;
-            transaction
-                .commit()
-                .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+            transaction.commit().map_err(|source| {
+                error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+            })?;
             indexed += 1;
         }
         for summary in quality {
@@ -51,12 +53,16 @@ pub(super) fn rebuild(root: &Path, quality: &[SourceQualitySummary]) -> Cognitio
                         summary.last_observed_at,
                     ],
                 )
-                .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+                .map_err(|source| {
+                    error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+                })?;
         }
-        database
-            .close()
-            .map_err(|_| error("memory_knowhow_index_write_failed"))?;
-        fs::rename(&temporary, &path).map_err(|_| error("memory_knowhow_index_write_failed"))?;
+        database.close().map_err(|(_, source)| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
+        fs::rename(&temporary, &path).map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
         sync_directory(root)?;
         Ok(indexed)
     })();
@@ -89,7 +95,7 @@ fn create_schema(database: &Connection) -> CognitionResult<()> {
              CREATE INDEX idx_knowhow_entries_status ON knowhow_entries(status);
              CREATE INDEX idx_knowhow_terms_term ON knowhow_terms(term);",
         )
-        .map_err(|_| error("memory_knowhow_index_write_failed"))
+        .map_err(|source| error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source))
 }
 
 fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()> {
@@ -102,15 +108,15 @@ fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()
     let quality = entry
         .get("quality")
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let score = quality
         .get("score")
         .and_then(Value::as_f64)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let confidence = quality
         .get("confidence")
         .and_then(Value::as_f64)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     database
         .execute(
             "INSERT INTO knowhow_entries VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -118,7 +124,9 @@ fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()
                 id, name, status, scope, summary, score, confidence, updated_at
             ],
         )
-        .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+        .map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
 
     insert_term(database, id, "name", name)?;
     let aliases = string_array(entry, "aliases")?;
@@ -126,7 +134,7 @@ fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()
     let intent = entry
         .get("intent_match")
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let topics = object_string_array(intent, "topics")?;
     insert_terms(database, id, "topic", &topics)?;
     let examples = object_string_array(intent, "examples")?;
@@ -134,7 +142,7 @@ fn insert_entry(database: &Transaction<'_>, entry: &Value) -> CognitionResult<()
     let strategy = entry
         .get("strategy")
         .and_then(Value::as_object)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?;
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?;
     let sources = object_string_array(strategy, "preferred_sources")?;
     insert_terms(database, id, "source", &sources)?;
     Ok(())
@@ -163,7 +171,9 @@ fn insert_term(
             "INSERT OR IGNORE INTO knowhow_terms VALUES (?1, ?2, ?3)",
             params![id, term, kind],
         )
-        .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+        .map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
     Ok(())
 }
 
@@ -171,20 +181,20 @@ fn string<'a>(value: &'a Value, field: &str) -> CognitionResult<&'a str> {
     value
         .get(field)
         .and_then(Value::as_str)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
 }
 
 fn string_array(value: &Value, field: &str) -> CognitionResult<Vec<String>> {
     value
         .get(field)
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
         .iter()
         .map(|value| {
             value
                 .as_str()
                 .map(str::to_owned)
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
         })
         .collect()
 }
@@ -196,13 +206,13 @@ fn object_string_array(
     value
         .get(field)
         .and_then(Value::as_array)
-        .ok_or_else(|| error("memory_knowhow_entry_invalid"))?
+        .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))?
         .iter()
         .map(|value| {
             value
                 .as_str()
                 .map(str::to_owned)
-                .ok_or_else(|| error("memory_knowhow_entry_invalid"))
+                .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryInvalid))
         })
         .collect()
 }
@@ -213,9 +223,9 @@ fn ensure_private_dir(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::DirBuilderExt;
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error("memory_knowhow_root_path_unsafe")),
+            Ok(_) => return Err(error(CognitionCode::MemoryKnowhowRootPathUnsafe)),
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error("memory_knowhow_root_write_failed")),
+            Err(_) => return Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
         }
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);
@@ -226,9 +236,9 @@ fn ensure_private_dir(path: &Path) -> CognitionResult<()> {
                     .ok()
                     .filter(|metadata| metadata.file_type().is_dir())
                     .map(|_| ())
-                    .ok_or_else(|| error("memory_knowhow_root_path_unsafe"))
+                    .ok_or_else(|| error(CognitionCode::MemoryKnowhowRootPathUnsafe))
             }
-            Err(_) => Err(error("memory_knowhow_root_write_failed")),
+            Err(_) => Err(error(CognitionCode::MemoryKnowhowRootWriteFailed)),
         }
     }
     #[cfg(not(unix))]
@@ -237,7 +247,8 @@ fn ensure_private_dir(path: &Path) -> CognitionResult<()> {
             Ok(metadata) if metadata.file_type().is_dir() => Ok(()),
             Ok(_) => Err(error("memory_knowhow_root_path_unsafe")),
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir_all(path).map_err(|_| error("memory_knowhow_root_write_failed"))
+                fs::create_dir_all(path)
+                    .map_err(|source| error("memory_knowhow_root_write_failed").with_source(source))
             }
             Err(_) => Err(error("memory_knowhow_root_write_failed")),
         }
@@ -252,9 +263,9 @@ fn create_private_file(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    options
-        .open(path)
-        .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+    options.open(path).map_err(|source| {
+        error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+    })?;
     Ok(())
 }
 
@@ -262,6 +273,8 @@ fn sync_directory(path: &Path) -> CognitionResult<()> {
     #[cfg(unix)]
     File::open(path)
         .and_then(|directory| directory.sync_all())
-        .map_err(|_| error("memory_knowhow_index_write_failed"))?;
+        .map_err(|source| {
+            error(CognitionCode::MemoryKnowhowIndexWriteFailed).with_source(source)
+        })?;
     Ok(())
 }

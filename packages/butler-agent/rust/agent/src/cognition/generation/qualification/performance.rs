@@ -13,6 +13,7 @@ use super::{
         QueryResult, QueueWorkEvidence, SourceBinding, SourceRead,
     },
 };
+use crate::cognition::CognitionCode;
 
 pub(super) fn validate_performance(
     acceptance: &Acceptance,
@@ -28,7 +29,7 @@ pub(super) fn validate_performance(
         || !io::safe_ref(&performance.report_ref)
         || !valid_sha(&performance.report_sha256)
     {
-        return Err(invalid("memory_acceptance_performance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
     }
 
     let report: PerformanceReport =
@@ -44,7 +45,7 @@ pub(super) fn validate_performance(
         .filter(|sample| sample.mode == "hybrid")
         .collect::<Vec<_>>();
     let Some(first_case) = acceptance.cases.first() else {
-        return Err(invalid("memory_acceptance_performance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
     };
     let first_trace: super::types::CaseTrace =
         capture.read_json(&first_case.trace_ref, &first_case.trace_sha256)?;
@@ -64,12 +65,12 @@ pub(super) fn validate_performance(
         || source::memory_inventory_hash(&inventory)?
             != acceptance.verification_source_inventory_hash
     {
-        return Err(invalid("memory_acceptance_performance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
     }
 
     for sample in &report.samples {
         if !valid_performance_sample(sample) {
-            return Err(invalid("memory_acceptance_performance_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
         }
         let artifacts_valid = valid_performance_artifacts(
             sample,
@@ -78,9 +79,11 @@ pub(super) fn validate_performance(
             &inventory,
             capture,
         )
-        .map_err(|_| invalid("memory_acceptance_performance_invalid"))?;
+        .map_err(|source| {
+            invalid(CognitionCode::MemoryAcceptancePerformanceInvalid).with_source(source)
+        })?;
         if !artifacts_valid {
-            return Err(invalid("memory_acceptance_performance_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
         }
     }
     if !valid_twelve_by_five(&graph)
@@ -107,7 +110,7 @@ pub(super) fn validate_performance(
         ) != performance.prepared_hybrid_p95_ms
         || !valid_contention_evidence(&report.contention, capture, &report.samples)?
     {
-        return Err(invalid("memory_acceptance_performance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptancePerformanceInvalid));
     }
     Ok(())
 }
@@ -299,7 +302,9 @@ fn valid_contention_evidence(
     for work in &value.queue_work_refs {
         let evidence: QueueWorkEvidence = capture
             .read_json(work.evidence.path(), &work.evidence.sha256)
-            .map_err(|_| invalid("memory_acceptance_performance_invalid"))?;
+            .map_err(|source| {
+                invalid(CognitionCode::MemoryAcceptancePerformanceInvalid).with_source(source)
+            })?;
         if evidence.schema != "butler.memory-queue-work-evidence.v1"
             || evidence.result_id != work.result_id
             || evidence.work_class != "background"

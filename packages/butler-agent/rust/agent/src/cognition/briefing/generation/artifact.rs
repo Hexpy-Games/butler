@@ -5,6 +5,7 @@ use super::contracts::{
     BriefingGenerationError, BriefingInputSnapshot, BriefingProjectSignal, error,
 };
 use super::prompt;
+use crate::cognition::BriefingGenerationCode;
 
 #[derive(Clone, Copy)]
 pub(super) struct BriefingArtifactContext<'a> {
@@ -41,8 +42,8 @@ pub(super) fn from_model(
     if end <= start {
         return Err(invalid("JSON object"));
     }
-    let parsed: Value =
-        serde_json::from_str(&trimmed[start..=end]).map_err(|_| invalid("JSON object"))?;
+    let parsed: Value = serde_json::from_str(&trimmed[start..=end])
+        .map_err(|source| invalid("JSON object").with_source(source))?;
     let scope = if project.is_some() {
         "project"
     } else {
@@ -180,7 +181,7 @@ fn required_text(value: &Value, label: &str) -> Result<String, BriefingGeneratio
 
 fn invalid(label: &str) -> BriefingGenerationError {
     error(
-        "new_chat_briefing_invalid_model_output",
+        BriefingGenerationCode::NewChatBriefingInvalidModelOutput,
         format!("New chat briefing model omitted {label}"),
     )
 }

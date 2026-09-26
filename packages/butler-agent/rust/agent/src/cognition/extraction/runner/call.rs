@@ -1,4 +1,5 @@
 use super::ExtractionStagePort;
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{CognitionError, CognitionResult, extraction::ExtractInput},
     models::{
@@ -24,13 +25,15 @@ impl PromptInvocationIntent for Lifecycle<'_> {
             self.stages
                 .invocation_intent(self.input)
                 .await
-                .map_err(model_error)
+                .map_err(|error| model_error(&error))
         })
     }
 }
 impl PromptAdapterEntry for Lifecycle<'_> {
     fn entered(&self) -> Result<(), ProviderPromptError> {
-        self.stages.adapter_entry().map_err(model_error)
+        self.stages
+            .adapter_entry()
+            .map_err(|error| model_error(&error))
     }
 }
 
@@ -111,7 +114,7 @@ where
         let reused = saved.is_some();
         let result = if let Some(saved) = saved {
             if saved.request_hash != request_hash {
-                return Err(error("memory_extract_stage_changed"));
+                return Err(error(CognitionCode::MemoryExtractStageChanged));
             }
             saved
         } else {
@@ -155,9 +158,9 @@ where
                 .await
                 .map_err(|problem| {
                     if cancellation.is_cancelled() {
-                        error("memory_extract_cancelled")
+                        error(CognitionCode::MemoryExtractCancelled).with_source(problem)
                     } else {
-                        provider_error(&problem)
+                        provider_error(problem)
                     }
                 })?;
             let evidence = json!({"reported_model":result.model,"usage":result.usage.as_ref().map(|u|json!({"prompt_tokens":u.prompt_tokens,"cached_tokens":u.cached_tokens,"output_tokens":u.output_tokens,"total_tokens":u.total_tokens})),"duration_ms":provider_started.elapsed().as_millis(),"request_wire":wire});
@@ -170,30 +173,28 @@ where
             stage_result
         };
         stage_evidence.push(json!({"stage":stage,"repair":repair,"reused":reused,"request_hash":result.request_hash,"provider":result.evidence}));
-        let parsed =
-            serde_json::from_str(&result.raw).map_err(|_| error("memory_extract_invalid_json"));
+        let parsed = serde_json::from_str(&result.raw)
+            .map_err(|source| error(CognitionCode::MemoryExtractInvalidJson).with_source(source));
         let validated = parsed.and_then(|value| validate(value, repair));
         match validated {
             Ok(value) => return Ok((value, stage_evidence)),
             Err(problem)
-                if problem.code.starts_with("memory_extract_invalid_")
+                if problem.code().starts_with("memory_extract_invalid_")
                     && repair < MAX_STAGE_REPAIRS =>
             {
-                rejection = Some(problem.code.into());
+                rejection = Some(problem.code().into());
             }
             Err(problem)
-                if problem.code.starts_with("memory_extract_invalid_")
+                if problem.code().starts_with("memory_extract_invalid_")
                     && repair == MAX_STAGE_REPAIRS =>
             {
-                return Err(CognitionError::new(
-                    problem.code,
-                    format!("repair_exhausted: {}", problem.message),
-                ));
+                let message = format!("repair_exhausted: {}", problem.message());
+                return Err(problem.with_message(message));
             }
             Err(problem) => return Err(problem),
         }
     }
-    Err(error("memory_extract_stage_changed"))
+    Err(error(CognitionCode::MemoryExtractStageChanged))
 }
 
 fn parse_effort(v: &str) -> CognitionResult<ReasoningEffort> {
@@ -204,24 +205,26 @@ fn parse_effort(v: &str) -> CognitionResult<ReasoningEffort> {
         "high" => Ok(ReasoningEffort::High),
         "xhigh" => Ok(ReasoningEffort::Xhigh),
         "max" => Ok(ReasoningEffort::Max),
-        _ => Err(error("memory_extract_invalid_reasoning_effort")),
+        _ => Err(error(CognitionCode::MemoryExtractInvalidReasoningEffort)),
     }
 }
 fn sha(v: &str) -> String {
     format!("{:x}", Sha256::digest(v.as_bytes()))
 }
-pub(super) fn error(c: &'static str) -> CognitionError {
-    CognitionError::new(c, c)
+pub(super) fn error(c: CognitionCode) -> CognitionError {
+    CognitionError::new(c, c.as_str())
 }
-pub(super) fn json_error(e: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", e.to_string())
+pub(super) fn json_error(e: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, e.to_string()).with_source(e)
 }
-fn provider_error(e: &ProviderPromptError) -> CognitionError {
-    CognitionError::new("memory_extract_provider_failed", format!("{e:?}"))
+fn provider_error(e: ProviderPromptError) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractProviderFailed, format!("{e:?}")).with_source(e)
 }
-fn model_error(e: CognitionError) -> ProviderPromptError {
+/// Invocation callbacks report Cognition failures as provider invocation
+/// failures, which carry only a code and message.
+fn model_error(e: &CognitionError) -> ProviderPromptError {
     ProviderPromptError::InvocationFailure {
-        code: Some(e.code.into()),
-        message: e.message,
+        code: Some(e.code().into()),
+        message: e.message(),
     }
 }

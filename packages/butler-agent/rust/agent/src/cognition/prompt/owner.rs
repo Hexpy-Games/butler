@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tokio::sync::{Notify, Semaphore};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult};
 
 #[derive(Clone)]
@@ -56,17 +57,18 @@ impl PromptReadOwner {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 CognitionError::new(
-                    "cognition_prompt_closed",
+                    CognitionCode::CognitionPromptClosed,
                     "cognition prompt reader is closed",
                 )
+                .with_source(source)
             })?;
         {
             let mut state = self.inner.state.lock();
             if state.closing {
                 return Err(CognitionError::new(
-                    "cognition_prompt_closed",
+                    CognitionCode::CognitionPromptClosed,
                     "cognition prompt reader is closed",
                 ));
             }
@@ -79,11 +81,12 @@ impl PromptReadOwner {
             action()
         })
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             CognitionError::new(
-                "cognition_prompt_worker_failed",
+                CognitionCode::CognitionPromptWorkerFailed,
                 "cognition prompt read worker failed",
             )
+            .with_source(source)
         })?
     }
 

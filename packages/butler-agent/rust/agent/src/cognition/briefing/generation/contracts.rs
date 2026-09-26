@@ -53,22 +53,12 @@ pub(crate) trait BriefingInputSource: Send + Sync {
     fn local_minute(&self, epoch_ms: i64) -> Result<u16, BriefingGenerationError>;
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct BriefingGenerationError {
-    pub code: &'static str,
-    pub message: String,
-}
+pub(crate) use super::error::{BriefingGenerationCode, BriefingGenerationError};
 
-impl BriefingGenerationError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-pub(super) fn error(code: &'static str, message: impl Into<String>) -> BriefingGenerationError {
+pub(super) fn error(
+    code: BriefingGenerationCode,
+    message: impl Into<String>,
+) -> BriefingGenerationError {
     BriefingGenerationError::new(code, message)
 }
 

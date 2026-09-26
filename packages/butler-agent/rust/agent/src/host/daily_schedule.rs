@@ -65,7 +65,7 @@ fn state_path(data_root: &Path, id: &str) -> PathBuf {
 }
 
 fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, String> {
-    ensure_data_authority(data_root, &[path]).map_err(|error| error.code.to_owned())?;
+    ensure_data_authority(data_root, &[path]).map_err(|error| error.code().to_owned())?;
     Ok(fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
@@ -77,11 +77,11 @@ fn should_run(data_root: &Path, path: &Path, day: &str) -> Result<bool, String> 
 fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), String> {
     let path = state_path(data_root, id);
     let parent = path.parent().ok_or("scheduler_state_path_invalid")?;
-    ensure_data_authority(data_root, &[parent, &path]).map_err(|error| error.code.to_owned())?;
+    ensure_data_authority(data_root, &[parent, &path]).map_err(|error| error.code().to_owned())?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     let temporary = parent.join(format!(".{id}-{}.tmp", uuid::Uuid::new_v4()));
     ensure_data_authority(data_root, &[&path, &temporary])
-        .map_err(|error| error.code.to_owned())?;
+        .map_err(|error| error.code().to_owned())?;
     let result = (|| {
         let mut bytes = serde_json::to_vec_pretty(state).map_err(|error| error.to_string())?;
         bytes.push(b'\n');
@@ -99,7 +99,7 @@ fn write_state(data_root: &Path, id: &str, state: &Value) -> Result<(), String> 
         file.sync_all().map_err(|error| error.to_string())?;
         drop(file);
         ensure_data_authority(data_root, &[&path, &temporary])
-            .map_err(|error| error.code.to_owned())?;
+            .map_err(|error| error.code().to_owned())?;
         fs::rename(&temporary, &path).map_err(|error| error.to_string())
     })();
     if result.is_err() {

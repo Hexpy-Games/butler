@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::ConsumeTypedLifecycleInput;
 use super::{CognitionRegistrationService, closed, join_error};
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
@@ -28,7 +29,7 @@ impl CognitionRegistrationService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
@@ -64,11 +65,12 @@ impl CognitionRegistrationService {
             .await;
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_registration_operation_failed",
+                CognitionCode::MemoryRegistrationOperationFailed,
                 "memory_registration_operation_failed",
             )
+            .with_source(source)
         })?
     }
 }
@@ -184,9 +186,9 @@ async fn run(run: TypedLifecycleRun) -> CognitionResult<()> {
 }
 
 fn source_changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
 
 fn aborted() -> CognitionError {
-    CognitionError::new("memory_write_aborted", "memory_write_aborted")
+    CognitionError::new(CognitionCode::MemoryWriteAborted, "memory_write_aborted")
 }

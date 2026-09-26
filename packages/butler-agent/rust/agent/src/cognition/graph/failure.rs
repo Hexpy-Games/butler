@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 
 use super::{db_error, jobs};
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, CognitionResult, graph::ProjectionWindowOwner};
 
 pub(super) fn pinned_input(
@@ -14,8 +15,9 @@ pub(super) fn pinned_input(
 ) -> CognitionResult<crate::cognition::extraction::ExtractInput> {
     let json=connection.query_row("SELECT input_json FROM memory_projection_windows WHERE window_ref=?1 AND owner_nonce=?2 AND state='running'",
         params![window,nonce],|r|r.get::<_,String>(0)).optional().map_err(db_error)?.ok_or_else(changed)?;
-    serde_json::from_str(&json)
-        .map_err(|e| CognitionError::new("memory_extract_invalid_json", e.to_string()))
+    serde_json::from_str(&json).map_err(|e| {
+        CognitionError::new(CognitionCode::MemoryExtractInvalidJson, e.to_string()).with_source(e)
+    })
 }
 
 pub(super) fn disposition(
@@ -167,8 +169,10 @@ fn retryable(code: &str) -> bool {
         )
 }
 fn retry_at(now: &str, attempts: i64) -> CognitionResult<String> {
-    let parsed = DateTime::parse_from_rfc3339(now)
-        .map_err(|_| CognitionError::new("memory_graph_unavailable", "invalid clock"))?;
+    let parsed = DateTime::parse_from_rfc3339(now).map_err(|source| {
+        CognitionError::new(CognitionCode::MemoryGraphUnavailable, "invalid clock")
+            .with_source(source)
+    })?;
     Ok(
         (parsed + Duration::milliseconds(if attempts == 1 { 30_000 } else { 120_000 }))
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
@@ -176,10 +180,11 @@ fn retry_at(now: &str, attempts: i64) -> CognitionResult<String> {
 }
 fn changed() -> CognitionError {
     CognitionError::new(
-        "memory_projection_window_changed",
+        CognitionCode::MemoryProjectionWindowChanged,
         "memory_projection_window_changed",
     )
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

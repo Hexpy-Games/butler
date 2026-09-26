@@ -13,6 +13,7 @@ use crate::cognition::{
 };
 
 use super::error;
+use crate::cognition::CognitionCode;
 
 pub(super) const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_QUEUE_REQUESTS: usize = 64;
@@ -61,9 +62,9 @@ impl QueueState {
                     released += item.bytes;
                     requests += 1;
                     let code = if item.cancellation.is_cancelled() {
-                        "embed_request_cancelled"
+                        CognitionCode::EmbedRequestCancelled
                     } else {
-                        "embed_request_deadline"
+                        CognitionCode::EmbedRequestDeadline
                     };
                     let _ = item.response.send(Err(error(code)));
                 } else {
@@ -107,7 +108,7 @@ pub(super) fn validate_request(request: &EmbeddingRequest) -> CognitionResult<()
             .max_embeddings
             .is_some_and(|count| count == 0 || count > MAX_TEXTS)
     {
-        Err(error("embed_invalid_request"))
+        Err(error(CognitionCode::EmbedInvalidRequest))
     } else {
         Ok(())
     }
@@ -119,10 +120,10 @@ pub(super) fn deadline_instant(epoch_ms: Option<i64>) -> CognitionResult<Option<
     };
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| error("embed_request_deadline"))?
+        .map_err(|_| error(CognitionCode::EmbedRequestDeadline))?
         .as_millis();
     if epoch_ms <= 0 || u128::try_from(epoch_ms).unwrap_or_default() <= now_ms {
-        return Err(error("embed_request_deadline"));
+        return Err(error(CognitionCode::EmbedRequestDeadline));
     }
     let remaining =
         u64::try_from(u128::try_from(epoch_ms).unwrap_or_default() - now_ms).unwrap_or(u64::MAX);

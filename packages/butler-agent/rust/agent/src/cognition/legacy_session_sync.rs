@@ -5,6 +5,7 @@ mod query;
 mod session_id;
 
 use super::{CognitionError, CognitionResult, ensure_data_authority};
+use crate::cognition::CognitionCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -39,7 +40,7 @@ impl LegacySessionOffsets {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(Self::default());
             }
-            Err(_) => return Err(failure("legacy_session_offset_read_failed")),
+            Err(_) => return Err(failure(CognitionCode::LegacySessionOffsetReadFailed)),
         };
         let Ok(mut value) = serde_json::from_str::<Value>(&raw) else {
             return Ok(Self::default());
@@ -85,15 +86,18 @@ impl LegacySessionOffsets {
         let path = offset_path(memory_root);
         let parent = path
             .parent()
-            .ok_or_else(|| failure("legacy_session_offset_write_failed"))?;
+            .ok_or_else(|| failure(CognitionCode::LegacySessionOffsetWriteFailed))?;
         let temp = parent.join(format!(
             "session-sync-offset.json.tmp-{}",
             uuid::Uuid::new_v4()
         ));
         ensure_data_authority(data_root, &[memory_root, parent, &path, &temp])?;
-        fs::create_dir_all(parent).map_err(|_| failure("legacy_session_offset_write_failed"))?;
-        let content = serde_json::to_vec_pretty(&self.values)
-            .map_err(|_| failure("legacy_session_offset_write_failed"))?;
+        fs::create_dir_all(parent).map_err(|source| {
+            failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+        })?;
+        let content = serde_json::to_vec_pretty(&self.values).map_err(|source| {
+            failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+        })?;
         let result: CognitionResult<()> = (|| {
             let mut options = fs::OpenOptions::new();
             options.write(true).create_new(true);
@@ -102,17 +106,22 @@ impl LegacySessionOffsets {
                 use std::os::unix::fs::OpenOptionsExt;
                 options.mode(0o600);
             }
-            let mut file = options
-                .open(&temp)
-                .map_err(|_| failure("legacy_session_offset_write_failed"))?;
+            let mut file = options.open(&temp).map_err(|source| {
+                failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+            })?;
             if let Ok(metadata) = fs::metadata(&path) {
-                fs::set_permissions(&temp, metadata.permissions())
-                    .map_err(|_| failure("legacy_session_offset_write_failed"))?;
+                fs::set_permissions(&temp, metadata.permissions()).map_err(|source| {
+                    failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+                })?;
             }
             file.write_all(&content)
                 .and_then(|()| file.sync_all())
-                .map_err(|_| failure("legacy_session_offset_write_failed"))?;
-            fs::rename(&temp, &path).map_err(|_| failure("legacy_session_offset_write_failed"))?;
+                .map_err(|source| {
+                    failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+                })?;
+            fs::rename(&temp, &path).map_err(|source| {
+                failure(CognitionCode::LegacySessionOffsetWriteFailed).with_source(source)
+            })?;
             Ok(())
         })();
         if result.is_err() {
@@ -141,7 +150,7 @@ pub(crate) fn read_legacy_new_lines(
                 },
             ));
         }
-        Err(_) => return Err(failure("legacy_transcript_read_failed")),
+        Err(_) => return Err(failure(CognitionCode::LegacyTranscriptReadFailed)),
     };
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
@@ -150,9 +159,9 @@ pub(crate) fn read_legacy_new_lines(
     let mut lines = Vec::new();
     loop {
         line.clear();
-        let read = reader
-            .read_until(b'\n', &mut line)
-            .map_err(|_| failure("legacy_transcript_read_failed"))?;
+        let read = reader.read_until(b'\n', &mut line).map_err(|source| {
+            failure(CognitionCode::LegacyTranscriptReadFailed).with_source(source)
+        })?;
         if read == 0 {
             break;
         }
@@ -206,9 +215,9 @@ pub(crate) fn append_legacy_session_diagnostic(
     ensure_data_authority(data_root, &[memory_root, &path])?;
     fs::create_dir_all(
         path.parent()
-            .ok_or_else(|| failure("legacy_diagnostic_failed"))?,
+            .ok_or_else(|| failure(CognitionCode::LegacyDiagnosticFailed))?,
     )
-    .map_err(|_| failure("legacy_diagnostic_failed"))?;
+    .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;
     let mut options = fs::OpenOptions::new();
     options.append(true).create(true);
     #[cfg(unix)]
@@ -218,17 +227,17 @@ pub(crate) fn append_legacy_session_diagnostic(
     }
     let mut file = options
         .open(path)
-        .map_err(|_| failure("legacy_diagnostic_failed"))?;
+        .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))?;
     writeln!(file, "{}", json!({"timestamp": chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         "reason":"session_sync_unparseable_transcript", "session_id":session_id, "project":project, "line_count":line_count}))
-        .map_err(|_| failure("legacy_diagnostic_failed"))
+        .map_err(|source| failure(CognitionCode::LegacyDiagnosticFailed).with_source(source))
 }
 
 fn offset_path(memory_root: &Path) -> PathBuf {
     memory_root.join("db/session-sync-offset.json")
 }
-fn failure(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn failure(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 
 #[cfg(test)]

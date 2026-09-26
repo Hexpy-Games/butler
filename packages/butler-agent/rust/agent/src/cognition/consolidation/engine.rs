@@ -15,6 +15,7 @@ use super::{
         Phase, PhaseResult, PhaseResultStatus, RateBudget,
     },
 };
+use crate::cognition::CognitionCode;
 use crate::{
     cognition::{CognitionError, CognitionPathEnvironment, CognitionResult},
     coordination::{
@@ -23,20 +24,50 @@ use crate::{
     },
 };
 
+/// A consolidation phase failed. `code`/`message` are recorded in the
+/// checkpoint, `metrics` are the partial phase metrics, and `source` is the
+/// underlying error when there was one.
+#[derive(Debug, thiserror::Error)]
+#[error("{code}: {message}")]
 pub(crate) struct PhaseError {
     pub(crate) code: &'static str,
     pub(crate) message: String,
-    pub(crate) metrics: Map<String, Value>,
+    /// Boxed: phase results travel in `Result` and the map is rarely present.
+    pub(crate) metrics: Box<Map<String, Value>>,
+    #[source]
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl PhaseError {
+    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            metrics: Box::default(),
+            source: None,
+        }
+    }
+
+    /// Attaches the partial metrics of the failed phase.
+    #[must_use]
+    pub(crate) fn with_metrics(mut self, metrics: Map<String, Value>) -> Self {
+        self.metrics = Box::new(metrics);
+        self
+    }
+
+    /// Records the underlying error.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
+        self.source = Some(source.into());
+        self
+    }
+
     #[cfg(test)]
     pub(crate) fn unavailable(phase: Phase) -> Self {
-        Self {
-            code: "consolidation_phase_unavailable",
-            message: phase.as_str().into(),
-            metrics: Map::new(),
-        }
+        Self::new("consolidation_phase_unavailable", phase.as_str())
     }
 }
 
@@ -114,7 +145,7 @@ impl CycleService {
         let existing = checkpoint::read_checkpoint(&self.data_root, &self.environment(), &run_id)?;
         if !input.resume && existing.is_some() {
             return Err(CognitionError::new(
-                "consolidation_checkpoint_changed",
+                CognitionCode::ConsolidationCheckpointChanged,
                 "Run already exists; use --resume",
             ));
         }
@@ -153,7 +184,7 @@ impl CycleService {
             }
             if input.cancellation.is_cancelled() {
                 return Err(CognitionError::new(
-                    "consolidation_aborted",
+                    CognitionCode::ConsolidationAborted,
                     "Consolidation was cancelled",
                 ));
             }
@@ -202,7 +233,7 @@ impl CycleService {
                 .await
             {
                 Ok(value) => value,
-                Err(error) if error.code == "memory_write_busy" => {
+                Err(error) if error.code() == "memory_write_busy" => {
                     phases.push(PhaseResult {
                         phase,
                         status: PhaseResultStatus::Error,
@@ -256,7 +287,7 @@ impl CycleService {
                     phases.push(PhaseResult {
                         phase,
                         status: PhaseResultStatus::Error,
-                        metrics: error.metrics,
+                        metrics: *error.metrics,
                         error: Some(safe_message.clone()),
                     });
                     committed

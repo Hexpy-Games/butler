@@ -11,6 +11,7 @@ mod retention;
 #[path = "box_store/tests.rs"]
 mod tests;
 
+use crate::cognition::CognitionCode;
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
@@ -79,7 +80,7 @@ impl BoxStoreService {
             &self.data_root,
             &[&cognition_root, &root, &lock_path],
         )
-        .map_err(|_| error("memory_box_root_path_unsafe"))?;
+        .map_err(|source| error(CognitionCode::MemoryBoxRootPathUnsafe).with_source(source))?;
         let coordinator = self.coordinator.clone();
         let lease = coordinator
             .acquire(
@@ -88,7 +89,7 @@ impl BoxStoreService {
             )
             .await
             .map_err(CognitionError::from)?
-            .ok_or_else(|| error("memory_write_busy"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
             let result = operation(root);
             let released = lease.release(result.is_ok()).map_err(CognitionError::from);
@@ -98,10 +99,10 @@ impl BoxStoreService {
             }
         })
         .await
-        .map_err(|_| error("memory_box_store_io_failed"))?
+        .map_err(|source| error(CognitionCode::MemoryBoxStoreIoFailed).with_source(source))?
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
+fn error(code: CognitionCode) -> CognitionError {
     CognitionError::new(code, "Cognition Box operation failed")
 }

@@ -12,6 +12,7 @@ use std::{
 };
 
 use super::{CognitionError, CognitionPathEnvironment, CognitionResult, ensure_data_authority};
+use crate::cognition::CognitionCode;
 use crate::public_text::trim_js_whitespace;
 
 pub(crate) fn recall_legacy(
@@ -23,7 +24,7 @@ pub(crate) fn recall_legacy(
     let corpus = corpus::load(data_root, paths, request.project_id.as_deref())?;
     if trim_js_whitespace(&request.cue).is_empty() {
         return Err(CognitionError::new(
-            "legacy_recall_invalid_cue",
+            CognitionCode::LegacyRecallInvalidCue,
             "recall cue requires text",
         ));
     }

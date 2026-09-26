@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 
 use super::{error, stringify};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionResult,
     extraction::{ExtractClaim, ExtractInput, ExtractOutput, NodeResolution},
@@ -116,7 +117,7 @@ pub(super) fn record_mention(
     byte_start: usize,
 ) -> CognitionResult<()> {
     if surface.is_empty() {
-        return Err(error("memory_mention_empty"));
+        return Err(error(CognitionCode::MemoryMentionEmpty));
     }
     let span = text.find(surface).map(|offset| byte_start + offset);
     tx.execute("INSERT OR IGNORE INTO memory_mentions(node_id,source_id,byte_start,byte_end,surface,method) VALUES(?1,?2,?3,?4,?5,?6)",params![node,source,span.map(|x|i64::try_from(x).unwrap_or(i64::MAX)),span.map(|x|i64::try_from(x+surface.len()).unwrap_or(i64::MAX)),surface,if span.is_some(){"literal"}else{"inferred"}]).map_err(db_error)?;

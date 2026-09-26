@@ -1,6 +1,7 @@
 //! Host-owned, bounded client for the private same-executable embedding worker.
 //! One in-process queue serializes one child and one inference at a time.
 
+use crate::cognition::CognitionCode;
 use parking_lot::Mutex;
 use std::{
     panic::AssertUnwindSafe,
@@ -59,7 +60,8 @@ struct AdmissionGuard {
 
 impl NativeEmbeddingOwner {
     pub(crate) fn new(data_root: PathBuf) -> CognitionResult<Self> {
-        let executable = std::env::current_exe().map_err(|_| error("embed_worker_unavailable"))?;
+        let executable =
+            std::env::current_exe().map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
         let inner = Arc::new(Inner {
             data_root,
             executable,
@@ -92,18 +94,20 @@ impl NativeEmbeddingOwner {
             if let Some(completed) = completed {
                 let actor = self.actor.lock().take();
                 if let Some(actor) = actor {
-                    actor.await.map_err(|_| error("embed_worker_unavailable"))?;
+                    actor
+                        .await
+                        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
                 }
                 return if completed {
                     Ok(())
                 } else {
-                    Err(error("embed_worker_unavailable"))
+                    Err(error(CognitionCode::EmbedWorkerUnavailable))
                 };
             }
             completion
                 .changed()
                 .await
-                .map_err(|_| error("embed_worker_unavailable"))?;
+                .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
         }
     }
 
@@ -118,7 +122,7 @@ impl NativeEmbeddingOwner {
         let deadline = deadline_instant(request.deadline_at_epoch_ms)?
             .or_else(|| Instant::now().checked_add(Duration::from_secs(300)));
         if cancellation.is_cancelled() {
-            return Err(error("embed_request_cancelled"));
+            return Err(error(CognitionCode::EmbedRequestCancelled));
         }
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let mode = request.mode;
@@ -133,10 +137,11 @@ impl NativeEmbeddingOwner {
             resplit: request.resplit,
             max_embeddings: request.max_embeddings,
         };
-        let mut frame = serde_json::to_vec(&wire).map_err(|_| error("embed_invalid_request"))?;
+        let mut frame =
+            serde_json::to_vec(&wire).map_err(|_| error(CognitionCode::EmbedInvalidRequest))?;
         frame.push(b'\n');
         if frame.len() > MAX_FRAME_BYTES {
-            return Err(error("embed_request_too_large"));
+            return Err(error(CognitionCode::EmbedRequestTooLarge));
         }
         let bytes = frame.len();
         let admitted_cancel = cancellation.child_token();
@@ -144,12 +149,12 @@ impl NativeEmbeddingOwner {
         {
             let mut state = self.inner.state.lock();
             if state.closed {
-                return Err(error("embed_owner_closed"));
+                return Err(error(CognitionCode::EmbedOwnerClosed));
             }
             if state.queued_requests >= MAX_QUEUE_REQUESTS
                 || state.queued_bytes + bytes > MAX_QUEUE_BYTES
             {
-                return Err(error("embed_queue_full"));
+                return Err(error(CognitionCode::EmbedQueueFull));
             }
             let pending = Pending {
                 id,
@@ -179,12 +184,12 @@ impl NativeEmbeddingOwner {
         let response = async {
             receiver
                 .await
-                .map_err(|_| error("embed_worker_unavailable"))?
+                .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?
         };
         tokio::select! {
             biased;
-            () = admitted_cancel.cancelled() => Err(error("embed_request_cancelled")),
-            () = deadline_wait(deadline) => Err(error("embed_request_deadline")),
+            () = admitted_cancel.cancelled() => Err(error(CognitionCode::EmbedRequestCancelled)),
+            () = deadline_wait(deadline) => Err(error(CognitionCode::EmbedRequestDeadline)),
             result = response => result,
         }
     }
@@ -214,10 +219,14 @@ impl Inner {
         }
         state.closed = true;
         for pending in state.interactive.drain(..) {
-            let _ = pending.response.send(Err(error("embed_owner_closed")));
+            let _ = pending
+                .response
+                .send(Err(error(CognitionCode::EmbedOwnerClosed)));
         }
         for pending in state.background.drain(..) {
-            let _ = pending.response.send(Err(error("embed_owner_closed")));
+            let _ = pending
+                .response
+                .send(Err(error(CognitionCode::EmbedOwnerClosed)));
         }
         state.active_cancel.as_ref().map(CancellationToken::cancel);
         state.queued_requests = usize::from(state.active_cancel.is_some());
@@ -300,10 +309,10 @@ async fn run_item(
     item: &Pending,
 ) -> CognitionResult<NativeEmbeddingResult> {
     if item.cancellation.is_cancelled() {
-        return Err(error("embed_request_cancelled"));
+        return Err(error(CognitionCode::EmbedRequestCancelled));
     }
     if expired(item.deadline) {
-        return Err(error("embed_request_deadline"));
+        return Err(error(CognitionCode::EmbedRequestDeadline));
     }
     if child
         .as_mut()
@@ -317,9 +326,9 @@ async fn run_item(
     if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let initialized = tokio::select! {
             biased;
-            () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
+            () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
             result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
-                result.unwrap_or_else(|_| Err(error("embed_worker_unavailable"))),
+                result.unwrap_or_else(|_| Err(error(CognitionCode::EmbedWorkerUnavailable))),
         };
         match initialized {
             Ok(()) => process.initialized = true,
@@ -332,19 +341,19 @@ async fn run_item(
     // Initialization belongs to the owner. An initiating caller may have
     // timed out while the same child became ready for later live requests.
     if item.cancellation.is_cancelled() {
-        return Err(error("embed_request_cancelled"));
+        return Err(error(CognitionCode::EmbedRequestCancelled));
     }
     if expired(item.deadline) {
-        return Err(error("embed_request_deadline"));
+        return Err(error(CognitionCode::EmbedRequestDeadline));
     }
     let Some(process) = child.as_mut() else {
-        return Err(error("embed_worker_unavailable"));
+        return Err(error(CognitionCode::EmbedWorkerUnavailable));
     };
     let outcome = tokio::select! {
         biased;
-        () = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
-        () = item.cancellation.cancelled() => Err(error("embed_request_cancelled")),
-        () = deadline_wait(item.deadline) => Err(error("embed_request_deadline")),
+        () = inner.shutdown.cancelled() => Err(error(CognitionCode::EmbedOwnerClosed)),
+        () = item.cancellation.cancelled() => Err(error(CognitionCode::EmbedRequestCancelled)),
+        () = deadline_wait(item.deadline) => Err(error(CognitionCode::EmbedRequestDeadline)),
         result = exchange(process, item) => result,
     };
     match outcome {
@@ -356,6 +365,6 @@ async fn run_item(
     }
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

@@ -4,6 +4,7 @@ mod performance;
 mod source;
 mod types;
 
+use crate::cognition::CognitionCode;
 use std::path::Path;
 
 use crate::cognition::{CognitionError, CognitionResult};
@@ -36,7 +37,7 @@ pub(super) fn validate_evidence(
             "memory-extract-v2" | "memory-extract-v3"
         )
     {
-        return Err(invalid("memory_acceptance_version_mismatch"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceVersionMismatch));
     }
 
     let mut capture = CaptureStore::new(acceptance_path, evidence_root)?;
@@ -51,7 +52,7 @@ pub(super) fn validate_evidence(
     let mut covered = std::collections::HashSet::new();
     for item in &acceptance.cases {
         if !case_ids.insert(item.id.as_str()) {
-            return Err(invalid("memory_acceptance_evidence_invalid"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceEvidenceInvalid));
         }
         case::validate_case(item, &acceptance, &mut capture)?;
         covered.extend(item.mr_ids.iter().map(String::as_str));
@@ -59,7 +60,7 @@ pub(super) fn validate_evidence(
     for index in 1..=12 {
         let id = format!("MR-{index:02}");
         if !covered.contains(id.as_str()) {
-            return Err(invalid("memory_acceptance_incomplete"));
+            return Err(invalid(CognitionCode::MemoryAcceptanceIncomplete));
         }
     }
     if !acceptance.cases.iter().any(|item| {
@@ -82,14 +83,14 @@ pub(super) fn validate_evidence(
             item.path == "owner_integration" && item.mr_ids.iter().any(|id| id == "MR-12")
         })
     {
-        return Err(invalid("memory_acceptance_incomplete"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceIncomplete));
     }
 
     validate_performance(&acceptance, &mut capture)?;
     if expected_implementation_commit.is_some_and(|expected| {
         !valid_git_commit(expected) || expected != acceptance.implementation_commit
     }) {
-        return Err(invalid("memory_acceptance_version_mismatch"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceVersionMismatch));
     }
     Ok(ValidatedEvidence {
         acceptance_sha256,
@@ -112,15 +113,15 @@ fn validate_acceptance_header(
         || !valid_sha(&value.embedding_version)
         || value.embedding_version != expected_embedding_version
     {
-        return Err(invalid("memory_acceptance_version_mismatch"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceVersionMismatch));
     }
     if value.verification_generation_id.is_empty() || value.cases.is_empty() {
-        return Err(invalid("memory_acceptance_invalid"));
+        return Err(invalid(CognitionCode::MemoryAcceptanceInvalid));
     }
     Ok(())
 }
 
-pub(super) fn invalid(code: &'static str) -> CognitionError {
+pub(super) fn invalid(code: CognitionCode) -> CognitionError {
     CognitionError::new(
         code,
         "source-preserving memory qualification evidence did not validate",

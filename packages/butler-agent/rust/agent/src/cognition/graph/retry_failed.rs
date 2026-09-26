@@ -1,5 +1,6 @@
 //! Source-compatible recovery for failed graph projection work.
 
+use crate::cognition::CognitionCode;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -33,8 +34,9 @@ pub(in crate::cognition) struct VectorRepairUnitRequest {
 
 impl VectorRepairRequest {
     pub(in crate::cognition) fn parse(value: Value) -> CognitionResult<Self> {
-        let request: Self = serde_json::from_value(value)
-            .map_err(|_| error("memory_vector_repair_invalid_request"))?;
+        let request: Self = serde_json::from_value(value).map_err(|source| {
+            error(CognitionCode::MemoryVectorRepairInvalidRequest).with_source(source)
+        })?;
         if request.generation_id.is_empty()
             || request.units.is_empty()
             || request.units.iter().any(|unit| {
@@ -44,7 +46,7 @@ impl VectorRepairRequest {
                     || unit.receipt_json.is_empty()
             })
         {
-            return Err(error("memory_vector_repair_invalid_request"));
+            return Err(error(CognitionCode::MemoryVectorRepairInvalidRequest));
         }
         let mut ids = HashSet::with_capacity(request.units.len());
         if request
@@ -52,7 +54,7 @@ impl VectorRepairRequest {
             .iter()
             .any(|unit| !ids.insert(unit.unit_id.as_str()))
         {
-            return Err(error("memory_vector_repair_invalid_request"));
+            return Err(error(CognitionCode::MemoryVectorRepairInvalidRequest));
         }
         Ok(request)
     }
@@ -134,13 +136,13 @@ pub(super) fn repair_selected_invalid_vectors(
         || request.generation_id != current_generation
         || request.units.is_empty()
     {
-        return Err(error("memory_vector_repair_preimage_changed"));
+        return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
     }
 
     let mut snapshots = Vec::with_capacity(request.units.len());
     for requested in &request.units {
         let snapshot = read_repair_unit(connection, requested, current_generation)?
-            .ok_or_else(|| error("memory_vector_repair_preimage_changed"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryVectorRepairPreimageChanged))?;
         if snapshot.state != "complete"
             || snapshot.owner_revision != requested.owner_revision
             || snapshot.source_revision != requested.source_revision
@@ -158,7 +160,7 @@ pub(super) fn repair_selected_invalid_vectors(
                 &requested.receipt_json,
             )
         {
-            return Err(error("memory_vector_repair_preimage_changed"));
+            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
         }
         snapshots.push(snapshot);
     }
@@ -187,7 +189,7 @@ pub(super) fn repair_selected_invalid_vectors(
             )
             .map_err(db_error)?;
         if changed != 1 {
-            return Err(error("memory_vector_repair_preimage_changed"));
+            return Err(error(CognitionCode::MemoryVectorRepairPreimageChanged));
         }
     }
     for snapshot in &snapshots {
@@ -322,9 +324,10 @@ fn recovery_revision(generation_id: &str, now: &str) -> CognitionResult<String> 
 }
 
 fn stringify(value: &Value) -> CognitionResult<String> {
-    crate::json::stringify(value).map_err(|_| error("memory_graph_failed"))
+    crate::json::stringify(value)
+        .map_err(|source| error(CognitionCode::MemoryGraphFailed).with_source(source))
 }
 
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

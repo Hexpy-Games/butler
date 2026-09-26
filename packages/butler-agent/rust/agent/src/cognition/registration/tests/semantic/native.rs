@@ -439,7 +439,7 @@ async fn actual_native_provider_applies_registered_semantic_window() {
         )
         .unwrap();
     assert_eq!(
-        reader.recall(paged.clone()).await.unwrap_err().code,
+        reader.recall(paged.clone()).await.unwrap_err().code(),
         "stale_cursor"
     );
     reader.close().await;

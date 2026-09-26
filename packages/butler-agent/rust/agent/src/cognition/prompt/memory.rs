@@ -11,9 +11,10 @@ use crate::cognition::{
 use crate::conversation::{ConversationSourceReader, conversation_store_path};
 
 use super::CapsulePresence;
+use crate::cognition::CognitionCode;
 
 fn failure(error: &std::io::Error) -> CognitionError {
-    CognitionError::new("cognition_prompt_read_failed", error.to_string())
+    CognitionError::new(CognitionCode::CognitionPromptReadFailed, error.to_string())
 }
 
 fn optional_text(path: &Path) -> CognitionResult<Option<String>> {
@@ -127,9 +128,7 @@ fn read_generation_hot_cache(
         &canonical,
         &entries,
     );
-    let canonical_closed = canonical
-        .close()
-        .map_err(|error| CognitionError::new(error.code(), error.message()));
+    let canonical_closed = canonical.close().map_err(CognitionError::from);
     let graph_closed = graph.close();
     canonical_closed?;
     graph_closed?;

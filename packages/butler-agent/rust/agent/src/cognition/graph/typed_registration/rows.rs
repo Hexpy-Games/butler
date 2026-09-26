@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 
 use super::super::db_error;
 use super::{TypedRegistrationInput, source_changed};
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow, MEMORY_SOURCE_WINDOW_BYTES, sources,
 };
@@ -29,7 +30,7 @@ pub(super) fn existing_job(
     drop(statement);
     if rows.len() > 1 {
         return Err(CognitionError::new(
-            "memory_projection_duplicate_revision",
+            CognitionCode::MemoryProjectionDuplicateRevision,
             "memory_projection_duplicate_revision",
         ));
     }
@@ -204,7 +205,7 @@ pub(super) fn insert_windows(
             .ok_or_else(source_changed)?;
         if end - start > MEMORY_SOURCE_WINDOW_BYTES {
             return Err(CognitionError::new(
-                "memory_extract_source_window_exceeds_budget",
+                CognitionCode::MemoryExtractSourceWindowExceedsBudget,
                 "memory_extract_source_window_exceeds_budget",
             ));
         }
@@ -289,6 +290,6 @@ fn json_string_array(values: &[String]) -> CognitionResult<String> {
     .map_err(json_error)
 }
 
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_graph_unavailable", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string()).with_source(error)
 }

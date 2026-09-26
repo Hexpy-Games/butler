@@ -1,5 +1,6 @@
 //! Validate model output against its pinned input before durable apply.
 
+use crate::cognition::CognitionCode;
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
@@ -149,7 +150,7 @@ pub(super) fn normalize(
                 .as_ref()
                 .is_some_and(|reference| !refs.contains_key(reference))
         {
-            return Err(error("memory_extract_invalid_ref"));
+            return Err(error(CognitionCode::MemoryExtractInvalidRef));
         }
         if claim
             .condition
@@ -163,7 +164,7 @@ pub(super) fn normalize(
                 || claim.claim_type != "constraint"
                 || claim.subject_ref.is_none()
             {
-                return Err(error("memory_extract_invalid_condition"));
+                return Err(error(CognitionCode::MemoryExtractInvalidCondition));
             }
             condition::validate(requirement, &refs)?;
         }
@@ -177,22 +178,22 @@ pub(super) fn normalize(
     for relation in &output.relations {
         let claim = claims
             .get(relation.claim_ref.as_str())
-            .ok_or_else(|| error("memory_extract_invalid_relation"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRelation))?;
         if claim.speech_act != "assertion"
             || claim.subject_ref.as_deref() != Some(&relation.from_ref)
             || claim.object_ref.as_deref() != Some(&relation.to_ref)
         {
-            return Err(error("memory_extract_invalid_relation"));
+            return Err(error(CognitionCode::MemoryExtractInvalidRelation));
         }
         validate_quotes(input, &relation.evidence, true)?;
     }
     for correction in &output.corrections {
         if !claims.contains_key(correction.replacement_claim_ref.as_str()) {
-            return Err(error("memory_extract_invalid_ref"));
+            return Err(error(CognitionCode::MemoryExtractInvalidRef));
         }
         let candidate = candidates
             .get(correction.previous_claim_ref.as_str())
-            .ok_or_else(|| error("memory_extract_invalid_ref"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidRef))?;
         selected.insert(
             format!("correction:{}", correction.previous_claim_ref),
             candidate,
@@ -227,7 +228,7 @@ fn validate_resolution<'a>(
     match resolution {
         NodeResolution::Create { identity_scope, .. } => {
             if identity_scope == "project" && input.bound_project_id.is_none() {
-                return Err(error("memory_extract_invalid_scope"));
+                return Err(error(CognitionCode::MemoryExtractInvalidScope));
             }
         }
         NodeResolution::Reuse {
@@ -235,11 +236,11 @@ fn validate_resolution<'a>(
         } => {
             let candidate = candidates
                 .get(node_ref.as_str())
-                .ok_or_else(|| error("memory_extract_invalid_identity_reuse"))?;
+                .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidIdentityReuse))?;
             if candidate.node_type != node_type
                 || (candidate.scope == "project" && candidate.project_id != input.bound_project_id)
             {
-                return Err(error("memory_extract_invalid_identity_reuse"));
+                return Err(error(CognitionCode::MemoryExtractInvalidIdentityReuse));
             }
             let quotes = validate_quotes(input, evidence, true)?;
             let historical = candidate
@@ -251,7 +252,7 @@ fn validate_resolution<'a>(
                 .iter()
                 .any(|quote| historical.contains(quote.source_id.as_str()))
             {
-                return Err(error("memory_extract_invalid_identity_reuse"));
+                return Err(error(CognitionCode::MemoryExtractInvalidIdentityReuse));
             }
             selected.insert(local_ref.into(), candidate);
         }
@@ -265,7 +266,7 @@ fn candidate_binding(
 ) -> CognitionResult<CandidateBinding> {
     let mut evidence = Vec::new();
     for unit in &candidate.evidence {
-        let row=connection.query_row("SELECT source_id,episode_id,revision,content_hash FROM memory_chunk_sources WHERE source_id=?1",[&unit.ref_id],|row|Ok(CandidateSource{source_ref:row.get(0)?,episode_ref:row.get(1)?,revision:row.get(2)?,content_hash:row.get(3)?})).optional().map_err(db_error)?.ok_or_else(||error("memory_extract_candidate_changed"))?;
+        let row=connection.query_row("SELECT source_id,episode_id,revision,content_hash FROM memory_chunk_sources WHERE source_id=?1",[&unit.ref_id],|row|Ok(CandidateSource{source_ref:row.get(0)?,episode_ref:row.get(1)?,revision:row.get(2)?,content_hash:row.get(3)?})).optional().map_err(db_error)?.ok_or_else(||error(CognitionCode::MemoryExtractCandidateChanged))?;
         evidence.push(row);
     }
     evidence.sort_by(|a, b| a.source_ref.cmp(&b.source_ref));
@@ -284,7 +285,7 @@ fn validate_quotes(
     require_current: bool,
 ) -> CognitionResult<Vec<ValidatedQuote>> {
     if quotes.len() > 8 {
-        return Err(error("memory_extract_invalid_quote"));
+        return Err(error(CognitionCode::MemoryExtractInvalidQuote));
     }
     let mut units = HashMap::new();
     for unit in &input.source_units {
@@ -308,16 +309,16 @@ fn validate_quotes(
     for quote in quotes {
         let text = units
             .get(quote.unit_ref.as_str())
-            .ok_or_else(|| error("memory_extract_invalid_quote"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidQuote))?;
         if quote.quote.is_empty()
             || crate::segmentation::grapheme_segments(&quote.quote).count() > 480
         {
-            return Err(error("memory_extract_invalid_quote"));
+            return Err(error(CognitionCode::MemoryExtractInvalidQuote));
         }
         let (start, _) = text
             .match_indices(&quote.quote)
             .nth(quote.occurrence)
-            .ok_or_else(|| error("memory_extract_invalid_quote"))?;
+            .ok_or_else(|| error(CognitionCode::MemoryExtractInvalidQuote))?;
         let end = start + quote.quote.len();
         if current.contains(quote.unit_ref.as_str()) {
             has_current = true;
@@ -343,7 +344,7 @@ fn validate_quotes(
         });
     }
     if require_current && !has_current {
-        return Err(error("memory_extract_invalid_quote"));
+        return Err(error(CognitionCode::MemoryExtractInvalidQuote));
     }
     Ok(validated)
 }
@@ -366,21 +367,22 @@ fn validate_basis(input: &ExtractInput, basis: &str, quotes: &[QuoteRef]) -> Cog
             && ((basis == "user_statement" && *role != "user")
                 || (basis == "assistant_statement" && *role != "assistant"))
         {
-            return Err(error("memory_extract_invalid_basis"));
+            return Err(error(CognitionCode::MemoryExtractInvalidBasis));
         }
     }
     Ok(())
 }
 
 fn hash(value: Vec<Value>) -> CognitionResult<String> {
-    Ok(crate::cognition::sources::projection_hash_for_graph(value)?)
+    crate::cognition::sources::projection_hash_for_graph(value)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
 fn invalid_output() -> CognitionError {
-    error("memory_extract_invalid_output")
+    error(CognitionCode::MemoryExtractInvalidOutput)
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

@@ -1,6 +1,7 @@
 //! Recover interrupted semantic claims before selecting pending work.
 
 use super::*;
+use crate::cognition::CognitionCode;
 
 impl CognitionRegistrationService {
     /// Run the same interrupted-window recovery as a claim before the idle
@@ -15,7 +16,7 @@ impl CognitionRegistrationService {
     ) -> CognitionResult<()> {
         let deps = self.projection.as_ref().ok_or_else(|| {
             CognitionError::new(
-                "cognition_projection_unconfigured",
+                CognitionCode::CognitionProjectionUnconfigured,
                 "cognition_projection_unconfigured",
             )
         })?;
@@ -24,7 +25,7 @@ impl CognitionRegistrationService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
@@ -54,7 +55,7 @@ impl CognitionRegistrationService {
                 () = cancellation.cancelled() => Err(write_aborted()),
                 result = coordinator.acquire(request, CognitionWaitClass::Background) =>
                     result.map_err(CognitionError::from).and_then(|lease|
-                        lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))),
+                        lease.ok_or_else(|| CognitionError::new(CognitionCode::MemoryWriteBusy, "memory_write_busy"))),
             };
             let result = match acquired {
                 Err(error) => Err(error),
@@ -90,11 +91,12 @@ impl CognitionRegistrationService {
             };
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             CognitionError::new(
-                "memory_projection_operation_failed",
+                CognitionCode::MemoryProjectionOperationFailed,
                 "memory_projection_operation_failed",
             )
+            .with_source(source)
         })?
     }
 }

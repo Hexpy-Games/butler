@@ -12,6 +12,7 @@ use crate::cognition::{
 };
 
 use super::{source, write::failure_log_path};
+use crate::cognition::CognitionCode;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,7 +61,9 @@ pub(super) fn read(
     let failure_path = failure_log_path(data_root, paths);
     ensure_data_authority(data_root, &[&memory_root, &path, &failure_path])?;
 
-    let exists = path.try_exists().map_err(|_| inspect_error())?;
+    let exists = path
+        .try_exists()
+        .map_err(|source| inspect_error().with_source(source))?;
     let body = if exists {
         fs::read_to_string(&path)
             .map(|text| crate::public_text::trim_js_whitespace(&text).to_owned())
@@ -217,7 +220,7 @@ fn epoch_millis(time: SystemTime) -> Option<i64> {
 
 fn inspect_error() -> CognitionError {
     CognitionError::new(
-        "project_capsule_inspect_failed",
+        CognitionCode::ProjectCapsuleInspectFailed,
         "Could not inspect project memory capsule",
     )
 }

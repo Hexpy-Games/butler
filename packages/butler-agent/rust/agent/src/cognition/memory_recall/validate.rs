@@ -1,5 +1,6 @@
 //! Source-order validation and canonical timestamp normalization.
 
+use crate::cognition::CognitionCode;
 use crate::public_text::fixed_regex;
 use std::sync::OnceLock;
 
@@ -24,15 +25,15 @@ pub(super) fn normalize(
     .iter()
     .any(|value| crate::public_text::trim_js_whitespace(value).is_empty())
     {
-        return Err(failure("invalid_runtime_binding"));
+        return Err(failure(CognitionCode::InvalidRuntimeBinding));
     }
     if crate::public_text::trim_js_whitespace(&input.cue).is_empty()
         || grapheme_segments(&input.cue).count() > 2048
     {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if !(1..=20).contains(&input.limit) {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if input.seed_phrases.len() > 16
         || input
@@ -40,7 +41,7 @@ pub(super) fn normalize(
             .iter()
             .any(|phrase| phrase.is_empty() || grapheme_segments(phrase).count() > 512)
     {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if input.vector_queries.len() > 4
         || input
@@ -48,26 +49,26 @@ pub(super) fn normalize(
             .iter()
             .any(|phrase| phrase.is_empty() || grapheme_segments(phrase).count() > 2048)
     {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if input.session_ids.len() > 32 || input.project_ids.len() > 16 {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if (input.project_filter == RecallProjectFilter::Selected) == input.project_ids.is_empty() {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
     if input.scope == RecallScope::CurrentProject && input.runtime.project_id.is_none() {
-        return Err(failure("invalid_scope"));
+        return Err(failure(CognitionCode::InvalidScope));
     }
     if input.scope == RecallScope::CurrentSession && input.runtime.session_id.is_empty() {
-        return Err(failure("invalid_scope"));
+        return Err(failure(CognitionCode::InvalidScope));
     }
     let as_of = timestamp(&input.as_of, &parse_date)?;
     let normalized_time = if let Some(mut time) = input.time {
         let from = timestamp(&time.from, &parse_date)?;
         let to = timestamp(&time.to, &parse_date)?;
         if parse_date(&time.from) >= parse_date(&time.to) {
-            return Err(failure("invalid_arguments"));
+            return Err(failure(CognitionCode::InvalidArguments));
         }
         time.from = from;
         time.to = to;
@@ -86,12 +87,13 @@ fn timestamp(text: &str, parse_date: &impl Fn(&str) -> Option<i64>) -> Cognition
         fixed_regex(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
     });
     if !offset.is_match(text) {
-        return Err(failure("invalid_arguments"));
+        return Err(failure(CognitionCode::InvalidArguments));
     }
-    let millis = parse_date(text).ok_or_else(|| failure("invalid_arguments"))?;
-    crate::js_date::format_iso_millis(millis).ok_or_else(|| failure("invalid_arguments"))
+    let millis = parse_date(text).ok_or_else(|| failure(CognitionCode::InvalidArguments))?;
+    crate::js_date::format_iso_millis(millis)
+        .ok_or_else(|| failure(CognitionCode::InvalidArguments))
 }
 
-fn failure(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn failure(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }

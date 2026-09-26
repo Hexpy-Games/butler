@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde_json::json;
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow,
     extraction::{
@@ -116,18 +117,20 @@ pub(super) fn attach(
         match source_passages(input).and_then(|parts| meaning_prompt(input, &parts)) {
             Ok(_) => return Ok(()),
             Err(problem)
-                if problem.code == "memory_extract_source_window_exceeds_budget" && width > 0 => {}
+                if problem.code() == "memory_extract_source_window_exceeds_budget" && width > 0 => {
+            }
             Err(problem) => return Err(problem),
         }
     }
     Err(CognitionError::new(
-        "memory_extract_source_window_exceeds_budget",
+        CognitionCode::MemoryExtractSourceWindowExceedsBudget,
         "memory_extract_source_window_exceeds_budget",
     ))
 }
 fn changed() -> CognitionError {
-    CognitionError::new("memory_source_changed", "memory_source_changed")
+    CognitionError::new(CognitionCode::MemorySourceChanged, "memory_source_changed")
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

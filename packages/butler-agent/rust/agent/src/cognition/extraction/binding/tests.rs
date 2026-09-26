@@ -85,7 +85,7 @@ fn correction_rejects_cross_candidate_evidence_and_unresolved_is_explicit() {
     let (batch, mut output, input) = fixture();
     let bad = json!({"decisions":[{"target":"f0","candidate":"f0c0","span":"f0c0p0","support":["f0u0","another-history"]}]});
     assert_eq!(
-        apply(&bad, &batch, &mut output, &input).unwrap_err().code,
+        apply(&bad, &batch, &mut output, &input).unwrap_err().code(),
         "memory_extract_invalid_identity_reuse"
     );
     let warning = apply(

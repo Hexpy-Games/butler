@@ -4,6 +4,7 @@
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{
     CognitionError, CognitionResult, GenerationEmbedding, NativeEmbeddingIdentity,
 };
@@ -78,7 +79,7 @@ pub(super) fn query_identity(
 
 fn mismatch() -> CognitionError {
     CognitionError::new(
-        "memory_embedding_version_mismatch",
+        CognitionCode::MemoryEmbeddingVersionMismatch,
         "memory_embedding_version_mismatch",
     )
 }
@@ -123,7 +124,7 @@ mod tests {
         assert_eq!(
             preflight(&serde_json::from_value(altered).unwrap())
                 .unwrap_err()
-                .code,
+                .code(),
             "memory_embedding_version_mismatch"
         );
     }

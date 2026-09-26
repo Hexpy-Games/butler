@@ -1,5 +1,6 @@
 //! Current-generation source-window candidates for semantic binding.
 
+use crate::cognition::CognitionCode;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -39,7 +40,7 @@ pub(super) fn load(
     deadline: i64,
 ) -> CognitionResult<Vec<ExtractCandidate>> {
     if cue.len() > 8_192 {
-        return Err(error("memory_extract_source_window_exceeds_budget"));
+        return Err(error(CognitionCode::MemoryExtractSourceWindowExceedsBudget));
     }
     let seeds = selection::select(db, canonical, input, cue, vector, deadline)?;
     let mut ids = Vec::new();
@@ -189,9 +190,10 @@ fn current_millis() -> i64 {
     )
     .unwrap_or(i64::MAX)
 }
-fn error(code: &'static str) -> CognitionError {
-    CognitionError::new(code, code)
+fn error(code: CognitionCode) -> CognitionError {
+    CognitionError::new(code, code.as_str())
 }
-fn json_error(error: impl std::fmt::Display) -> CognitionError {
-    CognitionError::new("memory_extract_invalid_json", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> CognitionError {
+    CognitionError::new(CognitionCode::MemoryExtractInvalidJson, error.to_string())
+        .with_source(error)
 }

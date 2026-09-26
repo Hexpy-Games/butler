@@ -19,6 +19,7 @@ use std::{path::Path, time::Duration};
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 use super::db_error;
+use crate::cognition::CognitionCode;
 use crate::cognition::recall::{
     EligibleAdjacency, IdentityMembersResult, IdentityReadScope, IdentityResolution,
     IdentitySourceBinding, RecallRequest, RecallVectorMatch, SemanticSelection,
@@ -319,9 +320,9 @@ impl GraphRecallReader {
     }
 
     fn connection(&self) -> CognitionResult<&Connection> {
-        self.connection
-            .as_ref()
-            .ok_or_else(|| CognitionError::new("memory_graph_closed", "memory_graph_closed"))
+        self.connection.as_ref().ok_or_else(|| {
+            CognitionError::new(CognitionCode::MemoryGraphClosed, "memory_graph_closed")
+        })
     }
 }
 

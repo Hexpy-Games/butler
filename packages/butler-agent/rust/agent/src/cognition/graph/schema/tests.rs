@@ -43,7 +43,7 @@ fn legacy_graph_requires_the_existing_explicit_migration() {
         .execute_batch("CREATE TABLE entities(id TEXT)")
         .unwrap();
     let error = ensure(&mut connection, "2026-09-14T00:00:00.000Z").unwrap_err();
-    assert_eq!(error.code, "memory_schema_migration_required");
+    assert_eq!(error.code(), "memory_schema_migration_required");
 }
 
 #[test]

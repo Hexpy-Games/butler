@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::cognition::CognitionCode;
 use crate::cognition::{CognitionError, embedding::NativeEmbeddingIdentity};
 
 const NATIVE_EMBEDDING_SCHEMA: &str = "butler.native-embedding-identity.v1";
@@ -206,7 +207,8 @@ pub(super) fn validate_native_embedding_identity(
     let expected_version = format!(
         "{:x}",
         Sha256::digest(
-            serde_json::to_vec(&versioned_identity).map_err(|_| invalid_embedding_metadata())?
+            serde_json::to_vec(&versioned_identity)
+                .map_err(|source| invalid_embedding_metadata().with_source(source))?
         )
     );
     if value.version != expected_version {
@@ -245,7 +247,16 @@ fn validate_javascript_embedding(
     Ok(())
 }
 
-fn ensure_exact_native_fields(value: &Value) -> Result<(), &'static str> {
+/// Why stored native embedding metadata does not match the native schema.
+#[derive(Debug, thiserror::Error)]
+enum NativeFieldsError {
+    #[error("native embedding metadata must be an object")]
+    NotAnObject,
+    #[error("native embedding metadata fields do not match the native schema")]
+    FieldMismatch,
+}
+
+fn ensure_exact_native_fields(value: &Value) -> Result<(), NativeFieldsError> {
     const FIELDS: [&str; 16] = [
         "schema",
         "model",
@@ -265,17 +276,17 @@ fn ensure_exact_native_fields(value: &Value) -> Result<(), &'static str> {
         "version",
     ];
     let Some(object) = value.as_object() else {
-        return Err("native embedding metadata must be an object");
+        return Err(NativeFieldsError::NotAnObject);
     };
     if object.len() != FIELDS.len() || FIELDS.iter().any(|field| !object.contains_key(*field)) {
-        return Err("native embedding metadata fields do not match the native schema");
+        return Err(NativeFieldsError::FieldMismatch);
     }
     Ok(())
 }
 
 fn invalid_embedding_metadata() -> CognitionError {
     CognitionError::new(
-        "memory_embedding_metadata_invalid",
+        CognitionCode::MemoryEmbeddingMetadataInvalid,
         "memory_embedding_metadata_invalid",
     )
 }
