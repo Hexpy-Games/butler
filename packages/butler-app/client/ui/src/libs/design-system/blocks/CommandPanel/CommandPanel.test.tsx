@@ -12,7 +12,7 @@ test("the palette opens with a 0.98 -> 1 scale and backdrop fade over 140ms and 
   expect(tokens).toContain("--motion-palette: 140ms;");
   expect(tokens).toContain("--motion-scale-palette: 0.98;");
   expect(tokens).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ :root \{[^}]*--motion-scale-palette: 1;/u);
-  expect(dialogCss).toMatch(/\.content\[data-motion="palette"\]\[data-state="open"\] \{ animation: palette-enter var\(--motion-palette\) var\(--motion-ease-decelerate\);/u);
+  expect(dialogCss).toMatch(/\.content\[data-motion="palette"\]\[data-state="open"\] \{ animation: palette-enter var\(--motion-palette\) var\(--motion-ease-standard\);/u);
   expect(dialogCss).toMatch(/\.content\[data-motion="palette"\]\[data-state="closed"\] \{ animation: palette-exit var\(--motion-exit-fast\) var\(--motion-ease-accelerate\) forwards;/u);
   expect(dialogCss).toMatch(/\.overlay\[data-motion="palette"\]\[data-state="open"\] \{ animation: dialog-overlay-enter var\(--motion-palette\)/u);
   expect(dialogCss).toMatch(/@keyframes palette-enter \{ from \{ opacity: 0; transform: translate\(-50%, -50%\) scale\(var\(--motion-scale-palette\)\);/u);

@@ -2382,7 +2382,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
     read(
       "packages/butler-app/client/ui/src/libs/design-system/components/Tag/Tag.module.css",
     ),
-  ).toContain("min-height: 20px");
+  ).toContain("min-height: var(--tag-height-sm)");
   expect(
     read(
       "packages/butler-app/client/ui/src/libs/design-system/components/Tag/Tag.module.css",
