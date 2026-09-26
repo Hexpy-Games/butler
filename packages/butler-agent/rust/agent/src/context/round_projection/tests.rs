@@ -125,104 +125,102 @@ async fn fitting_all_mandatory_pressure_returns_without_saved_identity() {
 }
 
 #[test]
-fn exact_message_writer_matches_source_object_order_and_omissions() {
-    let mut assistant = message(ModelRoundRole::Assistant, "reply 💡");
-    assistant.tool_calls = Some(vec![ModelRoundToolCall {
-        id: "call-1".into(),
-        name: "tool_call".into(),
-        arguments: serde_json::from_value(serde_json::json!({"z":2,"1":"one","a":true}))
-            .expect("object arguments"),
-        raw_arguments: "{\"z\":2}".into(),
-        origin: None,
-    }]);
-    assistant.provider_data = Some(serde_json::json!({"nested":{"z":"x"}}));
-    assistant.request_segment_kind = Some("phase_continuity".into());
-    assistant.continuation_item_id = Some("item-1".into());
-    let expected = concat!(
-        "{\"role\":\"assistant\",\"content\":\"reply 💡\",\"toolCalls\":[",
-        "{\"id\":\"call-1\",\"name\":\"tool_call\",\"arguments\":",
-        "{\"1\":\"one\",\"z\":2,\"a\":true},\"rawArguments\":\"{\\\"z\\\":2}\"}",
-        "],\"providerData\":{\"nested\":{\"z\":\"x\"}},",
-        "\"requestSegmentKind\":\"phase_continuity\",\"continuationItemId\":\"item-1\"}"
-    );
-    // ECMAScript enumerates index keys first, then the insertion order of
-    // ordinary keys. This fixture is created through the actual source shape.
-    assert_eq!(
-        message_json(&assistant, MessageProjection::Exact).unwrap(),
-        expected
-    );
-    let messages = messages_json([&assistant], MessageProjection::Exact).unwrap();
-    assert_eq!(
-        request_json(None, &[], None, &messages).unwrap(),
-        format!("{{\"tools\":[],\"messages\":[{expected}]}}")
-    );
-    assert_eq!(
-        request_for_messages(None, &[], None, &[assistant]).unwrap(),
-        format!("{{\"tools\":[],\"messages\":[{expected}]}}")
-    );
-}
+fn message_writers_keep_the_persisted_digest_field_order_and_omissions() {
+    {
+        let mut assistant = message(ModelRoundRole::Assistant, "reply 💡");
+        assistant.tool_calls = Some(vec![ModelRoundToolCall {
+            id: "call-1".into(),
+            name: "tool_call".into(),
+            arguments: serde_json::from_value(serde_json::json!({"z":2,"1":"one","a":true}))
+                .expect("object arguments"),
+            raw_arguments: "{\"z\":2}".into(),
+            origin: None,
+        }]);
+        assistant.provider_data = Some(serde_json::json!({"nested":{"z":"x"}}));
+        assistant.request_segment_kind = Some("phase_continuity".into());
+        assistant.continuation_item_id = Some("item-1".into());
+        let expected = concat!(
+            "{\"role\":\"assistant\",\"content\":\"reply 💡\",\"toolCalls\":[",
+            "{\"id\":\"call-1\",\"name\":\"tool_call\",\"arguments\":",
+            "{\"1\":\"one\",\"z\":2,\"a\":true},\"rawArguments\":\"{\\\"z\\\":2}\"}",
+            "],\"providerData\":{\"nested\":{\"z\":\"x\"}},",
+            "\"requestSegmentKind\":\"phase_continuity\",\"continuationItemId\":\"item-1\"}"
+        );
+        // ECMAScript enumerates index keys first, then the insertion order of
+        // ordinary keys. This fixture is created through the actual source shape.
+        assert_eq!(
+            message_json(&assistant, MessageProjection::Exact).unwrap(),
+            expected
+        );
+        let messages = messages_json([&assistant], MessageProjection::Exact).unwrap();
+        assert_eq!(
+            request_json(None, &[], None, &messages).unwrap(),
+            format!("{{\"tools\":[],\"messages\":[{expected}]}}")
+        );
+        assert_eq!(
+            request_for_messages(None, &[], None, &[assistant]).unwrap(),
+            format!("{{\"tools\":[],\"messages\":[{expected}]}}")
+        );
+    }
+    {
+        // Oracle: Bun toolResultToMessage({ custom_tool, answer: 42, journal-1 })
+        // followed by createTurnContinuationItems("request").push(message).
+        let mut result = message(
+            ModelRoundRole::Tool,
+            "{\"ok\":true,\"output\":{\"tool_name\":\"custom_tool\",\"answer\":42}}",
+        );
+        result.tool_call_id = Some("call-1".into());
+        result.name = Some("custom_tool".into());
+        result.request_segment_kind = Some("latest_tool_result_delivery".into());
+        result.operation_result_call_id = Some("journal-1".into());
+        result.continuation_item_id = Some("turn-item-1".into());
+        assert_eq!(
+            message_json(&result, MessageProjection::Exact).unwrap(),
+            concat!(
+                "{\"role\":\"tool\",\"toolCallId\":\"call-1\",",
+                "\"name\":\"custom_tool\",\"content\":",
+                "\"{\\\"ok\\\":true,\\\"output\\\":{\\\"tool_name\\\":\\\"custom_tool\\\",\\\"answer\\\":42}}\",",
+                "\"requestSegmentKind\":\"latest_tool_result_delivery\",",
+                "\"operationResultCallId\":\"journal-1\",",
+                "\"continuationItemId\":\"turn-item-1\"}"
+            )
+        );
 
-#[test]
-fn tool_result_writer_matches_actual_source_constructor_and_cursor() {
-    // Oracle: Bun toolResultToMessage({ custom_tool, answer: 42, journal-1 })
-    // followed by createTurnContinuationItems("request").push(message).
-    let mut result = message(
-        ModelRoundRole::Tool,
-        "{\"ok\":true,\"output\":{\"tool_name\":\"custom_tool\",\"answer\":42}}",
-    );
-    result.tool_call_id = Some("call-1".into());
-    result.name = Some("custom_tool".into());
-    result.request_segment_kind = Some("latest_tool_result_delivery".into());
-    result.operation_result_call_id = Some("journal-1".into());
-    result.continuation_item_id = Some("turn-item-1".into());
-    assert_eq!(
-        message_json(&result, MessageProjection::Exact).unwrap(),
-        concat!(
-            "{\"role\":\"tool\",\"toolCallId\":\"call-1\",",
-            "\"name\":\"custom_tool\",\"content\":",
-            "\"{\\\"ok\\\":true,\\\"output\\\":{\\\"tool_name\\\":\\\"custom_tool\\\",\\\"answer\\\":42}}\",",
-            "\"requestSegmentKind\":\"latest_tool_result_delivery\",",
-            "\"operationResultCallId\":\"journal-1\",",
-            "\"continuationItemId\":\"turn-item-1\"}"
-        )
-    );
-
-    // The source producer inserts the exact-result reference after the
-    // journal call ID, before the cursor's continuation ID.
-    result.operation_result_reference = Some(
-        serde_json::from_value(serde_json::json!({
-            "version": "butler.operation-result-reference.v1",
-            "kind": "operation_result",
-            "identity": {"kind": "direct", "result_ref": "ref", "tool_name": "custom_tool"},
-            "integrity": {"sha256": "a", "revision": null},
-            "outcome": {"status": "completed", "success": true,
-                "verification": "stored_exact_available"},
-            "availability": {"status": "exact_read_available",
-                "capability": "read_operation_results", "scope": "same_turn"}
-        }))
-        .expect("typed source reference"),
-    );
-    let encoded = message_json(&result, MessageProjection::Exact).unwrap();
-    assert_eq!(
-        digest(&encoded),
-        "a836a811802d6af3c2d2a708256dc21e91d0b3f754fb3985597d2f14fc8956cc"
-    );
-    let source = message_json(&result, MessageProjection::SourceDigest).unwrap();
-    assert!(!source.contains("operationResultReference"));
-    assert!(source.contains("operationResultCallId"));
-}
-
-#[test]
-fn assistant_writer_preserves_explicit_empty_tool_calls_from_source_fallback() {
-    // Oracle: createTurnContinuationItems.identifyResponse({text:"hello",
-    // toolCalls:[]}) followed by appendAssistantResponse.
-    let mut assistant = message(ModelRoundRole::Assistant, "hello");
-    assistant.tool_calls = Some(Vec::new());
-    assistant.continuation_item_id = Some("turn-item-1".into());
-    assert_eq!(
-        message_json(&assistant, MessageProjection::Exact).unwrap(),
-        "{\"role\":\"assistant\",\"content\":\"hello\",\"toolCalls\":[],\"continuationItemId\":\"turn-item-1\"}"
-    );
+        // The source producer inserts the exact-result reference after the
+        // journal call ID, before the cursor's continuation ID.
+        result.operation_result_reference = Some(
+            serde_json::from_value(serde_json::json!({
+                "version": "butler.operation-result-reference.v1",
+                "kind": "operation_result",
+                "identity": {"kind": "direct", "result_ref": "ref", "tool_name": "custom_tool"},
+                "integrity": {"sha256": "a", "revision": null},
+                "outcome": {"status": "completed", "success": true,
+                    "verification": "stored_exact_available"},
+                "availability": {"status": "exact_read_available",
+                    "capability": "read_operation_results", "scope": "same_turn"}
+            }))
+            .expect("typed source reference"),
+        );
+        let encoded = message_json(&result, MessageProjection::Exact).unwrap();
+        assert_eq!(
+            digest(&encoded),
+            "a836a811802d6af3c2d2a708256dc21e91d0b3f754fb3985597d2f14fc8956cc"
+        );
+        let source = message_json(&result, MessageProjection::SourceDigest).unwrap();
+        assert!(!source.contains("operationResultReference"));
+        assert!(source.contains("operationResultCallId"));
+    }
+    {
+        // Oracle: createTurnContinuationItems.identifyResponse({text:"hello",
+        // toolCalls:[]}) followed by appendAssistantResponse.
+        let mut assistant = message(ModelRoundRole::Assistant, "hello");
+        assistant.tool_calls = Some(Vec::new());
+        assistant.continuation_item_id = Some("turn-item-1".into());
+        assert_eq!(
+            message_json(&assistant, MessageProjection::Exact).unwrap(),
+            "{\"role\":\"assistant\",\"content\":\"hello\",\"toolCalls\":[],\"continuationItemId\":\"turn-item-1\"}"
+        );
+    }
 }
 
 #[test]

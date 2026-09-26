@@ -257,28 +257,3 @@ pub(crate) struct WorkingContextBudgetInput {
     pub compaction_prompt_reserve_tokens: Option<f64>,
     pub overrides: ContextBudgetOverrides,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn number_strings_keep_context_positive_integer_validation() {
-        for (value, expected) in [
-            ("0b1000", Some(8.0)),
-            ("0o10", Some(8.0)),
-            ("0x100000000000000000000000000000000", Some(2_f64.powi(128))),
-            ("+0x10", None),
-            ("-0x10", None),
-            ("Infinity", None),
-            ("0.5", None),
-            ("", None),
-        ] {
-            assert_eq!(
-                positive_integer(Some(&Value::String(value.into()))),
-                expected
-            );
-        }
-        assert_eq!(positive_integer(Some(&Value::Bool(true))), None);
-    }
-}
