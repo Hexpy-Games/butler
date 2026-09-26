@@ -153,7 +153,7 @@ pub(super) fn signal_command(
 }
 
 #[cfg(unix)]
-pub(super) fn signal_name(status: &ExitStatus) -> Option<String> {
+pub(super) fn signal_name(status: ExitStatus) -> Option<String> {
     use std::os::unix::process::ExitStatusExt;
     status.signal().map(|number| match number {
         2 => "SIGINT".to_owned(),

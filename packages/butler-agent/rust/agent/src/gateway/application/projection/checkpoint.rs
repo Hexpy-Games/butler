@@ -152,6 +152,6 @@ mod tests {
         .unwrap();
         let checkpoint = load(&db, "general").unwrap().unwrap();
         assert_eq!(checkpoint.projected_bytes, 17);
-        assert_eq!(checkpoint.modified_at_ms, 1789313577777.5864);
+        assert_eq!(checkpoint.modified_at_ms, 1_789_313_577_777.586_4);
     }
 }

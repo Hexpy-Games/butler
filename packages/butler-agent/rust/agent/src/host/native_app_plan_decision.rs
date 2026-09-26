@@ -33,16 +33,15 @@ impl AppPlanDecisionLedgerPort for NativeAppPlanDecisionLedger {
                 .resolve_app_plan_root(app_project_id.clone(), ledger_project_id)
                 .await
                 .map_err(|_| AppPlanDecisionLedgerError::Unavailable)?;
-            let plan = match ledger
+            let Ok(plan) = ledger
                 .show_plan_record(PlanRecordRead {
                     workspace_path: root.to_string_lossy().into_owned(),
                     app_project_id,
                     plan_id: plan_id.clone(),
                 })
                 .await
-            {
-                Ok(plan) => plan,
-                Err(_) => return Ok(None),
+            else {
+                return Ok(None);
             };
             if plan.id != plan_id || plan.title.is_empty() {
                 return Ok(None);

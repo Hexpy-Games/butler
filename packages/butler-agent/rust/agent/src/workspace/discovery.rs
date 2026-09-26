@@ -241,13 +241,10 @@ impl Walk<'_> {
             {
                 continue;
             }
-            let metadata = match child.file_type() {
-                Ok(metadata) => metadata,
-                Err(_) => {
-                    self.io_errors += 1;
-                    self.stop("io_error");
-                    break;
-                }
+            let Ok(metadata) = child.file_type() else {
+                self.io_errors += 1;
+                self.stop("io_error");
+                break;
             };
             if metadata.is_dir() {
                 if EXCLUDED_DIRS.contains(&child.file_name().to_string_lossy().as_ref())

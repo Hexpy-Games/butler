@@ -184,22 +184,19 @@ async fn run_search_test(
             );
         }
     };
-    let models = match NativeProcessModels::new(
+    let Ok(models) = NativeProcessModels::new(
         data_root.clone(),
         environment.model,
         Arc::new(crate::configuration::ConfigurationWrites::new()),
         collation,
-    ) {
-        Ok(models) => models,
-        Err(_) => {
-            return report_error(
-                command.source_name(),
-                options.json,
-                "web_search_provider_auth_missing",
-                "Web search provider authentication is unavailable.",
-                5,
-            );
-        }
+    ) else {
+        return report_error(
+            command.source_name(),
+            options.json,
+            "web_search_provider_auth_missing",
+            "Web search provider authentication is unavailable.",
+            5,
+        );
     };
     let access =
         match crate::web_access::WebAccess::new_search(data_root, models.configuration, metrics) {

@@ -64,7 +64,7 @@ pub(crate) fn read_subsession_metadata(
         _ => return Err(invalid()),
     };
     let effects = string_array(object.get("allowed_tools_and_effects"))?;
-    let allowed_tools_and_effects = normalize_effects(effects, &execution_mode)?;
+    let allowed_tools_and_effects = normalize_effects(effects, execution_mode)?;
     let mutation_scope = match execution_mode {
         SubsessionExecutionMode::Mutation if file_scope_required(&allowed_tools_and_effects) => {
             normalize_scope(string_array(object.get("mutation_scope"))?)?
@@ -85,7 +85,7 @@ pub(crate) fn read_subsession_metadata(
 
 fn normalize_effects(
     values: Vec<String>,
-    mode: &SubsessionExecutionMode,
+    mode: SubsessionExecutionMode,
 ) -> Result<Vec<String>, BtccError> {
     let mut values = stable_unique(
         values

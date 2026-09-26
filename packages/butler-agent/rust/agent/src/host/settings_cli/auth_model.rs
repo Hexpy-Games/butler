@@ -73,15 +73,12 @@ pub(super) async fn auth_logout(
             Err(error) => return report_error(command.name(), options.json, &error),
         };
     let profile = path::auth_profile_path(data_root, &environment);
-    let profile = match path::safe_data_file(installation, data_root, &profile) {
-        Ok(path) => path,
-        Err(_) => {
-            return report_error(
-                command.name(),
-                options.json,
-                &CliError::invalid("auth profile removal must remain inside DATA"),
-            );
-        }
+    let Ok(profile) = path::safe_data_file(installation, data_root, &profile) else {
+        return report_error(
+            command.name(),
+            options.json,
+            &CliError::invalid("auth profile removal must remain inside DATA"),
+        );
     };
     let owner = match models::open_status_models(data_root.to_path_buf()).await {
         Ok(owner) => owner,

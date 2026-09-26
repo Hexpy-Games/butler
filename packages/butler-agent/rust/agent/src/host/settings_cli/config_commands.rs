@@ -219,9 +219,8 @@ pub(super) fn config_edit(
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "vi".into());
-    let status = match ProcessCommand::new(editor).arg(&file).status() {
-        Ok(status) => status,
-        Err(_) => return ExitCode::FAILURE,
+    let Ok(status) = ProcessCommand::new(editor).arg(&file).status() else {
+        return ExitCode::FAILURE;
     };
     if !status.success() {
         return ExitCode::from(u8::try_from(status.code().unwrap_or(1)).unwrap_or(1));

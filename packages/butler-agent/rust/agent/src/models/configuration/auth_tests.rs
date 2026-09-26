@@ -143,9 +143,8 @@ async fn refresh_http_failure_keeps_original_and_invalid_json_is_reported() {
         let result = owner.auth_owner().resolve_codex().await;
         server.await.unwrap();
         if let Some(code) = expected_error {
-            let error = match result {
-                Ok(_) => panic!("expected refresh error"),
-                Err(error) => error,
+            let Err(error) = result else {
+                panic!("expected refresh error")
             };
             assert_eq!(error.code, code);
         } else {

@@ -41,14 +41,13 @@ pub(super) async fn get(
     let Some(ledger_id) = project.ledger_project_id else {
         return Ok(unavailable("unbound"));
     };
-    let snapshot = match application
+    let Ok(snapshot) = application
         .dependencies
         .project_dashboard_ledger
         .snapshot(project.id.clone(), ledger_id)
         .await
-    {
-        Ok(snapshot) => snapshot,
-        Err(_) => return Ok(unavailable("source_unavailable")),
+    else {
+        return Ok(unavailable("source_unavailable"));
     };
     let sessions = application
         .list_sessions(Some("project".into()), Some(project_id.to_owned()))

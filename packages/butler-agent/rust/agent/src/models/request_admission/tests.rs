@@ -99,9 +99,9 @@ fn image_inputs_are_projected_and_output_overflow_cannot_fit() {
     assert_eq!(admitted.plan.compiled_input_tokens, 8_222.0);
 
     let overflow = json!({"input":"x"});
-    let error = match prepare(&catalog, &config, "openai/gpt-5.5", &overflow, 1_050_000.0).admit() {
-        Ok(_) => panic!("overflow request was admitted"),
-        Err(error) => error,
+    let Err(error) = prepare(&catalog, &config, "openai/gpt-5.5", &overflow, 1_050_000.0).admit()
+    else {
+        panic!("overflow request was admitted")
     };
     assert!(matches!(
         error,

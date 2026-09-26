@@ -183,14 +183,11 @@ async fn run_sse_source(
             }
             return;
         };
-        let events = match parser.push(&chunk) {
-            Ok(events) => events,
-            Err(()) => {
-                if endpoint.borrow().is_none() {
-                    endpoint.send_replace(Some(Err(())));
-                }
-                return;
+        let Ok(events) = parser.push(&chunk) else {
+            if endpoint.borrow().is_none() {
+                endpoint.send_replace(Some(Err(())));
             }
+            return;
         };
         for event in events {
             if event.event == "endpoint" {

@@ -26,9 +26,8 @@ pub(super) async fn get(
     let session_projection = application
         .storage
         .execute(move |db| {
-            let transaction = match db.transaction() {
-                Ok(transaction) => transaction,
-                Err(_) => return Ok(None),
+            let Ok(transaction) = db.transaction() else {
+                return Ok(None);
             };
             let mut projection = base;
             if app::populate(

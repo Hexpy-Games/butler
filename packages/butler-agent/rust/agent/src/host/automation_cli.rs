@@ -153,17 +153,15 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             &CliError::invalid("--include-deleted is only supported by automation list"),
         );
     }
-    let data_root =
-        match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-            Ok(root) => root,
-            Err(_) => {
-                return report_error(
-                    command.name(),
-                    options.json,
-                    &CliError::failed("butler_data_unavailable", "Butler DATA is unavailable."),
-                );
-            }
-        };
+    let Ok(data_root) =
+        settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return report_error(
+            command.name(),
+            options.json,
+            &CliError::failed("butler_data_unavailable", "Butler DATA is unavailable."),
+        );
+    };
     if let Some(id) = command_id(&command) {
         if !valid_id(id) {
             return report_error(

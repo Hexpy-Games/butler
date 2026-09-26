@@ -239,7 +239,7 @@ async fn execute(
         } else {
             status.code()
         },
-        signal: signal_name(&status),
+        signal: signal_name(status),
         timed_out: matches!(cause, Cause::Timeout),
     };
     let payload_source = paths

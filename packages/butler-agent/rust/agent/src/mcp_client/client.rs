@@ -349,9 +349,8 @@ impl NativeMcpClient {
         if signal.is_cancelled() {
             return with_probe_error(base, "MCP discovery was cancelled.");
         }
-        let secrets = match resolve_secrets(server, &self.environment) {
-            Ok(secrets) => secrets,
-            Err(_) => return with_probe_error(base, "MCP server credentials are unavailable."),
+        let Ok(secrets) = resolve_secrets(server, &self.environment) else {
+            return with_probe_error(base, "MCP server credentials are unavailable.");
         };
         let result = self
             .with_server(server, &secrets, Operation::Probe, signal)

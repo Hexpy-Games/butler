@@ -75,9 +75,9 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             2,
         );
     }
-    let data = match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-        Ok(data) => data,
-        Err(_) => return failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1),
+    let Ok(data) = settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1);
     };
     let service = match open_app_update(&data, &installation) {
         Ok(service) => service,

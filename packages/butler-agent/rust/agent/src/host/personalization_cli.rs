@@ -139,20 +139,18 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         };
     }
 
-    let data_root =
-        match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-            Ok(path) => path,
-            Err(_) => {
-                return report_error(
-                    command.name(),
-                    options.json,
-                    &CliError::failed(
-                        "native_personalization_cli_failed",
-                        "Butler DATA is unavailable.",
-                    ),
-                );
-            }
-        };
+    let Ok(data_root) =
+        settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return report_error(
+            command.name(),
+            options.json,
+            &CliError::failed(
+                "native_personalization_cli_failed",
+                "Butler DATA is unavailable.",
+            ),
+        );
+    };
     if matches!(command, Command::Set | Command::MigrationImport) {
         let mut paths = PROFILE_MUTATION_PATHS.to_vec();
         if command == Command::MigrationImport {

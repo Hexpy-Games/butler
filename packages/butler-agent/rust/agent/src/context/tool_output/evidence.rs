@@ -39,9 +39,8 @@ pub(super) fn read(
     if !path.exists() {
         return failure("artifact_not_found");
     }
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(_) => return failure("artifact_unreadable"),
+    let Ok(bytes) = std::fs::read(&path) else {
+        return failure("artifact_unreadable");
     };
     let artifact: Value = match serde_json::from_slice(&bytes) {
         Ok(artifact) => artifact,

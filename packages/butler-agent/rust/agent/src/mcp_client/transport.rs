@@ -69,29 +69,23 @@ impl NativeMcpClient {
                         false,
                     )
                 })?;
-                let stdout = match child.stdout.take() {
-                    Some(stdout) => stdout,
-                    None => {
-                        let _ = child.start_kill();
-                        let _ = child.wait().await;
-                        return Err(failure(
-                            "mcp_server_unavailable",
-                            "MCP server could not be started.",
-                            false,
-                        ));
-                    }
+                let Some(stdout) = child.stdout.take() else {
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
+                    return Err(failure(
+                        "mcp_server_unavailable",
+                        "MCP server could not be started.",
+                        false,
+                    ));
                 };
-                let stdin = match child.stdin.take() {
-                    Some(stdin) => stdin,
-                    None => {
-                        let _ = child.start_kill();
-                        let _ = child.wait().await;
-                        return Err(failure(
-                            "mcp_server_unavailable",
-                            "MCP server could not be started.",
-                            false,
-                        ));
-                    }
+                let Some(stdin) = child.stdin.take() else {
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
+                    return Err(failure(
+                        "mcp_server_unavailable",
+                        "MCP server could not be started.",
+                        false,
+                    ));
                 };
                 let transport = AsyncRwTransport::<RoleClient, _, _>::new_client(stdout, stdin);
                 run_session_with_child(transport, operation, timeout, signal, child).await

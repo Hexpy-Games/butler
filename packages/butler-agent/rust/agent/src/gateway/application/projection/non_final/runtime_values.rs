@@ -219,7 +219,7 @@ fn sanitize_value(value: &Value, key: &str, preserve_numbers: bool) -> Value {
                 })
                 .collect(),
         ),
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 

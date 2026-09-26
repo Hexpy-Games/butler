@@ -9,10 +9,7 @@ use std::{
 use serde_json::Value;
 
 pub(super) fn visit_jsonl(path: &Path, mut visit: impl FnMut(&str, Result<Value, ()>)) -> usize {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return 0,
-    };
+    let Ok(file) = File::open(path) else { return 0 };
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
     let mut parse_errors = 0;

@@ -77,9 +77,8 @@ pub(crate) async fn prepare_representatives(
     if !root.exists() {
         return Ok(Vec::new());
     }
-    let connection = match lance_store::connect(&root).await {
-        Ok(connection) => connection,
-        Err(_) => return Ok(Vec::new()),
+    let Ok(connection) = lance_store::connect(&root).await else {
+        return Ok(Vec::new());
     };
     let table = match lance_store::open(&connection, TABLE).await {
         Ok(table) => table,

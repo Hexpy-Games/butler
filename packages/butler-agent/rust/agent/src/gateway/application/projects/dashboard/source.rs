@@ -81,16 +81,15 @@ pub(super) async fn get(
                 return Err(source_unavailable());
             };
             let (work_id, _) = query.id.split_once('|').unwrap_or((&query.id, ""));
-            let snapshot = match application
+            let Ok(snapshot) = application
                 .dependencies
                 .project_dashboard_ledger
                 .snapshot(project.id.clone(), ledger_id.clone())
                 .await
-            {
-                Ok(snapshot) => snapshot,
-                Err(_) => return Err(source_unavailable()),
+            else {
+                return Err(source_unavailable());
             };
-            let entries = match application
+            let Ok(entries) = application
                 .dependencies
                 .project_dashboard_ledger
                 .work_history(
@@ -100,9 +99,8 @@ pub(super) async fn get(
                     Some(work_id.to_owned()),
                 )
                 .await
-            {
-                Ok(entries) => entries,
-                Err(_) => return Err(source_unavailable()),
+            else {
+                return Err(source_unavailable());
             };
             let Some(entry) = entries.into_iter().find(|entry| entry.id == query.id) else {
                 return Err(source_unavailable());
@@ -130,14 +128,13 @@ pub(super) async fn get(
     let Some(ledger_id) = project.ledger_project_id.clone() else {
         return Err(source_unavailable());
     };
-    let snapshot = match application
+    let Ok(snapshot) = application
         .dependencies
         .project_dashboard_ledger
         .snapshot(project.id.clone(), ledger_id.clone())
         .await
-    {
-        Ok(snapshot) => snapshot,
-        Err(_) => return Err(source_unavailable()),
+    else {
+        return Err(source_unavailable());
     };
     let source = match application
         .dependencies

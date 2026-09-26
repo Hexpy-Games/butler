@@ -189,16 +189,15 @@ async fn open_browser(url: &str) -> Result<bool, String> {
     } else {
         "xdg-open"
     };
-    let mut child = match tokio::process::Command::new(command)
+    let Ok(mut child) = tokio::process::Command::new(command)
         .arg(url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true)
         .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return Ok(false),
+    else {
+        return Ok(false);
     };
     let result = tokio::select! {
         result = child.wait() => Some(Ok(result.is_ok_and(|status| status.success()))),
@@ -254,12 +253,9 @@ async fn read_callback(
         respond(stream, 404, "Not found").await;
         return Ok(None);
     }
-    let current = match url::Url::parse(redirect_uri).and_then(|base| base.join(target[1])) {
-        Ok(url) => url,
-        Err(_) => {
-            respond(stream, 404, "Not found").await;
-            return Ok(None);
-        }
+    let Ok(current) = url::Url::parse(redirect_uri).and_then(|base| base.join(target[1])) else {
+        respond(stream, 404, "Not found").await;
+        return Ok(None);
     };
     if current.path() != "/auth/callback" {
         respond(stream, 404, "Not found").await;

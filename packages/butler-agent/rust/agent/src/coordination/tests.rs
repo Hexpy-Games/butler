@@ -264,12 +264,11 @@ fn legacy_reclaim_requires_same_host_definitely_dead_safe_pid() {
         let host = Arc::new(Host::new(101, "host-a"));
         host.status(405, status);
         let coordinator = CognitionWriteCoordinator::new(host).unwrap();
-        let error = match coordinator.try_acquire(&CognitionWriteAcquire::immediate(
+        let Err(error) = coordinator.try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "projection",
-        )) {
-            Err(error) => error,
-            Ok(_) => panic!("legacy owner should block acquisition"),
+        )) else {
+            panic!("legacy owner should block acquisition")
         };
         assert_eq!(error.code, "memory_write_legacy_blocked");
         assert_eq!(
@@ -312,9 +311,8 @@ async fn cancellation_while_waiting_leaves_no_sqlite_owner() {
     };
     tokio::task::yield_now().await;
     cancellation.cancel();
-    let error = match waiting.await.unwrap() {
-        Err(error) => error,
-        Ok(_) => panic!("cancelled acquisition should fail"),
+    let Err(error) = waiting.await.unwrap() else {
+        panic!("cancelled acquisition should fail")
     };
     assert_eq!(error.code, "memory_write_aborted");
     drop(held);
@@ -369,7 +367,7 @@ async fn async_deadline_preserves_first_attempt_expiry_and_cancel_classes() {
     let cancelled = Fixture::new("immediate-cancel");
     let cancellation = tokio_util::sync::CancellationToken::new();
     cancellation.cancel();
-    let error = match coordinator
+    let Err(error) = coordinator
         .acquire(
             CognitionWriteAcquire {
                 lock_path: cancelled.lock.clone(),
@@ -380,9 +378,8 @@ async fn async_deadline_preserves_first_attempt_expiry_and_cancel_classes() {
             CognitionWaitClass::Background,
         )
         .await
-    {
-        Err(error) => error,
-        Ok(_) => panic!("cancelled async acquisition should fail"),
+    else {
+        panic!("cancelled async acquisition should fail")
     };
     assert_eq!(error.code, "memory_write_aborted");
     assert!(!cancelled.lock.exists());

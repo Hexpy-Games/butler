@@ -85,9 +85,8 @@ impl NativeMemorySourceReference {
             now_millis: || 0,
             compare_locale: |a: &str, b: &str| a.cmp(b),
         });
-        let source = match hydrated.remove(&source_id) {
-            Some(RecallSourceResolution::Value(source)) => source,
-            _ => return Err(error("memory_source_changed")),
+        let Some(RecallSourceResolution::Value(source)) = hydrated.remove(&source_id) else {
+            return Err(error("memory_source_changed"));
         };
         Ok(ResolvedMemorySource {
             generation_id: generation.generation_id,

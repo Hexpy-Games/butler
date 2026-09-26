@@ -276,14 +276,12 @@ async fn drain_chat(app: &AppApplication, chat_id: &str) -> Result<(), GatewayAp
             .await
             .map_err(app_error)?;
         let Some(claim) = claim else { continue };
-        let resolution = match settings::resolution_from_persisted(&row.control_resolution_json) {
-            Ok(resolution) => resolution,
-            Err(_) => {
-                let _ = app
-                    .fail_dispatch(&claim, "turn_control_resolution_invalid")
-                    .await;
-                continue;
-            }
+        let Ok(resolution) = settings::resolution_from_persisted(&row.control_resolution_json)
+        else {
+            let _ = app
+                .fail_dispatch(&claim, "turn_control_resolution_invalid")
+                .await;
+            continue;
         };
         if let Err(error) = app
             .start_turn(

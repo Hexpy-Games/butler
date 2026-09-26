@@ -182,13 +182,11 @@ fn binding_current(
     let Some(message_id) = &row.conversation_message_id else {
         return Ok(false);
     };
-    let message = match canonical.read_message(message_id) {
-        Ok(Some(message)) => message,
-        Ok(None) | Err(_) => return Ok(false),
+    let Ok(Some(message)) = canonical.read_message(message_id) else {
+        return Ok(false);
     };
-    let hydrated = match hydrate_conversation_source(&message, &row, f64::INFINITY) {
-        Ok(hydrated) => hydrated,
-        Err(_) => return Ok(false),
+    let Ok(hydrated) = hydrate_conversation_source(&message, &row, f64::INFINITY) else {
+        return Ok(false);
     };
     let quote = string(binding, "quote").unwrap_or("");
     if quote.is_empty() {

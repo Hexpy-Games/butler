@@ -27,9 +27,8 @@ impl super::service::WebAccess {
             );
             return Ok(cli_projection(&page));
         }
-        let parsed = match Url::parse(requested_url) {
-            Ok(url) => url,
-            Err(_) => return Ok(cli_invalid_url(requested_url)),
+        let Ok(parsed) = Url::parse(requested_url) else {
+            return Ok(cli_invalid_url(requested_url));
         };
         if !matches!(parsed.scheme(), "http" | "https")
             || parsed.host_str().is_none()

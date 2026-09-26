@@ -34,17 +34,14 @@ pub(super) async fn run(
         let message = format!("no logs found for service {service}");
         return report_error("butler logs", options.json, "not_found", &message, 1);
     }
-    let lines = match tail_log_entries(&files, clamp_lines(&options, 80, 1_000)) {
-        Ok(lines) => lines,
-        Err(_) => {
-            return report_error(
-                "butler logs",
-                options.json,
-                "log_read_failed",
-                "Log files could not be read.",
-                1,
-            );
-        }
+    let Ok(lines) = tail_log_entries(&files, clamp_lines(&options, 80, 1_000)) else {
+        return report_error(
+            "butler logs",
+            options.json,
+            "log_read_failed",
+            "Log files could not be read.",
+            1,
+        );
     };
     let data = json!({
         "service": service,
@@ -107,44 +104,37 @@ async fn follow(
     installation: ResolvedInstallation,
     files: Vec<LogFile>,
 ) -> ExitCode {
-    let mut follower = match LogFollower::from_end(&files) {
-        Ok(follower) => follower,
-        Err(_) => {
-            return report_error(
-                "butler logs",
-                false,
-                "log_read_failed",
-                "Log files could not be followed.",
-                1,
-            );
-        }
+    let Ok(mut follower) = LogFollower::from_end(&files) else {
+        return report_error(
+            "butler logs",
+            false,
+            "log_read_failed",
+            "Log files could not be followed.",
+            1,
+        );
     };
-    let mut interrupt =
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()) {
-            Ok(signal) => signal,
-            Err(_) => {
-                return report_error(
-                    "butler logs",
-                    false,
-                    "signal_unavailable",
-                    "Log follow signal handling is unavailable.",
-                    1,
-                );
-            }
-        };
-    let mut terminate =
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(signal) => signal,
-            Err(_) => {
-                return report_error(
-                    "butler logs",
-                    false,
-                    "signal_unavailable",
-                    "Log follow signal handling is unavailable.",
-                    1,
-                );
-            }
-        };
+    let Ok(mut interrupt) =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+    else {
+        return report_error(
+            "butler logs",
+            false,
+            "signal_unavailable",
+            "Log follow signal handling is unavailable.",
+            1,
+        );
+    };
+    let Ok(mut terminate) =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+    else {
+        return report_error(
+            "butler logs",
+            false,
+            "signal_unavailable",
+            "Log follow signal handling is unavailable.",
+            1,
+        );
+    };
     let mut interval = tokio::time::interval(follow_poll_interval());
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     interval.tick().await;

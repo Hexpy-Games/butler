@@ -61,5 +61,7 @@ missing_panics_doc = "allow"
 doc_markdown = "allow"
 # `s += &format!(..)` is clearer than `let _ = write!(s, ..)`.
 format_push_string = "allow"
+# `Default::default()` in struct literals avoids repeating long type names.
+default_trait_access = "allow"
 # Parity fixtures deliberately carry decomposed (non-NFC) text.
 unicode_not_nfc = "allow"

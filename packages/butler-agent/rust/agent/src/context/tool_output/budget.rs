@@ -24,7 +24,7 @@ pub(super) fn budget(
         {
             "silent_on_success"
         }
-        _ => "auto",
+        OutputModeInput::Present(_) => "auto",
     };
     let success = input.result.exit_code == Some(0) && !input.result.timed_out;
     let validation = input

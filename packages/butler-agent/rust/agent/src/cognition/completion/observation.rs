@@ -104,9 +104,8 @@ pub(super) fn read_verified(root: &Path, job_id: &str) -> CognitionResult<Option
     let path = root
         .join("queue/completion-observations")
         .join(format!("{job_id}.json"));
-    let content = match fs::read_to_string(path) {
-        Ok(content) => content,
-        Err(_) => return Ok(None),
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(None);
     };
     let value: Value = match serde_json::from_str(&content) {
         Ok(value) => value,

@@ -103,9 +103,8 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
     if !root.exists() {
         return Ok(units.len());
     }
-    let connection = match lance_store::connect(&root).await {
-        Ok(value) => value,
-        Err(_) => return Ok(units.len()),
+    let Ok(connection) = lance_store::connect(&root).await else {
+        return Ok(units.len());
     };
     let table = match lance_store::open(&connection, "butler_memory").await {
         Ok(value) => value,

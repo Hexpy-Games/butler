@@ -192,7 +192,7 @@ fn safe_evidence(value: &Value, depth: usize) -> Value {
             }
             Value::Object(out)
         }
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 fn safe_argument(key: &str, value: &Value, depth: usize) -> Value {
@@ -216,7 +216,7 @@ fn safe_argument(key: &str, value: &Value, depth: usize) -> Value {
             }
             Value::Object(out)
         }
-        _ => Value::Null,
+        Value::Null => Value::Null,
     }
 }
 fn remove_unsafe(record: &Map<String, Value>) -> Map<String, Value> {

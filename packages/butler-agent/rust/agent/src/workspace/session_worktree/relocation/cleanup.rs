@@ -20,12 +20,11 @@ async fn discard_unlocked(owner: &Owner, plan: RelocationWorkspacePlan) -> Works
     };
     owner.validate_plan_path(&plan).await?;
     let git = owner.git();
-    let entries = match git
+    let Ok(entries) = git
         .list(&marker.repository_anchor_path, owner.shutdown.child_token())
         .await?
-    {
-        Ok(entries) => entries,
-        Err(_) => return Ok(false),
+    else {
+        return Ok(false);
     };
     let mut owned = false;
     for entry in entries {

@@ -293,12 +293,11 @@ impl NativeAppGatewayLifecycle {
 }
 
 async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> bool {
-    let client = match reqwest::Client::builder()
+    let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))
         .build()
-    {
-        Ok(client) => client,
-        Err(_) => return false,
+    else {
+        return false;
     };
     let mut request = client.get(format!("{}/health", base_url.trim_end_matches('/')));
     if auth.required {
@@ -307,9 +306,8 @@ async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> 
         };
         request = request.bearer_auth(token);
     }
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(_) => return false,
+    let Ok(response) = request.send().await else {
+        return false;
     };
     if !response.status().is_success() {
         return false;

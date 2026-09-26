@@ -41,9 +41,8 @@ pub(super) async fn execute(
     else {
         return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
-    let offset = match parse_cursor(args, file_id, digest) {
-        Ok(offset) => offset,
-        Err(()) => return encoded(&invalid_cursor()),
+    let Ok(offset) = parse_cursor(args, file_id, digest) else {
+        return encoded(&invalid_cursor());
     };
     let bytes = match owner
         .attachment_context
@@ -60,9 +59,8 @@ pub(super) async fn execute(
             return encoded(&json!({"ok":false,"error":code}));
         }
     };
-    let body = match String::from_utf8(bytes) {
-        Ok(body) => body,
-        Err(_) => return encoded(&json!({"ok":false,"error":"source_unavailable"})),
+    let Ok(body) = String::from_utf8(bytes) else {
+        return encoded(&json!({"ok":false,"error":"source_unavailable"}));
     };
     let units: Vec<u16> = body.encode_utf16().collect();
     if offset > units.len() {
@@ -72,9 +70,8 @@ pub(super) async fn execute(
     if end < units.len() && end > offset && (0xd800..=0xdbff).contains(&units[end - 1]) {
         end -= 1;
     }
-    let content = match String::from_utf16(&units[offset..end]) {
-        Ok(content) => content,
-        Err(_) => return encoded(&invalid_cursor()),
+    let Ok(content) = String::from_utf16(&units[offset..end]) else {
+        return encoded(&invalid_cursor());
     };
     let truncated = end < units.len();
     let next_cursor = truncated.then(|| {

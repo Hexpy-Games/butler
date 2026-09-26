@@ -61,17 +61,14 @@ pub(super) async fn execute(
             "Retry only within the immutable Steward mutation scope.",
         ));
     }
-    let expected_sha256 = match arguments::sha256(args.get("expected_sha256")) {
-        Ok(value) => value,
-        Err(()) => {
-            return Ok(failure(
-                &root,
-                &requested,
-                "invalid_arguments",
-                "expected_sha256 must be a 64-character hexadecimal SHA-256 digest.",
-                "Retry with the complete current lowercase or uppercase SHA-256.",
-            ));
-        }
+    let Ok(expected_sha256) = arguments::sha256(args.get("expected_sha256")) else {
+        return Ok(failure(
+            &root,
+            &requested,
+            "invalid_arguments",
+            "expected_sha256 must be a 64-character hexadecimal SHA-256 digest.",
+            "Retry with the complete current lowercase or uppercase SHA-256.",
+        ));
     };
     let context = arguments::context(&input, root);
     let command = MutationCommand::Write(WriteMutation {

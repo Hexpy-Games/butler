@@ -137,12 +137,9 @@ impl MetricFiles {
             }
 
             stats.scanned += 1;
-            let mut value = match serde_json::from_slice::<Value>(&record) {
-                Ok(value) => value,
-                Err(_) => {
-                    stats.parse_errors += 1;
-                    continue;
-                }
+            let Ok(mut value) = serde_json::from_slice::<Value>(&record) else {
+                stats.parse_errors += 1;
+                continue;
             };
             let timestamp = value
                 .get("ts")

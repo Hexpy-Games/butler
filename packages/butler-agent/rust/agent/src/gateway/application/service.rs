@@ -178,7 +178,7 @@ impl AppApplication {
     ) -> Result<(), GatewayApplicationError> {
         let code = match error {
             GatewayApplicationError::Public { code, .. } => code.clone(),
-            _ => "queued_message_admission_failed".to_owned(),
+            GatewayApplicationError::Internal => "queued_message_admission_failed".to_owned(),
         };
         let chat = chat_id.to_owned();
         let queued = queued_id.to_owned();

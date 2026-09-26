@@ -167,15 +167,12 @@ async fn run_dump(
             "Lightpanda output is unavailable.",
         ));
     };
-    let (spool, file) = match TemporarySpool::create(access.data_root()) {
-        Ok(created) => created,
-        Err(_) => {
-            stop_child(&mut child).await;
-            return Err(WebAccessError::new(
-                "web_access_spool_failed",
-                "Rendered page could not be spooled in DATA.",
-            ));
-        }
+    let Ok((spool, file)) = TemporarySpool::create(access.data_root()) else {
+        stop_child(&mut child).await;
+        return Err(WebAccessError::new(
+            "web_access_spool_failed",
+            "Rendered page could not be spooled in DATA.",
+        ));
     };
     let mut file = TokioFile::from_std(file);
     let deadline = Instant::now() + MAX_RUNTIME;

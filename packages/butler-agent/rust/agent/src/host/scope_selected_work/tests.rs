@@ -162,16 +162,15 @@ async fn store_for_scope_routes_local_worker_to_session_and_ledger_steward_to_pr
         .unwrap();
     assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
 
-    let missing_app = match routed
+    let Err(missing_app) = routed
         .store_for_scope(&WorkTurnScope {
             turn_id: "ledger-without-app-turn".into(),
             session_id: "ledger-without-app".into(),
             project_ref: None,
         })
         .await
-    {
-        Ok(_) => panic!("ledger binding without an app project must not use session Work"),
-        Err(error) => error,
+    else {
+        panic!("ledger binding without an app project must not use session Work")
     };
     assert_eq!(missing_app.code, "work_scope_project_binding_missing");
     assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);

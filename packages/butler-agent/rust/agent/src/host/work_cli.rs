@@ -36,19 +36,16 @@ pub async fn run(
         Ok(path) => path,
         Err(error) => return render_error(json_output, &command, &error),
     };
-    let collation = match LocaleCollation::new("en-US") {
-        Ok(value) => value,
-        Err(_) => {
-            return render_error(
-                json_output,
-                &command,
-                &output::failure(
-                    "work_records_unavailable",
-                    "Work records are unavailable.",
-                    1,
-                ),
-            );
-        }
+    let Ok(collation) = LocaleCollation::new("en-US") else {
+        return render_error(
+            json_output,
+            &command,
+            &output::failure(
+                "work_records_unavailable",
+                "Work records are unavailable.",
+                1,
+            ),
+        );
     };
     let outcome =
         tokio::task::spawn_blocking(move || execute(&data_root, &options, &collation)).await;

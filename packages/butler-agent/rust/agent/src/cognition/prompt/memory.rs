@@ -117,12 +117,9 @@ fn read_generation_hot_cache(
         return Ok(None);
     }
     let graph = GraphRepository::open_readonly(&generation.graph_path)?;
-    let canonical = match ConversationSourceReader::open(&conversation_store_path(data_root)) {
-        Ok(reader) => reader,
-        Err(_) => {
-            graph.close()?;
-            return Ok(None);
-        }
+    let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root)) else {
+        graph.close()?;
+        return Ok(None);
     };
     let result = project_entries(
         data_root,

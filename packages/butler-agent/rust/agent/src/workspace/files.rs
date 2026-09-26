@@ -180,20 +180,17 @@ pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<Worksp
             None,
         ));
     }
-    let mut decoded = match String::from_utf8(data) {
-        Ok(value) => value,
-        Err(_) => {
-            return Ok(failed_bytes(
-                failure(
-                    &input.path,
-                    "invalid_utf8",
-                    "The workspace file is not valid UTF-8 text.",
-                    "Choose a UTF-8 text file or convert it before reading.",
-                ),
-                false,
-                None,
-            ));
-        }
+    let Ok(mut decoded) = String::from_utf8(data) else {
+        return Ok(failed_bytes(
+            failure(
+                &input.path,
+                "invalid_utf8",
+                "The workspace file is not valid UTF-8 text.",
+                "Choose a UTF-8 text file or convert it before reading.",
+            ),
+            false,
+            None,
+        ));
     };
     if decoded.starts_with('\u{feff}') {
         decoded.drain(..3);

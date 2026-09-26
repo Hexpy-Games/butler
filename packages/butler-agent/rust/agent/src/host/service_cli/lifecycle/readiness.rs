@@ -124,9 +124,8 @@ async fn app_health_ready(
         };
         request = request.bearer_auth(token);
     }
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(_) => return Ok(false),
+    let Ok(response) = request.send().await else {
+        return Ok(false);
     };
     if !response.status().is_success() {
         return Ok(false);

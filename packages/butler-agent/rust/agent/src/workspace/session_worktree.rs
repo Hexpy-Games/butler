@@ -243,15 +243,12 @@ impl Owner {
         let Some(binding) = self.bindings.get_by_session_id(&input.session_id).await? else {
             return Ok(failure(action, Some(branch), "session_binding_required"));
         };
-        let existing_marker = match path::read_marker(binding.metadata.as_ref()) {
-            Ok(value) => value,
-            Err(()) => {
-                return Ok(failure(
-                    action,
-                    Some(branch),
-                    "session_workspace_unavailable",
-                ));
-            }
+        let Ok(existing_marker) = path::read_marker(binding.metadata.as_ref()) else {
+            return Ok(failure(
+                action,
+                Some(branch),
+                "session_workspace_unavailable",
+            ));
         };
         let anchor_path = existing_marker
             .as_ref()
@@ -408,9 +405,8 @@ impl Owner {
                 updated_at: Some(now),
             })
             .await;
-        let persisted = match result {
-            Ok(value) => value,
-            Err(_) => return Ok(failure(action, Some(branch), "binding_persist_failed")),
+        let Ok(persisted) = result else {
+            return Ok(failure(action, Some(branch), "binding_persist_failed"));
         };
         match persisted {
             RebindWorkspaceResult::Missing => {

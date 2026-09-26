@@ -52,12 +52,9 @@ fn read_open(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> O
         if row.disposition == "complete" {
             counts[4] += 1;
         }
-        let message = match reader.read_message(&row.message_id) {
-            Ok(message) => message,
-            Err(_) => {
-                read_ok = false;
-                break;
-            }
+        let Ok(message) = reader.read_message(&row.message_id) else {
+            read_ok = false;
+            break;
         };
         let scalar = message
             .as_ref()

@@ -243,7 +243,7 @@ async fn work(input: RebuildWork<'_>) -> CognitionResult<Value> {
         record_rebuild_readiness(data_root, paths, coordinator, &target, cancellation).await?;
     let inspected = inspect_memory_rebuild(data_root, paths, &handle.generation_id)?;
     Ok(json!({
-        "generationId":handle.generation_id,"canonicalSnapshotId":match target {MemoryGenerationTarget::Rebuild {canonical_snapshot_id,..}=>Some(canonical_snapshot_id),_=>None},
+        "generationId":handle.generation_id,"canonicalSnapshotId":match target {MemoryGenerationTarget::Rebuild {canonical_snapshot_id,..}=>Some(canonical_snapshot_id),MemoryGenerationTarget::Active { .. }=>None},
         "inventorySourceCount":inventory.expected_source_count,
         "catchupQuanta":catchup_quanta,"conversationRegistered":conversation_registered,
         "typedRegistered":typed_registered,"projectionQuanta":projection_quanta,"cacheQuanta":cache_quanta,

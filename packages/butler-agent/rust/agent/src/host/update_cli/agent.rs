@@ -26,11 +26,9 @@ pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -
             2,
         );
     }
-    let data = match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
-        Ok(data) => data,
-        Err(_) => {
-            return super::failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1);
-        }
+    let Ok(data) = settings_cli::resolve_data_root_override(options.data.clone(), &installation)
+    else {
+        return super::failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1);
     };
     let service = match AgentArchiveUpdateService::new(
         data,
@@ -42,17 +40,15 @@ pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -
             return super::failure(options.json, &code, "Agent updates are unavailable", 1);
         }
     };
-    let signal_task = match super::super::memory_maintain::signals(service.cancellation_token()) {
-        Ok(task) => task,
-        Err(_) => {
-            service.close();
-            return super::failure(
-                options.json,
-                "signal_unavailable",
-                "Agent update signal handling is unavailable",
-                1,
-            );
-        }
+    let Ok(signal_task) = super::super::memory_maintain::signals(service.cancellation_token())
+    else {
+        service.close();
+        return super::failure(
+            options.json,
+            "signal_unavailable",
+            "Agent update signal handling is unavailable",
+            1,
+        );
     };
     let request = AgentUpdateRequest {
         manifest: options.manifest.clone(),
