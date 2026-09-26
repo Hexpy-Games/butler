@@ -8,6 +8,7 @@ Tag is a compact pill for a status, mode or category label, with an optional lea
 | Prop | Values |
 | --- | --- |
 | `tone` | `neutral` (default), `accent`, `success`, `warning`, `danger` |
+| `size` | `sm` (default; 22px tall, 8px inline padding) for inline chips, `md` (24px, 10px) for page eyebrows and hero labels |
 | `icon` | Leading icon, sized to `--icon-size-xs` |
 | `onRemove`, `removeLabel` | Trailing remove button inside the pill; `removeLabel` names it |
 

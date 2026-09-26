@@ -1,11 +1,21 @@
 .tag {
   width: fit-content;
-  min-height: 20px;
-  padding: 0 var(--space-1);
+  min-height: var(--tag-height-sm);
+  padding-block: var(--tag-padding-block);
+  padding-inline: var(--tag-padding-inline-sm);
   border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--text-secondary);
+}
+
+.tag[data-size="md"] {
+  min-height: var(--tag-height-md);
+  padding-inline: var(--tag-padding-inline-md);
+}
+
+.tag[data-removable="true"] {
+  padding-inline-end: var(--space-xs);
 }
 
 .tag[data-tone="accent"] {
@@ -45,7 +55,11 @@
 .label {
   color: inherit;
   font-size: var(--font-size-1);
-  line-height: 1;
+  line-height: var(--line-height-tight);
+}
+
+.tag[data-size="md"] .label {
+  font-size: var(--font-size-2);
 }
 
 .remove {

@@ -81,7 +81,7 @@ export function OverviewPage({ entries, state, themes, onOpen, onChange }: {
         <div className={styles.heroFluid}><PromptFluidBackground tone={themes[0] === "dark" ? "dark" : "light"} /></div>
         <div className={styles.heroGrid}>
           <Stack gap="lg">
-            <Stack align="row"><Tag tone="accent">Butler Design System</Tag></Stack>
+            <Stack align="row"><Tag tone="accent" size="md">Butler Design System</Tag></Stack>
             <h1 className={styles.heroTitle}>One system. Every Butler screen.</h1>
             <p className={styles.lead}>
               Tokens, components and blocks that already run the app. Pick the piece, read how it is meant to be used, and assemble screens without new CSS.

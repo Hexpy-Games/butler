@@ -18,6 +18,12 @@
   --control-height-sm: 28px;
   --control-height-md: 30px;
   --control-height-lg: 34px;
+  /* Tag: a comfortable pill; the height holds the caption at line-height tight. */
+  --tag-height-sm: 22px;
+  --tag-height-md: var(--control-height-xs);
+  --tag-padding-block: calc(var(--space-xs) / 2);
+  --tag-padding-inline-sm: var(--space-sm);
+  --tag-padding-inline-md: calc(var(--space-sm) + var(--space-xs) / 2);
   --menu-item-height: 32px;
   --menu-item-padding-block: 6px;
   --menu-item-line-height: calc(

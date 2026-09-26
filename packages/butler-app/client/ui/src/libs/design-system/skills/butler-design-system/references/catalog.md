@@ -1077,7 +1077,7 @@ A small pill for a status, category or removable filter value.
 - Use for: A removable filter chip
 - Not for: A clickable action → `PillButton`
 - Not for: An inline error or result message → `Notice`
-- Tokens: `--radius-pill`, `--color-success-bg`, `--color-warning-bg`, `--color-danger-bg`, `--line`
+- Tokens: `--radius-pill`, `--tag-height-sm`, `--tag-padding-inline-sm`, `--tag-padding-inline-md`, `--color-success-bg`, `--color-warning-bg`, `--color-danger-bg`, `--line`
 
 ### Typo
 

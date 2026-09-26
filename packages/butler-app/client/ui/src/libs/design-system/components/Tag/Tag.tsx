@@ -7,12 +7,15 @@ import styles from "./Tag.module.css";
 import { dsClass } from "../../lib/internal";
 
 export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger";
+/** `sm`: inline status and filter chips. `md`: page eyebrows and hero labels. */
+export type TagSize = "sm" | "md";
 
 export interface TagProps {
   children: ReactNode;
   /** Leading icon; sized to --icon-size-xs. */
   icon?: ReactNode;
   tone?: TagTone;
+  size?: TagSize;
   ariaLabel?: string;
   /** Renders a trailing remove button inside the pill. */
   onRemove?: () => void;
@@ -25,6 +28,7 @@ export function Tag({
   children,
   icon,
   tone = "neutral",
+  size = "sm",
   ariaLabel,
   onRemove,
   removeLabel,
@@ -37,6 +41,8 @@ export function Tag({
       gap="xs"
       className={dsClass(styles.tag)}
       data-tone={tone}
+      data-size={size}
+      data-removable={onRemove ? "true" : undefined}
       data-test-class={dataTestClass}
       aria-label={ariaLabel}
     >

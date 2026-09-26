@@ -29,7 +29,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A button styled as a tag hides that it acts.", render: () => <Button size="xs" variant="outline" shape="pill" text="active" /> },
     },
   ],
-  content: ["One or two lowercase words in English; Korean uses the noun form (활성)."],
+  content: ["size=\"sm\" (default) for inline chips; size=\"md\" for page eyebrows and hero labels.", "One or two lowercase words in English; Korean uses the noun form (활성)."],
   accessibility: ["Color is never the only signal: the word says the state; removeLabel names the remove button."],
-  tokens: ["--radius-pill", "--color-success-bg", "--color-warning-bg", "--color-danger-bg", "--line"],
+  tokens: ["--radius-pill", "--tag-height-sm", "--tag-padding-inline-sm", "--tag-padding-inline-md", "--color-success-bg", "--color-warning-bg", "--color-danger-bg", "--line"],
 };

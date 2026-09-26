@@ -196,7 +196,7 @@
   top: calc(var(--space-lg) * -1);
   right: 0;
   z-index: 1;
-  padding: 0 var(--space-xs);
+  padding: var(--tag-padding-block) var(--tag-padding-inline-sm);
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--color-text-inverse);

@@ -16,7 +16,7 @@ export function PageHeader({ eyebrow, title, lead, children }: {
 }) {
   return (
     <Stack gap="md">
-      {eyebrow ? <Stack align="row"><Tag tone="accent">{eyebrow}</Tag></Stack> : null}
+      {eyebrow ? <Stack align="row"><Tag tone="accent" size="md">{eyebrow}</Tag></Stack> : null}
       <Typo.H1>{title}</Typo.H1>
       {lead ? <p className={styles.lead}>{lead}</p> : null}
       {children}
