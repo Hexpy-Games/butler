@@ -403,9 +403,5 @@
       "path": "/tmp/😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
       "basename": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
     }
-  ],
-  "missingGit": {
-    "ok": false,
-    "code": "session_workspace_unavailable"
-  }
+  ]
 }

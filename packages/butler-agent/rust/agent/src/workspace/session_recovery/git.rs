@@ -238,7 +238,7 @@ fn command_failure_code(
     } else if result
         .error
         .as_ref()
-        .is_some_and(|error| error.code() == "ENOENT")
+        .is_some_and(|error| error.io_kind() == Some(std::io::ErrorKind::NotFound))
     {
         Some(WorkspaceCode::GitNotInstalled)
     } else if result.exit_code != Some(0) {

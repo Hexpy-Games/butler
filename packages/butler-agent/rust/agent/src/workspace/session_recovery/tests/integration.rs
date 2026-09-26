@@ -215,10 +215,10 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
     .recover("session", None, CancellationToken::new())
     .await
     .unwrap();
-    let golden: Value = serde_json::from_str(include_str!("../bun-golden.json")).unwrap();
+    // A missing git binary is a spawn failure with io::ErrorKind::NotFound.
     assert_eq!(
         missing_git.workspace_reference.get().unwrap_err().code(),
-        golden["missingGit"]["code"].as_str().unwrap()
+        "git_not_installed"
     );
     fixture.store.close().await.unwrap();
     let reopened = Fixture::open(&fixture.root).await;

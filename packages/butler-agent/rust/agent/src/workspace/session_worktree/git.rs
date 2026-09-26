@@ -119,7 +119,7 @@ impl<'a> GitWorktrees<'a> {
         if result
             .error
             .as_ref()
-            .is_some_and(|error| error.code() == "ENOENT")
+            .is_some_and(|error| error.io_kind() == Some(std::io::ErrorKind::NotFound))
         {
             return Ok(Err(WorkspaceCode::GitNotInstalled));
         }
@@ -350,7 +350,7 @@ pub(super) fn command_failure(
     } else if result
         .error
         .as_ref()
-        .is_some_and(|error| error.code() == "ENOENT")
+        .is_some_and(|error| error.io_kind() == Some(std::io::ErrorKind::NotFound))
     {
         Some(WorkspaceCode::GitNotInstalled)
     } else if result.exit_code != Some(0) {
