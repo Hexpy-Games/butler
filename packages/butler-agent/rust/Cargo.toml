@@ -28,6 +28,9 @@ todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
 await_holding_lock = "deny"
+# Not yet denied: 1079 of 1700 hits index serde_json::Value by key, which
+# never panics on read (P5 replaces Value with typed structs). The remaining
+# slice/Vec/str indexing is inventoried for a follow-up pass (see P2B notes).
 indexing_slicing = "allow"
 
 # Pedantic lints that are allowed, with the reason each one is noise here:

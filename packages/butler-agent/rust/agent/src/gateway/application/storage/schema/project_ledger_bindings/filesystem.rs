@@ -78,7 +78,7 @@ pub(super) fn safe_id(value: &str) -> bool {
 
 fn read_json_string(path: &Path, key: &str) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     let candidate = trim(value.get(key)?.as_str()?);
     (!candidate.is_empty()).then(|| candidate.to_owned())
 }

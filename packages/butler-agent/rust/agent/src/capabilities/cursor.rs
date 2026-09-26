@@ -57,7 +57,7 @@ pub(super) fn decode(value: &Value) -> Option<ReadCursor> {
     // Buffer.from(base64url) ignores junk, stops at padding, and discards
     // incomplete low-order bits rather than requiring canonical encoding.
     let bytes = decode_buffer_base64url(raw);
-    let record: Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let record: Value = serde_json::from_slice(&bytes).ok()?;
     let object = record.as_object()?;
     if object.get("v")?.as_f64()? != 1.0 || object.get("tool")?.as_str()? != "read_file" {
         return None;

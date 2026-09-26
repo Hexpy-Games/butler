@@ -8,6 +8,7 @@ use super::{AuthError, error};
 
 pub(super) async fn read_json_object(path: &Path) -> Option<Map<String, Value>> {
     let bytes = tokio::fs::read(path).await.ok()?;
+    // Lossy UTF-8 decoding matches the source's readFile(.., "utf8").
     serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes))
         .ok()?
         .as_object()

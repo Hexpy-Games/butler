@@ -43,6 +43,7 @@ pub(super) fn app_default(config: &Value) -> Option<&str> {
 pub(super) async fn read_object(path: &Path) -> Value {
     // Source readJsonObject catches read/parse failures and returns an empty
     // object. This path never repairs, deletes or rewrites original file bytes.
+    // It decodes UTF-8 lossily like the source's readFile(.., "utf8").
     let Ok(bytes) = tokio::fs::read(path).await else {
         return Value::Object(Map::new());
     };

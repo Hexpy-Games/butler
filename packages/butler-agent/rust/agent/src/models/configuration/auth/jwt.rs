@@ -65,6 +65,7 @@ fn decode_jwt_payload(token: &str) -> Option<Map<String, Value>> {
         normalized.push('=');
     }
     let bytes = STANDARD.decode(normalized).ok()?;
+    // Lossy UTF-8 decoding matches the source's Buffer.toString("utf8").
     serde_json::from_str::<Value>(&String::from_utf8_lossy(&bytes))
         .ok()?
         .as_object()

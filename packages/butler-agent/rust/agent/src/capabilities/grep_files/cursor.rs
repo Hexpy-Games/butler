@@ -21,7 +21,7 @@ pub(super) fn decode(value: &Value) -> Option<GrepCursor> {
         return None;
     }
     let bytes = super::super::cursor::decode_buffer_base64url(raw);
-    let decoded: Value = serde_json::from_str(&String::from_utf8_lossy(&bytes)).ok()?;
+    let decoded: Value = serde_json::from_slice(&bytes).ok()?;
     let fields = decoded.as_object()?;
     if fields.get("v")?.as_f64()? != 1.0 || fields.get("tool")?.as_str()? != "grep_files" {
         return None;
