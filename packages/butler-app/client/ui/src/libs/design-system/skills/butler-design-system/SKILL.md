@@ -74,7 +74,8 @@ and quality gates.
 Every item page in the DS Viewer shows composition recipes with their exact JSX
 (from `<Name>.guidance.tsx` `#region recipe:` blocks). Whole screens (settings
 page, conversation turn, sidebar, project dashboard, dialog form,
-empty/loading/error states; no CSS files, no className, no inline styles) are
+empty/loading/error states; no CSS files, no className, and no inline style
+except Skeleton sizing, which has no size props yet) are
 under "Build a screen" in the viewer and at the
 end of `references/catalog.md`. A settings row, for example:
 
@@ -169,8 +170,10 @@ bun run render all --viewport=all
 bun run render Button --theme=all
 ```
 
-The render command builds the UI, opens each item (or viewer page) by deep link
-and writes `.tmp/ds-viewer`; unknown names fail.
+Viewer pages render too: pass a page id with a slash or a `page:` prefix
+(`bun run render page:overview foundations/color patterns/tinted-glass`), alone
+or beside `all`. The render command builds the UI, opens each item or page by
+deep link and writes `.tmp/ds-viewer`; unknown names fail.
 
 ## Wrong-Turn Guardrails
 

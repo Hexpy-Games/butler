@@ -45,7 +45,6 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
 }
 
 .toolbar {

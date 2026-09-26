@@ -17,6 +17,15 @@ function isEditable(target: EventTarget | null): boolean {
     && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 }
 
+/** Scrolls `main` so the anchor sits just below the sticky toolbar (its first child). */
+function scrollToAnchor(main: HTMLElement | null, id: string | undefined): boolean {
+  const target = id ? document.getElementById(id) : null;
+  if (!main || !target) return false;
+  const toolbar = main.firstElementChild instanceof HTMLElement ? main.firstElementChild.offsetHeight : 0;
+  main.scrollTop += target.getBoundingClientRect().top - main.getBoundingClientRect().top - toolbar;
+  return true;
+}
+
 /** "/" (outside fields) focuses the sidebar filter. */
 function useSlashFocus(onFocus: () => void) {
   useEffect(() => {
@@ -44,7 +53,7 @@ export function DesignSystemViewer() {
   const activeId = page.kind === "item" ? page.entry.id : pageId;
   useEffect(() => {
     if (!initialAnchor) return undefined;
-    const timer = window.setTimeout(() => document.getElementById(initialAnchor)?.scrollIntoView({ block: "start" }), 120);
+    const timer = window.setTimeout(() => scrollToAnchor(mainRef.current, initialAnchor), 120);
     return () => window.clearTimeout(timer);
     // Only the anchor from the initial URL.
   }, []);
@@ -60,9 +69,7 @@ export function DesignSystemViewer() {
     update({ page: id });
     setMenuOpen(false);
     requestAnimationFrame(() => {
-      const target = anchor ? document.getElementById(anchor) : null;
-      if (target) target.scrollIntoView({ block: "start" });
-      else mainRef.current?.scrollTo({ top: 0 });
+      if (!scrollToAnchor(mainRef.current, anchor)) mainRef.current?.scrollTo({ top: 0 });
     });
   }, [update]);
 

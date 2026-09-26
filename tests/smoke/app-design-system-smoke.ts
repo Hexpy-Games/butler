@@ -26,7 +26,11 @@ async function assertNoHorizontalOverflow(page: Page, label: string): Promise<vo
 
 async function assertWorkbench(page: Page, baseUrl: string, label: string): Promise<void> {
   await openViewerPage(page, baseUrl, "foundations");
-  await page.locator("[data-ds-foundations]").waitFor({ state: "visible" });
+  await page.locator('[data-ds-foundations="index"] [data-ds-token-category]').first().waitFor({ state: "visible" });
+  await assertNoHorizontalOverflow(page, `${label} foundations index`);
+  // Token pages are generated from tokens.css; color carries raw, semantic, alias and context tokens.
+  await openViewerPage(page, baseUrl, "foundations/color");
+  await page.locator('[data-ds-foundations="color"] [data-ds-token-name]').first().waitFor({ state: "visible" });
   const tokenInventory = await page.evaluate(() => {
     const names = Array.from(
       document.querySelectorAll<HTMLElement>("[data-ds-token-name]"),
@@ -381,7 +385,7 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   assert(blockPolishState.workerIconTitleAligned, `${label}: WorkerActivityRow icon/title alignment is off`);
   assert(blockPolishState.automationIconTitleAligned, `${label}: AutomationRunList icon/title alignment is off`);
 
-  const groupHeader = page.locator('[data-ds-component="CollapsibleNavGroup"]').getByRole("button", { name: "Interactive Group" });
+  const groupHeader = page.locator('[data-ds-component="CollapsibleNavGroup"]').getByRole("button", { name: "Design system" });
   await groupHeader.click();
   await page.waitForFunction(() =>
     document.querySelector('[data-ds-component="CollapsibleNavGroup"] [aria-expanded="false"]'),
@@ -397,6 +401,40 @@ async function assertWorkbench(page: Page, baseUrl: string, label: string): Prom
   await page.locator('[data-ds-detail="DashboardHeader"] [data-ds-story] [data-ds-fixture-canvas]').first().waitFor({ state: "visible" });
   const detailUrl = new URL(page.url());
   assert(detailUrl.searchParams.get("page") === "blocks/DashboardHeader", `${label}: Open details did not deep-link the item page`);
+
+  await assertItemGuidanceAndStates(page, baseUrl, label);
+}
+
+async function assertItemGuidanceAndStates(page: Page, baseUrl: string, label: string): Promise<void> {
+  await openViewerPage(page, baseUrl, "components/Button");
+  const matrix = page.locator('[data-ds-detail="Button"] [data-ds-states-matrix]').first();
+  await matrix.waitFor({ state: "visible" });
+  const states = await page.evaluate(() => {
+    const cell = (id: string) => document.querySelector(`[data-ds-state-cell="${id}"] [data-slot="button"]`);
+    const style = (id: string) => {
+      const element = cell(id);
+      return element ? getComputedStyle(element) : null;
+    };
+    const base = style("default:default");
+    const hover = style("default:hover");
+    const focus = style("default:focus-visible");
+    return {
+      forcedLayer: Boolean(document.querySelector("style[data-ds-force-state-layer]")),
+      hoverDiffers: Boolean(base && hover) && base!.backgroundColor !== hover!.backgroundColor,
+      focusRing: Boolean(focus) && (focus!.outlineStyle !== "none" || focus!.boxShadow !== "none"),
+      disabled: (cell("default:disabled") as HTMLButtonElement | null)?.disabled === true,
+      guidance: ["usage", "do-dont", "recipes", "notes", "tokens"]
+        .every((section) => Boolean(document.querySelector(`[data-ds-detail="Button"] [data-ds-guidance="${section}"]`))),
+      recipes: document.querySelectorAll('[data-ds-detail="Button"] [data-ds-recipe]').length,
+    };
+  });
+  assert(states.forcedLayer, `${label}: the forced-state stylesheet is missing`);
+  assert(states.hoverDiffers, `${label}: forced hover does not change the Button fill`);
+  assert(states.focusRing, `${label}: forced focus-visible does not draw the focus ring`);
+  assert(states.disabled, `${label}: the disabled state cell is not a disabled Button`);
+  assert(states.guidance, `${label}: Button guidance sections are incomplete`);
+  assert(states.recipes >= 1, `${label}: Button has no composition recipe`);
+  await assertNoHorizontalOverflow(page, `${label} Button item`);
 }
 
 assert(

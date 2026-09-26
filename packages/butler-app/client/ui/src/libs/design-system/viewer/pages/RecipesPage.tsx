@@ -15,7 +15,7 @@ export function RecipesPage({ locale }: { locale: AppLocale }) {
   return (
     <Stack gap="2xl" data-ds-recipes={RECIPES.length}>
       <PageHeader eyebrow="Build a screen" title="Screens, assembled from the system"
-        lead="Each recipe is a real Butler screen composed only of DS components and blocks: no CSS files, no className, no inline styles. The code under each screen is the exact JSX that renders it." />
+        lead="Each recipe is a real Butler screen composed only of DS components and blocks: no CSS files and no className. The one inline style sizes Skeleton, which has no size props yet. The code under each screen is the exact JSX that renders it." />
       {RECIPES.map(({ id, title, description, uses, Screen }) => (
         <Section id={`recipe-${id}`} key={id} title={title} titleAs="h2" description={description} data-ds-recipe={id}>
           <Stack align="row" gap="xs" wrap>{uses.map((name) => <Tag key={name}>{name}</Tag>)}</Stack>

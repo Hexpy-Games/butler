@@ -72,7 +72,7 @@ const scenarios: Scenario[] = [
     name: "menu-open-close",
     item: "DropdownMenu",
     run: async (page, scope) => {
-      await scope.getByRole("button", { name: "Menu" }).click();
+      await scope.getByRole("button", { name: "Session actions" }).click();
       await page.waitForTimeout(500);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(500);
@@ -82,7 +82,7 @@ const scenarios: Scenario[] = [
     name: "dialog-open-close",
     item: "Dialog",
     run: async (page, scope) => {
-      await scope.getByRole("button", { name: "Open dialog" }).click();
+      await scope.getByRole("button", { name: "Rename" }).click();
       await page.waitForTimeout(600);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(500);
@@ -424,8 +424,8 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
     // Overlay open/close: animation windows are the enter/exit token durations
     // after the first rendered frame (the mount frame itself lays out).
     for (const [name, item, trigger] of [
-      ["menu", "DropdownMenu", "Menu"],
-      ["dialog", "Dialog", "Open dialog"],
+      ["menu", "DropdownMenu", "Session actions"],
+      ["dialog", "Dialog", "Rename"],
     ] as const) {
       const scope = await openItem(page, serverUrl, ids.get(item)!, "light");
       const { events, thread } = await traced(browser, page, async () => {
