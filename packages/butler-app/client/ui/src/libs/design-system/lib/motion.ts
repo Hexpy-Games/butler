@@ -59,7 +59,13 @@ function tokenValue(name: string): string {
   }
 }
 
+/** The DS Viewer's motion toggle scopes reduced motion with `data-motion="reduced"` on <body>. */
+function reducedMotionScope(): boolean {
+  return typeof document !== "undefined" && document.body?.dataset?.motion === "reduced";
+}
+
 export function prefersReducedMotion(): boolean {
+  if (reducedMotionScope()) return true;
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }

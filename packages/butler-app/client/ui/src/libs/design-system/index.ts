@@ -55,6 +55,7 @@ export * from "./components/SegmentedControl";
 export * from "./components/Typo";
 export * from "./components/Icons";
 export * from "./components/IconButton";
+export * from "./components/Kbd";
 
 // Blocks
 export * from "./blocks/AdaptiveShell";
@@ -129,11 +130,3 @@ export * from "./blocks/ChromeFrame";
 export * from "./blocks/TitlebarShell";
 export * from "./blocks/SidebarShell";
 
-export {
-  designSystemComponents,
-  designSystemBlocks,
-  designSystemTokenGroups,
-  type DesignSystemComponentMeta,
-  type DesignSystemBlockMeta,
-  type DesignSystemTokenGroup,
-} from "./registry";

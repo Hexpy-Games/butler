@@ -107,10 +107,8 @@ function parseRenderOptions(args: string[]): RenderOptions {
   const componentNames = names.map((arg) => arg.trim()).filter(Boolean);
 
   return {
-    componentNames:
-      componentNames.length === 1 && componentNames[0]?.toLowerCase() === "all"
-        ? []
-        : componentNames,
+    // `all` expands to every component and block; viewer pages may be listed beside it.
+    componentNames: componentNames.flatMap((name) => (name.toLowerCase() === "all" ? ["*"] : [name])),
     viewports: [...new Set(viewports)],
     themes: [...new Set(themes)],
   };
@@ -127,6 +125,16 @@ function safeFileName(value: string): string {
 
 function viewerUrl(serverUrl: string, params: Record<string, string>): string {
   return `${serverUrl}?${new URLSearchParams({ visual: "design-system", ...params }).toString()}`;
+}
+
+// Viewer pages render as viewport screenshots: `page:overview`, `page:foundations/color`, or any id with a slash
+// (`patterns/tinted-glass`). Bare names are components and blocks.
+function isViewerPageName(name: string): boolean {
+  return name.startsWith("page:") || name.includes("/");
+}
+
+function viewerPageId(name: string): string {
+  return name.startsWith("page:") ? name.slice("page:".length) : name;
 }
 
 /** Item ids by component name, read from the Components and Blocks galleries. */
@@ -165,13 +173,15 @@ async function renderViewport(
   try {
     const items = await viewerItems(page, serverUrl);
     const availableNames = [...items.keys()];
-    const selectedNames =
-      requestedNames.length > 0 ? requestedNames : availableNames;
+    const selectedNames = requestedNames.length > 0
+      ? [...new Set(requestedNames.flatMap((name) => (name === "*" ? availableNames : [name])))]
+      : availableNames;
     const availableByLower = new Map(
       availableNames.map((name) => [name.toLowerCase(), name]),
     );
+    const pageIds = selectedNames.filter(isViewerPageName).map(viewerPageId);
     const unknownNames = selectedNames.filter(
-      (name) => !availableByLower.has(name.toLowerCase()),
+      (name) => !isViewerPageName(name) && !availableByLower.has(name.toLowerCase()),
     );
 
     if (unknownNames.length > 0) {
@@ -181,7 +191,19 @@ async function renderViewport(
     }
 
     const writtenPaths: string[] = [];
+    for (const pageId of pageIds) {
+      for (const theme of themes) {
+        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, motion: "reduced" }), { waitUntil: "networkidle" });
+        await page.locator(`[data-ds-page="${pageId}"] main > *`).first().waitFor({ state: "visible" });
+        if (await page.locator("[data-ds-not-found]").count()) throw new Error(`Unknown DS Viewer page: ${pageId}`);
+        const suffix = themes.length > 1 ? `-${theme}` : "";
+        const outputPath = join(outputDir, `page-${safeFileName(pageId)}${suffix}.png`);
+        await page.screenshot({ path: outputPath, animations: "disabled" });
+        writtenPaths.push(outputPath);
+      }
+    }
     for (const requestedName of selectedNames) {
+      if (isViewerPageName(requestedName)) continue;
       const componentName = availableByLower.get(requestedName.toLowerCase());
       const id = componentName ? items.get(componentName) : undefined;
       if (!componentName || !id) continue;

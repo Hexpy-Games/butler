@@ -1,6 +1,13 @@
 # Butler Design System
 
-Butler Design System is the client UI foundation for reusable primitives, tokens, documentation, fixtures, and agent-facing guidance.
+Butler Design System is the client UI foundation for reusable primitives, tokens, documentation, showcases, and agent-facing guidance.
+
+> Building or reviewing UI (human or agent)? Read
+> [`skills/butler-design-system/SKILL.md`](skills/butler-design-system/SKILL.md)
+> and pick components from its generated
+> [catalog](skills/butler-design-system/references/catalog.md) (decision guide,
+> every component, Build-a-screen recipes). Product UI is assembled only from
+> this system.
 
 ## Boundaries
 
@@ -67,7 +74,11 @@ Run the UI and open:
 /?visual=design-system
 ```
 
-Or capture component fixtures directly:
+Every component and block folder owns `<Name>.showcase.tsx` (stories and an
+optional states matrix) and `<Name>.guidance.tsx` (usage guidance); the viewer
+collects both automatically.
+
+Or capture item pages directly:
 
 ```sh
 bun run render Button NavRow CollapsibleNavGroup

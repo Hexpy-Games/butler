@@ -1,9 +1,3 @@
 .cluster {
   --icon-button-size: var(--sidebar-action-size);
 }
-
-.fixtureSurface {
-  background: var(--surface-raised);
-  border-radius: var(--radius-control);
-  padding: var(--space-2);
-}

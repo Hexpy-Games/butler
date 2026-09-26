@@ -85,13 +85,6 @@
   line-height: var(--typo-caption-line-height);
 }
 
-.sample-swatch {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--accent);
-}
-
 .color-swatch {
   display: block;
   width: 100%;

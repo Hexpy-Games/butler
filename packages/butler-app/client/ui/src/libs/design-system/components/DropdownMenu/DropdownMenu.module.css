@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .content {
   z-index: var(--z-popover);
   min-width: 8rem;

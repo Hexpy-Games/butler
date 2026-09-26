@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Stack } from "../../components/Stack";
@@ -61,3 +61,13 @@ export const stories: ShowcaseStory[] = [
   { name: "Menu unavailable", render: (context) => <Approval {...context} scope={false} /> },
   { name: "Disabled while pending", states: ["disabled"], render: (context) => <Approval {...context} pending /> },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active", "disabled"],
+  variants: ["primary", "outline"],
+  render: (context) => (
+    <SplitButton text={copy[context.locale].once} menuLabel={copy[context.locale].more} disabled={context.state === "disabled"}
+      variant={context.variant === "outline" ? "outline" : "primary"}
+      items={[{ key: "conversation", label: copy[context.locale].conversation, onSelect: () => undefined }]} onClick={() => undefined} />
+  ),
+};

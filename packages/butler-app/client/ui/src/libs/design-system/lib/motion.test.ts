@@ -99,6 +99,24 @@ test("animateMotion fades only under reduced motion and skips transform-only mot
   expect(calls).toHaveLength(1);
 });
 
+test("a data-motion=reduced scope (the DS Viewer toggle) counts as reduced motion", () => {
+  installEnvironment({ reduce: false, tokens: {} });
+  Object.assign(globalThis.document, { body: { dataset: { motion: "reduced" } } });
+  expect(prefersReducedMotion()).toBe(true);
+  Object.assign(globalThis.document, { body: { dataset: {} } });
+  expect(prefersReducedMotion()).toBe(false);
+});
+
+test("tokens.css scopes the reduced-motion overrides to [data-motion=reduced]", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../tokens.css", import.meta.url), "utf8");
+  const media = /@media \(prefers-reduced-motion: reduce\) \{\s*:root \{([^}]*)\}/u.exec(css)?.[1] ?? "";
+  const scope = /\[data-motion="reduced"\] \{([^}]*)\}/u.exec(css)?.[1] ?? "";
+  const names = (body: string) => [...body.matchAll(/(--[\w-]+):\s*([^;]+);/gu)].map((match) => `${match[1]}=${match[2]}`).sort();
+  expect(names(media).length).toBeGreaterThan(5);
+  expect(names(scope)).toEqual(names(media));
+});
+
 test("animateMotion is a no-op without WAAPI", () => {
   installEnvironment({ reduce: false, tokens: {} });
   expect(animateMotion({} as HTMLElement, [{ opacity: 0 }, { opacity: 1 }])).toBeNull();

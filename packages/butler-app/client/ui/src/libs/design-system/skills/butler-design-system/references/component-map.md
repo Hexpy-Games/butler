@@ -361,8 +361,11 @@ Use `SettingsNav` for settings category navigation.
 
 Use `SettingsField` for responsive label, description, control, and helper/meta layout.
 
-Use `FormSection` for each top-level logical settings group. It is the bordered
-settings card. Use `Section` only for unframed grouping inside a larger surface.
+Use `SettingsPage` + `SettingsSection` for every settings page: the page renders
+only sections, and each section (`kind` form, list, status or info) owns its
+loading, error and empty states. `SettingsField` must render inside a
+`SettingsSection`, `FormSection` or `DialogForm`. Use `FormSection` directly
+only outside settings pages; it is the bordered card SettingsSection composes. Use `Section` only for unframed grouping inside a larger surface.
 
 Use `SurfacePanel` for repeated editable settings entities inside a
 `FormSection`, such as worker rules or registered local-model rows.

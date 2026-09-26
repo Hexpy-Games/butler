@@ -137,7 +137,7 @@ function FieldSeparator({
       data-content={!!children}
       className={cn(styles.separator, className)}
       {...props}>
-      <Separator className="absolute inset-0 top-1/2" />
+      <Separator className={styles.separatorLine} />
       {children && (
         <span
           className={styles.separatorContent}
@@ -175,7 +175,7 @@ function FieldError({
     }
 
     return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
+      <ul className={styles.errorList}>
         {uniqueErrors.map((error, index) =>
           error?.message && <li key={index}>{error.message}</li>)}
       </ul>

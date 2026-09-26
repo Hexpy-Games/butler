@@ -548,12 +548,10 @@ describe("token inventory cleanup", () => {
     "--worker-title-bg",
   ];
 
-  test("retired tokens are neither defined nor listed in the DS registry", () => {
+  test("retired tokens are not defined (DS Viewer token pages come from tokens.css)", () => {
     const css = read(tokensPath);
-    const registry = read(`${uiSrc}/libs/design-system/registry.tsx`);
     for (const name of retired) {
       expect(css).not.toMatch(new RegExp(`${name}:`, "u"));
-      expect(registry).not.toContain(`"${name}"`);
     }
   });
 

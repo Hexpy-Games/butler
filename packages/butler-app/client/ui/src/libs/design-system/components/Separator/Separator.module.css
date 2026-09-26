@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .separator {
   --separator-color: var(--line);
   position: relative;

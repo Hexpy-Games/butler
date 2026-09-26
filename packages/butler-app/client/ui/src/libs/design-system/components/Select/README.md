@@ -29,7 +29,7 @@ Use `SelectButton` for a select-looking trigger that opens a custom popover,
 such as a searchable list inside `Popover`. It shares the `SelectTrigger` border,
 height, left-aligned value, and plain chevron.
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 ### Disabled tone
 

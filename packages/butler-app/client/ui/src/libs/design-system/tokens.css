@@ -672,6 +672,20 @@
   }
 }
 
+/* The same overrides as a scope: the DS Viewer's reduced-motion toggle sets
+   data-motion="reduced" (lib/motion.ts reads it too). */
+[data-motion="reduced"] {
+  --motion-distance-xs: 0px;
+  --motion-distance-sm: 0px;
+  --motion-distance-md: 0px;
+  --motion-distance-lg: 0px;
+  --motion-scale-menu: 1;
+  --motion-scale-dialog: 1;
+  --motion-scale-press: 1;
+  --motion-scale-lift: 1;
+  --motion-scale-palette: 1;
+}
+
 /* Compact settings (single-pane SettingsShell) keep the ramp and only
    tighten the section card inset. */
 @media (width <= 760px) {

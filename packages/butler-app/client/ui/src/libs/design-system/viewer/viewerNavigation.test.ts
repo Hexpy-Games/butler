@@ -13,8 +13,10 @@ function entry(id: string, category: ShowcaseCategory, tags: string[] = []): Sho
     sourcePath: `libs/design-system/${id}`,
     meta: { title: name, category, tags },
     stories: [],
+    stateMatrix: null,
+    guidance: null,
+    loadGuidanceSource: null,
     readme: null,
-    origin: "none",
   };
 }
 
@@ -27,12 +29,18 @@ const entries = [
 ];
 
 describe("DS Viewer navigation", () => {
-  test("resolves fixed sections, galleries, and placeholder sections", () => {
+  test("resolves fixed sections, galleries, token pages and patterns", () => {
     expect(resolveViewerPage("overview", entries)).toEqual({ kind: "overview" });
+    expect(resolveViewerPage("guide", entries)).toEqual({ kind: "guide" });
+    expect(resolveViewerPage("recipes", entries)).toEqual({ kind: "recipes" });
     expect(resolveViewerPage("foundations", entries)).toEqual({ kind: "foundations" });
+    expect(resolveViewerPage("foundations/color", entries)).toEqual({ kind: "tokens", category: "color" });
+    expect(resolveViewerPage("foundations/nope", entries)).toEqual({ kind: "not-found", id: "foundations/nope" });
+    expect(resolveViewerPage("motion", entries)).toEqual({ kind: "motion" });
     expect(resolveViewerPage("components", entries)).toEqual({ kind: "gallery", section: "components" });
     expect(resolveViewerPage("blocks", entries)).toEqual({ kind: "gallery", section: "blocks" });
-    expect(resolveViewerPage("patterns", entries)).toEqual({ kind: "placeholder", section: "patterns" });
+    expect(resolveViewerPage("patterns", entries)).toEqual({ kind: "patterns" });
+    expect(resolveViewerPage("patterns/tinted-glass", entries, ["tinted-glass"])).toEqual({ kind: "pattern", id: "tinted-glass" });
     expect(resolveViewerPage("icons", entries)).toEqual({ kind: "icons" });
   });
 

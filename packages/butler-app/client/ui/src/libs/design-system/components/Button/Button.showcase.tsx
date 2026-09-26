@@ -1,4 +1,4 @@
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { ButtonContainer } from "../ButtonContainer";
 import { Plus, Search, Trash2 } from "../Icons";
 import { Button } from "./Button";
@@ -58,3 +58,12 @@ export const stories: ShowcaseStory[] = [
     ),
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active", "disabled"],
+  variants: ["default", "outline", "borderless", "ghost", "destructive"],
+  render: (context) => (
+    <Button disabled={context.state === "disabled"} text={text(context).save}
+      variant={context.variant as "default" | "outline" | "borderless" | "ghost" | "destructive"} />
+  ),
+};

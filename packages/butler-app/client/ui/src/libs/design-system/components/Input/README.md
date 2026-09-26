@@ -19,7 +19,7 @@ Import from the public design-system alias:
 import { Input } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 `compact` makes a short inline field (5.5rem, small control height; the
 touch target still applies on coarse pointers) for a number in a toolbar,

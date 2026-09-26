@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .overlay {
   position: fixed;
   inset: 0;
