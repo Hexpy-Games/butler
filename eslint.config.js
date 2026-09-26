@@ -12,6 +12,7 @@ export default tseslint.config(
       "src/**/node_modules/**",
       "packages/butler-app/client/ui/dist/**",
       "packages/butler-app/client/electron/dist/**",
+      "packages/butler-app/client/electron/.native-agent-payload/**",
       // Cargo output, including the static ONNX Runtime source/build cache that
       // scripts/prepare-static-ort-macos-arm64.py keeps under target/native-deps.
       "packages/butler-agent/rust/target/**",

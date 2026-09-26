@@ -21,6 +21,7 @@ const labels = {
     nested: "Nested items keep the same rhythm", steps: ["Plan the change", "Verify it"], quote: "Quoted notes use a quiet rule and secondary text.",
     matrix: "Verification matrix", head: ["Check", "Command", "Result"], rows: [["Types", "bun run typecheck", "Passed"], ["Design lint", "bun run lint:design", "Passed"]],
     copy: "Copy code", copied: "Copied", replay: "Replay stream",
+    imageIntro: "Inline images in a reply stay bounded so the text keeps its measure.", imageAlt: "Settings screen at 375px",
     stream: "Streaming text **fades in per chunk**: each appended chunk keeps its own span, so nothing moves while the answer grows. Settled messages render plain markdown.",
   },
   "ko-KR": {
@@ -29,9 +30,12 @@ const labels = {
     nested: "중첩 항목도 같은 리듬을 따릅니다", steps: ["변경 계획하기", "검증하기"], quote: "인용은 조용한 선과 보조 텍스트를 씁니다.",
     matrix: "검증 표", head: ["점검", "명령", "결과"], rows: [["타입", "bun run typecheck", "통과"], ["디자인 린트", "bun run lint:design", "통과"]],
     copy: "코드 복사", copied: "복사됨", replay: "스트림 다시 재생",
+    imageIntro: "답변 안의 인라인 이미지는 크기가 제한되어 본문 폭을 지킵니다.", imageAlt: "375px 설정 화면",
     stream: "스트리밍 텍스트는 **조각마다 서서히 나타납니다**. 새 조각마다 자기 span을 유지하므로 답이 길어져도 아무것도 움직이지 않습니다. 끝난 메시지는 일반 마크다운으로 그립니다.",
   },
 } as const;
+
+const INLINE_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='400' viewBox='0 0 640 400'%3E%3Crect width='640' height='400' fill='%23e9eaec'/%3E%3Cpath d='m80 320 150-160 110 100 80-90 140 150H80Z' fill='%2371767d'/%3E%3C/svg%3E";
 
 function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
@@ -105,6 +109,17 @@ export const stories: ShowcaseStory[] = [
           <thead><tr>{text(context).head.map((cell) => <th key={cell}>{cell}</th>)}</tr></thead>
           <tbody>{text(context).rows.map((row) => <tr key={row[0]}><td>{row[0]}</td><td><code>{row[1]}</code></td><td>{row[2]}</td></tr>)}</tbody>
         </MarkdownTable>
+      </MarkdownContent>
+    ),
+  },
+  {
+    // MessageMarkdown renders reply images inline; the block caps their width.
+    name: "Inline image",
+    widths: ["375", "app"],
+    render: (context) => (
+      <MarkdownContent>
+        <p>{text(context).imageIntro}</p>
+        <p><img alt={text(context).imageAlt} src={INLINE_IMAGE} /></p>
       </MarkdownContent>
     ),
   },

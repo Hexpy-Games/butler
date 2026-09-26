@@ -1,8 +1,8 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
@@ -27,6 +27,8 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-first-run-smoke-"));
 const dataDir = join(tempDir, "data");
 const electronProfileDir = join(tempDir, "electron-profile");
+const smokeHome = join(tempDir, "home");
+mkdirSync(join(smokeHome, ".codex"), { recursive: true });
 const firstRunSelector = "[data-test-class=\"first-run-setup\"]";
 const forbiddenCopy = [
   "gateway",
@@ -377,6 +379,30 @@ async function expectNoForbiddenCopy(
   }
 }
 
+function stageNativeAgentInstallation(workDir: string): string {
+  const prebuilt = process.env.BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE?.trim();
+  if (!prebuilt) {
+    return join(prepareBundledAgentResource(root, workDir).resourceDir, "bin", "butler-agent");
+  }
+  assert(isAbsolute(prebuilt) && existsSync(prebuilt), `BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE is not an absolute existing path: ${prebuilt}`);
+  const installation = join(workDir, "bundled-agent");
+  const resources = join(installation, "resources");
+  mkdirSync(join(installation, "bin"), { recursive: true });
+  cpSync(prebuilt, join(installation, "bin", "butler-agent"), { mode: 2 /* COPYFILE_FICLONE */ });
+  cpSync(resolve(root, "packages", "butler-agent", "resources"), resources, { recursive: true });
+  cpSync(uiRoot, join(resources, "app-client", "dist"), { recursive: true });
+  // Same manifest prepare-native-agent.mjs writes; Electron checks its version.
+  const cargo = readFileSync(resolve(root, "packages", "butler-agent", "rust", "crates", "butler-agent", "Cargo.toml"), "utf8");
+  const version = cargo.match(/^version\s*=\s*"([^"]+)"/mu)?.[1];
+  const appVersion = JSON.parse(readFileSync(join(electronAppRoot, "package.json"), "utf8")).version;
+  assert(version && appVersion, "native Agent or App version is missing");
+  writeFileSync(join(installation, "native-agent-manifest.json"), `${JSON.stringify({
+    schema: "butler.native-agent-payload.v1", version, appVersion, platform: process.platform,
+    architecture: process.arch, binary: "bin/butler-agent", resources: "resources",
+  }, null, 2)}\n`);
+  return join(installation, "bin", "butler-agent");
+}
+
 async function main(): Promise<void> {
   assert(
     existsSync(electronBin),
@@ -392,14 +418,17 @@ async function main(): Promise<void> {
   const debugPort = await freePort();
   assertPortAvailable(serverPort);
   assertPortAvailable(debugPort);
-  // Unpackaged Electron runs the foreground lifecycle, which only opens a window
-  // once the BTCC executor reports ready. The dev `butler gateway app` fallback
-  // never starts an executor, so stage the bundled agent like
-  // app-first-run-test-env.ts does.
-  const bundledAgentResourceDir = prepareBundledAgentResource(
-    root,
+  // Unpackaged Electron resolves the native Agent from an absolute
+  // BUTLER_NATIVE_AGENT_EXECUTABLE whose installation root (bin/..) carries
+  // resources/ (bundled-native-agent.mjs). By default the smoke stages that
+  // installation with the release producer (prepare-native-agent.mjs, static
+  // ONNX Runtime; its cache lives under the Rust target dir). Set
+  // BUTLER_FIRST_RUN_NATIVE_AGENT_EXECUTABLE to a prebuilt/locally built
+  // butler-agent to skip the producer; it is staged with the repository
+  // resources and the built UI the same way.
+  const nativeAgentExecutable = stageNativeAgentInstallation(
     join(tempDir, "bundled-agent-resource"),
-  ).resourceDir;
+  );
   const nodePath = spawnSync("which", ["node"], { encoding: "utf8" }).stdout.trim();
   const smokePath = nodePath
     ? `${dirname(nodePath)}:/usr/bin:/bin:/usr/sbin:/sbin`
@@ -409,8 +438,10 @@ async function main(): Promise<void> {
     BUTLER_BUN: process.execPath,
     BUTLER_DATA: dataDir,
     BUTLER_HOME: root,
+    HOME: smokeHome,
+    CODEX_HOME: join(smokeHome, ".codex"),
     BUTLER_APP_GATEWAY_PID_FILE: "off",
-    BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,
+    BUTLER_NATIVE_AGENT_EXECUTABLE: nativeAgentExecutable,
     BUTLER_APP_SERVER_PORT: String(serverPort),
     LANG: "ko_KR.UTF-8",
     LC_ALL: "ko_KR.UTF-8",
@@ -422,6 +453,7 @@ async function main(): Promise<void> {
   delete env.BUTLER_APP_SERVER_BRIDGE;
   delete env.BUTLER_APP_SERVER_DB;
   delete env.BUTLER_APP_BUTLER_HOME;
+  delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
 
   electronProcess = spawn(
     electronBin,

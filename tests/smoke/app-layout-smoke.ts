@@ -16,6 +16,11 @@ import {
 import type { ProjectSummary, SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const root = process.cwd();
+// tests/support/native-app-server.ts registers one Custom model ("Stub",
+// local/stub) as the default; the model picker selects it by that label.
+const STUB_MODEL_LABEL = /^Stub\b/u;
+// The stub Custom model advertises a single reasoning level.
+const STUB_REASONING_LABEL = "Instant";
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
@@ -272,10 +277,6 @@ const pendingSummary: SessionSummaryView = {
     ],
   },
 };
-const inlineSmokeImageBytes = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
-  "base64",
-);
 let releaseSmokeResponderReply: (() => void) | undefined;
 let releaseSmokeResponderProgress: (() => void) | undefined;
 const smokeResponderProgressGate = new Promise<void>((resolveGate) => {
@@ -306,12 +307,17 @@ assert(
   "pending-turn-does-not-flash-stale-tool-history",
 );
 
-// The native gateway runs the real agent loop; the retired in-process responder's
-// injected progress rows and artifact files are not available. The stub model
-// waits on the same gates and returns the same Markdown reply.
+// The native gateway runs the real agent loop against a stub Custom model that
+// waits on the progress/reply gates and returns a Markdown reply. The retired
+// in-process responder's injected tool progress and artifact files have no native
+// equivalent; those rendering checks moved to DS stories in
+// tests/smoke/ds-conversation-stories-smoke.ts (app:design-system:smoke).
 const server = await createNativeAppServer({
   butlerData: join(tempDir, "data"),
   uiRoot,
+  // The smoke asserts English copy (firstRunCompleteState("en")); keep the
+  // gateway's saved language in step so Settings does not switch locale.
+  config: { user: { name: "Smoke", language: "en" } },
   stubReply: async (request) => {
     await smokeResponderProgressGate;
     await smokeResponderReplyGate;
@@ -322,15 +328,12 @@ const server = await createNativeAppServer({
       "- Markdown rendered",
       `- Received ${received} chars`,
       "",
-      "![Inline smoke](artifacts/inline-smoke.png)",
-      "",
       "```ts",
       "const ok = true;",
       "```",
     ].join("\n");
   },
 });
-void inlineSmokeImageBytes;
 const smokeProject = (await server.api<{ project: ProjectSummary }>("/projects", {
   method: "POST",
   body: JSON.stringify({ source: "scratch", display_name: "Desktop client polish" }),
@@ -2149,7 +2152,11 @@ try {
   await page
     .locator(testClass("filtered-select-popover"))
     .waitFor({ state: "visible" });
-  await page.getByRole("button", { name: /GPT-5.6 Terra/i }).click();
+  await page
+    .locator(testClass("filtered-select-popover"))
+    .getByRole("button", { name: STUB_MODEL_LABEL })
+    .first()
+    .click();
   await expectLocatorCount(
     page,
     `${testClass("filtered-select-popover")}:visible`,
@@ -2158,7 +2165,7 @@ try {
   );
   await page
     .locator(testClass("filtered-select-popover"))
-    .getByRole("button", { name: "High", exact: true })
+    .getByRole("button", { name: STUB_REASONING_LABEL, exact: true })
     .click();
   await expectLocatorCount(
     page,
@@ -2170,13 +2177,13 @@ try {
     .locator(testClass("model-button"))
     .textContent();
   assert(
-    (modelButtonText ?? "").includes("High") &&
+    (modelButtonText ?? "").includes(STUB_REASONING_LABEL) &&
       !(modelButtonText ?? "").includes("reasoning") &&
       !(modelButtonText ?? "").includes("No reasoning"),
     `model trigger should render model and compact reasoning without reasoning suffix: ${modelButtonText}`,
   );
   const modelButtonIconCount = await page
-    .getByRole("button", { name: /GPT-5.6 Terra/i })
+    .locator(testClass("model-button"))
     .evaluate((element) => element.querySelectorAll("svg").length);
   assert(
     modelButtonIconCount === 0,
@@ -2550,11 +2557,13 @@ try {
     .first()
     .getByRole("heading", { name: "Default", exact: true })
     .waitFor({ state: "visible" });
-  await page
-    .getByText("GPT-5.5", { exact: false })
+  // The Default worker profile resolves to the stub Custom model.
+  await workerProfilePanels
+    .first()
+    .getByText("Custom / Stub", { exact: false })
     .first()
     .waitFor({ state: "visible" });
-  const localModelsTitle = page.getByText(appCopy.settings.localModels.title);
+  const localModelsTitle = page.getByText(appCopy.settings.localModels.title, { exact: true });
   if ((await localModelsTitle.count()) > 0) {
     await localModelsTitle.waitFor({ state: "visible" });
   } else {
@@ -3781,17 +3790,9 @@ try {
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
-  releaseSmokeResponderProgress?.();
-  const timelineWorkActivity = page.locator(
-    `${testClasses("message", "assistant", "turn-activity-message")} ${testClasses("turn-activity-panel", "turn-work-panel")}`,
-    { hasText: "Bash" },
-  );
-  await timelineWorkActivity.waitFor({
-    state: "visible",
-    timeout: turnActivityTimeoutMs,
-  });
-  const currentStatusGeometry = await timelineWorkActivity
+  const currentStatusGeometry = await timelineActivity
     .locator(testClass("turn-current-status-slot"))
+    .first()
     .evaluate((element) => {
       const line = element.querySelector("p");
       if (!line) return null;
@@ -3811,54 +3812,10 @@ try {
       currentStatusGeometry.clipped,
     `current status must stay one clipped line: ${JSON.stringify(currentStatusGeometry)}`,
   );
-  const activityButton = timelineWorkActivity
-    .getByRole("button", { name: /Bash/u })
-    .first();
-  await activityButton.focus();
-  await page.keyboard.press("Enter");
-  const expanded = await activityButton.getAttribute("aria-expanded");
-  assert(expanded === "true", "turn activity keyboard expands details");
-  const activityDetails = timelineWorkActivity
-    .locator(testClass("turn-work-tool-detail-text"))
-    .first();
-  await activityDetails.waitFor({
-    state: "attached",
-    timeout: turnActivityTimeoutMs,
-  });
-  const activityDetailsColor = await activityDetails.evaluate((element) => {
-    const block = element.closest("[data-test-class~='turn-work-block']");
-    const probe = document.createElement("span");
-    probe.style.color = "var(--work-activity-muted-text)";
-    (block ?? element).appendChild(probe);
-    const mutedColor = getComputedStyle(probe).color;
-    probe.remove();
-    return {
-      color: getComputedStyle(element).color,
-      mutedColor,
-    };
-  });
-  assert(
-    activityDetailsColor.color === activityDetailsColor.mutedColor,
-    `turn activity detail content should use muted work tone: ${JSON.stringify(activityDetailsColor)}`,
-  );
-  const activityButtonStyle = await activityButton.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      alignItems: style.alignItems,
-      borderTopColor: style.borderTopColor,
-      borderTopWidth: style.borderTopWidth,
-      display: style.display,
-      maxWidth: style.maxWidth,
-    };
-  });
-  assert(
-    activityButtonStyle.display === "grid" &&
-      activityButtonStyle.alignItems === "center" &&
-      activityButtonStyle.borderTopWidth === "1px" &&
-      activityButtonStyle.maxWidth !== "none" &&
-      activityButtonStyle.borderTopColor !== "rgba(0, 0, 0, 0)",
-    `turn activity tool button should be outlined, capped, and center-aligned: ${JSON.stringify(activityButtonStyle)}`,
-  );
+  releaseSmokeResponderProgress?.();
+  // Tool rows, their keyboard disclosure and muted detail tone are checked on the
+  // WorkActivityBlock story (tests/smoke/ds-conversation-stories-smoke.ts); the
+  // native turn has no injected tool progress to render here.
   screenshots.push(await screenshot(page, "turn-activity-timeline.png"));
   releaseSmokeResponderReply?.();
   await page
@@ -3869,41 +3826,9 @@ try {
   const assistantMessageForContextMenu = page
     .locator(testClasses("message", "assistant"), { hasText: "Butler reply" })
     .last();
-  const inlineMarkdownImage = assistantMessageForContextMenu
-    .locator(testClass("markdown-inline-image"))
-    .first();
-  await inlineMarkdownImage.waitFor({ state: "visible", timeout: 5000 });
-  const inlineMarkdownImageState = await inlineMarkdownImage.evaluate(
-    async (element) => {
-      const image = element as HTMLImageElement;
-      if (!image.complete) {
-        await new Promise((resolve) => {
-          image.addEventListener("load", resolve, { once: true });
-          image.addEventListener("error", resolve, { once: true });
-          setTimeout(resolve, 1200);
-        });
-      }
-      const imageBox = image.getBoundingClientRect();
-      const documentBox = image
-        .closest('[data-test-class~="markdown-document"]')
-        ?.getBoundingClientRect();
-      return {
-        complete: image.complete,
-        documentWidth: documentBox?.width ?? 0,
-        naturalWidth: image.naturalWidth,
-        src: image.currentSrc || image.src,
-        width: imageBox.width,
-      };
-    },
-  );
-  assert(
-    inlineMarkdownImageState.complete &&
-      inlineMarkdownImageState.naturalWidth > 0 &&
-      inlineMarkdownImageState.src.includes("/message-files/file-") &&
-      inlineMarkdownImageState.width <=
-        inlineMarkdownImageState.documentWidth * 0.31,
-    `markdown inline image should render from message files and stay bounded: ${JSON.stringify(inlineMarkdownImageState)}`,
-  );
+  // Reply images come from message files the native turn does not produce with a
+  // stub model; bounded inline images are checked on the MarkdownContent
+  // "Inline image" story (tests/smoke/ds-conversation-stories-smoke.ts).
   await assistantMessageForContextMenu.click({ button: "right" });
   await page
     .locator('[data-slot="context-menu-content"]')
@@ -3930,226 +3855,10 @@ try {
   await page
     .locator('[data-slot="context-menu-content"]')
     .waitFor({ state: "hidden", timeout: 1200 });
-  const singleWorkContainer = page
-    .locator(testClass("turn-current-phase-activity"))
-    .first();
-  await singleWorkContainer.waitFor({
-    state: "visible",
-    timeout: turnActivityTimeoutMs,
-  });
-  const activityDisclosure = singleWorkContainer.locator(
-    testClass("toggle-turn-activity-disclosure"),
-  );
-  await activityDisclosure.waitFor({ state: "visible" });
-  const inlineDisclosureStyle = await activityDisclosure.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      background: style.backgroundColor,
-      paddingLeft: style.paddingLeft,
-      paddingRight: style.paddingRight,
-    };
-  });
-  assert(
-    inlineDisclosureStyle.paddingLeft === "0px" &&
-      inlineDisclosureStyle.paddingRight === "0px",
-    `activity disclosure should have no inline padding: ${JSON.stringify(inlineDisclosureStyle)}`,
-  );
-  await activityDisclosure.hover();
-  const inlineDisclosureHover = await activityDisclosure.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      background: style.backgroundColor,
-      textDecoration: style.textDecorationLine,
-    };
-  });
-  assert(
-    inlineDisclosureHover.background === inlineDisclosureStyle.background &&
-      inlineDisclosureHover.textDecoration.includes("underline"),
-    `activity disclosure hover should underline without a surface: ${JSON.stringify(inlineDisclosureHover)}`,
-  );
-  assert(
-    await singleWorkContainer.locator(testClass("turn-work-block")).count() === 0,
-    "completed activity should start with only its disclosure header",
-  );
-  const collapsedDisclosureIcon = await activityDisclosure
-    .locator('[data-slot="button-icon"][data-position="end"] svg')
-    .innerHTML();
-  await activityDisclosure.click();
-  const expandedDisclosureIcon = await activityDisclosure
-    .locator('[data-slot="button-icon"][data-position="end"] svg')
-    .innerHTML();
-  assert(
-    collapsedDisclosureIcon !== expandedDisclosureIcon,
-    "activity disclosure should change from right to down chevron",
-  );
-  await singleWorkContainer.locator(
-    testClass("collapse-turn-activity-history"),
-  ).waitFor({ state: "visible" });
-  const singleWorkButton = singleWorkContainer
-    .locator(testClass("turn-work-tool-row"))
-    .getByRole("button")
-    .first();
-  await singleWorkButton.waitFor({
-    state: "visible",
-    timeout: turnActivityTimeoutMs,
-  });
-  const singleWorkTriggerText = (await singleWorkButton.innerText())
-    .replace(/\s+/g, " ")
-    .trim();
-  assert(
-    singleWorkTriggerText === "Bash: bun test",
-    `completed activity tool should use its model-authored operation label: ${singleWorkTriggerText}`,
-  );
-  if ((await singleWorkButton.getAttribute("aria-expanded")) !== "true") {
-    await singleWorkButton.click();
-  }
-  await singleWorkContainer
-    .locator(testClass("turn-work-tool-row"))
-    .first()
-    .waitFor({ state: "visible", timeout: turnActivityTimeoutMs });
-  const singleExpandedHeaders = singleWorkContainer.locator(
-    testClass("turn-work-block-header"),
-  );
-  const singleExpandedHeaderTexts = (await singleExpandedHeaders.allInnerTexts())
-    .map((text) => text.replace(/\s+/g, " ").trim());
-  assert(
-    singleExpandedHeaderTexts.includes("로컬 검증 실행"),
-    `expanded history should keep the model-authored semantic title: ${singleExpandedHeaderTexts.join(" | ")}`,
-  );
-  const workTimelineState = await singleWorkContainer.evaluate((element) => {
-    const block = Array.from(element.querySelectorAll(
-      "[data-test-class~='turn-work-block']",
-    )).find((candidate) => candidate.querySelector(
-      "[data-test-class~='turn-work-block-header']",
-    )?.textContent?.includes("로컬 검증 실행")) ?? null;
-    const header = block?.querySelector("[data-test-class~='turn-work-block-header']");
-    const marker = block?.querySelector("[data-slot='work-activity-marker']");
-    const headerIcon = block?.querySelector(
-      "[data-slot='work-activity-icon'] svg",
-    );
-    const description = block?.querySelector(
-      "[data-slot='work-activity-description']",
-    );
-    const tool = element.querySelector(
-      "[data-test-class~='turn-work-tool-row']",
-    );
-    const disclosureBox = block?.getBoundingClientRect();
-    const activityTriggerBox = element.querySelector(
-      "[data-test-class~='toggle-turn-activity-disclosure']",
-    )?.getBoundingClientRect();
-    const markerBox = marker?.getBoundingClientRect();
-    const headerBox = header?.getBoundingClientRect();
-    const descriptionBox = description?.getBoundingClientRect();
-    const toolBox = tool?.getBoundingClientRect();
-    const result = element.nextElementSibling as HTMLElement | null;
-    const resultBox = result?.getBoundingClientRect();
-    const titleWeight = header ? getComputedStyle(header).fontWeight : "";
-    const titleWhiteSpace = header ? getComputedStyle(header).whiteSpace : "";
-    const titleColor = header ? getComputedStyle(header).color : "";
-    const descriptionColor = description
-      ? getComputedStyle(description).color
-      : "";
-    const trigger = tool?.querySelector("button, [role='button']");
-    const triggerCursor = trigger
-      ? getComputedStyle(trigger).cursor
-      : "";
-    const disclosureBackground = block
-      ? getComputedStyle(block).backgroundColor
-      : "";
-    // The tool row wraps its button in a layout Stack (3d8720aa); measure the
-    // tool surface itself.
-    const toolSurface = tool?.querySelector("button, div[class*='tool']") ?? tool;
-    const toolStyle = toolSurface ? getComputedStyle(toolSurface) : null;
-    const readTokenColor = (token: string) => {
-      if (!block) return "";
-      const probe = document.createElement("span");
-      probe.style.color = `var(${token})`;
-      block.appendChild(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
-    const secondaryColor = readTokenColor("--text-secondary");
-    const mutedColor = readTokenColor("--work-activity-muted-text");
-    return {
-      disclosureBackground,
-      activityTriggerX: activityTriggerBox?.x ?? 0,
-      headerX: headerBox?.x ?? 0,
-      hasHeaderIcon: Boolean(headerIcon),
-      markerCenterX: markerBox ? markerBox.x + markerBox.width / 2 : Number.NaN,
-      markerSize: markerBox?.width ?? 0,
-      descriptionX: descriptionBox?.x ?? 0,
-      resultGap:
-        resultBox && disclosureBox
-          ? resultBox.y - (disclosureBox.y + disclosureBox.height)
-          : Number.NaN,
-      toolX: toolBox?.x ?? 0,
-      descriptionColor,
-      titleColor,
-      triggerCursor,
-      titleWeight,
-      titleWhiteSpace,
-      titleUsesSecondary: titleColor === secondaryColor,
-      descriptionUsesMuted: descriptionColor === mutedColor,
-      toolUsesMuted: toolStyle?.color === mutedColor,
-      toolBorderColor: toolStyle?.borderTopColor ?? "",
-      toolMaxWidth: toolStyle?.maxWidth ?? "",
-      disclosureWidth: disclosureBox?.width ?? 0,
-      resultX: resultBox?.x ?? 0,
-    };
-  });
-  assert(
-    Math.abs(workTimelineState.activityTriggerX - workTimelineState.resultX) <= 1,
-    `activity disclosure should align with the result body: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    /rgba?\(0,\s*0,\s*0,\s*0\)|transparent/u.test(
-      workTimelineState.disclosureBackground,
-    ),
-    `completed work disclosure should stay visually plain: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    Number(workTimelineState.titleWeight) <= 500,
-    `work timeline title should not be bold: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.titleWhiteSpace === "normal",
-    `work timeline title should wrap instead of overflowing: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.descriptionColor !== workTimelineState.titleColor,
-    `work timeline body should use a quieter tone than the title: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.titleUsesSecondary &&
-      workTimelineState.descriptionUsesMuted &&
-      workTimelineState.toolUsesMuted,
-    `work timeline text should step down to secondary and muted tones: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.resultGap >= 14,
-    `answer body should have breathing room after work history: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.triggerCursor === "pointer",
-    `clickable work history trigger should use a pointer cursor: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    !workTimelineState.hasHeaderIcon &&
-      workTimelineState.markerSize >= 6 &&
-      Number.isFinite(workTimelineState.markerCenterX),
-    `work timeline should use a dot marker instead of a decorative fixed header icon: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    Math.abs(workTimelineState.headerX - workTimelineState.descriptionX) <= 1 &&
-      Math.abs(workTimelineState.headerX - workTimelineState.toolX) <= 1,
-    `work timeline content starts should align: ${JSON.stringify(workTimelineState)}`,
-  );
-  assert(
-    workTimelineState.toolMaxWidth !== "none" &&
-      workTimelineState.toolBorderColor !== "rgba(0, 0, 0, 0)",
-    `toolchain row should be outlined and capped: ${JSON.stringify(workTimelineState)}`,
-  );
+  // A stub-model native turn completes without phase activity, so the completed
+  // work disclosure has nothing to show here. Its DS parts are checked on stories
+  // (WorkActivityBlock rows and tones, Button "Inline" disclosure) by
+  // tests/smoke/ds-conversation-stories-smoke.ts.
   screenshots.push(await screenshot(page, "cmd-enter-markdown-send.png"));
   const showSidebarForProjectMenu = page.getByRole("button", {
     name: "Show sidebar",

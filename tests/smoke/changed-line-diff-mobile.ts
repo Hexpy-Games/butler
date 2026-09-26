@@ -16,7 +16,7 @@ try {
     try {
       await page.goto(`${server.url}?visual=design-system&page=blocks/ChangedLineDiff`, { waitUntil: "networkidle" });
       await page.locator('[data-ds-detail="ChangedLineDiff"]').waitFor({ state: "visible" });
-      const region = page.locator("#changed-line-diff-fixture").first();
+      const region = page.locator('[data-ds-story="Standalone"] #ds-diff').first();
       await region.scrollIntoViewIfNeeded();
       const metrics = await region.evaluate((element) => {
         const rows = [...element.querySelectorAll<HTMLElement>("[data-line-type]")];
