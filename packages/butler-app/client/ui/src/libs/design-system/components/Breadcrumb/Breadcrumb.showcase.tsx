@@ -21,8 +21,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { back: "Back", models: "Models", management: "Model management", add: "Add model", automations: "Automations", nightly: "Nightly release notes", docs: "Docs" },
-  "ko-KR": { back: "뒤로", models: "모델", management: "모델 관리", add: "모델 추가", automations: "자동화", nightly: "야간 릴리스 노트", docs: "문서" },
+  "en-US": { back: "Back", models: "Models", management: "Model management", add: "Add model", automations: "Automations", nightly: "Nightly release notes", docs: "Docs", trail: "Location", more: "More" },
+  "ko-KR": { back: "뒤로", models: "모델", management: "모델 관리", add: "모델 추가", automations: "자동화", nightly: "야간 릴리스 노트", docs: "문서", trail: "현재 위치", more: "더보기" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -37,7 +37,7 @@ function ModelSettingsTrail(context: ShowcaseRenderContext) {
       <IconButton label={copy.back} onClick={() => undefined}>
         <ArrowLeft size="md" />
       </IconButton>
-      <Breadcrumb>
+      <Breadcrumb label={text(context).trail}>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbButton onClick={() => undefined}>{copy.models}</BreadcrumbButton>
@@ -61,7 +61,7 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Automation detail",
     render: (context) => (
-      <Breadcrumb>
+      <Breadcrumb label={text(context).trail}>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbButton onClick={() => undefined}>{text(context).automations}</BreadcrumbButton>
@@ -78,14 +78,14 @@ export const stories: ShowcaseStory[] = [
     name: "Collapsed path with link",
     widths: ["320", "375", "app"],
     render: (context) => (
-      <Breadcrumb>
+      <Breadcrumb label={text(context).trail}>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink href="#docs">{text(context).docs}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbEllipsis />
+            <BreadcrumbEllipsis label={text(context).more} />
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>

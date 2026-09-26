@@ -770,6 +770,8 @@ export interface AppCopy {
     close: string;
     open: string;
     more: string;
+    /** Accessible name of a breadcrumb trail. */
+    breadcrumb: string;
     refresh: string;
     save: string;
     create: string;

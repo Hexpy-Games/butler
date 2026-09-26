@@ -895,6 +895,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     close: "Close",
     open: "Open",
     more: "More",
+    breadcrumb: "Location",
     refresh: "Refresh",
     save: "Save",
     create: "Create",

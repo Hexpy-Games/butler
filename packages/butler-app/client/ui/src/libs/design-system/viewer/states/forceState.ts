@@ -1,22 +1,44 @@
 // Forced interaction states for the DS Viewer states matrix. A cell marked
-// `data-ds-force-state="hover"` renders as if hovered: the viewer copies every
-// loaded rule that uses :hover, :focus(-visible|-within) or :active into a
-// small stylesheet where the pseudo-class is replaced by the attribute. The
-// product CSS stays untouched and the layer only exists while a matrix shows.
+// `data-ds-force-state="hover"` renders as if its target were hovered: the
+// viewer copies every loaded rule that uses :hover, :focus(-visible|-within)
+// or :active into a small stylesheet where the pseudo-class is replaced by the
+// attribute. The target is the one element marked `data-ds-force-target` (the
+// first enabled focusable element unless a story marks its own), so a cell
+// with several segments paints only the intended one. Like real :hover, the
+// target's ancestors match too. The product CSS stays untouched and the layer
+// only exists while a matrix shows.
 
-const FOCUSABLE = "button, input, select, textarea, a[href], [tabindex], [role=\"button\"], [role=\"switch\"], [role=\"tab\"], [role=\"slider\"], [role=\"option\"], [role=\"menuitem\"]";
+const TARGET = "[data-ds-force-target]";
 
-function inside(state: string): string {
-  return `:is([data-ds-force-state~="${state}"], [data-ds-force-state~="${state}"] *)`;
+/** Elements the matrix may mark as the forced target, in document order. */
+export const FORCE_TARGET_CANDIDATES = [
+  "button:not(:disabled)", "input:not(:disabled)", "select:not(:disabled)", "textarea:not(:disabled)", "a[href]",
+  "[role=\"button\"]", "[role=\"switch\"]", "[role=\"tab\"]", "[role=\"radio\"]", "[role=\"slider\"]",
+  "[role=\"option\"]", "[role=\"menuitem\"]", "[tabindex]:not([tabindex=\"-1\"])",
+].join(", ");
+
+/** The target and its ancestors inside a cell forced into `state` (how :hover matches). */
+function targetOrAncestor(state: string): string {
+  return `:is([data-ds-force-state~="${state}"] :is(${TARGET}, :has(${TARGET})))`;
 }
 
+const FOCUSED = `:is([data-ds-force-state~="focus-visible"] ${TARGET})`;
+
 const REPLACEMENTS: Array<[RegExp, string]> = [
-  [/:hover(?![\w-])/gu, inside("hover")],
-  [/:active(?![\w-])/gu, inside("active")],
-  [/:focus-visible(?![\w-])/gu, `:is([data-ds-force-state~="focus-visible"] :is(${FOCUSABLE}))`],
-  [/:focus-within(?![\w-])/gu, inside("focus-visible")],
-  [/:focus(?![\w-])/gu, `:is([data-ds-force-state~="focus-visible"] :is(${FOCUSABLE}))`],
+  [/:hover(?![\w-])/gu, targetOrAncestor("hover")],
+  [/:active(?![\w-])/gu, targetOrAncestor("active")],
+  [/:focus-visible(?![\w-])/gu, FOCUSED],
+  [/:focus-within(?![\w-])/gu, targetOrAncestor("focus-visible")],
+  [/:focus(?![\w-])/gu, FOCUSED],
 ];
+
+/** Marks the forced target in every states-matrix cell under `root` that has none yet. */
+export function markForceTargets(root: ParentNode): void {
+  for (const cell of Array.from(root.querySelectorAll("[data-ds-force-state]"))) {
+    if (cell.querySelector(TARGET)) continue;
+    cell.querySelector(FORCE_TARGET_CANDIDATES)?.setAttribute("data-ds-force-target", "");
+  }
+}
 
 /** The selector with interaction pseudo-classes replaced, or null when it has none. */
 export function forceStateSelector(selector: string): string | null {

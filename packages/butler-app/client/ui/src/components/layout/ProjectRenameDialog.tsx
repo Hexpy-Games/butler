@@ -3,9 +3,7 @@ import { useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogForm,
 } from "@/butler-ds";
 import { Field, FieldLabel } from "@/butler-ds";
 import { Input } from "@/butler-ds";
@@ -46,17 +44,24 @@ export function ProjectRenameDialog({
         if (!open) cancel();
       }}
     >
-      <DialogContent closeLabel={appCopy.common.close} data-test-class="modal-card">
-        <form
-          className="modal-form"
-          onSubmit={(event) => {
-            event.preventDefault();
+      <DialogContent closeLabel={appCopy.common.close} aria-describedby={undefined} data-test-class="modal-card">
+        <DialogForm
+          dialog
+          title={appCopy.sidebar.projectRenameTitle}
+          onSubmit={() => {
             if (canSubmit) submit(project, value);
           }}
+          footer={
+            <ButtonContainer size="default" justify="end">
+              <Button type="button" variant="outline" onClick={cancel}>
+                {appCopy.common.cancel}
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {appCopy.common.save}
+              </Button>
+            </ButtonContainer>
+          }
         >
-          <DialogHeader>
-            <DialogTitle>{appCopy.sidebar.projectRenameTitle}</DialogTitle>
-          </DialogHeader>
           <Field>
             <FieldLabel htmlFor={inputId}>
               {appCopy.sidebar.projectName}
@@ -68,17 +73,7 @@ export function ProjectRenameDialog({
               onChange={(event) => setValue(event.target.value)}
             />
           </Field>
-          <DialogFooter>
-            <ButtonContainer size="default" justify="end">
-              <Button type="button" variant="outline" onClick={cancel}>
-                {appCopy.common.cancel}
-              </Button>
-              <Button type="submit" disabled={!canSubmit}>
-                {appCopy.common.save}
-              </Button>
-            </ButtonContainer>
-          </DialogFooter>
-        </form>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

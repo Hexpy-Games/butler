@@ -1,8 +1,10 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
-import { forceStateCss, forceStateSelector } from "./forceState";
+import { JSDOM } from "jsdom";
+import { FORCE_TARGET_CANDIDATES, forceStateCss, forceStateSelector, markForceTargets } from "./forceState";
 
-const HOVER = ':is([data-ds-force-state~="hover"], [data-ds-force-state~="hover"] *)';
+const TARGET = "[data-ds-force-target]";
+const HOVER = `:is([data-ds-force-state~="hover"] :is(${TARGET}, :has(${TARGET})))`;
 
 describe("forced interaction states (data-ds-force-state)", () => {
   test("rewrites :hover in place so compound selectors keep their other parts", () => {
@@ -10,17 +12,29 @@ describe("forced interaction states (data-ds-force-state)", () => {
     expect(forceStateSelector(".row:hover .actions")).toBe(`.row${HOVER} .actions`);
   });
 
-  test("maps :focus and :focus-visible to focusable elements inside the forced cell", () => {
-    const rewritten = forceStateSelector(".input:focus-visible");
-    expect(rewritten).toContain('[data-ds-force-state~="focus-visible"]');
-    expect(rewritten).toContain("button");
-    expect(forceStateSelector(".input:focus")).toContain('[data-ds-force-state~="focus-visible"]');
-    expect(forceStateSelector(".group:focus-within")).toContain('[data-ds-force-state~="focus-visible"]');
+  test("hover and active paint only the target and its ancestors, never sibling segments", () => {
+    // Real :hover matches the element under the pointer and its ancestors; a
+    // cell with several segments must not paint all of them.
+    expect(HOVER).not.toContain('[data-ds-force-state~="hover"] *');
+    expect(forceStateSelector(".segment:hover")).toBe(`.segment${HOVER}`);
+  });
+
+  test("maps :focus and :focus-visible to the one target element; :focus-within to it and its ancestors", () => {
+    expect(forceStateSelector(".input:focus-visible")).toBe(`.input:is([data-ds-force-state~="focus-visible"] ${TARGET})`);
+    expect(forceStateSelector(".input:focus")).toBe(`.input:is([data-ds-force-state~="focus-visible"] ${TARGET})`);
+    expect(forceStateSelector(".group:focus-within")).toBe(
+      `.group:is([data-ds-force-state~="focus-visible"] :is(${TARGET}, :has(${TARGET})))`,
+    );
+  });
+
+  test("picks the first enabled focusable element as the target unless a story marks one", () => {
+    expect(FORCE_TARGET_CANDIDATES).toContain("button:not(:disabled)");
+    expect(FORCE_TARGET_CANDIDATES).toContain('[role="radio"]');
   });
 
   test("rewrites :active and every selector in a list", () => {
     expect(forceStateSelector(".a:active, .b:hover")).toBe(
-      `.a:is([data-ds-force-state~="active"], [data-ds-force-state~="active"] *), .b${HOVER}`,
+      `.a:is([data-ds-force-state~="active"] :is(${TARGET}, :has(${TARGET}))), .b${HOVER}`,
     );
   });
 
@@ -38,5 +52,14 @@ describe("forced interaction states (data-ds-force-state)", () => {
     expect(css).toContain(`.button${HOVER} { background: var(--selection); }`);
     expect(css).not.toContain(".plain");
     expect(css).toContain(`@media (hover: hover) { .row${HOVER} { opacity: 1; } }`);
+  });
+
+  test("marks one target per cell: the first enabled segment, or the one a story marked", () => {
+    const { document } = new JSDOM(`
+      <div data-ds-force-state="hover" id="a"><button disabled>x</button><button>one</button><button>two</button></div>
+      <div data-ds-force-state="hover" id="b"><button>one</button><button data-ds-force-target>two</button></div>`).window;
+    markForceTargets(document);
+    expect([...document.querySelectorAll("#a [data-ds-force-target]")].map((node) => node.textContent)).toEqual(["one"]);
+    expect([...document.querySelectorAll("#b [data-ds-force-target]")].map((node) => node.textContent)).toEqual(["two"]);
   });
 });

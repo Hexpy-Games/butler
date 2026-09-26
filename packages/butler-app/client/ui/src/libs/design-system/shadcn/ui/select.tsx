@@ -55,7 +55,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+        <ChevronDownIcon />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -79,10 +79,7 @@ const SelectButton = React.forwardRef<
       {...props}
     >
       <span data-slot="select-value">{children}</span>
-      <ChevronDownIcon
-        className="pointer-events-none size-4 text-muted-foreground"
-        aria-hidden="true"
-      />
+      <ChevronDownIcon aria-hidden="true" />
     </button>
   );
 });
@@ -165,7 +162,7 @@ function SelectItem({
     >
       <span className={styles.indicator}>
         <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="pointer-events-none" />
+          <CheckIcon />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

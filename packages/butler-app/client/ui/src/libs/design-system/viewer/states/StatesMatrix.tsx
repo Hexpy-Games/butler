@@ -1,9 +1,9 @@
-import { Fragment, useEffect, type CSSProperties } from "react";
+import { Fragment, useEffect, useRef, type CSSProperties } from "react";
 import { Typo } from "../../components/Typo";
 import type { ShowcaseStateMatrix } from "../../showcase";
 import type { ResolvedTheme } from "../useViewerTheme";
 import type { ViewerLocale } from "../viewerState";
-import { documentRules, forceStateCss } from "./forceState";
+import { documentRules, forceStateCss, markForceTargets } from "./forceState";
 import styles from "../DesignSystemViewer.module.css";
 
 let layerUsers = 0;
@@ -28,10 +28,16 @@ function useForceStateLayer() {
 /** Variants (rows) × states (columns); hover, focus-visible and active are forced. */
 export function StatesMatrix({ matrix, locale, theme }: { matrix: ShowcaseStateMatrix; locale: ViewerLocale; theme: ResolvedTheme }) {
   useForceStateLayer();
+  const root = useRef<HTMLDivElement>(null);
+  // Each cell forces its state on one target element (the first enabled
+  // focusable one unless the story marks `data-ds-force-target`).
+  useEffect(() => {
+    if (root.current) markForceTargets(root.current);
+  });
   const variants = matrix.variants ?? ["default"];
   const appLocale = locale === "ko" ? "ko-KR" : "en-US";
   return (
-    <div className={`${styles.matrix} theme-${theme}`} data-ds-states-matrix style={{ "--matrix-columns": matrix.states.length } as CSSProperties}>
+    <div ref={root} className={`${styles.matrix} theme-${theme}`} data-ds-states-matrix style={{ "--matrix-columns": matrix.states.length } as CSSProperties}>
       <span />
       {matrix.states.map((state) => (
         <div className={styles.matrixHead} key={state}><Typo.Caption tone="secondary">{state}</Typo.Caption></div>

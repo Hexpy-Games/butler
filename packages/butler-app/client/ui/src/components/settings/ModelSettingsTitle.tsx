@@ -48,7 +48,7 @@ export function ModelSettingsTitle({
       <IconButton label={copy.back} onClick={onBack}>
         <ArrowLeft size="md" />
       </IconButton>
-      <Breadcrumb>
+      <Breadcrumb label={appCopy.common.breadcrumb}>
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbButton onClick={onRoot}>{copy.sections.models}</BreadcrumbButton>

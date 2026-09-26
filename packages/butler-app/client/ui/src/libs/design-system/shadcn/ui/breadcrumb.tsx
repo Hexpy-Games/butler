@@ -10,11 +10,15 @@ import styles from "../../components/Breadcrumb/Breadcrumb.module.css";
 
 function Breadcrumb({
   className,
+  label,
   ...props
-}: React.ComponentPropsWithoutRef<"nav">) {
+}: React.ComponentPropsWithoutRef<"nav"> & {
+  /** Localized accessible name of the trail (app copy `common.breadcrumb`). */
+  label: string;
+}) {
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={label}
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
@@ -118,8 +122,12 @@ function BreadcrumbSeparator({
 
 function BreadcrumbEllipsis({
   className,
+  label,
   ...props
-}: React.ComponentPropsWithoutRef<"span">) {
+}: React.ComponentPropsWithoutRef<"span"> & {
+  /** Localized name of the collapsed steps (app copy `common.more`). */
+  label: string;
+}) {
   return (
     <span
       data-slot="breadcrumb-ellipsis"
@@ -129,7 +137,7 @@ function BreadcrumbEllipsis({
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More</span>
+      <span className="sr-only">{label}</span>
     </span>
   );
 }

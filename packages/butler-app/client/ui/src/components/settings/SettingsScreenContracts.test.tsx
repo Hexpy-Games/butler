@@ -170,7 +170,7 @@ test("searchable settings select uses the plain select trigger with a left-align
   expect(trigger?.firstElementChild?.getAttribute("data-slot")).toBe("select-value");
   expect(trigger?.querySelector('[data-slot="select-value"]')?.textContent).toBe("Asia/Seoul");
   expect(trigger?.innerHTML).toContain(
-    markupOf(<ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" aria-hidden="true" />),
+    markupOf(<ChevronDownIcon aria-hidden="true" />),
   );
 });
 

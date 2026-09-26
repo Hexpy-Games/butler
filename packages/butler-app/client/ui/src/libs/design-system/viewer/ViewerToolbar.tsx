@@ -34,7 +34,7 @@ export function ViewerToolbar({ page, state, onChange, onOpen, onSearch, onToggl
         <span className={styles.menuToggle}>
           <IconButton label="Toggle navigation" onClick={onToggleMenu}><PanelLeft size="md" /></IconButton>
         </span>
-        <Breadcrumb aria-label="Location">
+        <Breadcrumb label="Location">
           <BreadcrumbList>
             {trail.map((step, index) => (
               <Fragment key={step.label}>

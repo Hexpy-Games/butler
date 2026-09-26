@@ -6,7 +6,7 @@ import { Breadcrumb, BreadcrumbButton, BreadcrumbItem, BreadcrumbList, Breadcrum
 // #region recipe: In-app settings trail
 function SettingsTrail() {
   return (
-    <Breadcrumb>
+    <Breadcrumb label="Location">
       <BreadcrumbList>
         <BreadcrumbItem><BreadcrumbButton onClick={() => undefined}>Models</BreadcrumbButton></BreadcrumbItem>
         <BreadcrumbSeparator />
@@ -32,6 +32,6 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: ["Use page titles exactly as they appear in navigation."],
-  accessibility: ["nav landmark with aria-current=\"page\" on the last item; separators are hidden."],
+  accessibility: ["Pass label (app copy common.breadcrumb) for the trail's accessible name and label on BreadcrumbEllipsis; nothing is hard-coded.", "nav landmark with aria-current=\"page\" on the last item; separators are hidden."],
   tokens: ["--text-secondary", "--text-primary", "--icon-size-sm"],
 };

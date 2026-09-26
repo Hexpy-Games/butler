@@ -927,6 +927,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     close: "닫기",
     open: "열기",
     more: "더보기",
+    breadcrumb: "현재 위치",
     refresh: "새로고침",
     save: "저장",
     create: "만들기",

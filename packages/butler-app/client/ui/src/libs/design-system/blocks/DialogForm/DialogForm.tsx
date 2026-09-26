@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { DialogDescription, DialogTitle } from "../../components/Dialog";
 import { SettingsFieldScopeProvider } from "../SettingsField/settingsFieldScope";
 import styles from "./DialogForm.module.css";
 
@@ -10,6 +11,13 @@ export interface DialogFormProps {
   children: ReactNode;
   footer?: ReactNode;
   onSubmit?: () => void;
+  /**
+   * Inside a Dialog: the visible title and description become the dialog's
+   * DialogTitle and DialogDescription (no separate sr-only title needed).
+   */
+  dialog?: boolean;
+  /** Marks the form busy while it submits. */
+  busy?: boolean;
 }
 
 export function DialogForm({
@@ -18,9 +26,14 @@ export function DialogForm({
   children,
   footer,
   onSubmit,
+  dialog = false,
+  busy,
 }: DialogFormProps) {
+  const heading = <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>;
+  const body = description ? <Typo.Body className={styles.description}>{description}</Typo.Body> : null;
   return (
     <form
+      aria-busy={busy || undefined}
       className={styles.form}
       onSubmit={(event) => {
         event.preventDefault();
@@ -28,8 +41,8 @@ export function DialogForm({
       }}
     >
       <Stack gap="xs">
-        <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>
-        {description ? <Typo.Body className={styles.description}>{description}</Typo.Body> : null}
+        {dialog ? <DialogTitle asChild>{heading}</DialogTitle> : heading}
+        {body && dialog ? <DialogDescription asChild>{body}</DialogDescription> : body}
       </Stack>
       <Stack gap="md"><SettingsFieldScopeProvider>{children}</SettingsFieldScopeProvider></Stack>
       {footer ? <div className={styles.footer}>{footer}</div> : null}

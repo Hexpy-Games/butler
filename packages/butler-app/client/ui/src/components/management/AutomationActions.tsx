@@ -47,7 +47,7 @@ export function AutomationActions({
         <IconButton label={copy.backLabel} onClick={onBack}>
           <ArrowLeft size="md" />
         </IconButton>
-        <Breadcrumb>
+        <Breadcrumb label={appCopy.common.breadcrumb}>
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbButton onClick={onBack}>{copy.title}</BreadcrumbButton>
