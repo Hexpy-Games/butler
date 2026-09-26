@@ -69,6 +69,14 @@
   --motion-exit-slow: 150ms;
   /* The command palette opens between fast and base (Cmd+K). */
   --motion-palette: 140ms;
+  /* Overlay enters run on --motion-ease-enter (the standard curve) and last
+     long enough that the first 60Hz frame carries at most ~30% of the change
+     (standard: 140ms -> 23%, 160ms -> 17%; the old 90-120ms decelerate
+     enters landed 53-60% in the first frame and read as instant). Menus,
+     selects and tooltips stay quicker than popovers, toasts and dialogs;
+     exits keep the faster --motion-exit-* tokens. */
+  --motion-enter-menu: 140ms;
+  --motion-enter-overlay: var(--motion-base);
   --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --motion-ease-decelerate: cubic-bezier(0, 0, 0, 1);
   --motion-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
@@ -99,7 +107,7 @@
   );
   /* Loops (spinner, shimmer) only. */
   --motion-ease-linear: linear;
-  --motion-ease-enter: var(--motion-ease-decelerate);
+  --motion-ease-enter: var(--motion-ease-standard);
   --motion-ease-exit: var(--motion-ease-accelerate);
   /* Travel and scale are tokens so reduced motion can zero them globally and
      every token-driven animation becomes a pure opacity fade. */

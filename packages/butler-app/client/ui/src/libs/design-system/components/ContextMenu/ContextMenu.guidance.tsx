@@ -35,5 +35,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Same wording as the visible action (Copy, Branch from here)."],
   accessibility: ["Keyboard: the context-menu key or Shift+F10 opens it; items are menuitems."],
-  tokens: ["--menu-item-height", "--radius-popover", "--motion-menu", "--z-popover"],
+  tokens: ["--menu-item-height", "--radius-popover", "--motion-enter-menu", "--z-popover"],
 };

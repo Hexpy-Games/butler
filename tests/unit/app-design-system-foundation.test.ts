@@ -610,7 +610,9 @@ describe("motion tokens", () => {
     expect(tokens.get("--motion-ease-decelerate")).toBe("cubic-bezier(0, 0, 0, 1)");
     expect(tokens.get("--motion-ease-accelerate")).toBe("cubic-bezier(0.3, 0, 1, 1)");
     expect(tokens.get("--motion-ease-emphasized")).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
-    expect(tokens.get("--motion-ease-enter")).toBe("var(--motion-ease-decelerate)");
+    expect(tokens.get("--motion-ease-enter")).toBe("var(--motion-ease-standard)");
+    expect(tokens.get("--motion-enter-menu")).toBe("140ms");
+    expect(tokens.get("--motion-enter-overlay")).toBe("var(--motion-base)");
     expect(tokens.get("--motion-ease-exit")).toBe("var(--motion-ease-accelerate)");
     expect(tokens.get("--motion-ease-linear")).toBe("linear");
     expect(tokens.get("--adaptive-panel-duration")).toBe("var(--motion-slow)");
@@ -660,11 +662,43 @@ describe("motion tokens", () => {
     )).toEqual([]);
   });
 
-  test("menus and selects open with the 90ms menu motion token and decelerate", () => {
-    for (const file of ["DropdownMenu/DropdownMenu", "ContextMenu/ContextMenu", "Select/Select"]) {
-      const css = read(`${uiSrc}/libs/design-system/components/${file}.module.css`);
-      expect(css).toMatch(/animation: [\w-]+-enter var\(--motion-menu\)\s+var\(--motion-ease-decelerate\)/u);
+  test("menus, selects and tooltips open on the menu enter token and the enter curve", () => {
+    for (const file of ["components/DropdownMenu/DropdownMenu", "components/ContextMenu/ContextMenu", "components/Select/Select", "shadcn/ui/tooltip"]) {
+      const css = read(`${uiSrc}/libs/design-system/${file}.module.css`);
+      expect(css).toMatch(/animation: [\w-]+-enter var\(--motion-enter-menu\)\s+var\(--motion-ease-enter\)/u);
     }
+    const popover = read(`${uiSrc}/libs/design-system/components/Popover/Popover.module.css`);
+    expect(popover).toMatch(/animation: popover-enter var\(--motion-enter-overlay\)\s+var\(--motion-ease-enter\)/u);
+    const toast = read(`${uiSrc}/libs/design-system/components/Toast/Toast.module.css`);
+    expect(toast).toMatch(/transform var\(--motion-enter-overlay\) var\(--motion-ease-enter\)/u);
+  });
+
+  test("overlay enters land at most ~30% of the change in the first 60Hz frame; exits stay faster", () => {
+    const tokens = rootTokens();
+    const resolve = (value: string): string => {
+      const ref = /^var\((--[\w-]+)\)$/u.exec(value);
+      return ref ? resolve(tokens.get(ref[1]!) ?? "") : value;
+    };
+    const ms = (name: string) => Number(/^(\d+)ms$/u.exec(resolve(`var(${name})`))?.[1]);
+    const curve = resolve("var(--motion-ease-enter)").match(/-?\d*\.?\d+/gu)!.map(Number);
+    const sample = (a: number, b: number, u: number) => 3 * a * u * (1 - u) ** 2 + 3 * b * u ** 2 * (1 - u) + u ** 3;
+    const progress = (t: number) => {
+      let low = 0;
+      let high = 1;
+      for (let step = 0; step < 30; step += 1) {
+        const mid = (low + high) / 2;
+        if (sample(curve[0]!, curve[2]!, mid) < t) low = mid;
+        else high = mid;
+      }
+      return sample(curve[1]!, curve[3]!, (low + high) / 2);
+    };
+    const frame = 1000 / 60;
+    for (const [enter, exit] of [["--motion-enter-menu", "--motion-exit-menu"], ["--motion-enter-overlay", "--motion-exit-fast"], ["--motion-enter-overlay", "--motion-exit-base"]] as const) {
+      expect(progress(frame / ms(enter))).toBeLessThanOrEqual(0.3);
+      expect(ms(exit)).toBeLessThan(ms(enter));
+    }
+    // Menus stay faster than dialogs.
+    expect(ms("--motion-enter-menu")).toBeLessThan(ms("--motion-base"));
   });
 
   test("menu and select animations keep a pure fade under reduced motion", () => {

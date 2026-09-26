@@ -642,7 +642,7 @@ A Radix select with the Butler trigger and menu, for one value from a list.
 - Not for: Plain options in a dense form or on phones → `NativeSelect`
 - Not for: A searchable list with filters → `FilteredSelectPopover`
 - Not for: A trigger that opens a custom popover → `SelectButton`
-- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-menu`, `--motion-scale-menu`
+- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-scale-menu`
 
 ### Slider
 
@@ -688,7 +688,7 @@ Secondary actions on right-click or long-press of a piece of content.
 - Use for: Offer copy or branch actions on messages without a visible button
 - Not for: The only way to reach an action → `DropdownMenu`
 - Not for: A visible row menu → `OverflowActionMenu`
-- Tokens: `--menu-item-height`, `--radius-popover`, `--motion-menu`, `--z-popover`
+- Tokens: `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--z-popover`
 
 ### Dialog
 
@@ -716,7 +716,7 @@ A menu of actions (and radio or checkbox choices) anchored to a trigger.
 - Not for: Right-click actions on content → `ContextMenu`
 - Not for: Picking a value for a form → `Select`
 - Not for: A composer chooser with descriptions → `OptionMenu`
-- Tokens: `--menu-item-height`, `--radius-popover`, `--motion-menu`, `--motion-exit-menu`, `--motion-scale-menu`, `--z-popover`
+- Tokens: `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-ease-enter`, `--motion-exit-menu`, `--motion-scale-menu`, `--z-popover`
 
 ### Popover
 
@@ -729,7 +729,7 @@ A non-modal glass layer anchored to a control, for choosers and small panels.
 - Not for: A plain list of actions → `DropdownMenu`
 - Not for: A task that needs focus and a backdrop → `Dialog`
 - Not for: A label that explains a control → `Tooltip`
-- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-fast`, `--motion-scale-menu`, `--z-popover`
+- Tokens: `--tinted-glass-bg`, `--radius-popover`, `--motion-enter-overlay`, `--motion-scale-menu`, `--z-popover`
 
 ### Tooltip
 
@@ -742,7 +742,7 @@ A short glass label shown after a hover delay or on keyboard focus.
 - Not for: Content people must read or act on → `Popover`
 - Not for: Inline help under a field → `FieldDescription`
 - Not for: An icon-only button → `IconButton`
-- Tokens: `--tinted-glass-bg`, `--radius-control`, `--motion-fast`, `--z-tooltip`
+- Tokens: `--tinted-glass-bg`, `--radius-control`, `--motion-enter-menu`, `--z-tooltip`
 
 ## Components · Navigation
 
@@ -945,7 +945,7 @@ Butler's identity mark and its thinking animation: the filled logo at rest, a ri
 - Not for: A task row or step whose success replaces the loader → `LoadingIndicator`
 - Not for: Confirming that an action finished → `SuccessCheck`
 - Not for: Layout placeholders while content loads → `Skeleton`
-- Tokens: `--motion-slow`, `--motion-ease-standard`, `--pulse-duration`, `--icon-size-sm`, `--icon-size-xl`
+- Tokens: `--pulse-duration`, `--spinner-easing`, `--motion-slow`, `--motion-ease-standard`, `--icon-size-sm`, `--icon-size-xl`
 
 ### LoadingIndicator
 

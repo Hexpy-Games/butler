@@ -32,5 +32,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Sentence fragments, no trailing period; under about 60 characters."],
   accessibility: ["Opens on focus-visible without delay; linked with aria-describedby while open; never holds focusable content."],
-  tokens: ["--tinted-glass-bg", "--radius-control", "--motion-fast", "--z-tooltip"],
+  tokens: ["--tinted-glass-bg", "--radius-control", "--motion-enter-menu", "--z-tooltip"],
 };

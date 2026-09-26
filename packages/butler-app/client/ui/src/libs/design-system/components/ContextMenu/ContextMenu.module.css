@@ -62,7 +62,8 @@
 }
 
 .content[data-state="open"] {
-  animation: context-menu-enter var(--motion-menu) var(--motion-ease-decelerate);
+  animation: context-menu-enter var(--motion-enter-menu)
+    var(--motion-ease-enter);
 }
 
 .content[data-state="closed"] {

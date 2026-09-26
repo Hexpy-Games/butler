@@ -20,7 +20,7 @@ const copy = {
     loading: "Show loading", checking: "Checking for updates…", done: "Butler is up to date",
     action: "Show with action", archived: "Conversation archived", undo: "Undo",
     warning: "Show warning", slow: "The model provider is responding slowly.",
-    burst: "Show three in a row", motion: "Toasts drop in 24px and fade on --motion-base and leave on --motion-exit-base; reduced motion only fades.",
+    burst: "Show three in a row", motion: "Toasts drop in 24px and fade on --motion-enter-overlay (the standard enter curve) and leave on --motion-exit-base; reduced motion only fades.",
   },
   "ko-KR": {
     hint: "토스트는 창 위쪽 가운데에 나타나고 스스로 사라집니다.",
@@ -30,7 +30,7 @@ const copy = {
     loading: "진행 보기", checking: "업데이트를 확인하는 중…", done: "Butler가 최신 버전입니다",
     action: "실행 취소 보기", archived: "대화를 보관했습니다", undo: "실행 취소",
     warning: "경고 보기", slow: "모델 제공자의 응답이 느립니다.",
-    burst: "세 개 연달아 보기", motion: "토스트는 24px 내려오며 나타나고(--motion-base) 더 빨리 사라집니다(--motion-exit-base). 동작 줄이기에서는 페이드만 합니다.",
+    burst: "세 개 연달아 보기", motion: "토스트는 24px 내려오며 나타나고(--motion-enter-overlay) 더 빨리 사라집니다(--motion-exit-base). 동작 줄이기에서는 페이드만 합니다.",
   },
 } as const;
 

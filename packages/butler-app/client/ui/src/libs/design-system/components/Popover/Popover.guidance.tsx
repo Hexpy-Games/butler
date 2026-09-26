@@ -39,5 +39,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short."],
   accessibility: ["Focus stays on the trigger unless content needs it; Escape and outside click close it."],
-  tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-fast", "--motion-scale-menu", "--z-popover"],
+  tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-enter-overlay", "--motion-scale-menu", "--z-popover"],
 };

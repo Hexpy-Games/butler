@@ -18,7 +18,7 @@
   white-space: nowrap;
   pointer-events: none;
   transform: translateX(-50%);
-  animation: tooltip-enter var(--motion-fast) var(--motion-ease-decelerate);
+  animation: tooltip-enter var(--motion-enter-menu) var(--motion-ease-enter);
 }
 
 .tooltip[data-state="closed"] {

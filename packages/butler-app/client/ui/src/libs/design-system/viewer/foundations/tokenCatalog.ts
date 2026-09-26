@@ -68,7 +68,7 @@ const RULES: Array<[TokenCategory, string, RegExp]> = [
   ["focus", "Focus ring", /^--focus-ring(-width)?$/u],
   ["color", "Semantic", /^--(focus-ring-color|color-focus-ring)$/u],
   ["z-index", "Layers", /^--z-/u],
-  ["motion", "Durations", /^--motion-(instant|menu|fast|base|slow|deliberate|palette|exit-[\w-]+)$/u],
+  ["motion", "Durations", /^--motion-(instant|menu|fast|base|slow|deliberate|palette|enter-[\w-]+|exit-[\w-]+)$/u],
   ["motion", "Easings", /^--motion-ease-/u],
   ["motion", "Distances and scales", /^--motion-(distance|scale)-/u],
   ["motion", "Loops", /^--(spinner|pulse|shimmer)-/u],

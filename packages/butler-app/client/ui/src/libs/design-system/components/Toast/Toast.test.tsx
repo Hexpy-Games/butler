@@ -19,7 +19,7 @@ test("every toast takes DS surface, text, border, radius and shadow tokens in bo
 });
 
 test("toasts move with transform and opacity on DS motion tokens; reduced motion fades", () => {
-  expect(css).toMatch(/\.toast\[data-sonner-toast\] \{[^}]*transition: transform var\(--motion-base\) var\(--motion-ease-enter\), opacity var\(--motion-base\) var\(--motion-ease-enter\)/u);
+  expect(css).toMatch(/\.toast\[data-sonner-toast\] \{[^}]*transition: transform var\(--motion-enter-overlay\) var\(--motion-ease-enter\), opacity var\(--motion-enter-overlay\) var\(--motion-ease-enter\)/u);
   expect(css).toMatch(/\[data-removed="true"\] \{[^}]*transition-duration: var\(--motion-exit-base\);[^}]*transition-timing-function: var\(--motion-ease-exit\);/u);
   expect(css).toMatch(/\[data-mounted="false"\] \{[^}]*--y: translateY\(calc\(-1 \* var\(--motion-distance-lg\)\)\)/u);
   expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ \.toast\[data-sonner-toast\] \{ transition: opacity var\(--motion-fast\) var\(--motion-ease-standard\) !important;/u);

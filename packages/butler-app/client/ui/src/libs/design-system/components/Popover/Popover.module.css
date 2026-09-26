@@ -100,7 +100,7 @@
 }
 
 .content[data-state="open"] {
-  animation: popover-enter var(--motion-fast) var(--motion-ease-decelerate);
+  animation: popover-enter var(--motion-enter-overlay) var(--motion-ease-enter);
 }
 
 .content[data-state="closed"] {

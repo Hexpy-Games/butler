@@ -69,7 +69,7 @@ export const guidance: ShowcaseGuidance = {
     "Name the trigger with aria-label or a Field label; typeahead and arrow keys work without motion delays.",
     "Select animates only its entrance (Radix unmounts it without an exit).",
   ],
-  tokens: ["--control-height-md", "--menu-item-height", "--radius-popover", "--motion-menu", "--motion-scale-menu"],
+  tokens: ["--control-height-md", "--menu-item-height", "--radius-popover", "--motion-enter-menu", "--motion-scale-menu"],
   internalExports: {
     SelectScrollUpButton: "Rendered by SelectContent when the list overflows.",
     SelectScrollDownButton: "Rendered by SelectContent when the list overflows.",

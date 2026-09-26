@@ -179,7 +179,7 @@
 }
 
 .content[data-state="open"] {
-  animation: select-enter var(--motion-menu) var(--motion-ease-decelerate);
+  animation: select-enter var(--motion-enter-menu) var(--motion-ease-enter);
 }
 
 @keyframes select-enter {

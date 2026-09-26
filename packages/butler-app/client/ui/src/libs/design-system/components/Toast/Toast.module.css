@@ -83,8 +83,8 @@
    slide; transform and opacity only (no height), tokens only. */
 .toast[data-sonner-toast] {
   transition:
-    transform var(--motion-base) var(--motion-ease-enter),
-    opacity var(--motion-base) var(--motion-ease-enter),
+    transform var(--motion-enter-overlay) var(--motion-ease-enter),
+    opacity var(--motion-enter-overlay) var(--motion-ease-enter),
     box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
 
