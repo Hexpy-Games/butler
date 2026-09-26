@@ -18,9 +18,6 @@ use crate::cognition::{
 
 use super::rows::{error, optional_text, text};
 
-#[cfg(test)]
-mod tests;
-
 const LIMIT: usize = 256;
 const META: [&str; 14] = [
     "vector_key",

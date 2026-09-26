@@ -48,7 +48,7 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
         "enabled":true,
         "transport":"stdio",
         "command":executable,
-        "args":["--exact", "mcp_client::client::tests::stdio_fixture_child"],
+        "args":["--exact", "mcp_client::client::tests::stdio_fixture_child", "--ignored"],
         "env":[{"key":"MCP_FIXTURE_MARKER","source":"literal","value":marker.to_string_lossy()}],
     }));
     let client = NativeMcpClient::new(
@@ -110,7 +110,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
         "enabled":true,
         "transport":"stdio",
         "command":executable,
-        "args":["--exact", "mcp_client::client::tests::stdio_hanging_call_fixture_child"],
+        "args":["--exact", "mcp_client::client::tests::stdio_hanging_call_fixture_child", "--ignored"],
         "env":[
             {"key":"MCP_FIXTURE_DISPATCHED","source":"literal","value":dispatched.to_string_lossy()},
             {"key":"MCP_FIXTURE_PID","source":"literal","value":pid_marker.to_string_lossy()},
@@ -161,6 +161,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
 }
 
 #[test]
+#[ignore = "stdio MCP server child; spawned with --ignored by the stdio client tests"]
 fn stdio_fixture_child() {
     let Ok(marker) = std::env::var("MCP_FIXTURE_MARKER") else {
         return;
@@ -193,6 +194,7 @@ fn stdio_fixture_child() {
 }
 
 #[test]
+#[ignore = "hanging stdio MCP server child; spawned with --ignored by the cancellation test"]
 fn stdio_hanging_call_fixture_child() {
     let (Ok(dispatched), Ok(pid_marker)) = (
         std::env::var("MCP_FIXTURE_DISPATCHED"),
