@@ -1,31 +1,39 @@
 import { useState } from "react";
 import type { ShowcaseGuidance } from "../../showcase";
 import { Input } from "../../components/Input";
+import { SettingsField, SettingsFieldScopeProvider } from "../SettingsField";
 import { TokenInputControl } from "./TokenInputControl";
 
-// #region recipe: Topic tokens
-function Topics() {
-  const [value, setValue] = useState("typescript, design-system");
-  const tokens = value.split(",").map((token) => token.trim()).filter(Boolean);
-  return <TokenInputControl id="topics" value={value} tokens={tokens} onChange={setValue} placeholder="Add topics, separated by commas" />;
+// #region recipe: Context limit
+function ContextLimit() {
+  const [value, setValue] = useState(200000);
+  return (
+    <SettingsFieldScopeProvider>
+      <SettingsField id="context-limit" label="Context limit" description="Maximum tokens kept in context."
+        descriptionId="context-limit-help"
+        control={<TokenInputControl id="context-limit" inputLabel="Context limit" sliderLabel="Context limit slider"
+          describedBy="context-limit-help" min={1000} max={400000} value={value}
+          onCommit={(next) => setValue(next)} />} />
+    </SettingsFieldScopeProvider>
+  );
 }
 // #endregion
 
 export const guidance: ShowcaseGuidance = {
-  purpose: "A comma-separated text input that previews its values as tokens.",
-  whenToUse: ["A short list of free-form values (topics, tags)"],
+  purpose: "A token budget setting: a number input and a slider over the model's range, with a value / max readout.",
+  whenToUse: ["A token limit bounded by the active model"],
   whenNotToUse: [
-    { when: "One value", use: "Input" },
-    { when: "Values from a fixed list", use: "Select" },
+    { when: "A percentage", use: "PercentInputControl" },
+    { when: "A free number", use: "Input" },
   ],
-  recipes: [{ name: "Topic tokens", description: "The caller parses the text into tokens; the control shows them.", render: () => <Topics /> }],
+  recipes: [{ name: "Context limit", description: "Typed values accept 120,000 or 120_000 and clamp to min and max; onCommit reports clamping.", render: () => <ContextLimit /> }],
   doDont: [
     {
-      do: { caption: "Tokens show how the text will be split.", render: () => <Topics /> },
-      dont: { caption: "A plain input hides how commas are interpreted.", render: () => <Input aria-label="Topics" defaultValue="typescript, design-system" /> },
+      do: { caption: "The readout shows the budget against the model maximum.", render: () => <ContextLimit /> },
+      dont: { caption: "A bare input hides the allowed range.", render: () => <Input aria-label="Context limit" defaultValue="200000" /> },
     },
   ],
-  content: ["The placeholder names the separator."],
-  accessibility: ["Pass inputProps.aria-label when there is no visible label."],
-  tokens: ["--radius-pill", "--line", "--space-xs"],
+  content: ["The description names the model maximum; tell the user when a value was clamped."],
+  accessibility: ["Both halves carry their own accessible name and describe themselves with the field help text."],
+  tokens: ["--accent", "--control-height-md", "--space-sm"],
 };

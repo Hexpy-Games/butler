@@ -2121,9 +2121,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(
     read("packages/butler-app/client/ui/src/stores/settingsUIStore.ts"),
   ).toContain("editablePersonaText");
-  expect(renderer).toContain("function SettingsTokenInput");
+  expect(renderer).toContain("function TokenInputControl");
   expect(renderer).toContain("settingsFields.localReasoningBudget");
-  expect(renderer).toContain("function SettingsPercentInput");
+  expect(renderer).toContain("function PercentInputControl");
   expect(renderer).toContain("localModelMutationPayload");
   expect(renderer).toContain("settingsCopy.errors.updateLocalReasoningBudget");
   expect(
@@ -2194,7 +2194,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain('data-test-class="registered-local-model-row"');
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/SettingsPercentInput.tsx",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/PercentInputControl/PercentInputControl.tsx",
     ),
   ).toContain("<Slider");
   expect(
@@ -3443,12 +3443,15 @@ describe("app-client design system foundation", () => {
 
     for (const name of blockNames) {
       expect(existsSync(blockPath(name, `${name}.tsx`))).toBe(true);
-      expect(existsSync(blockPath(name, `${name}.module.css`))).toBe(true);
       expect(existsSync(blockPath(name, `${name}.showcase.tsx`))).toBe(true);
       expect(existsSync(blockPath(name, "README.md"))).toBe(true);
       expect(existsSync(blockPath(name, "index.ts"))).toBe(true);
 
       const component = readFileSync(blockPath(name, `${name}.tsx`), "utf8");
+      // Blocks composed only of DS components carry no stylesheet of their own.
+      if (component.includes(`./${name}.module.css`)) {
+        expect(existsSync(blockPath(name, `${name}.module.css`))).toBe(true);
+      }
       expect(component).not.toMatch(/from ["']@\/(?:app|stores|components)\//u);
       expect(component).not.toContain("window.butlerApp");
       expect(component).not.toContain("appCopy");

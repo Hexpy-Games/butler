@@ -18,7 +18,6 @@
 | A chooser opened from a composer control | `Popover` |  |
 | A clickable action | `PillButton` | `Tag` |
 | A clickable item in a grid | `Card` | `SurfacePanel` |
-| A comma-separated list of tokens | `TokenInputControl` | `Input` |
 | A composer chooser with descriptions | `OptionMenu` | `DropdownMenu` |
 | A composer setting that opens a menu (access, model, workspace) | `ComposerControl` |  |
 | A composer toolbar control with label and detail | `ComposerControl` | `PillButton` |
@@ -45,7 +44,7 @@
 | A form select outside the composer | `Select` | `ComposerControl` |
 | A fraction of a budget | `ProgressMeter` | `MetricCard` |
 | A fraction of one budget | `ProgressMeter` | `Chart` |
-| A free number | `Input` | `PercentInputControl` |
+| A free number | `Input` | `TokenInputControl` |
 | A full page that lists and manages things in the workspace | `ManagementPage` |  |
 | A generic clickable surface | `Clickable` | `NavRow` |
 | A generic data row | `ListRow` | `WorkerActivityRow` |
@@ -83,6 +82,7 @@
 | A page two or more levels deep (settings detail, automation detail) | `Breadcrumb` |  |
 | A panel header | `PanelHeader` | `TitlebarShell` |
 | A panel with a surface and header | `InspectorPanel` | `Section` |
+| A percentage | `PercentInputControl` | `TokenInputControl` |
 | A percentage setting that needs both a feel and an exact value | `PercentInputControl` |  |
 | A percentage with a slider | `PercentInputControl` | `Input` |
 | A percentage with both slider and input | `PercentInputControl` | `Slider` |
@@ -121,7 +121,6 @@
 | A settings section with a header above | `FormSection` | `SurfacePanel` |
 | A setup flow | `SetupWizardShell` | `SettingsShell` |
 | A setup wizard | `SetupWizardShell` | `TodoProgressPanel` |
-| A short list of free-form values (topics, tags) | `TokenInputControl` |  |
 | A short task in the app | `DialogForm` | `SetupWizardShell` |
 | A side panel | `PanelHeader` | `DashboardHeader` |
 | A sidebar folder | `CollapsibleNavGroup` | `Collapsible` |
@@ -156,6 +155,9 @@
 | A titled region elsewhere | `Section` | `InspectorPanel` |
 | A titled region in a panel | `Section` | `FormSection` |
 | A titled region of page content | `Section` | `NavSection` |
+| A token budget | `TokenInputControl` | `PercentInputControl` |
+| A token budget with a slider | `TokenInputControl` | `Input` |
+| A token limit bounded by the active model | `TokenInputControl` |  |
 | A transient confirmation | `Toaster` | `Notice` |
 | A trend over time | `ChartContainer` | `MetricCard` |
 | A trigger that opens a custom popover | `SelectButton` | `Select` |
@@ -293,7 +295,6 @@
 | One or two always-visible actions | `ButtonContainer` | `OverflowActionMenu` |
 | One row with an action | `SurfacePanel` | `FormSection` |
 | One total | `MetricCard` | `ActivityHeatmap` |
-| One value | `Input` | `TokenInputControl` |
 | Only a width cap | `PageContainer` | `ManagementPage` |
 | Only padding or a background | `Box` | `Card` |
 | Only rendered markdown | `MarkdownContent` | `DocumentReader` |
@@ -417,7 +418,6 @@
 | Under ten plain options | `Select` | `FilteredSelectPopover` |
 | Unknown duration | `Spinner` | `ProgressMeter` |
 | Unrelated actions | `DropdownMenu` | `SplitButton` |
-| Values from a fixed list | `Select` | `TokenInputControl` |
 | Worker activity | `WorkerActivityPanel` | `ComposerAdjunctPanel` |
 | Worker sub-sessions | `WorkerActivityRow` | `WorkActivityBlock` |
 | Workers | `WorkerActivityPanel` | `TodoProgressPanel` |
@@ -542,7 +542,7 @@ A single-line text box for names, IDs, URLs, numbers and secrets.
 - Use for: Show a masked or read-only value that people can select
 - Not for: Several lines of text → `Textarea`
 - Not for: Choosing from a fixed list → `Select`
-- Not for: A comma-separated list of tokens → `TokenInputControl`
+- Not for: A token budget with a slider → `TokenInputControl`
 - Not for: A percentage with a slider → `PercentInputControl`
 - Tokens: `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--color-disabled-bg`, `--color-danger-border`
 
@@ -1566,11 +1566,11 @@ A settings section: header (title, description) above its card, fields inside fo
 
 `import { PercentInputControl } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/PercentInputControl`
 
-A percentage control: a slider with a synced number input and bounds.
+A percentage setting: a number input and a slider that commit together, with a percent readout.
 
 - Use for: A percentage setting that needs both a feel and an exact value
 - Not for: A plain range without exact entry → `Slider`
-- Not for: A free number → `Input`
+- Not for: A token budget → `TokenInputControl`
 - Tokens: `--accent`, `--control-height-md`, `--space-sm`
 
 ### SettingsField
@@ -1657,12 +1657,12 @@ A reorderable card list (pointer and keyboard) with lift and neighbor-slide moti
 
 `import { TokenInputControl } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=blocks/TokenInputControl`
 
-A comma-separated text input that previews its values as tokens.
+A token budget setting: a number input and a slider over the model's range, with a value / max readout.
 
-- Use for: A short list of free-form values (topics, tags)
-- Not for: One value → `Input`
-- Not for: Values from a fixed list → `Select`
-- Tokens: `--radius-pill`, `--line`, `--space-xs`
+- Use for: A token limit bounded by the active model
+- Not for: A percentage → `PercentInputControl`
+- Not for: A free number → `Input`
+- Tokens: `--accent`, `--control-height-md`, `--space-sm`
 
 ## Blocks · Dashboard & Metrics
 

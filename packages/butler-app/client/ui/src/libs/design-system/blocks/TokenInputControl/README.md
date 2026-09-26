@@ -1,28 +1,28 @@
 # TokenInputControl
 
 ## What is this component
-A text input with token preview chips.
+A token budget setting control: a numeric input, a DS `Slider` over `min`..`max` and a `value / max` readout.
 
 ## When to use this component
-Use it when a setting accepts comma-separated or parsed tokens.
+Use it for token limits bounded by a model (context limit).
 
 ## Where to use this component
-Use it in settings forms and filter configuration.
+Use it as the `control` of a `SettingsField`.
 
 ## Why to use this component
-It separates token display from parsing and persistence.
+It owns parsing (commas, underscores and spaces), clamping and the clamped signal passed to `onCommit`.
 
 ## How to use this component
-Pass input value, change handler, and parsed token strings.
+Pass the committed `value`, `min`, `max`, `inputLabel`, `sliderLabel`, `describedBy` and `onCommit(value, clamped)`.
 
 ## Who can use this component
-Settings containers that own token parsing.
+Settings containers.
 
 ## Best practice
-Parse, validate, and persist tokens outside the block.
+Tell the user when `clamped` is true (a status toast).
 
 ## Wrong use cases
-Do not use it for file attachments. Use `AttachmentList`.
+Do not use it for percentages. Use `PercentInputControl`. Do not use it for tags; use `Input`.
 
 ## Tags
-settings, tokens, input, chips
+settings, tokens, budget, input, slider

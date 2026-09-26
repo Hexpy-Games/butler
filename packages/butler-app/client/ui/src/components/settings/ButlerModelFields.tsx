@@ -4,11 +4,9 @@ import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { reasoningOptionLabel, tokenWindowLabel } from "@/app/utils.ts";
 import { notifyStatus } from "@/app/notifications.ts";
-import {
-  SettingsSelect,
-  SettingsTokenInput,
-  SettingsPercentInput,
-} from "./SettingsFormComponents";
+import { useId } from "react";
+import { PercentInputControl, SettingsField, TokenInputControl } from "@/butler-ds";
+import { SettingsSelect } from "./SettingsFormComponents";
 import { ratioToPercent } from "./settingsUtils";
 import { useLocalReasoningBudget } from "./hooks/useLocalReasoningBudget";
 import { useButlerModels } from "./hooks/useButlerModels";
@@ -27,6 +25,10 @@ export function ButlerModelFields() {
   const descriptions = settingsCopy.descriptions;
   const activeModelContextMax = activeModel?.context_window_tokens ?? 200_000;
   const activeLocalModel = activeModel?.provider_id === "local" ? activeModel : null;
+  const contextLimitId = useId();
+  const contextLimitHelpId = useId();
+  const localBudgetId = useId();
+  const localBudgetHelpId = useId();
   const { updateActiveLocalReasoningBudget } = useLocalReasoningBudget(
     activeLocalModel,
     draft,
@@ -58,31 +60,53 @@ export function ButlerModelFields() {
           label: reasoningOptionLabel(activeModel, value),
         }))}
       />
-      <SettingsTokenInput
+      <SettingsField
         settingId="context-limit"
+        id={contextLimitId}
+        data-test-class="settings-field"
         label={fields.contextLimit}
-        value={draft.context_window_tokens}
-        min={1_000}
-        max={activeModelContextMax}
         description={descriptions.contextLimit(tokenWindowLabel(activeModelContextMax))}
-        onCommit={(value, clamped) => {
-          void update({ context_window_tokens: value }, setSettings).then(() => {
-            if (!clamped) return;
-            notifyStatus(descriptions.contextLimitClamped(value.toLocaleString("en-US")), {
-              id: "settings-context-limit",
-              tone: "ok",
-            });
-          });
-        }}
+        descriptionId={contextLimitHelpId}
+        control={
+          <TokenInputControl
+            id={contextLimitId}
+            inputLabel={fields.contextLimit}
+            sliderLabel={`${fields.contextLimit} slider`}
+            describedBy={contextLimitHelpId}
+            value={draft.context_window_tokens}
+            min={1_000}
+            max={activeModelContextMax}
+            onCommit={(value, clamped) => {
+              void update({ context_window_tokens: value }, setSettings).then(() => {
+                if (!clamped) return;
+                notifyStatus(descriptions.contextLimitClamped(value.toLocaleString("en-US")), {
+                  id: "settings-context-limit",
+                  tone: "ok",
+                });
+              });
+            }}
+          />
+        }
       />
       {activeLocalModel && !activeLocalModel.reasoning_efforts.includes("low") && (
-        <SettingsPercentInput
+        <SettingsField
           settingId="local-reasoning-budget"
+          id={localBudgetId}
+          data-test-class="settings-field"
           label={fields.localReasoningBudget}
-          value={ratioToPercent(activeLocalModel.local_reasoning_budget_ratio)}
           description={descriptions.localReasoningBudget}
-          disabled={saving}
-          onCommit={(value) => updateActiveLocalReasoningBudget(value)}
+          descriptionId={localBudgetHelpId}
+          control={
+            <PercentInputControl
+              id={localBudgetId}
+              inputLabel={`${fields.localReasoningBudget} percent value`}
+              sliderLabel={`${fields.localReasoningBudget} percent slider`}
+              describedBy={localBudgetHelpId}
+              disabled={saving}
+              value={Number(ratioToPercent(activeLocalModel.local_reasoning_budget_ratio))}
+              onCommit={(value) => updateActiveLocalReasoningBudget(String(value))}
+            />
+          }
         />
       )}
     </>

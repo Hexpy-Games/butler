@@ -20,7 +20,7 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-/** SettingsTokenInput: a controlled slider over a token budget. */
+/** A controlled slider over a token budget (TokenInputControl adds the exact input). */
 function TokenSlider({ context, disabled }: { context: ShowcaseRenderContext; disabled?: boolean }) {
   const [value, setValue] = useState(285000);
   const format = new Intl.NumberFormat(context.locale);
@@ -36,7 +36,7 @@ function TokenSlider({ context, disabled }: { context: ShowcaseRenderContext; di
   );
 }
 
-/** SettingsPercentInput: 0-100 with a percent readout. */
+/** 0-100 with a percent readout (PercentInputControl adds the exact input). */
 function PercentSlider({ context }: { context: ShowcaseRenderContext }) {
   const [value, setValue] = useState(80);
   return (

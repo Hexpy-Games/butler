@@ -22,7 +22,7 @@ export const guidance: ShowcaseGuidance = {
   whenNotToUse: [
     { when: "Several lines of text", use: "Textarea" },
     { when: "Choosing from a fixed list", use: "Select" },
-    { when: "A comma-separated list of tokens", use: "TokenInputControl" },
+    { when: "A token budget with a slider", use: "TokenInputControl" },
     { when: "A percentage with a slider", use: "PercentInputControl" },
   ],
   recipes: [
