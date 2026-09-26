@@ -5,17 +5,19 @@ use std::sync::Arc;
 use super::{ContextBudgetEnvironment, ContextBudgetOverrides, ContextBudgetOwner};
 use crate::models::{ModelCatalog, ModelConfiguration};
 
+/// The context budget for status views could not be evaluated.
+#[derive(Debug, thiserror::Error)]
+#[error("context_status_unavailable: {0}")]
+pub(crate) struct StatusBudgetError(#[source] super::ContextError);
+
 pub(crate) async fn evaluate_status_budget(
     configuration: Arc<ModelConfiguration>,
     catalog: Arc<ModelCatalog>,
     model_ref: Option<&str>,
     input_tokens: f64,
-) -> Result<super::ContextBudgetEvaluation, String> {
+) -> Result<super::ContextBudgetEvaluation, StatusBudgetError> {
     let owner = ContextBudgetOwner::new(configuration, catalog, environment());
-    let snapshot = owner
-        .snapshot()
-        .await
-        .map_err(|error| format!("context_status_unavailable: {error}"))?;
+    let snapshot = owner.snapshot().await.map_err(StatusBudgetError)?;
     Ok(snapshot.evaluate(model_ref, input_tokens, &ContextBudgetOverrides::default()))
 }
 

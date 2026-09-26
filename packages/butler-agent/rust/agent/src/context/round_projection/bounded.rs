@@ -178,6 +178,7 @@ fn compact(
                 "operation_result".into(),
                 serde_json::to_value(reference).map_err(|error| {
                     BtccError::relayed("context_serialization_failed", error.to_string())
+                        .with_source(error)
                 })?,
             );
         }

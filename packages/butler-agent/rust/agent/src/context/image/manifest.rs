@@ -2,6 +2,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::contracts::{ImageSanitizerInput, ImageSourceRecord, VisualAttachmentManifest};
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 use crate::public_text::trim_js_whitespace;
 
@@ -29,11 +30,12 @@ pub(super) fn sniff_image(bytes: &[u8]) -> Option<SniffedImage> {
 }
 
 pub(super) fn assert_magic(mime_type: &str, bytes: &[u8]) -> ContextResult<SniffedImage> {
-    let sniffed = sniff_image(bytes)
-        .ok_or_else(|| ContextError::new("image_manifest_invalid", "magic_unrecognized"))?;
+    let sniffed = sniff_image(bytes).ok_or_else(|| {
+        ContextError::new(ContextCode::ImageManifestInvalid, "magic_unrecognized")
+    })?;
     if sniffed.mime_type != mime_type.to_lowercase() {
         return Err(ContextError::new(
-            "image_manifest_invalid",
+            ContextCode::ImageManifestInvalid,
             "magic_mime_mismatch",
         ));
     }
@@ -48,13 +50,16 @@ pub(super) fn create_visual_manifest(
     height: u32,
 ) -> ContextResult<VisualAttachmentManifest> {
     if input.source_bytes.is_empty() || derivative_bytes.is_empty() {
-        return Err(ContextError::new("image_manifest_invalid", "empty_payload"));
+        return Err(ContextError::new(
+            ContextCode::ImageManifestInvalid,
+            "empty_payload",
+        ));
     }
     let sniffed = assert_magic(input.mime_type, input.source_bytes)?;
     let derivative_sniffed = assert_magic(derivative_mime_type, derivative_bytes)?;
     if width == 0 || height == 0 {
         return Err(ContextError::new(
-            "image_manifest_invalid",
+            ContextCode::ImageManifestInvalid,
             "dimensions_unavailable",
         ));
     }
@@ -138,8 +143,9 @@ fn manifest_digest(manifest: &VisualAttachmentManifest) -> ContextResult<String>
         pixel_count: manifest.pixel_count,
         sanitizer_revision: &manifest.sanitizer_revision,
     };
-    let encoded = serde_json::to_vec(&digest_input)
-        .map_err(|error| ContextError::new("image_manifest_invalid", error.to_string()))?;
+    let encoded = serde_json::to_vec(&digest_input).map_err(|error| {
+        ContextError::new(ContextCode::ImageManifestInvalid, error.to_string()).with_source(error)
+    })?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
 
@@ -157,7 +163,7 @@ pub(crate) fn verify_visual_manifest_source(
         || source_record.storage_revision != manifest.storage_revision
     {
         return Err(ContextError::new(
-            "image_payload_invalid",
+            ContextCode::ImagePayloadInvalid,
             "source_record_mismatch",
         ));
     }
@@ -166,7 +172,7 @@ pub(crate) fn verify_visual_manifest_source(
         sniffed.mime_type == manifest.sniffed_mime_type && sniffed.magic == manifest.sniffed_magic
     }) {
         return Err(ContextError::new(
-            "image_payload_invalid",
+            ContextCode::ImagePayloadInvalid,
             "source_magic_mismatch",
         ));
     }

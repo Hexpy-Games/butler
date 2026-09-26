@@ -1,6 +1,7 @@
 //! Exact UTF-16 text is appended as JSON literals, never carried through Value.
 
 use super::*;
+use crate::context::ContextCode;
 use crate::context::tool_artifact_slice::{ToolArtifactSearch, ToolArtifactTextSlice};
 
 impl BudgetedToolOutput {
@@ -177,11 +178,13 @@ fn append_optional_i32(output: &mut String, value: Option<i32>) {
 pub(super) fn append_optional_number(output: &mut String, value: Option<f64>) -> ContextResult<()> {
     match value {
         Some(value) if value.is_finite() => {
-            let number = serde_json::Number::from_f64(value)
-                .ok_or_else(|| ContextError::new("tool_output_json_error", "Invalid number"))?;
+            let number = serde_json::Number::from_f64(value).ok_or_else(|| {
+                ContextError::new(ContextCode::ToolOutputJsonError, "Invalid number")
+            })?;
             output.push_str(
                 &crate::json::stringify(&serde_json::Value::Number(number)).map_err(|error| {
-                    ContextError::new("tool_output_json_error", error.to_string())
+                    ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                        .with_source(error)
                 })?,
             );
         }
@@ -205,12 +208,16 @@ pub(super) fn append_optional_string(
 
 pub(super) fn append_path(output: &mut String, path: &std::path::Path) -> ContextResult<()> {
     let value = path.to_str().ok_or_else(|| {
-        ContextError::new("tool_output_path_encoding", "Artifact path is not UTF-8")
+        ContextError::new(
+            ContextCode::ToolOutputPathEncoding,
+            "Artifact path is not UTF-8",
+        )
     })?;
     append_string(output, value)
 }
 
 pub(super) fn append_string(output: &mut String, value: &str) -> ContextResult<()> {
-    crate::json::write_string(value, output)
-        .map_err(|error| ContextError::new("tool_output_json_error", error.to_string()))
+    crate::json::write_string(value, output).map_err(|error| {
+        ContextError::new(ContextCode::ToolOutputJsonError, error.to_string()).with_source(error)
+    })
 }

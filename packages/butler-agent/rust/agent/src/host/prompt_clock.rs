@@ -5,6 +5,7 @@ use crate::context::{ContextError, ContextResult, PromptClock};
 
 mod timezone_names;
 use super::timezone_data::TimeZoneData;
+use crate::context::ContextCode;
 use timezone_names::TimeZoneNames;
 
 pub(crate) struct NativePromptClock {
@@ -149,7 +150,7 @@ fn short_gmt(offset: i32) -> String {
 }
 
 fn failure(message: impl Into<String>) -> ContextError {
-    ContextError::new("prompt_time_format_error", message)
+    ContextError::new(ContextCode::PromptTimeFormatError, message)
 }
 
 #[cfg(test)]

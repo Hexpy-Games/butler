@@ -122,11 +122,40 @@ fn read_transcript_tokens(data_root: &Path, session: &StatusSessionIdentity) -> 
         .join(format!("{}.jsonl", safe_session_id(&session.session_id)));
     match transcript_payload_chars(&path) {
         Ok(chars) => StatusFact::Available(chars.div_ceil(4)),
-        Err(reason) => StatusFact::Unavailable(reason),
+        Err(error) => StatusFact::Unavailable(error.reason().to_owned()),
     }
 }
 
-fn transcript_payload_chars(path: &Path) -> Result<u64, String> {
+/// Why a transcript could not be scanned for status reporting. `reason()` is
+/// the value reported in status output.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum TranscriptScanError {
+    /// The transcripts directory could not be listed.
+    #[error("transcript_directory_unavailable")]
+    Directory(#[source] std::io::Error),
+    /// A transcript's metadata could not be read.
+    #[error("transcript_metadata_unavailable")]
+    Metadata(#[source] std::io::Error),
+    /// A transcript could not be opened, read or re-encoded.
+    #[error("transcript_read_unavailable")]
+    Read(#[source] Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl TranscriptScanError {
+    pub(crate) fn reason(&self) -> &'static str {
+        match self {
+            Self::Directory(_) => "transcript_directory_unavailable",
+            Self::Metadata(_) => "transcript_metadata_unavailable",
+            Self::Read(_) => "transcript_read_unavailable",
+        }
+    }
+
+    pub(crate) fn read(source: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
+        Self::Read(source.into())
+    }
+}
+
+fn transcript_payload_chars(path: &Path) -> Result<u64, TranscriptScanError> {
     scan_transcript(path, None).map(|scan| {
         scan.payload_chars
             .saturating_add(scan.payload_events.saturating_sub(1))
@@ -161,17 +190,20 @@ pub(crate) fn read_status_transcript_summary(
             parse_errors: Some(scan.parse_errors),
             unavailable_reason: None,
         },
-        Err(reason) => unavailable_transcript_summary(Some(true), Some(bytes), &reason),
+        Err(error) => unavailable_transcript_summary(Some(true), Some(bytes), error.reason()),
     }
 }
 
-fn scan_transcript(path: &Path, max_line_bytes: Option<usize>) -> Result<TranscriptScan, String> {
+fn scan_transcript(
+    path: &Path,
+    max_line_bytes: Option<usize>,
+) -> Result<TranscriptScan, TranscriptScanError> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(TranscriptScan::default());
         }
-        Err(_) => return Err("transcript_read_unavailable".into()),
+        Err(error) => return Err(TranscriptScanError::read(error)),
     };
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
@@ -180,7 +212,7 @@ fn scan_transcript(path: &Path, max_line_bytes: Option<usize>) -> Result<Transcr
         line.clear();
         let bytes = reader
             .read_until(b'\n', &mut line)
-            .map_err(|_| "transcript_read_unavailable".to_owned())?;
+            .map_err(TranscriptScanError::read)?;
         if bytes == 0 {
             break;
         }
@@ -220,8 +252,8 @@ fn scan_transcript(path: &Path, max_line_bytes: Option<usize>) -> Result<Transcr
             scan.latest_timestamp = Some(timestamp.to_owned());
         }
         if valid_transcript_event(&event) {
-            let serialized = serde_json::to_string(&event["payload"])
-                .map_err(|_| "transcript_read_unavailable".to_owned())?;
+            let serialized =
+                serde_json::to_string(&event["payload"]).map_err(TranscriptScanError::read)?;
             scan.payload_chars = scan
                 .payload_chars
                 .saturating_add(serialized.encode_utf16().count() as u64);

@@ -8,6 +8,7 @@ use super::contracts::{
     ImageSanitizerInput, ImageSanitizerLimits, SanitizedImage, VisualAttachmentManifest,
 };
 use super::manifest::{assert_magic, create_visual_manifest};
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
 const MAX_SOURCE_BYTES: usize = 10 * 1024 * 1024;
@@ -19,7 +20,10 @@ const MAX_PIXELS: u64 = 64_000_000;
 /// runs this synchronous work on its single tracked blocking lane.
 pub(crate) fn sanitize_image(input: ImageSanitizerInput<'_>) -> ContextResult<SanitizedImage> {
     if input.source_bytes.is_empty() {
-        return Err(ContextError::new("image_manifest_invalid", "empty_source"));
+        return Err(ContextError::new(
+            ContextCode::ImageManifestInvalid,
+            "empty_source",
+        ));
     }
     let caller_max_bytes = input.limits.max_bytes.unwrap_or(MAX_SOURCE_BYTES as f64);
     let max_bytes = if caller_max_bytes.is_nan() {
@@ -138,12 +142,12 @@ fn encode_derivative(image: DynamicImage, magic: &str) -> ContextResult<(Vec<u8>
 }
 
 fn limit_error() -> ContextError {
-    ContextError::new("image_payload_invalid", "image_limit_exceeded")
+    ContextError::new(ContextCode::ImagePayloadInvalid, "image_limit_exceeded")
 }
 
 fn preprocess_error(error: impl std::fmt::Display) -> ContextError {
     ContextError::new(
-        "image_payload_invalid",
+        ContextCode::ImagePayloadInvalid,
         format!("preprocess_failed:{error}"),
     )
 }

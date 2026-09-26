@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::*;
+use crate::context::ContextCode;
 use crate::context::tool_artifact_slice::{SliceInput, slice_tool_artifact_text};
 use crate::public_text::trim_js_whitespace;
 
@@ -14,7 +15,7 @@ pub(super) fn read(
     let root = butler_data.join("artifacts/tool-output");
     let path = match reference(&root, input, None)? {
         Ok(path) => path,
-        Err(error) => return Ok(failure(error)),
+        Err(error) => return Ok(failure(error.as_str())),
     };
     if !path.exists() {
         return Ok(failure("artifact_not_found"));
@@ -151,7 +152,7 @@ pub(super) fn reference(
     root: &Path,
     input: &ReadToolOutputInput,
     required_schema: Option<&str>,
-) -> ContextResult<Result<PathBuf, &'static str>> {
+) -> ContextResult<Result<PathBuf, ContextCode>> {
     if let Some(path) = input
         .path
         .as_ref()
@@ -161,7 +162,7 @@ pub(super) fn reference(
     {
         let path = lexical_absolute(Path::new(path))?;
         if !under_root(&path, root)? {
-            return Ok(Err("unsafe_artifact_path"));
+            return Ok(Err(ContextCode::UnsafeArtifactPath));
         }
         return Ok(Ok(path));
     }
@@ -172,13 +173,13 @@ pub(super) fn reference(
     {
         let id = id.trim();
         if id.contains('/') || id.contains('\\') {
-            return Ok(Err("artifact_not_found"));
+            return Ok(Err(ContextCode::ArtifactNotFound));
         }
         let limit = input.max_artifact_scan_files.unwrap_or(10_000).max(1);
         let mut files = Vec::new();
         walk_files(root, limit.saturating_add(1), &mut files)?;
         if files.len() > limit {
-            return Ok(Err("artifact_scan_limit_exceeded"));
+            return Ok(Err(ContextCode::ArtifactScanLimitExceeded));
         }
         for path in files {
             if path.extension().is_none_or(|extension| extension != "json") {
@@ -201,9 +202,9 @@ pub(super) fn reference(
                 return Ok(Ok(path));
             }
         }
-        return Ok(Err("artifact_not_found"));
+        return Ok(Err(ContextCode::ArtifactNotFound));
     }
-    Ok(Err("artifact_reference_required"))
+    Ok(Err(ContextCode::ArtifactReferenceRequired))
 }
 
 pub(super) fn walk_files(
@@ -270,10 +271,6 @@ fn under_root(path: &Path, root: &Path) -> ContextResult<bool> {
     Ok(real_path.starts_with(real_root))
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> ContextError {
-    ContextError::new("tool_output_io_error", error.to_string())
+    ContextError::new(ContextCode::ToolOutputIoError, error.to_string()).with_source(error)
 }

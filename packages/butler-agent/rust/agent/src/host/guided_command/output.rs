@@ -213,14 +213,14 @@ async fn from_streams(
             retain_original: registered,
         })
         .await
-        .map_err(|error| BtccError::relayed(error.code, error.message))?
+        .map_err(|error| BtccError::relayed(error.code(), error.message()))?
         .await
         .map_err(|_| error("tool_output_completion_lost"))?
-        .map_err(|error| BtccError::relayed(error.code, error.message))?;
+        .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
     let base = JsonDocument::from_encoded(
         budget
             .to_json_document()
-            .map_err(|error| BtccError::relayed(error.code, error.message))?,
+            .map_err(|error| BtccError::relayed(error.code(), error.message()))?,
     )
     .map_err(|_| error("command_result_encoding_failed"))?;
     let success = budget.exit_code == Some(0) && !budget.timed_out;

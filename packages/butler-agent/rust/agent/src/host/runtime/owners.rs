@@ -64,7 +64,7 @@ impl HostDependencies for RuntimeOwners {
                 .conversation_reference
                 .close()
                 .await
-                .map_err(|e| BtccError::relayed(e.code, e.message));
+                .map_err(|e| BtccError::relayed(e.code(), e.message()));
             self.plans.close().await;
             self.command.close().await;
             self.commands.close().await;

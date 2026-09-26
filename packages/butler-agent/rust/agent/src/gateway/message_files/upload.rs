@@ -88,7 +88,7 @@ pub(super) fn prepare(
     let text = {
         let extraction = match fs::read(&path) {
             Ok(bytes) => extract_pdf_text(&bytes),
-            Err(_) => Err(PdfTextError::Extraction),
+            Err(error) => Err(PdfTextError::Extraction(error.into())),
         };
         pdf_sidecar_text(extraction)
     };

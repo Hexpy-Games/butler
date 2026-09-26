@@ -1,3 +1,4 @@
+use crate::context::ContextCode;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ pub(super) fn parse(
     input: &Value,
     current_session: &str,
     project_id: Option<&str>,
-) -> Result<ListArgs, &'static str> {
+) -> Result<ListArgs, ContextCode> {
     let limit = integer(
         input.get("limit").filter(|value| value.is_number()),
         20,
@@ -61,7 +62,7 @@ pub(super) fn parse(
     if !["any", "unassigned", "selected"].contains(&project_filter)
         || (project_filter == "selected") == project_ids.is_empty()
     {
-        return Err("invalid_project_filter");
+        return Err(ContextCode::InvalidProjectFilter);
     }
     let scope = match input.get("scope") {
         None | Some(Value::Null) => {
@@ -74,14 +75,14 @@ pub(super) fn parse(
         Some(value) => value.as_str().unwrap_or(""),
     };
     if !["current_session", "current_project", "all_user_sessions"].contains(&scope) {
-        return Err("invalid_scope_value");
+        return Err(ContextCode::InvalidScopeValue);
     }
     let session_kind = match input.get("session_kind") {
         None | Some(Value::Null) => "any",
         Some(value) => value.as_str().unwrap_or(""),
     };
     if !["any", "chat", "project", "unknown"].contains(&session_kind) {
-        return Err("invalid_session_kind");
+        return Err(ContextCode::InvalidSessionKind);
     }
     let time = match input.get("time") {
         None | Some(Value::Null | Value::Bool(false)) => None,
@@ -89,18 +90,18 @@ pub(super) fn parse(
         Some(Value::String(value)) if value.is_empty() => None,
         Some(value) => {
             if value.get("basis").and_then(Value::as_str) != Some("conversation") {
-                return Err("invalid_time");
+                return Err(ContextCode::InvalidTime);
             }
             let from = iso(value
                 .get("from")
                 .and_then(Value::as_str)
-                .ok_or("invalid_time")?)?;
+                .ok_or(ContextCode::InvalidTime)?)?;
             let to = iso(value
                 .get("to")
                 .and_then(Value::as_str)
-                .ok_or("invalid_time")?)?;
+                .ok_or(ContextCode::InvalidTime)?)?;
             if from >= to {
-                return Err("invalid_time");
+                return Err(ContextCode::InvalidTime);
             }
             Some((from, to))
         }
@@ -119,7 +120,7 @@ pub(super) fn parse(
     } else {
         filter
     };
-    let text = json::stringify(&filter).map_err(|_| "invalid_arguments")?;
+    let text = json::stringify(&filter).map_err(|_| ContextCode::InvalidArguments)?;
     let filter_hash = format!("{:x}", Sha256::digest(text.as_bytes()));
     let cursor = input
         .get("cursor")
@@ -152,11 +153,14 @@ pub(super) fn encode_cursor(cursor: &ListCursor) -> String {
     // cursor would be rejected as invalid on decode.
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).unwrap_or_default())
 }
-fn decode_cursor(text: &str) -> Result<ListCursor, &'static str> {
-    let bytes = URL_SAFE_NO_PAD.decode(text).map_err(|_| "invalid_cursor")?;
-    let cursor: ListCursor = serde_json::from_slice(&bytes).map_err(|_| "invalid_cursor")?;
+fn decode_cursor(text: &str) -> Result<ListCursor, ContextCode> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(text)
+        .map_err(|_| ContextCode::InvalidCursor)?;
+    let cursor: ListCursor =
+        serde_json::from_slice(&bytes).map_err(|_| ContextCode::InvalidCursor)?;
     if cursor.schema != "butler.list-conversation-sessions-cursor.v2" {
-        return Err("invalid_cursor");
+        return Err(ContextCode::InvalidCursor);
     }
     Ok(cursor)
 }
@@ -165,27 +169,27 @@ fn integer(
     fallback: usize,
     min: usize,
     max: usize,
-) -> Result<usize, &'static str> {
+) -> Result<usize, ContextCode> {
     let Some(value) = value else {
         return Ok(fallback);
     };
     let Some(number) = value.as_f64() else {
-        return Err("invalid_integer");
+        return Err(ContextCode::InvalidInteger);
     };
     if number.fract() != 0.0 || !number.is_finite() || number < min as f64 || number > max as f64 {
-        return Err("invalid_integer");
+        return Err(ContextCode::InvalidInteger);
     }
     Ok(crate::json::saturating_usize(number))
 }
-fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, &'static str> {
+fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, ContextCode> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
     let Some(items) = value.as_array() else {
-        return Err("invalid_array");
+        return Err(ContextCode::InvalidArray);
     };
     if items.len() > max {
-        return Err("invalid_array");
+        return Err(ContextCode::InvalidArray);
     }
     items
         .iter()
@@ -194,21 +198,22 @@ fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, &'static st
                 .map(str::trim)
                 .filter(|text| !text.is_empty())
                 .map(str::to_owned)
-                .ok_or("invalid_array")
+                .ok_or(ContextCode::InvalidArray)
         })
         .collect()
 }
-fn iso(text: &str) -> Result<String, &'static str> {
+fn iso(text: &str) -> Result<String, ContextCode> {
     let explicit = text.contains('T')
         && (text.ends_with('Z')
             || text
                 .rfind(['+', '-'])
                 .is_some_and(|index| index > 10 && text[index..].contains(':')));
     if !explicit {
-        return Err("invalid_time");
+        return Err(ContextCode::InvalidTime);
     }
-    let millis = crate::js_date::parse_date_millis(text, &|_| None).ok_or("invalid_time")?;
+    let millis =
+        crate::js_date::parse_date_millis(text, &|_| None).ok_or(ContextCode::InvalidTime)?;
     DateTime::<Utc>::from_timestamp_millis(millis)
         .map(|date| date.to_rfc3339_opts(SecondsFormat::Millis, true))
-        .ok_or("invalid_time")
+        .ok_or(ContextCode::InvalidTime)
 }

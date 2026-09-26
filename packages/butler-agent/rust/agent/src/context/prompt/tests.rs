@@ -55,13 +55,13 @@ impl PromptClock for Clock {
     fn iso_from_epoch_millis(&self, value: i64) -> ContextResult<String> {
         (value == 1_789_344_000_000)
             .then(|| "2026-09-14T00:00:00.000Z".into())
-            .ok_or_else(|| ContextError::new("clock_range", "invalid timestamp"))
+            .ok_or_else(|| ContextError::relayed("clock_range", "invalid timestamp"))
     }
     fn format_local_time(&self, _: i64, timezone: &str) -> ContextResult<String> {
         if timezone == "UTC" {
             Ok("Monday, September 14, 2026 at 12:00:00 AM UTC".into())
         } else {
-            Err(ContextError::new("timezone", "invalid timezone"))
+            Err(ContextError::relayed("timezone", "invalid timezone"))
         }
     }
 }
@@ -245,7 +245,7 @@ async fn butler_and_steward_assemblies_keep_sections_producer_order_and_fallback
             .build_butler_context_assembly(&request, &butler_binding)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "prompt_file_read_error"
     );
     conversation.close().await.unwrap();

@@ -388,7 +388,7 @@ pub(super) async fn execute(
             owner.tool_artifacts.read_evidence(args).await
         };
         return result.map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::relayed(error.code, error.message))
+            ToolExecutionError::Integrity(BtccError::relayed(error.code(), error.message()))
         });
     }
     let result = match call.name.as_str() {
@@ -396,12 +396,12 @@ pub(super) async fn execute(
             .conversation_tools
             .list(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "read_conversation_context" => owner
             .conversation_tools
             .read_context(owner.binding.memory.runtime_session_id.clone(), args)
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "recall_memory" => owner
             .recall
             .recall_tool(
@@ -421,7 +421,7 @@ pub(super) async fn execute(
             .conversations
             .read(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code(), error.message())),
         "read_file" | "list_files" | "grep_files" | "list_skills" => owner
             .capabilities
             .invoke(

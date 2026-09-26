@@ -8,6 +8,7 @@ use std::{
 };
 
 use super::ContextCompactionSnapshot;
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
 pub(super) fn append_snapshot(
@@ -17,7 +18,7 @@ pub(super) fn append_snapshot(
     let path = compaction_snapshot_path(data_root, &snapshot.session_id);
     let parent = path.parent().ok_or_else(|| {
         ContextError::new(
-            "context_compaction_path_invalid",
+            ContextCode::ContextCompactionPathInvalid,
             "Snapshot path has no parent",
         )
     })?;
@@ -31,7 +32,11 @@ pub(super) fn append_snapshot(
     }
     let mut file = options.open(path).map_err(snapshot_io_error)?;
     serde_json::to_writer(&mut file, snapshot).map_err(|error| {
-        ContextError::new("context_compaction_snapshot_error", error.to_string())
+        ContextError::new(
+            ContextCode::ContextCompactionSnapshotError,
+            error.to_string(),
+        )
+        .with_source(error)
     })?;
     file.write_all(b"\n").map_err(snapshot_io_error)
 }
@@ -75,7 +80,7 @@ impl CompactionLock {
                 }
                 Err(_) if Instant::now() >= deadline => {
                     return Err(ContextError::new(
-                        "context_compaction_lock_timeout",
+                        ContextCode::ContextCompactionLockTimeout,
                         format!("Context compaction lock timed out for {session_id}"),
                     ));
                 }
@@ -91,18 +96,14 @@ impl Drop for CompactionLock {
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn snapshot_io_error(error: std::io::Error) -> ContextError {
-    ContextError::new("context_compaction_snapshot_error", error.to_string())
+    ContextError::new(
+        ContextCode::ContextCompactionSnapshotError,
+        error.to_string(),
+    )
+    .with_source(error)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn lock_io_error(error: std::io::Error) -> ContextError {
-    ContextError::new("context_compaction_lock_error", error.to_string())
+    ContextError::new(ContextCode::ContextCompactionLockError, error.to_string()).with_source(error)
 }

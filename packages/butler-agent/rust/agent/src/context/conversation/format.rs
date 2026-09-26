@@ -11,6 +11,7 @@ use crate::json::stringify;
 
 use super::parts::to_context_message;
 use super::types::*;
+use crate::context::ContextCode;
 
 const REQUIRED_RECENT_SEMANTIC_TURNS: usize = 8;
 
@@ -150,13 +151,13 @@ fn semantic_turn_atoms(
         .map(|group| {
             let Some(first) = group.first() else {
                 return Err(ContextError::new(
-                    "context_group_empty",
+                    ContextCode::ContextGroupEmpty,
                     "Conversation group is empty",
                 ));
             };
             let Some(last) = group.last() else {
                 return Err(ContextError::new(
-                    "context_group_empty",
+                    ContextCode::ContextGroupEmpty,
                     "Conversation group is empty",
                 ));
             };
@@ -361,8 +362,8 @@ fn hash_bytes(value: &[u8]) -> String {
 fn option_string(value: Option<&String>) -> Value {
     value.cloned().map(Value::String).unwrap_or(Value::Null)
 }
-fn json_error(e: impl std::fmt::Display) -> ContextError {
-    ContextError::new("context_json_error", e.to_string())
+fn json_error(e: impl std::error::Error + Send + Sync + 'static) -> ContextError {
+    ContextError::new(ContextCode::ContextJsonError, e.to_string()).with_source(e)
 }
 fn number_display(v: f64) -> String {
     serde_json::Number::from_f64(v)
@@ -373,7 +374,9 @@ fn number_display(v: f64) -> String {
 fn js_number(v: f64) -> ContextResult<String> {
     serde_json::Number::from_f64(v)
         .map(Value::Number)
-        .ok_or_else(|| ContextError::new("context_number_invalid", "invalid context number"))
+        .ok_or_else(|| {
+            ContextError::new(ContextCode::ContextNumberInvalid, "invalid context number")
+        })
         .and_then(|v| stringify(&v).map_err(json_error))
 }
 

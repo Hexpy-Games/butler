@@ -14,6 +14,7 @@ use super::{
     args::{self, ReadArgs},
     store_error,
 };
+use crate::context::ContextCode;
 
 #[derive(Deserialize, Serialize)]
 struct SourceCursor {
@@ -32,7 +33,7 @@ pub(super) fn read_memory(
 ) -> ContextResult<Value> {
     if format!("{:x}", Sha256::digest(source.scalar.as_bytes())) != source.source_hash {
         return Err(ContextError::new(
-            "source_changed",
+            ContextCode::SourceChanged,
             "Memory source scalar hash changed",
         ));
     }
@@ -77,7 +78,7 @@ pub(super) fn read(
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     {
         return Err(ContextError::new(
-            "source_not_found",
+            ContextCode::SourceNotFound,
             "Invalid canonical source handle",
         ));
     }
@@ -94,14 +95,19 @@ pub(super) fn read(
         .map(|((a, b), c)| (a, b, c))
     else {
         return Err(ContextError::new(
-            "source_not_found",
+            ContextCode::SourceNotFound,
             "Invalid canonical source handle",
         ));
     };
     let message = snapshot
         .message(&message_id)
         .map_err(store_error)?
-        .ok_or_else(|| ContextError::new("source_not_found", "Canonical message is unavailable"))?;
+        .ok_or_else(|| {
+            ContextError::new(
+                ContextCode::SourceNotFound,
+                "Canonical message is unavailable",
+            )
+        })?;
     let session = snapshot
         .session(&message.message.session_id)
         .map_err(store_error)?;
@@ -116,7 +122,7 @@ pub(super) fn read(
             )
     {
         return Err(ContextError::new(
-            "invalid_scope",
+            ContextCode::InvalidScope,
             "Canonical source is outside the authorized scope",
         ));
     }
@@ -124,11 +130,14 @@ pub(super) fn read(
         .into_iter()
         .find(|item| item.part.id == part_id && item.pointer == pointer)
         .ok_or_else(|| {
-            ContextError::new("source_not_found", "Canonical source scalar is unavailable")
+            ContextError::new(
+                ContextCode::SourceNotFound,
+                "Canonical source scalar is unavailable",
+            )
         })?;
     if scalar.hash != parts[5] {
         return Err(ContextError::new(
-            "source_changed",
+            ContextCode::SourceChanged,
             "Canonical scalar hash changed",
         ));
     }
@@ -174,18 +183,24 @@ fn paginate(
         .get("cursor")
         .filter(|value| value.is_string())
         .map(|value| {
-            let text = value
-                .as_str()
-                .ok_or_else(|| ContextError::new("invalid_cursor", "Invalid source cursor"))?;
-            let bytes = URL_SAFE_NO_PAD
-                .decode(text)
-                .map_err(|_| ContextError::new("invalid_cursor", "Invalid source cursor"))?;
-            let decoded: SourceCursor = serde_json::from_slice(&bytes)
-                .map_err(|_| ContextError::new("invalid_cursor", "Invalid source cursor"))?;
+            let text = value.as_str().ok_or_else(|| {
+                ContextError::new(ContextCode::InvalidCursor, "Invalid source cursor")
+            })?;
+            let bytes = URL_SAFE_NO_PAD.decode(text).map_err(|source| {
+                ContextError::new(ContextCode::InvalidCursor, "Invalid source cursor")
+                    .with_source(source)
+            })?;
+            let decoded: SourceCursor = serde_json::from_slice(&bytes).map_err(|source| {
+                ContextError::new(ContextCode::InvalidCursor, "Invalid source cursor")
+                    .with_source(source)
+            })?;
             if decoded.schema != "butler.source-read-cursor.v2"
                 || decoded.next_byte.unsigned_abs() > 9_007_199_254_740_991
             {
-                return Err(ContextError::new("invalid_cursor", "Invalid source cursor"));
+                return Err(ContextError::new(
+                    ContextCode::InvalidCursor,
+                    "Invalid source cursor",
+                ));
             }
             Ok(decoded)
         })
@@ -195,7 +210,7 @@ fn paginate(
         .is_some_and(|cursor| cursor.source_ref != source_ref || cursor.source_hash != source_hash)
     {
         return Err(ContextError::new(
-            "source_changed",
+            ContextCode::SourceChanged,
             "Source cursor identifies a different scalar",
         ));
     }
@@ -204,7 +219,7 @@ fn paginate(
         .is_some_and(|cursor| cursor.scope_hash.as_deref() != Some(parsed.scope_hash.as_str()))
     {
         return Err(ContextError::new(
-            "stale_cursor",
+            ContextCode::StaleCursor,
             "Source cursor scope changed",
         ));
     }
@@ -214,7 +229,7 @@ fn paginate(
         || u64::try_from(requested_start).unwrap_or_default() > bytes.len() as u64
     {
         return Err(ContextError::new(
-            "source_changed",
+            ContextCode::SourceChanged,
             "Source cursor position is outside the scalar",
         ));
     }
@@ -228,15 +243,17 @@ fn paginate(
         if index >= max_chars {
             break;
         }
-        let added =
-            json::string_bytes(grapheme).map_err(|e| ContextError::new("json", e.to_string()))? - 2;
+        let added = json::string_bytes(grapheme)
+            .map_err(|e| ContextError::new(ContextCode::Json, e.to_string()).with_source(e))?
+            - 2;
         if encoded_text_bytes + added > 20 * 1024 {
             if text.is_empty() {
                 for scalar in grapheme.chars() {
                     let mut encoded = [0; 4];
-                    let added = json::string_bytes(scalar.encode_utf8(&mut encoded))
-                        .map_err(|e| ContextError::new("json", e.to_string()))?
-                        - 2;
+                    let added =
+                        json::string_bytes(scalar.encode_utf8(&mut encoded)).map_err(|e| {
+                            ContextError::new(ContextCode::Json, e.to_string()).with_source(e)
+                        })? - 2;
                     if encoded_text_bytes + added > 20 * 1024 {
                         break;
                     }
@@ -260,8 +277,8 @@ fn paginate(
             scope_hash: Some(parsed.scope_hash.clone()),
             next_byte: i64::try_from(end).unwrap_or(i64::MAX),
         };
-        let json =
-            json::stringify(&json!(value)).map_err(|e| ContextError::new("json", e.to_string()))?;
+        let json = json::stringify(&json!(value))
+            .map_err(|e| ContextError::new(ContextCode::Json, e.to_string()).with_source(e))?;
         Some(URL_SAFE_NO_PAD.encode(json.as_bytes()))
     } else {
         None

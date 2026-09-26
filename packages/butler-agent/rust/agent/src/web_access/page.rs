@@ -98,7 +98,7 @@ pub(super) fn extract_page(
                 vec!["pdf-text-unavailable".into()],
                 Some("PDF text is unavailable; this may be a scanned document.".into()),
             ),
-            Err(crate::context::PdfTextError::Extraction) => (
+            Err(crate::context::PdfTextError::Extraction(_)) => (
                 None,
                 String::new(),
                 String::new(),

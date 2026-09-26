@@ -15,6 +15,7 @@ use crate::btcc::{AttachmentKind, AttachmentRef};
 use crate::public_text::trim_js_whitespace;
 
 use super::{ContextError, ContextResult};
+use crate::context::ContextCode;
 
 pub(crate) struct NativeAttachmentContext {
     butler_data: PathBuf,
@@ -52,7 +53,10 @@ impl NativeAttachmentContext {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ContextError::new("closed", "Attachment context reader is closing"))?;
+            .map_err(|source| {
+                ContextError::new(ContextCode::Closed, "Attachment context reader is closing")
+                    .with_source(source)
+            })?;
         let butler_data = self.butler_data.clone();
         let title = title.to_owned();
         let (sender, receiver) = oneshot::channel();
@@ -60,7 +64,7 @@ impl NativeAttachmentContext {
             let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
-                    "closed",
+                    ContextCode::Closed,
                     "Attachment context reader is closing",
                 ));
             }
@@ -70,12 +74,19 @@ impl NativeAttachmentContext {
                     render_now(&attachments, &butler_data, &title)
                 })
                 .await
-                .map_err(|error| ContextError::new("attachment_join_failed", error.to_string()));
+                .map_err(|error| {
+                    ContextError::new(ContextCode::AttachmentJoinFailed, error.to_string())
+                        .with_source(error)
+                });
                 let _ = sender.send(result);
             });
         }
-        receiver.await.map_err(|_| {
-            ContextError::new("attachment_completion_lost", "Attachment context read lost")
+        receiver.await.map_err(|source| {
+            ContextError::new(
+                ContextCode::AttachmentCompletionLost,
+                "Attachment context read lost",
+            )
+            .with_source(source)
         })?
     }
 
@@ -92,14 +103,17 @@ impl NativeAttachmentContext {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ContextError::new("closed", "Attachment context reader is closing"))?;
+            .map_err(|source| {
+                ContextError::new(ContextCode::Closed, "Attachment context reader is closing")
+                    .with_source(source)
+            })?;
         let data = self.butler_data.clone();
         let (sender, receiver) = oneshot::channel();
         {
             let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
-                    "closed",
+                    ContextCode::Closed,
                     "Attachment context reader is closing",
                 ));
             }
@@ -109,13 +123,20 @@ impl NativeAttachmentContext {
                     project_source::read(&data, &file_id, size_bytes, &sha256)
                 })
                 .await
-                .map_err(|error| ContextError::new("attachment_join_failed", error.to_string()))
+                .map_err(|error| {
+                    ContextError::new(ContextCode::AttachmentJoinFailed, error.to_string())
+                        .with_source(error)
+                })
                 .and_then(|result| result);
                 let _ = sender.send(result);
             });
         }
-        receiver.await.map_err(|_| {
-            ContextError::new("attachment_completion_lost", "Project source read lost")
+        receiver.await.map_err(|source| {
+            ContextError::new(
+                ContextCode::AttachmentCompletionLost,
+                "Project source read lost",
+            )
+            .with_source(source)
         })?
     }
 

@@ -20,6 +20,7 @@ use super::{
     ContextBudgetOwner, ContextError, ContextResult, ExactText, OwnedDefaultTokenEstimator,
     ToolArtifactTextSlice,
 };
+use crate::context::ContextCode;
 use crate::json::JsonDocument;
 
 pub(crate) trait ToolOutputIdentity: Send + Sync {
@@ -287,21 +288,27 @@ impl NativeToolOutput {
         let state = self.admission.lock();
         if state.closing {
             return Err(ContextError::new(
-                "tool_output_closed",
+                ContextCode::ToolOutputClosed,
                 "Tool-output service is closed",
             ));
         }
-        state
-            .queue
-            .send(job)
-            .map_err(|_| ContextError::new("tool_output_closed", "Tool-output worker ended"))
+        state.queue.send(job).map_err(|source| {
+            ContextError::new(ContextCode::ToolOutputClosed, "Tool-output worker ended")
+                .with_source(source)
+        })
     }
 
     async fn acquire_slot(&self) -> ContextResult<OwnedSemaphorePermit> {
         Arc::clone(&self.slots)
             .acquire_owned()
             .await
-            .map_err(|_| ContextError::new("tool_output_closed", "Tool-output service is closed"))
+            .map_err(|source| {
+                ContextError::new(
+                    ContextCode::ToolOutputClosed,
+                    "Tool-output service is closed",
+                )
+                .with_source(source)
+            })
     }
 
     pub(crate) async fn submit_budget(
@@ -329,11 +336,14 @@ impl NativeToolOutput {
         input: ReadToolOutputInput,
     ) -> ContextResult<JsonDocument> {
         let read = self.submit_read(input).await?.await.map_err(|error| {
-            ContextError::new("tool_output_completion_lost", error.to_string())
+            ContextError::new(ContextCode::ToolOutputCompletionLost, error.to_string())
+                .with_source(error)
         })??;
         let encoded = read.to_json_document()?;
-        JsonDocument::from_encoded(encoded)
-            .map_err(|error| ContextError::new("tool_output_json_error", error.to_string()))
+        JsonDocument::from_encoded(encoded).map_err(|error| {
+            ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                .with_source(error)
+        })
     }
 
     pub(crate) async fn read_evidence_document(
@@ -343,9 +353,10 @@ impl NativeToolOutput {
         let permit = self.acquire_slot().await?;
         let (reply, receiver) = oneshot::channel();
         self.enqueue(Job::ReadEvidence(input, reply, permit))?;
-        receiver
-            .await
-            .map_err(|error| ContextError::new("tool_output_completion_lost", error.to_string()))?
+        receiver.await.map_err(|error| {
+            ContextError::new(ContextCode::ToolOutputCompletionLost, error.to_string())
+                .with_source(error)
+        })?
     }
 
     pub(crate) async fn submit_prune(
@@ -385,7 +396,7 @@ impl NativeToolOutput {
 )]
 fn join_error<T>(error: tokio::task::JoinError) -> ContextResult<T> {
     Err(ContextError::new(
-        "tool_output_worker_failed",
+        ContextCode::ToolOutputWorkerFailed,
         error.to_string(),
     ))
 }

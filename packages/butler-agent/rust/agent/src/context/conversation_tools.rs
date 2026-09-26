@@ -14,6 +14,7 @@ use super::{
     ContextConversation, ContextError, ContextResult, ConversationContextDirection,
     ReadConversationContextInput,
 };
+use crate::context::ContextCode;
 use crate::conversation::{CanonicalMemoryReadBinding, conversation_store_path};
 
 pub(crate) struct NativeConversationTools {
@@ -51,7 +52,10 @@ impl NativeConversationTools {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ContextError::new("closed", "Conversation tools are closing"))?;
+            .map_err(|source| {
+                ContextError::new(ContextCode::Closed, "Conversation tools are closing")
+                    .with_source(source)
+            })?;
         let path = self.path.clone();
         let data_root = self.data_root.clone();
         let (tx, rx) = oneshot::channel();
@@ -59,7 +63,7 @@ impl NativeConversationTools {
             let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
-                    "closed",
+                    ContextCode::Closed,
                     "Conversation tools are closing",
                 ));
             }
@@ -71,18 +75,19 @@ impl NativeConversationTools {
                 .await
                 .unwrap_or_else(|error| {
                     Err(ContextError::new(
-                        "conversation_list_join_failed",
+                        ContextCode::ConversationListJoinFailed,
                         error.to_string(),
                     ))
                 });
                 let _ = tx.send(result);
             });
         }
-        rx.await.map_err(|_| {
+        rx.await.map_err(|source| {
             ContextError::new(
-                "conversation_list_completion_lost",
+                ContextCode::ConversationListCompletionLost,
                 "Conversation list completion lost",
             )
+            .with_source(source)
         })?
     }
 
@@ -96,14 +101,17 @@ impl NativeConversationTools {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ContextError::new("closed", "Conversation tools are closing"))?;
+            .map_err(|source| {
+                ContextError::new(ContextCode::Closed, "Conversation tools are closing")
+                    .with_source(source)
+            })?;
         let conversation = self.conversation.clone();
         let (tx, rx) = oneshot::channel();
         {
             let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
-                    "closed",
+                    ContextCode::Closed,
                     "Conversation tools are closing",
                 ));
             }
@@ -137,19 +145,21 @@ impl NativeConversationTools {
                     .and_then(|result| {
                         serde_json::to_value(result).map_err(|error| {
                             ContextError::new(
-                                "conversation_context_serialize_failed",
+                                ContextCode::ConversationContextSerializeFailed,
                                 error.to_string(),
                             )
+                            .with_source(error)
                         })
                     });
                 let _ = tx.send(result);
             });
         }
-        rx.await.map_err(|_| {
+        rx.await.map_err(|source| {
             ContextError::new(
-                "conversation_context_completion_lost",
+                ContextCode::ConversationContextCompletionLost,
                 "Conversation context completion lost",
             )
+            .with_source(source)
         })?
     }
 

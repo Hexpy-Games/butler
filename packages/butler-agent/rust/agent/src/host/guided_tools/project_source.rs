@@ -51,7 +51,7 @@ pub(super) async fn execute(
     {
         Ok(bytes) => bytes,
         Err(error) => {
-            let code = if error.code == "source_snapshot_changed" {
+            let code = if error.code() == "source_snapshot_changed" {
                 "source_snapshot_changed"
             } else {
                 "source_unavailable"

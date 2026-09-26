@@ -23,6 +23,7 @@ mod storage;
 use algorithm::{build_summary, compaction_window, estimate_tokens, joined_message_text};
 use storage::{CompactionLock, append_snapshot};
 
+use crate::context::ContextCode;
 pub(crate) use storage::compaction_snapshot_path;
 
 const READ_LIMIT: f64 = 5_000.0;
@@ -311,5 +312,5 @@ fn now_epoch_millis() -> f64 {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn conversation_error(error: crate::conversation::ConversationError) -> ContextError {
-    ContextError::new("context_conversation_error", error.to_string())
+    ContextError::new(ContextCode::ContextConversationError, error.to_string())
 }

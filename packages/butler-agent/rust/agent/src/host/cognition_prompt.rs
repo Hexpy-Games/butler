@@ -20,7 +20,7 @@ impl NativeCognitionPrompt {
 }
 
 fn error(error: CognitionError) -> ContextError {
-    ContextError::new(error.code, error.message)
+    ContextError::port(error.code, error.message.clone(), error)
 }
 
 impl CognitionPromptPort for NativeCognitionPrompt {

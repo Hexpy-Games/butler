@@ -12,6 +12,7 @@ use super::{
     args::{self, ReadArgs},
     store_error,
 };
+use crate::context::ContextCode;
 
 pub(super) fn read(
     snapshot: &PublicMemorySnapshot,
@@ -63,7 +64,7 @@ pub(super) fn read(
             .is_some_and(|row| row.message.session_id == session.id);
         if !valid {
             return Err(ContextError::new(
-                "invalid_scope",
+                ContextCode::InvalidScope,
                 "Anchor is not part of the session",
             ));
         }
@@ -139,5 +140,5 @@ fn envelope_bytes(value: &Value) -> ContextResult<usize> {
     }
     json::stringify(&json!({"ok":true,"output":output}))
         .map(|text| text.len())
-        .map_err(|error| ContextError::new("json", error.to_string()))
+        .map_err(|error| ContextError::new(ContextCode::Json, error.to_string()).with_source(error))
 }

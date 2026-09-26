@@ -131,7 +131,7 @@ async fn bounded_queue_drops_waiting_caller_and_close_rejects_pending_submission
         .await
         .unwrap()
         .unwrap_err();
-    assert_eq!(error.code, "tool_output_closed");
+    assert_eq!(error.code(), "tool_output_closed");
     release_tx.send(()).unwrap();
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {

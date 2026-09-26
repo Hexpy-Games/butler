@@ -8,6 +8,7 @@ use super::{
     ArtifactStream, ContextError, ContextResult, OwnedDefaultTokenEstimator, ReadToolEvidenceInput,
     ReadToolOutputInput, reader, wire,
 };
+use crate::context::ContextCode;
 use crate::{
     context::tool_artifact_slice::{SliceInput, slice_tool_artifact_text},
     json::JsonDocument,
@@ -34,7 +35,7 @@ pub(super) fn read(
     };
     let path = match reader::reference(&artifact_root, &reference, Some(SCHEMA))? {
         Ok(path) => path,
-        Err(error) => return failure(error),
+        Err(error) => return failure(error.as_str()),
     };
     if !path.exists() {
         return failure("artifact_not_found");
@@ -116,16 +117,18 @@ pub(super) fn read(
     document.push_str("},\"text\":");
     wire::append_slice(&mut document, &slice)?;
     document.push('}');
-    JsonDocument::from_encoded(document)
-        .map_err(|error| ContextError::new("tool_evidence_json_error", error.to_string()))
+    JsonDocument::from_encoded(document).map_err(|error| {
+        ContextError::new(ContextCode::ToolEvidenceJsonError, error.to_string()).with_source(error)
+    })
 }
 
 fn failure(error: &str) -> ContextResult<JsonDocument> {
     let mut document = String::from("{\"ok\":false,\"error\":");
     wire::append_string(&mut document, error)?;
     document.push_str(",\"rawTextStored\":false}");
-    JsonDocument::from_encoded(document)
-        .map_err(|error| ContextError::new("tool_evidence_json_error", error.to_string()))
+    JsonDocument::from_encoded(document).map_err(|error| {
+        ContextError::new(ContextCode::ToolEvidenceJsonError, error.to_string()).with_source(error)
+    })
 }
 fn nonnegative_trunc(value: f64) -> usize {
     crate::json::saturating_usize(value.trunc().max(0.0))

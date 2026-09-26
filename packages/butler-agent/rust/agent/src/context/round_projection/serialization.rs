@@ -285,8 +285,9 @@ pub(super) fn digest(value: &str) -> String {
 }
 
 pub(super) fn stringify(value: &Value) -> Result<String, BtccError> {
-    crate::json::stringify(value)
-        .map_err(|error| BtccError::relayed("context_serialization_failed", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
+    })
 }
 
 fn field<T: Serialize + ?Sized>(
@@ -408,27 +409,20 @@ fn array_index(key: &str) -> Option<u32> {
     (value < u32::MAX && value.to_string() == key).then_some(value)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::relayed("context_serialization_failed", error.to_string())
+    BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
 }
 
 fn usize_value(value: usize) -> Result<Value, BtccError> {
-    u64::try_from(value).map(Value::from).map_err(|_| {
+    u64::try_from(value).map(Value::from).map_err(|source| {
         BtccError::relayed(
             "context_compaction_record_invalid",
             "context compaction covered unit count is out of range",
         )
+        .with_source(source)
     })
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn serialization_error(error: serde_json::Error) -> BtccError {
-    BtccError::relayed("context_serialization_failed", error.to_string())
+    BtccError::relayed("context_serialization_failed", error.to_string()).with_source(error)
 }

@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use crate::{conversation::PublicMemoryScope, json};
 
 use super::{ContextError, ContextResult};
+use crate::context::ContextCode;
 
 pub(super) struct ReadArgs {
     pub(super) scope: PublicMemoryScope,
@@ -14,7 +15,7 @@ pub(super) fn parse(
     input: &Value,
     current_session_id: &str,
     project_id: Option<&str>,
-) -> Result<ReadArgs, &'static str> {
+) -> Result<ReadArgs, ContextCode> {
     let project_id = project_id.map(str::trim).filter(|value| !value.is_empty());
     let kind = input
         .get("scope")
@@ -36,7 +37,7 @@ pub(super) fn parse(
     if !["current_session", "current_project", "all_user_sessions"].contains(&kind)
         || kind == "current_project" && project_id.is_none()
     {
-        return Err("invalid_scope");
+        return Err(ContextCode::InvalidScope);
     }
     let session_ids = strings(
         input.get("session_ids").filter(|value| value.is_array()),
@@ -48,12 +49,12 @@ pub(super) fn parse(
     )?;
     let project_filter = match input.get("project_filter") {
         None | Some(Value::Null) => "any",
-        Some(value) => value.as_str().ok_or("invalid_arguments")?,
+        Some(value) => value.as_str().ok_or(ContextCode::InvalidArguments)?,
     };
     if !["any", "unassigned", "selected"].contains(&project_filter)
         || (project_filter == "selected") == project_ids.is_empty()
     {
-        return Err("invalid_arguments");
+        return Err(ContextCode::InvalidArguments);
     }
     let include_internal = input.get("include_internal") == Some(&Value::Bool(true));
     let scope = PublicMemoryScope {
@@ -68,19 +69,19 @@ pub(super) fn parse(
     let hash_value = json!({"scope":kind,"project_id":if kind == "current_project" { project_id } else { None },
         "session_ids":scope.session_ids,"project_filter":scope.project_filter,"project_ids":scope.project_ids,
         "include_internal":include_internal});
-    let hash_text = json::stringify(&hash_value).map_err(|_| "invalid_arguments")?;
+    let hash_text = json::stringify(&hash_value).map_err(|_| ContextCode::InvalidArguments)?;
     let scope_hash = format!("{:x}", Sha256::digest(hash_text.as_bytes()));
     Ok(ReadArgs { scope, scope_hash })
 }
 
-fn strings(value: Option<&Value>, limit: usize) -> Result<Vec<String>, &'static str> {
+fn strings(value: Option<&Value>, limit: usize) -> Result<Vec<String>, ContextCode> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
     let values = value
         .as_array()
         .filter(|values| values.len() <= limit)
-        .ok_or("invalid_arguments")?;
+        .ok_or(ContextCode::InvalidArguments)?;
     values
         .iter()
         .map(|value| {
@@ -88,7 +89,7 @@ fn strings(value: Option<&Value>, limit: usize) -> Result<Vec<String>, &'static 
                 .as_str()
                 .map(str::trim)
                 .filter(|text| !text.is_empty())
-                .ok_or("invalid_arguments")?;
+                .ok_or(ContextCode::InvalidArguments)?;
             Ok(text.to_owned())
         })
         .collect()
@@ -111,7 +112,12 @@ pub(super) fn integer(
                 && *number >= minimum as f64
                 && *number <= maximum as f64
         })
-        .ok_or_else(|| ContextError::new("invalid_integer", "Integer is outside source range"))?;
+        .ok_or_else(|| {
+            ContextError::new(
+                ContextCode::InvalidInteger,
+                "Integer is outside source range",
+            )
+        })?;
     Ok(crate::json::saturating_usize(number))
 }
 

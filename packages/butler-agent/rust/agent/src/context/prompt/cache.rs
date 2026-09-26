@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use std::io::Write;
 
 use crate::btcc::ContextSection;
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
 pub(super) fn live_configuration_hash(sections: &[ContextSection]) -> ContextResult<String> {
@@ -12,8 +13,11 @@ pub(super) fn live_configuration_hash(sections: &[ContextSection]) -> ContextRes
 
 fn section_hash(sections: &[ContextSection]) -> ContextResult<String> {
     let mut hash = Sha256::new();
-    serde_json::to_writer(HashWriter(&mut hash), &SectionHashPayload { sections })
-        .map_err(|error| ContextError::new("prompt_json_error", error.to_string()))?;
+    serde_json::to_writer(HashWriter(&mut hash), &SectionHashPayload { sections }).map_err(
+        |error| {
+            ContextError::new(ContextCode::PromptJsonError, error.to_string()).with_source(error)
+        },
+    )?;
     Ok(format!("{:x}", hash.finalize())[..16].to_owned())
 }
 

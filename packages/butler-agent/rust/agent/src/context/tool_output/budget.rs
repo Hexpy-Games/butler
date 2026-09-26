@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use super::*;
+use crate::context::ContextCode;
 use crate::json::Utf16Slice;
 use crate::public_text::trim_js_whitespace;
 
@@ -97,8 +98,10 @@ pub(super) fn budget(
     identity.before_artifact_write();
     std::fs::write(
         &path,
-        serde_json::to_string_pretty(&artifact)
-            .map_err(|error| ContextError::new("tool_output_json_error", error.to_string()))?,
+        serde_json::to_string_pretty(&artifact).map_err(|error| {
+            ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                .with_source(error)
+        })?,
     )
     .map_err(io_error)?;
 
@@ -177,12 +180,8 @@ struct StoredResult<'a> {
     timed_out: bool,
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> ContextError {
-    ContextError::new("tool_output_io_error", error.to_string())
+    ContextError::new(ContextCode::ToolOutputIoError, error.to_string()).with_source(error)
 }
 
 pub(super) fn estimate_output(

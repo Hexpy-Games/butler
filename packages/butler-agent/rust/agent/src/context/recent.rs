@@ -1,4 +1,5 @@
 use crate::btcc::{ContextAssembly, ContextSection};
+use crate::context::ContextCode;
 use crate::context::{ContextConversation, ContextResult, PromptMaterialRenderOptions};
 
 pub(crate) struct RecentConversationInput<'a> {
@@ -22,7 +23,11 @@ pub(crate) async fn include_recent_context(
         .get_session_by_gateway_binding(input.transport, input.runtime_session_id)
         .await
         .map_err(|e| {
-            crate::context::ContextError::new("context_conversation_read_error", e.to_string())
+            crate::context::ContextError::new(
+                ContextCode::ContextConversationReadError,
+                e.to_string(),
+            )
+            .with_source(e)
         })?
     else {
         return Ok(assembly);
@@ -37,7 +42,11 @@ pub(crate) async fn include_recent_context(
         )
         .await
         .map_err(|e| {
-            crate::context::ContextError::new("context_conversation_read_error", e.to_string())
+            crate::context::ContextError::new(
+                ContextCode::ContextConversationReadError,
+                e.to_string(),
+            )
+            .with_source(e)
         })?;
     let plan = crate::context::compile_prompt_material_context_plan(
         &material,

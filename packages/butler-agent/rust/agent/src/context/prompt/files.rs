@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 use crate::context::{ContextError, ContextResult, prefix_utf16};
 
 use super::PromptPaths;
+use crate::context::ContextCode;
 
 pub(super) fn resource_path(paths: &PromptPaths, parts: &[&str]) -> PathBuf {
     join(&paths.resource_root, parts)
@@ -16,9 +17,10 @@ pub(super) fn read_text_if_exists(path: &Path) -> ContextResult<Option<String>> 
     }
     let bytes = std::fs::read(path).map_err(|error| {
         ContextError::new(
-            "prompt_file_read_error",
+            ContextCode::PromptFileReadError,
             format!("Failed to read prompt file {}: {error}", path.display()),
         )
+        .with_source(error)
     })?;
     let text = String::from_utf8_lossy(&bytes);
     let text = crate::public_text::trim_js_whitespace(&text);

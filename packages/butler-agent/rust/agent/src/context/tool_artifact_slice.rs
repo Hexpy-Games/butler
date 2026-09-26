@@ -6,6 +6,7 @@ use std::fmt::Write;
 use crate::json::Utf16Slice;
 
 use super::{ContextResult, OwnedDefaultTokenEstimator};
+use crate::context::ContextCode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ExactText {
@@ -28,7 +29,8 @@ impl ExactText {
     pub(crate) fn append_json_literal(&self, output: &mut String) -> ContextResult<()> {
         match self {
             Self::Plain(text) => crate::json::write_string(text, output).map_err(|error| {
-                super::ContextError::new("tool_output_json_error", error.to_string())
+                super::ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                    .with_source(error)
             }),
             Self::Units(units) => {
                 output.push('"');

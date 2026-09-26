@@ -57,7 +57,7 @@ impl AdmissionContextPort for PromptAssembler {
         Box::pin(async move {
             self.build_butler_context_assembly(request, binding)
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -69,7 +69,7 @@ impl AdmissionContextPort for PromptAssembler {
         Box::pin(async move {
             self.build_steward_context_assembly(request, binding)
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -91,11 +91,7 @@ impl AdmissionContextPort for PromptAssembler {
                 assembly,
             )
             .await
-            .map_err(btcc_error)
+            .map_err(BtccError::from)
         })
     }
-}
-
-fn btcc_error(error: crate::context::ContextError) -> BtccError {
-    BtccError::relayed(error.code, error.message)
 }

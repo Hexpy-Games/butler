@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 
+use crate::context::ContextCode;
 use crate::context::{
     CompactionMetricEvent, ContextCompactionMetricSink, ContextError, ContextResult,
     PruneMetricObserver, PruneToolOutputResult,
@@ -196,21 +197,25 @@ impl PruneMetricObserver for MetricFiles {
             "maxAgeMs": result.max_age_ms, "maxBytes": result.max_bytes,
             "protectedCount": protected_count, "rawTextStored": false,
         });
-        let mut line = serde_json::to_vec(&event)
-            .map_err(|error| ContextError::new("tool_output_json_error", error.to_string()))?;
+        let mut line = serde_json::to_vec(&event).map_err(|error| {
+            ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+        })?;
         line.push(b'\n');
         self.append(MetricFile::ToolOutputPrune, &line)
-            .map_err(|error| ContextError::new("tool_output_io_error", error.to_string()))
+            .map_err(|error| ContextError::new(ContextCode::ToolOutputIoError, error.to_string()))
     }
 }
 
 impl ContextCompactionMetricSink for MetricFiles {
     fn append_context_compaction_metric(&self, event: &CompactionMetricEvent) -> ContextResult<()> {
-        let mut line = serde_json::to_vec(event)
-            .map_err(|error| ContextError::new("context_metric_write_error", error.to_string()))?;
+        let mut line = serde_json::to_vec(event).map_err(|error| {
+            ContextError::new(ContextCode::ContextMetricWriteError, error.to_string())
+        })?;
         line.push(b'\n');
         self.append(MetricFile::ContextCompaction, &line)
-            .map_err(|error| ContextError::new("context_metric_write_error", error.to_string()))
+            .map_err(|error| {
+                ContextError::new(ContextCode::ContextMetricWriteError, error.to_string())
+            })
     }
 }
 

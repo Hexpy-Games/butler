@@ -161,7 +161,7 @@ impl BriefingInputSource for NativeBriefingSource {
             .local_day_and_minute(epoch_ms)
             .map(|(_, minute)| minute)
             .map_err(|failure| {
-                BriefingGenerationError::new("new_chat_briefing_time_failed", failure.message)
+                BriefingGenerationError::new("new_chat_briefing_time_failed", failure.message())
             })
     }
     fn snapshot(&self) -> BriefingInputFuture<'_> {

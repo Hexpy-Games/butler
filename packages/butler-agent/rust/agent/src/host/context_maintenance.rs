@@ -119,7 +119,7 @@ impl ContextMaintenance {
                             }
                         }
                     }
-                    Err(error) => eprintln!("[context-maintenance] {}", error.code),
+                    Err(error) => eprintln!("[context-maintenance] {}", error.code()),
                 }
                 tokio::select! {
                     () = cancellation.cancelled() => break,

@@ -12,6 +12,7 @@ use super::runtime::{
     section,
 };
 use super::{PromptAssembler, PromptProjectionInput, SharedAssemblyInput};
+use crate::context::ContextCode;
 
 impl PromptAssembler {
     pub(super) fn runtime_system_context(&self) -> ContextResult<Vec<ContextSection>> {
@@ -336,7 +337,7 @@ fn push(
 fn check_cancelled(request: &TurnRequest) -> ContextResult<()> {
     if request.preparation_cancellation.is_cancelled() {
         Err(ContextError::new(
-            "prompt_assembly_cancelled",
+            ContextCode::PromptAssemblyCancelled,
             "Prompt assembly was cancelled",
         ))
     } else {

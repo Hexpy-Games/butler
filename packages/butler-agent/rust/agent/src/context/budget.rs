@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 use crate::models::{
     ModelCatalog, ModelCatalogSnapshot, ModelConfiguration, TokenEstimate, TokenEstimateInput,
@@ -114,7 +115,8 @@ impl ContextBudgetOwner {
 
     pub(crate) async fn snapshot(&self) -> ContextResult<ContextBudgetSnapshot<'_>> {
         let metadata = self.configuration.read_metadata().await.map_err(|error| {
-            ContextError::new("context_model_metadata_error", error.to_string())
+            ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
+                .with_source(error)
         })?;
         Ok(ContextBudgetSnapshot {
             config: metadata.config,
@@ -130,7 +132,8 @@ impl ContextBudgetOwner {
         &self,
     ) -> ContextResult<OwnedDefaultTokenEstimator> {
         let metadata = self.configuration.read_metadata().await.map_err(|error| {
-            ContextError::new("context_model_metadata_error", error.to_string())
+            ContextError::new(ContextCode::ContextModelMetadataError, error.to_string())
+                .with_source(error)
         })?;
         Ok(OwnedDefaultTokenEstimator {
             catalog: Arc::clone(&self.catalog),
@@ -150,7 +153,10 @@ impl OwnedDefaultTokenEstimator {
     pub(crate) fn estimate(&self, text: &str) -> ContextResult<TokenEstimate> {
         self.catalog
             .estimate_tokens(&self.models, TokenEstimateInput::Text(text), None)
-            .map_err(|error| ContextError::new("context_token_estimate_error", error.to_string()))
+            .map_err(|error| {
+                ContextError::new(ContextCode::ContextTokenEstimateError, error.to_string())
+                    .with_source(error)
+            })
     }
 
     pub(crate) fn provider_id(&self) -> &str {
@@ -173,6 +179,9 @@ impl ContextBudgetSnapshot<'_> {
     ) -> ContextResult<TokenEstimate> {
         self.catalog
             .estimate_tokens(&self.models, input, model_ref)
-            .map_err(|error| ContextError::new("context_token_estimate_error", error.to_string()))
+            .map_err(|error| {
+                ContextError::new(ContextCode::ContextTokenEstimateError, error.to_string())
+                    .with_source(error)
+            })
     }
 }

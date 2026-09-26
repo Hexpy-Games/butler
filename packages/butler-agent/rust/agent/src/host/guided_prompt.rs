@@ -283,7 +283,7 @@ impl PromptPort for NativeGuidedPrompt {
                 .attachment_context
                 .render(&attachment_refs, "User attachments")
                 .await
-                .map_err(|error| BtccError::relayed(error.code, error.message))?;
+                .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
             let image_attachments = attachments::provider_images(turn);
             let work_stream = if state.phase.execution_policy.tracking_mode == "none" {
                 String::new()

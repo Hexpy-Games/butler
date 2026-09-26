@@ -6,6 +6,7 @@ use std::path::Path;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{ContextError, ContextResult};
+use crate::context::ContextCode;
 use crate::{
     conversation::{CanonicalMemoryReadBinding, PublicMemorySnapshot, decode_message_scalars},
     json,
@@ -38,13 +39,13 @@ pub(super) fn run(
             .filter(|value| !value.is_empty()),
     ) {
         Ok(parsed) => parsed,
-        Err(code) => return Ok(failure("invalid_arguments", &[code])),
+        Err(code) => return Ok(failure("invalid_arguments", &[code.as_str()])),
     };
     let result = read(&snapshot, data_root, &parsed);
     match result {
         Ok(result) => Ok(result),
-        Err(error) if error.code == "stale_cursor" => Ok(failure("stale_cursor", &[])),
-        Err(error) if error.code == "invalid_scope" => Ok(failure("invalid_scope", &[])),
+        Err(error) if error.code() == "stale_cursor" => Ok(failure("stale_cursor", &[])),
+        Err(error) if error.code() == "invalid_scope" => Ok(failure("invalid_scope", &[])),
         Err(_) => Ok(failure(
             "backend_unavailable",
             &["conversation_store_unavailable"],
@@ -62,7 +63,7 @@ fn read(
         .map_err(store_error)?
     {
         return Err(ContextError::new(
-            "invalid_scope",
+            ContextCode::InvalidScope,
             "Invalid canonical scope",
         ));
     }
@@ -71,7 +72,7 @@ fn read(
         cursor.revision != revision || cursor.filter_hash != parsed.filter_hash
     }) {
         return Err(ContextError::new(
-            "stale_cursor",
+            ContextCode::StaleCursor,
             "Conversation source changed",
         ));
     }
@@ -251,7 +252,7 @@ fn envelope_bytes(value: &Value) -> ContextResult<usize> {
     }
     json::stringify(&json!({"ok":true,"output":output}))
         .map(|text| text.len())
-        .map_err(|error| ContextError::new("json", error.to_string()))
+        .map_err(|error| ContextError::new(ContextCode::Json, error.to_string()).with_source(error))
 }
 fn add_diagnostic(value: &mut Value, text: &str) {
     let Some(items) = value["diagnostics"].as_array_mut() else {
@@ -274,5 +275,5 @@ fn failure(code: &str, diagnostics: &[&str]) -> Value {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
-    ContextError::new("conversation_store_unavailable", error.to_string())
+    ContextError::new(ContextCode::ConversationStoreUnavailable, error.to_string())
 }

@@ -13,22 +13,29 @@ pub(crate) struct ExtractedPdfText {
     pub(crate) title: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Why a PDF yielded no text.
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum PdfTextError {
+    /// The PDF parsed but has no text layer (likely a scanned document).
+    #[error("{SCANNED_MESSAGE}")]
     Scanned,
-    Extraction,
+    /// The PDF could not be parsed or a page could not be decoded (or the
+    /// extraction task failed).
+    #[error("{EXTRACTION_MESSAGE}")]
+    Extraction(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// The caller owns the upload bytes and blocking admission. PDF content expansion is not
 /// capped here because the source extractor has no decompressed-text/output cap.
 pub(crate) fn extract_pdf_text(bytes: &[u8]) -> Result<ExtractedPdfText, PdfTextError> {
-    let document = Document::load_mem(bytes).map_err(|_| PdfTextError::Extraction)?;
+    let document =
+        Document::load_mem(bytes).map_err(|error| PdfTextError::Extraction(error.into()))?;
     let mut text = String::new();
     let mut has_text = false;
     for page_number in document.get_pages().keys() {
         let page = document
             .extract_text(&[*page_number])
-            .map_err(|_| PdfTextError::Extraction)?;
+            .map_err(|error| PdfTextError::Extraction(error.into()))?;
         let page = trim_js_whitespace(&page);
         has_text |= !page.is_empty();
         if !text.is_empty() || *page_number > 1 {
@@ -51,7 +58,7 @@ pub(crate) fn pdf_sidecar_text(result: Result<ExtractedPdfText, PdfTextError>) -
     match result {
         Ok(extracted) => extracted.text,
         Err(PdfTextError::Scanned) => format!("[{SCANNED_MESSAGE}]"),
-        Err(PdfTextError::Extraction) => EXTRACTION_MESSAGE.to_owned(),
+        Err(PdfTextError::Extraction(_)) => EXTRACTION_MESSAGE.to_owned(),
     }
 }
 

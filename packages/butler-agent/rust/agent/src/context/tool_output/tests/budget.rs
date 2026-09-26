@@ -80,7 +80,7 @@ async fn artifact_directory_write_failure_is_an_error_and_not_a_result() {
         .await
         .unwrap()
         .unwrap_err();
-    assert_eq!(error.code, "tool_output_io_error");
+    assert_eq!(error.code(), "tool_output_io_error");
     fixture.service.close().await;
 }
 

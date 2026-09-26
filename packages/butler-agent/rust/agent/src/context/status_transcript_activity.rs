@@ -1,5 +1,6 @@
 //! Read-only transcript activity fallback for status and usage projections.
 
+use super::status_conversation::TranscriptScanError;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -50,25 +51,25 @@ struct DeliveryFailure {
 
 pub(crate) fn read_status_transcript_activity(
     data_root: &Path,
-) -> Result<StatusTranscriptActivity, String> {
+) -> Result<StatusTranscriptActivity, TranscriptScanError> {
     read_status_transcript_activity_at(data_root, unix_now_ms())
 }
 
 fn read_status_transcript_activity_at(
     data_root: &Path,
     now_ms: i64,
-) -> Result<StatusTranscriptActivity, String> {
+) -> Result<StatusTranscriptActivity, TranscriptScanError> {
     let directory = data_root.join("transcripts");
     let entries = match fs::read_dir(&directory) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(StatusTranscriptActivity::default());
         }
-        Err(_) => return Err("transcript_directory_unavailable".into()),
+        Err(error) => return Err(TranscriptScanError::Directory(error)),
     };
     let mut paths = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|_| "transcript_directory_unavailable".to_owned())?;
+        let entry = entry.map_err(TranscriptScanError::Directory)?;
         if entry.file_name().to_string_lossy().ends_with(".jsonl") {
             paths.push(entry.path());
         }
@@ -80,7 +81,7 @@ fn read_status_transcript_activity_at(
             Ok(metadata) if metadata.is_file() => {}
             Ok(_) => continue,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(_) => return Err("transcript_metadata_unavailable".into()),
+            Err(error) => return Err(TranscriptScanError::Metadata(error)),
         }
         scan_transcript(&path, &mut activity)?;
     }
@@ -88,15 +89,16 @@ fn read_status_transcript_activity_at(
     Ok(activity.summary)
 }
 
-fn scan_transcript(path: &Path, activity: &mut ActivityAccumulator) -> Result<(), String> {
-    let file = File::open(path).map_err(|_| "transcript_read_unavailable".to_owned())?;
+fn scan_transcript(
+    path: &Path,
+    activity: &mut ActivityAccumulator,
+) -> Result<(), TranscriptScanError> {
+    let file = File::open(path).map_err(TranscriptScanError::read)?;
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
     let mut oversized = false;
     loop {
-        let available = reader
-            .fill_buf()
-            .map_err(|_| "transcript_read_unavailable".to_owned())?;
+        let available = reader.fill_buf().map_err(TranscriptScanError::read)?;
         if available.is_empty() {
             break;
         }

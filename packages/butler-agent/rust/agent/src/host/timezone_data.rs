@@ -3,10 +3,11 @@
 
 use std::cmp::Ordering;
 
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
 fn failure(message: impl Into<String>) -> ContextError {
-    ContextError::new("prompt_time_format_error", message)
+    ContextError::new(ContextCode::PromptTimeFormatError, message)
 }
 
 const DATA: &[u8] = include_bytes!("../../resources/timezones/source-2026c.btz");

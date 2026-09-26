@@ -6,6 +6,7 @@ mod compaction;
 mod conversation;
 mod conversation_session_reference;
 mod conversation_tools;
+mod error;
 mod image;
 mod memory_source;
 mod pdf;
@@ -29,6 +30,7 @@ pub(crate) use compaction::{
 pub(crate) use conversation::*;
 pub(crate) use conversation_session_reference::NativeConversationSessionReference;
 pub(crate) use conversation_tools::NativeConversationTools;
+pub(crate) use error::{ContextCode, ContextError};
 pub(crate) use image::{
     ImageCapabilityEvidence, ImageCarrierTuple, ImageSanitizerInput, ImageSanitizerLimits,
     ImageSourceRecord, VisualAttachmentManifest, VisualImageAdmissionResult,
@@ -57,31 +59,6 @@ pub(crate) use tool_output::{
     PruneMetricObserver, PruneToolOutputInput, PruneToolOutputResult, ReadToolEvidenceInput,
     ReadToolOutputInput, ShellCommandResult, ToolOutputIdentity,
 };
-
-use std::fmt;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ContextError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl ContextError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for ContextError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for ContextError {}
 
 pub(crate) type ContextResult<T> = Result<T, ContextError>;
 

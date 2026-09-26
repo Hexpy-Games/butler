@@ -9,6 +9,7 @@ use crate::conversation::{
 
 use super::parts::{to_context_message, to_context_summary};
 use super::types::*;
+use crate::context::ContextCode;
 
 const DEFAULT_LIMIT: f64 = 10.0;
 const MAX_LIMIT: f64 = 80.0;
@@ -341,6 +342,7 @@ fn trim_option(value: Option<String>) -> Option<String> {
         .map(|v| crate::public_text::trim_js_whitespace(&v).to_owned())
         .filter(|v| !v.is_empty())
 }
-fn store_error(error: impl std::fmt::Display) -> ContextError {
-    ContextError::new("context_conversation_read_error", error.to_string())
+fn store_error(error: impl std::error::Error + Send + Sync + 'static) -> ContextError {
+    ContextError::new(ContextCode::ContextConversationReadError, error.to_string())
+        .with_source(error)
 }

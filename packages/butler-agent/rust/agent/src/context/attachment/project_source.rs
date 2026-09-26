@@ -7,6 +7,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use super::{ContextError, ContextResult};
+use crate::context::ContextCode;
 
 const MAX_SOURCE_BYTES: u64 = 10 * 1024 * 1024;
 
@@ -20,8 +21,10 @@ pub(super) fn read(
         return Err(unavailable());
     }
     let path = data_root.join("app-server/message-files").join(file_id);
-    let mut file = open_snapshot(&path).map_err(|_| unavailable())?;
-    let metadata = file.metadata().map_err(|_| unavailable())?;
+    let mut file = open_snapshot(&path).map_err(|source| unavailable().with_source(source))?;
+    let metadata = file
+        .metadata()
+        .map_err(|source| unavailable().with_source(source))?;
     if !metadata.is_file() || metadata.len() != size_bytes {
         return Err(unavailable());
     }
@@ -29,10 +32,10 @@ pub(super) fn read(
     file.by_ref()
         .take(MAX_SOURCE_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| unavailable())?;
+        .map_err(|source| unavailable().with_source(source))?;
     if bytes.len() as u64 != size_bytes || format!("{:x}", Sha256::digest(&bytes)) != sha256 {
         return Err(ContextError::new(
-            "source_snapshot_changed",
+            ContextCode::SourceSnapshotChanged,
             "The admitted project source snapshot changed.",
         ));
     }
@@ -67,7 +70,10 @@ fn open_snapshot(path: &Path) -> std::io::Result<File> {
 }
 
 fn unavailable() -> ContextError {
-    ContextError::new("source_unavailable", "Project source snapshot unavailable")
+    ContextError::new(
+        ContextCode::SourceUnavailable,
+        "Project source snapshot unavailable",
+    )
 }
 
 #[cfg(test)]
@@ -87,7 +93,7 @@ mod tests {
         assert_eq!(read(&root, id, 8, &digest).unwrap(), b"accepted");
         std::fs::write(&path, "replaced").unwrap();
         assert_eq!(
-            read(&root, id, 8, &digest).unwrap_err().code,
+            read(&root, id, 8, &digest).unwrap_err().code(),
             "source_snapshot_changed"
         );
         #[cfg(unix)]
@@ -96,7 +102,7 @@ mod tests {
             std::fs::write(root.join("outside"), "accepted").unwrap();
             std::os::unix::fs::symlink(root.join("outside"), &path).unwrap();
             assert_eq!(
-                read(&root, id, 8, &digest).unwrap_err().code,
+                read(&root, id, 8, &digest).unwrap_err().code(),
                 "source_unavailable"
             );
         }

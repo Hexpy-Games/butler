@@ -32,7 +32,7 @@ pub(super) fn admit(
             position,
             limits: ImageSanitizerLimits::default(),
         })
-        .map_err(|error| image_error(error.code))?;
+        .map_err(|error| image_error(error.code()))?;
         verify_visual_manifest_source(
             &sanitized.manifest,
             &source,
@@ -42,7 +42,7 @@ pub(super) fn admit(
                 storage_revision: &revision,
             },
         )
-        .map_err(|error| image_error(error.code))?;
+        .map_err(|error| image_error(error.code()))?;
         stages.push(Stage::write(root, sanitized.manifest, &sanitized.bytes)?);
     }
     let manifests: Vec<_> = stages.iter().map(|stage| stage.manifest.clone()).collect();
@@ -139,7 +139,7 @@ pub(super) fn validate(
                 storage_revision: &revision,
             },
         )
-        .map_err(|error| image_error(error.code))?;
+        .map_err(|error| image_error(error.code()))?;
         files::verified_derivative(root, manifest)?;
     }
     serde_json::to_value(checked).map_err(|_| GatewayApplicationError::Internal)

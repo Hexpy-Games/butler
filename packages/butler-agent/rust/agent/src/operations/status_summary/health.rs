@@ -180,8 +180,8 @@ pub(super) fn read_transcript_activity(data_root: &Path) -> TranscriptActivityPr
             });
             TranscriptActivityProjection { status, facts }
         }
-        Err(reason) => {
-            let status = json!({ "status": "unavailable", "reason": reason });
+        Err(error) => {
+            let status = json!({ "status": "unavailable", "reason": error.reason() });
             let facts = json!({ "available": false, "status": status, "tools": null, "deliveryFailed": null, "lastDeliveryError": null });
             TranscriptActivityProjection { status, facts }
         }

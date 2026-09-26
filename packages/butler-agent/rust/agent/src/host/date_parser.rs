@@ -3,6 +3,7 @@
 //! the process timezone explicitly; there is no silent UTC fallback.
 
 use super::timezone_data::TimeZoneData;
+use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
 
 pub(crate) struct NativeDateParser {
@@ -14,9 +15,9 @@ impl NativeDateParser {
     /// zone rules as named-zone callers; otherwise use the OS localtime file.
     pub(crate) fn from_process() -> ContextResult<Self> {
         if let Some(value) = std::env::var_os("TZ") {
-            let value = value
-                .to_str()
-                .ok_or_else(|| ContextError::new("date_timezone_unavailable", "TZ is not UTF-8"))?;
+            let value = value.to_str().ok_or_else(|| {
+                ContextError::new(ContextCode::DateTimezoneUnavailable, "TZ is not UTF-8")
+            })?;
             if value.is_empty() {
                 return Self::from_zone(tz::TimeZone::utc());
             }
@@ -30,10 +31,12 @@ impl NativeDateParser {
     }
 
     fn from_zone_file(path: &std::path::Path) -> ContextResult<Self> {
-        let bytes = std::fs::read(path)
-            .map_err(|error| ContextError::new("date_timezone_unavailable", error.to_string()))?;
-        let zone = tz::TimeZone::from_tz_data(&bytes)
-            .map_err(|error| ContextError::new("date_timezone_unavailable", error.to_string()))?;
+        let bytes = std::fs::read(path).map_err(|error| {
+            ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+        })?;
+        let zone = tz::TimeZone::from_tz_data(&bytes).map_err(|error| {
+            ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+        })?;
         Self::from_zone(zone)
     }
 
@@ -56,7 +59,9 @@ impl NativeDateParser {
                 view.leap_seconds().to_vec(),
                 Some(tz::timezone::TransitionRule::Fixed(fixed)),
             )
-            .map_err(|error| ContextError::new("date_timezone_unavailable", error.to_string()))?;
+            .map_err(|error| {
+                ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+            })?;
         }
         Ok(Self { zone })
     }
@@ -70,7 +75,9 @@ impl NativeDateParser {
         let offset = self
             .zone
             .find_local_time_type(seconds)
-            .map_err(|error| ContextError::new("date_timezone_unavailable", error.to_string()))?
+            .map_err(|error| {
+                ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+            })?
             .ut_offset();
         let wall = epoch_ms + i64::from(offset) * 1_000;
         let (year, month, day) = crate::js_date::civil_from_days(wall.div_euclid(86_400_000));

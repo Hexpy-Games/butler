@@ -21,6 +21,7 @@ use crate::conversation::{
 };
 
 use super::{ContextError, ContextResult, MemorySourceReferencePort, ResolvedMemorySource};
+use crate::context::ContextCode;
 
 pub(crate) struct NativeConversationSessionReference {
     path: PathBuf,
@@ -50,9 +51,17 @@ impl NativeConversationSessionReference {
         binding: CanonicalMemoryReadBinding,
         args: Value,
     ) -> ContextResult<Value> {
-        let permit =
-            self.permits.clone().acquire_owned().await.map_err(|_| {
-                ContextError::new("closed", "Conversation reference reader is closing")
+        let permit = self
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|source| {
+                ContextError::new(
+                    ContextCode::Closed,
+                    "Conversation reference reader is closing",
+                )
+                .with_source(source)
             })?;
         let path = self.path.clone();
         let memory_sources = self.memory_sources.clone();
@@ -61,7 +70,7 @@ impl NativeConversationSessionReference {
             let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
-                    "closed",
+                    ContextCode::Closed,
                     "Conversation reference reader is closing",
                 ));
             }
@@ -71,15 +80,21 @@ impl NativeConversationSessionReference {
                     read_now(&path, memory_sources.as_ref(), &binding, &args)
                 })
                 .await
-                .unwrap_or_else(|e| Err(ContextError::new("reference_join_failed", e.to_string())));
+                .unwrap_or_else(|e| {
+                    Err(ContextError::new(
+                        ContextCode::ReferenceJoinFailed,
+                        e.to_string(),
+                    ))
+                });
                 let _ = sender.send(result);
             });
         }
-        receiver.await.map_err(|_| {
+        receiver.await.map_err(|source| {
             ContextError::new(
-                "reference_completion_lost",
+                ContextCode::ReferenceCompletionLost,
                 "Conversation reference read lost",
             )
+            .with_source(source)
         })?
     }
 
@@ -157,8 +172,8 @@ fn read_now(
         Ok(parsed) => parsed,
         Err(error) => {
             return Ok(args::failure(
-                error,
-                if error == "invalid_arguments" {
+                error.as_str(),
+                if error == ContextCode::InvalidArguments {
                     &["invalid_arguments"]
                 } else {
                     &[]
@@ -218,21 +233,25 @@ fn read_now(
         };
         return match output {
             Ok(value) => Ok(value),
-            Err(error) if matches!(error.code, "memory_source_not_found" | "source_not_found") => {
+            Err(error)
+                if matches!(error.code(), "memory_source_not_found" | "source_not_found") =>
+            {
                 Ok(args::failure("source_not_found", &[]))
             }
-            Err(error) if matches!(error.code, "memory_source_changed" | "source_changed") => {
+            Err(error) if matches!(error.code(), "memory_source_changed" | "source_changed") => {
                 Ok(args::failure("source_changed", &[]))
             }
-            Err(error) if error.code == "stale_cursor" => Ok(args::failure("stale_cursor", &[])),
-            Err(error) if error.code == "invalid_scope" => Ok(args::failure("invalid_scope", &[])),
+            Err(error) if error.code() == "stale_cursor" => Ok(args::failure("stale_cursor", &[])),
+            Err(error) if error.code() == "invalid_scope" => {
+                Ok(args::failure("invalid_scope", &[]))
+            }
             Err(error)
                 if matches!(
-                    error.code,
+                    error.code(),
                     "invalid_integer" | "invalid_cursor" | "invalid_arguments"
                 ) =>
             {
-                Ok(args::failure("invalid_arguments", &[error.code]))
+                Ok(args::failure("invalid_arguments", &[error.code()]))
             }
             Err(_) => Ok(args::failure(
                 "backend_unavailable",
@@ -257,14 +276,15 @@ fn read_now(
                 "stale_cursor",
                 "invalid_scope",
             ]
-            .contains(&error.code) =>
+            .contains(&error.code()) =>
         {
-            Ok(args::failure(error.code, &[]))
+            Ok(args::failure(error.code(), &[]))
         }
         Err(error)
-            if ["invalid_arguments", "invalid_integer", "invalid_cursor"].contains(&error.code) =>
+            if ["invalid_arguments", "invalid_integer", "invalid_cursor"]
+                .contains(&error.code()) =>
         {
-            Ok(args::failure("invalid_arguments", &[error.code]))
+            Ok(args::failure("invalid_arguments", &[error.code()]))
         }
         Err(_) => Ok(args::failure(
             "backend_unavailable",
@@ -278,5 +298,5 @@ fn read_now(
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
-    ContextError::new("conversation_store_unavailable", error.to_string())
+    ContextError::new(ContextCode::ConversationStoreUnavailable, error.to_string())
 }

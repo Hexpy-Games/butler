@@ -4,6 +4,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::*;
+use crate::context::ContextCode;
 
 pub(super) fn prune(
     butler_data: &Path,
@@ -110,10 +111,6 @@ fn lexical_absolute(path: &Path) -> ContextResult<std::path::PathBuf> {
     Ok(clean)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> ContextError {
-    ContextError::new("tool_output_io_error", error.to_string())
+    ContextError::new(ContextCode::ToolOutputIoError, error.to_string()).with_source(error)
 }
