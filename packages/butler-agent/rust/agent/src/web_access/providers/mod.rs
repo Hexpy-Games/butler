@@ -24,6 +24,7 @@ use self::{
     openai::OpenAIWebSearchProvider,
     tavily::TavilyWebSearchProvider,
 };
+use crate::web_access::WebAccessCode;
 
 #[expect(
     clippy::match_same_arms,
@@ -223,7 +224,7 @@ fn process_env(name: &str) -> Option<String> {
 async fn resolve_auth(access: &WebAccess) -> Result<ProviderAuth, WebAccessError> {
     let configuration = access.configuration().ok_or_else(|| {
         WebAccessError::new(
-            "web_search_provider_auth_missing",
+            WebAccessCode::WebSearchProviderAuthMissing,
             "Web search provider authentication is unavailable.",
         )
     })?;
@@ -231,11 +232,12 @@ async fn resolve_auth(access: &WebAccess) -> Result<ProviderAuth, WebAccessError
     configuration
         .resolve_openai_auth_for_web_search(&private_environment)
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             WebAccessError::new(
-                "web_search_provider_auth_missing",
+                WebAccessCode::WebSearchProviderAuthMissing,
                 "Web search provider authentication is unavailable.",
             )
+            .with_source(source)
         })
 }
 
@@ -299,8 +301,8 @@ impl SearchProvider for FallbackSearchProvider {
             match self.primary.search(access, input, cancellation).await {
                 Ok(output) => Ok(output),
                 Err(error)
-                    if error.code == "invalid_arguments"
-                        || error.code == "web_search_input_validation"
+                    if error.code() == "invalid_arguments"
+                        || error.code() == "web_search_input_validation"
                         || cancellation.is_cancelled() =>
                 {
                     Err(if cancellation.is_cancelled() {
@@ -362,7 +364,7 @@ impl SearchProvider for DisabledSearchProvider {
     ) -> futures_util::future::BoxFuture<'a, Result<SearchOutput, WebAccessError>> {
         async {
             Err(WebAccessError::new(
-                "web_search_provider_disabled",
+                WebAccessCode::WebSearchProviderDisabled,
                 "Web search is disabled by configuration.",
             ))
         }

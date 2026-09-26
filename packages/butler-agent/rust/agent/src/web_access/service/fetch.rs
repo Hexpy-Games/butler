@@ -3,6 +3,7 @@ use tokio::{fs::File as TokioFile, io::AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use super::{WebAccess, WebAccessError};
+use crate::web_access::WebAccessCode;
 use crate::web_access::spool::{FetchedBody, TemporarySpool};
 
 /// Where a logical page URL is fetched from, and which URL the page reports
@@ -55,7 +56,7 @@ impl WebAccess {
             .settled_url(logical_url, &fetched.final_url)
             .ok_or_else(|| {
                 WebAccessError::new(
-                    "web_access_response_failed",
+                    WebAccessCode::WebAccessResponseFailed,
                     "Public response URL was invalid.",
                 )
             })?;
@@ -73,9 +74,7 @@ impl WebAccess {
         let response = tokio::select! {
             biased;
             () = cancellation.cancelled() => return Err(WebAccessError::cancelled()),
-            result = request.send() => result.map_err(|_| {
-                WebAccessError::new("web_access_request_failed", "Public web request failed.")
-            })?,
+            result = request.send() => result.map_err(|source| WebAccessError::new(WebAccessCode::WebAccessRequestFailed, "Public web request failed.").with_source(source))?,
         };
         let status = response.status().as_u16();
         let ok = response.status().is_success();
@@ -85,11 +84,12 @@ impl WebAccess {
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
-        let (spool, file) = TemporarySpool::create(&self.inner.data_root).map_err(|_| {
+        let (spool, file) = TemporarySpool::create(&self.inner.data_root).map_err(|source| {
             WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Public page could not be spooled in DATA.",
             )
+            .with_source(source)
         })?;
         let mut file = TokioFile::from_std(file);
         let mut stream = response.bytes_stream();
@@ -100,21 +100,27 @@ impl WebAccess {
                 chunk = futures_util::StreamExt::next(&mut stream) => chunk,
             };
             let Some(chunk) = next else { break };
-            let chunk = chunk.map_err(|_| {
-                WebAccessError::new("web_access_response_failed", "Public response body failed.")
-            })?;
-            file.write_all(&chunk).await.map_err(|_| {
+            let chunk = chunk.map_err(|source| {
                 WebAccessError::new(
-                    "web_access_spool_failed",
+                    WebAccessCode::WebAccessResponseFailed,
+                    "Public response body failed.",
+                )
+                .with_source(source)
+            })?;
+            file.write_all(&chunk).await.map_err(|source| {
+                WebAccessError::new(
+                    WebAccessCode::WebAccessSpoolFailed,
                     "Public page could not be spooled in DATA.",
                 )
+                .with_source(source)
             })?;
         }
-        file.flush().await.map_err(|_| {
+        file.flush().await.map_err(|source| {
             WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Public page could not be spooled in DATA.",
             )
+            .with_source(source)
         })?;
         drop(file);
         Ok(FetchedBody {

@@ -1,5 +1,6 @@
 use tokio_util::sync::CancellationToken;
 
+use crate::web_access::WebAccessCode;
 use crate::web_access::service::{WebAccess, WebAccessError};
 
 pub(super) async fn response_bytes(
@@ -11,17 +12,19 @@ pub(super) async fn response_bytes(
     let status = fetched.status;
     let bytes = tokio::task::spawn_blocking(move || fetched.read_all())
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Search response could not be read.",
             )
+            .with_source(source)
         })?
-        .map_err(|_| {
+        .map_err(|source| {
             WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Search response could not be read.",
             )
+            .with_source(source)
         })?;
     Ok((status, bytes))
 }

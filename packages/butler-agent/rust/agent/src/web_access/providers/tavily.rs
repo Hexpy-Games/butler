@@ -9,6 +9,7 @@ use crate::web_access::service::{WebAccess, WebAccessError};
 
 use super::contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult};
 use super::http::response_bytes;
+use crate::web_access::WebAccessCode;
 
 pub(super) struct TavilyWebSearchProvider {
     api_key: String,
@@ -39,7 +40,7 @@ impl SearchProvider for TavilyWebSearchProvider {
                     .as_deref()
                     .unwrap_or("https://api.tavily.com/search"),
             )
-            .map_err(|_| invalid_endpoint())?;
+            .map_err(|source| invalid_endpoint().with_source(source))?;
             let mut body = json!({
                 "query":input.query,
                 "search_depth":"basic",
@@ -58,15 +59,16 @@ impl SearchProvider for TavilyWebSearchProvider {
             let (status, bytes) = response_bytes(access, request, cancellation).await?;
             if !(200..300).contains(&status) {
                 return Err(WebAccessError::new(
-                    "web_search_provider_failed",
+                    WebAccessCode::WebSearchProviderFailed,
                     format!("Tavily web search failed with HTTP {status}."),
                 ));
             }
-            let payload: Value = serde_json::from_slice(&bytes).map_err(|_| {
+            let payload: Value = serde_json::from_slice(&bytes).map_err(|source| {
                 WebAccessError::new(
-                    "web_search_response_invalid",
+                    WebAccessCode::WebSearchResponseInvalid,
                     "Tavily returned an invalid response.",
                 )
+                .with_source(source)
             })?;
             let results = payload
                 .get("results")
@@ -123,7 +125,7 @@ fn text(value: Option<&Value>) -> Option<String> {
 
 fn invalid_endpoint() -> WebAccessError {
     WebAccessError::new(
-        "web_access_configuration_invalid",
+        WebAccessCode::WebAccessConfigurationInvalid,
         "Search endpoint is invalid.",
     )
 }

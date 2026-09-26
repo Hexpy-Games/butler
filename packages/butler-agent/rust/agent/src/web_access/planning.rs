@@ -4,6 +4,7 @@ mod prompt;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+use crate::web_access::WebAccessCode;
 use crate::{
     models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest},
     web_access::{
@@ -127,9 +128,9 @@ pub(super) async fn create_plan(
                         fallback_reason: None,
                     });
                 }
-                Err(error) => last_error = Some(error),
+                Err(error) => last_error = Some(error.to_string()),
             },
-            Err(error) if error.code == "cancelled" || cancellation.is_cancelled() => {
+            Err(error) if error.code() == "cancelled" || cancellation.is_cancelled() => {
                 return Err(WebAccessError::cancelled());
             }
             Err(_) => last_error = Some("planner request failed".into()),
@@ -241,7 +242,7 @@ async fn run_planner(
                 return WebAccessError::cancelled();
             }
             WebAccessError::new(
-                "web_search_planner_failed",
+                WebAccessCode::WebSearchPlannerFailed,
                 "Smart search planning request failed.",
             )
         })?;

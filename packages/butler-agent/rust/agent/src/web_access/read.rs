@@ -3,6 +3,7 @@ use super::{
     page::PageRead,
     service::{WebAccessError, WebSession},
 };
+use crate::web_access::WebAccessCode;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -97,8 +98,12 @@ impl WebSession {
             .and_then(Value::as_str)
             .map(crate::public_text::trim_js_whitespace)
             .unwrap_or_default();
-        let parsed = Url::parse(requested_url).map_err(|_| {
-            WebAccessError::new("invalid_arguments", "web_read requires a valid URL.")
+        let parsed = Url::parse(requested_url).map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::InvalidArguments,
+                "web_read requires a valid URL.",
+            )
+            .with_source(source)
         })?;
         if !matches!(parsed.scheme(), "http" | "https")
             || parsed.host_str().is_none()
@@ -106,7 +111,7 @@ impl WebSession {
             || parsed.password().is_some()
         {
             return Err(WebAccessError::new(
-                "invalid_arguments",
+                WebAccessCode::InvalidArguments,
                 "web_read only supports public http(s) URLs without embedded credentials.",
             ));
         }

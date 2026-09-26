@@ -16,6 +16,7 @@ use super::{
 };
 
 pub(super) use super::providers::contracts::SearchResult;
+use crate::web_access::WebAccessCode;
 pub(super) use parse::{is_duckduckgo_challenge, parse_results};
 
 impl WebSession {
@@ -31,7 +32,7 @@ impl WebSession {
             .unwrap_or_default();
         if query.encode_utf16().count() < 2 {
             return Err(WebAccessError::new(
-                "invalid_arguments",
+                WebAccessCode::InvalidArguments,
                 "web_search requires a query with at least 2 characters.",
             ));
         }
@@ -39,7 +40,7 @@ impl WebSession {
         let blocked = string_array(args.get("blocked_domains"));
         if !allowed.is_empty() && !blocked.is_empty() {
             return Err(WebAccessError::new(
-                "invalid_arguments",
+                WebAccessCode::InvalidArguments,
                 "web_search cannot use allowed_domains and blocked_domains together.",
             ));
         }
@@ -71,7 +72,7 @@ impl WebSession {
                 Err(error) => {
                     self.access
                         .metrics()
-                        .record(provider.id(), query, Some(error.code));
+                        .record(provider.id(), query, Some(error.code()));
                     return Err(error);
                 }
             }
@@ -103,7 +104,7 @@ impl WebSession {
             Err(error) => {
                 self.access
                     .metrics()
-                    .record(provider.id(), query, Some(error.code));
+                    .record(provider.id(), query, Some(error.code()));
                 return Err(error);
             }
         };
@@ -240,7 +241,7 @@ async fn execute_planned(
                     let index = batch_index * batch_size + offset;
                     failures.push(json!({
                         "query":planned_inputs[index].query,
-                        "error":bounded_error(&error.message, 500),
+                        "error":bounded_error(&error.message(), 500),
                     }));
                 }
             }
@@ -248,7 +249,7 @@ async fn execute_planned(
     }
     if outputs.is_empty() {
         return Err(WebAccessError::new(
-            "web_search_planned_all_failed",
+            WebAccessCode::WebSearchPlannedAllFailed,
             format!(
                 "All {} planned web searches failed via {}.",
                 planned_inputs.len(),

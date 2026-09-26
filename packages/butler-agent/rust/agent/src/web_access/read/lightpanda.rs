@@ -14,6 +14,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use crate::web_access::WebAccessCode;
 use crate::web_access::{
     page::{PageRead, extract_page},
     service::{WebAccess, WebAccessError},
@@ -46,7 +47,7 @@ pub(super) async fn render(
         .max(500);
     let fetched = match Box::pin(run_dump(access, &binary, url, wait_ms, cancellation)).await {
         Ok(fetched) => fetched,
-        Err(error) if error.code == "cancelled" => return Err(error),
+        Err(error) if error.code() == "cancelled" => return Err(error),
         Err(_) => {
             return Ok(Some(render_failed(
                 requested_url,
@@ -60,11 +61,12 @@ pub(super) async fn render(
     let requested = requested_url.to_owned();
     let final_url = url.to_string();
     let mut page = tokio::task::spawn_blocking(move || {
-        let bytes = fetched.read_all().map_err(|_| {
+        let bytes = fetched.read_all().map_err(|source| {
             WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Rendered page could not be read.",
             )
+            .with_source(source)
         })?;
         extract_page(
             &requested,
@@ -77,11 +79,12 @@ pub(super) async fn render(
         )
     })
     .await
-    .map_err(|_| {
+    .map_err(|source| {
         WebAccessError::new(
-            "web_read_parse_failed",
+            WebAccessCode::WebReadParseFailed,
             "Rendered page could not be parsed.",
         )
+        .with_source(source)
     })??;
     page.reader = "lightpanda".into();
     if !page
@@ -154,23 +157,24 @@ async fn run_dump(
         .stderr(Stdio::null())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|_| {
+        .map_err(|source| {
             WebAccessError::new(
-                "web_access_reader_unavailable",
+                WebAccessCode::WebAccessReaderUnavailable,
                 "Lightpanda is unavailable.",
             )
+            .with_source(source)
         })?;
     let Some(mut stdout) = child.stdout.take() else {
         stop_child(&mut child).await;
         return Err(WebAccessError::new(
-            "web_access_reader_unavailable",
+            WebAccessCode::WebAccessReaderUnavailable,
             "Lightpanda output is unavailable.",
         ));
     };
     let Ok((spool, file)) = TemporarySpool::create(access.data_root()) else {
         stop_child(&mut child).await;
         return Err(WebAccessError::new(
-            "web_access_spool_failed",
+            WebAccessCode::WebAccessSpoolFailed,
             "Rendered page could not be spooled in DATA.",
         ));
     };
@@ -181,10 +185,10 @@ async fn run_dump(
         let read = tokio::select! {
             biased;
             () = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
-            () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
+            () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new(WebAccessCode::WebAccessReaderTimeout, "Lightpanda timed out.")); }
             result = stdout.read(&mut buffer) => match result {
                 Ok(read) => read,
-                Err(_) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_failed", "Lightpanda output failed.")); }
+                Err(_) => { stop_child(&mut child).await; return Err(WebAccessError::new(WebAccessCode::WebAccessReaderFailed, "Lightpanda output failed.")); }
             },
         };
         if read == 0 {
@@ -193,7 +197,7 @@ async fn run_dump(
         if file.write_all(&buffer[..read]).await.is_err() {
             stop_child(&mut child).await;
             return Err(WebAccessError::new(
-                "web_access_spool_failed",
+                WebAccessCode::WebAccessSpoolFailed,
                 "Rendered page could not be spooled in DATA.",
             ));
         }
@@ -202,19 +206,19 @@ async fn run_dump(
     let status = tokio::select! {
         biased;
         () = cancellation.cancelled() => { stop_child(&mut child).await; return Err(WebAccessError::cancelled()); }
-        () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new("web_access_reader_timeout", "Lightpanda timed out.")); }
-        status = child.wait() => status.map_err(|_| WebAccessError::new("web_access_reader_failed", "Lightpanda process failed."))?,
+        () = tokio::time::sleep_until(deadline) => { stop_child(&mut child).await; return Err(WebAccessError::new(WebAccessCode::WebAccessReaderTimeout, "Lightpanda timed out.")); }
+        status = child.wait() => status.map_err(|source| WebAccessError::new(WebAccessCode::WebAccessReaderFailed, "Lightpanda process failed.").with_source(source))?,
     };
     if file.flush().await.is_err() {
         return Err(WebAccessError::new(
-            "web_access_spool_failed",
+            WebAccessCode::WebAccessSpoolFailed,
             "Rendered page could not be spooled in DATA.",
         ));
     }
     drop(file);
     if !status.success() {
         return Err(WebAccessError::new(
-            "web_access_reader_failed",
+            WebAccessCode::WebAccessReaderFailed,
             "Lightpanda process failed.",
         ));
     }

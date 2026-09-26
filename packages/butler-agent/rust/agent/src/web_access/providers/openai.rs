@@ -12,6 +12,7 @@ use super::{
     http::response_bytes,
     responses::{overview_from_response, results_from_response},
 };
+use crate::web_access::WebAccessCode;
 
 pub(super) struct OpenAIWebSearchProvider {
     api_key: String,
@@ -62,12 +63,10 @@ impl SearchProvider for OpenAIWebSearchProvider {
             if !(200..300).contains(&status) {
                 return Err(http_error(status));
             }
-            let payload: Value = serde_json::from_slice(&bytes).map_err(|_| {
-                WebAccessError::new(
-                    "web_search_response_invalid",
+            let payload: Value = serde_json::from_slice(&bytes).map_err(|source| WebAccessError::new(
+                    WebAccessCode::WebSearchResponseInvalid,
                     "OpenAI web search returned an invalid response.",
-                )
-            })?;
+                ).with_source(source))?;
             let results = filter_results(results_from_response(&payload), input);
             let provider_overview = input
                 .blocked_domains
@@ -90,17 +89,18 @@ impl SearchProvider for OpenAIWebSearchProvider {
 
 pub(super) fn join_endpoint(base: &str, suffix: &str) -> Result<Url, WebAccessError> {
     let base = base.trim_end_matches('/');
-    Url::parse(&format!("{base}{suffix}")).map_err(|_| {
+    Url::parse(&format!("{base}{suffix}")).map_err(|source| {
         WebAccessError::new(
-            "web_access_configuration_invalid",
+            WebAccessCode::WebAccessConfigurationInvalid,
             "Search endpoint is invalid.",
         )
+        .with_source(source)
     })
 }
 
 fn http_error(status: u16) -> WebAccessError {
     WebAccessError::new(
-        "web_search_provider_failed",
+        WebAccessCode::WebSearchProviderFailed,
         format!("OpenAI web search failed with HTTP {status}."),
     )
 }

@@ -4,7 +4,24 @@ use serde_json::Value;
 
 use super::{SearchBucket, SearchPlan, SearchQuery};
 
-pub(super) fn parse_and_normalize(text: &str, default_depth: &str) -> Result<SearchPlan, String> {
+/// Why a planner response was not used; `Display` is the recorded fallback reason.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum PlanRejection {
+    /// The response is not JSON.
+    #[error("planner returned invalid JSON")]
+    InvalidJson(#[source] serde_json::Error),
+    /// The response JSON is not an object.
+    #[error("plan is not an object")]
+    NotAnObject,
+    /// The plan contains no usable queries.
+    #[error("plan has no queries")]
+    NoQueries,
+}
+
+pub(super) fn parse_and_normalize(
+    text: &str,
+    default_depth: &str,
+) -> Result<SearchPlan, PlanRejection> {
     let body = text.trim();
     let body = if body.starts_with("```") && body.ends_with("```") {
         body.lines()
@@ -17,15 +34,12 @@ pub(super) fn parse_and_normalize(text: &str, default_depth: &str) -> Result<Sea
     } else {
         body.to_owned()
     };
-    let raw: Value =
-        serde_json::from_str(&body).map_err(|_| "planner returned invalid JSON".to_owned())?;
-    let object = raw
-        .as_object()
-        .ok_or_else(|| "plan is not an object".to_owned())?;
+    let raw: Value = serde_json::from_str(&body).map_err(PlanRejection::InvalidJson)?;
+    let object = raw.as_object().ok_or(PlanRejection::NotAnObject)?;
     let depth = depth(object.get("depth"), default_depth);
     let queries = normalize_queries(object.get("queries"), &depth);
     if queries.is_empty() {
-        return Err("plan has no queries".into());
+        return Err(PlanRejection::NoQueries);
     }
     let decomposition = normalize_buckets(object.get("decomposition"));
     let intent = object

@@ -269,7 +269,7 @@ async fn cancellation_interrupts_body_stream_and_cleans_partial_spool() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(result.unwrap_err().code, "cancelled");
+    assert_eq!(result.unwrap_err().code(), "cancelled");
     server.abort();
     let remaining_spools = fs::read_dir(&spool_dir).ok().into_iter().flatten().count();
     assert_eq!(remaining_spools, 0);
@@ -318,7 +318,7 @@ async fn disabled_provider_is_projected_and_not_called() {
         .web_search(&json!({"query":"example query"}), &CancellationToken::new())
         .await
         .unwrap_err();
-    assert_eq!(error.code, "web_search_provider_disabled");
+    assert_eq!(error.code(), "web_search_provider_disabled");
     let _ = fs::remove_dir_all(root);
 }
 
@@ -345,8 +345,8 @@ async fn disabled_reader_does_not_fetch_and_credentials_are_rejected() {
         )
         .await
         .unwrap_err();
-    assert_eq!(credential_url.code, "invalid_arguments");
-    assert!(!credential_url.message.contains("secret"));
+    assert_eq!(credential_url.code(), "invalid_arguments");
+    assert!(!credential_url.message().contains("secret"));
     let _ = fs::remove_dir_all(root);
 }
 

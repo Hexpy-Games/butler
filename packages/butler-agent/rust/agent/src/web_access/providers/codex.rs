@@ -16,6 +16,7 @@ use super::{
     openai::join_endpoint,
     responses::{bounded_overview, results_from_response},
 };
+use crate::web_access::WebAccessCode;
 
 pub(super) struct CodexSubscriptionWebSearchProvider {
     authorization: String,
@@ -50,7 +51,7 @@ impl CodexSubscriptionWebSearchProvider {
         }
         if account_id.trim().is_empty() {
             return Err(WebAccessError::new(
-                "web_search_provider_auth_missing",
+                WebAccessCode::WebSearchProviderAuthMissing,
                 "Codex web search requires a ChatGPT account id.",
             ));
         }
@@ -113,7 +114,7 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
             let (status, bytes) = response_bytes(access, request, cancellation).await?;
             if !(200..300).contains(&status) {
                 return Err(WebAccessError::new(
-                    "web_search_provider_failed",
+                    WebAccessCode::WebSearchProviderFailed,
                     format!("Codex web search failed with HTTP {status}."),
                 ));
             }
@@ -159,7 +160,7 @@ fn codex_model(model: Option<&str>) -> Result<String, WebAccessError> {
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             WebAccessError::new(
-                "web_search_provider_model_missing",
+                WebAccessCode::WebSearchProviderModelMissing,
                 "Codex subscription model is required; no model fallback is allowed.",
             )
         })?;
@@ -211,7 +212,7 @@ fn parse_sse(raw: &str) -> Result<(Value, String), WebAccessError> {
         match event.get("type").and_then(Value::as_str).unwrap_or("") {
             "error" | "response.failed" => {
                 return Err(WebAccessError::new(
-                    "web_search_provider_failed",
+                    WebAccessCode::WebSearchProviderFailed,
                     "Codex web search provider reported a failed response.",
                 ));
             }
@@ -291,7 +292,7 @@ fn extract_urls(text: &str) -> Vec<String> {
 
 fn auth_missing() -> WebAccessError {
     WebAccessError::new(
-        "web_search_provider_auth_missing",
+        WebAccessCode::WebSearchProviderAuthMissing,
         "Codex subscription login is required for web search.",
     )
 }

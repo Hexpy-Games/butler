@@ -3,6 +3,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use super::{WebAccessError, WebSession};
+use crate::web_access::WebAccessCode;
 use crate::web_access::{page::PageRead, spool::TemporarySpool};
 
 const MAX_OBSERVATION_CACHE_ENTRIES: usize = 16;
@@ -52,17 +53,19 @@ impl WebSession {
         let Some(path) = path else {
             return Ok(None);
         };
-        let bytes = tokio::fs::read(path).await.map_err(|_| {
+        let bytes = tokio::fs::read(path).await.map_err(|source| {
             WebAccessError::new(
-                "web_access_cache_failed",
+                WebAccessCode::WebAccessCacheFailed,
                 "Turn web cache could not be read.",
             )
+            .with_source(source)
         })?;
-        serde_json::from_slice(&bytes).map(Some).map_err(|_| {
+        serde_json::from_slice(&bytes).map(Some).map_err(|source| {
             WebAccessError::new(
-                "web_access_cache_failed",
+                WebAccessCode::WebAccessCacheFailed,
                 "Turn web cache could not be decoded.",
             )
+            .with_source(source)
         })
     }
 
@@ -72,25 +75,28 @@ impl WebSession {
         result: &PageRead,
     ) -> Result<(), WebAccessError> {
         let root = self.access.inner.data_root.clone();
-        let bytes = serde_json::to_vec(result).map_err(|_| {
+        let bytes = serde_json::to_vec(result).map_err(|source| {
             WebAccessError::new(
-                "web_access_cache_failed",
+                WebAccessCode::WebAccessCacheFailed,
                 "Turn web cache could not be encoded.",
             )
+            .with_source(source)
         })?;
         let spool = tokio::task::spawn_blocking(move || TemporarySpool::from_bytes(&root, &bytes))
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 WebAccessError::new(
-                    "web_access_cache_failed",
+                    WebAccessCode::WebAccessCacheFailed,
                     "Turn web cache could not be written.",
                 )
+                .with_source(source)
             })?
-            .map_err(|_| {
+            .map_err(|source| {
                 WebAccessError::new(
-                    "web_access_cache_failed",
+                    WebAccessCode::WebAccessCacheFailed,
                     "Turn web cache could not be written.",
                 )
+                .with_source(source)
             })?;
         self.state.lock().page_cache.insert(key, spool);
         Ok(())

@@ -26,7 +26,7 @@ pub(super) async fn execute(
             .await
     }
     .unwrap_or_else(
-        |error| json!({"ok":false,"error":{"code":error.code,"message":error.message}}),
+        |error| json!({"ok":false,"error":{"code":error.code(),"message":error.message()}}),
     );
     super::encoded(&result)
 }

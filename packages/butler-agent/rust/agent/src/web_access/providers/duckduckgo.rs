@@ -10,6 +10,7 @@ use crate::web_access::{
 };
 
 use super::contracts::{SearchInput, SearchOutput, SearchProvider};
+use crate::web_access::WebAccessCode;
 
 pub(super) struct DuckDuckGoHtmlSearchProvider {
     api_base: Option<String>,
@@ -39,11 +40,12 @@ impl SearchProvider for DuckDuckGoHtmlSearchProvider {
         async move {
             let started = Instant::now();
             let mut url = match self.api_base.as_deref() {
-                Some(base) => Url::parse(base).map_err(|_| {
+                Some(base) => Url::parse(base).map_err(|source| {
                     WebAccessError::new(
-                        "web_access_configuration_invalid",
+                        WebAccessCode::WebAccessConfigurationInvalid,
                         "Search endpoint is invalid.",
                     )
+                    .with_source(source)
                 })?,
                 None => access.search_url(&input.query),
             };
@@ -65,22 +67,23 @@ impl SearchProvider for DuckDuckGoHtmlSearchProvider {
             let results = tokio::task::spawn_blocking({
                 let input = input.clone();
                 move || {
-                    let bytes = fetched.read_all().map_err(|_| {
+                    let bytes = fetched.read_all().map_err(|source| {
                         WebAccessError::new(
-                            "web_access_spool_failed",
+                            WebAccessCode::WebAccessSpoolFailed,
                             "Search response could not be read.",
                         )
+                        .with_source(source)
                     })?;
                     let html = String::from_utf8_lossy(&bytes);
                     if !(200..300).contains(&status) {
                         return Err(WebAccessError::new(
-                            "web_search_request_failed",
+                            WebAccessCode::WebSearchRequestFailed,
                             format!("DuckDuckGo search failed with HTTP {status}."),
                         ));
                     }
                     if crate::web_access::search::is_duckduckgo_challenge(&html) {
                         return Err(WebAccessError::new(
-                            "web_search_challenge",
+                            WebAccessCode::WebSearchChallenge,
                             "DuckDuckGo returned an anti-bot challenge page.",
                         ));
                     }
@@ -93,11 +96,12 @@ impl SearchProvider for DuckDuckGoHtmlSearchProvider {
                 }
             })
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 WebAccessError::new(
-                    "web_search_parse_failed",
+                    WebAccessCode::WebSearchParseFailed,
                     "Search response could not be parsed.",
                 )
+                .with_source(source)
             })??;
             Ok(SearchOutput::direct(
                 self.id(),

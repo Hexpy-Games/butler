@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use reqwest::Url;
 use tokio_util::sync::CancellationToken;
 
+use crate::web_access::WebAccessCode;
 use crate::web_access::{
     page::{PageRead, extract_page},
     service::{WebAccess, WebAccessError},
@@ -42,9 +43,7 @@ impl WebAccess {
                 cancel_and_reap(&mut task).await;
                 Err(WebAccessError::cancelled())
             }
-            output = &mut task => output.map_err(|_| {
-                WebAccessError::new("web_read_failed", "Public page read failed.")
-            })?,
+            output = &mut task => output.map_err(|source| WebAccessError::new(WebAccessCode::WebReadFailed, "Public page read failed.").with_source(source))?,
             () = tokio::time::sleep(Duration::from_secs(20)) => {
                 budget.cancel();
                 cancel_and_reap(&mut task).await;
@@ -73,7 +72,7 @@ impl WebAccess {
         let mut page =
             match lightweight(self, url.clone(), requested_url, backend, cancellation).await {
                 Ok(page) => page,
-                Err(error) if error.code == "cancelled" => return Err(error),
+                Err(error) if error.code() == "cancelled" => return Err(error),
                 Err(_) => failed_page(requested_url),
             };
         match backend {
@@ -96,7 +95,7 @@ impl WebAccess {
                     Ok(None) => {
                         add_warning(&mut page, "lightpanda-unavailable-fell-back-to-lightweight");
                     }
-                    Err(error) if error.code == "cancelled" => return Err(error),
+                    Err(error) if error.code() == "cancelled" => return Err(error),
                     Err(_) => add_warning(&mut page, "lightpanda-render-fallback-rejected"),
                 }
             }
@@ -170,8 +169,12 @@ async fn parse_fetched(
     let ok = fetched.ok;
     let content_type = fetched.content_type.clone();
     tokio::task::spawn_blocking(move || {
-        let bytes = fetched.read_all().map_err(|_| {
-            WebAccessError::new("web_access_spool_failed", "Public page could not be read.")
+        let bytes = fetched.read_all().map_err(|source| {
+            WebAccessError::new(
+                WebAccessCode::WebAccessSpoolFailed,
+                "Public page could not be read.",
+            )
+            .with_source(source)
         })?;
         extract_page(
             &requested_url,
@@ -184,7 +187,13 @@ async fn parse_fetched(
         )
     })
     .await
-    .map_err(|_| WebAccessError::new("web_read_parse_failed", "Public page could not be parsed."))?
+    .map_err(|source| {
+        WebAccessError::new(
+            WebAccessCode::WebReadParseFailed,
+            "Public page could not be parsed.",
+        )
+        .with_source(source)
+    })?
 }
 
 fn github_raw_url(url: &Url) -> Option<Url> {

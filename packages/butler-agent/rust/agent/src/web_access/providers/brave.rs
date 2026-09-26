@@ -11,6 +11,7 @@ use super::{
     contracts::{SearchInput, SearchOutput, SearchProvider, SearchResult, filter_results},
     http::response_bytes,
 };
+use crate::web_access::WebAccessCode;
 
 pub(super) struct BraveWebSearchProvider {
     api_key: String,
@@ -41,7 +42,7 @@ impl SearchProvider for BraveWebSearchProvider {
                     .as_deref()
                     .unwrap_or("https://api.search.brave.com/res/v1/web/search"),
             )
-            .map_err(|_| invalid_endpoint())?;
+            .map_err(|source| invalid_endpoint().with_source(source))?;
             {
                 let mut query = url.query_pairs_mut();
                 query.append_pair("q", &input.query);
@@ -68,11 +69,12 @@ impl SearchProvider for BraveWebSearchProvider {
             if !(200..300).contains(&status) {
                 return Err(http_error("Brave", status));
             }
-            let payload: Value = serde_json::from_slice(&bytes).map_err(|_| {
+            let payload: Value = serde_json::from_slice(&bytes).map_err(|source| {
                 WebAccessError::new(
-                    "web_search_response_invalid",
+                    WebAccessCode::WebSearchResponseInvalid,
                     "Brave returned an invalid response.",
                 )
+                .with_source(source)
             })?;
             let results = payload
                 .pointer("/web/results")
@@ -124,14 +126,14 @@ fn valid_public_url(value: &str) -> bool {
 
 fn invalid_endpoint() -> WebAccessError {
     WebAccessError::new(
-        "web_access_configuration_invalid",
+        WebAccessCode::WebAccessConfigurationInvalid,
         "Search endpoint is invalid.",
     )
 }
 
 fn http_error(provider: &str, status: u16) -> WebAccessError {
     WebAccessError::new(
-        "web_search_provider_failed",
+        WebAccessCode::WebSearchProviderFailed,
         format!("{provider} web search failed with HTTP {status}."),
     )
 }

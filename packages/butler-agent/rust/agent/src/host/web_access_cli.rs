@@ -83,8 +83,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 command.source_name(),
                 options.json,
-                error.code,
-                &error.message,
+                error.code(),
+                &error.message(),
                 1,
             );
         }
@@ -105,8 +105,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             Err(error) => report_error(
                 command.source_name(),
                 options.json,
-                error.code,
-                &error.message,
+                error.code(),
+                &error.message(),
                 1,
             ),
         },
@@ -140,7 +140,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
-                    let exit = if error.code == "invalid_arguments" {
+                    let exit = if error.code() == "invalid_arguments" {
                         2
                     } else {
                         1
@@ -148,8 +148,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     report_error(
                         command.source_name(),
                         options.json,
-                        error.code,
-                        &error.message,
+                        error.code(),
+                        &error.message(),
                         exit,
                     )
                 }
@@ -206,8 +206,8 @@ async fn run_search_test(
                 return report_error(
                     command.source_name(),
                     options.json,
-                    error.code,
-                    &error.message,
+                    error.code(),
+                    &error.message(),
                     5,
                 );
             }
@@ -244,7 +244,7 @@ async fn run_search_test(
             command.source_name(),
             options.json,
             "external_unavailable",
-            &error.message,
+            &error.message(),
             5,
         ),
     }

@@ -1,3 +1,4 @@
+pub(crate) use super::error::WebAccessError;
 use parking_lot::Mutex;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
@@ -13,6 +14,7 @@ const SEARCH_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
 mod fetch;
 mod session;
 
+use crate::web_access::WebAccessCode;
 pub(crate) use fetch::{DirectPageRoute, PageRoute};
 
 #[derive(Clone)]
@@ -45,25 +47,6 @@ struct WebSessionState {
     original_request: String,
     page_cache: HashMap<String, TemporarySpool>,
     observation_cache: HashMap<String, Value>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct WebAccessError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl WebAccessError {
-    pub(super) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-
-    pub(super) fn cancelled() -> Self {
-        Self::new("cancelled", "Public web retrieval was cancelled.")
-    }
 }
 
 impl WebAccess {
@@ -126,11 +109,12 @@ impl WebAccess {
         planning_disabled: bool,
         page_route: Arc<dyn PageRoute>,
     ) -> Result<Self, WebAccessError> {
-        let search_endpoint = Url::parse(endpoint).map_err(|_| {
+        let search_endpoint = Url::parse(endpoint).map_err(|source| {
             WebAccessError::new(
-                "web_access_configuration_invalid",
+                WebAccessCode::WebAccessConfigurationInvalid,
                 "Search endpoint is invalid.",
             )
+            .with_source(source)
         })?;
         let client = Client::builder()
             .redirect(Policy::custom(|attempt| {
@@ -145,11 +129,12 @@ impl WebAccess {
             .timeout(REQUEST_TIMEOUT)
             .user_agent("butler-native-web-access/0.1")
             .build()
-            .map_err(|_| {
+            .map_err(|source| {
                 WebAccessError::new(
-                    "web_access_unavailable",
+                    WebAccessCode::WebAccessUnavailable,
                     "Public web client is unavailable.",
                 )
+                .with_source(source)
             })?;
         Ok(Self {
             inner: Arc::new(WebAccessInner {
@@ -178,11 +163,12 @@ impl WebAccess {
 
     pub(super) fn config(&self) -> Result<Value, WebAccessError> {
         crate::configuration::read_json_object(&self.inner.data_root.join("butler.config.json"))
-            .map_err(|_| {
+            .map_err(|source| {
                 WebAccessError::new(
-                    "web_access_configuration_invalid",
+                    WebAccessCode::WebAccessConfigurationInvalid,
                     "Butler web configuration could not be read.",
                 )
+                .with_source(source)
             })
     }
 
@@ -190,7 +176,7 @@ impl WebAccess {
         crate::configuration::read_private_environment(&self.inner.data_root.join(".env")).map_err(
             |_| {
                 WebAccessError::new(
-                    "web_access_configuration_invalid",
+                    WebAccessCode::WebAccessConfigurationInvalid,
                     "Private web settings could not be read.",
                 )
             },
