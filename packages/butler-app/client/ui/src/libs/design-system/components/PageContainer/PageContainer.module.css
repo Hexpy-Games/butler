@@ -7,6 +7,10 @@
   container: page / inline-size;
 }
 
+.page[data-align="start"] {
+  margin-inline: 0;
+}
+
 .page[data-width="narrow"] {
   max-width: var(--page-container-narrow);
 }

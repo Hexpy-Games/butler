@@ -10,6 +10,7 @@ PageContainer is the page frame for full pages (dashboards, management pages, se
 | `width` | `narrow` (`--page-container-narrow`, 760px reading width), `default` (`--page-container-default`, 72rem), `full` (no cap) |
 | `gutter` | named Space (`none`, `xs`, `sm`, `md`, `lg`, `xl`, `2xl`); omit for the adaptive page gutter |
 | `as` | `div` (default), `main`, `section` |
+| `align` | `center` (default) or `start`: the capped page stays at the inline start, as in the settings detail (`SettingsShell`) |
 
 ## How to use this component
 

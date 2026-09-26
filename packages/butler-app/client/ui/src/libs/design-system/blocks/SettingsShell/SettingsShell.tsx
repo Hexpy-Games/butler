@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PageContainer } from "../../components/PageContainer";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./SettingsShell.module.css";
 import { SettingsPageProvider } from "./settingsPage";
@@ -52,21 +53,22 @@ export function SettingsShell({
           .join(" ")}
       >
         {detailHeader ? (
-          <div className={styles.detailHeader}>
+          <PageContainer width="narrow" align="start" gutter="none" className={styles.detailHeader}>
             {detailNavigation ? (
               <div className={styles.detailNavigation}>{detailNavigation}</div>
             ) : null}
             {detailHeader}
-          </div>
+          </PageContainer>
         ) : null}
         <ScrollArea
           className={styles.detailScroll}
-          contentClassName={styles.detailContent}
           dataTestClass="settings-detail-scroll"
         >
-          <SettingsPageProvider title={pageTitle} description={pageDescription}>
-            {detail}
-          </SettingsPageProvider>
+          <PageContainer width="narrow" align="start" gutter="none" className={styles.detailContent}>
+            <SettingsPageProvider title={pageTitle} description={pageDescription}>
+              {detail}
+            </SettingsPageProvider>
+          </PageContainer>
         </ScrollArea>
       </main>
       {active ? (

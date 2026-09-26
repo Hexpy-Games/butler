@@ -70,7 +70,6 @@ export const legacyShowcaseCategories: Record<string, ShowcaseCategory> = {
   "blocks/SettingsHeader": "Settings & Forms",
   "blocks/SettingsNav": "Settings & Forms",
   "blocks/SettingsSecretRows": "Settings & Forms",
-  "blocks/SettingsShell": "Settings & Forms",
   "blocks/SortableCardList": "Settings & Forms",
   "blocks/SurfacePanel": "Shell",
   "blocks/TitlebarShell": "Shell",

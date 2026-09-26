@@ -47,3 +47,11 @@ test("Grid responsive columns switch to the wide preset inside a wide page conta
   expect(gridCss).toMatch(/\[data-columns="1"\][^}]*grid-template-columns:\s*minmax\(0, 1fr\)/u);
   expect(gridCss).toMatch(/minmax\(min\(100%, 240px\), 1fr\)/u);
 });
+
+test("PageContainer align start keeps the page at the inline start instead of centering it", () => {
+  const start = render(renderToStaticMarkup(<PageContainer align="start" width="narrow">x</PageContainer>));
+  expect(start.getAttribute("data-align")).toBe("start");
+  const centered = render(renderToStaticMarkup(<PageContainer>x</PageContainer>));
+  expect(centered.hasAttribute("data-align")).toBe(false);
+  expect(css).toMatch(/\[data-align="start"\][^}]*margin-inline:\s*0/u);
+});
