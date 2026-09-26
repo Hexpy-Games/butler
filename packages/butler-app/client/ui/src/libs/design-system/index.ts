@@ -39,6 +39,8 @@ export * from "./components/Select";
 export * from "./components/Separator";
 export * from "./components/Skeleton";
 export { Spinner, type SpinnerProps } from "./components/Spinner";
+export { SuccessCheck, type SuccessCheckProps } from "./components/SuccessCheck";
+export { LoadingIndicator, type LoadingIndicatorProps, type LoadingIndicatorState } from "./components/LoadingIndicator";
 export * from "./components/Slider";
 export * from "./components/Switch";
 export * from "./components/Tag";

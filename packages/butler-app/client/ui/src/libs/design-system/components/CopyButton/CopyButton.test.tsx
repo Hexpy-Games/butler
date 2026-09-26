@@ -78,3 +78,29 @@ test("CopyButton crossfades and scales the icons and keeps a fade under reduced 
   expect(css).toMatch(/\.button\[data-copied="true"\] \.copyIcon \{[^}]*opacity: 0;[^}]*transform: scale\(var\(--motion-scale-menu\)\)/u);
   expect(css).toMatch(/\.button\[data-copied="false"\] \.checkIcon \{[^}]*opacity: 0;/u);
 });
+
+test("each copy mounts a fresh drawing SuccessCheck, so the check animates every time", async () => {
+  const document = setup(async () => {});
+  await act(async () => root!.render(<CopyButton text="hello" label="Copy" copiedLabel="Copied" />));
+  const button = document.querySelector("button")!;
+  expect(document.querySelector('[data-slot="success-check"]')!.getAttribute("data-animate")).toBe("false");
+  await act(async () => { button.click(); });
+  const first = document.querySelector('[data-slot="success-check"]')!;
+  expect(first.getAttribute("data-animate")).toBe("true");
+  expect(first.querySelector("circle")).toBeNull();
+  await act(async () => { button.click(); });
+  // Still copied: the same check stays; it re-draws only after the copy icon has returned.
+  expect(document.querySelector('[data-slot="success-check"]')).toBe(first);
+});
+
+test("parent-driven copied remounts the check on every false -> true", async () => {
+  const document = setup(async () => {});
+  const render = (copied: boolean) => act(async () => root!.render(<CopyButton copied={copied} label="Copy" copiedLabel="Copied" onCopy={() => undefined} />));
+  await render(false);
+  await render(true);
+  const first = document.querySelector('[data-slot="success-check"]')!;
+  expect(first.getAttribute("data-animate")).toBe("true");
+  await render(false);
+  await render(true);
+  expect(document.querySelector('[data-slot="success-check"]')).not.toBe(first);
+});

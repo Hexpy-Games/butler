@@ -111,6 +111,8 @@
   --motion-scale-dialog: 0.96;
   --motion-scale-press: 0.97;
   --motion-scale-palette: 0.98;
+  /* SuccessCheck pop-in: subtle, from 85%. */
+  --motion-scale-check: 0.85;
   /* A dragged card or a drop target lifts toward the pointer (spring). */
   --motion-scale-lift: 1.02;
   /* How far moved rows may paint past a folded list clip during a drag (at
@@ -694,6 +696,7 @@
     --motion-scale-press: 1;
     --motion-scale-lift: 1;
     --motion-scale-palette: 1;
+    --motion-scale-check: 1;
   }
 }
 
@@ -709,6 +712,7 @@
   --motion-scale-press: 1;
   --motion-scale-lift: 1;
   --motion-scale-palette: 1;
+  --motion-scale-check: 1;
 }
 
 /* Compact settings (single-pane SettingsShell) keep the ramp and only

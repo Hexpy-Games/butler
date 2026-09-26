@@ -5,6 +5,7 @@ import { ButtonContainer } from "../ButtonContainer";
 import { CheckIcon, Circle, CircleAlert, ICON_SIZE, MessageSquare } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
+import { LoadingIndicator } from "../LoadingIndicator";
 import { Spinner } from "./Spinner";
 
 export const meta: ShowcaseMeta = {
@@ -45,7 +46,7 @@ function BusyButton({ context }: { context: ShowcaseRenderContext }) {
       </Stack>
       <ButtonContainer size="sm">
         <Button size="sm" disabled={busy} aria-busy={busy || undefined}>
-          {busy ? <Spinner size={ICON_SIZE.sm} /> : <CheckIcon size="sm" aria-hidden />}
+          <LoadingIndicator state={busy ? "loading" : "done"} size={ICON_SIZE.sm} />
           {busy ? copy.syncing : copy.synced}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setBusy(!busy)} text={busy ? copy.complete : copy.again} />

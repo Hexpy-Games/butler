@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../IconButton";
-import { CheckIcon, Copy } from "../Icons";
+import { Copy, ICON_SIZE } from "../Icons";
+import { SuccessCheck } from "../SuccessCheck";
 import styles from "./CopyButton.module.css";
 import { dsClass } from "../../lib/internal";
+import { cn } from "../../lib/utils";
 
 /** How long the check stays before the copy icon returns. */
 export const COPY_FEEDBACK_MS = 1500;
@@ -37,6 +39,13 @@ export function CopyButton({
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const copied = copiedProp ?? copiedState;
+  // Each false -> true mounts a new SuccessCheck, so the check draws every copy.
+  const [checkRun, setCheckRun] = useState(0);
+  const [wasCopied, setWasCopied] = useState(copied);
+  if (copied !== wasCopied) {
+    setWasCopied(copied);
+    if (copied) setCheckRun((run) => run + 1);
+  }
 
   const copy = async () => {
     if (onCopy) {
@@ -64,7 +73,9 @@ export function CopyButton({
       >
         <span className={styles.icons} aria-hidden="true">
           <Copy size="sm" className={dsClass(styles.icon, styles.copyIcon)} />
-          <CheckIcon size="sm" className={dsClass(styles.icon, styles.checkIcon)} />
+          <span className={cn(styles.icon, styles.checkIcon)}>
+            <SuccessCheck key={checkRun} size={ICON_SIZE.sm} animate={checkRun > 0} />
+          </span>
         </span>
       </IconButton>
       <span className="sr-only" role="status" aria-live="polite">

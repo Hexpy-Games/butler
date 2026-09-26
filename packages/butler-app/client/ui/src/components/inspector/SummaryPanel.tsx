@@ -3,7 +3,6 @@ import { appCopy } from "@/app/copy.ts";
 import type { ReactElement } from "react";
 import {
   ActivityFeed,
-  CheckCircle2,
   Circle,
   CircleAlert,
   CircleX,
@@ -11,7 +10,7 @@ import {
   InspectorInset,
   InspectorPanel,
   KeyValueRow,
-  Spinner,
+  LoadingIndicator,
 } from "@/butler-ds";
 import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
 import { contextTooltip } from "@/app/utils.ts";
@@ -149,9 +148,10 @@ function progressStateTone(state?: string): string {
 
 function progressStateIcon(state?: string): ReactElement {
   const tone = progressStateTone(state);
-  if (tone === "complete") return <CheckCircle2 size="lg" />;
+  // Running and complete share one LoadingIndicator, so running -> complete draws the check.
+  if (tone === "complete") return <LoadingIndicator state="done" size={ICON_SIZE.lg} />;
   if (tone === "failed") return <CircleAlert size="lg" />;
   if (tone === "cancelled") return <CircleX size="lg" />;
-  if (tone === "running") return <Spinner size={ICON_SIZE.lg} />;
+  if (tone === "running") return <LoadingIndicator state="loading" size={ICON_SIZE.lg} />;
   return <Circle size="lg" />;
 }

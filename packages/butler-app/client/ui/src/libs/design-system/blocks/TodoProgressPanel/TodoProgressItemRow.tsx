@@ -1,13 +1,13 @@
 import { memo } from "react";
 import {
-  CheckCircle2,
   Circle,
   CircleAlert,
   CircleX,
+  ICON_SIZE,
   Minus,
 } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
-import { Spinner } from "../../components/Spinner";
+import { LoadingIndicator } from "../../components/LoadingIndicator";
 import type {
   TodoProgressPanelItem,
   TodoProgressPanelItemState,
@@ -48,13 +48,14 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
   previous.item.statusLabel === next.item.statusLabel,
 );
 
+/** Running and completed share one LoadingIndicator, so running -> completed draws the check. */
 function itemIcon(state: TodoProgressPanelItemState) {
-  if (state === "completed") return <CheckCircle2 size="md" />;
+  if (state === "completed") return <LoadingIndicator state="done" size={ICON_SIZE.md} />;
   if (state === "blocked") return <CircleAlert size="md" />;
   if (state === "skipped") return <Minus size="md" />;
   if (state === "correction-required" || state === "stopped")
     return <CircleX size="md" />;
   if (state === "running" || state === "reviewing")
-    return <Spinner />;
+    return <LoadingIndicator state="loading" size={ICON_SIZE.md} />;
   return <Circle size="md" />;
 }

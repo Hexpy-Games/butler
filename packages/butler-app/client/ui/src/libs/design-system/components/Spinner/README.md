@@ -35,7 +35,9 @@ Reduced motion disables rotation and retains the open-ring silhouette. Keep
 the status label visible. The caller owns busy state, disabling, completion,
 failure, and cancellation. Mount only while needed and remove promptly when
 the existing operation leaves that state; do not delay completion to finish a
-revolution or add an unconditional success check.
+revolution or add an unconditional success check. When success replaces the
+spinner in the same slot, use `LoadingIndicator` (`state="loading" | "done"`),
+which draws the ringed `SuccessCheck` only after it was loading.
 
 ## Where and why
 
