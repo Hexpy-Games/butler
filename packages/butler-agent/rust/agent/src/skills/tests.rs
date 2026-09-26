@@ -117,13 +117,7 @@ async fn rejects_parent_traversal_without_writing_outside_staging() {
             None,
         )
         .await;
-    assert!(matches!(
-        result,
-        Err(SkillError {
-            code: "skill_archive_path_invalid",
-            ..
-        })
-    ));
+    assert!(matches!(result, Err(SkillError::ArchivePathInvalid)));
     assert!(!root.join("escape").exists());
     owner.close().await;
     let _ = std::fs::remove_dir_all(root);

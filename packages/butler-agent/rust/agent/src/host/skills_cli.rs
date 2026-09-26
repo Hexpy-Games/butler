@@ -67,7 +67,7 @@ async fn list(
     let view = skills
         .cli_settings(project_values(&options.args))
         .await
-        .map_err(skill_failure)?;
+        .map_err(|error| skill_failure(&error))?;
     let mut lines = vec![names("Core", &view.core), names("User", &view.user)];
     lines.extend(
         view.projects
@@ -89,7 +89,7 @@ async fn inspect(
     let view = skills
         .cli_settings(project_values(&options.args))
         .await
-        .map_err(skill_failure)?;
+        .map_err(|error| skill_failure(&error))?;
     let matches: Vec<_> = flattened(&view)
         .into_iter()
         .filter(|skill| skill.name == *name)
@@ -149,7 +149,7 @@ async fn import(
     let result = skills
         .import(staged, option_value(&options.args, "--project").cloned())
         .await
-        .map_err(skill_failure)?;
+        .map_err(|error| skill_failure(&error))?;
     let human = if result.imported.is_empty() {
         "No skills imported.".to_owned()
     } else {
@@ -173,7 +173,7 @@ async fn validate(
     let result = skills
         .validate_settings(project_values(&options.args))
         .await
-        .map_err(skill_failure)?;
+        .map_err(|error| skill_failure(&error))?;
     if !result.ok {
         let data = value(&result)?;
         if options.json {
@@ -346,8 +346,8 @@ fn command_string(args: &[String]) -> String {
     format!("butler {}", args.join(" ")).trim().to_owned()
 }
 
-fn skill_failure(error: SkillError) -> CommandError {
-    failure(error.code, error.message, 1)
+fn skill_failure(error: &SkillError) -> CommandError {
+    failure(error.code(), error.to_string(), 1)
 }
 
 #[expect(

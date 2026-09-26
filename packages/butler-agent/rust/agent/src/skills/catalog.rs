@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use super::{
     SkillError, SkillProjectView, SkillSettingsView, SkillSummary, SkillValidationCounts,
-    SkillValidationIssueView, SkillValidationView, error,
+    SkillValidationIssueView, SkillValidationView,
 };
 
 #[derive(Clone, Debug, Serialize)]
@@ -124,12 +124,12 @@ fn discover_projects(data: &Path) -> Result<Vec<String>, SkillError> {
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(io(error)),
+        Err(error) => return Err(SkillError::Io(error)),
     };
     let mut projects = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(io)?;
-        if entry.file_type().map_err(io)?.is_dir() {
+        let entry = entry.map_err(SkillError::Io)?;
+        if entry.file_type().map_err(SkillError::Io)?.is_dir() {
             projects.push(entry.file_name().to_string_lossy().into_owned());
         }
     }
@@ -156,12 +156,12 @@ pub(super) fn load(root: &Path) -> Result<Vec<SkillDefinition>, SkillError> {
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(io(error)),
+        Err(error) => return Err(SkillError::Io(error)),
     };
     let mut skills = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(io)?;
-        if !entry.file_type().map_err(io)?.is_dir() {
+        let entry = entry.map_err(SkillError::Io)?;
+        if !entry.file_type().map_err(SkillError::Io)?.is_dir() {
             continue;
         }
         if let Some(skill) = read(&entry.path().join("SKILL.md"))? {
@@ -236,7 +236,7 @@ fn read(path: &Path) -> Result<Option<SkillDefinition>, SkillError> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(io(error)),
+        Err(error) => return Err(SkillError::Io(error)),
     };
     let (metadata, body) = frontmatter(&content);
     let value = |key: &str| {
@@ -320,11 +320,4 @@ pub(super) fn project_dir(data: &Path, id: &str) -> PathBuf {
 }
 fn core_dir(resources: &Path) -> PathBuf {
     resources.join("skills")
-}
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn io(source: std::io::Error) -> SkillError {
-    error("skills_io_failed", &source.to_string())
 }

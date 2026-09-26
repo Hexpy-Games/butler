@@ -375,11 +375,12 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn skill_error(error: crate::skills::SkillError) -> GatewayApplicationError {
-    match error.code {
-        "skill_archive_invalid" | "skill_archive_path_invalid" => {
-            public(400, error.code, &error.message)
+    match error {
+        crate::skills::SkillError::ArchiveInvalid(_)
+        | crate::skills::SkillError::ArchivePathInvalid => {
+            public(400, error.code(), &error.message())
         }
-        "skills_closed" => public(503, error.code, &error.message),
+        crate::skills::SkillError::Closed => public(503, error.code(), &error.message()),
         _ => GatewayApplicationError::Internal,
     }
 }

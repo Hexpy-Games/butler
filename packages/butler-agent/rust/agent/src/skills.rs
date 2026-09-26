@@ -186,15 +186,15 @@ impl NativeSkills {
 
     async fn permit(&self) -> Result<OwnedSemaphorePermit, SkillError> {
         if self.inner.closed.is_cancelled() {
-            return Err(error("skills_closed", "Skill service is closed"));
+            return Err(SkillError::Closed);
         }
         let permit = tokio::select! {
-            () = self.inner.closed.cancelled() => Err(error("skills_closed", "Skill service is closed")),
-            permit = self.inner.jobs.clone().acquire_owned() => permit.map_err(|_| error("skills_closed", "Skill service is closed")),
+            () = self.inner.closed.cancelled() => Err(SkillError::Closed),
+            permit = self.inner.jobs.clone().acquire_owned() => permit.map_err(|_closed| SkillError::Closed),
         }?;
         if self.inner.closed.is_cancelled() {
             drop(permit);
-            return Err(error("skills_closed", "Skill service is closed"));
+            return Err(SkillError::Closed);
         }
         Ok(permit)
     }
@@ -214,14 +214,7 @@ async fn blocking<T: Send + 'static>(
         work()
     })
     .await
-    .map_err(|join| error("skills_job_failed", &join.to_string()))?
-}
-
-fn error(code: &'static str, message: &str) -> SkillError {
-    SkillError {
-        code,
-        message: message.to_owned(),
-    }
+    .map_err(SkillError::JobFailed)?
 }
 
 #[cfg(test)]

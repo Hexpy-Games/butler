@@ -89,8 +89,41 @@ impl Drop for StagedSkillArchive {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct SkillError {
-    pub code: &'static str,
-    pub message: String,
+/// Failures of the native skill catalog and archive import.
+///
+/// `Display` is the user-facing message; `code()` the CLI wire code.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SkillError {
+    /// The skill service is closing, so no new job is admitted.
+    #[error("Skill service is closed")]
+    Closed,
+    /// The blocking skill job panicked or was cancelled.
+    #[error("{0}")]
+    JobFailed(#[source] tokio::task::JoinError),
+    /// A filesystem operation on the skill catalog or staging area failed.
+    #[error("{0}")]
+    Io(#[source] std::io::Error),
+    /// The archive is not a readable zip file.
+    #[error("{0}")]
+    ArchiveInvalid(#[source] zip::result::ZipError),
+    /// The archive contains an entry that escapes its root.
+    #[error("Skill archive contains an unsafe path")]
+    ArchivePathInvalid,
+}
+
+impl SkillError {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Closed => "skills_closed",
+            Self::JobFailed(_) => "skills_job_failed",
+            Self::Io(_) => "skills_io_failed",
+            Self::ArchiveInvalid(_) => "skill_archive_invalid",
+            Self::ArchivePathInvalid => "skill_archive_path_invalid",
+        }
+    }
+
+    /// The user-facing message; identical to `Display`.
+    pub(crate) fn message(&self) -> String {
+        self.to_string()
+    }
 }
