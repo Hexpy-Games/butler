@@ -26,15 +26,12 @@ impl LocaleCollation {
                 .bytes()
                 .any(|byte| !byte.is_ascii_alphanumeric() && byte != b'-')
         {
-            return Err(LocaleError("Expected a resolved BCP-47 locale".into()));
+            return Err(LocaleError::NotBcp47);
         }
-        let locale: Locale = locale
-            .parse()
-            .map_err(|error| LocaleError(format!("{error}")))?;
+        let locale: Locale = locale.parse().map_err(LocaleError::Parse)?;
         let mut options = CollatorOptions::new();
         options.strength = Some(Strength::Tertiary);
-        let collator = Collator::try_new(&locale.into(), options)
-            .map_err(|error| LocaleError(error.to_string()))?;
+        let collator = Collator::try_new(&locale.into(), options).map_err(LocaleError::Collator)?;
         Ok(Self { collator })
     }
 
@@ -43,13 +40,17 @@ impl LocaleCollation {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct LocaleError(String);
-
-impl std::fmt::Display for LocaleError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.0)
-    }
+/// Failures to build a collator for the host's locale.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum LocaleError {
+    /// The input is empty or uses characters outside BCP-47 (e.g. `_`).
+    #[error("Expected a resolved BCP-47 locale")]
+    NotBcp47,
+    /// ICU4X could not parse the locale. (ICU4X 1.4 errors implement only
+    /// `Display`, so they are kept as typed fields rather than sources.)
+    #[error("{0}")]
+    Parse(icu_locid::ParserError),
+    /// ICU4X has no collation data for the locale.
+    #[error("{0}")]
+    Collator(icu_collator::CollatorError),
 }
-
-impl std::error::Error for LocaleError {}
