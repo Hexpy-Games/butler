@@ -50,7 +50,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
     ] {
         if let Some(value) = base
             .field(key)
-            .map_err(|_| error("command_result_encoding_failed"))?
+            .map_err(|source| error("command_result_encoding_failed").with_source(source))?
         {
             append_raw(&mut encoded, key, value)?;
         }
@@ -84,7 +84,7 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
     }
     if let Some(value) = base
         .field("butler_tool_artifact")
-        .map_err(|_| error("command_result_encoding_failed"))?
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?
     {
         append_raw(&mut encoded, "butler_tool_artifact", value)?;
     }
@@ -169,12 +169,14 @@ pub(super) fn assemble(input: Assembly<'_>) -> Result<JsonDocument, BtccError> {
         append_raw(&mut encoded, "command_outcome_observed", "true")?;
     }
     encoded.push('}');
-    JsonDocument::from_encoded(encoded).map_err(|_| error("command_result_encoding_failed"))
+    JsonDocument::from_encoded(encoded)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))
 }
 
 fn append_raw(out: &mut String, key: &str, value: &str) -> Result<(), BtccError> {
     out.push(',');
-    crate::json::write_string(key, out).map_err(|_| error("command_result_encoding_failed"))?;
+    crate::json::write_string(key, out)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     out.push(':');
     out.push_str(value);
     Ok(())
@@ -182,14 +184,16 @@ fn append_raw(out: &mut String, key: &str, value: &str) -> Result<(), BtccError>
 
 fn append_field_string(out: &mut String, key: &str, value: &str) -> Result<(), BtccError> {
     out.push(',');
-    crate::json::write_string(key, out).map_err(|_| error("command_result_encoding_failed"))?;
+    crate::json::write_string(key, out)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     out.push(':');
-    crate::json::write_string(value, out).map_err(|_| error("command_result_encoding_failed"))
+    crate::json::write_string(value, out)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))
 }
 
 fn append_value(out: &mut String, key: &str, value: &Value) -> Result<(), BtccError> {
-    let encoded =
-        crate::json::stringify(value).map_err(|_| error("command_result_encoding_failed"))?;
+    let encoded = crate::json::stringify(value)
+        .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     append_raw(out, key, &encoded)
 }
 

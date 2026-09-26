@@ -154,10 +154,6 @@ pub(super) fn write_string(text: &str, output: &mut String) -> Result<(), BtccEr
     crate::json::write_string(text, output).map_err(json_error)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn json_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::relayed("guided_prompt_json_invalid", error.to_string())
+    BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
 }

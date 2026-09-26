@@ -326,7 +326,7 @@ fn catalog_value<T: serde::Serialize>(catalog: &T) -> Result<Value, GatewayAppli
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, GatewayApplicationError> {
-    serde_json::from_value(value).map_err(|_| invalid_model_input())
+    serde_json::from_value(value).map_err(|source| invalid_model_input().with_source(source))
 }
 
 fn invalid_model_input() -> GatewayApplicationError {

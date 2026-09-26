@@ -78,7 +78,7 @@ impl EffectAdapter for TopicConversationEffect {
         };
         normalize(object)
             .map(Value::Object)
-            .map_err(|_| policy("branch_input_invalid"))
+            .map_err(|source| policy("branch_input_invalid").with_source(source))
     }
 
     fn dispatch<'a>(
@@ -292,7 +292,7 @@ impl TopicConversationEffect {
         };
         JsonDocument::from_value(data)
             .map(AdapterOutcome::Applied)
-            .map_err(|error| EffectFailure::adapter(error.to_string()))
+            .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))
     }
 }
 

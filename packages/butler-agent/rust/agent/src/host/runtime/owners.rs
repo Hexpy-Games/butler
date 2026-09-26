@@ -44,8 +44,9 @@ impl HostDependencies for RuntimeOwners {
             self.project_tools.close().await;
             self.project_work.close().await;
             self.session_worktrees.close().await;
-            let image_files = self.image_files.close().await.map_err(|_| {
+            let image_files = self.image_files.close().await.map_err(|source| {
                 BtccError::relayed("image_files_close_failed", "Image file owner did not close")
+                    .with_source(source)
             });
             let attachment_context = self.attachment_context.close().await.map_err(setup);
             let memory_sync = self.memory_sync.close().await;

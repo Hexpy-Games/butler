@@ -96,13 +96,15 @@ fn clipped_slice(raw: &str, text: &str, limit: usize) -> Result<String, BtccErro
     let start = match field(raw, "start_char")? {
         None | Some("null") => 0.0,
         Some(value) => {
-            let parsed: Value = serde_json::from_str(value).map_err(|_| failure())?;
-            crate::json::coerce_number(&parsed).map_err(|_| failure())?
+            let parsed: Value =
+                serde_json::from_str(value).map_err(|source| failure().with_source(source))?;
+            crate::json::coerce_number(&parsed).map_err(|source| failure().with_source(source))?
         }
     };
     let next = start + visible.len() as f64;
     let next = if let Some(number) = serde_json::Number::from_f64(next) {
-        crate::json::stringify(&Value::Number(number)).map_err(|_| failure())?
+        crate::json::stringify(&Value::Number(number))
+            .map_err(|source| failure().with_source(source))?
     } else {
         "null".into()
     };
@@ -145,13 +147,14 @@ fn replace(raw: &str, fields: &[(&str, String)]) -> Result<String, BtccError> {
         }
         Ok(())
     })
-    .map_err(|_| failure())?;
+    .map_err(|source| failure().with_source(source))?;
     for (index, (key, value)) in fields.iter().enumerate() {
         if !seen[index] {
             if output.len() > 1 {
                 output.push(',');
             }
-            crate::json::write_string(key, &mut output).map_err(|_| failure())?;
+            crate::json::write_string(key, &mut output)
+                .map_err(|source| failure().with_source(source))?;
             output.push(':');
             output.push_str(value);
         }

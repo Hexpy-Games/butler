@@ -101,7 +101,8 @@ fn validation_receipt(value: &Validation) -> Result<String, BtccError> {
         "scope":scope,"references":[],"limitations":limitations,
         "created_at":DateTime::<Utc>::from(std::time::SystemTime::now()).to_rfc3339_opts(SecondsFormat::Millis,true),
     });
-    let mut encoded = crate::json::stringify(&receipt).map_err(|_| error())?;
+    let mut encoded =
+        crate::json::stringify(&receipt).map_err(|source| error().with_source(source))?;
     for text in std::iter::once(&suite).chain(failure.as_ref()) {
         for (marker, unit) in &text.escaped_units {
             encoded = encoded.replace(*marker, &format!("\\u{unit:04x}"));
@@ -124,7 +125,9 @@ pub(super) fn capability_receipts(
         if index > 0 {
             encoded.push(',');
         }
-        encoded.push_str(&crate::json::stringify(receipt).map_err(|_| error())?);
+        encoded.push_str(
+            &crate::json::stringify(receipt).map_err(|source| error().with_source(source))?,
+        );
     }
     for validation in validations {
         encoded.push(',');
@@ -132,7 +135,9 @@ pub(super) fn capability_receipts(
     }
     for receipt in ordinary.iter().skip(1) {
         encoded.push(',');
-        encoded.push_str(&crate::json::stringify(receipt).map_err(|_| error())?);
+        encoded.push_str(
+            &crate::json::stringify(receipt).map_err(|source| error().with_source(source))?,
+        );
     }
     encoded.push(']');
     Ok(encoded)

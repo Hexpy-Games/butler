@@ -175,15 +175,16 @@ pub(super) async fn record_unexecuted(
         })
         .await
         .map_err(BtccError::from)?;
-    let body = serde_json::to_string(result)
-        .map_err(|error| BtccError::relayed("guided_tool_result_json", error.to_string()))?;
+    let body = serde_json::to_string(result).map_err(|error| {
+        BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error)
+    })?;
     owner
         .journal
         .finish(ToolJournalFinish {
             call_id,
             status: ToolJournalFinishStatus::Cancelled,
             result: Some(JsonDocument::from_encoded(body).map_err(|error| {
-                BtccError::relayed("guided_tool_result_json", error.to_string())
+                BtccError::relayed("guided_tool_result_json", error.to_string()).with_source(error)
             })?),
             changed_files: None,
             error_code: None,

@@ -57,14 +57,15 @@ pub(super) async fn run(
     let handle = resolve_generation(data_root, paths, &target)?;
     let inventory = read_build_inventory(data_root, &handle, cancellation)?;
     let os = nix::sys::utsname::uname()
-        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
+        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(data_root, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
-        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+        LocaleCollation::new("en-US")
+            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
     );
     let models = NativeProcessModels::new(
         data_root.to_owned(),

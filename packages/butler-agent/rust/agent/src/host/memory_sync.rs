@@ -98,8 +98,9 @@ impl NativeMemorySync {
         self.consumer.close().await;
         let task = self.task.lock().take();
         let joined = match task {
-            Some(task) => task.await.map_err(|_| {
+            Some(task) => task.await.map_err(|source| {
                 BtccError::relayed("memory_sync_join_failed", "Memory sync owner failed")
+                    .with_source(source)
             }),
             None => Ok(()),
         };

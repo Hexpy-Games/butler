@@ -17,7 +17,9 @@ pub(super) fn updates(
     normalize(values)?
         .into_iter()
         .enumerate()
-        .map(|(index, value)| serde_json::from_value(value).map_err(|_| invalid(index)))
+        .map(|(index, value)| {
+            serde_json::from_value(value).map_err(|source| invalid(index).with_source(source))
+        })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
 }

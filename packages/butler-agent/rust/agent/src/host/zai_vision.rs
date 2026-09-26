@@ -70,7 +70,7 @@ pub(crate) async fn catalog_for_visual_admission(
         &CancellationToken::new(),
     ))
     .await
-    .map_err(|_| carrier_unavailable())?;
+    .map_err(|source| carrier_unavailable().with_source(source))?;
     entry.image_input_support = Some("supported".into());
     entry.image_capability_source = Some("provider_discovery".into());
     entry.image_route_health = Some("healthy".into());

@@ -290,6 +290,7 @@ async fn classify_before_prepare(
             CognitionCode::MemoryOriginCollationUnavailable,
             error.to_string(),
         )
+        .with_source(error)
     })?);
     let store = AgentConversationStore::open(ConversationStoreConfig {
         path: canonical,

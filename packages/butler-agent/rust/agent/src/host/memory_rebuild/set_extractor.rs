@@ -29,14 +29,15 @@ pub(super) async fn run(
         return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
     }
     let os = nix::sys::utsname::uname()
-        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
+        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(data, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
-        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+        LocaleCollation::new("en-US")
+            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
     );
     let models = NativeProcessModels::new(
         data.to_owned(),
@@ -44,12 +45,12 @@ pub(super) async fn run(
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|_| error(CognitionCode::NativeModelSetupFailed))?;
+    .map_err(|source| error(CognitionCode::NativeModelSetupFailed).with_source(source))?;
     let current = models
         .configuration
         .read()
         .await
-        .map_err(|_| error(CognitionCode::NativeModelSetupFailed))?;
+        .map_err(|source| error(CognitionCode::NativeModelSetupFailed).with_source(source))?;
     for (model, effort) in [
         (&policy.primary_model, &policy.primary_effort),
         (&policy.fallback_model, &policy.fallback_effort),
@@ -57,8 +58,10 @@ pub(super) async fn run(
         let Some(metadata) = current.catalog.find_model_metadata(Some(model)) else {
             return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
         };
-        let parsed = serde_json::from_value::<ReasoningEffort>(json!(effort))
-            .map_err(|_| error(CognitionCode::MemoryRebuildInvalidModelPolicy))?;
+        let parsed =
+            serde_json::from_value::<ReasoningEffort>(json!(effort)).map_err(|source| {
+                error(CognitionCode::MemoryRebuildInvalidModelPolicy).with_source(source)
+            })?;
         if !metadata.runtime_supported || !metadata.reasoning_efforts.contains(&parsed) {
             return Err(error(CognitionCode::MemoryRebuildInvalidModelPolicy));
         }

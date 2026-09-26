@@ -45,7 +45,7 @@ pub(super) fn command(
                 .map(f64::floor)
                 .unwrap_or(50.0);
             let limit = crate::json::stringify(&Value::from(limit))
-                .map_err(|_| error("project_ledger_tool_limit_invalid"))?;
+                .map_err(|source| error("project_ledger_tool_limit_invalid").with_source(source))?;
             options.insert("limit".into(), limit.into());
             LedgerCommand::Query
         }
@@ -160,7 +160,9 @@ pub(super) fn command(
             options.insert(
                 "priority".into(),
                 crate::json::stringify(&Value::from(value))
-                    .map_err(|_| error("project_ledger_tool_priority_invalid"))?
+                    .map_err(|source| {
+                        error("project_ledger_tool_priority_invalid").with_source(source)
+                    })?
                     .into(),
             );
         }

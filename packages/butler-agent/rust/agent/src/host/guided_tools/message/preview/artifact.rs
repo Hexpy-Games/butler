@@ -10,7 +10,7 @@ use super::{append_field, failure, field};
 
 pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     let mut output = String::from("{\"tool_name\":");
-    crate::json::write_string(name, &mut output).map_err(|_| failure())?;
+    crate::json::write_string(name, &mut output).map_err(|source| failure().with_source(source))?;
     selected(
         &mut output,
         "ok",
@@ -117,7 +117,8 @@ fn text(raw: &str, max: Option<usize>) -> Result<Option<String>, BtccError> {
     if !string_raw(raw) {
         return Ok(None);
     }
-    let decoded: String = serde_json::from_str(raw).map_err(|_| failure())?;
+    let decoded: String =
+        serde_json::from_str(raw).map_err(|source| failure().with_source(source))?;
     let trimmed = crate::public_text::trim_js_whitespace(&decoded);
     if trimmed.is_empty() {
         return Ok(None);
@@ -125,7 +126,9 @@ fn text(raw: &str, max: Option<usize>) -> Result<Option<String>, BtccError> {
     let encoded = if let Some(max) = max {
         let prefix = Utf16Prefix::new(trimmed, max);
         let truncated = prefix.len_utf16() < trimmed.encode_utf16().count();
-        let mut encoded = prefix.json_literal().map_err(|_| failure())?;
+        let mut encoded = prefix
+            .json_literal()
+            .map_err(|source| failure().with_source(source))?;
         if truncated {
             encoded.pop();
             encoded.push_str("...\"");
@@ -133,7 +136,8 @@ fn text(raw: &str, max: Option<usize>) -> Result<Option<String>, BtccError> {
         encoded
     } else {
         let mut encoded = String::new();
-        crate::json::write_string(trimmed, &mut encoded).map_err(|_| failure())?;
+        crate::json::write_string(trimmed, &mut encoded)
+            .map_err(|source| failure().with_source(source))?;
         encoded
     };
     Ok(Some(encoded))
@@ -144,7 +148,7 @@ fn selected(output: &mut String, key: &str, raw: Option<&str>) -> Result<(), Btc
         if output.len() > 1 {
             output.push(',');
         }
-        crate::json::write_string(key, output).map_err(|_| failure())?;
+        crate::json::write_string(key, output).map_err(|source| failure().with_source(source))?;
         output.push(':');
         output.push_str(raw);
     }

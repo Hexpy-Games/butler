@@ -38,7 +38,7 @@ pub(super) fn with_worker_profile_choices(
         definition["description"] = format!(
             "{description} Available profiles: {}. Profile ids are opaque selectors; choose by label and job, or omit profile_id to use default.",
             serde_json::to_string(&choices)
-                .map_err(|_| super::error("worker_profile_settings_invalid"))?
+                .map_err(|source| super::error("worker_profile_settings_invalid").with_source(source))?
         )
         .into();
         definition["parameters"]["properties"]["profile_id"] =
@@ -80,8 +80,9 @@ pub(super) fn available(
         .provider_tools
         .iter()
         .map(|definition| {
-            serde_json::from_value(definition.clone())
-                .map_err(|_| super::error("guided_provider_tool_definition_invalid"))
+            serde_json::from_value(definition.clone()).map_err(|source| {
+                super::error("guided_provider_tool_definition_invalid").with_source(source)
+            })
         })
         .collect()
 }

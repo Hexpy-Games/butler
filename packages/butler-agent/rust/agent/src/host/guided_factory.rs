@@ -206,7 +206,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                     source_session_id: start.turn.session_id.clone(),
                     model_ref: format!("{}/{}", semantic.model.provider, semantic.model.model),
                     reasoning_effort: serde_json::to_value(&semantic.model.reasoning_effort)
-                        .map_err(|_| error("invalid_reasoning_effort"))?
+                        .map_err(|source| error("invalid_reasoning_effort").with_source(source))?
                         .as_str()
                         .ok_or_else(|| error("invalid_reasoning_effort"))?
                         .to_owned(),

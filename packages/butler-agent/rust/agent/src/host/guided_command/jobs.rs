@@ -52,7 +52,7 @@ impl CommandJobs {
         let permit = Arc::clone(&self.inner.slots)
             .acquire_owned()
             .await
-            .map_err(|_| error("command_jobs_closed"))?;
+            .map_err(|source| error("command_jobs_closed").with_source(source))?;
         {
             let mut state = self.inner.state.lock();
             if state.closing {
@@ -70,7 +70,7 @@ impl CommandJobs {
             job()
         })
         .await
-        .map_err(|_| error("command_job_failed"))
+        .map_err(|source| error("command_job_failed").with_source(source))
     }
 
     pub(super) async fn close(&self) {

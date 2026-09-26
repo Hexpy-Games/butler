@@ -103,7 +103,7 @@ fn pending(key: &str, signal: &CancellationToken) -> Result<AdapterOutcome, Effe
         "restarted":false,
         "handoff_request_id":key,
     }))
-    .map_err(|error| EffectFailure::adapter(error.to_string()))?;
+    .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))?;
     Ok(AdapterOutcome::Applied(result))
 }
 

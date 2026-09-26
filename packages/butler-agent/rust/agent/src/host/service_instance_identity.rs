@@ -36,8 +36,11 @@ pub(crate) fn process_start_identity(pid: u32) -> Result<Option<String>, String>
         .split_whitespace()
         .nth(19)
         .ok_or_else(|| "native_service_process_identity_unavailable".to_owned())?;
-    let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id")
-        .map_err(|_| "native_service_process_identity_unavailable".to_owned())?;
+    let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id").map_err(|source| {
+        "native_service_process_identity_unavailable"
+            .to_owned()
+            .with_source(source)
+    })?;
     Ok(Some(format!("linux:{}:{}", boot_id.trim(), start_ticks)))
 }
 

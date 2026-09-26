@@ -46,7 +46,9 @@ pub(super) async fn read(
             let document = repo
                 .read_context_document(reference.to_owned())
                 .await
-                .map_err(|_| error("phase_scoped_memory_document_invalid"))?;
+                .map_err(|source| {
+                    error("phase_scoped_memory_document_invalid").with_source(source)
+                })?;
             if document.context_ref != reference || document.projection_class != class {
                 return Err(error("phase_scoped_memory_document_invalid"));
             }
@@ -65,7 +67,7 @@ pub(super) async fn read(
 
 fn write_string(value: &str, output: &mut String) -> Result<(), BtccError> {
     crate::json::write_string(value, output)
-        .map_err(|_| error("phase_scoped_memory_document_invalid"))
+        .map_err(|source| error("phase_scoped_memory_document_invalid").with_source(source))
 }
 
 fn encoded(document: &ContextDocumentRead, content: &str) -> Result<String, BtccError> {

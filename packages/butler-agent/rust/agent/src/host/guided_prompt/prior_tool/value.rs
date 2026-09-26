@@ -102,8 +102,9 @@ pub(super) fn preserve_arguments(parsed: &Value, arguments: &str) -> Result<Stri
     }
     preserved.insert(
         "omitted_arguments".into(),
-        serde_json::from_str(&json_digest(arguments))
-            .map_err(|error| BtccError::relayed("guided_prompt_json_invalid", error.to_string()))?,
+        serde_json::from_str(&json_digest(arguments)).map_err(|error| {
+            BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
+        })?,
     );
     encode(&Value::Object(preserved))
 }

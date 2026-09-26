@@ -63,8 +63,9 @@ fn js_truthy(value: &Value) -> bool {
 }
 
 fn json(value: &Value) -> Result<String, BtccError> {
-    crate::json::stringify(value)
-        .map_err(|error| BtccError::relayed("guided_prompt_json_invalid", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
+    })
 }
 
 fn nonempty_array(turn: &TurnRecord, field: &str) -> bool {
@@ -234,11 +235,12 @@ fn request_bytes(
         .model_execution
         .base()
         .initial_request_bytes(prompt, instructions, Some(butler_data))
-        .map_err(|_| {
+        .map_err(|source| {
             BtccError::relayed(
                 "phase_scoped_memory_serializer_failed",
                 "phase_scoped_memory_serializer_failed",
             )
+            .with_source(source)
         })?
         .ok_or_else(|| {
             BtccError::relayed(
@@ -397,6 +399,7 @@ impl PromptPort for NativeGuidedPrompt {
                 .map(|tool| {
                     serde_json::from_value::<ModelRoundTool>(tool.clone()).map_err(|error| {
                         BtccError::relayed("guided_provider_tool_invalid", error.to_string())
+                            .with_source(error)
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;

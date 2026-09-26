@@ -103,9 +103,14 @@ impl NativeConversationObserver {
         let (reply, result) = oneshot::channel();
         let state = self.state.lock().await;
         let sender = state.sender.as_ref().ok_or_else(closed)?;
-        sender.send(job(reply)).await.map_err(|_| closed())?;
+        sender
+            .send(job(reply))
+            .await
+            .map_err(|source| closed().with_source(source))?;
         drop(state);
-        result.await.map_err(|_| closed())?
+        result
+            .await
+            .map_err(|source| closed().with_source(source))?
     }
 
     /// Stops admission, drains already accepted jobs, and joins the owner.

@@ -47,7 +47,7 @@ impl TimeZoneNames {
         let raw: RawData = serde_json::from_str(include_str!(
             "../../../resources/timezones/names-icu78.json"
         ))
-        .map_err(|error| failure(error.to_string()))?;
+        .map_err(|error| failure(error.to_string()).with_source(error))?;
         let default_end = timestamp("9999-12-31 23:59")?;
         let mut periods = HashMap::with_capacity(raw.periods.len());
         for (key, values) in raw.periods {

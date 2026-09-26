@@ -60,8 +60,8 @@ struct AdmissionGuard {
 
 impl NativeEmbeddingOwner {
     pub(crate) fn new(data_root: PathBuf) -> CognitionResult<Self> {
-        let executable =
-            std::env::current_exe().map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+        let executable = std::env::current_exe()
+            .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
         let inner = Arc::new(Inner {
             data_root,
             executable,
@@ -94,9 +94,9 @@ impl NativeEmbeddingOwner {
             if let Some(completed) = completed {
                 let actor = self.actor.lock().take();
                 if let Some(actor) = actor {
-                    actor
-                        .await
-                        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+                    actor.await.map_err(|source| {
+                        error(CognitionCode::EmbedWorkerUnavailable).with_source(source)
+                    })?;
                 }
                 return if completed {
                     Ok(())
@@ -104,10 +104,9 @@ impl NativeEmbeddingOwner {
                     Err(error(CognitionCode::EmbedWorkerUnavailable))
                 };
             }
-            completion
-                .changed()
-                .await
-                .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+            completion.changed().await.map_err(|source| {
+                error(CognitionCode::EmbedWorkerUnavailable).with_source(source)
+            })?;
         }
     }
 
@@ -137,8 +136,8 @@ impl NativeEmbeddingOwner {
             resplit: request.resplit,
             max_embeddings: request.max_embeddings,
         };
-        let mut frame =
-            serde_json::to_vec(&wire).map_err(|_| error(CognitionCode::EmbedInvalidRequest))?;
+        let mut frame = serde_json::to_vec(&wire)
+            .map_err(|source| error(CognitionCode::EmbedInvalidRequest).with_source(source))?;
         frame.push(b'\n');
         if frame.len() > MAX_FRAME_BYTES {
             return Err(error(CognitionCode::EmbedRequestTooLarge));
@@ -182,9 +181,9 @@ impl NativeEmbeddingOwner {
             cancellation: admitted_cancel.clone(),
         };
         let response = async {
-            receiver
-                .await
-                .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?
+            receiver.await.map_err(|source| {
+                error(CognitionCode::EmbedWorkerUnavailable).with_source(source)
+            })?
         };
         tokio::select! {
             biased;

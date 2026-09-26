@@ -114,9 +114,11 @@ impl NativeWorkStreams {
             .ok_or_else(closed)?
             .send(make(reply))
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         drop(guard);
-        result.await.map_err(|_| closed())?
+        result
+            .await
+            .map_err(|source| closed().with_source(source))?
     }
 
     pub(crate) async fn execute(

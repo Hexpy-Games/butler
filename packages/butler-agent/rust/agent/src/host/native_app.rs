@@ -252,6 +252,7 @@ impl NativeAppServer {
         let listener = match self.listener.take() {
             Some(server) => server.close().await.map_err(|error| {
                 BtccError::relayed("app_listener_close_failed", error.to_string())
+                    .with_source(error)
             }),
             None => Ok(()),
         };

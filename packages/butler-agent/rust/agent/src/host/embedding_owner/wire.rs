@@ -36,7 +36,7 @@ pub(super) fn spawn_worker(
         .stderr(Stdio::null())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
     let stdin = child
         .stdin
         .take()
@@ -63,7 +63,7 @@ pub(super) async fn initialize(process: &mut WorkerChild, id: u64) -> CognitionR
         max_embeddings: None,
     };
     let mut frame = serde_json::to_vec(&request)
-        .map_err(|_| error(CognitionCode::EmbedWorkerProtocolInvalid))?;
+        .map_err(|source| error(CognitionCode::EmbedWorkerProtocolInvalid).with_source(source))?;
     frame.push(b'\n');
     let response = round_trip(process, &frame, id).await?;
     match response.result {
@@ -99,20 +99,19 @@ async fn round_trip(
         .stdin
         .write_all(frame)
         .await
-        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
     process
         .stdin
         .flush()
         .await
-        .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+        .map_err(|source| error(CognitionCode::EmbedWorkerUnavailable).with_source(source))?;
     let mut response = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 8192];
     loop {
-        let count = process
-            .stdout
-            .read(&mut chunk)
-            .await
-            .map_err(|_| error(CognitionCode::EmbedWorkerUnavailable))?;
+        let count =
+            process.stdout.read(&mut chunk).await.map_err(|source| {
+                error(CognitionCode::EmbedWorkerUnavailable).with_source(source)
+            })?;
         if count == 0 || response.len() + count > MAX_RESPONSE_BYTES + 1 {
             return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
         }
@@ -125,7 +124,7 @@ async fn round_trip(
         }
     }
     let response: WorkerResponse = serde_json::from_slice(&response)
-        .map_err(|_| error(CognitionCode::EmbedWorkerProtocolInvalid))?;
+        .map_err(|source| error(CognitionCode::EmbedWorkerProtocolInvalid).with_source(source))?;
     if response.id != id {
         return Err(error(CognitionCode::EmbedWorkerProtocolInvalid));
     }

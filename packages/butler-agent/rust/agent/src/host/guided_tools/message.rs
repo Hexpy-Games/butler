@@ -28,8 +28,9 @@ pub(super) fn result_message(
         && let Some(tool_error) = &result.error
     {
         content.push_str(",\"error\":");
-        let value = serde_json::to_value(tool_error)
-            .map_err(|_| error("guided_tool_provider_serialization_failed"))?;
+        let value = serde_json::to_value(tool_error).map_err(|source| {
+            error("guided_tool_provider_serialization_failed").with_source(source)
+        })?;
         append_value(&mut content, &value)?;
     }
     if let Some(output) = &result.output {
@@ -39,7 +40,9 @@ pub(super) fn result_message(
             if result.name == "read_operation_results"
                 && output
                     .field("data")
-                    .map_err(|_| error("guided_tool_provider_serialization_failed"))?
+                    .map_err(|source| {
+                        error("guided_tool_provider_serialization_failed").with_source(source)
+                    })?
                     .is_some_and(|raw| raw.starts_with('"'))
             {
                 content.push_str("{\"tool_name\":\"read_operation_results\"");
@@ -53,13 +56,13 @@ pub(super) fn result_message(
                     "resultSha256",
                     "complete",
                 ] {
-                    if let Some(value) = output
-                        .field(key)
-                        .map_err(|_| error("guided_tool_provider_serialization_failed"))?
-                    {
+                    if let Some(value) = output.field(key).map_err(|source| {
+                        error("guided_tool_provider_serialization_failed").with_source(source)
+                    })? {
                         content.push(',');
-                        crate::json::write_string(key, &mut content)
-                            .map_err(|_| error("guided_tool_provider_serialization_failed"))?;
+                        crate::json::write_string(key, &mut content).map_err(|source| {
+                            error("guided_tool_provider_serialization_failed").with_source(source)
+                        })?;
                         content.push(':');
                         content.push_str(value);
                     }
@@ -67,8 +70,9 @@ pub(super) fn result_message(
                 content.push('}');
             } else {
                 content.push_str("{\"tool_name\":");
-                crate::json::write_string(&result.name, &mut content)
-                    .map_err(|_| error("guided_tool_provider_serialization_failed"))?;
+                crate::json::write_string(&result.name, &mut content).map_err(|source| {
+                    error("guided_tool_provider_serialization_failed").with_source(source)
+                })?;
                 if encoded.len() > 2 {
                     content.push(',');
                     content.push_str(&encoded[1..encoded.len() - 1]);
@@ -77,15 +81,17 @@ pub(super) fn result_message(
             }
         } else if encoded.starts_with('"') {
             content.push_str("{\"tool_name\":");
-            crate::json::write_string(&result.name, &mut content)
-                .map_err(|_| error("guided_tool_provider_serialization_failed"))?;
+            crate::json::write_string(&result.name, &mut content).map_err(|source| {
+                error("guided_tool_provider_serialization_failed").with_source(source)
+            })?;
             content.push_str(",\"text\":");
             content.push_str(encoded);
             content.push('}');
         } else {
             content.push_str("{\"tool_name\":");
-            crate::json::write_string(&result.name, &mut content)
-                .map_err(|_| error("guided_tool_provider_serialization_failed"))?;
+            crate::json::write_string(&result.name, &mut content).map_err(|source| {
+                error("guided_tool_provider_serialization_failed").with_source(source)
+            })?;
             content.push_str(",\"value\":");
             content.push_str(encoded);
             content.push('}');
@@ -124,5 +130,5 @@ fn error(code: &'static str) -> BtccError {
 
 fn append_value(output: &mut String, value: &serde_json::Value) -> Result<(), BtccError> {
     crate::json::append_json(value, output)
-        .map_err(|_| error("guided_tool_provider_serialization_failed"))
+        .map_err(|source| error("guided_tool_provider_serialization_failed").with_source(source))
 }

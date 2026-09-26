@@ -38,9 +38,9 @@ impl TimeZoneData {
             let canonical_len = usize::from(take_u16(&mut input)?);
             let data_len = take_u32(&mut input)? as usize;
             let name = std::str::from_utf8(take(&mut input, name_len)?)
-                .map_err(|error| failure(error.to_string()))?;
+                .map_err(|error| failure(error.to_string()).with_source(error))?;
             let canonical = std::str::from_utf8(take(&mut input, canonical_len)?)
-                .map_err(|error| failure(error.to_string()))?;
+                .map_err(|error| failure(error.to_string()).with_source(error))?;
             let bytes = take(&mut input, data_len)?;
             if !name.is_ascii()
                 || !bytes.starts_with(b"TZif")
@@ -68,7 +68,7 @@ impl TimeZoneData {
             .binary_search_by(|entry| compare(entry.name, name))
             .map_err(|_| failure("Unknown time zone"))?;
         tz::TimeZone::from_tz_data(self.entries[index].bytes)
-            .map_err(|error| failure(error.to_string()))
+            .map_err(|error| failure(error.to_string()).with_source(error))
     }
 
     pub(super) fn facts(&self, name: &str, epoch: i64) -> ContextResult<(i32, bool, &'static str)> {
@@ -125,7 +125,7 @@ impl TimeZoneData {
                 .ok_or_else(|| failure("Invalid time zone data"))?
         } else {
             zone.find_local_time_type(epoch)
-                .map_err(|error| failure(error.to_string()))?
+                .map_err(|error| failure(error.to_string()).with_source(error))?
         };
         let daylight = match view.extra_rule() {
             Some(tz::timezone::TransitionRule::Alternate(rule))
@@ -154,14 +154,14 @@ fn take_u16(input: &mut &'static [u8]) -> ContextResult<u16> {
     let bytes = take(input, 2)?;
     <[u8; 2]>::try_from(bytes)
         .map(u16::from_le_bytes)
-        .map_err(|_| failure("Truncated embedded time zone data"))
+        .map_err(|source| failure("Truncated embedded time zone data").with_source(source))
 }
 
 fn take_u32(input: &mut &'static [u8]) -> ContextResult<u32> {
     let bytes = take(input, 4)?;
     <[u8; 4]>::try_from(bytes)
         .map(u32::from_le_bytes)
-        .map_err(|_| failure("Truncated embedded time zone data"))
+        .map_err(|source| failure("Truncated embedded time zone data").with_source(source))
 }
 
 fn take(input: &mut &'static [u8], length: usize) -> ContextResult<&'static [u8]> {

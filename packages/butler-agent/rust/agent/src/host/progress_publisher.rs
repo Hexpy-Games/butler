@@ -84,11 +84,12 @@ impl NativeProgressPublisher {
             visibility,
             event.event.payload.as_ref(),
         )
-        .map_err(|_| {
+        .map_err(|source| {
             BtccError::relayed(
                 "progress_event_projection_failed",
                 "Progress event is invalid",
             )
+            .with_source(source)
         })?;
         let mut public_event = json!({
             "id":event.event_id,
@@ -150,6 +151,9 @@ impl NativeProgressPublisher {
         self.writer
             .append_outbound(event.session_id.clone(), action, delivery, metadata)
             .await
-            .map_err(|_| BtccError::relayed("progress_delivery_failed", "Progress delivery failed"))
+            .map_err(|source| {
+                BtccError::relayed("progress_delivery_failed", "Progress delivery failed")
+                    .with_source(source)
+            })
     }
 }

@@ -69,11 +69,12 @@ impl NativeLegacySessionSync {
             let root = data_root.clone();
             let memory = memory_root.clone();
             move || {
-                std::fs::create_dir_all(memory.join("db")).map_err(|_| {
+                std::fs::create_dir_all(memory.join("db")).map_err(|source| {
                     crate::cognition::CognitionError::new(
                         CognitionCode::LegacySessionOffsetWriteFailed,
                         "legacy_session_offset_write_failed",
                     )
+                    .with_source(source)
                 })?;
                 LegacySessionOffsets::load(&root, &memory)
             }

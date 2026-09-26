@@ -120,8 +120,9 @@ fn semantic_value(raw: &str) -> Result<Option<String>, BtccError> {
     if raw.trim_start().starts_with('"') {
         return Ok(semantic_string(raw, 800));
     }
-    let parsed = serde_json::from_str(raw)
-        .map_err(|error| BtccError::relayed("guided_prompt_json_invalid", error.to_string()))?;
+    let parsed = serde_json::from_str(raw).map_err(|error| {
+        BtccError::relayed("guided_prompt_json_invalid", error.to_string()).with_source(error)
+    })?;
     encode(&value::project(parsed, 0, "")?).map(Some)
 }
 

@@ -110,12 +110,12 @@ impl NativeGuidedProjectTools {
                     .clone()
                     .acquire_owned()
                     .await
-                    .map_err(|_| error("project_tools_closed"))?;
+                    .map_err(|source| error("project_tools_closed").with_source(source))?;
                 owner.run(&name, args, scope).await
             })
         };
         task.await
-            .map_err(|_| error("project_tool_worker_failed"))?
+            .map_err(|source| error("project_tool_worker_failed").with_source(source))?
     }
 
     pub(crate) async fn close(&self) {
@@ -141,8 +141,8 @@ impl NativeGuidedProjectTools {
             let mut result =
                 tokio::task::spawn_blocking(move || reader.dashboard(debug, limit, &collation))
                     .await
-                    .map_err(|_| error("work_dashboard_worker_failed"))?
-                    .map_err(|_| error("work_dashboard_unavailable"))?;
+                    .map_err(|source| error("work_dashboard_worker_failed").with_source(source))?
+                    .map_err(|source| error("work_dashboard_unavailable").with_source(source))?;
             result["ok"] = Value::Bool(true);
             return Ok(evidence::attach(name, &args, Path::new(""), result));
         }
@@ -201,7 +201,9 @@ impl NativeGuidedProjectTools {
                 explicit_reference: explicit.first().map(|value| (*value).to_owned()),
             })
             .await
-            .map_err(|_| error("project_ledger_project_resolution_failed"))?;
+            .map_err(|source| {
+                error("project_ledger_project_resolution_failed").with_source(source)
+            })?;
         let (command, command_options) = options::command(name, &args)?;
         let mut result = match lifecycle::execute(
             &self.ledger,

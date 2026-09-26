@@ -94,7 +94,7 @@ impl NativeGuidedCommand {
                 "message": "Command execution is not admitted for this Steward task.",
                 "recovery_hint": "Use only the exact mutation capability in the delegated packet."
             }))
-            .map_err(|_| error("command_result_encoding_failed"));
+            .map_err(|source| error("command_result_encoding_failed").with_source(source));
         }
         let root = active_root(&scope)?;
         let raw_command = args
@@ -154,7 +154,7 @@ impl NativeGuidedCommand {
                     "evidence_capability_receipts":evidence::capability_receipts(Some(1),false,false,false,&[])
                 });
                 return JsonDocument::from_value(&rejected)
-                    .map_err(|_| error("command_result_encoding_failed"));
+                    .map_err(|source| error("command_result_encoding_failed").with_source(source));
             }
             let before_git = registered_artifacts::snapshot(
                 &self.commands,
@@ -170,6 +170,7 @@ impl NativeGuidedCommand {
                 .await?
                 .map_err(|error| {
                     BtccError::relayed("command_artifact_directory_failed", error.to_string())
+                        .with_source(error)
                 })?;
             let data = scope.butler_data.to_path_buf();
             let host = Arc::clone(&self.host_environment);
@@ -201,7 +202,7 @@ impl NativeGuidedCommand {
                 })
                 .map_err(BtccError::from)?
                 .await
-                .map_err(|_| error("command_completion_lost"))?;
+                .map_err(|source| error("command_completion_lost").with_source(source))?;
             return output::registered_result(
                 output::OutputResources {
                     output: &self.output,
@@ -243,7 +244,7 @@ impl NativeGuidedCommand {
             .submit_guided(input)
             .map_err(BtccError::from)?
             .await
-            .map_err(|_| error("command_completion_lost"))?
+            .map_err(|source| error("command_completion_lost").with_source(source))?
             .map_err(BtccError::from)?;
         output::public_result(
             output::OutputResources {

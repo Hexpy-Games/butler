@@ -33,9 +33,11 @@ impl NativeDateParser {
     fn from_zone_file(path: &std::path::Path) -> ContextResult<Self> {
         let bytes = std::fs::read(path).map_err(|error| {
             ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+                .with_source(error)
         })?;
         let zone = tz::TimeZone::from_tz_data(&bytes).map_err(|error| {
             ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+                .with_source(error)
         })?;
         Self::from_zone(zone)
     }
@@ -61,6 +63,7 @@ impl NativeDateParser {
             )
             .map_err(|error| {
                 ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+                    .with_source(error)
             })?;
         }
         Ok(Self { zone })
@@ -77,6 +80,7 @@ impl NativeDateParser {
             .find_local_time_type(seconds)
             .map_err(|error| {
                 ContextError::new(ContextCode::DateTimezoneUnavailable, error.to_string())
+                    .with_source(error)
             })?
             .ut_offset();
         let wall = epoch_ms + i64::from(offset) * 1_000;

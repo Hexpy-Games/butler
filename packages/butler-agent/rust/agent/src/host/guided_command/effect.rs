@@ -31,7 +31,7 @@ pub(super) async fn prepare(
     let cwd_identity = canonical_root(&cwd);
     let relative = cwd_identity
         .strip_prefix(&root_identity)
-        .map_err(|_| error("command_cwd_rejected"))?;
+        .map_err(|source| error("command_cwd_rejected").with_source(source))?;
     let relative = if relative.as_os_str().is_empty() {
         ".".to_owned()
     } else {
@@ -152,7 +152,9 @@ impl EffectAdapter for CommandEffectAdapter {
                 .jobs
                 .run(move || super::artifacts::snapshot(&data))
                 .await
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
+                .map_err(|error| {
+                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                })?;
             let started = std::time::SystemTime::now();
             let spooled = self
                 .commands
@@ -166,10 +168,17 @@ impl EffectAdapter for CommandEffectAdapter {
                     host_environment: (*self.host_environment).clone(),
                     abort: signal.clone(),
                 })
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?
+                .map_err(|error| {
+                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                })?
                 .await
-                .map_err(|_| crate::btcc::EffectFailure::adapter("Command completion was lost"))?
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
+                .map_err(|source| {
+                    crate::btcc::EffectFailure::adapter("Command completion was lost")
+                        .with_source(source)
+                })?
+                .map_err(|error| {
+                    crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+                })?;
             let effect = if self.effect == "remote_observation" {
                 "remote_observation"
             } else {
@@ -191,7 +200,9 @@ impl EffectAdapter for CommandEffectAdapter {
                 Some(effect),
             )
             .await
-            .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
+            .map_err(|error| {
+                crate::btcc::EffectFailure::adapter(error.message()).with_source(error)
+            })?;
             Ok(AdapterOutcome::Applied(result))
         })
     }

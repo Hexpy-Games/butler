@@ -22,7 +22,8 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
     if let Some(raw_name) = field(raw, "tool_name")? {
         result.push_str(raw_name);
     } else {
-        crate::json::write_string(name, &mut result).map_err(|_| failure())?;
+        crate::json::write_string(name, &mut result)
+            .map_err(|source| failure().with_source(source))?;
     }
     visit_raw_object(raw, |key, value| {
         let decoded = serde_json::from_str::<String>(key).map_err(crate::json::JsonError::from)?;
@@ -34,7 +35,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
         }
         Ok(())
     })
-    .map_err(|_| failure())?;
+    .map_err(|source| failure().with_source(source))?;
     if name == "grep_files" {
         let mut paths = String::from("[");
         let mut seen = HashSet::new();
@@ -56,7 +57,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
                 }
                 Ok(())
             })
-            .map_err(|_| failure())?;
+            .map_err(|source| failure().with_source(source))?;
         }
         paths.push(']');
         append_field(&mut result, "match_count", &count.to_string())?;

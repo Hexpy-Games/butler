@@ -422,8 +422,8 @@ pub(super) fn write_atomic(path: &Path, value: &Value) -> Result<(), BtccError> 
         std::process::id(),
         uuid::Uuid::new_v4()
     ));
-    let mut bytes =
-        serde_json::to_vec_pretty(value).map_err(|_| error("work_stream_record_invalid"))?;
+    let mut bytes = serde_json::to_vec_pretty(value)
+        .map_err(|source| error("work_stream_record_invalid").with_source(source))?;
     bytes.push(b'\n');
     fs::write(&temp, bytes).map_err(io_error)?;
     fs::rename(temp, path).map_err(io_error)

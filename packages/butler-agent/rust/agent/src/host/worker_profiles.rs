@@ -31,7 +31,7 @@ impl NativeWorkerProfileReader {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|_| error("worker_profile_reader_unavailable"))?;
+            .map_err(|source| error("worker_profile_reader_unavailable").with_source(source))?;
         Ok(Self {
             url: format!("http://{host}:{}/settings", config.port),
             auth,
@@ -78,16 +78,16 @@ impl NativeWorkerProfileReader {
         let response = request
             .send()
             .await
-            .map_err(|_| error("worker_profile_settings_unavailable"))?;
+            .map_err(|source| error("worker_profile_settings_unavailable").with_source(source))?;
         if !response.status().is_success() {
             return Err(error("worker_profile_settings_unavailable"));
         }
         let bytes = response
             .bytes()
             .await
-            .map_err(|_| error("worker_profile_settings_invalid"))?;
-        let body: Value =
-            serde_json::from_slice(&bytes).map_err(|_| error("worker_profile_settings_invalid"))?;
+            .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
+        let body: Value = serde_json::from_slice(&bytes)
+            .map_err(|source| error("worker_profile_settings_invalid").with_source(source))?;
         body.get("data")
             .and_then(|value| value.get("worker_profiles"))
             .and_then(Value::as_array)

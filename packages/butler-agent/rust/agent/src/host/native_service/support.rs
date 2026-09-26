@@ -19,8 +19,9 @@ pub(super) async fn deliver_parent_results(
         if pending.route != crate::btcc::ParentResultRoute::ButlerApp {
             continue;
         }
-        let body = serde_json::to_string(&pending.input)
-            .map_err(|error| failure("app_subsession_result_invalid", error.to_string()))?;
+        let body = serde_json::to_string(&pending.input).map_err(|error| {
+            failure("app_subsession_result_invalid", error.to_string()).with_source(error)
+        })?;
         let mut request = client
             .post(format!("{base}/internal/subsession-result"))
             .header("content-type", "application/json")

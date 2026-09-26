@@ -58,12 +58,11 @@ impl NativeProcessModels {
         visual_capability: Option<Arc<dyn crate::models::ProviderVisualCapabilityPort>>,
     ) -> Result<Self, BtccError> {
         let client = provider_http_client().map_err(|error| {
-            BtccError::relayed("provider_client_unavailable", error.to_string())
+            BtccError::relayed("provider_client_unavailable", error.to_string()).with_source(error)
         })?;
-        let catalog =
-            Arc::new(ModelCatalog::new().map_err(|error| {
-                BtccError::relayed("model_catalog_unavailable", error.to_string())
-            })?);
+        let catalog = Arc::new(ModelCatalog::new().map_err(|error| {
+            BtccError::relayed("model_catalog_unavailable", error.to_string()).with_source(error)
+        })?);
         let configuration = Arc::new(
             ModelConfiguration::new(
                 data_root.clone(),
@@ -76,6 +75,7 @@ impl NativeProcessModels {
             )
             .map_err(|error| {
                 BtccError::relayed("model_configuration_unavailable", error.to_string())
+                    .with_source(error)
             })?,
         );
         let provider = NativeModelProvider::new(

@@ -214,10 +214,11 @@ impl AppBranchSummarizer for NativeAppBranchSummarizer {
             let metadata = configuration
                 .read_metadata()
                 .await
-                .map_err(|_| summary_error())?;
+                .map_err(|source| summary_error().with_source(source))?;
             let bound = bound_context(&input.text, &input.model_ref, &metadata.catalog, &catalog)
                 .map_err(|()| summary_error())?;
-            let encoded = serde_json::to_string(&bound.value).map_err(|_| summary_error())?;
+            let encoded = serde_json::to_string(&bound.value)
+                .map_err(|source| summary_error().with_source(source))?;
             let messages = [ModelRoundMessage {
                 role: ModelRoundRole::User,
                 content: encoded.into(),
@@ -264,7 +265,7 @@ impl AppBranchSummarizer for NativeAppBranchSummarizer {
                     identity_observer: None,
                 })
                 .await
-                .map_err(|_| summary_error())?;
+                .map_err(|source| summary_error().with_source(source))?;
             if cancellation.is_cancelled() {
                 return Err(GatewayApplicationError::Public {
                     status: 409,

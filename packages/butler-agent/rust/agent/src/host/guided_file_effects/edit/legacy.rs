@@ -108,7 +108,8 @@ pub(super) fn recover(
                 .expected
                 .as_deref()
                 .is_none_or(|expected| expected == state.before)
-            && effect_input_sha256(&value).map_err(|_| mismatch())? == prior_input_sha256
+            && effect_input_sha256(&value).map_err(|source| mismatch().with_source(source))?
+                == prior_input_sha256
         {
             matches += 1;
             match_found = Some(value);
@@ -149,7 +150,8 @@ pub(super) fn recover(
                             .expected
                             .as_deref()
                             .is_none_or(|expected| expected == before_hash)
-                        && effect_input_sha256(&value).map_err(|_| mismatch())?
+                        && effect_input_sha256(&value)
+                            .map_err(|source| mismatch().with_source(source))?
                             == prior_input_sha256
                     {
                         matches += 1;

@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::btcc::BtccError;
 
-pub(super) fn setup(error: impl std::fmt::Display) -> BtccError {
-    BtccError::relayed("native_runtime_initialization_failed", error.to_string())
+pub(super) fn setup(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
+    BtccError::relayed("native_runtime_initialization_failed", error.to_string()).with_source(error)
 }
 
 pub(super) fn validate_data_installation_boundary(

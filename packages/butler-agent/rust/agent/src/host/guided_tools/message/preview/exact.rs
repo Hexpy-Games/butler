@@ -46,7 +46,10 @@ pub(super) fn fit(payload: &str, max_bytes: usize) -> Result<String, BtccError> 
         return Ok(payload.into());
     };
     let data = if raw_data[1..raw_data.len() - 1].contains('\\') {
-        Cow::Owned(serde_json::from_str::<String>(raw_data).map_err(|_| failure())?)
+        Cow::Owned(
+            serde_json::from_str::<String>(raw_data)
+                .map_err(|source| failure().with_source(source))?,
+        )
     } else {
         Cow::Borrowed(&raw_data[1..raw_data.len() - 1])
     };
@@ -79,11 +82,12 @@ pub(super) fn fit(payload: &str, max_bytes: usize) -> Result<String, BtccError> 
 fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, BtccError> {
     let visible = base64::engine::general_purpose::STANDARD
         .decode(data)
-        .map_err(|_| {
+        .map_err(|source| {
             BtccError::relayed(
                 "guided_tool_result_base64_invalid",
                 "Exact result page is invalid",
             )
+            .with_source(source)
         })?
         .len();
     let mut body = String::from("{");
@@ -97,7 +101,8 @@ fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, 
             if projected.len() > 1 {
                 projected.push(',');
             }
-            crate::json::write_string(key, &mut projected).map_err(|_| failure())?;
+            crate::json::write_string(key, &mut projected)
+                .map_err(|source| failure().with_source(source))?;
             projected.push(':');
             projected.push_str(raw);
         }
@@ -106,7 +111,8 @@ fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, 
         projected.push(',');
     }
     projected.push_str("\"data\":");
-    crate::json::write_string(data, &mut projected).map_err(|_| failure())?;
+    crate::json::write_string(data, &mut projected)
+        .map_err(|source| failure().with_source(source))?;
     if let Some(raw) = field(output, "offset")? {
         append_field(&mut projected, "offset", raw)?;
     }

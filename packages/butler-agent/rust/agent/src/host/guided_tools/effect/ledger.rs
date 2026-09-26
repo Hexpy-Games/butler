@@ -43,11 +43,12 @@ pub(super) async fn prepare(
         .as_ref()
         .map(WorkspaceReference::get)
         .transpose()
-        .map_err(|_| {
+        .map_err(|source| {
             crate::btcc::BtccError::relayed(
                 "project_ledger_active_context_required",
                 "The active workspace is unavailable.",
             )
+            .with_source(source)
         })?
         .unwrap_or_else(|| owner.binding.workspace_path.clone());
     let ledger = owner.project.ledger();
@@ -58,11 +59,12 @@ pub(super) async fn prepare(
             explicit_reference: None,
         })
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             crate::btcc::BtccError::relayed(
                 "project_ledger_active_context_required",
                 "Project Ledger changes require the exact bounded project and workspace context.",
             )
+            .with_source(source)
         })?;
     let adapter = LedgerEffectAdapter {
         name: name.to_owned(),
@@ -307,7 +309,8 @@ fn public(result: &Value) -> Result<JsonDocument, EffectFailure> {
         "source_sha256":source_sha256,
         "source_file_count":source_file_count,
     });
-    JsonDocument::from_value(&value).map_err(|error| EffectFailure::adapter(error.to_string()))
+    JsonDocument::from_value(&value)
+        .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error))
 }
 
 fn valid_target(target: &str) -> bool {

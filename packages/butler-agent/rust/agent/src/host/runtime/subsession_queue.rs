@@ -14,7 +14,8 @@ pub(crate) struct NativeSubsessionQueue(pub(crate) Arc<NativeInboundQueue>);
 
 impl SubsessionChildQueue for NativeSubsessionQueue {
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError> {
-        let document = JsonDocument::from_value(&input.envelope).map_err(|_| invalid())?;
+        let document = JsonDocument::from_value(&input.envelope)
+            .map_err(|source| invalid().with_source(source))?;
         self.0
             .enqueue_idempotent_with_metadata(document, input.metadata)
             .map(|_| ())
@@ -27,8 +28,8 @@ impl SubsessionChildQueue for NativeSubsessionQueue {
         session_id: &str,
         turn_id: &str,
     ) -> Result<Option<InterruptedSubsessionEvent>, BtccError> {
-        let lookup =
-            JsonDocument::from_value(&json!({"eventId":event_id})).map_err(|_| invalid())?;
+        let lookup = JsonDocument::from_value(&json!({"eventId":event_id}))
+            .map_err(|source| invalid().with_source(source))?;
         let Some(record) = self.0.find_idempotent(&lookup).map_err(queue_error)? else {
             return Ok(None);
         };
@@ -69,7 +70,10 @@ impl SubsessionChildQueue for NativeSubsessionQueue {
                     .and_then(Value::as_str)
             })
             .filter(|value| !value.is_empty());
-        let envelope: Value = record.envelope.read().map_err(|_| invalid())?;
+        let envelope: Value = record
+            .envelope
+            .read()
+            .map_err(|source| invalid().with_source(source))?;
         let matches = envelope
             .pointer("/routingHints/sessionId")
             .and_then(Value::as_str)

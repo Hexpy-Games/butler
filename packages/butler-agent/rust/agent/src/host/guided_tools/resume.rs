@@ -50,8 +50,9 @@ impl ResumePool {
 }
 
 fn signature(name: &str, arguments: &Value, catalog_id: Option<&str>) -> Result<String, BtccError> {
-    let body = canonical_json(arguments, CanonicalKeyOrder::Utf16Lexical)
-        .map_err(|error| BtccError::relayed("guided_tool_identity_json", error.to_string()))?;
+    let body = canonical_json(arguments, CanonicalKeyOrder::Utf16Lexical).map_err(|error| {
+        BtccError::relayed("guided_tool_identity_json", error.to_string()).with_source(error)
+    })?;
     Ok(format!("{}\0{name}\0{body}", catalog_id.unwrap_or("")))
 }
 
@@ -63,6 +64,8 @@ fn catalog_id(raw: &str) -> Result<Option<String>, BtccError> {
         }
         Ok(())
     })
-    .map_err(|error| BtccError::relayed("guided_tool_identity_json", error.to_string()))?;
+    .map_err(|error| {
+        BtccError::relayed("guided_tool_identity_json", error.to_string()).with_source(error)
+    })?;
     Ok(id)
 }

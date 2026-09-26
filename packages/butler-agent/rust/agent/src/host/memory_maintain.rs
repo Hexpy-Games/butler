@@ -171,14 +171,15 @@ async fn run_active(
 ) -> crate::cognition::CognitionResult<crate::cognition::ConfiguredCycleResult> {
     let generation = resolve_active_generation(&options.data, paths)?;
     let os = nix::sys::utsname::uname()
-        .map_err(|_| error(CognitionCode::NativeEnvironmentUnavailable))?;
+        .map_err(|source| error(CognitionCode::NativeEnvironmentUnavailable).with_source(source))?;
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
     let environment =
         NativeProcessEnvironment::capture(&options.data, &home, &os.release().to_string_lossy());
     let collation = Arc::new(
-        LocaleCollation::new("en-US").map_err(|_| error(CognitionCode::NativeLocaleUnavailable))?,
+        LocaleCollation::new("en-US")
+            .map_err(|source| error(CognitionCode::NativeLocaleUnavailable).with_source(source))?,
     );
     let models = NativeProcessModels::new(
         options.data.clone(),

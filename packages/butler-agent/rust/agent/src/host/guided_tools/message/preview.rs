@@ -76,8 +76,10 @@ pub(super) fn fit(
     {
         projected.push_str(",\"error\":");
         projected.push_str(
-            &crate::json::stringify(&serde_json::to_value(error).map_err(|_| failure())?)
-                .map_err(|_| failure())?,
+            &crate::json::stringify(
+                &serde_json::to_value(error).map_err(|source| failure().with_source(source))?,
+            )
+            .map_err(|source| failure().with_source(source))?,
         );
     }
     if let Some(output) = output {
@@ -92,7 +94,7 @@ pub(super) fn fit(
             .as_ref()
             .map(serde_json::to_value)
             .transpose()
-            .map_err(|_| failure())?
+            .map_err(|source| failure().with_source(source))?
     };
     let exact_read = exact_read.as_ref();
     if partial_exact {
@@ -100,7 +102,7 @@ pub(super) fn fit(
         projected.push_str(",\"model_preview\":");
         projected.push_str(
             &crate::json::stringify(&bound::metadata(payload.len(), exact_read))
-                .map_err(|_| failure())?,
+                .map_err(|source| failure().with_source(source))?,
         );
     }
     projected.push('}');
@@ -137,7 +139,7 @@ fn keys(name: &str) -> &'static [&'static str] {
 
 fn generic_output(name: &str, candidate: &str) -> Result<String, BtccError> {
     let mut output = String::from("{\"tool_name\":");
-    crate::json::write_string(name, &mut output).map_err(|_| failure())?;
+    crate::json::write_string(name, &mut output).map_err(|source| failure().with_source(source))?;
     let candidate = candidate.trim();
     if candidate.starts_with('{') {
         if !candidate[1..candidate.len() - 1].trim().is_empty() {
@@ -164,8 +166,10 @@ fn payload(result: &ToolResult) -> Result<String, BtccError> {
     {
         body.push_str(",\"error\":");
         body.push_str(
-            &crate::json::stringify(&serde_json::to_value(error).map_err(|_| failure())?)
-                .map_err(|_| failure())?,
+            &crate::json::stringify(
+                &serde_json::to_value(error).map_err(|source| failure().with_source(source))?,
+            )
+            .map_err(|source| failure().with_source(source))?,
         );
     }
     if let Some(output) = &result.output {
@@ -216,13 +220,13 @@ pub(super) fn field<'a>(raw: &'a str, name: &str) -> Result<Option<&'a str>, Btc
         }
         Ok(())
     })
-    .map_err(|_| failure())?;
+    .map_err(|source| failure().with_source(source))?;
     Ok(selected)
 }
 
 pub(super) fn append_field(output: &mut String, name: &str, raw: &str) -> Result<(), BtccError> {
     output.push(',');
-    crate::json::write_string(name, output).map_err(|_| failure())?;
+    crate::json::write_string(name, output).map_err(|source| failure().with_source(source))?;
     output.push(':');
     output.push_str(raw);
     Ok(())

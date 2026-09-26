@@ -404,8 +404,8 @@ fn unavailable(locale: String, reason: &'static str) -> BriefingSettings {
     BriefingSettings::Unavailable { locale, reason }
 }
 
-fn setup(error: impl std::fmt::Display) -> BtccError {
-    BtccError::relayed("new_chat_briefing_setup_failed", error.to_string())
+fn setup(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
+    BtccError::relayed("new_chat_briefing_setup_failed", error.to_string()).with_source(error)
 }
 
 #[cfg(test)]

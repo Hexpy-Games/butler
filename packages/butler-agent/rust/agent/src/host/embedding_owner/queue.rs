@@ -120,7 +120,7 @@ pub(super) fn deadline_instant(epoch_ms: Option<i64>) -> CognitionResult<Option<
     };
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| error(CognitionCode::EmbedRequestDeadline))?
+        .map_err(|source| error(CognitionCode::EmbedRequestDeadline).with_source(source))?
         .as_millis();
     if epoch_ms <= 0 || u128::try_from(epoch_ms).unwrap_or_default() <= now_ms {
         return Err(error(CognitionCode::EmbedRequestDeadline));

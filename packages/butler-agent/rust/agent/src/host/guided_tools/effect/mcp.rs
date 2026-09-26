@@ -119,7 +119,7 @@ impl EffectAdapter for McpToolEffect {
             {
                 Ok(result) => JsonDocument::from_value(&result)
                     .map(AdapterOutcome::Applied)
-                    .map_err(|error| EffectFailure::adapter(error.to_string())),
+                    .map_err(|error| EffectFailure::adapter(error.to_string()).with_source(error)),
                 Err(error) if error.attempted => Ok(AdapterOutcome::Uncertain(Some(
                     EffectAdapterError::new(error.code, error.message),
                 ))),

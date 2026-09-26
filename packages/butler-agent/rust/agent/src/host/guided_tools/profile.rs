@@ -64,8 +64,9 @@ pub(super) async fn execute(
 }
 
 fn profile_value(value: impl serde::Serialize) -> Result<Value, ProfileError> {
-    serde_json::to_value(value)
-        .map_err(|error| ProfileError::new(ProfileCode::ProfileResultInvalid, error.to_string()))
+    serde_json::to_value(value).map_err(|error| {
+        ProfileError::new(ProfileCode::ProfileResultInvalid, error.to_string()).with_source(error)
+    })
 }
 
 fn onboarding_input(args: &Map<String, Value>) -> FirstChatOnboardingUpdate {

@@ -70,7 +70,7 @@ pub(super) async fn public_result(
             (bytes, cleanup)
         })
         .await?;
-    let bytes = bytes.map_err(|_| error("command_output_unreadable"))?;
+    let bytes = bytes.map_err(|source| error("command_output_unreadable").with_source(source))?;
     let payload = &spooled.payload_source;
     let stdout = usize::try_from(payload.stdout_start)
         .ok()
@@ -215,14 +215,14 @@ async fn from_streams(
         .await
         .map_err(|error| BtccError::relayed(error.code(), error.message()))?
         .await
-        .map_err(|_| error("tool_output_completion_lost"))?
+        .map_err(|source| error("tool_output_completion_lost").with_source(source))?
         .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
     let base = JsonDocument::from_encoded(
         budget
             .to_json_document()
             .map_err(|error| BtccError::relayed(error.code(), error.message()))?,
     )
-    .map_err(|_| error("command_result_encoding_failed"))?;
+    .map_err(|source| error("command_result_encoding_failed").with_source(source))?;
     let success = budget.exit_code == Some(0) && !budget.timed_out;
     let cwd = PathBuf::from(&summary.cwd);
     let args_copy = args.clone();
