@@ -27,7 +27,7 @@ function Framed() {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "The sidebar frame: titlebar space, fixed navigation, a scrolling list with fades, a footer and a density.",
-  whenToUse: ["The app sidebar and any sidebar-like navigation column"],
+  whenToUse: ["The app sidebar and other sidebar-like navigation columns"],
   whenNotToUse: [
     { when: "Settings navigation lists", use: "SettingsNav" },
     { when: "A scrolling region in content", use: "ScrollArea" },

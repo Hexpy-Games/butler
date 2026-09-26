@@ -351,7 +351,7 @@
 | Reserve space for a hidden item | `Layout` |  |
 | Revealing content with a height change | `Collapsible` | `Presence` |
 | Right-click actions on content | `ContextMenu` | `DropdownMenu` |
-| Rows in the sidebar, settings navigation or any navigation list | `NavRow` |  |
+| Rows in the sidebar, settings navigation and other navigation lists | `NavRow` |  |
 | Rows inside a panel | `ListRow` | `CardList` |
 | Rows of data in panels and lists (automations, artifacts, models) | `ListRow` |  |
 | Rows that should not wrap, or need grow/truncate | `Stack` | `Inline` |
@@ -393,7 +393,7 @@
 | The action is an icon without a visible label | `IconButton` | `Button` |
 | The action needs words to be understood | `Button` | `IconButton` |
 | The app sidebar | `SidebarShell` | `SettingsNav` |
-| The app sidebar and any sidebar-like navigation column | `SidebarShell` |  |
+| The app sidebar and other sidebar-like navigation columns | `SidebarShell` |  |
 | The automation itself | `AutomationRow` | `AutomationRunList` |
 | The inspector beside the conversation | `InspectorShell` |  |
 | The layout of the coming content is known (rows, lines, cards) | `Skeleton` |  |
@@ -1129,7 +1129,7 @@ The first-run setup frame: step progress, a large title and centered content.
 
 The sidebar frame: titlebar space, fixed navigation, a scrolling list with fades, a footer and a density.
 
-- Use for: The app sidebar and any sidebar-like navigation column
+- Use for: The app sidebar and other sidebar-like navigation columns
 - Not for: Settings navigation lists → `SettingsNav`
 - Not for: A scrolling region in content → `ScrollArea`
 - Tokens: `--sidebar-bg`, `--sidebar-width`, `--sidebar-row-height`, `--scroll-fade-size`, `--sidebar-padding-inline`
@@ -1223,7 +1223,7 @@ Drop feedback for navigation trees: an insert slot, a group ring and a root zone
 
 The navigation row: icon and label on the left, badge or actions on the right, flat active state.
 
-- Use for: Rows in the sidebar, settings navigation or any navigation list
+- Use for: Rows in the sidebar, settings navigation and other navigation lists
 - Use for: A row with hover-revealed actions
 - Not for: A data row that is not navigation → `ListRow`
 - Not for: A folder that expands → `CollapsibleNavGroup`

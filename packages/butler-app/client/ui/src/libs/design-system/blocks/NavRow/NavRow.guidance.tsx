@@ -17,7 +17,7 @@ function SessionNavRow() {
 
 export const guidance: ShowcaseGuidance = {
   purpose: "The navigation row: icon and label on the left, badge or actions on the right, flat active state.",
-  whenToUse: ["Rows in the sidebar, settings navigation or any navigation list", "A row with hover-revealed actions"],
+  whenToUse: ["Rows in the sidebar, settings navigation and other navigation lists", "A row with hover-revealed actions"],
   whenNotToUse: [
     { when: "A data row that is not navigation", use: "ListRow" },
     { when: "A folder that expands", use: "CollapsibleNavGroup" },

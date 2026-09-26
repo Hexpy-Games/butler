@@ -20,8 +20,8 @@ export const guidance: ShowcaseGuidance = {
   recipes: [{ name: "Icon in a button", description: "Pass icons through iconStart/iconEnd; size=\"md\" in default controls.", render: () => <NewProjectButton /> }],
   doDont: [
     {
-      do: { caption: "Use the token sizes (xs…2xl).", render: () => <Settings size="md" /> },
-      dont: { caption: "Pixel sizes drift from the 12/14/16/20/24/32 scale.", render: () => <Stack align="row" gap="xs"><Settings size={17} /><Typo.Caption>17px</Typo.Caption></Stack> },
+      do: { caption: "Use the named sizes (xs…2xl), one size per row.", render: () => <Stack align="row" gap="xs"><Settings size="md" /><Typo.Caption>md</Typo.Caption></Stack> },
+      dont: { caption: "Pixel sizes (size={17}) drift off the 12/14/16/20/24/32 scale; mixed sizes in one row misalign.", render: () => <Stack align="row" gap="xs" cross="center"><Settings size="sm" /><Settings size="xl" /><Typo.Caption>sm + xl</Typo.Caption></Stack> },
     },
   ],
   content: ["Name new mappings after the meaning (FolderPlus), not the glyph file."],
