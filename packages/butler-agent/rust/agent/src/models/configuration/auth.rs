@@ -1,6 +1,7 @@
 //! Request-local OpenAI API-key and Codex OAuth resolution.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use base64::Engine as _;
 use reqwest::{Client, Url};
@@ -28,12 +29,30 @@ pub(super) struct AuthOwner<'a> {
     pub(super) client: &'a Client,
 }
 
-#[derive(Clone)]
+/// A provider authentication failure: a static wire code and user-facing
+/// message, plus the transport, filesystem or JSON error that caused it.
+#[derive(Clone, thiserror::Error)]
+#[error("{message}")]
 pub(crate) struct AuthError {
     pub(super) code: &'static str,
     pub(super) message: &'static str,
+    #[source]
+    source: Option<Arc<dyn std::error::Error + Send + Sync>>,
 }
 
+impl AuthError {
+    /// Records the underlying error.
+    #[must_use]
+    pub(super) fn with_source(
+        mut self,
+        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
+        self.source = Some(Arc::from(source.into()));
+        self
+    }
+}
+
+/// Debug omits the source: transport errors may echo request details.
 impl std::fmt::Debug for AuthError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -42,12 +61,6 @@ impl std::fmt::Debug for AuthError {
             .finish_non_exhaustive()
     }
 }
-impl std::fmt::Display for AuthError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.message)
-    }
-}
-impl std::error::Error for AuthError {}
 
 impl AuthOwner<'_> {
     pub(super) async fn resolve_openai(&self) -> Result<ProviderAuth, AuthError> {
@@ -167,20 +180,22 @@ impl AuthOwner<'_> {
             ])
             .send()
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 error(
                     "provider_auth_refresh_transport",
                     "OpenAI OAuth refresh failed.",
                 )
+                .with_source(source)
             })?;
         if !response.status().is_success() {
             return Ok(profile);
         }
-        let token = response_json(response).await.map_err(|()| {
+        let token = response_json(response).await.map_err(|source| {
             error(
                 "provider_auth_refresh_invalid",
                 "OpenAI OAuth refresh response was invalid.",
             )
+            .with_source(source)
         })?;
         let mut raw = profile.raw;
         let access = token
@@ -231,11 +246,12 @@ impl AuthOwner<'_> {
             ])
             .send()
             .await
-            .map_err(|_| {
+            .map_err(|source| {
                 error(
                     "provider_auth_exchange_transport",
                     "OpenAI OAuth token exchange failed.",
                 )
+                .with_source(source)
             })?;
         if !response.status().is_success() {
             return Err(error(
@@ -243,11 +259,12 @@ impl AuthOwner<'_> {
                 "OpenAI OAuth token exchange failed.",
             ));
         }
-        let token = response_json(response).await.map_err(|()| {
+        let token = response_json(response).await.map_err(|source| {
             error(
                 "provider_auth_exchange_invalid",
                 "OpenAI OAuth token exchange response was invalid.",
             )
+            .with_source(source)
         })?;
         let access = token
             .get("access_token")
@@ -298,18 +315,20 @@ impl AuthOwner<'_> {
                 "OpenAI auth profile path is invalid.",
             )
         })?;
-        tokio::fs::create_dir_all(parent).await.map_err(|_| {
+        tokio::fs::create_dir_all(parent).await.map_err(|source| {
             error(
                 "provider_auth_write_failed",
                 "OpenAI auth profile could not be written.",
             )
+            .with_source(source)
         })?;
         let mut bytes =
-            serde_json::to_vec_pretty(&Value::Object(profile.clone())).map_err(|_| {
+            serde_json::to_vec_pretty(&Value::Object(profile.clone())).map_err(|source| {
                 error(
                     "provider_auth_write_failed",
                     "OpenAI auth profile could not be written.",
                 )
+                .with_source(source)
             })?;
         bytes.push(b'\n');
         write_mode_600(&path, &bytes).await
@@ -378,5 +397,9 @@ fn trimmed(value: Option<&str>) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 fn error(code: &'static str, message: &'static str) -> AuthError {
-    AuthError { code, message }
+    AuthError {
+        code,
+        message,
+        source: None,
+    }
 }

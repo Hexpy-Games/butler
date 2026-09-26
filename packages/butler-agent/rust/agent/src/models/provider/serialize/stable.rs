@@ -9,11 +9,11 @@ pub(super) fn order(
     mut body: Map<String, Value>,
     stable: &Value,
     instructions: Option<&str>,
-) -> Result<Map<String, Value>, &'static str> {
+) -> Result<Map<String, Value>, ModelRoundError> {
     let prefix = stable
         .get("instructionPrefix")
         .and_then(Value::as_str)
-        .ok_or("stable_provider_prefix_contract_invalid")?;
+        .ok_or_else(|| invariant("stable_provider_prefix_contract_invalid"))?;
     let revisions_valid = ["stablePrefixRevision", "toolProfileRevision"]
         .into_iter()
         .all(|key| {
@@ -28,10 +28,10 @@ pub(super) fn order(
         || prefix.is_empty()
         || prefix.len() > 200_000
     {
-        return Err("stable_provider_prefix_contract_invalid");
+        return Err(invariant("stable_provider_prefix_contract_invalid"));
     }
     if !instructions.is_some_and(|value| value.starts_with(prefix)) {
-        return Err("stable_provider_prefix_instruction_mismatch");
+        return Err(invariant("stable_provider_prefix_instruction_mismatch"));
     }
     let mut ordered = Map::new();
     for key in ["model", "tools", "tool_choice", "reasoning", "instructions"] {

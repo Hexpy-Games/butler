@@ -11,10 +11,9 @@ impl AdmissionModelCatalogPort for ModelConfiguration {
     ) -> PortFuture<'_, AdmissionModelCatalogSnapshot> {
         Box::pin(async move {
             // Admission only needs metadata. It never reads or retains secrets.
-            let facts = self
-                .read_metadata()
-                .await
-                .map_err(|error| BtccError::relayed("model_catalog_failed", error.to_string()))?;
+            let facts = self.read_metadata().await.map_err(|error| {
+                BtccError::relayed("model_catalog_failed", error.to_string()).with_source(error)
+            })?;
             let snapshot = facts.catalog;
             let metadata = requested_model_refs
                 .into_iter()

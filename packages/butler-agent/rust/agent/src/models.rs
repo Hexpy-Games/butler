@@ -57,6 +57,7 @@ pub(crate) use catalog::{
     registered_hosted_model_metadata,
 };
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::locale::LocaleCollation;
@@ -66,7 +67,8 @@ use tokenizer::TokenizerOwner;
 pub(crate) use configuration::{
     DiscoveredLocalModel, HostedModelMutation, LocalModelMutation, McpModelTarget,
     ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-    ModelConfigurationRead, ProviderCredentialMutation, generate_pkce_verifier, pkce_challenge,
+    ModelConfigurationRead, ProviderCredentialMutation, SettingsError, generate_pkce_verifier,
+    pkce_challenge,
 };
 #[cfg(unix)]
 pub(crate) use status::{NativeStatusModels, auth_status_with_environment, open_status_models};
@@ -119,22 +121,45 @@ impl ModelCatalog {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct ModelCatalogError(String);
+/// Failures of the model catalog, model configuration and tokenizer.
+///
+/// `Display` is the user-facing message.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ModelCatalogError {
+    /// A configuration request or stored value was rejected; the message says why.
+    #[error("{0}")]
+    Rejected(Cow<'static, str>),
+    /// Local model discovery failed; the message says which check failed.
+    #[error("local_model_discovery_failed: {message}")]
+    Discovery {
+        message: &'static str,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
+    /// A model configuration or credentials file could not be read, encoded
+    /// or written; the message says which.
+    #[error("{message}")]
+    Storage {
+        message: &'static str,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+    /// The bundled or generated catalog could not be encoded or decoded.
+    #[error(transparent)]
+    Catalog(#[from] serde_json::Error),
+    /// Canonical JSON encoding of the catalog failed.
+    #[error(transparent)]
+    CatalogJson(#[from] crate::json::JsonError),
+    /// The tokenizer could not be initialized.
+    #[error("{0}")]
+    Tokenizer(Arc<dyn std::error::Error + Send + Sync>),
+}
 
 impl ModelCatalogError {
-    pub(super) fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+    pub(super) fn rejected(message: impl Into<Cow<'static, str>>) -> Self {
+        Self::Rejected(message.into())
     }
 }
-
-impl std::fmt::Display for ModelCatalogError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for ModelCatalogError {}
 
 #[cfg(test)]
 mod tests;

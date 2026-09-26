@@ -36,7 +36,7 @@ pub(super) async fn details_or_set(
 ) -> CallToolResult {
     let config = match models::open_status_models(data_root.to_path_buf()).await {
         Ok(value) => value.configuration,
-        Err(error) => return tool_error(error),
+        Err(error) => return tool_error(error.to_string()),
     };
     if let Some(model) = model.filter(|value| !value.is_empty()) {
         let target = target_value(target);

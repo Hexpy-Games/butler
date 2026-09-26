@@ -12,7 +12,9 @@ use crate::{models, operations};
 use super::super::service_instance;
 
 pub(super) async fn text(data_root: &Path) -> Result<String, String> {
-    let models = models::open_status_models(data_root.to_path_buf()).await?;
+    let models = models::open_status_models(data_root.to_path_buf())
+        .await
+        .map_err(|error| error.to_string())?;
     let now_ms = SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

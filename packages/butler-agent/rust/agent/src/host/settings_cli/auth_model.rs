@@ -82,21 +82,21 @@ pub(super) async fn auth_logout(
     };
     let owner = match models::open_status_models(data_root.to_path_buf()).await {
         Ok(owner) => owner,
-        Err(message) => {
+        Err(error) => {
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("auth_logout_failed", message),
+                &CliError::failed("auth_logout_failed", error.to_string()),
             );
         }
     };
     let removed = match owner.configuration.remove_auth_profile(&profile).await {
         Ok(removed) => removed,
-        Err(message) => {
+        Err(error) => {
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("auth_logout_failed", message),
+                &CliError::failed("auth_logout_failed", error.to_string()),
             );
         }
     };
@@ -155,18 +155,22 @@ pub(super) async fn model_set(
     }
     let owner = match models::open_status_models(data_root.to_path_buf()).await {
         Ok(owner) => owner,
-        Err(message) => {
+        Err(error) => {
             return report_error(
                 command.name(),
                 options.json,
-                &CliError::failed("model_set_failed", message),
+                &CliError::failed("model_set_failed", error.to_string()),
             );
         }
     };
     let change = match owner.configuration.set_default_model(requested).await {
         Ok(change) => change,
-        Err(message) => {
-            return report_error(command.name(), options.json, &CliError::health(message));
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::health(error.to_string()),
+            );
         }
     };
     drop(owner);

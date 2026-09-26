@@ -97,10 +97,10 @@ pub(super) fn upsert(
     clock: &dyn ModelConfigurationClock,
 ) -> Result<CredentialView, crate::models::ModelCatalogError> {
     let provider_id = hosted_provider(provider_id)
-        .ok_or_else(|| crate::models::ModelCatalogError::new("Unsupported provider."))?;
+        .ok_or_else(|| crate::models::ModelCatalogError::rejected("Unsupported provider."))?;
     let secret = crate::public_text::trim_js_whitespace(secret);
     if secret.is_empty() {
-        return Err(crate::models::ModelCatalogError::new(
+        return Err(crate::models::ModelCatalogError::rejected(
             "Provider API key is required.",
         ));
     }
@@ -112,7 +112,7 @@ pub(super) fn upsert(
         .and_then(|id| records.iter().position(|record| record.id == id));
     let previous = existing_index.map(|index| &records[index]);
     if previous.is_some_and(|record| record.provider_id != provider_id) {
-        return Err(crate::models::ModelCatalogError::new(
+        return Err(crate::models::ModelCatalogError::rejected(
             "Credential provider does not match the selected provider.",
         ));
     }

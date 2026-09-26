@@ -21,8 +21,9 @@ pub(super) fn authorize(
         .oauth_authorize_url
         .as_deref()
         .unwrap_or(AUTHORIZE_URL);
-    let mut url =
-        Url::parse(base).map_err(|_| invalid_url("OpenAI OAuth authorize URL is invalid."))?;
+    let mut url = Url::parse(base).map_err(|source| {
+        invalid_url("OpenAI OAuth authorize URL is invalid.").with_source(source)
+    })?;
     let client_id = trimmed(environment.oauth_client_id.as_deref()).unwrap_or(CLIENT_ID);
     let scope = scope
         .filter(|value| !value.is_empty())
@@ -52,7 +53,7 @@ pub(super) fn authorize(
 
 pub(super) fn token_url(environment: &ModelConfigurationEnvironment) -> Result<Url, AuthError> {
     Url::parse(environment.oauth_token_url.as_deref().unwrap_or(TOKEN_URL))
-        .map_err(|_| invalid_url("OpenAI OAuth token URL is invalid."))
+        .map_err(|source| invalid_url("OpenAI OAuth token URL is invalid.").with_source(source))
 }
 
 fn set(pairs: &mut Vec<(String, String)>, key: &str, value: &str) {

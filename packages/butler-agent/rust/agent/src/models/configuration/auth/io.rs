@@ -27,23 +27,25 @@ pub(super) async fn write_mode_600(path: &Path, bytes: &[u8]) -> Result<(), Auth
                 .create(true)
                 .truncate(true)
                 .mode(0o600)
-                .open(path)
-                .map_err(|_| ())?;
-            file.write_all(&bytes).map_err(|_| ())
+                .open(path)?;
+            file.write_all(&bytes)
         })
         .await
-        .map_err(|_| write_error())?
-        .map_err(|()| write_error())
+        .map_err(|source| write_error().with_source(source))?
+        .map_err(|source| write_error().with_source(source))
     }
     #[cfg(not(unix))]
     tokio::fs::write(path, bytes)
         .await
-        .map_err(|_| write_error())
+        .map_err(|source| write_error().with_source(source))
 }
 
-pub(super) async fn response_json(response: reqwest::Response) -> Result<Value, ()> {
-    let bytes = response.bytes().await.map_err(|_| ())?;
-    serde_json::from_slice(&bytes).map_err(|_| ())
+/// The response body as JSON; the error is the transport or decoding failure.
+pub(super) async fn response_json(
+    response: reqwest::Response,
+) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    let bytes = response.bytes().await?;
+    Ok(serde_json::from_slice(&bytes)?)
 }
 
 fn write_error() -> AuthError {

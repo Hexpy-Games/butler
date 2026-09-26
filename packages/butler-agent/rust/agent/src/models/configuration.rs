@@ -18,6 +18,7 @@ pub(crate) use auth::{generate_pkce_verifier, pkce_challenge};
 pub(crate) use discovery::{DiscoveredLocalModel, LocalModelDiscoveryResult};
 pub(crate) use mcp::McpModelTarget;
 pub(crate) use mutations::{HostedModelMutation, LocalModelMutation, ProviderCredentialMutation};
+pub(crate) use settings::SettingsError;
 
 use std::{
     collections::HashMap,
@@ -380,7 +381,10 @@ impl ModelConfiguration {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|_| ModelCatalogError::new("Local model discovery could not start."))?;
+            .map_err(|source| ModelCatalogError::Storage {
+                message: "Local model discovery could not start.",
+                source: source.into(),
+            })?;
         discovery::discover(&client, server_url, platform, api_key.as_deref()).await
     }
 

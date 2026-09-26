@@ -20,7 +20,7 @@ pub(super) fn bounded_items(messages: &[ModelRoundMessage]) -> Vec<Value> {
 
 pub(super) fn bounded_items_with_ordinals(
     messages: &[ModelRoundMessage],
-) -> Result<(Vec<Value>, Vec<u64>), &'static str> {
+) -> Option<(Vec<Value>, Vec<u64>)> {
     let mut items = Vec::new();
     let mut ordinals = Vec::new();
     for message in messages {
@@ -32,25 +32,25 @@ pub(super) fn bounded_items_with_ordinals(
         ordinals.extend(std::iter::repeat_n(ordinal, projected.len()));
         items.extend(projected);
     }
-    Ok((items, ordinals))
+    Some((items, ordinals))
 }
 
-pub(super) fn turn_item_ordinal(value: Option<&str>) -> Result<u64, &'static str> {
-    let value = value
-        .and_then(|value| value.strip_prefix("turn-item-"))
-        .ok_or("bounded_continuation_turn_item_identity_missing")?;
+/// The ordinal of a `turn-item-N` continuation id; `None` when the id is
+/// missing or malformed (the caller reports
+/// `bounded_continuation_turn_item_identity_missing`).
+pub(super) fn turn_item_ordinal(value: Option<&str>) -> Option<u64> {
+    let value = value.and_then(|value| value.strip_prefix("turn-item-"))?;
     if value.is_empty()
         || value.len() > 7
         || (value.len() > 1 && value.starts_with('0'))
         || !value.bytes().all(|byte| byte.is_ascii_digit())
     {
-        return Err("bounded_continuation_turn_item_identity_missing");
+        return None;
     }
     value
         .parse::<u64>()
         .ok()
         .filter(|value| *value <= 1_000_000)
-        .ok_or("bounded_continuation_turn_item_identity_missing")
 }
 pub(super) fn chat_messages(request: &ModelRoundRequest<'_>) -> Vec<Value> {
     chat_messages_with_instructions(request, request.instructions)

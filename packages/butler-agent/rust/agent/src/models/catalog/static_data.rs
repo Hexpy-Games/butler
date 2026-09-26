@@ -12,6 +12,6 @@ pub(crate) struct StaticCatalog {
 impl StaticCatalog {
     pub(crate) fn load() -> Result<Self, ModelCatalogError> {
         serde_json::from_str(include_str!("static-catalog.json"))
-            .map_err(|error| ModelCatalogError::new(error.to_string()))
+            .map_err(ModelCatalogError::Catalog)
     }
 }

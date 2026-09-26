@@ -293,10 +293,13 @@ impl ModelRoundPort for NativeModelProvider {
                 Some(request.model),
             )
             .map_err(|error| {
-                ModelRoundError::Integrity(crate::btcc::BtccError::relayed(
-                    "context_tokenization_failed",
-                    error.to_string(),
-                ))
+                ModelRoundError::Integrity(
+                    crate::btcc::BtccError::relayed(
+                        "context_tokenization_failed",
+                        error.to_string(),
+                    )
+                    .with_source(error),
+                )
             })?
             .tokens
             + request
@@ -317,26 +320,29 @@ impl ModelRoundPort for NativeModelProvider {
                 let value = if model.starts_with("openai/") {
                     serde_json::Value::Array(serialize::bounded_items(messages))
                 } else {
-                    serde_json::to_value(messages).map_err(|_| {
+                    serde_json::to_value(messages).map_err(|source| {
                         crate::btcc::BtccError::relayed(
                             "context_serialization_failed",
                             "Context serialization failed.",
                         )
+                        .with_source(source)
                     })?
                 };
-                let bytes = crate::json::stringify(&value).map_err(|_| {
+                let bytes = crate::json::stringify(&value).map_err(|source| {
                     crate::btcc::BtccError::relayed(
                         "context_serialization_failed",
                         "Context serialization failed.",
                     )
+                    .with_source(source)
                 })?;
                 let tokens = catalog
                     .estimate_tokens(&snapshot, TokenEstimateInput::Text(&bytes), Some(&model))
-                    .map_err(|_| {
+                    .map_err(|source| {
                         crate::btcc::BtccError::relayed(
                             "context_tokenization_failed",
                             "Context tokenization failed.",
                         )
+                        .with_source(source)
                     })?
                     .tokens;
                 Ok(tokens * 2.0)

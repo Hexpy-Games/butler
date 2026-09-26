@@ -235,12 +235,18 @@ fn clean(value: &str) -> Option<&str> {
     let value = crate::public_text::trim_js_whitespace(value);
     (!value.is_empty()).then_some(value)
 }
-fn error(message: &str) -> ModelCatalogError {
-    ModelCatalogError::new(message)
+fn error(message: &'static str) -> ModelCatalogError {
+    ModelCatalogError::rejected(message)
 }
-fn io_error(_: std::io::Error) -> ModelCatalogError {
-    error("Model configuration could not be written.")
+fn io_error(source: std::io::Error) -> ModelCatalogError {
+    ModelCatalogError::Storage {
+        message: "Model configuration could not be written.",
+        source: source.into(),
+    }
 }
-fn json_error(_: serde_json::Error) -> ModelCatalogError {
-    error("Model configuration could not be serialized.")
+fn json_error(source: serde_json::Error) -> ModelCatalogError {
+    ModelCatalogError::Storage {
+        message: "Model configuration could not be serialized.",
+        source: source.into(),
+    }
 }

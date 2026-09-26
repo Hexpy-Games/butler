@@ -24,8 +24,7 @@ pub(super) fn generation(
                 .unwrap_or_default(),
         )
     });
-    let bytes = json::stringify(&Value::Array(values))
-        .map_err(|error| ModelCatalogError::new(error.to_string()))?;
+    let bytes = json::stringify(&Value::Array(values)).map_err(ModelCatalogError::CatalogJson)?;
     Ok(format!("{:x}", Sha256::digest(bytes.as_bytes())))
 }
 
@@ -65,5 +64,5 @@ fn generation_value(model: &ModelProviderMetadata) -> Result<Value, ModelCatalog
 }
 
 fn to_json<T: serde::Serialize>(value: &T) -> Result<Value, ModelCatalogError> {
-    serde_json::to_value(value).map_err(|error| ModelCatalogError::new(error.to_string()))
+    serde_json::to_value(value).map_err(ModelCatalogError::Catalog)
 }

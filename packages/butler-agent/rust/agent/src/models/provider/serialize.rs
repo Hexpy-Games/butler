@@ -156,8 +156,7 @@ fn responses(
         );
     }
     if let Some(stable) = request.stable_provider_cache_prefix {
-        body = stable::order(body, stable, request.instructions)
-            .map_err(|code| crate::btcc::ModelRoundError::StablePrefix(code.into()))?;
+        body = stable::order(body, stable, request.instructions)?;
     }
     if matches!(
         config.auth.mode(),
@@ -197,7 +196,7 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
         let response = bounded
             .get("responseItemId")
             .and_then(Value::as_str)
-            .and_then(|value| messages::turn_item_ordinal(Some(value)).ok())
+            .and_then(|value| messages::turn_item_ordinal(Some(value)))
             .ok_or_else(|| continuation_error("bounded_continuation_turn_item_identity_missing"))?;
         let previous = request
             .continuation
@@ -215,8 +214,8 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
             })
             .transpose()?
             .map_or(-1_i64, |value| i64::try_from(value).unwrap_or(i64::MAX));
-        let (items, ordinals) =
-            messages::bounded_items_with_ordinals(request.messages).map_err(continuation_error)?;
+        let (items, ordinals) = messages::bounded_items_with_ordinals(request.messages)
+            .ok_or_else(|| continuation_error("bounded_continuation_turn_item_identity_missing"))?;
         if i64::try_from(response).unwrap_or(i64::MAX) <= delivered
             || ordinals.iter().any(|value| *value >= response)
             || ordinals.windows(2).any(|pair| pair[1] < pair[0])

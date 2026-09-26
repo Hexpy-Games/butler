@@ -82,7 +82,9 @@ pub async fn run_native_status_cli(
     };
     let models = match models::open_status_models(data_root.clone()).await {
         Ok(models) => models,
-        Err(message) => return report_error(command.source_name(), options.json, &message),
+        Err(error) => {
+            return report_error(command.source_name(), options.json, &error.to_string());
+        }
     };
     let (data, text) = match command {
         Command::ModelStatus => {

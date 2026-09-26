@@ -181,8 +181,10 @@ pub(super) fn normalize_server(value: &str) -> Result<(String, String), ModelCat
     } else {
         format!("http://{value}")
     };
-    let mut url =
-        Url::parse(&candidate).map_err(|_| error("Local model server URL is invalid."))?;
+    let mut url = Url::parse(&candidate).map_err(|source| ModelCatalogError::Discovery {
+        message: "Local model server URL is invalid.",
+        source: Some(source.into()),
+    })?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(error("Local model server URL must use http or https."));
     }
@@ -320,8 +322,11 @@ fn is_js_space(value: char) -> bool {
         | '\u{3000}' | '\u{feff}')
 }
 
-fn error(message: &str) -> ModelCatalogError {
-    ModelCatalogError::new(format!("local_model_discovery_failed: {message}"))
+fn error(message: &'static str) -> ModelCatalogError {
+    ModelCatalogError::Discovery {
+        message,
+        source: None,
+    }
 }
 
 #[cfg(test)]

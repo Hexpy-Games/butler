@@ -10,11 +10,13 @@ use std::{
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{Value, json};
 
+use crate::btcc::ModelRoundError;
 use crate::{configuration::ConfigurationWrites, locale::LocaleCollation};
 
 use super::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, PromptCacheRetention,
-    ProviderPromptCachePolicy, ProviderRequestConfigPort, parse_model_ref, provider_http_client,
+    ModelCatalog, ModelCatalogError, ModelConfiguration, ModelConfigurationEnvironment,
+    PromptCacheRetention, ProviderPromptCachePolicy, ProviderRequestConfigPort, parse_model_ref,
+    provider_http_client,
 };
 
 pub(crate) struct NativeStatusModels {
@@ -116,17 +118,34 @@ impl NativeStatusModels {
     }
 }
 
-pub(crate) async fn open_status_models(data_root: PathBuf) -> Result<NativeStatusModels, String> {
+/// The status model owner could not be opened. `Display` is the CLI message.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StatusModelsError {
+    /// The collation locale could not be built.
+    #[error("model_status_unavailable: {0}")]
+    Locale(#[source] crate::locale::LocaleError),
+    /// The catalog or model configuration could not be opened.
+    #[error("model_status_unavailable: {0}")]
+    Catalog(#[source] ModelCatalogError),
+    /// The provider HTTP client could not be built.
+    #[error("model_status_unavailable: {0}")]
+    HttpClient(#[source] reqwest::Error),
+    /// Model metadata could not be read. The message keeps the historical
+    /// `ModelCatalogError("..")` rendering the status CLI has always printed.
+    #[error("model_status_unavailable: ModelCatalogError({:?})", .0.to_string())]
+    Metadata(#[source] ModelCatalogError),
+    /// The effective prompt model could not be resolved.
+    #[error("model_status_unavailable: {0:?}")]
+    PromptModel(ModelRoundError),
+}
+
+pub(crate) async fn open_status_models(
+    data_root: PathBuf,
+) -> Result<NativeStatusModels, StatusModelsError> {
     let environment = status_environment();
-    let collation = Arc::new(
-        LocaleCollation::new("en-US")
-            .map_err(|error| format!("model_status_unavailable: {error}"))?,
-    );
-    let catalog = Arc::new(
-        ModelCatalog::new().map_err(|error| format!("model_status_unavailable: {error}"))?,
-    );
-    let client =
-        provider_http_client().map_err(|error| format!("model_status_unavailable: {error}"))?;
+    let collation = Arc::new(LocaleCollation::new("en-US").map_err(StatusModelsError::Locale)?);
+    let catalog = Arc::new(ModelCatalog::new().map_err(StatusModelsError::Catalog)?);
+    let client = provider_http_client().map_err(StatusModelsError::HttpClient)?;
     let configuration = Arc::new(
         ModelConfiguration::new(
             data_root.clone(),
@@ -137,15 +156,15 @@ pub(crate) async fn open_status_models(data_root: PathBuf) -> Result<NativeStatu
             client,
             Arc::new(ConfigurationWrites::new()),
         )
-        .map_err(|error| format!("model_status_unavailable: {error}"))?,
+        .map_err(StatusModelsError::Catalog)?,
     );
     let metadata = configuration
         .read_metadata()
         .await
-        .map_err(|error| format!("model_status_unavailable: {error:?}"))?;
+        .map_err(StatusModelsError::Metadata)?;
     let model_ref = configuration
         .effective_prompt_model(None)
-        .map_err(|error| format!("model_status_unavailable: {error:?}"))?;
+        .map_err(StatusModelsError::PromptModel)?;
     let parsed = parse_model_ref(&model_ref);
     let _model_metadata = metadata.catalog.resolve_model_metadata(Some(&model_ref));
     let runtime = if parsed.provider_id == "local" {

@@ -57,7 +57,10 @@ pub(crate) struct VisualImageAdmissionResult {
     pub manifests: Vec<VisualAttachmentManifest>,
 }
 
-#[derive(Debug)]
+/// A visual attachment was refused for the selected model; `code` is the
+/// wire code and `message` the refusal detail.
+#[derive(Debug, thiserror::Error)]
+#[error("{code}: {message}")]
 pub(crate) struct ImageAdmissionError {
     pub(crate) code: &'static str,
     pub(crate) message: String,

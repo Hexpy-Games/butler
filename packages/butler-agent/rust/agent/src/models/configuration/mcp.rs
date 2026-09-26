@@ -51,7 +51,7 @@ impl ModelConfiguration {
                 McpModelTarget::Worker => "worker",
                 McpModelTarget::Butler => "butler",
             };
-            return Err(ModelCatalogError::new(format!(
+            return Err(ModelCatalogError::rejected(format!(
                 "Invalid {label} model: \"{requested}\". Valid: {}",
                 VALID_MODELS.join(", ")
             )));
