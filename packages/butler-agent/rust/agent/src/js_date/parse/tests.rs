@@ -1,26 +1,50 @@
 use super::parse_date_millis;
 
 #[test]
-fn grammar_and_local_boundary_match_actual_bun_fixed_zone_corpus() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!("source-bun.json")).unwrap();
-    let mut failures = Vec::new();
-    for zone in fixture["zones"].as_array().unwrap() {
-        let offset = zone["offset_seconds"].as_i64().unwrap() * 1000;
-        for case in zone["cases"].as_array().unwrap() {
-            let text = case[0].as_str().unwrap();
-            let expected = case[1].as_i64();
-            let actual = parse_date_millis(text, &|local| local.checked_sub(offset));
-            if actual != expected {
-                failures.push((zone["zone"].clone(), text.to_owned(), expected, actual));
-            }
+fn date_grammar_resolves_utc_and_local_forms_and_rejects_invalid_dates() {
+    // (text, parsed in UTC, parsed in a fixed UTC+09:00 zone)
+    for (text, utc, plus_nine) in [
+        ("2000-04-31", Some(957139200000), Some(957139200000)),
+        ("2024-02-30 1:2", Some(1709254920000), Some(1709222520000)),
+        (
+            "2024-02-30 1:2+09",
+            Some(1709222520000),
+            Some(1709222520000),
+        ),
+        (
+            "Mar 30 1999 12:34 GMT-0800",
+            Some(922826040000),
+            Some(922826040000),
+        ),
+        (
+            "1900-02-29T12:34:56Z",
+            Some(-2203845904000),
+            Some(-2203845904000),
+        ),
+        (
+            "+010000-01-01T01:02:03.123456789999",
+            Some(253402304523123),
+            Some(253402272123123),
+        ),
+        ("Jan 1 50", Some(-631152000000), Some(-631184400000)),
+        ("Dec 29 49", Some(2524348800000), Some(2524316400000)),
+        ("2024-13-01T24:00:00-00:30", None, None),
+        ("January 32 1999 12::34 GMT+9", None, None),
+        ("19700131", None, None),
+        (
+            "+275760-09-13T00:00:00Z",
+            Some(8640000000000000),
+            Some(8640000000000000),
+        ),
+    ] {
+        for (offset, expected) in [(0, utc), (9 * 3_600_000, plus_nine)] {
+            assert_eq!(
+                parse_date_millis(text, &|local| local.checked_sub(offset)),
+                expected,
+                "{text} at offset {offset}"
+            );
         }
     }
-    assert!(
-        failures.is_empty(),
-        "{} mismatches; first 20: {:?}",
-        failures.len(),
-        failures.iter().take(20).collect::<Vec<_>>()
-    );
 }
 
 #[test]

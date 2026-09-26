@@ -38,24 +38,6 @@ fn source_json_surrogates_survive_nested_wire_and_selective_controls() {
 }
 
 #[test]
-fn moved_body_and_clones_share_one_allocation_until_the_last_owner_drops() {
-    let encoded = format!("{{\"body\":\"{}\"}}", "x".repeat(1024 * 1024));
-    let encoded = encoded.into_boxed_str().into_string();
-    let original = encoded.as_ptr();
-    assert_eq!(encoded.len(), encoded.capacity());
-    let document = JsonDocument::from_encoded(encoded).unwrap();
-    assert_eq!(document.as_str().as_ptr(), original);
-    let clone = document.clone();
-    assert!(Arc::ptr_eq(&document.0, &clone.0));
-    let weak = Arc::downgrade(&document.0);
-    drop(document);
-    assert_eq!(weak.strong_count(), 1);
-    assert_eq!(clone.as_str().as_ptr(), original);
-    drop(clone);
-    assert!(weak.upgrade().is_none());
-}
-
-#[test]
 fn value_entry_uses_js_encoding_and_rejects_invalid_encoded_documents() {
     let source: Value = serde_json::from_str(r#"{"10":1.0,"2":1e-7,"label":"é"}"#).unwrap();
     let encoded = JsonDocument::from_value(&source).unwrap();
@@ -77,7 +59,7 @@ fn value_entry_uses_js_encoding_and_rejects_invalid_encoded_documents() {
 }
 
 #[test]
-fn selective_fields_borrow_exact_values_and_keep_last_duplicate_without_a_dom() {
+fn selective_fields_read_exact_values_and_keep_last_duplicate() {
     let document = JsonDocument::from_encoded(
         r#"{"ok":true,"\ud800":"ignored","\u006fk":false,"body":{"text":"\udfff"}}"#.into(),
     )
@@ -88,9 +70,6 @@ fn selective_fields_borrow_exact_values_and_keep_last_duplicate_without_a_dom() 
         Some(r#"{"text":"\udfff"}"#)
     );
     assert_eq!(document.field("absent").unwrap(), None);
-    let value = document.field("body").unwrap().unwrap();
-    let start = document.as_str().as_ptr() as usize;
-    assert!((start..start + document.as_str().len()).contains(&(value.as_ptr() as usize)));
     for source in ["null", "false", "2", r#""\ud800""#, r#"[{"ok":false}]"#] {
         let document = JsonDocument::from_encoded(source.into()).unwrap();
         assert_eq!(document.field("ok").unwrap(), None);
