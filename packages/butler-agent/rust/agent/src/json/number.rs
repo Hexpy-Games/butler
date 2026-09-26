@@ -29,7 +29,7 @@ pub(crate) fn coerce_number(value: &Value) -> Result<f64, JsonError> {
 fn validate_primitive_conversion(value: &Value) -> Result<(), JsonError> {
     match value {
         Value::Object(value) if value.contains_key("toString") => {
-            return Err(JsonError::new("Cannot convert object to primitive value"));
+            return Err(JsonError::ObjectToPrimitive);
         }
         Value::Array(values) => {
             for value in values {

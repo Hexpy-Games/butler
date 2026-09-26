@@ -23,7 +23,7 @@ impl JsonDocument {
     pub(crate) fn from_encoded(encoded: String) -> Result<Self, JsonError> {
         RawValue::from_string(encoded)
             .map(|value| Self(Arc::new(value)))
-            .map_err(|error| JsonError::new(error.to_string()))
+            .map_err(JsonError::from)
     }
 
     /// Encode using the existing JS number/property ordering, not serde's DOM
@@ -45,7 +45,7 @@ impl JsonDocument {
     /// Parse only the typed view needed by this consumer. Unknown payload
     /// fields can be skipped without retaining a second parsed result body.
     pub(crate) fn read<'a, T: Deserialize<'a>>(&'a self) -> Result<T, JsonError> {
-        serde_json::from_str(self.as_str()).map_err(|error| JsonError::new(error.to_string()))
+        serde_json::from_str(self.as_str()).map_err(JsonError::from)
     }
 }
 

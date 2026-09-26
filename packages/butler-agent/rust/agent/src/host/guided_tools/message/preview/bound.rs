@@ -279,7 +279,7 @@ impl<'a> Node<'a> {
             let mut fields = Vec::new();
             visit_raw_object(raw, |key, value| {
                 if let Some(node) = Self::bounded(value, chars, items, depth + 1)
-                    .map_err(|e| crate::json::JsonError::new(e.to_string()))?
+                    .map_err(crate::json::JsonError::callback)?
                 {
                     fields.push((Key::source(key), node));
                 }
@@ -293,7 +293,7 @@ impl<'a> Node<'a> {
             visit_raw_array(raw, |value| {
                 if values.len() < items
                     && let Some(node) = Self::bounded(value, chars, items, depth + 1)
-                        .map_err(|e| crate::json::JsonError::new(e.to_string()))?
+                        .map_err(crate::json::JsonError::callback)?
                 {
                     values.push(node);
                 }

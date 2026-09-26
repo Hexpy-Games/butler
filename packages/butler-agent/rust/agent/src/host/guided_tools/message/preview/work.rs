@@ -70,8 +70,8 @@ pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
                 }
                 let mut selected = String::from("{");
                 for key in ["action_key", "status"] {
-                    if let Some(value) = field(action, key)
-                        .map_err(|e| crate::json::JsonError::new(e.to_string()))?
+                    if let Some(value) =
+                        field(action, key).map_err(crate::json::JsonError::callback)?
                     {
                         if selected.len() > 1 {
                             selected.push(',');

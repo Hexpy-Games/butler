@@ -25,8 +25,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
         crate::json::write_string(name, &mut result).map_err(|_| failure())?;
     }
     visit_raw_object(raw, |key, value| {
-        let decoded = serde_json::from_str::<String>(key)
-            .map_err(|error| crate::json::JsonError::new(error.to_string()))?;
+        let decoded = serde_json::from_str::<String>(key).map_err(crate::json::JsonError::from)?;
         if !excluded.contains(&decoded.as_str()) && decoded != "tool_name" {
             result.push(',');
             result.push_str(key);
@@ -44,7 +43,7 @@ pub(super) fn project(name: &str, raw: &str) -> Result<String, BtccError> {
             visit_raw_array(matches, |item| {
                 count += 1;
                 if let Some(path) = field(item, "path")
-                    .map_err(|error| crate::json::JsonError::new(error.to_string()))?
+                    .map_err(crate::json::JsonError::callback)?
                     .filter(|raw| raw.trim_start().starts_with('"'))
                 {
                     let units = raw_string_units(path).collect::<Vec<_>>();

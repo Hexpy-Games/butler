@@ -13,7 +13,7 @@ pub(super) fn field<'a>(encoded: &'a str, name: &str) -> Result<Option<&'a str>,
     let mut deserializer = serde_json::Deserializer::from_str(encoded);
     deserializer
         .deserialize_map(FindField(name))
-        .map_err(|error| JsonError::new(error.to_string()))
+        .map_err(JsonError::from)
 }
 
 struct FindField<'a>(&'a str);

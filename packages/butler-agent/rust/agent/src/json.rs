@@ -64,19 +64,32 @@ pub(crate) fn object_field_mut<'a>(
     )
 }
 
-#[derive(Debug)]
-pub(crate) struct JsonError(String);
+/// Failures of the crate's JSON encoders.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum JsonError {
+    /// A number has no JSON representation (NaN or an infinity).
+    #[error("invalid JSON number")]
+    InvalidNumber,
+    /// Two object keys became equal after Unicode normalization.
+    #[error("duplicate normalized object key")]
+    DuplicateNormalizedKey,
+    /// An object with its own `toString` cannot be coerced to a primitive (JS parity).
+    #[error("Cannot convert object to primitive value")]
+    ObjectToPrimitive,
+    /// A raw-JSON visitor callback failed; serde carries its text outward.
+    #[error(transparent)]
+    Callback(Box<dyn std::error::Error + Send + Sync>),
+    /// serde_json failed to serialize or parse a value.
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+}
+
 impl JsonError {
-    pub(crate) fn new(message: impl Into<String>) -> Self {
-        Self(message.into())
+    /// Wraps a visitor callback's own error.
+    pub(crate) fn callback(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Callback(Box::new(error))
     }
 }
-impl std::fmt::Display for JsonError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-impl std::error::Error for JsonError {}
 
 #[derive(Clone, Copy)]
 pub(crate) enum CanonicalKeyOrder {
@@ -166,7 +179,7 @@ fn write_value(
             let value = value
                 .as_f64()
                 .filter(|value| value.is_finite())
-                .ok_or_else(|| JsonError::new("invalid JSON number"))?;
+                .ok_or(JsonError::InvalidNumber)?;
             output.push_str(ryu_js::Buffer::new().format_finite(value));
         }
         Value::String(value) => {
@@ -209,7 +222,7 @@ fn write_value(
                 }
             });
             if children.windows(2).any(|pair| pair[0].0 == pair[1].0) {
-                return Err(JsonError::new("duplicate normalized object key"));
+                return Err(JsonError::DuplicateNormalizedKey);
             }
             output.push('{');
             for (index, (key, value)) in children.into_iter().enumerate() {
@@ -227,8 +240,7 @@ fn write_value(
 }
 
 pub(crate) fn write_string(value: &str, output: &mut String) -> Result<(), JsonError> {
-    serde_json::to_writer(Utf8Output(output), value)
-        .map_err(|error| JsonError::new(error.to_string()))
+    serde_json::to_writer(Utf8Output(output), value).map_err(JsonError::from)
 }
 
 /// Measure the same escaped UTF-8 string bytes without retaining encoded output.
@@ -245,7 +257,7 @@ pub(crate) fn serde_serialized_bytes<T: serde::Serialize + ?Sized>(
     value: &T,
 ) -> Result<usize, JsonError> {
     let mut output = ByteCount(0);
-    serde_json::to_writer(&mut output, value).map_err(|error| JsonError::new(error.to_string()))?;
+    serde_json::to_writer(&mut output, value).map_err(JsonError::from)?;
     Ok(output.0)
 }
 

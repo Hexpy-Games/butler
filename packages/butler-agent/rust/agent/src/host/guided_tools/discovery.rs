@@ -238,8 +238,8 @@ pub(super) fn remember_described(
         }
         visit_raw_object(description, |key, value| {
             if key == "\"id\"" {
-                let id: String = serde_json::from_str(value)
-                    .map_err(|error| crate::json::JsonError::new(error.to_string()))?;
+                let id: String =
+                    serde_json::from_str(value).map_err(crate::json::JsonError::from)?;
                 if !id.is_empty() {
                     ids.push(id);
                 }

@@ -118,8 +118,7 @@ fn encode_record(
 fn omit_preview_controls(raw: &str) -> Result<String, BtccError> {
     let mut output = String::from("{");
     visit_raw_object(raw, |key, value| {
-        let name: String = serde_json::from_str(key)
-            .map_err(|error| crate::json::JsonError::new(error.to_string()))?;
+        let name: String = serde_json::from_str(key).map_err(crate::json::JsonError::from)?;
         if !matches!(
             name.as_str(),
             "tool_name"

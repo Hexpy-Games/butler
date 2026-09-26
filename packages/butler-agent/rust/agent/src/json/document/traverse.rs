@@ -31,7 +31,7 @@ pub(crate) fn visit_raw_object<'a>(
     }
     serde_json::Deserializer::from_str(encoded)
         .deserialize_map(Fields(field))
-        .map_err(|error| JsonError::new(error.to_string()))
+        .map_err(JsonError::from)
 }
 
 pub(crate) fn visit_raw_array<'a>(
@@ -56,7 +56,7 @@ pub(crate) fn visit_raw_array<'a>(
     }
     serde_json::Deserializer::from_str(encoded)
         .deserialize_seq(Items(item))
-        .map_err(|error| JsonError::new(error.to_string()))
+        .map_err(JsonError::from)
 }
 
 const LINE_MARKER: &str = "\n[remaining lines omitted]";

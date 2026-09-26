@@ -127,8 +127,7 @@ fn replace(raw: &str, fields: &[(&str, String)]) -> Result<String, BtccError> {
     let mut output = String::from("{");
     let mut seen = vec![false; fields.len()];
     visit_raw_object(raw, |key, value| {
-        let decoded: String = serde_json::from_str(key)
-            .map_err(|error| crate::json::JsonError::new(error.to_string()))?;
+        let decoded: String = serde_json::from_str(key).map_err(crate::json::JsonError::from)?;
         if output.len() > 1 {
             output.push(',');
         }
