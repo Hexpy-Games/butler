@@ -38,8 +38,16 @@ export function DesignSystemViewer() {
   useHotkey("mod+k", () => setPaletteOpen((value) => !value));
   const mainRef = useRef<HTMLElement>(null);
   const theme = useViewerTheme(state.theme, state.motion);
-  const page = resolveViewerPage(state.page, showcaseEntries, PATTERN_IDS);
-  const activeId = page.kind === "item" ? page.entry.id : state.page;
+  // A deep link may carry an in-page anchor: page=components/Button#states.
+  const [pageId = "overview", initialAnchor] = state.page.split("#");
+  const page = resolveViewerPage(pageId, showcaseEntries, PATTERN_IDS);
+  const activeId = page.kind === "item" ? page.entry.id : pageId;
+  useEffect(() => {
+    if (!initialAnchor) return undefined;
+    const timer = window.setTimeout(() => document.getElementById(initialAnchor)?.scrollIntoView({ block: "start" }), 120);
+    return () => window.clearTimeout(timer);
+    // Only the anchor from the initial URL.
+  }, []);
 
   const focusSearch = useCallback(() => {
     setMenuOpen(true);
@@ -47,8 +55,8 @@ export function DesignSystemViewer() {
   }, []);
   useSlashFocus(focusSearch);
 
-  const open = useCallback((pageId: string) => {
-    const [id, anchor] = pageId.split("#");
+  const open = useCallback((target: string) => {
+    const [id, anchor] = target.split("#");
     update({ page: id });
     setMenuOpen(false);
     requestAnimationFrame(() => {
@@ -61,7 +69,7 @@ export function DesignSystemViewer() {
   return (
     <div
       className={`${styles.viewer} theme-${theme.chrome} sidebar-translucent`}
-      data-ds-page={state.page}
+      data-ds-page={pageId}
       data-ds-viewer={DS_VIEWER_BUNDLE_MARKER}
       data-menu-open={menuOpen}
       data-motion={state.motion}
@@ -75,7 +83,7 @@ export function DesignSystemViewer() {
             onToggleMenu={() => setMenuOpen((value) => !value)} />
         </div>
         <div className={styles.content}>
-          <div className={styles.page} key={state.page}>
+          <div className={styles.page} key={pageId}>
             <ViewerContent entries={showcaseEntries} onChange={update} onOpen={open} page={page} state={state} themes={theme.frames} />
           </div>
         </div>
