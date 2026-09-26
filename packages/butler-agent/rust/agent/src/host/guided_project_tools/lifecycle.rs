@@ -84,12 +84,12 @@ pub(super) async fn execute(
                     refreshes += 1;
                     continue 'replan;
                 }
-                return Ok(Some(with_plan(recoverable(updated), executed, refreshes)));
+                return Ok(Some(with_plan(recoverable(updated), &executed, refreshes)));
             }
         }
         let result = command(ledger, root, final_command, final_options.clone()).await?;
         executed.push(json!({"command":final_summary(kind, &id, args)}));
-        let result = with_plan(recoverable(result), executed, refreshes);
+        let result = with_plan(recoverable(result), &executed, refreshes);
         if refreshes == 0 && error_code(&result) == "invalid_transition" {
             refreshes += 1;
             continue;
@@ -178,7 +178,7 @@ fn completed(
         text(args.get(*arg)).is_empty() || text(args.get(*arg)) == text(data.get(*field))
     });
     if matches {
-        return with_plan(current, vec![], refreshes);
+        return with_plan(current, &[], refreshes);
     }
     with_plan(
         json!({"ok":false,"recoverable":true,"error":{
@@ -186,12 +186,12 @@ fn completed(
             "details":[{"id":id,"tool":name,"status":"done"}],
             "native_next":[{"tool":"project_ledger_show","args":{"id":id},"reason":"Inspect the completed record before deciding whether a metadata update is required."}],
         }}),
-        vec![],
+        &[],
         refreshes,
     )
 }
 
-fn with_plan(mut result: Value, executed: Vec<Value>, refreshes: usize) -> Value {
+fn with_plan(mut result: Value, executed: &[Value], refreshes: usize) -> Value {
     result["project_ledger_transition_plan"] = json!({"executed":executed,"refreshes":refreshes});
     result
 }

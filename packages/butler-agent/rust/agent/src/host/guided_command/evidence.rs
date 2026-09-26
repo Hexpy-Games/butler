@@ -80,7 +80,7 @@ pub(super) fn capability_receipts(
         } else {
             0.65
         },
-        format!("Command execution {status} with exit code {label}."),
+        &format!("Command execution {status} with exit code {label}."),
     );
     first["scope"] = json!({"status":status,"exit_code":exit,"timed_out":timed_out,
         "output_suppressed":suppressed,"output_budgeted":budgeted});
@@ -102,7 +102,7 @@ pub(super) fn capability_receipts(
             "verified",
             true,
             0.9,
-            "Command produced a verified durable artifact reference.".into(),
+            "Command produced a verified durable artifact reference.",
         );
         receipt["scope"] = scope.clone();
         receipt["references"] = reference.clone();
@@ -122,7 +122,7 @@ pub(super) fn capability_receipts(
             _ => None,
         };
         if let Some((capability, kind, summary)) = extra {
-            let mut receipt = base(capability, kind, "verified", true, 0.9, summary.into());
+            let mut receipt = base(capability, kind, "verified", true, 0.9, summary);
             receipt["scope"] = scope;
             receipt["references"] = reference;
             receipt["satisfies"] = json!([capability]);
@@ -138,7 +138,7 @@ fn base(
     maturity: &str,
     verified: bool,
     confidence: f64,
-    summary: String,
+    summary: &str,
 ) -> Value {
     json!({"receipt_id":id("ecr"),"schema_version":"evidence-capability.v1",
         "producer":{"kind":"tool","name":"run_command"},

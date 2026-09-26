@@ -7,7 +7,7 @@ async fn canonical_change_while_waiting_rolls_back_and_close_waits_for_operation
     let facts = Arc::new(Facts::new());
     let coordinator = Arc::new(CognitionWriteCoordinator::new(facts.clone()).unwrap());
     let held = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock_path(),
             "fixture",
         ))
@@ -59,7 +59,7 @@ async fn caller_drop_does_not_detach_wait_and_close_cancels_and_drains_it() {
     let facts = Arc::new(Facts::new());
     let coordinator = Arc::new(CognitionWriteCoordinator::new(facts.clone()).unwrap());
     let held = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock_path(),
             "fixture",
         ))

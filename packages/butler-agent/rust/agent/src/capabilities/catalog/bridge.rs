@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::json;
 
+#[derive(Clone, Copy)]
 pub(crate) struct BridgeCatalogTool<'a> {
     pub name: &'a str,
     pub definition: &'a Value,

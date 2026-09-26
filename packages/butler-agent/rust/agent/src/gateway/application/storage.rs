@@ -26,6 +26,10 @@ impl AppStorageError {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     pub(super) fn sqlite(error: rusqlite::Error) -> Self {
         Self::new("app_sqlite_error", error.to_string())
     }
@@ -72,7 +76,13 @@ impl AppStorage {
         let thread = std::thread::Builder::new()
             .name("butler-app-sqlite".to_owned())
             .spawn(move || {
-                run_connection_lane(path, butler_data, initialized_at, receiver, initialized_tx)
+                run_connection_lane(
+                    path,
+                    butler_data.as_ref(),
+                    &initialized_at,
+                    receiver,
+                    initialized_tx,
+                )
             })
             .map_err(|error| {
                 AppStorageError::new("app_sqlite_thread_spawn_failed", error.to_string())
@@ -174,8 +184,8 @@ impl Drop for StorageInner {
 
 fn run_connection_lane(
     path: PathBuf,
-    butler_data: Option<PathBuf>,
-    initialized_at: String,
+    butler_data: Option<&PathBuf>,
+    initialized_at: &str,
     mut receiver: mpsc::Receiver<DatabaseOperation>,
     initialized: oneshot::Sender<StorageResult<()>>,
 ) -> StorageResult<()> {
@@ -187,8 +197,8 @@ fn run_connection_lane(
         }
         let mut connection = Connection::open(path).map_err(AppStorageError::sqlite)?;
         configure(&connection)?;
-        schema::migrate(&mut connection, butler_data.as_deref())?;
-        schema::seed(&connection, &initialized_at)?;
+        schema::migrate(&mut connection, butler_data.map(PathBuf::as_path))?;
+        schema::seed(&connection, initialized_at)?;
         Ok(connection)
     })();
     let mut connection = match setup {

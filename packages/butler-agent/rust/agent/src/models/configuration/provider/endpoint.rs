@@ -54,7 +54,7 @@ pub(super) fn resolve(
         } else {
             format!("{base}/responses")
         };
-        return parse_endpoint(provider, value);
+        return parse_endpoint(provider, &value);
     }
     if provider == "local" {
         let Some(base) = local_base else {
@@ -66,14 +66,12 @@ pub(super) fn resolve(
             )));
         };
         let base = trim_slashes(base);
-        return parse_endpoint(
-            provider,
-            if base.ends_with("/chat/completions") {
-                base
-            } else {
-                format!("{base}/chat/completions")
-            },
-        );
+        let url = if base.ends_with("/chat/completions") {
+            base
+        } else {
+            format!("{base}/chat/completions")
+        };
+        return parse_endpoint(provider, &url);
     }
     let base = registered
         .and_then(|value| value.api_base_url.clone())
@@ -93,18 +91,16 @@ pub(super) fn resolve(
     let base = trim_slashes(&base);
     let suffix = match (provider, shape) {
         ("anthropic", _) | ("opencode-go", Some(HostedApiShape::AnthropicMessages)) => "messages",
-        ("google", _) => return parse_endpoint(provider, gemini_endpoint(&base, model)),
+        ("google", _) => return parse_endpoint(provider, &gemini_endpoint(&base, model)),
         (_, Some(HostedApiShape::OpenaiResponses)) => "responses",
         _ => "chat/completions",
     };
-    parse_endpoint(
-        provider,
-        if base.ends_with(&format!("/{suffix}")) {
-            base
-        } else {
-            format!("{base}/{suffix}")
-        },
-    )
+    let url = if base.ends_with(&format!("/{suffix}")) {
+        base
+    } else {
+        format!("{base}/{suffix}")
+    };
+    parse_endpoint(provider, &url)
 }
 
 fn trim_slashes(value: &str) -> String {
@@ -119,8 +115,8 @@ fn gemini_endpoint(base: &str, model: &str) -> String {
     let model = url::form_urlencoded::byte_serialize(model.as_bytes()).collect::<String>();
     format!("{base}/models/{model}:generateContent")
 }
-fn parse_endpoint(provider: &str, value: String) -> Result<Url, Box<ProviderRequestError>> {
-    Url::parse(&value).map_err(|_| {
+fn parse_endpoint(provider: &str, value: &str) -> Result<Url, Box<ProviderRequestError>> {
+    Url::parse(value).map_err(|_| {
         Box::new(provider_error_for(
             provider,
             "provider_endpoint_invalid",

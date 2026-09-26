@@ -172,7 +172,7 @@ impl ContextBudgetSnapshot<'_> {
 
     pub(crate) fn evaluate_working(
         &self,
-        input: WorkingContextBudgetInput,
+        input: &WorkingContextBudgetInput,
     ) -> WorkingContextBudgetEvaluation {
         let model_ref = canonical_model_ref(input.model_ref.as_deref());
         let parsed = parse_model_ref(&model_ref);

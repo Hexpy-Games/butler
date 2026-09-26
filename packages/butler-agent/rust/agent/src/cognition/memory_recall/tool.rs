@@ -25,8 +25,8 @@ pub(super) fn prepare(
     binding: CanonicalMemoryReadBinding,
     current_user_message: String,
     operation_id: String,
-    args: Value,
-    now_iso: String,
+    args: &Value,
+    now_iso: &str,
 ) -> CognitionResult<PreparedRecall> {
     let snapshot = match PublicMemorySnapshot::open(&conversation_store_path(data_root), &binding) {
         Ok(snapshot) => snapshot,
@@ -145,7 +145,7 @@ pub(super) fn prepare(
         as_of: args
             .get("as_of")
             .and_then(Value::as_str)
-            .unwrap_or(&now_iso)
+            .unwrap_or(now_iso)
             .to_owned(),
         as_of_explicit: args.get("as_of").is_some_and(Value::is_string),
         time,

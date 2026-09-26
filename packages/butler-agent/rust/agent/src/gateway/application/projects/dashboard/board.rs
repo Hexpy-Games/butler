@@ -72,7 +72,7 @@ pub(super) async fn get(
             .cmp(&a["updatedAt"].as_str())
             .then_with(|| a["id"].as_str().cmp(&b["id"].as_str()))
     });
-    cards = interleave(cards);
+    cards = interleave(&cards);
     let mut lane_counts = LANES
         .into_iter()
         .map(|lane| (lane, 0_u64))
@@ -311,7 +311,7 @@ fn record_lane(status: &str) -> &'static str {
     }
 }
 
-fn interleave(cards: Vec<Value>) -> Vec<Value> {
+fn interleave(cards: &[Value]) -> Vec<Value> {
     let buckets = LANES
         .iter()
         .map(|lane| {

@@ -10,6 +10,7 @@ use super::db_error;
 use crate::cognition::{CognitionError, CognitionResult, CognitionSourceRow};
 use crate::conversation::ConversationSourceReader;
 
+#[derive(Clone, Copy)]
 pub(super) struct InvalidationInput<'a> {
     pub old_source_ids: &'a [String],
     pub new_job_id: &'a str,
@@ -132,6 +133,7 @@ pub(super) fn superseded_sources(
     Ok(changed)
 }
 
+#[derive(Clone, Copy)]
 struct RecordInput<'a> {
     record: &'a Value,
     node: &'a history::Node,

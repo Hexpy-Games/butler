@@ -194,7 +194,7 @@ pub(crate) async fn compact_transcript(
             .await
             .map_err(conversation_error)?;
     }
-    let working_budget = budget.evaluate_working(WorkingContextBudgetInput {
+    let working_budget = budget.evaluate_working(&WorkingContextBudgetInput {
         model_ref: None,
         working_context_tokens: pre_tokens,
         static_context_tokens: None,
@@ -305,6 +305,10 @@ fn now_epoch_millis() -> f64 {
         * 1_000.0
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn conversation_error(error: crate::conversation::ConversationError) -> ContextError {
     ContextError::new("context_conversation_error", error.to_string())
 }

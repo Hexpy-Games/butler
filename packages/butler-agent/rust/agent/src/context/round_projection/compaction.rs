@@ -198,7 +198,7 @@ impl CompactionState {
             let prompt = summary::shorten_prompt(&next_summary, summary_budget);
             let source_digest = digest(&prompt);
             next_summary = trim_summary(
-                summary
+                &summary
                     .summarize(SummaryRequest {
                         text: &prompt,
                         max_output_bytes: summary_budget,
@@ -251,7 +251,7 @@ async fn summarize_history(
             if fits {
                 let source_digest = digest(&prompt);
                 *current = trim_summary(
-                    producer
+                    &producer
                         .summarize(SummaryRequest {
                             text: &prompt,
                             max_output_bytes: summary_budget,
@@ -409,8 +409,8 @@ fn view<'a>(
     projected.as_deref().unwrap_or(messages)
 }
 
-fn trim_summary(value: String) -> Result<String, BtccError> {
-    let trimmed = crate::public_text::trim_js_whitespace(&value);
+fn trim_summary(value: &str) -> Result<String, BtccError> {
+    let trimmed = crate::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() {
         Err(error("context_summary_empty_response"))
     } else {

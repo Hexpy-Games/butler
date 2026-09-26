@@ -111,7 +111,7 @@ pub(super) fn decision_gate(
 }
 
 pub(super) fn normalized_plan(
-    plan: AppPlanDecisionPlan,
+    plan: &AppPlanDecisionPlan,
     expected_id: &str,
 ) -> Option<AppPlanDecisionPlan> {
     let id = trim_js_whitespace(&plan.id).to_owned();

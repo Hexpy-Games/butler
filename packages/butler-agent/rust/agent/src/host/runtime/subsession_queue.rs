@@ -124,7 +124,7 @@ mod tests {
     fn child_cancel_outbox_preserves_parent_turn_provenance_outside_envelope() {
         let root =
             std::env::temp_dir().join(format!("butler-subsession-outbox-{}", uuid::Uuid::new_v4()));
-        let queue = Arc::new(NativeInboundQueue::new(root.clone()));
+        let queue = Arc::new(NativeInboundQueue::new(&root.clone()));
         let adapter = NativeSubsessionQueue(queue.clone());
         let envelope = json!({
             "eventId":"subsession-cancel:request-1",
@@ -143,7 +143,7 @@ mod tests {
             .unwrap();
 
         let lookup = JsonDocument::from_value(&envelope).unwrap();
-        let stored = NativeInboundQueue::new(root.clone())
+        let stored = NativeInboundQueue::new(&root.clone())
             .find_idempotent(&lookup)
             .unwrap()
             .unwrap();

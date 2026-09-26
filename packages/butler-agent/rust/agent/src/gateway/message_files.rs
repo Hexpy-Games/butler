@@ -9,7 +9,10 @@ mod tests;
 mod upload;
 
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use bytes::Bytes;
 use tokio::sync::{Semaphore, oneshot};
@@ -31,7 +34,7 @@ pub(crate) struct NativeAppMessageFiles {
 }
 
 impl NativeAppMessageFiles {
-    pub(crate) fn new(data_root: PathBuf, clock: Arc<dyn AppIdentityClock>) -> Self {
+    pub(crate) fn new(data_root: &Path, clock: Arc<dyn AppIdentityClock>) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),
             clock,
@@ -112,7 +115,7 @@ impl AppArtifactMaterializer for NativeAppMessageFiles {
         &self,
         request: ArtifactMaterializationRequest,
     ) -> ApplicationFuture<Vec<MaterializedResponderFile>> {
-        self.run_file_job(move |root, clock| materialize::run(root, clock, request))
+        self.run_file_job(move |root, clock| materialize::run(root, clock, &request))
     }
 }
 
@@ -122,10 +125,10 @@ impl AppMessageFileStorage for NativeAppMessageFiles {
     }
 
     fn prepare_uploaded(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        self.run_file_job(move |root, _| upload::prepare(root, file))
+        self.run_file_job(move |root, _| upload::prepare(root, &file))
     }
 
     fn read_original(&self, file: AppMessageFileSnapshot) -> ApplicationFuture<Bytes> {
-        self.run_file_job(move |root, _| upload::read(root, file))
+        self.run_file_job(move |root, _| upload::read(root, &file))
     }
 }

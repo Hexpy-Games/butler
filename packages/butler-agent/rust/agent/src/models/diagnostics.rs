@@ -29,7 +29,7 @@ pub(super) fn timeout(provider: &str, api: &str, kind: &str) -> ProviderRequestE
     failure
 }
 
-pub(super) fn network(provider: &str, api: &str, cause: String) -> ProviderRequestError {
+pub(super) fn network(provider: &str, api: &str, cause: &str) -> ProviderRequestError {
     let mut failure = error(
         "provider_network_error",
         "Model provider API connection failed before a response was received.",
@@ -37,7 +37,7 @@ pub(super) fn network(provider: &str, api: &str, cause: String) -> ProviderReque
         api,
         true,
     );
-    failure.cause = safe_text(&cause);
+    failure.cause = safe_text(cause);
     failure
 }
 
@@ -181,7 +181,7 @@ fn error(
     }
 }
 
-fn bounded(value: String, max: usize) -> String {
+fn bounded(value: &str, max: usize) -> String {
     value.chars().take(max).collect()
 }
 
@@ -192,7 +192,7 @@ fn string(value: Option<&Map<String, Value>>, keys: &[&str]) -> Option<String> {
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(|value| bounded(value.to_owned(), 160))
+            .map(|value| bounded(value, 160))
     })
 }
 
@@ -322,10 +322,7 @@ fn safe_text(value: &str) -> Option<String> {
             r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+",
         )
     });
-    Some(bounded(
-        SECRET.replace_all(&words, "[redacted]").into_owned(),
-        500,
-    ))
+    Some(bounded(&SECRET.replace_all(&words, "[redacted]"), 500))
 }
 
 fn header(headers: Option<&HeaderMap>, names: &[&str]) -> Option<String> {
@@ -336,6 +333,7 @@ fn header(headers: Option<&HeaderMap>, names: &[&str]) -> Option<String> {
             .map(|value| value.replace(['\r', '\n'], " "))
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
+            .as_ref()
             .map(|value| bounded(value, 160))
     })
 }
@@ -358,7 +356,7 @@ fn sanitize(value: &Value, depth: usize) -> Option<Value> {
             let mut output = Map::new();
             for (key, value) in values.iter().take(24) {
                 let key = bounded(
-                    key.chars()
+                    &key.chars()
                         .map(|character| {
                             if character.is_ascii_alphanumeric() || "_.:@/-".contains(character) {
                                 character
@@ -366,7 +364,7 @@ fn sanitize(value: &Value, depth: usize) -> Option<Value> {
                                 '_'
                             }
                         })
-                        .collect(),
+                        .collect::<String>(),
                     120,
                 );
                 let private = key.to_ascii_lowercase();

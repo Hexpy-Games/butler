@@ -2,7 +2,11 @@
 
 mod inspect;
 
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use rusqlite::{Connection, OpenFlags, params};
 use tokio::sync::mpsc;
@@ -64,14 +68,14 @@ struct ChunkRefs {
 
 impl LegacyMetadataIntegrityService {
     pub(crate) fn new(
-        data_root: PathBuf,
+        data_root: &Path,
         paths: CognitionPathEnvironment,
         box_store: Arc<BoxStoreService>,
         feedback: Arc<FeedbackBufferService>,
     ) -> Self {
         Self {
-            data_root: data_root.clone(),
-            path: paths.memory_root(&data_root).join("metadata.sqlite"),
+            data_root: data_root.to_path_buf(),
+            path: paths.memory_root(data_root).join("metadata.sqlite"),
             paths,
             box_store,
             feedback,
@@ -192,7 +196,7 @@ impl LegacyMetadataIntegrityService {
         }
         let (sender, mut receiver) = mpsc::channel(1);
         let path = self.path.clone();
-        let producer = tokio::task::spawn_blocking(move || stream_refs(path, sender));
+        let producer = tokio::task::spawn_blocking(move || stream_refs(&path, &sender));
         let mut counts = LegacyMetadataIntegrityCounts::default();
         let mut missing_box_refs = Vec::new();
         let mut missing_feedback_refs = Vec::new();
@@ -307,10 +311,10 @@ fn remove_missing_links(
 }
 
 fn stream_refs(
-    path: PathBuf,
-    sender: mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
+    path: &PathBuf,
+    sender: &mpsc::Sender<CognitionResult<Vec<ChunkRefs>>>,
 ) -> CognitionResult<()> {
-    let db = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|_| metadata_error())?;
     db.busy_timeout(std::time::Duration::from_secs(5))
         .map_err(|_| metadata_error())?;

@@ -10,6 +10,10 @@ fn field(output: &mut String, name: &str, value: &str, first: bool) -> EffectRes
     output.push(':');
     crate::json::write_string(value, output).map_err(error)
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn error(error: crate::json::JsonError) -> EffectFailure {
     EffectFailure::policy("effect_journal_json", error.to_string())
 }

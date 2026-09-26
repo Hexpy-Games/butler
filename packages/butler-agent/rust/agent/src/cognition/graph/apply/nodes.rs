@@ -11,6 +11,7 @@ use crate::cognition::{
     lexical,
 };
 
+#[derive(Clone, Copy)]
 pub(super) struct NodeUpsert<'a> {
     pub id: &'a str,
     pub node_type: &'a str,

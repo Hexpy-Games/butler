@@ -17,7 +17,7 @@ pub(super) fn auth_status(
     let env_path = data_root.join(".env");
     let environment = match path::read_private_environment(installation, data_root, &env_path) {
         Ok(environment) => environment,
-        Err(error) => return report_error(command.name(), options.json, error),
+        Err(error) => return report_error(command.name(), options.json, &error),
     };
     let mut data = models::auth_status_with_environment(data_root, &environment);
     data["envPath"] = Value::String(env_path.display().to_string());
@@ -28,7 +28,7 @@ pub(super) fn auth_status(
         data["mode"].as_str().unwrap_or("missing"),
         data["source"].as_str().unwrap_or("none"),
     );
-    report_success(options, command.name(), data, &human)
+    report_success(options, command.name(), &data, &human)
 }
 
 pub(super) async fn auth_login(
@@ -41,7 +41,7 @@ pub(super) async fn auth_login(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("auth login requires an interactive browser flow"),
+            &CliError::invalid("auth login requires an interactive browser flow"),
         );
     }
     match oauth_login::run_native_oauth_login_for_data(installation, data_root).await {
@@ -49,7 +49,7 @@ pub(super) async fn auth_login(
         Err(message) => report_error(
             command.name(),
             options.json,
-            CliError::failed("auth_login_failed", message),
+            &CliError::failed("auth_login_failed", message),
         ),
     }
 }
@@ -64,13 +64,13 @@ pub(super) async fn auth_logout(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("auth logout requires --yes"),
+            &CliError::invalid("auth logout requires --yes"),
         );
     }
     let environment =
         match path::read_private_environment(installation, data_root, &data_root.join(".env")) {
             Ok(environment) => environment,
-            Err(error) => return report_error(command.name(), options.json, error),
+            Err(error) => return report_error(command.name(), options.json, &error),
         };
     let profile = path::auth_profile_path(data_root, &environment);
     let profile = match path::safe_data_file(installation, data_root, &profile) {
@@ -79,7 +79,7 @@ pub(super) async fn auth_logout(
             return report_error(
                 command.name(),
                 options.json,
-                CliError::invalid("auth profile removal must remain inside DATA"),
+                &CliError::invalid("auth profile removal must remain inside DATA"),
             );
         }
     };
@@ -89,7 +89,7 @@ pub(super) async fn auth_logout(
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed("auth_logout_failed", message),
+                &CliError::failed("auth_logout_failed", message),
             );
         }
     };
@@ -99,7 +99,7 @@ pub(super) async fn auth_logout(
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed("auth_logout_failed", message),
+                &CliError::failed("auth_logout_failed", message),
             );
         }
     };
@@ -116,7 +116,7 @@ pub(super) async fn auth_logout(
     } else {
         "No local auth profile was present."
     };
-    report_success(options, command.name(), data, human)
+    report_success(options, command.name(), &data, human)
 }
 
 pub(super) fn model_list(options: &Options, command: Command) -> ExitCode {
@@ -125,7 +125,7 @@ pub(super) fn model_list(options: &Options, command: Command) -> ExitCode {
         .map(|model| format!("openai/{model}"))
         .collect::<Vec<_>>();
     let data = json!({ "source": "bundled-catalog", "models": refs });
-    report_success(options, command.name(), data, &refs.join("\n"))
+    report_success(options, command.name(), &data, &refs.join("\n"))
 }
 
 pub(super) async fn model_set(
@@ -138,7 +138,7 @@ pub(super) async fn model_set(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("model set requires <provider/model>"),
+            &CliError::invalid("model set requires <provider/model>"),
         );
     };
     let parsed = models::parse_model_ref(requested);
@@ -146,7 +146,7 @@ pub(super) async fn model_set(
         return report_error(
             command.name(),
             options.json,
-            CliError::invalid("model set requires canonical provider/model ref"),
+            &CliError::invalid("model set requires canonical provider/model ref"),
         );
     }
     if let Err(error) = path::safe_data_file(
@@ -154,7 +154,7 @@ pub(super) async fn model_set(
         data_root,
         &data_root.join("butler.config.json"),
     ) {
-        return report_error(command.name(), options.json, error);
+        return report_error(command.name(), options.json, &error);
     }
     let owner = match models::open_status_models(data_root.to_path_buf()).await {
         Ok(owner) => owner,
@@ -162,14 +162,14 @@ pub(super) async fn model_set(
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed("model_set_failed", message),
+                &CliError::failed("model_set_failed", message),
             );
         }
     };
     let change = match owner.configuration.set_default_model(requested).await {
         Ok(change) => change,
         Err(message) => {
-            return report_error(command.name(), options.json, CliError::health(message));
+            return report_error(command.name(), options.json, &CliError::health(message));
         }
     };
     drop(owner);
@@ -183,7 +183,7 @@ pub(super) async fn model_set(
     report_success(
         options,
         command.name(),
-        data,
+        &data,
         &format!(
             "Model set to {}. Restart recommended.",
             parsed.canonical_ref

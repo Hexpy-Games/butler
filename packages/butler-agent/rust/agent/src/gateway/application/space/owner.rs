@@ -100,7 +100,7 @@ impl SpaceMutationOwner {
                     db,
                     clock.as_ref(),
                     previous,
-                    command,
+                    &command,
                     origin,
                     title.as_deref().unwrap_or("새 그룹"),
                 ))
@@ -109,7 +109,7 @@ impl SpaceMutationOwner {
             .map_err(super::super::app_error)??;
         *state = result.history;
         drop(state);
-        crate::gateway::application::events::publish(&publish_to, result.event);
+        crate::gateway::application::events::publish(&publish_to, &result.event);
         Ok(result.result)
     }
 
@@ -142,7 +142,7 @@ impl SpaceMutationOwner {
         *history = SpaceHistory::default();
         drop(history);
         for event in result.events {
-            events::publish(&publish_to, event);
+            events::publish(&publish_to, &event);
         }
         Ok(result.result)
     }

@@ -159,7 +159,7 @@ pub(super) async fn validate_linked_worktree(
     let target_for_list = target.to_owned();
     let branch_for_list = branch.to_owned();
     let listed = files
-        .run(move || listed_worktree_matches(stdout, target_for_list, branch_for_list))
+        .run(move || listed_worktree_matches(&stdout, &target_for_list, &branch_for_list))
         .await
         .map_err(file_owner_error)?
         .map_err(io_error)?;
@@ -267,10 +267,18 @@ async fn git(
         .map_err(|_| WorkspaceError::new("workspace_recovery_command_lost", "Git result lost"))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
     WorkspaceError::new(error.code, "Workspace file owner closed")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
     WorkspaceError::new("workspace_recovery_io", error.to_string())
 }

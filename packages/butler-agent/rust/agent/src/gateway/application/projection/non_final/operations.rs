@@ -20,6 +20,7 @@ use crate::gateway::application::{
 #[cfg(test)]
 mod tests;
 
+#[derive(Clone, Copy)]
 pub(super) struct FailedProjection<'a> {
     pub metadata: &'a Map<String, Value>,
     pub message: &'a Map<String, Value>,
@@ -66,7 +67,7 @@ pub(super) fn project_failed(
         },
         Some(turn),
         service::map(
-            json!({"session_id":chat,"turn_id":turn,"safeLabel":label,"safeErrorCode":code,"retryable":retryable}),
+            &json!({"session_id":chat,"turn_id":turn,"safeLabel":label,"safeErrorCode":code,"retryable":retryable}),
         )?,
         now,
     )?;
@@ -76,7 +77,7 @@ pub(super) fn project_failed(
         "turn.state_changed",
         Some(turn),
         service::map(
-            json!({"session_id":chat,"turn_id":turn,"state":if code=="runtime_fault"{"runtime_fault"}else{"failed"},"safe_status_label":if code=="runtime_fault"{"Runtime fault"}else{"Failed"},"safe_error_code":code,"retryable":retryable,"cancellable":false}),
+            &json!({"session_id":chat,"turn_id":turn,"state":if code=="runtime_fault"{"runtime_fault"}else{"failed"},"safe_status_label":if code=="runtime_fault"{"Runtime fault"}else{"Failed"},"safe_error_code":code,"retryable":retryable,"cancellable":false}),
         )?,
         now,
     )?;
@@ -100,7 +101,7 @@ pub(super) fn project_cancelled(
         "turn.state_changed",
         Some(turn),
         service::map(
-            json!({"session_id":chat,"turn_id":turn,"state":"cancelled","safe_status_label":"Cancelled","safe_error_code":"turn_cancelled","retryable":false,"cancellable":false}),
+            &json!({"session_id":chat,"turn_id":turn,"state":"cancelled","safe_status_label":"Cancelled","safe_error_code":"turn_cancelled","retryable":false,"cancellable":false}),
         )?,
         now,
     )?;
@@ -144,7 +145,7 @@ pub(super) fn project_suspended(
         subscribers,
         "turn.state_changed",
         Some(turn),
-        service::map(json!({
+        service::map(&json!({
             "session_id":chat,"turn_id":turn,"state":state,"safe_status_label":label,
             "retryable":false,"cancellable":authority_pending
         }))?,
@@ -167,7 +168,7 @@ pub(super) fn project_suspended(
         subscribers,
         "session_queue.changed",
         Some(turn),
-        service::map(json!({
+        service::map(&json!({
             "session_id":chat,"turn_id":turn,"action":"dispatched"
         }))?,
         now,
@@ -197,7 +198,7 @@ pub(super) fn settle_if_claimed(
         "session_queue.changed",
         Some(turn),
         service::map(
-            json!({"session_id":chat,"turn_id":turn,"action":"failed","safe_error_code":code}),
+            &json!({"session_id":chat,"turn_id":turn,"action":"failed","safe_error_code":code}),
         )?,
         now,
     )?;
@@ -323,7 +324,7 @@ pub(super) fn project_worker_result(
         subscribers,
         "message.created",
         None,
-        service::map(json!({"message":row}))?,
+        service::map(&json!({"message":row}))?,
         now,
     )?;
     finish(&tx, action, event, chat, cursor, now)?;

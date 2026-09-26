@@ -133,7 +133,7 @@ async fn execute(installation: ResolvedInstallation, options: Options) -> Result
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(error.to_string()),
         };
-        let planned = plan_historical_recovery(reader.as_ref(), &parse_timestamp, input);
+        let planned = plan_historical_recovery(reader.as_ref(), &parse_timestamp, &input);
         if let Some(reader) = reader {
             reader.close().map_err(|error| error.to_string())?;
         }

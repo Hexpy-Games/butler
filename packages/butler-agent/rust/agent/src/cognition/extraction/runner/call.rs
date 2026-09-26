@@ -157,7 +157,7 @@ where
                     if cancellation.is_cancelled() {
                         error("memory_extract_cancelled")
                     } else {
-                        provider_error(problem)
+                        provider_error(&problem)
                     }
                 })?;
             let evidence = json!({"reported_model":result.model,"usage":result.usage.as_ref().map(|u|json!({"prompt_tokens":u.prompt_tokens,"cached_tokens":u.cached_tokens,"output_tokens":u.output_tokens,"total_tokens":u.total_tokens})),"duration_ms":provider_started.elapsed().as_millis(),"request_wire":wire});
@@ -216,7 +216,7 @@ pub(super) fn error(c: &'static str) -> CognitionError {
 pub(super) fn json_error(e: impl std::fmt::Display) -> CognitionError {
     CognitionError::new("memory_extract_invalid_json", e.to_string())
 }
-fn provider_error(e: ProviderPromptError) -> CognitionError {
+fn provider_error(e: &ProviderPromptError) -> CognitionError {
     CognitionError::new("memory_extract_provider_failed", format!("{e:?}"))
 }
 fn model_error(e: CognitionError) -> ProviderPromptError {

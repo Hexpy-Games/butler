@@ -17,7 +17,7 @@ struct Entry {
     text: String,
 }
 
-fn error(error: std::io::Error) -> CognitionError {
+fn error(error: &std::io::Error) -> CognitionError {
     CognitionError::new("cognition_feedback_read_failed", error.to_string())
 }
 
@@ -140,7 +140,7 @@ pub(super) fn read(
     let source = match super::read_utf8(&path) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(io_error) => return Err(error(io_error)),
+        Err(io_error) => return Err(error(&io_error)),
     };
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

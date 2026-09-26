@@ -17,7 +17,7 @@ pub(super) async fn create(
 ) -> Result<Response, HttpError> {
     let body = read_body_with_limit(request.into_body(), super::MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
-    let request = strict_create(value)?;
+    let request = strict_create(&value)?;
     let queue = state.application.create_session_queue(request).await?;
     json(
         axum::http::StatusCode::ACCEPTED,
@@ -45,7 +45,7 @@ pub(super) async fn route(
                 read_body_with_limit(request.into_body(), super::MAX_REQUEST_BODY_SIZE).await?;
             let value: Value =
                 serde_json::from_slice(&body).map_err(|_| HttpError::invalid_json())?;
-            let update = parse_update(value)?;
+            let update = parse_update(&value)?;
             let queue = state.application.update_session_queue(id, update).await?;
             json(
                 axum::http::StatusCode::OK,
@@ -69,7 +69,7 @@ pub(super) async fn route(
     }
 }
 
-fn strict_create(value: Value) -> Result<MessageSendRequest, HttpError> {
+fn strict_create(value: &Value) -> Result<MessageSendRequest, HttpError> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid_request("Queued message text is required."))?;
@@ -113,7 +113,7 @@ fn strict_create(value: Value) -> Result<MessageSendRequest, HttpError> {
     })
 }
 
-fn parse_update(value: Value) -> Result<SessionQueueUpdateRequest, HttpError> {
+fn parse_update(value: &Value) -> Result<SessionQueueUpdateRequest, HttpError> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid_request("Queued message update is invalid."))?;

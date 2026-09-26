@@ -52,7 +52,7 @@ pub(crate) fn update_explicit_memory(
     data_root: &Path,
     environment: &CognitionPathEnvironment,
     publisher: &CompletionPublisher,
-    input: ExplicitMemoryUpdateInput,
+    input: &ExplicitMemoryUpdateInput,
 ) -> CognitionResult<ExplicitMemoryUpdateResult> {
     if crate::public_text::trim_js_whitespace(&input.text).is_empty() {
         return Err(error("explicit_memory_text_required"));
@@ -292,6 +292,10 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_source_unavailable", error.to_string())
 }

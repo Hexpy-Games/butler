@@ -40,7 +40,7 @@ pub(crate) fn normalized_workspace_effect_target(
 fn adapter_error(code: &str, message: impl Into<String>) -> EffectAdapterError {
     EffectAdapterError::new(code, message)
 }
-fn workspace_error(error: crate::workspace::EffectFileError) -> EffectAdapterError {
+fn workspace_error(error: &crate::workspace::EffectFileError) -> EffectAdapterError {
     adapter_error(&error.code, error.message)
 }
 fn mismatch(target: &str, input: &Value) -> Option<EffectAdapterError> {
@@ -134,7 +134,7 @@ fn observed_result(
 }
 fn observation_error(observation: EffectFileObservation) -> EffectAdapterError {
     match observation {
-        EffectFileObservation::Unavailable(error) => workspace_error(error),
+        EffectFileObservation::Unavailable(error) => workspace_error(&error),
         _ => adapter_error(
             "workspace_file_state_mismatch",
             "Current target bytes do not prove whether write_file was applied.",
@@ -186,7 +186,7 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
             let guarded =
                 match guard_effect_file(&self.scope, input["path"].as_str().unwrap_or("")).await {
                     Ok(value) => value,
-                    Err(error) => return Ok(AdapterOutcome::NotApplied(workspace_error(error))),
+                    Err(error) => return Ok(AdapterOutcome::NotApplied(workspace_error(&error))),
                 };
             if signal.is_cancelled() {
                 return Ok(AdapterOutcome::NotApplied(adapter_error(
@@ -197,7 +197,7 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
             let before = observe_effect_file(&guarded).await;
             if let EffectFileObservation::Unavailable(error) = &before {
                 return Ok(AdapterOutcome::Uncertain(Some(workspace_error(
-                    error.clone(),
+                    &error.clone(),
                 ))));
             }
             if let Some(error) = caller_precondition(input, &before) {
@@ -258,7 +258,7 @@ impl EffectAdapter for WorkspaceFileEffectAdapter {
                 .await
             {
                 Ok(value) => value,
-                Err(error) => return Ok(AdapterOutcome::Uncertain(Some(workspace_error(error)))),
+                Err(error) => return Ok(AdapterOutcome::Uncertain(Some(workspace_error(&error)))),
             };
             let observed = observe_effect_file(&guarded).await;
             if attempts == 0

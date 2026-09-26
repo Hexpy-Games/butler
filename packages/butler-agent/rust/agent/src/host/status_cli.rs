@@ -87,8 +87,8 @@ pub async fn run_native_status_cli(
     let (data, text) = match command {
         Command::ModelStatus => {
             let telemetry = operations::read_prompt_cache_telemetry(&data_root, None);
-            let data = models.status_value(telemetry.clone());
-            let text = models.render_text(telemetry, None);
+            let data = models.status_value(&telemetry.clone());
+            let text = models.render_text(&telemetry, None);
             (data, text)
         }
         Command::MetricsStatus | Command::Status => {
@@ -110,7 +110,7 @@ pub async fn run_native_status_cli(
                     operations::render_metrics_status(&metrics),
                 )
             } else {
-                let model = models.status_value(metrics.model_telemetry());
+                let model = models.status_value(&metrics.model_telemetry());
                 let services = service_health(&data_root);
                 let text = operations::render_status_context(&metrics, &models, &services);
                 (

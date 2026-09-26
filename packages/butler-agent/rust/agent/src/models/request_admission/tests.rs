@@ -54,7 +54,7 @@ fn prepare<'a>(
     output: f64,
 ) -> PreparedRequestAdmission<'a> {
     let serialized = Bytes::from(crate::json::stringify(body).unwrap());
-    PreparedRequestAdmission::new(PrepareAdmissionInput {
+    PreparedRequestAdmission::new(&PrepareAdmissionInput {
         catalog,
         config,
         provider: "openai",

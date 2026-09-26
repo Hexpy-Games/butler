@@ -310,7 +310,7 @@ async fn turn_outcome_follows_agent_result_progress_failures_and_resume_state() 
             Setup::StateProgressFails => harness.fail_state_progress.store(true, Ordering::SeqCst),
             Setup::Admitted | Setup::DeliveryCommitted => {}
         }
-        let assembly = crate::btcc::assemble(harness.dependencies());
+        let assembly = crate::btcc::assemble(&harness.dependencies());
         let outcome = assembly.btcc.run_turn(request("turn-1", "session-1")).await;
         assert_eq!(harness.calls.load(Ordering::SeqCst), agent_calls);
         let stored = harness.turns.lock().unwrap()["turn-1"].clone();
@@ -347,7 +347,7 @@ async fn progress_uses_latest_request_queue_claim() {
         .unwrap()
         .app_queue_claim_id = Some("old".into());
     let harness = Harness::new([admitted]);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let mut request = request("turn-1", "session-1");
     request.app_queue_claim_id = Some("latest".into());
     assembly.btcc.run_turn(request).await.unwrap();
@@ -364,7 +364,7 @@ async fn progress_uses_latest_request_queue_claim() {
 async fn stop_bypasses_run_queue_and_fences_before_repository() {
     let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
     harness.block_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let btcc = assembly.btcc.clone();
     let running = tokio::spawn(async move { btcc.run_turn(request("turn-1", "session-1")).await });
     crate::testing::eventually("agent loop entry", || {
@@ -390,7 +390,7 @@ async fn stop_bypasses_run_queue_and_fences_before_repository() {
 async fn duplicate_turn_id_shares_one_active_execution() {
     let harness = Harness::new([record("turn-1", "session-1", TurnSemanticState::Admitted)]);
     harness.block_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let first_btcc = assembly.btcc.clone();
     let second_btcc = assembly.btcc.clone();
     let first =
@@ -422,7 +422,7 @@ async fn close_drains_same_session_tail_then_closes_dependencies_once() {
         record("turn-2", "session-1", TurnSemanticState::Admitted),
     ]);
     harness.block_agent.store(true, Ordering::SeqCst);
-    let assembly = crate::btcc::assemble(harness.dependencies());
+    let assembly = crate::btcc::assemble(&harness.dependencies());
     let first_btcc = assembly.btcc.clone();
     let second_btcc = assembly.btcc.clone();
     let first =

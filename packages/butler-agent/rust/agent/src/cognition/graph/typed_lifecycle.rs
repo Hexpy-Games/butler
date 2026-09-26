@@ -5,6 +5,7 @@ use rusqlite::{Connection, params};
 use super::{GraphRepository, db_error};
 use crate::cognition::{CognitionError, CognitionResult, sources::TypedMemoryLifecycle};
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct TypedLifecycleInput<'a> {
     pub source_kind: &'a str,
     pub record_id: &'a str,

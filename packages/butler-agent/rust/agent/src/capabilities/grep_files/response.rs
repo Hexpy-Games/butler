@@ -15,7 +15,7 @@ pub(super) fn invalid_cursor(elapsed_ms: u64) -> Value {
         "evidence_capability_receipts":evidence::grep_limitation("invalid_cursor")})
 }
 
-pub(super) fn guard_rejection(root: &str, rejection: WorkspaceListRejection) -> Value {
+pub(super) fn guard_rejection(root: &str, rejection: &WorkspaceListRejection) -> Value {
     let error = if matches!(
         rejection.reason,
         "directory_not_allowed" | "not_a_directory"
@@ -39,7 +39,7 @@ pub(super) fn success(
     options: &Options,
     query: &str,
     listed: &WorkspaceListResult,
-    searched: SearchResult,
+    searched: &SearchResult,
     cursor: Option<&GrepCursor>,
 ) -> Value {
     let partial: Vec<_> = searched
@@ -181,10 +181,10 @@ pub(super) fn success(
         "max_output_bytes":options.max_output_bytes,"output_truncated":searched.max_output_reached,
         "truncated":truncated || incomplete,"metrics":metrics,
         "evidence_receipts":evidence::grep_execution(
-            format!("Found {} matches for {}{}", searched.matches.len(), options.pattern,
+            &format!("Found {} matches for {}{}", searched.matches.len(), options.pattern,
                 if next_cursor.is_some() { " with bounded continuation" }
                 else if truncated || incomplete { " with a bounded partial result" } else { "" }),
-            receipt_references),
+            &receipt_references),
         "evidence_capability_receipts":evidence::grep_capability(&searched.matches,
             truncated || incomplete, files_searched, files_skipped)
     });

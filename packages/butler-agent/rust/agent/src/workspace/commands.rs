@@ -33,6 +33,10 @@ impl CommandError {
             io_kind: None,
         }
     }
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn io(error: std::io::Error) -> Self {
         Self::new("command_io_failed", error.to_string())
     }

@@ -63,7 +63,7 @@ pub(super) async fn capture(
     .await?;
     let (mut extractor_model, consent, read) = initial;
     let Some(read) = read else {
-        return Ok(empty_result(extractor_model, consent));
+        return Ok(empty_result(extractor_model, &consent));
     };
     runtime::with_gate(&dependencies, Some(provider_cancellation.clone()), {
         let root = dependencies.root.clone();

@@ -93,7 +93,7 @@ fn real_exclusive_gate_preserves_fence_and_release_projection() {
         ConsolidationLockState::InitializationAvailable
     );
     let lease = first
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             " projection ",
         ))
@@ -105,7 +105,7 @@ fn real_exclusive_gate_preserves_fence_and_release_projection() {
     assert_eq!(held.state, ConsolidationLockState::Held);
     assert!(
         second
-            .try_acquire(CognitionWriteAcquire::immediate(
+            .try_acquire(&CognitionWriteAcquire::immediate(
                 fixture.lock.clone(),
                 "consolidation",
             ))
@@ -139,7 +139,7 @@ fn real_exclusive_gate_preserves_fence_and_release_projection() {
     drop(db);
 
     let next = second
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "consolidation",
         ))
@@ -182,7 +182,7 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
     let fixture = Fixture::new("drop");
     let coordinator = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
     let lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "projection",
         ))
@@ -216,7 +216,7 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
 
     local.lock().remove(&fixture.lock);
     let reacquired = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "projection",
         ))
@@ -225,7 +225,7 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
     drop(reacquired);
     let other = CognitionWriteCoordinator::new(Arc::new(Host::new(202, "host-a"))).unwrap();
     other
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "projection",
         ))
@@ -244,7 +244,7 @@ fn legacy_reclaim_requires_same_host_definitely_dead_safe_pid() {
     host.status(404, CognitionProcessStatus::DefinitelyDead);
     let coordinator = CognitionWriteCoordinator::new(host).unwrap();
     coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             dead.lock.clone(),
             "projection",
         ))
@@ -264,7 +264,7 @@ fn legacy_reclaim_requires_same_host_definitely_dead_safe_pid() {
         let host = Arc::new(Host::new(101, "host-a"));
         host.status(405, status);
         let coordinator = CognitionWriteCoordinator::new(host).unwrap();
-        let error = match coordinator.try_acquire(CognitionWriteAcquire::immediate(
+        let error = match coordinator.try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "projection",
         )) {
@@ -285,7 +285,7 @@ async fn cancellation_while_waiting_leaves_no_sqlite_owner() {
     let first = CognitionWriteCoordinator::new(Arc::new(Host::new(101, "host-a"))).unwrap();
     let second = CognitionWriteCoordinator::new(Arc::new(Host::new(202, "host-a"))).unwrap();
     let held = first
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "profile",
         ))
@@ -319,7 +319,7 @@ async fn cancellation_while_waiting_leaves_no_sqlite_owner() {
     assert_eq!(error.code, "memory_write_aborted");
     drop(held);
     second
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             fixture.lock.clone(),
             "memory",
         ))
@@ -388,7 +388,7 @@ async fn async_deadline_preserves_first_attempt_expiry_and_cancel_classes() {
     assert!(!cancelled.lock.exists());
     assert!(
         coordinator
-            .try_acquire(CognitionWriteAcquire {
+            .try_acquire(&CognitionWriteAcquire {
                 lock_path: cancelled.lock.clone(),
                 purpose: Some("projection".into()),
                 deadline_at_epoch_ms: None,

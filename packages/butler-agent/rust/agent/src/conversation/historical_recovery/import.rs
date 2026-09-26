@@ -44,7 +44,11 @@ pub(super) fn planned_outcome(
         .map(|id| reader.read_message(id))
         .transpose()?
         .flatten();
-    Ok(planned_mapping(decision, by_source, by_id))
+    Ok(planned_mapping(
+        decision,
+        by_source.as_ref(),
+        by_id.as_ref(),
+    ))
 }
 
 pub(super) fn planned_outcome_connection(
@@ -62,13 +66,17 @@ pub(super) fn planned_outcome_connection(
         .map(|id| super::super::codec::read_message(connection, id))
         .transpose()?
         .flatten();
-    Ok(planned_mapping(decision, by_source, by_id))
+    Ok(planned_mapping(
+        decision,
+        by_source.as_ref(),
+        by_id.as_ref(),
+    ))
 }
 
 fn planned_mapping(
     decision: &Decision,
-    by_source: Option<ConversationMessageWithParts>,
-    by_id: Option<ConversationMessageWithParts>,
+    by_source: Option<&ConversationMessageWithParts>,
+    by_id: Option<&ConversationMessageWithParts>,
 ) -> Outcome {
     if !decision.admit {
         return Outcome::default();
@@ -119,7 +127,7 @@ pub(super) fn import_one(
         .transpose()?
         .flatten();
     if by_source.is_some() || by_id.is_some() {
-        let outcome = planned_mapping(decision, by_source, by_id);
+        let outcome = planned_mapping(decision, by_source.as_ref(), by_id.as_ref());
         transaction.commit().map_err(ConversationError::sqlite)?;
         return Ok(outcome);
     }
@@ -154,9 +162,9 @@ pub(super) fn import_one(
             turn_id: Some(turn_id.clone()),
             now: Some(now.clone()),
         },
-        session_id.clone(),
+        &session_id.clone(),
         turn_id.clone(),
-        now.clone(),
+        &now.clone(),
     )?;
     super::super::messages::append_in_transaction(
         &transaction,
@@ -189,7 +197,7 @@ pub(super) fn import_one(
             now: Some(now.clone()),
             parts: None,
         },
-        now.clone(),
+        &now.clone(),
     )?;
     super::super::turns::finalize_in_transaction(
         &transaction,
@@ -200,7 +208,7 @@ pub(super) fn import_one(
             completed_at: Some(now.clone()),
             outcome_capsule: None,
         },
-        now,
+        &now,
     )?;
     transaction.commit().map_err(ConversationError::sqlite)?;
     Ok(Outcome {

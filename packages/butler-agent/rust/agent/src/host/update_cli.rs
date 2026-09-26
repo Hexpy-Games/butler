@@ -1,6 +1,10 @@
 //! One-shot App package update check and dry run; never starts the App runtime.
 
-use std::{ffi::OsString, path::PathBuf, process::ExitCode};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 use serde_json::{Value, json};
 
@@ -75,7 +79,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         Ok(data) => data,
         Err(_) => return failure(options.json, "unsafe_path", "BUTLER_DATA is unavailable", 1),
     };
-    let service = match open_app_update(data, &installation) {
+    let service = match open_app_update(&data, &installation) {
         Ok(service) => service,
         Err(code) => return failure(options.json, &code, "App updates are unavailable", 1),
     };
@@ -137,10 +141,10 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
 }
 
 pub(super) fn open_app_update(
-    data: PathBuf,
+    data: &Path,
     installation: &ResolvedInstallation,
 ) -> Result<AppUpdateService, String> {
-    let data = installation.validate_data_root(&data)?;
+    let data = installation.validate_data_root(data)?;
     let version = installation.app_version();
     AppUpdateService::new(data, installation.root().to_path_buf(), version)
 }

@@ -164,7 +164,7 @@ async fn execute_serial(
             GuardedCommand::Write(input, path) => {
                 MutationOutcome::Write(write::execute(input, path, observer.as_ref()))
             }
-            GuardedCommand::Edit(input, paths) => edit::execute(input, paths, observer.as_ref()),
+            GuardedCommand::Edit(input, paths) => edit::execute(&input, paths, observer.as_ref()),
         }
     })
     .await

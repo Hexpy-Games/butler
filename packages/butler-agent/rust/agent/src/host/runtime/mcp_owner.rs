@@ -7,7 +7,7 @@ use crate::{
 
 pub(super) fn for_runtime(
     paths: &super::NativeRuntimePaths,
-    host_environment: Arc<HashMap<String, String>>,
+    host_environment: &Arc<HashMap<String, String>>,
     registry_writes: Arc<ConfigurationWrites>,
 ) -> Arc<NativeMcpClient> {
     new(
@@ -21,7 +21,7 @@ pub(super) fn for_runtime(
 pub(super) fn new(
     data_root: PathBuf,
     installation_root: PathBuf,
-    host_environment: Arc<HashMap<String, String>>,
+    host_environment: &Arc<HashMap<String, String>>,
     registry_writes: Arc<ConfigurationWrites>,
 ) -> Arc<NativeMcpClient> {
     let path_guard: Arc<RegistryPathGuard> = Arc::new(move |data_root, target| {
@@ -42,7 +42,7 @@ pub(super) fn new(
     });
     Arc::new(NativeMcpClient::with_registry_writer(
         data_root,
-        (*host_environment).clone(),
+        (**host_environment).clone(),
         registry_writes,
         path_guard,
     ))

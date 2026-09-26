@@ -32,7 +32,7 @@ impl ToolJournalRepository {
     pub(crate) async fn start(&self, input: ToolJournalStart) -> StorageResult<()> {
         let clock = self.clock.clone();
         self.storage
-            .execute(move |db| write::start(db, input, &*clock))
+            .execute(move |db| write::start(db, &input, &*clock))
             .await
     }
 

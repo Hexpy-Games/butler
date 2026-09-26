@@ -85,10 +85,18 @@ impl Drop for CompactionLock {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn snapshot_io_error(error: std::io::Error) -> ContextError {
     ContextError::new("context_compaction_snapshot_error", error.to_string())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn lock_io_error(error: std::io::Error) -> ContextError {
     ContextError::new("context_compaction_lock_error", error.to_string())
 }

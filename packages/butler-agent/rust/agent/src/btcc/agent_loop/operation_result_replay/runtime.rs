@@ -486,6 +486,10 @@ fn contract(code: &'static str) -> BtccError {
     BtccError::new(code, code)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn numeric_argument_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new(
         "operation_result_argument_coercion_failed",

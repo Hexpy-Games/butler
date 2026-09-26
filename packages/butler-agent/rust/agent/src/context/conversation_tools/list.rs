@@ -269,6 +269,10 @@ fn truncate(text: &str, max: usize) -> String {
 fn failure(code: &str, diagnostics: &[&str]) -> Value {
     json!({"ok":false,"code":code,"diagnostics":diagnostics})
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
     ContextError::new("conversation_store_unavailable", error.to_string())
 }

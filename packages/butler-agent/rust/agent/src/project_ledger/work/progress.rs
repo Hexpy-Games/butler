@@ -325,6 +325,7 @@ pub(super) fn checkpoint_child(input: CheckpointChildInput<'_>) -> Result<Value,
     }))
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct CheckpointChildInput<'a> {
     pub current: &'a Snapshot,
     pub turn_id: &'a str,

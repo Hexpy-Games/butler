@@ -153,7 +153,7 @@ pub(super) fn claim(
             subscribers,
             "session_queue.changed",
             None,
-            service::map(serde_json::json!({
+            service::map(&serde_json::json!({
                 "session_id":claim.chat_id,
                 "queued_message_id":claim.queued_message_id,
                 "action":"dispatching",

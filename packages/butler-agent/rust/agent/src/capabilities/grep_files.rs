@@ -120,7 +120,7 @@ pub(super) async fn execute(
     let listed = match outcome {
         WorkspaceListOutcome::Listed(listed) => listed,
         WorkspaceListOutcome::Rejected(rejection) => {
-            return Ok(response::guard_rejection(&options.root, rejection));
+            return Ok(response::guard_rejection(&options.root, &rejection));
         }
     };
     let matcher_source = if options.regex {
@@ -158,7 +158,7 @@ pub(super) async fn execute(
         &options,
         &query,
         &listed,
-        searched,
+        &searched,
         position.as_ref(),
     ))
 }

@@ -174,10 +174,10 @@ fn progress_destination(
     destination
 }
 
-pub(crate) fn assemble(dependencies: TurnFacadeDependencies) -> Arc<Coordinator> {
+pub(crate) fn assemble(dependencies: &TurnFacadeDependencies) -> Arc<Coordinator> {
     let host = dependencies.host.clone();
     Arc::new(Coordinator::new(
-        Arc::new(TurnFacade::new(&dependencies)),
+        Arc::new(TurnFacade::new(dependencies)),
         host,
     ))
 }

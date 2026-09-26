@@ -17,7 +17,14 @@ impl AgentConversationStore {
         let session_id = input.session_id.clone().unwrap_or_else(|| clock.id("cs"));
         let turn_id = input.turn_id.clone().unwrap_or_else(|| clock.id("ct"));
         self.execute(move |connection| {
-            begin(connection, clock.as_ref(), input, session_id, turn_id, now)
+            begin(
+                connection,
+                clock.as_ref(),
+                input,
+                &session_id,
+                turn_id,
+                &now,
+            )
         })
         .await
     }
@@ -30,7 +37,7 @@ impl AgentConversationStore {
             .completed_at
             .clone()
             .unwrap_or_else(|| clock.now_iso());
-        self.execute(move |connection| finalize(connection, clock.as_ref(), input, completed))
+        self.execute(move |connection| finalize(connection, clock.as_ref(), input, &completed))
             .await
     }
     pub(crate) async fn read_turn(&self, id: &str) -> ConversationResult<Option<ConversationTurn>> {
@@ -44,9 +51,9 @@ fn begin(
     connection: &mut Connection,
     clock: &dyn ConversationIdentityClock,
     input: BeginTurnInput,
-    session_id: String,
+    session_id: &str,
     turn_id: String,
-    now: String,
+    now: &str,
 ) -> ConversationResult<ConversationTurn> {
     let tx = connection
         .transaction()
@@ -60,9 +67,9 @@ pub(super) fn begin_in_transaction(
     tx: &Connection,
     clock: &dyn ConversationIdentityClock,
     input: BeginTurnInput,
-    session_id: String,
+    session_id: &str,
     turn_id: String,
-    now: String,
+    now: &str,
 ) -> ConversationResult<ConversationTurn> {
     if let Some(turn) = get_turn(tx, &turn_id)? {
         return Ok(turn);
@@ -106,20 +113,20 @@ pub(super) fn begin_in_transaction(
     enqueue(
         tx,
         clock,
-        &session_id,
+        session_id,
         0.0,
         "conversation.session_bound",
-        &session_id,
-        &now,
+        session_id,
+        now,
     )?;
     let turn = ConversationTurn {
         id: turn_id,
-        session_id: session_id.clone(),
-        seq: next_seq(tx, "conversation_turns", &session_id)?,
+        session_id: session_id.to_string(),
+        seq: next_seq(tx, "conversation_turns", session_id)?,
         actor: input.actor,
         status: "running".into(),
         request_id: input.request_id,
-        started_at: now.clone(),
+        started_at: now.to_string(),
         completed_at: None,
     };
     tx.execute(
@@ -140,11 +147,11 @@ pub(super) fn begin_in_transaction(
     enqueue(
         tx,
         clock,
-        &session_id,
+        session_id,
         turn.seq as f64,
         "conversation.turn_started",
         &turn.id,
-        &now,
+        now,
     )?;
     Ok(turn)
 }
@@ -153,7 +160,7 @@ fn finalize(
     connection: &mut Connection,
     clock: &dyn ConversationIdentityClock,
     input: FinalizeTurnInput,
-    completed: String,
+    completed: &str,
 ) -> ConversationResult<ConversationTurn> {
     let tx = connection
         .transaction()
@@ -167,7 +174,7 @@ pub(super) fn finalize_in_transaction(
     tx: &Connection,
     clock: &dyn ConversationIdentityClock,
     input: FinalizeTurnInput,
-    completed: String,
+    completed: &str,
 ) -> ConversationResult<ConversationTurn> {
     get_turn(tx, &input.turn_id)?.ok_or_else(|| {
         ConversationError::new(

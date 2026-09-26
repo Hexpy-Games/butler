@@ -162,6 +162,10 @@ pub(super) fn select(
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> crate::cognition::CognitionError {
     crate::cognition::CognitionError::new("memory_graph_unavailable", error.to_string())
 }

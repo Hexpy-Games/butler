@@ -20,7 +20,7 @@ impl Scratch {
         Self(std::env::temp_dir().join(format!("butler-mcp-client-{}", uuid::Uuid::new_v4())))
     }
 
-    fn write_registry(&self, server: Value) {
+    fn write_registry(&self, server: &Value) {
         let config = self.0.join("config");
         fs::create_dir_all(&config).unwrap();
         fs::write(
@@ -42,7 +42,7 @@ async fn stdio_client_lists_describes_calls_and_reads_then_reaps_each_child() {
     let scratch = Scratch::new();
     let marker = scratch.0.join("reaped.txt");
     let executable = std::env::current_exe().unwrap();
-    scratch.write_registry(json!({
+    scratch.write_registry(&json!({
         "id":"fixture",
         "display_name":"Fixture",
         "enabled":true,
@@ -104,7 +104,7 @@ async fn stdio_cancellation_reaps_child_after_one_tool_dispatch() {
     let dispatched = scratch.0.join("dispatched.txt");
     let pid_marker = scratch.0.join("pid.txt");
     let executable = std::env::current_exe().unwrap();
-    scratch.write_registry(json!({
+    scratch.write_registry(&json!({
         "id":"fixture",
         "display_name":"Fixture",
         "enabled":true,

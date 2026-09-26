@@ -27,16 +27,17 @@ pub(super) fn reference(
         identity: OperationResultIdentity {
             kind,
             result_ref: bounded_identifier(
-                stored.result_ref,
+                &stored.result_ref,
                 "operation_result_reference_invalid",
             )?,
             tool_name: bounded_identifier(
-                record.tool_name.clone(),
+                &record.tool_name.clone(),
                 "operation_result_tool_name_invalid",
             )?,
             work_id: stored
                 .work_id
                 .filter(|value| !value.is_empty())
+                .as_ref()
                 .map(|value| bounded_identifier(value, "operation_result_work_id_invalid"))
                 .transpose()?,
         },
@@ -73,8 +74,8 @@ pub(super) fn reference(
     })
 }
 
-fn bounded_identifier(value: String, code: &'static str) -> Result<String, BtccError> {
-    let trimmed = crate::public_text::trim_js_whitespace(&value);
+fn bounded_identifier(value: &str, code: &'static str) -> Result<String, BtccError> {
+    let trimmed = crate::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() || trimmed.len() > 256 {
         Err(error(code))
     } else {

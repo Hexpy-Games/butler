@@ -29,9 +29,9 @@ pub(crate) struct NativeStatusModels {
 }
 
 impl NativeStatusModels {
-    pub(crate) fn status_value(&self, telemetry: Value) -> Value {
+    pub(crate) fn status_value(&self, telemetry: &Value) -> Value {
         let mut prompt_cache = self.prompt_cache.clone();
-        prompt_cache["telemetry"] = telemetry_projection(&telemetry);
+        prompt_cache["telemetry"] = telemetry_projection(telemetry);
         if let Some(object) = prompt_cache.as_object_mut() {
             object.insert("scope".into(), Value::Null);
         }
@@ -68,7 +68,7 @@ impl NativeStatusModels {
         .join(", ")
     }
 
-    pub(crate) fn render_text(&self, telemetry: Value, scope: Option<&str>) -> String {
+    pub(crate) fn render_text(&self, telemetry: &Value, scope: Option<&str>) -> String {
         let policy = self.prompt_cache.clone();
         let prefix = policy.get("keyPrefix").and_then(Value::as_str);
         let effective_key = match (prefix, scope.filter(|scope| !scope.is_empty())) {
@@ -88,7 +88,7 @@ impl NativeStatusModels {
             .get("supported")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let telemetry = telemetry_projection(&telemetry);
+        let telemetry = telemetry_projection(telemetry);
         let request_count = telemetry["requestCount"].as_u64().unwrap_or(0);
         let cached = telemetry["cachedTokens"].as_f64().unwrap_or(0.0);
         let prompt = telemetry["promptTokens"].as_f64().unwrap_or(0.0);

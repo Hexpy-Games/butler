@@ -297,9 +297,17 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
     result
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_queue_io_error", error.to_string())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn sqlite_error(error: rusqlite::Error) -> CognitionError {
     CognitionError::new("memory_queue_sqlite_error", error.to_string())
 }

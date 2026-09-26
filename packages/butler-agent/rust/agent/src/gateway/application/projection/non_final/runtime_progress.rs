@@ -17,7 +17,7 @@ pub(super) fn row_from_runtime_event(
             let note = safe(payload.get("note"), "Working");
             fields(
                 &mut row,
-                json!({"kind":"message","safe_label":note,
+                &json!({"kind":"message","safe_label":note,
                 "state":match optional(payload.get("recoveryStatus")).as_deref(){Some("cleared")=>"delivered",Some("interrupted")=>"failed",_=>"running"}}),
             );
             copy(
@@ -53,18 +53,18 @@ pub(super) fn row_from_runtime_event(
         }
         "turn.first_progress" => fields(
             &mut row,
-            json!({"kind":"turn","safe_label":safe(payload.get("note").or_else(||payload.get("safeLabel")),"Working"),"state":"thinking"}),
+            &json!({"kind":"turn","safe_label":safe(payload.get("note").or_else(||payload.get("safeLabel")),"Working"),"state":"thinking"}),
         ),
         "turn.acknowledged" => fields(
             &mut row,
-            json!({"kind":"turn","safe_label":safe(payload.get("safeLabel"),"Request received. Preparing the work."),"state":"accepted","receipt_kind":"turn.acknowledged"}),
+            &json!({"kind":"turn","safe_label":safe(payload.get("safeLabel"),"Request received. Preparing the work."),"state":"accepted","receipt_kind":"turn.acknowledged"}),
         ),
         "assistant.decision" => {
             standalone_decision(payload, &mut row);
             let label = row.get("public_decision_summary")?.clone();
             fields(
                 &mut row,
-                json!({"kind":"decision","safe_label":label,"state":"running"}),
+                &json!({"kind":"decision","safe_label":label,"state":"running"}),
             );
         }
         "work.block.started" | "work.block.updated" | "work.block.completed" => {
@@ -84,7 +84,7 @@ pub(super) fn row_from_runtime_event(
             };
             fields(
                 &mut row,
-                json!({"kind":"work_block","safe_label":title,"state":state,"work_block_id":optional(payload.get("workBlockId")).unwrap_or_else(||id.into()),"work_block_label":title,"work_block_phase":phase}),
+                &json!({"kind":"work_block","safe_label":title,"state":state,"work_block_id":optional(payload.get("workBlockId")).unwrap_or_else(||id.into()),"work_block_label":title,"work_block_phase":phase}),
             );
             if let Some(value) = block_sequence(payload) {
                 row.insert("work_block_sequence".into(), value.into());
@@ -92,7 +92,7 @@ pub(super) fn row_from_runtime_event(
         }
         "guard.started" | "guard.completed" => fields(
             &mut row,
-            json!({"kind":"system","safe_label":if kind.ends_with("started"){"Checking response"}else{"Response checked"},"state":if kind.ends_with("started"){"running"}else{"delivered"}}),
+            &json!({"kind":"system","safe_label":if kind.ends_with("started"){"Checking response"}else{"Response checked"},"state":if kind.ends_with("started"){"running"}else{"delivered"}}),
         ),
         value if value.starts_with("tool.") => tool_row(value, payload, id, &mut row),
         "runtime.fault" => {
@@ -102,7 +102,7 @@ pub(super) fn row_from_runtime_event(
             );
             fields(
                 &mut row,
-                json!({"kind":"runtime_fault","safe_label":summary,"state":"runtime_fault","runtime_fault_id":safe(payload.get("faultId"),id),"runtime_fault_kind":safe(payload.get("kind"),"runtime_fault"),"runtime_fault_retryable":payload.get("retryable").and_then(Value::as_bool)==Some(true),"runtime_fault_public_summary":summary}),
+                &json!({"kind":"runtime_fault","safe_label":summary,"state":"runtime_fault","runtime_fault_id":safe(payload.get("faultId"),id),"runtime_fault_kind":safe(payload.get("kind"),"runtime_fault"),"runtime_fault_retryable":payload.get("retryable").and_then(Value::as_bool)==Some(true),"runtime_fault_public_summary":summary}),
             );
             copy(
                 payload,
@@ -121,7 +121,7 @@ pub(super) fn row_from_runtime_event(
             };
             fields(
                 &mut row,
-                json!({"kind":"turn","safe_label":label,"state":if kind=="turn.accepted"{"accepted"}else{"thinking"}}),
+                &json!({"kind":"turn","safe_label":label,"state":if kind=="turn.accepted"{"accepted"}else{"thinking"}}),
             );
             if kind == "turn.iteration.started" {
                 row.insert("bridge_phase".into(), "model_round_waiting".into());
@@ -129,15 +129,15 @@ pub(super) fn row_from_runtime_event(
         }
         "message.final.started" => fields(
             &mut row,
-            json!({"kind":"message","safe_label":"Preparing final answer","state":"running"}),
+            &json!({"kind":"message","safe_label":"Preparing final answer","state":"running"}),
         ),
         "message.final.completed" | "turn.completed" => fields(
             &mut row,
-            json!({"kind":"turn","safe_label":if kind=="message.final.completed"{"Final answer ready"}else{"Completed"},"state":"delivered"}),
+            &json!({"kind":"turn","safe_label":if kind=="message.final.completed"{"Final answer ready"}else{"Completed"},"state":"delivered"}),
         ),
         "turn.failed" | "turn.cancelled" => fields(
             &mut row,
-            json!({"kind":"turn","safe_label":if kind=="turn.failed"{safe(payload.get("safeLabel"),"Failed")}else{"Cancelled".into()},"state":if kind=="turn.failed"{"failed"}else{"cancelled"}}),
+            &json!({"kind":"turn","safe_label":if kind=="turn.failed"{safe(payload.get("safeLabel"),"Failed")}else{"Cancelled".into()},"state":if kind=="turn.failed"{"failed"}else{"cancelled"}}),
         ),
         _ => return None,
     }
@@ -149,7 +149,7 @@ fn tool_row(kind: &str, p: &Map<String, Value>, id: &str, row: &mut Map<String, 
         let todo = optional(p.get("todoId").or_else(|| p.get("inputLabel")));
         fields(
             row,
-            json!({"id":todo.as_deref().unwrap_or(id),"kind":"todo","safe_label":safe(p.get("safeLabel"),"Working step"),"state":optional(p.get("state")).unwrap_or_else(||"running".into())}),
+            &json!({"id":todo.as_deref().unwrap_or(id),"kind":"todo","safe_label":safe(p.get("safeLabel"),"Working step"),"state":optional(p.get("state")).unwrap_or_else(||"running".into())}),
         );
         insert(row, "safe_input_label", todo);
         copy(p, row, "bridgePhase", "bridge_phase");
@@ -191,7 +191,7 @@ fn tool_row(kind: &str, p: &Map<String, Value>, id: &str, row: &mut Map<String, 
     };
     fields(
         row,
-        json!({"kind":activity,"safe_label":safe(p.get("safeLabel"),&fallback),"state":state,"safe_tool_name":tool}),
+        &json!({"kind":activity,"safe_label":safe(p.get("safeLabel"),&fallback),"state":state,"safe_tool_name":tool}),
     );
     insert(row, "safe_input_label", input);
     copy(p, row, "toolCallId", "tool_call_id");
@@ -281,7 +281,7 @@ fn details(p: &Map<String, Value>, row: &mut Map<String, Value>) {
         .take(8)
         .enumerate()
         .filter_map(|(index, value)| {
-            let mut item = service::map(json!({
+            let mut item = service::map(&json!({
                 "id":safe(value.get("id"),&format!("detail-{}",index+1)),
                 "safe_label":safe(value.get("safe_label"),"Detail")
             }))
@@ -321,9 +321,9 @@ fn block_sequence(p: &Map<String, Value>) -> Option<u64> {
     })
 }
 fn base(id: &str, now: &str, sequence: Option<u64>) -> Option<Map<String, Value>> {
-    service::map(json!({"id":id,"created_at":now,"turn_event_sequence":sequence})).ok()
+    service::map(&json!({"id":id,"created_at":now,"turn_event_sequence":sequence})).ok()
 }
-fn fields(row: &mut Map<String, Value>, value: Value) {
+fn fields(row: &mut Map<String, Value>, value: &Value) {
     if let Some(values) = value.as_object() {
         row.extend(values.clone());
     }

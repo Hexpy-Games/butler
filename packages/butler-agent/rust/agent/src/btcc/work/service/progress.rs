@@ -57,7 +57,7 @@ impl DurableWorkService {
                 .as_ref()
                 .map_or(Value::Null, |value| Value::String(value.clone())),
         );
-        let request_sha256 = fingerprint("record_checkpoint", Value::Object(identity))?;
+        let request_sha256 = fingerprint("record_checkpoint", &Value::Object(identity))?;
         let action_progress = super::super::policy::apply_work_action_updates(
             &context.work,
             input.action_updates.as_deref().unwrap_or(&[]),
@@ -146,7 +146,7 @@ impl DurableWorkService {
                 .transpose()?
                 .unwrap_or(Value::Null),
         );
-        let request_sha256 = fingerprint("record_review", Value::Object(identity))?;
+        let request_sha256 = fingerprint("record_review", &Value::Object(identity))?;
         let expected_result_review_revision_id = if input.subject == ReviewSubject::Completion {
             accepted_review.map(|review| review.review_revision_id.clone())
         } else {

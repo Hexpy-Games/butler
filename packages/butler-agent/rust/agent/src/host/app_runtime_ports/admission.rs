@@ -99,6 +99,10 @@ impl AppAdmissionAuthority for NativeAppAdmission {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn ledger_error(error: ProjectLedgerReadError) -> GatewayApplicationError {
     match error {
         ProjectLedgerReadError::DashboardChanged => GatewayApplicationError::Public {

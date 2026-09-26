@@ -249,6 +249,10 @@ fn receipt_result(
     JsonDocument::from_encoded(encoded).map_err(wire_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn wire_error(error: crate::json::JsonError) -> ToolExecutionError {
     ToolExecutionError::Integrity(BtccError::new("guided_tool_result_json", error.to_string()))
 }

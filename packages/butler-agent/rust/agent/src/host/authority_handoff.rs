@@ -189,6 +189,10 @@ impl AppAuthorityHandoff for NativeAuthorityHandoff {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn authority_error(error: AuthorityError) -> GatewayApplicationError {
     let (status, public_code, message) = match error.code.as_str() {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {

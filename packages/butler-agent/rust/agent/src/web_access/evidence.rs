@@ -220,7 +220,7 @@ pub(super) struct ToolReceiptInput<'a> {
     pub(super) metrics: Value,
 }
 
-pub(super) fn tool_receipt(input: ToolReceiptInput<'_>) -> Value {
+pub(super) fn tool_receipt(input: &ToolReceiptInput<'_>) -> Value {
     let references = input
         .urls
         .iter()

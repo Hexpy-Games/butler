@@ -133,7 +133,7 @@ pub(super) async fn update(
                 &clock.now_iso(),
             )?;
             tx.commit().map_err(AppStorageError::sqlite)?;
-            events::publish(&subscribers, event);
+            events::publish(&subscribers, &event);
             Ok(expected + 1)
         })
         .await

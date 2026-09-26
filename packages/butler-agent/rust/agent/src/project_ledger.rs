@@ -340,7 +340,7 @@ impl NativeProjectLedger {
             let _publication_permit = publication_permit;
             let _active = active;
             let _fs_permit = fs_permit;
-            publication::apply_record_effect(&data_root, request, &collation)
+            publication::apply_record_effect(&data_root, &request, &collation)
         })
         .await
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?
@@ -367,7 +367,7 @@ impl NativeProjectLedger {
             let _publication_permit = publication_permit;
             let _active = active;
             let _fs_permit = fs_permit;
-            publication::reconcile_record_effect(&data_root, request, &collation)
+            publication::reconcile_record_effect(&data_root, &request, &collation)
         })
         .await
         .map_err(|_| LedgerEffectError::Owner("project_ledger_worker_failed"))?

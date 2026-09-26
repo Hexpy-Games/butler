@@ -9,7 +9,7 @@ pub(super) fn prune(
     butler_data: &Path,
     identity: &dyn ToolOutputIdentity,
     metrics: &dyn PruneMetricObserver,
-    input: PruneToolOutputInput,
+    input: &PruneToolOutputInput,
 ) -> ContextResult<PruneToolOutputResult> {
     let now = identity.now();
     let now_ms = epoch_millis(now).trunc();
@@ -110,6 +110,10 @@ fn lexical_absolute(path: &Path) -> ContextResult<std::path::PathBuf> {
     Ok(clean)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> ContextError {
     ContextError::new("tool_output_io_error", error.to_string())
 }

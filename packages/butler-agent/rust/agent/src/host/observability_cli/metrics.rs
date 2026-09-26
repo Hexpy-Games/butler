@@ -100,7 +100,7 @@ pub(super) fn tail(
     } else {
         text.join("\n")
     };
-    report_success(options, command.name(), data, &human);
+    report_success(options, command.name(), &data, &human);
     ExitCode::SUCCESS
 }
 

@@ -19,7 +19,7 @@ pub(super) async fn text(data_root: &Path) -> Result<String, String> {
         .as_secs_f64()
         * 1_000.0;
     let telemetry = operations::read_prompt_cache_telemetry(data_root, Some(now_ms - 86_400_000.0));
-    let control = models.render_text(telemetry, None);
+    let control = models.render_text(&telemetry, None);
     let counts = operations::read_mcp_task_counts(data_root);
     let hot_files = std::fs::read_dir(data_root.join("cognition/memory/hot"))
         .ok()

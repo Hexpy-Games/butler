@@ -109,6 +109,7 @@ pub(super) fn failure(
     })]
 }
 
+#[derive(Clone, Copy)]
 pub(super) enum MutationOperation {
     Created,
     Overwritten,
@@ -189,7 +190,7 @@ pub(super) fn success(
     receipts
 }
 
-pub(super) fn execution(tool: &str, summary: String, references: Value) -> Vec<Value> {
+pub(super) fn execution(tool: &str, summary: &str, references: &Value) -> Vec<Value> {
     vec![json!({
         "schema":"butler.evidence-receipt.v1",
         "id":format!("receipt-{tool}-{}", Uuid::new_v4()),

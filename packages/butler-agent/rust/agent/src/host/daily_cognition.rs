@@ -113,7 +113,7 @@ impl DailyCognitionJobs {
                 feedback: feedback.clone(),
             }),
             legacy_metadata: Arc::new(LegacyMetadataIntegrityService::new(
-                data_root.clone(),
+                &data_root.clone(),
                 paths.clone(),
                 box_store.clone(),
                 feedback.clone(),

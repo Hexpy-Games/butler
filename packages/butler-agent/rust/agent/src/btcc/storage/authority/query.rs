@@ -14,6 +14,10 @@ pub(super) const ROW: &str = "SELECT request_id, request_ref, identity_sha256, o
     private_alternative_input, outcome, outcome_receipt_json, close_reason, close_scope, \
     closed_at, created_at, updated_at FROM btcc_authority_requests";
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn sql(error: rusqlite::Error) -> AuthorityError {
     AuthorityError::storage("sqlite_error", error.to_string())
 }

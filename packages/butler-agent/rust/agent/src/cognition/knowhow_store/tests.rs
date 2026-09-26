@@ -59,7 +59,7 @@ impl FeedbackResolvePort for LockProbe {
         Box::pin(async move {
             let lease = self
                 .coordinator
-                .try_acquire(CognitionWriteAcquire::immediate(
+                .try_acquire(&CognitionWriteAcquire::immediate(
                     self.lock_path.clone(),
                     "knowhow-test-resolver",
                 ))

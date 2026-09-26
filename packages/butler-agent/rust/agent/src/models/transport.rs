@@ -109,7 +109,7 @@ pub(super) async fn execute(input: RequestExecution<'_>) -> Result<Value, ModelR
                 })?;
                 let result = async {
                     let response = current.send().await.map_err(|error| {
-                        diagnostics::network(provider, api, error.to_string())
+                        diagnostics::network(provider, api, &error.to_string())
                     })?;
                     progress.record_progress();
                     let response = checked(response, provider, api).await?;
@@ -222,7 +222,7 @@ async fn json(
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| Box::new(diagnostics::network(provider, api, error.to_string())))?;
+        .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
     let text = String::from_utf8_lossy(&bytes);
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
     match serde_json::from_str(text) {

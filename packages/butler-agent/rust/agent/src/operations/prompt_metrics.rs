@@ -59,6 +59,10 @@ impl PromptUsageMetricSink for PromptUsageMetrics {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_failure(error: std::io::Error) -> ModelRoundError {
     ModelRoundError::InvocationFailure {
         code: error.raw_os_error().map(|value| value.to_string()),

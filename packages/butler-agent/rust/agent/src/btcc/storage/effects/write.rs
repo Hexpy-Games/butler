@@ -6,6 +6,10 @@ use crate::btcc::effects::recovery;
 
 use super::{receipt_json, row};
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string())
 }
@@ -63,8 +67,8 @@ fn insert_recovery(db: &Connection, effect_id: &str, hint: &RecoveryHint) -> Eff
 }
 pub(super) fn prepare(
     db: &mut Connection,
-    identity: EffectIdentity,
-    hint: Option<RecoveryHint>,
+    identity: &EffectIdentity,
+    hint: Option<&RecoveryHint>,
     clock: &dyn Fn() -> String,
 ) -> EffectResult<PrepareEffect> {
     let transaction = db
@@ -77,7 +81,7 @@ pub(super) fn prepare(
             insert_recovery(&transaction, &identity.effect_id, hint)?;
         }
         transaction.commit().map_err(sql)?;
-        return Ok(if same(&existing.identity, &identity) {
+        return Ok(if same(&existing.identity, identity) {
             PrepareEffect::Ready {
                 created: false,
                 record: Box::new(existing),
@@ -209,7 +213,7 @@ pub(super) fn record_error(
     db: &Connection,
     effect_id: &str,
     revision: i64,
-    error: EffectError,
+    error: &EffectError,
     failed: bool,
     clock: &dyn Fn() -> String,
 ) -> EffectResult<Option<EffectRecord>> {

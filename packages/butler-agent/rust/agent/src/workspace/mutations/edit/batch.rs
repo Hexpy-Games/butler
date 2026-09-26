@@ -17,7 +17,7 @@ struct Ready {
     prepared: Prepared,
 }
 
-pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) -> BatchResult {
+pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> BatchResult {
     let mut outcome = BatchResult {
         applied: Vec::new(),
         unchanged: Vec::new(),
@@ -28,7 +28,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
     };
     let mut snapshots: HashMap<String, Snapshot> = HashMap::new();
     let mut texts: HashMap<String, String> = HashMap::new();
-    for edit in &edits {
+    for edit in edits {
         let key = &edit.path.public;
         if !snapshots.contains_key(key) {
             let path = super::super::contracts::GuardedPath {
@@ -79,11 +79,11 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
         }
     }
     if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, &edits);
+        return preflight_failed(outcome, edits);
     }
     let mut targets = Vec::<Target>::new();
     let mut target_indices = HashMap::<String, usize>::new();
-    for edit in &edits {
+    for edit in edits {
         let key = &edit.path.public;
         let Some(text) = texts.get_mut(key) else {
             continue;
@@ -95,7 +95,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
                     EditFailure::new(edit.input.index, Some(key.clone()), failure.error);
                 error.occurrences = Some(failure.occurrences);
                 outcome.preflight_failures.push(error);
-                return preflight_failed(outcome, &edits);
+                return preflight_failed(outcome, edits);
             }
         };
         text.replace_range(
@@ -139,7 +139,7 @@ pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) ->
         }
     }
     if !outcome.preflight_failures.is_empty() {
-        return preflight_failed(outcome, &edits);
+        return preflight_failed(outcome, edits);
     }
     let mut remaining = ready.into_iter();
     while let Some(ready_target) = remaining.next() {

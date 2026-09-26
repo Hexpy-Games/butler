@@ -59,7 +59,7 @@ async fn run(
         })?;
     let serialized = Bytes::from(serialized);
     let physical = crate::models::request_admission::PreparedRequestAdmission::new(
-        crate::models::request_admission::PrepareAdmissionInput {
+        &crate::models::request_admission::PrepareAdmissionInput {
             catalog: &provider.catalog,
             config: provider.config.as_ref(),
             provider: &config.metadata.provider_id,
@@ -186,6 +186,7 @@ async fn run(
     })
 }
 
+#[derive(Clone, Copy)]
 struct UsageObservation<'a> {
     carrier: Carrier,
     cache_key: Option<&'a str>,

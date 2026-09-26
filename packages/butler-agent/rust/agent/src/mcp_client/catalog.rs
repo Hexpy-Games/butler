@@ -358,6 +358,7 @@ fn terms(value: Option<&str>) -> Vec<String> {
     terms
 }
 
+#[derive(Clone, Copy)]
 struct ScoreWeights {
     exact_name: i32,
     tag: i32,

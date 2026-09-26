@@ -49,7 +49,7 @@ pub(super) struct PrepareAdmissionInput<'a, 'body> {
 }
 
 impl<'a> PreparedRequestAdmission<'a> {
-    pub(super) fn new(input: PrepareAdmissionInput<'a, '_>) -> Result<Self, ModelRoundError> {
+    pub(super) fn new(input: &PrepareAdmissionInput<'a, '_>) -> Result<Self, ModelRoundError> {
         let tool_schema_bytes = input
             .body
             .get("tools")

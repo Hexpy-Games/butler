@@ -48,7 +48,7 @@ fn encode_metadata(metadata: &Map<String, Value>) -> WorkspaceResult<String> {
     crate::json::stringify(&Value::Object(metadata.clone())).map_err(WorkspaceError::json)
 }
 
-fn parse_metadata(raw: Option<String>) -> Option<Map<String, Value>> {
-    let value = serde_json::from_str::<Value>(raw.as_deref()?).ok()?;
+fn parse_metadata(raw: Option<&String>) -> Option<Map<String, Value>> {
+    let value = serde_json::from_str::<Value>(raw?).ok()?;
     value.as_object().cloned()
 }

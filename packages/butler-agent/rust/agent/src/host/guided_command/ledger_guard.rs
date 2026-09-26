@@ -217,7 +217,7 @@ fn resolve(candidate: &str, cwd: &Path, data: &Path, home: Option<&Path>) -> Opt
     } else {
         cwd.join(candidate)
     };
-    Some(lexical(path))
+    Some(lexical(&path))
 }
 
 fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) -> bool {
@@ -236,7 +236,7 @@ fn protected(path: &Path, workspace: &Path, data: &Path, home: Option<&Path>) ->
 }
 
 fn real_or_nearest(path: &Path) -> PathBuf {
-    let mut current = lexical(path.to_path_buf());
+    let mut current = lexical(path);
     let mut suffix = Vec::new();
     loop {
         if let Ok(real) = std::fs::canonicalize(&current) {
@@ -246,16 +246,16 @@ fn real_or_nearest(path: &Path) -> PathBuf {
                 .fold(real, |path, part| path.join(part));
         }
         let Some(name) = current.file_name().map(|name| name.to_owned()) else {
-            return lexical(path.to_path_buf());
+            return lexical(path);
         };
         suffix.push(name);
         if !current.pop() {
-            return lexical(path.to_path_buf());
+            return lexical(path);
         }
     }
 }
 
-fn lexical(path: PathBuf) -> PathBuf {
+fn lexical(path: &Path) -> PathBuf {
     let mut result = PathBuf::new();
     for part in path.components() {
         match part {

@@ -8,7 +8,12 @@ mod tests;
 pub(crate) use record::{ClaimedInboundEvent, QueuedInboundEvent};
 
 use parking_lot::Mutex;
-use std::{collections::HashSet, fmt, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde_json::{Map, Value};
 use tokio::sync::Notify;
@@ -49,7 +54,7 @@ impl std::error::Error for NativeQueueError {}
 pub(crate) type QueueResult<T> = Result<T, NativeQueueError>;
 
 impl NativeInboundQueue {
-    pub(crate) fn new(butler_data: PathBuf) -> Self {
+    pub(crate) fn new(butler_data: &Path) -> Self {
         Self {
             root: butler_data.join("runtime/inbound-events"),
             owner_id: format!("{}:{}", std::process::id(), uuid::Uuid::new_v4()),

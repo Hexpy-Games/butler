@@ -131,7 +131,7 @@ pub async fn run_native_consolidation_cli(
         return success(
             &parsed,
             "butler cognition consolidation status",
-            data,
+            &data,
             &format!(
                 "feedback={} active={}\nknowhow={}\nboxItems={}",
                 counts.total_count, counts.status_active_count, knowhow_count, box_items
@@ -184,7 +184,7 @@ pub async fn run_native_consolidation_cli(
             feedback: feedback.clone(),
         }),
         legacy_metadata: Arc::new(LegacyMetadataIntegrityService::new(
-            parsed.data.clone(),
+            &parsed.data.clone(),
             cognition_paths.clone(),
             box_store.clone(),
             feedback.clone(),
@@ -242,9 +242,9 @@ pub async fn run_native_consolidation_cli(
                 value.phases.len()
             );
             if value.status == CycleStatus::Completed {
-                success(&parsed, command, data, &human)
+                success(&parsed, command, &data, &human)
             } else {
-                incomplete(&parsed, command, data, &human)
+                incomplete(&parsed, command, &data, &human)
             }
         }
         Err(error) => failure(
@@ -373,7 +373,7 @@ fn expand_home(value: &str) -> PathBuf {
 fn success(
     options: &Options,
     command: &str,
-    data: Value,
+    data: &Value,
     human: &str,
 ) -> NativeConsolidationCliResult {
     NativeConsolidationCliResult {
@@ -392,7 +392,7 @@ fn success(
 fn incomplete(
     options: &Options,
     command: &str,
-    data: Value,
+    data: &Value,
     human: &str,
 ) -> NativeConsolidationCliResult {
     NativeConsolidationCliResult {
@@ -402,7 +402,7 @@ fn incomplete(
                 command,
                 data,
                 Some(
-                    json!({"code":"consolidation_incomplete","message":"Consolidation has unfinished phases"}),
+                    &json!({"code":"consolidation_incomplete","message":"Consolidation has unfinished phases"}),
                 ),
             )
         } else if options.quiet {
@@ -431,8 +431,8 @@ fn failure(
             envelope(
                 false,
                 command,
-                Value::Null,
-                Some(json!({"code":code,"message":message})),
+                &Value::Null,
+                Some(&json!({"code":code,"message":message})),
             )
         } else {
             String::new()
@@ -446,7 +446,7 @@ fn failure(
     }
 }
 
-fn envelope(ok: bool, command: &str, data: Value, error: Option<Value>) -> String {
+fn envelope(ok: bool, command: &str, data: &Value, error: Option<&Value>) -> String {
     format!(
         "{}\n",
         crate::json::pretty(&json!({"ok":ok,"command":command,"data":data,

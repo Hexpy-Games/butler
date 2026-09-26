@@ -91,7 +91,7 @@ pub(crate) fn resolve_work_review_transition(
     if !review_entry_stages(subject).contains(&current_stage) {
         return Err(guard_error(
             current_stage,
-            format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
+            &format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
             review_guard(current_stage),
             review_next_action(current_stage),
         ));
@@ -102,7 +102,7 @@ pub(crate) fn resolve_work_review_transition(
     {
         return Err(guard_error(
             current_stage,
-            format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
+            &format!("{}_review_{}", subject_name(subject), verdict_name(verdict)),
             "correction_scope_required",
             "choose_planning_or_execution_correction",
         ));
@@ -311,7 +311,7 @@ fn review_next_action(stage: WorkStage) -> &'static str {
     }
 }
 
-fn guard_error(current: WorkStage, requested: String, unmet: &str, next: &str) -> BtccError {
+fn guard_error(current: WorkStage, requested: &str, unmet: &str, next: &str) -> BtccError {
     BtccError::new(
         "work_transition_guard_unmet",
         format!(

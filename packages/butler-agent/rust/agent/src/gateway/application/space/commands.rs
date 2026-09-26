@@ -38,7 +38,7 @@ pub(super) fn execute(
     db: &mut Connection,
     clock: &dyn AppIdentityClock,
     mut history: SpaceHistory,
-    command: AppSpaceCommand,
+    command: &AppSpaceCommand,
     origin: AppSpaceOrigin,
     title: &str,
 ) -> Result<Outcome, GatewayApplicationError> {

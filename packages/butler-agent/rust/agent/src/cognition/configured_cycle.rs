@@ -252,6 +252,10 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
     })?
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn log_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_maintenance_log_failed", error.to_string())
 }

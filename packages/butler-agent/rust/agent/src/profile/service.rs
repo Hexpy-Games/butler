@@ -418,7 +418,7 @@ where
     F: FnOnce() -> ProfileResult<T>,
 {
     let lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(lock, purpose))
+        .try_acquire(&CognitionWriteAcquire::immediate(lock, purpose))
         .map_err(|_| {
             ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
         })?

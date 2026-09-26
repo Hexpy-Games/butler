@@ -161,7 +161,7 @@ impl WebSession {
             "search_plan":search_plan,
             "public_web_evidence_items":evidence::search_items(&results, &observed_at),
             "evidence_capability_receipts":[evidence::search_capability_receipt(&results, &observed_at)],
-            "evidence_receipts":[evidence::tool_receipt(evidence::ToolReceiptInput {
+            "evidence_receipts":[evidence::tool_receipt(&evidence::ToolReceiptInput {
                 tool: "web_search",
                 receipt_type: "coverage",
                 summary: "Search returned public source candidates for the requested evidence.",

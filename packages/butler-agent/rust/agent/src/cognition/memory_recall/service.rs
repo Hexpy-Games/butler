@@ -73,8 +73,8 @@ impl NativeMemoryRecall {
                 binding,
                 current_user_message,
                 operation_id,
-                args,
-                now,
+                &args,
+                &now,
             )
         })
         .await

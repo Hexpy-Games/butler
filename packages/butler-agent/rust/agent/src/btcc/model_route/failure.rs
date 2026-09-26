@@ -108,7 +108,7 @@ fn provider_runtime(error: &ProviderRequestError) -> RuntimeFailure {
     }
 }
 
-pub(super) fn durability(phase: &str, error: BtccError) -> ModelRoundError {
+pub(super) fn durability(phase: &str, error: &BtccError) -> ModelRoundError {
     ModelRoundError::Integrity(BtccError::new(
         "model_route_durability_failure",
         format!("BTCC model route durability failed during {phase}: {error}"),

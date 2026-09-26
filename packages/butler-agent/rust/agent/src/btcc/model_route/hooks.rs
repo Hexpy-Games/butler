@@ -134,7 +134,7 @@ impl RouteHooks {
                     attempt += 1;
                     tokio::task::yield_now().await;
                 }
-                Err(error) => return Err(failure::durability(phase, error)),
+                Err(error) => return Err(failure::durability(phase, &error)),
             }
         }
     }

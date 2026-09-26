@@ -179,6 +179,7 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
     Ok(())
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct LegacyReceiptInput<'a> {
     pub data_root: &'a Path,
     pub memory_root: &'a Path,

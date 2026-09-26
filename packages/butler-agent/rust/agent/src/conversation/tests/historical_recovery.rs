@@ -62,7 +62,7 @@ fn transcript_reader_keeps_malformed_lines_redacted_in_dry_run() {
     let report = plan_historical_recovery(
         None,
         &parse_timestamp,
-        recovery_input(rows, Vec::new(), true),
+        &recovery_input(rows, Vec::new(), true),
     )
     .unwrap();
     assert_eq!(report["counts"]["recovered"], 1);
@@ -196,7 +196,7 @@ async fn recovery_import_is_atomic_idempotent_and_deduplicates_across_sessions()
     let planned = plan_historical_recovery(
         Some(&reader),
         &parse_timestamp,
-        recovery_input(
+        &recovery_input(
             vec![
                 transcript("shared-event", "legacy/session", "must not duplicate"),
                 transcript("fresh-event", "legacy/session", "RECOVERED_CANONICAL_TEXT"),

@@ -11,7 +11,7 @@ fn waiting_source_session_admits_control_then_released_ordinary_event() {
         "butler-native-ingress-waiting-{}",
         uuid::Uuid::new_v4()
     ));
-    let queue = NativeInboundQueue::new(root.clone());
+    let queue = NativeInboundQueue::new(&root.clone());
     let ordinary = queue
         .enqueue_idempotent(JsonDocument::from_value(&event("ordinary-1", None)).unwrap())
         .unwrap();
@@ -19,7 +19,7 @@ fn waiting_source_session_admits_control_then_released_ordinary_event() {
         .enqueue_idempotent(
             JsonDocument::from_value(&event(
                 "control-1",
-                Some(json!({
+                Some(&json!({
                     "kind":"resume_turn",
                     "requestId":"request-1",
                     "turnId":"turn-1"
@@ -62,7 +62,7 @@ fn waiting_source_session_admits_control_then_released_ordinary_event() {
     fs::remove_dir_all(root).unwrap();
 }
 
-fn event(event_id: &str, control: Option<serde_json::Value>) -> serde_json::Value {
+fn event(event_id: &str, control: Option<&serde_json::Value>) -> serde_json::Value {
     json!({
         "eventId":event_id,
         "transport":"app",

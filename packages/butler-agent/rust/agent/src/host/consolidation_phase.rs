@@ -102,7 +102,7 @@ impl PhaseExecutor for NativeCyclePhases {
                         self.metrics.record(
                             "health",
                             report.metric_status,
-                            report.metric_dimensions,
+                            &report.metric_dimensions,
                         );
                         crate::json::json_object!({
                             "memory_chunks_count": report.memory_chunks_count,
@@ -125,7 +125,7 @@ impl PhaseExecutor for NativeCyclePhases {
                     self.metrics.record(
                         "consolidation_cycle",
                         "ok",
-                        json!({ "raw_text_included": false }),
+                        &json!({ "raw_text_included": false }),
                     );
                     Ok(crate::json::json_object!({ "raw_text_included": false }))
                 }
@@ -148,6 +148,10 @@ impl PhaseExecutor for NativeCyclePhases {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn cognition_phase_error(error: crate::cognition::CognitionError) -> PhaseError {
     PhaseError {
         code: error.code,
@@ -158,6 +162,6 @@ fn cognition_phase_error(error: crate::cognition::CognitionError) -> PhaseError 
 
 impl CycleEventSink for CycleMetrics {
     fn record(&self, name: &str, status: &str, dimensions: Value) {
-        Self::record(self, name, status, dimensions);
+        Self::record(self, name, status, &dimensions);
     }
 }

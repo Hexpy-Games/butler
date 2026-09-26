@@ -2,7 +2,7 @@ use super::*;
 use crate::cognition::extraction::{ExtractCorrection, ExtractNode, ExtractRelation};
 
 pub(in crate::cognition) fn apply(
-    value: Value,
+    value: &Value,
     batch: &BindingBatch,
     output: &mut ExtractOutput,
     input: &ExtractInput,
@@ -289,5 +289,5 @@ pub(in crate::cognition) fn apply_repair(
             Value::Array(current.into_iter().chain(historical).collect()),
         );
     }
-    apply(value, batch, output, input)
+    apply(&value, batch, output, input)
 }

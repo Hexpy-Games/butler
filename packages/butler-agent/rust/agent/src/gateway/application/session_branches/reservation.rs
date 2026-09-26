@@ -112,7 +112,7 @@ impl AppApplication {
                 let session = super::super::sessions::create_branch_session(
                     &tx,
                     &subscribers,
-                    AppCreateSessionInput {
+                    &AppCreateSessionInput {
                         kind,
                         title: Some(request.title.clone()),
                         project_id,

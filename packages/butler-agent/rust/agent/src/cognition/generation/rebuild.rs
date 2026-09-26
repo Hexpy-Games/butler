@@ -369,11 +369,19 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
     }
     Ok(format!("{:x}", hash.finalize()))
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_rebuild_io_error", error.to_string())
 }
 /// A caller cancellation observed while waiting for the write gate is an abort,
 /// not contention: `memory_write_busy` is retryable for callers.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
     if failure.code == "memory_write_aborted" {
         error("memory_operation_aborted")

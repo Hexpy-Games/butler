@@ -271,6 +271,7 @@ pub(super) fn apply(
     })
 }
 
+#[derive(Clone, Copy)]
 struct RuntimeInput<'a> {
     db: &'a Connection,
     subscribers: &'a EventSubscribers,
@@ -344,13 +345,13 @@ fn project_runtime_event(input: RuntimeInput<'_>) -> Result<Option<&'static str>
             subscribers,
             "agent.turn_event",
             Some(turn),
-            service::map(json!({
+            service::map(&json!({
                 "session_id": chat, "turn_id": turn, "event": event
             }))?,
             now,
         )?;
         if let Some(row) = progress_row {
-            append_progress(ProgressAppend {
+            append_progress(&ProgressAppend {
                 db,
                 subscribers,
                 chat,

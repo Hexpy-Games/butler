@@ -68,7 +68,7 @@ impl MonitoringReaders {
         self.metrics.record(
             "health",
             report.metric_status,
-            report.metric_dimensions.clone(),
+            &report.metric_dimensions.clone(),
         );
         Ok(report.summary)
     }

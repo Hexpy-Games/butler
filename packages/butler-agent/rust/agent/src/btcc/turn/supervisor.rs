@@ -118,7 +118,7 @@ impl TurnExecutionSupervisor {
         }
     }
 
-    pub(super) fn observe_stop(&self, ticket: &StopTicket, outcome: StopPersistenceOutcome) {
+    pub(super) fn observe_stop(&self, ticket: &StopTicket, outcome: &StopPersistenceOutcome) {
         let mut state = self.inner.lock();
         let Some(registration) = state.turns.get_mut(&ticket.turn_id) else {
             return;

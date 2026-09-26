@@ -203,6 +203,10 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
     Ok(value)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn multipart_error(error: MultipartError) -> HttpError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         HttpError::PayloadTooLarge

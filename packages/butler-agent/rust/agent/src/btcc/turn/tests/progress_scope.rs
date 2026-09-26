@@ -129,7 +129,7 @@ async fn scoped_loop_progress_awaits_conversation_and_keeps_reclaimed_destinatio
         });
         dependencies.agent = trace.clone();
         dependencies.progress = trace.clone();
-        let assembly = crate::btcc::assemble(dependencies);
+        let assembly = crate::btcc::assemble(&dependencies);
         let host = assembly.host;
         let running = tokio::spawn(async move { assembly.btcc.run_turn(input).await });
         trace.entered.acquire().await.unwrap().forget();

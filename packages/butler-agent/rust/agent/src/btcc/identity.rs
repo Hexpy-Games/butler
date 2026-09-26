@@ -35,6 +35,10 @@ pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<Strin
     crate::json::stringify_without(value, field).map_err(identity_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn identity_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new("canonical_json", error.to_string())
 }

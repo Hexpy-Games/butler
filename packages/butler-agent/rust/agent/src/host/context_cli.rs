@@ -87,7 +87,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let json_requested = args.iter().any(|arg| arg == "--json");
     let (options, command) = match parse(&args) {
         Ok(parsed) => parsed,
-        Err((command, error)) => return report_error(command, json_requested, error),
+        Err((command, error)) => return report_error(command, json_requested, &error),
     };
     let data_root =
         match settings_cli::resolve_data_root_override(options.data.clone(), &installation) {
@@ -96,7 +96,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 return report_error(
                     command.name(),
                     options.json,
-                    CliError::failed("butler_data_unavailable", message),
+                    &CliError::failed("butler_data_unavailable", message),
                 );
             }
         };
@@ -111,8 +111,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         }
     };
     match result {
-        Ok((data, human)) => report_success(&options, command.name(), data, &human),
-        Err(error) => report_error(command.name(), options.json, error),
+        Ok((data, human)) => report_success(&options, command.name(), &data, &human),
+        Err(error) => report_error(command.name(), options.json, &error),
     }
 }
 
@@ -334,7 +334,7 @@ fn unavailable(code: &'static str, message: impl Into<String>) -> CliError {
     CliError::failed(code, message)
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
         println!(
             "{}",
@@ -352,7 +352,7 @@ fn report_success(options: &Options, command: &str, data: Value, human: &str) ->
     ExitCode::SUCCESS
 }
 
-fn report_error(command: &str, json_output: bool, error: CliError) -> ExitCode {
+fn report_error(command: &str, json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
         println!(
             "{}",

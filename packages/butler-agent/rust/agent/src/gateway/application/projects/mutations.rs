@@ -39,7 +39,9 @@ impl AppApplication {
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
         self.storage
-            .execute(move |db| update_project(db, &subscribers, &project_id, input, clock.as_ref()))
+            .execute(move |db| {
+                update_project(db, &subscribers, &project_id, &input, clock.as_ref())
+            })
             .await
             .map_err(app_error)
     }
@@ -161,7 +163,7 @@ fn update_project(
     db: &mut Connection,
     subscribers: &crate::gateway::application::events::EventSubscribers,
     project_id: &str,
-    input: AppProjectUpdate,
+    input: &AppProjectUpdate,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
@@ -188,7 +190,7 @@ fn update_project(
     let project = read_project(&tx, project_id)?;
     let event = append_project_event(&tx, "project.updated", &project, clock)?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppProjectActionResult { project })
 }
 
@@ -212,7 +214,7 @@ fn lifecycle_project(
             .map_err(AppStorageError::sqlite)?;
         let event = append_project_event(&tx, "project.permanently_deleted", &project, clock)?;
         tx.commit().map_err(AppStorageError::sqlite)?;
-        events::publish(subscribers, event);
+        events::publish(subscribers, &event);
         return Ok(AppProjectActionResult { project });
     }
     let display_name = display_name
@@ -243,9 +245,9 @@ fn lifecycle_project(
         None
     };
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, updated_event);
+    events::publish(subscribers, &updated_event);
     if let Some(event) = deleted_event {
-        events::publish(subscribers, event);
+        events::publish(subscribers, &event);
     }
     Ok(AppProjectActionResult { project })
 }

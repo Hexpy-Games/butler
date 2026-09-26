@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[cfg(unix)]
@@ -29,7 +29,7 @@ pub(super) struct AutomationStore {
 }
 
 impl AutomationStore {
-    pub(super) fn new(data_root: PathBuf) -> Self {
+    pub(super) fn new(data_root: &Path) -> Self {
         Self {
             root: data_root.join("automations"),
         }

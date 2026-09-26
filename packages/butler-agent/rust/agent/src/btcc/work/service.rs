@@ -91,7 +91,7 @@ impl DurableWorkService {
     }
 }
 
-fn fingerprint(operation: &str, input: Value) -> Result<String, BtccError> {
+fn fingerprint(operation: &str, input: &Value) -> Result<String, BtccError> {
     let value = serde_json::json!({"operation": operation, "input": input});
     Ok(crate::btcc::identity::digest(
         &crate::btcc::identity::stable_json(&value)?,

@@ -39,7 +39,7 @@ impl AgentConversationStore {
     ) -> ConversationResult<ConversationMessageWithParts> {
         let clock = self.identity_clock().clone();
         let now = input.now.clone().unwrap_or_else(|| clock.now_iso());
-        self.execute(move |connection| append(connection, clock.as_ref(), input, now))
+        self.execute(move |connection| append(connection, clock.as_ref(), input, &now))
             .await
     }
 
@@ -74,7 +74,7 @@ fn append(
     connection: &mut Connection,
     clock: &dyn ConversationIdentityClock,
     input: AppendMessageInput,
-    now: String,
+    now: &str,
 ) -> ConversationResult<ConversationMessageWithParts> {
     let transaction = connection
         .transaction()
@@ -88,7 +88,7 @@ pub(super) fn append_in_transaction(
     connection: &Connection,
     clock: &dyn ConversationIdentityClock,
     input: AppendMessageInput,
-    now: String,
+    now: &str,
 ) -> ConversationResult<ConversationMessageWithParts> {
     let message = ConversationMessage {
         id: input.message_id.unwrap_or_else(|| clock.id("cm")),
@@ -99,7 +99,7 @@ pub(super) fn append_in_transaction(
         status: input.status.unwrap_or(ConversationStatus::Complete),
         visibility: input.visibility.unwrap_or(ConversationVisibility::Model),
         provenance: input.provenance.unwrap_or(ConversationProvenance::Trusted),
-        created_at: now.clone(),
+        created_at: now.to_string(),
         compacted_by_summary_id: None,
         source_gateway: input.source_gateway,
         source_ref: input.source_ref,
@@ -149,7 +149,7 @@ pub(super) fn append_in_transaction(
         message.seq as f64,
         "conversation.message_committed",
         &message.id,
-        &now,
+        now,
     )?;
     let hydrated = hydrate_message(connection, message)?;
     Ok(hydrated)

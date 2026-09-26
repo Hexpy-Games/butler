@@ -147,7 +147,7 @@ pub(super) fn read(
     } else {
         "ok"
     };
-    let serving = super::serving::read(data_root, paths, now, profile.unwrap_or(Value::Null));
+    let serving = super::serving::read(data_root, paths, now, &profile.unwrap_or(Value::Null));
     let dimensions = json!({
         "hot_cache_files_count": hot_cache_files_count,
         "rule_files_count": rules.count,

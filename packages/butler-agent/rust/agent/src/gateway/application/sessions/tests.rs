@@ -53,7 +53,7 @@ async fn local_and_project_session_rows_follow_app_source() {
                 write::create(
                     db,
                     &subscribers,
-                    AppCreateSessionInput {
+                    &AppCreateSessionInput {
                         kind: AppChatKind::Chat,
                         title: None,
                         project_id: Some("ignored".into()),
@@ -76,7 +76,7 @@ async fn local_and_project_session_rows_follow_app_source() {
                 write::create(
                     db,
                     &subscribers,
-                    AppCreateSessionInput {
+                    &AppCreateSessionInput {
                         kind: AppChatKind::Project,
                         title: Some(" Build ".into()),
                         project_id: Some(" p1 ".into()),

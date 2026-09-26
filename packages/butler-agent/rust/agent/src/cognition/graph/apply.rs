@@ -25,6 +25,7 @@ pub(super) enum ApplyStage {
     Bound,
 }
 
+#[derive(Clone, Copy)]
 struct PlanApplication<'a> {
     owner: ProjectionWindowOwner<'a>,
     input: &'a ExtractInput,

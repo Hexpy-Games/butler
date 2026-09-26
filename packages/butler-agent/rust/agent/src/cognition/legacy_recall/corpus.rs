@@ -123,6 +123,10 @@ fn read_text(data_root: &Path, path: &Path) -> CognitionResult<String> {
         .unwrap_or_default())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn read_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("legacy_recall_read_failed", error.to_string())
 }

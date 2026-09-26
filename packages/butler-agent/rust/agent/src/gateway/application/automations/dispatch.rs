@@ -144,7 +144,7 @@ impl AppApplication {
                     db,
                     &subscribers,
                     "message.updated",
-                    json!({"message": message}),
+                    &json!({"message": message}),
                     &completed,
                 )?;
             }
@@ -154,11 +154,11 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                run_event(
-                    queued.automation.id,
-                    queued.run_target_id,
-                    run.state.clone(),
-                    queued.trigger,
+                &run_event(
+                    &queued.automation.id,
+                    &queued.run_target_id,
+                    &run.state.clone(),
+                    &queued.trigger,
                     run.safe_error_code.clone(),
                 ),
                 &completed,
@@ -241,11 +241,11 @@ impl AppApplication {
                 db,
                 &subscribers,
                 "automation.run",
-                run_event(
-                    row.id.clone(),
-                    row.target_id.clone(),
-                    run.state.clone(),
-                    trigger,
+                &run_event(
+                    &row.id.clone(),
+                    &row.target_id.clone(),
+                    &run.state.clone(),
+                    &trigger,
                     run.safe_error_code.clone(),
                 ),
                 &completed,
@@ -283,10 +283,10 @@ fn session_has_active_turn(
 }
 
 fn run_event(
-    automation_id: String,
-    target_session_id: String,
-    state: String,
-    trigger: String,
+    automation_id: &str,
+    target_session_id: &str,
+    state: &str,
+    trigger: &str,
     safe_error_code: Option<String>,
 ) -> serde_json::Value {
     let mut event = json!({

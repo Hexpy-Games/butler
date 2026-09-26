@@ -35,6 +35,10 @@ impl super::ProjectWorkRepository {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(in crate::project_ledger) fn read_error(error: ProjectLedgerReadError) -> BtccError {
     match error {
         ProjectLedgerReadError::RecordShow(code)

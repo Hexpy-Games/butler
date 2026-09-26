@@ -319,6 +319,10 @@ async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> 
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn error_text(error: BtccError) -> String {
     format!("{}: {}", error.code, error.message)
 }

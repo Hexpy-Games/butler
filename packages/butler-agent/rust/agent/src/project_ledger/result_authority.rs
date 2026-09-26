@@ -160,6 +160,10 @@ fn storage_error(code: &'static str) -> StorageError {
         message: code.into(),
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn read_error(error: ProjectLedgerReadError) -> StorageError {
     match error {
         ProjectLedgerReadError::Resolution(code)

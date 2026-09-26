@@ -51,7 +51,7 @@ pub(super) fn read(root: &Path, page: AppMonitorPage) -> Value {
 
 fn scheduler_event(root: &Path, id: &str, title: &str) -> Value {
     let state = read_json(&root.join("state/scheduler").join(format!("{id}.json")));
-    let mut metrics = vec![metric("job_id", json!(id))];
+    let mut metrics = vec![metric("job_id", &json!(id))];
     push_metric(&mut metrics, "last_run_date", state.get("lastRunDate"));
     let mut event = json!({
         "id": format!("scheduler:{id}"), "kind": "scheduler_job", "title": title,
@@ -106,11 +106,11 @@ fn run_events(path: &Path) -> Vec<Value> {
     let completed = string(run.get("completed_at"));
     let occurred = completed.clone().or_else(|| started.clone());
     let metrics = vec![
-        metric("phase_count", json!(phases.len())),
-        metric("failed_phase_count", json!(failed)),
+        metric("phase_count", &json!(phases.len())),
+        metric("failed_phase_count", &json!(failed)),
         metric(
             "raw_text_included",
-            json!(run.get("raw_text_included") == Some(&Value::Bool(true))),
+            &json!(run.get("raw_text_included") == Some(&Value::Bool(true))),
         ),
     ];
     let mut event = json!({
@@ -197,7 +197,7 @@ fn string(value: Option<&Value>) -> Option<String> {
         .filter(|value| !value.trim().is_empty())
 }
 
-fn metric(label: &str, value: Value) -> Value {
+fn metric(label: &str, value: &Value) -> Value {
     json!({ "label": label, "value": value })
 }
 
@@ -205,7 +205,7 @@ fn push_metric(metrics: &mut Vec<Value>, label: &str, value: Option<&Value>) {
     if let Some(value) =
         value.filter(|value| value.is_string() || value.is_number() || value.is_boolean())
     {
-        metrics.push(metric(label, value.clone()));
+        metrics.push(metric(label, &value.clone()));
     }
 }
 

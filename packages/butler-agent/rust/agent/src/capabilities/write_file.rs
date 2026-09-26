@@ -104,8 +104,8 @@ pub(super) async fn execute(
                 "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("write_file",
-                    format!("{} workspace file {}", if committed.created {"Created"} else {"Overwrote"}, committed.path),
-                    write_reference(&committed, create_parents)),
+                    &format!("{} workspace file {}", if committed.created {"Created"} else {"Overwrote"}, committed.path),
+                    &write_reference(&committed, create_parents)),
                 "evidence_capability_receipts":mutation_evidence::success("write_file",
                     Some(&committed.path), &[], &[], if committed.created {
                         mutation_evidence::MutationOperation::Created
@@ -187,6 +187,10 @@ fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: 
     reference
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError {
         code: error.code.into(),

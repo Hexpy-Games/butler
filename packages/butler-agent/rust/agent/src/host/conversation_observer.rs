@@ -1,6 +1,6 @@
 //! Tracked bounded host lane for passive metrics and durable completion jobs.
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -42,14 +42,14 @@ pub(crate) struct NativeConversationObserver {
 
 impl NativeConversationObserver {
     pub(crate) fn new(
-        data_root: PathBuf,
-        paths: CognitionPathEnvironment,
+        data_root: &Path,
+        paths: &CognitionPathEnvironment,
         clock: Arc<dyn ConversationIdentityClock>,
         metric_files: Arc<MetricFiles>,
     ) -> std::io::Result<Self> {
         let (sender, mut receiver) = mpsc::channel(CAPACITY);
         let now_iso = Arc::new(move || clock.now_iso());
-        let publisher = CompletionPublisher::new(data_root.clone(), paths, now_iso);
+        let publisher = CompletionPublisher::new(data_root, paths, now_iso);
         let metrics = ConversationMetrics::new(metric_files);
         let worker = std::thread::Builder::new()
             .name("butler-completion-observer".into())

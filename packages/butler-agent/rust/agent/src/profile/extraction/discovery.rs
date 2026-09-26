@@ -30,7 +30,7 @@ pub(super) fn read(
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.timestamp_millis());
     let mut reader = factory.open()?;
-    let result = read_owned(root, reader.as_mut(), limit, since, since_ms);
+    let result = read_owned(root, reader.as_mut(), limit, since.as_ref(), since_ms);
     let close = reader.close();
     close?;
     result
@@ -40,7 +40,7 @@ fn read_owned(
     root: &Path,
     reader: &mut dyn CanonicalProfileSourceReader,
     limit: usize,
-    since: Option<String>,
+    since: Option<&String>,
     since_ms: Option<i64>,
 ) -> ProfileResult<SourceRead> {
     let incomplete = incomplete_windows(root, reader, since_ms, limit)?;
@@ -59,7 +59,7 @@ fn read_owned(
     while source_rows < MAX_SCAN_MESSAGES && windows.len() < limit {
         let page_limit = 1_000usize.min(MAX_SCAN_MESSAGES - source_rows);
         let page = reader.read_cognition_messages(CanonicalProfileScan {
-            since: since.clone(),
+            since: since.cloned(),
             offset: offset as f64,
             limit: page_limit as f64,
         })?;
@@ -249,6 +249,7 @@ pub(super) fn make_window(input: SourceWindowInput<'_>) -> SourceWindow {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct SourceWindowInput<'a> {
     pub(super) message_id: &'a str,
     pub(super) timestamp: &'a str,

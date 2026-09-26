@@ -64,7 +64,7 @@ enum Command {
 impl RetentionOwner {
     pub(super) fn start(
         storage: AppStorage,
-        subscribers: EventSubscribers,
+        subscribers: &EventSubscribers,
         initial_cursor: u64,
     ) -> (Self, RetentionWake) {
         let (sender, receiver) = mpsc::channel(COMMAND_CAPACITY);

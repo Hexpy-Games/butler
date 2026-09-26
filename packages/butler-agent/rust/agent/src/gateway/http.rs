@@ -109,7 +109,7 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
     }
     let mut response = match route(state, request).await {
         Ok(response) => response,
-        Err(error) => error_response(error),
+        Err(error) => error_response(&error),
     };
     dev_cors::apply(&mut response, origin.as_ref());
     response
@@ -314,7 +314,7 @@ async fn post_message(
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
     drop(bytes);
-    let message = validate_message_request(value).map_err(|error| match error {
+    let message = validate_message_request(&value).map_err(|error| match error {
         MessageRequestError::Invalid => {
             HttpError::public(400, "invalid_request", "Message text is required.")
         }
@@ -442,6 +442,10 @@ pub(super) async fn read_body_with_limit(body: Body, limit: usize) -> Result<Byt
         .map_err(classify_body_read_error)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn classify_body_read_error(error: axum::Error) -> HttpError {
     let mut source: &(dyn StdError + 'static) = &error;
     loop {

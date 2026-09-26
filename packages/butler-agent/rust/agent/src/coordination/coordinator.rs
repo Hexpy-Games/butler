@@ -58,9 +58,9 @@ impl CognitionWriteCoordinator {
 
     pub(crate) fn try_acquire(
         &self,
-        request: CognitionWriteAcquire,
+        request: &CognitionWriteAcquire,
     ) -> CoordinationResult<Option<CognitionWriteLease>> {
-        self.inner.try_acquire(&request)
+        self.inner.try_acquire(request)
     }
 
     pub(crate) async fn acquire(

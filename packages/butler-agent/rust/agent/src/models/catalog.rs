@@ -299,6 +299,7 @@ pub(crate) struct ParsedModelRef {
     pub source: ParsedModelRefSource,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum TokenEstimateInput<'a> {
     Text(&'a str),
 }

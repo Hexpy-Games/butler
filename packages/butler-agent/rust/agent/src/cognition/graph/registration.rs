@@ -11,6 +11,7 @@ use crate::cognition::{
 };
 use crate::conversation::{ConversationMessageWithParts, ConversationSourceReader};
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct RegistrationInput<'a> {
     pub generation_id: &'a str,
     pub plan: &'a CognitionSourcePlan,

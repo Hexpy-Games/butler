@@ -9,6 +9,7 @@ use crate::context::BudgetedToolOutput;
 use crate::json::JsonDocument;
 use crate::workspace::GuidedSummary;
 
+#[derive(Clone, Copy)]
 pub(super) struct Assembly<'a> {
     pub base: &'a JsonDocument,
     pub budget: &'a BudgetedToolOutput,

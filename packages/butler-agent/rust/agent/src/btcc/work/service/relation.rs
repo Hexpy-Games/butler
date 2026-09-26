@@ -10,7 +10,7 @@ impl DurableWorkService {
         super::super::validation::validate_start(&input)?;
         let mut identity = serialized(&input)?;
         object_mut(&mut identity)?.remove("backfillToolCallIds");
-        let request_sha256 = fingerprint("start_work", identity)?;
+        let request_sha256 = fingerprint("start_work", &identity)?;
         self.repository
             .start_work(StartWorkCommand {
                 input,
@@ -26,7 +26,7 @@ impl DurableWorkService {
         super::super::validation::validate_continue(&input)?;
         let mut identity = serialized(&input)?;
         object_mut(&mut identity)?.remove("backfillToolCallIds");
-        let request_sha256 = fingerprint("continue_work", identity)?;
+        let request_sha256 = fingerprint("continue_work", &identity)?;
         self.repository
             .continue_work(ContinueWorkCommand {
                 input,
@@ -73,7 +73,7 @@ impl DurableWorkService {
         }
         identity.insert("actions".into(), serialized(&input.actions)?);
         identity.insert("checks".into(), serialized(&input.checks)?);
-        let request_sha256 = fingerprint("replace_plan", Value::Object(identity))?;
+        let request_sha256 = fingerprint("replace_plan", &Value::Object(identity))?;
         let expected_work_id = context.as_ref().map(|value| value.work.work_id.clone());
         let expected_progress_revision = context.as_ref().map(|value| {
             value

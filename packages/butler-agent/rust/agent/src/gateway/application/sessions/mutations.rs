@@ -58,7 +58,7 @@ impl AppApplication {
                 mutate_session(
                     db,
                     &subscribers,
-                    session,
+                    &session,
                     title,
                     input.archived,
                     clock.as_ref(),
@@ -97,7 +97,14 @@ impl AppApplication {
         let session = session_id.clone();
         self.storage
             .execute(move |db| {
-                mutate_session(db, &subscribers, session, title, Some(true), clock.as_ref())
+                mutate_session(
+                    db,
+                    &subscribers,
+                    &session,
+                    title,
+                    Some(true),
+                    clock.as_ref(),
+                )
             })
             .await
             .map_err(app_error)
@@ -135,7 +142,7 @@ impl AppApplication {
                     mutate_session(
                         db,
                         &subscribers,
-                        session_id,
+                        &session_id,
                         None,
                         Some(true),
                         clock.as_ref(),
@@ -172,13 +179,13 @@ impl AppApplication {
 fn mutate_session(
     db: &mut Connection,
     subscribers: &crate::gateway::application::events::EventSubscribers,
-    session_id: String,
+    session_id: &str,
     title: Option<String>,
     archived: Option<bool>,
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppSessionActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
-    let current = read::session(&tx, &session_id)?;
+    let current = read::session(&tx, session_id)?;
     if session_id == "general" && archived == Some(true) {
         return Err(AppStorageError::new(
             "general_channel_protected",
@@ -193,7 +200,7 @@ fn mutate_session(
         params![title, i32::from(archived), now, session_id],
     )
     .map_err(AppStorageError::sqlite)?;
-    let session = read::session(&tx, &session_id)?;
+    let session = read::session(&tx, session_id)?;
     let event = events::append_unpublished(
         &tx,
         "session.updated",
@@ -202,7 +209,7 @@ fn mutate_session(
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppSessionActionResult { session })
 }
 
@@ -230,7 +237,7 @@ fn delete_permanently(
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
-    events::publish(subscribers, event);
+    events::publish(subscribers, &event);
     Ok(AppSessionActionResult { session })
 }
 

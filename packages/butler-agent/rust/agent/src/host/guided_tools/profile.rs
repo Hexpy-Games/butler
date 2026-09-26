@@ -23,7 +23,7 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "update_onboarding_profile" => {
             if owner.binding.access_mode != AccessMode::FullAccess {
-                return encoded(json!({"ok":false,"error":{
+                return encoded(&json!({"ok":false,"error":{
                     "code":"profile_write_requires_full_access",
                     "message":"This Turn does not have full access; no profile change was applied."
                 }}));
@@ -54,8 +54,8 @@ pub(super) async fn execute(
         )),
     };
     match result {
-        Ok(value) => encoded(value),
-        Err(error) => encoded(json!({"ok":false,"error":{
+        Ok(value) => encoded(&value),
+        Err(error) => encoded(&json!({"ok":false,"error":{
             "code":error.code,
             "message":error.message
         }})),
@@ -114,8 +114,8 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     args.get(key).and_then(Value::as_str)
 }
 
-fn encoded(value: Value) -> Result<JsonDocument, ToolExecutionError> {
-    JsonDocument::from_value(&value).map_err(|error| {
+fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
+    JsonDocument::from_value(value).map_err(|error| {
         ToolExecutionError::Integrity(crate::btcc::BtccError::new(
             "guided_profile_result_json",
             error.to_string(),

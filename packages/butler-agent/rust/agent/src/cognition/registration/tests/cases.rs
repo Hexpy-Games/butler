@@ -76,14 +76,14 @@ async fn registered_memory_source_reads_original_scalar_after_reopen() {
         project_id: Some("project".into()),
     };
     let args = json!({"source_ref":handle,"scope":"current_project","max_chars":4000});
-    let reader = NativeConversationSessionReference::new(fixture.root.clone(), 2, memory.clone());
+    let reader = NativeConversationSessionReference::new(&fixture.root.clone(), 2, memory.clone());
     let first = reader.read(binding.clone(), args.clone()).await.unwrap();
     assert_eq!(first["ok"], true, "{first}");
     assert_eq!(first["text"], "Straße remembers 🙂");
     assert_eq!(first["source_kind"], "conversation");
     reader.close().await.unwrap();
 
-    let reopened = NativeConversationSessionReference::new(fixture.root.clone(), 1, memory);
+    let reopened = NativeConversationSessionReference::new(&fixture.root.clone(), 1, memory);
     let again = reopened.read(binding, args).await.unwrap();
     assert_eq!(again["text"], first["text"]);
     reopened.close().await.unwrap();

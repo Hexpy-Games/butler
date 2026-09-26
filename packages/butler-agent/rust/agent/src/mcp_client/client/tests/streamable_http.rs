@@ -70,7 +70,7 @@ async fn streamable_http_client_posts_initialize_and_call_with_auth_then_closes(
     });
 
     let scratch = Scratch::new();
-    scratch.write_registry(json!({
+    scratch.write_registry(&json!({
         "id":"http-fixture",
         "display_name":"HTTP fixture",
         "enabled":true,

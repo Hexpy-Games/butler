@@ -102,7 +102,7 @@ impl NativeAppPersonalization {
                     .map_err(profile_error)?;
                 let event = event(
                     "personalization.profile_imported",
-                    json!({
+                    &json!({
                         "source": imported.source,
                         "import_id": imported.import_id,
                         "profiling_enabled": imported.profiling_enabled,
@@ -292,7 +292,7 @@ impl NativeAppPersonalization {
         };
         Ok(event(
             "personalization.updated",
-            Value::Object(update_event_payload(&input, cleared.as_ref())),
+            &Value::Object(update_event_payload(&input, cleared.as_ref())),
         ))
     }
 }

@@ -9,6 +9,7 @@ pub(crate) struct ImageSanitizerLimits {
     pub(crate) max_pixels: Option<f64>,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct ImageSanitizerInput<'a> {
     pub(crate) file_id: &'a str,
     pub(crate) safe_name: &'a str,

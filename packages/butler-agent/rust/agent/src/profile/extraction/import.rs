@@ -35,7 +35,7 @@ pub(super) async fn run(
             stable,
         ));
     }
-    let normalized = normalize_text(options.text);
+    let normalized = normalize_text(&options.text);
     let hash = import_hash(&source, &normalized);
     let import_id = format!("third_party_profile_import:{source}:{hash}");
     if normalized.is_empty() {
@@ -106,7 +106,7 @@ pub(super) async fn run(
         let record = runtime::blocking(move || {
             candidates::upsert(
                 &root,
-                ProfileCandidateInput {
+                &ProfileCandidateInput {
                     category: candidate.category,
                     payload: candidate.payload,
                     source_type: candidate.source_type,
@@ -164,7 +164,7 @@ async fn stable_count(dependencies: &Dependencies) -> ProfileResult<usize> {
     runtime::blocking(move || Ok(storage::stable_entries(&root)?.len())).await
 }
 
-fn normalize_text(value: String) -> Utf16Prefix<'static> {
+fn normalize_text(value: &str) -> Utf16Prefix<'static> {
     let normalized = value.replace("\r\n", "\n");
     let trimmed = crate::public_text::trim_js_whitespace(&normalized).to_owned();
     Utf16Prefix::new(trimmed, 60_000)
@@ -304,7 +304,7 @@ mod tests {
         let golden: Value =
             serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let source = normalize_source(Some(" Other Assistant! "));
-        let text = normalize_text("  First\r\nsecond\t🙂  ".into());
+        let text = normalize_text("  First\r\nsecond\t🙂  ");
         let hash = import_hash(&source, &text);
         let id = format!("third_party_profile_import:{source}:{hash}");
         assert_eq!(source, golden["source"]);

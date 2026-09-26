@@ -148,8 +148,8 @@ pub(super) async fn run(
         }
     };
     attach_bridge_invocation(
-        result,
-        json!({"id":id,"provider":"native","affordance":"native_tool"}),
+        &result,
+        &json!({"id":id,"provider":"native","affordance":"native_tool"}),
     )
 }
 
@@ -264,14 +264,14 @@ async fn run_mcp(
         }
     };
     attach_bridge_invocation(
-        result,
-        json!({"id":id,"provider":"mcp","affordance":"mcp_tool"}),
+        &result,
+        &json!({"id":id,"provider":"mcp","affordance":"mcp_tool"}),
     )
 }
 
 fn attach_bridge_invocation(
-    result: JsonDocument,
-    meta: Value,
+    result: &JsonDocument,
+    meta: &Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut body = String::with_capacity(result.as_str().len() + 90);
     let source = result.as_str().trim();
@@ -286,7 +286,7 @@ fn attach_bridge_invocation(
         body.push(',');
     }
     body.push_str("\"bridge_invocation\":");
-    crate::json::append_json(&meta, &mut body).map_err(|error| {
+    crate::json::append_json(meta, &mut body).map_err(|error| {
         ToolExecutionError::Integrity(BtccError::new(
             "guided_bridge_result_json",
             error.to_string(),

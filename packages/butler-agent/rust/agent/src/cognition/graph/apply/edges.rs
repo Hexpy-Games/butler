@@ -10,6 +10,7 @@ use crate::cognition::{
     graph::{db_error, plan::NormalizedPlan},
 };
 
+#[derive(Clone, Copy)]
 pub(super) struct EdgeInput<'a> {
     pub input: &'a ExtractInput,
     pub plan: &'a NormalizedPlan,

@@ -127,7 +127,7 @@ pub(super) async fn execute(
         )
         .await
         .map_err(|_| integrity("mcp_server_unavailable", "Z.AI Vision is unavailable."))?;
-    let value = project_result(result, &file_id, temp.directory(), image_path);
+    let value = project_result(&result, &file_id, temp.directory(), &image_path);
     JsonDocument::from_value(&value).map_err(|_| {
         integrity(
             "image_analysis_result_invalid",
@@ -277,7 +277,7 @@ fn extension_for_mime(mime: &str) -> Result<&'static str, ToolExecutionError> {
     }
 }
 
-fn project_result(result: Value, file_id: &str, temp_root: &Path, temp_path: PathBuf) -> Value {
+fn project_result(result: &Value, file_id: &str, temp_root: &Path, temp_path: &Path) -> Value {
     let ok = result.get("ok").and_then(Value::as_bool).unwrap_or(false);
     let tool_result = result.get("result").unwrap_or(&Value::Null);
     let mut projected = json!({
@@ -285,10 +285,10 @@ fn project_result(result: Value, file_id: &str, temp_root: &Path, temp_path: Pat
         "file_id":file_id,
         "server_id":SERVER_ID,
         "tool_name":TOOL_NAME,
-        "analysis":safe_analysis(tool_result, temp_root, &temp_path),
+        "analysis":safe_analysis(tool_result, temp_root, temp_path),
     });
     if let Some(error) = result.get("error") {
-        projected["error"] = scrub_value(error.clone(), temp_root, &temp_path);
+        projected["error"] = scrub_value(error.clone(), temp_root, temp_path);
     }
     projected
 }

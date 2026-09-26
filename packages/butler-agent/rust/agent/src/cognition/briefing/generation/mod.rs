@@ -85,7 +85,7 @@ impl BriefingGenerationService {
                 ..
             } => (model.clone(), *reasoning_effort),
             BriefingSettings::Unavailable { reason, .. } => {
-                return Ok(metrics(BriefingMetrics {
+                return Ok(metrics(&BriefingMetrics {
                     outcome: "configuration_unavailable",
                     reason: Some(reason),
                     generated: 0,
@@ -159,7 +159,7 @@ impl BriefingGenerationService {
                 Err(_) => failed += 1,
             }
         }
-        Ok(metrics(BriefingMetrics {
+        Ok(metrics(&BriefingMetrics {
             outcome: "completed",
             reason: None,
             generated,
@@ -292,7 +292,7 @@ impl BriefingGenerationService {
     }
 }
 
-fn metrics(input: BriefingMetrics) -> Map<String, Value> {
+fn metrics(input: &BriefingMetrics) -> Map<String, Value> {
     crate::json::json_object!({
         "outcome":input.outcome, "skip_reason":input.reason, "generated_count":input.generated,
         "failed_count":input.failed, "skipped_project_count":input.skipped,

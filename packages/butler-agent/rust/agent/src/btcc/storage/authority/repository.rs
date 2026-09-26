@@ -71,7 +71,7 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
         write::decide(self.db, write)
     }
     fn record_outcome(&mut self, write: OutcomeWrite) -> AuthorityResult<()> {
-        write::record_outcome(self.db, write)
+        write::record_outcome(self.db, &write)
     }
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize> {
         close::close_pending_self_session_requests(self.db, session, reason, now)

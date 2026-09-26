@@ -357,7 +357,7 @@ async fn publish_update(
         .await
         .map_err(app_error)?;
     if let Some(event) = event {
-        events::publish(&subscribers, event);
+        events::publish(&subscribers, &event);
     }
     Ok(())
 }

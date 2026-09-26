@@ -185,7 +185,7 @@ impl WebSession {
                 &observed_at,
             )]);
         result["evidence_receipts"] = Value::Array(vec![evidence::tool_receipt(
-            evidence::ToolReceiptInput {
+            &evidence::ToolReceiptInput {
                 tool: "web_read",
                 receipt_type: "source",
                 summary: if ok {

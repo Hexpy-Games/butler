@@ -23,9 +23,9 @@ use super::{AgentConversationStore, ConversationResult, ConversationSourceReader
 pub(crate) fn plan_historical_recovery(
     reader: Option<&ConversationSourceReader>,
     parse_timestamp: &dyn Fn(&str) -> Option<i64>,
-    input: HistoricalRecoveryInput,
+    input: &HistoricalRecoveryInput,
 ) -> ConversationResult<Value> {
-    let decisions = classify_rows(input.transcript_rows, input.app_rows, parse_timestamp);
+    let decisions = classify_rows(&input.transcript_rows, &input.app_rows, parse_timestamp);
     let outcomes = decisions
         .iter()
         .map(|decision| planned_outcome(reader, decision))
@@ -39,7 +39,7 @@ impl AgentConversationStore {
         input: HistoricalRecoveryInput,
         parse_timestamp: &dyn Fn(&str) -> Option<i64>,
     ) -> ConversationResult<Value> {
-        let decisions = classify_rows(input.transcript_rows, input.app_rows, parse_timestamp);
+        let decisions = classify_rows(&input.transcript_rows, &input.app_rows, parse_timestamp);
         let dry_run = input.dry_run;
         let clock = self.identity_clock().clone();
         let (decisions, outcomes) = self

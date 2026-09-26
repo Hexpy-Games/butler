@@ -183,6 +183,10 @@ fn write_manifest_atomically(
     result
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn write_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_initialization_io_error", error.to_string())
 }

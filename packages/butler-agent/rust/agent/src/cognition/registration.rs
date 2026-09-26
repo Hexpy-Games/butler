@@ -458,6 +458,10 @@ fn write_aborted() -> CognitionError {
 fn closed() -> CognitionError {
     CognitionError::new("cognition_closed", "cognition_closed")
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_registration_operation_failed", error.to_string())
 }

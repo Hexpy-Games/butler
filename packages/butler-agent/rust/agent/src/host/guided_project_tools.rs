@@ -254,6 +254,10 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
         .map(trim_js_whitespace)
         .filter(|value| !value.is_empty())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn ledger_error(failure: ProjectLedgerReadError) -> BtccError {
     let code = match failure {
         ProjectLedgerReadError::Resolution(code)

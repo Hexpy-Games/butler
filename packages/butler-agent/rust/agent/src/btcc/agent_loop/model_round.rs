@@ -161,7 +161,7 @@ pub(super) async fn run_model_round(
                     error.to_string(),
                 ))
             })?;
-        emit(input.observer, AgentLoopEvent::ModelCall { iteration });
+        emit(input.observer, &AgentLoopEvent::ModelCall { iteration });
         let request_model_ref = input.model_execution.active_model_ref();
         let request = ModelRoundRequest {
             max_output_tokens: prepared.max_output_tokens,
@@ -223,7 +223,7 @@ pub(super) async fn run_model_round(
         identify_response(&mut response, response_item_id.clone());
         emit(
             input.observer,
-            AgentLoopEvent::ModelResponse {
+            &AgentLoopEvent::ModelResponse {
                 iteration,
                 text: response.text.clone(),
             },
@@ -297,6 +297,7 @@ fn output_serialization_error(error: impl std::fmt::Display) -> AttemptError {
     ))
 }
 
+#[derive(Clone, Copy)]
 struct ContextProjectionSource<'a> {
     model_ref: &'a str,
     round_id: &'a str,
@@ -362,7 +363,7 @@ fn map_attempt(error: AttemptError, input: &Invocation<'_>, iteration: u32) -> A
             };
             emit(
                 input.observer,
-                AgentLoopEvent::ModelFailure { iteration, code },
+                &AgentLoopEvent::ModelFailure { iteration, code },
             );
             mapped
         }

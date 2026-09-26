@@ -266,11 +266,19 @@ pub(super) async fn execute(
     }
     Ok(result)
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn owner_error(error: crate::workspace::FileOwnerError) -> CapabilityError {
     CapabilityError {
         code: error.code.into(),
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn guard_io_error(error: std::io::Error) -> CapabilityError {
     let code = match error.kind() {
         std::io::ErrorKind::NotFound => "ENOENT",

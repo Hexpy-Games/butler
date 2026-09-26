@@ -39,7 +39,7 @@ pub(in crate::gateway::application) fn create_plan_continuation(
     create_plan_queue_message(
         db,
         subscribers,
-        PlanQueueMessage {
+        &PlanQueueMessage {
             queued_id: input.queued_id,
             client_message_id: stable_client_message_id(&input.client_message_id),
             chat_id: input.chat_id,
@@ -62,7 +62,7 @@ pub(in crate::gateway::application) fn create_plan_instruction(
     create_plan_queue_message(
         db,
         subscribers,
-        PlanQueueMessage {
+        &PlanQueueMessage {
             queued_id: input.queued_id,
             client_message_id: stable_client_message_id(&input.client_message_id),
             chat_id: input.chat_id,
@@ -90,7 +90,7 @@ struct PlanQueueMessage {
 fn create_plan_queue_message(
     db: &Connection,
     subscribers: &EventSubscribers,
-    input: PlanQueueMessage,
+    input: &PlanQueueMessage,
     now: &str,
 ) -> Result<(), AppStorageError> {
     let digest = input_digest(&input.text, &input.plan_id, input.plan_mode);

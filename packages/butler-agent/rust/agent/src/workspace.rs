@@ -93,6 +93,10 @@ impl WorkspaceError {
         }
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "map_err/iterator adapter taking owned values"
+    )]
     fn sqlite(error: rusqlite::Error) -> Self {
         Self::new("workspace_sqlite_error", error.to_string())
     }

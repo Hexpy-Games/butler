@@ -235,7 +235,7 @@ impl NativeToolOutput {
                         let result = match budget_owner.owned_default_estimator().await {
                             Ok(estimator) => tokio::task::spawn_blocking({
                                 let root = butler_data.clone();
-                                move || reader::read(&root, &estimator, input)
+                                move || reader::read(&root, &estimator, &input)
                             })
                             .await
                             .unwrap_or_else(join_error),
@@ -260,7 +260,7 @@ impl NativeToolOutput {
                             let root = butler_data.clone();
                             let identity = Arc::clone(&identity);
                             let metrics = Arc::clone(&prune_metrics);
-                            move || prune::prune(&root, identity.as_ref(), metrics.as_ref(), input)
+                            move || prune::prune(&root, identity.as_ref(), metrics.as_ref(), &input)
                         })
                         .await
                         .unwrap_or_else(join_error);
@@ -377,6 +377,10 @@ impl NativeToolOutput {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn join_error<T>(error: tokio::task::JoinError) -> ContextResult<T> {
     Err(ContextError::new(
         "tool_output_worker_failed",

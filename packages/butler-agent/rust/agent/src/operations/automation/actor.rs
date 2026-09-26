@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde_json::{Map, Value, json};
 use tokio::{
@@ -24,7 +27,7 @@ pub(crate) struct NativeAutomationService {
 }
 
 impl NativeAutomationService {
-    pub(crate) fn open(data_root: PathBuf, dependencies: AutomationDependencies) -> Arc<Self> {
+    pub(crate) fn open(data_root: &Path, dependencies: AutomationDependencies) -> Arc<Self> {
         let (sender, receiver) = mpsc::channel(64);
         let task = tokio::spawn(run(AutomationStore::new(data_root), dependencies, receiver));
         Arc::new(Self {

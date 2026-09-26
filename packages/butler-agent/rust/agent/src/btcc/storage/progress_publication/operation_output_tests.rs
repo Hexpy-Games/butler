@@ -130,6 +130,7 @@ fn output_database() -> Connection {
     connection
 }
 
+#[derive(Clone, Copy)]
 struct EventSpec<'a> {
     turn_id: &'a str,
     session_id: &'a str,

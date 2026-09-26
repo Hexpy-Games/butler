@@ -201,7 +201,7 @@ pub(crate) struct BtccAssembly {
     pub(crate) host: BtccHost,
 }
 
-pub(crate) fn assemble(dependencies: TurnFacadeDependencies) -> BtccAssembly {
+pub(crate) fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
     let inner = turn::assemble(dependencies);
     BtccAssembly {
         btcc: Btcc {

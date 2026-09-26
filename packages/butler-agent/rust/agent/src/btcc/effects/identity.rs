@@ -9,6 +9,7 @@ pub(super) struct Resolved {
     pub normalized_input: Value,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct IdentityParts<'a> {
     pub work_id: &'a str,
     pub plan_revision_id: &'a str,

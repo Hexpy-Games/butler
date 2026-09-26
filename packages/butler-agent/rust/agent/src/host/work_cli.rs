@@ -27,14 +27,14 @@ pub async fn run(
     let json_requested = raw_args.iter().any(|arg| arg == "--json");
     let options = match parse(raw_args) {
         Ok(options) => options,
-        Err(error) => return render_error(json_requested, "butler work", error),
+        Err(error) => return render_error(json_requested, "butler work", &error),
     };
     let command = options.command_name();
     let json_output = options.json;
     let quiet = options.quiet;
     let data_root = match resolve_data_root(&installation, options.data.as_deref()) {
         Ok(path) => path,
-        Err(error) => return render_error(json_output, &command, error),
+        Err(error) => return render_error(json_output, &command, &error),
     };
     let collation = match LocaleCollation::new("en-US") {
         Ok(value) => value,
@@ -42,7 +42,7 @@ pub async fn run(
             return render_error(
                 json_output,
                 &command,
-                output::failure(
+                &output::failure(
                     "work_records_unavailable",
                     "Work records are unavailable.",
                     1,
@@ -51,14 +51,16 @@ pub async fn run(
         }
     };
     let outcome =
-        tokio::task::spawn_blocking(move || execute(&data_root, options, &collation)).await;
+        tokio::task::spawn_blocking(move || execute(&data_root, &options, &collation)).await;
     match outcome {
-        Ok(Ok((command, data, human))) => render_success(json_output, command, data, human, quiet),
-        Ok(Err(error)) => render_error(json_output, &command, error),
+        Ok(Ok((command, data, human))) => {
+            render_success(json_output, &command, data, &human, quiet)
+        }
+        Ok(Err(error)) => render_error(json_output, &command, &error),
         Err(_) => render_error(
             json_output,
             &command,
-            output::failure(
+            &output::failure(
                 "work_records_unavailable",
                 "Work records are unavailable.",
                 1,

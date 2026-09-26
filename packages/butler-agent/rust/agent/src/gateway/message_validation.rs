@@ -9,7 +9,7 @@ pub(super) enum MessageRequestError {
 }
 
 pub(super) fn validate_message_request(
-    value: Value,
+    value: &Value,
 ) -> Result<MessageSendRequest, MessageRequestError> {
     let object = value.as_object().ok_or(MessageRequestError::Invalid)?;
     let expected_project_id = expected_project_id(object)?;

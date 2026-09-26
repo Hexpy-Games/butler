@@ -270,7 +270,7 @@ async fn correction_target_revision_is_revalidated_after_provider() {
     drop(db);
     candidates::upsert(
         &root.0,
-        ProfileCandidateInput {
+        &ProfileCandidateInput {
             category: "communication".into(),
             payload: serde_json::json!({"summary":"Old preference"}),
             source_type: "explicit".into(),

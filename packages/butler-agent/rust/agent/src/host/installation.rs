@@ -35,7 +35,7 @@ impl ResolvedInstallation {
             .ok_or_else(|| "installation_root_unavailable".to_owned())?
             .to_path_buf();
         let resources = root.join("resources");
-        Self::new(executable, root, resources)
+        Self::new(&executable, &root, &resources)
     }
 
     pub fn desktop(
@@ -44,16 +44,16 @@ impl ResolvedInstallation {
         resource_root: impl Into<PathBuf>,
     ) -> Result<Self, String> {
         Self::new(
-            executable_path.into(),
-            installation_root.into(),
-            resource_root.into(),
+            &executable_path.into(),
+            &installation_root.into(),
+            &resource_root.into(),
         )
     }
 
-    fn new(executable: PathBuf, root: PathBuf, resources: PathBuf) -> Result<Self, String> {
-        let executable_path = canonical_file(&executable, "installation_executable_unavailable")?;
-        let installation_root = canonical_dir(&root, "installation_root_unavailable")?;
-        let resource_root = canonical_dir(&resources, "installation_resources_unavailable")?;
+    fn new(executable: &Path, root: &Path, resources: &Path) -> Result<Self, String> {
+        let executable_path = canonical_file(executable, "installation_executable_unavailable")?;
+        let installation_root = canonical_dir(root, "installation_root_unavailable")?;
+        let resource_root = canonical_dir(resources, "installation_resources_unavailable")?;
         if !executable_path.starts_with(&installation_root)
             || !resource_root.starts_with(&installation_root)
         {

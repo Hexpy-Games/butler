@@ -4,6 +4,7 @@ use crate::btcc::work::{ActionProgress, WorkStage};
 
 use super::super::{StorageError, StorageResult, common};
 
+#[derive(Clone, Copy)]
 pub(in crate::btcc::storage::work) struct ProgressInput<'a> {
     pub work_id: &'a str,
     pub plan_revision_id: &'a str,

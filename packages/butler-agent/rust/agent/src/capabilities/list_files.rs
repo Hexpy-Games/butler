@@ -162,7 +162,7 @@ pub(super) async fn execute(
                     "io_errors":listed.io_errors},
                 "evidence_receipts":evidence::list_execution(
                     files.len(), next_cursor.is_some(), truncated,
-                    references),
+                    &references),
                 "evidence_capability_receipts":evidence::list_capability(
                     &files, listed.files_considered, listed.dirs_visited, truncated)
             });

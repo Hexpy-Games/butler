@@ -18,7 +18,7 @@ impl AgentConversationStore {
     ) -> ConversationResult<ConversationSummary> {
         let clock = self.identity_clock().clone();
         let now = input.now.clone().unwrap_or_else(|| clock.now_iso());
-        self.execute(move |connection| write(connection, clock.as_ref(), input, now))
+        self.execute(move |connection| write(connection, clock.as_ref(), input, &now))
             .await
     }
     pub(crate) async fn read_summaries(
@@ -169,7 +169,7 @@ fn write(
     connection: &mut Connection,
     clock: &dyn ConversationIdentityClock,
     input: ConversationSummaryInput,
-    now: String,
+    now: &str,
 ) -> ConversationResult<ConversationSummary> {
     let summary = ConversationSummary {
         id: input.summary_id.unwrap_or_else(|| clock.id("csm")),
@@ -179,7 +179,7 @@ fn write(
         source_hash: input.source_hash,
         model: input.model,
         summary_text: input.summary_text,
-        created_at: now.clone(),
+        created_at: now.to_string(),
         invalidated_at: None,
     };
     let tx = connection
@@ -194,7 +194,7 @@ fn write(
         summary.covers_to_seq,
         "conversation.summary_written",
         &summary.id,
-        &now,
+        now,
     )?;
     tx.commit().map_err(ConversationError::sqlite)?;
     Ok(summary)

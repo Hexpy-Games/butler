@@ -21,7 +21,7 @@ use crate::workspace::{
 
 use std::sync::Mutex;
 
-fn binding(role: SessionRole, metadata: serde_json::Value) -> StoredSessionBinding {
+fn binding(role: SessionRole, metadata: &serde_json::Value) -> StoredSessionBinding {
     StoredSessionBinding {
         session_id: "session".into(),
         role,
@@ -47,7 +47,7 @@ fn binding(role: SessionRole, metadata: serde_json::Value) -> StoredSessionBindi
 fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
     let parent = binding(
         SessionRole::Butler,
-        json!({"runtimePolicy":{
+        &json!({"runtimePolicy":{
             "accessMode":"ask_first",
             "tracking_mode":"ledger",
             "requiredNativeTools":null,
@@ -89,7 +89,7 @@ fn steward_child_inherits_normalized_runtime_policy_while_worker_stays_local() {
 fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
     let steward = binding(
         SessionRole::Steward,
-        json!({"runtimePolicy":{"trackingMode":"ledger"}}),
+        &json!({"runtimePolicy":{"trackingMode":"ledger"}}),
     );
     let stored = crate::btcc::StoredSubsessionDelegation {
         relation_id: "relation".into(),
@@ -112,7 +112,7 @@ fn child_root_work_scope_uses_steward_ledger_binding_but_keeps_worker_local() {
 
     let worker = binding(
         SessionRole::Worker,
-        json!({"runtimePolicy":{"trackingMode":"local"}}),
+        &json!({"runtimePolicy":{"trackingMode":"local"}}),
     );
     let stored = crate::btcc::StoredSubsessionDelegation {
         child_session_id: worker.session_id.clone(),

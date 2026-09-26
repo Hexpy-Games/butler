@@ -5,7 +5,10 @@ mod files;
 mod payload;
 
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
@@ -22,7 +25,7 @@ pub(crate) struct NativeAppImageFiles {
 }
 
 impl NativeAppImageFiles {
-    pub(crate) fn new(data_root: PathBuf) -> Self {
+    pub(crate) fn new(data_root: &Path) -> Self {
         Self {
             root: data_root.join("app-server/message-files"),
             permits: Arc::new(Semaphore::new(1)),

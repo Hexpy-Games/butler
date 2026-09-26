@@ -84,7 +84,7 @@ fn io_failure(path: &str, error: &std::io::Error, stage: &str) -> Value {
         ),
     }
 }
-pub(super) fn read_one_blocking(input: ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
+pub(super) fn read_one_blocking(input: &ReadFileInput) -> std::io::Result<WorkspaceFileRead> {
     let guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.path,

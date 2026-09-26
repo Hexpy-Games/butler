@@ -160,6 +160,10 @@ fn string_list(values: &[Value]) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
     AppStorageError::new("app_projection_json_invalid", error.to_string())
 }

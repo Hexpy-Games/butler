@@ -37,6 +37,7 @@ struct InterruptedProjectionWindow {
     provider_evidence_json: Option<String>,
 }
 
+#[derive(Clone, Copy)]
 pub(in crate::cognition) struct ClaimProjectionWindowInput<'a> {
     pub job_id: Option<&'a str>,
     pub now: &'a str,

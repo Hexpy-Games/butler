@@ -37,7 +37,7 @@ pub async fn run_native_skills_cli(
     let outcome = execute(&skills, &options).await;
     skills.close().await;
     match outcome {
-        Ok((command, data, human)) => render_success(&options, command, data, human),
+        Ok((command, data, human)) => render_success(&options, command, data, &human),
         Err(error) => render_error(options.json, &command, error),
     }
 }
@@ -348,6 +348,10 @@ fn skill_failure(error: SkillError) -> CommandError {
     failure(error.code, error.message, 1)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_failure(error: std::io::Error) -> CommandError {
     failure("skills_io_failed", error.to_string(), 1)
 }

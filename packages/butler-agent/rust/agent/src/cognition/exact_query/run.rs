@@ -303,6 +303,10 @@ fn envelope_bytes(value: &Value) -> CognitionResult<usize> {
 fn failure(code: &str, diagnostics: &[&str]) -> Value {
     json!({"ok":false,"code":code,"diagnostics":diagnostics})
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn store_error(error: crate::conversation::ConversationError) -> CognitionError {
     CognitionError::new("store", error.to_string())
 }

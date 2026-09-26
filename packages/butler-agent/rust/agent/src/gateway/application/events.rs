@@ -44,7 +44,7 @@ impl EventSubscribers {
         })
     }
 
-    pub(super) fn publish(&self, event: AppEventEnvelope) {
+    pub(super) fn publish(&self, event: &AppEventEnvelope) {
         let (listeners, cursor_observer) = {
             let state = self.inner.lock();
             (
@@ -83,7 +83,7 @@ pub(super) fn append(
     created_at: &str,
 ) -> Result<AppEventEnvelope, AppStorageError> {
     let event = append_unpublished(connection, event_type, turn_id, payload, created_at)?;
-    subscribers.publish(event.clone());
+    subscribers.publish(&event.clone());
     Ok(event)
 }
 
@@ -114,7 +114,7 @@ pub(super) fn append_unpublished(
     Ok(event)
 }
 
-pub(super) fn publish(subscribers: &EventSubscribers, event: AppEventEnvelope) {
+pub(super) fn publish(subscribers: &EventSubscribers, event: &AppEventEnvelope) {
     subscribers.publish(event);
 }
 

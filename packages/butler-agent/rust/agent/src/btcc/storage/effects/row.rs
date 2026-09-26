@@ -11,6 +11,10 @@ const SELECT: &str = "SELECT e.effect_id,e.receipt_id,e.idempotency_key,e.identi
  LEFT JOIN btcc_guided_effect_recovery_hints recovery ON recovery.effect_id=e.effect_id
  LEFT JOIN btcc_guided_effect_recovery_payloads payload ON payload.effect_id=e.effect_id";
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
     EffectFailure::storage("sqlite_error", error.to_string())
 }

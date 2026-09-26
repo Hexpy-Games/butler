@@ -300,6 +300,10 @@ fn from_app_plan(plan: AppRelocationWorkspacePlan) -> RelocationWorkspacePlan {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn relocation_error(error: WorkspaceError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 409,

@@ -157,7 +157,7 @@ pub(super) async fn run(
                 service.rollback(manifest_id, &workspace).await
             }
             .map_err(service_error)?;
-            action_value(action, subcommand)
+            action_value(&action, subcommand)
         }
         _ => Err(CliError::failed(
             "unknown_command",
@@ -267,7 +267,7 @@ fn registered_workspace(data_root: &Path, project_id: &str) -> Result<Option<Pat
 }
 
 fn action_value(
-    action: ContinuityRecoveryAction,
+    action: &ContinuityRecoveryAction,
     subcommand: &str,
 ) -> Result<(Value, String), CliError> {
     let data = view_value(&action.manifest)?;

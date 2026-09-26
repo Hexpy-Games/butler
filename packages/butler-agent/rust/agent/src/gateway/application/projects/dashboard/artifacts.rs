@@ -181,6 +181,7 @@ fn artifact_summary(row: &ArtifactRow, project_id: &str) -> Result<Value, AppSto
     }))
 }
 
+#[derive(Clone, Copy)]
 struct ArtifactValueInput<'a> {
     file: &'a MessageFileRef,
     id: &'a str,

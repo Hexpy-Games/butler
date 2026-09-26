@@ -390,7 +390,7 @@ async fn project_final(
         .execute(move |db| {
             final_result::apply(
                 db,
-                candidate,
+                &candidate,
                 final_result::FinalApply {
                     files,
                     reply_id: &reply_id,

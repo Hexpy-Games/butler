@@ -6,7 +6,13 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    pin::Pin,
+    sync::Arc,
+    time::Duration,
+};
 
 use serde_json::{Map, Value};
 
@@ -19,7 +25,7 @@ pub(crate) struct NativeAutomationCliStore {
 }
 
 impl NativeAutomationCliStore {
-    pub(crate) fn new(data_root: PathBuf) -> Self {
+    pub(crate) fn new(data_root: &Path) -> Self {
         Self {
             store: store::AutomationStore::new(data_root),
         }

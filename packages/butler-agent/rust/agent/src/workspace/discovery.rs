@@ -78,7 +78,7 @@ pub(crate) enum WorkspaceListOutcome {
     Listed(WorkspaceListResult),
 }
 
-pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
+pub(super) fn list_blocking(input: &WorkspaceListInput) -> std::io::Result<WorkspaceListOutcome> {
     let mut guard = resolve_workspace_path_guard(GuardInput {
         root: &input.root,
         requested: &input.requested_root,
@@ -120,7 +120,7 @@ pub(super) fn list_blocking(input: WorkspaceListInput) -> std::io::Result<Worksp
         .map(|pattern| WorkspaceGlob::new(pattern))
         .collect();
     let mut walk = Walk {
-        input: &input,
+        input,
         root: &guard.root,
         include,
         exclude,

@@ -31,7 +31,7 @@ pub(super) async fn run(
         paths.clone(),
         coordinator.clone(),
     ));
-    let service = LegacyMetadataIntegrityService::new(data_root, paths, box_store, feedback);
+    let service = LegacyMetadataIntegrityService::new(&data_root, paths, box_store, feedback);
     match command {
         super::Command::MetadataInspect => {
             let id = memory_chunk_id.unwrap_or_default();

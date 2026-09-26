@@ -39,6 +39,10 @@ pub(super) fn append(
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> TranscriptError {
     TranscriptError::new("transcript_append_failed", error.to_string())
 }

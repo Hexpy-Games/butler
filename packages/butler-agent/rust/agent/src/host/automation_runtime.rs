@@ -11,7 +11,7 @@ pub(crate) fn open_automation_service(
     queue: Arc<NativeInboundQueue>,
 ) -> Arc<NativeAutomationService> {
     NativeAutomationService::open(
-        data_root.to_path_buf(),
+        &data_root.to_path_buf(),
         crate::operations::AutomationDependencies {
             parse_date: Arc::new(move |value| parser.parse(value)),
             now_millis: Arc::new(|| SystemIdentity.now_epoch_millis()),

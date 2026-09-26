@@ -295,6 +295,10 @@ impl Drop for TemporaryPath {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_write_error(error: serde_json::Error) -> io::Error {
     io::Error::other(error.to_string())
 }

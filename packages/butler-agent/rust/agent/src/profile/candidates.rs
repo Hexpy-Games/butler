@@ -14,7 +14,7 @@ use store::*;
 
 pub(super) fn upsert(
     data_root: &Path,
-    input: ProfileCandidateInput,
+    input: &ProfileCandidateInput,
     now: &str,
 ) -> ProfileResult<Option<ProfileCandidateRecord>> {
     let consent = storage::read_consent(data_root);
@@ -27,7 +27,7 @@ pub(super) fn upsert(
 
 pub(super) fn upsert_in_db(
     db: &rusqlite::Connection,
-    input: ProfileCandidateInput,
+    input: &ProfileCandidateInput,
     now: &str,
 ) -> ProfileResult<Option<ProfileCandidateRecord>> {
     let summary = normalize_text(
@@ -196,7 +196,7 @@ pub(super) fn upsert_in_db(
         &last_seen,
         expires,
         status,
-        Value::Object(payload.clone()),
+        &Value::Object(payload.clone()),
     )?;
     if status == "promoted" {
         let stable_id = identifier(
@@ -383,7 +383,7 @@ fn write_record(
         text(payload, "last_seen_at").unwrap_or(""),
         text(payload, "expires_or_decay"),
         text(payload, "status").unwrap_or("candidate"),
-        payload.clone(),
+        &payload.clone(),
     )
 }
 

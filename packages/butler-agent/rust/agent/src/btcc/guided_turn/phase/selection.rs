@@ -14,6 +14,7 @@ use super::visibility::{
 
 const REVISION: &str = "butler.btcc-tool-instruction-policy.v2";
 
+#[derive(Clone, Copy)]
 pub(crate) struct GuidedPhaseInput<'a> {
     pub(crate) turn: &'a TurnRecord,
     pub(crate) catalog: &'a GuidedCatalogSnapshot,

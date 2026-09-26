@@ -64,7 +64,7 @@ pub(super) fn rebuild_index(root: &Path) -> CognitionResult<BoxIndexReport> {
                     Err(error) => {
                         skipped.push(BoxIndexSkip {
                             path: manifest_path.to_string_lossy().into_owned(),
-                            issues: issues_from_error(error),
+                            issues: issues_from_error(&error),
                         });
                         continue;
                     }
@@ -349,7 +349,7 @@ fn insert_ref(
     Ok(())
 }
 
-fn issues_from_error(error: CognitionError) -> Vec<String> {
+fn issues_from_error(error: &CognitionError) -> Vec<String> {
     if error.code == "memory_box_manifest_invalid"
         && error.message != "Cognition Box operation failed"
     {

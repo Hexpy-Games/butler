@@ -139,7 +139,7 @@ pub(super) fn decide(
     transaction.commit().map_err(query::sql)?;
     Ok(stored)
 }
-pub(super) fn record_outcome(db: &Connection, write: OutcomeWrite) -> AuthorityResult<()> {
+pub(super) fn record_outcome(db: &Connection, write: &OutcomeWrite) -> AuthorityResult<()> {
     db.execute(
         "UPDATE btcc_authority_requests \
         SET outcome=?1, outcome_receipt_json=COALESCE(?2,outcome_receipt_json), updated_at=?3 \

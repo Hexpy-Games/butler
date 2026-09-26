@@ -100,13 +100,13 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let json_requested = args.iter().any(|arg| arg == "--json");
     let (options, _parsed_command) = match parse(&args) {
         Ok(parsed) => parsed,
-        Err((command, error)) => return report_error(command, json_requested, error),
+        Err((command, error)) => return report_error(command, json_requested, &error),
     };
     let Some(command) = Command::parse(&options.positionals) else {
         return report_error(
             "butler personalization",
             options.json,
-            CliError::invalid("unsupported personalization command"),
+            &CliError::invalid("unsupported personalization command"),
         );
     };
     if command == Command::Unknown {
@@ -117,7 +117,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         return report_error(
             command.name(),
             options.json,
-            CliError {
+            &CliError {
                 code: "unknown_command",
                 message: if action == "migration" || action == "migrate" {
                     let nested = options
@@ -134,8 +134,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     }
     if command == Command::MigrationPrompt {
         return match commands::migration_prompt(&options) {
-            Ok((data, human)) => report_success(&options, command.name(), data, &human),
-            Err(error) => report_error(command.name(), options.json, error),
+            Ok((data, human)) => report_success(&options, command.name(), &data, &human),
+            Err(error) => report_error(command.name(), options.json, &error),
         };
     }
 
@@ -146,7 +146,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 return report_error(
                     command.name(),
                     options.json,
-                    CliError::failed(
+                    &CliError::failed(
                         "native_personalization_cli_failed",
                         "Butler DATA is unavailable.",
                     ),
@@ -162,7 +162,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed(
+                &CliError::failed(
                     "unsafe_path",
                     "personalization writes require non-symlink paths inside DATA",
                 ),
@@ -179,7 +179,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 command.name(),
                 options.json,
-                CliError::failed("native_personalization_cli_failed", message),
+                &CliError::failed("native_personalization_cli_failed", message),
             );
         }
     };
@@ -195,8 +195,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     };
     profile.close().await;
     match result {
-        Ok((data, human)) => report_success(&options, command.name(), data, &human),
-        Err(error) => report_error(command.name(), options.json, error),
+        Ok((data, human)) => report_success(&options, command.name(), &data, &human),
+        Err(error) => report_error(command.name(), options.json, &error),
     }
 }
 
@@ -263,7 +263,7 @@ fn positionals_without_common_options(args: &[OsString]) -> Vec<OsString> {
     values
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
         println!(
             "{}",
@@ -281,7 +281,7 @@ fn report_success(options: &Options, command: &str, data: Value, human: &str) ->
     ExitCode::SUCCESS
 }
 
-fn report_error(command: &str, json_output: bool, error: CliError) -> ExitCode {
+fn report_error(command: &str, json_output: bool, error: &CliError) -> ExitCode {
     if json_output {
         println!(
             "{}",

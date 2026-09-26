@@ -6,6 +6,10 @@ use serde_json::{Value, json};
 
 use super::{CliError, Options};
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn safe_preview(value: Value) -> Value {
     let text = |key: &str| {
         value
@@ -61,7 +65,7 @@ fn safe_preview_text(value: &str) -> String {
 pub(super) fn report_success(
     options: &Options,
     command: &str,
-    data: Value,
+    data: &Value,
     human: &str,
 ) -> std::process::ExitCode {
     if options.json {
@@ -84,7 +88,7 @@ pub(super) fn report_success(
 pub(super) fn report_error(
     command: &str,
     json_output: bool,
-    error: CliError,
+    error: &CliError,
 ) -> std::process::ExitCode {
     if json_output {
         println!(

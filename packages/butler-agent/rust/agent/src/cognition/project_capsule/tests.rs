@@ -146,7 +146,7 @@ async fn changed_selected_source_blocks_capsule_replacement_and_releases_project
     let coordinator = CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap();
     let lock_path = paths.consolidation_lock(&root);
     let lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock_path.clone(),
             "project_capsule_test",
         ))
@@ -207,7 +207,7 @@ async fn cancellation_before_commit_preserves_capsule_and_releases_claims() {
     let coordinator = CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap();
     let lock_path = paths.consolidation_lock(&root);
     let lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock_path.clone(),
             "project_capsule_cancel_test",
         ))
@@ -230,7 +230,7 @@ async fn cancellation_before_commit_preserves_capsule_and_releases_claims() {
     assert_eq!(fs::read_to_string(&target).unwrap(), "existing capsule\n");
     assert!(!write::project_lock_path(&root, &paths, "alpha").exists());
     let next_lease = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock_path,
             "project_capsule_after_cancel",
         ))

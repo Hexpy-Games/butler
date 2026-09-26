@@ -182,6 +182,10 @@ fn write_atomic(path: &Path, value: &Value) -> CognitionResult<()> {
     result
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("completion_observation_io_error", error.to_string())
 }

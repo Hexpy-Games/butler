@@ -9,7 +9,7 @@ use crate::gateway::{
     AppSessionSummary, ApplicationFuture, GatewayApplication, GatewayApplicationError,
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct AppMonitorPage {
     pub limit: Option<usize>,
     pub offset: Option<usize>,

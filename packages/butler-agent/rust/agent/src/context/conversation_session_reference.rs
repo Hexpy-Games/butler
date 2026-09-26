@@ -7,7 +7,10 @@ mod source;
 mod tests;
 
 use parking_lot::Mutex;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
@@ -29,12 +32,12 @@ pub(crate) struct NativeConversationSessionReference {
 
 impl NativeConversationSessionReference {
     pub(crate) fn new(
-        data_root: PathBuf,
+        data_root: &Path,
         read_concurrency: usize,
         memory_sources: Arc<dyn MemorySourceReferencePort>,
     ) -> Self {
         Self {
-            path: conversation_store_path(&data_root),
+            path: conversation_store_path(data_root),
             memory_sources,
             permits: Arc::new(Semaphore::new(read_concurrency.max(1))),
             jobs: TaskTracker::new(),
@@ -270,6 +273,10 @@ fn read_now(
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn store_error(error: crate::conversation::ConversationError) -> ContextError {
     ContextError::new("conversation_store_unavailable", error.to_string())
 }

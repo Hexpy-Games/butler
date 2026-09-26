@@ -408,6 +408,10 @@ fn array_index(key: &str) -> Option<u32> {
     (value < u32::MAX && value.to_string() == key).then_some(value)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: crate::json::JsonError) -> BtccError {
     BtccError::new("context_serialization_failed", error.to_string())
 }
@@ -421,6 +425,10 @@ fn usize_value(value: usize) -> Result<Value, BtccError> {
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn serialization_error(error: serde_json::Error) -> BtccError {
     BtccError::new("context_serialization_failed", error.to_string())
 }

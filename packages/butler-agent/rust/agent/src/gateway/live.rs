@@ -63,7 +63,7 @@ pub(super) async fn create_live_stream(
                     .into_iter()
                     .take_while(|event| event.id <= high_water)
                 {
-                    state.push_output(event, high_water);
+                    state.push_output(&event, high_water);
                 }
             }
         } else {
@@ -119,7 +119,7 @@ impl LiveState {
             }
             return None;
         }
-        self.push_output(event, high_water);
+        self.push_output(&event, high_water);
         self.waker.take()
     }
 
@@ -129,7 +129,7 @@ impl LiveState {
         } else {
             let queued = std::mem::take(&mut self.replay_queue);
             for event in queued.into_values() {
-                self.push_output(event, current_high_water);
+                self.push_output(&event, current_high_water);
             }
         }
         self.replaying = false;
@@ -137,11 +137,11 @@ impl LiveState {
         self.replay_overflowed = false;
     }
 
-    fn push_output(&mut self, event: AppEventEnvelope, high_water: u64) {
+    fn push_output(&mut self, event: &AppEventEnvelope, high_water: u64) {
         if event.id as f64 <= self.cursor {
             return;
         }
-        self.push_chunk(format_event(&event), high_water);
+        self.push_chunk(format_event(event), high_water);
         self.cursor = event.id as f64;
     }
 

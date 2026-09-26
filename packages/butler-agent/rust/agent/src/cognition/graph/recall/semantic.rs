@@ -14,6 +14,10 @@ use crate::cognition::recall::{
     RecallRequest, RecallVectorMatch, SemanticSelection, select_semantic_seeds,
 };
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> crate::cognition::CognitionError {
     crate::cognition::CognitionError::new("memory_graph_failed", error.to_string())
 }

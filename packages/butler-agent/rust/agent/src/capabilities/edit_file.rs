@@ -159,6 +159,10 @@ fn safe_path(root: &std::path::Path, path: &str) -> Option<String> {
     crate::workspace::safe_workspace_path(&candidate).map(str::to_owned)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError {
         code: error.code.into(),

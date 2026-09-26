@@ -10,6 +10,7 @@ use crate::gateway::application::{
     storage::AppStorageError,
 };
 
+#[derive(Clone, Copy)]
 pub(super) struct ProgressInput<'a> {
     pub db: &'a Connection,
     pub subscribers: &'a EventSubscribers,
@@ -33,7 +34,7 @@ pub(super) fn project_progress(input: ProgressInput<'_>) -> Result<(), AppStorag
     .unwrap_or_else(|| "Working".to_owned());
     let row = progress_row(&input, &label)?;
     let Some(row) = row else { return Ok(()) };
-    let runtime = service::map(json!({
+    let runtime = service::map(&json!({
         "id":input.event_id,"sessionId":input.chat,"turnId":input.turn,
         "kind":"tool.progress","visibility":"public",
         "payload":{"safeLabel":short_text(&label,180)},"createdAt":input.timestamp
@@ -43,12 +44,12 @@ pub(super) fn project_progress(input: ProgressInput<'_>) -> Result<(), AppStorag
         input.subscribers,
         "agent.turn_event",
         Some(input.turn),
-        service::map(json!({
+        service::map(&json!({
             "session_id":input.chat,"turn_id":input.turn,"event":runtime
         }))?,
         input.now,
     )?;
-    append_progress(ProgressAppend {
+    append_progress(&ProgressAppend {
         db: input.db,
         subscribers: input.subscribers,
         chat: input.chat,
@@ -81,7 +82,7 @@ fn progress_row(
     } else {
         input.action.to_owned()
     };
-    let mut row = service::map(json!({
+    let mut row = service::map(&json!({
         "id":row_id,"kind":row_kind,
         "state":token(input.metadata.get("state")).unwrap_or_else(|| {
             if input.kind == "todo_progress" {"thinking".into()} else {"running".into()}
@@ -196,7 +197,7 @@ fn copy_detail_rows(source: &Map<String, Value>, target: &mut Map<String, Value>
     let rows = details.iter().filter_map(Value::as_object).take(20).enumerate()
         .filter_map(|(index, detail)| {
             let id = token(detail.get("id")).unwrap_or_else(||format!("detail-{}",index+1));
-            let mut row = service::map(json!({
+            let mut row = service::map(&json!({
                 "id":id,"safe_label":text(detail.get("safe_label").or_else(||detail.get("safeLabel")))
                     .map(|value|short_text(&value,180)).unwrap_or_else(||"Detail".into())
             })).ok()?;
@@ -232,7 +233,7 @@ pub(super) struct ProgressAppend<'a> {
     pub now: &'a str,
 }
 
-pub(super) fn append_progress(input: ProgressAppend<'_>) -> Result<(), AppStorageError> {
+pub(super) fn append_progress(input: &ProgressAppend<'_>) -> Result<(), AppStorageError> {
     let encoded = serde_json::to_string(&input.row)
         .map_err(|e| AppStorageError::new("app_projection_json_invalid", e.to_string()))?;
     let exists = input
@@ -255,7 +256,7 @@ pub(super) fn append_progress(input: ProgressAppend<'_>) -> Result<(), AppStorag
         .unwrap_or("Working");
     input.db.execute("UPDATE turns SET safe_status_label=?1,updated_at=?2 WHERE id=?3 AND state NOT IN ('delivered','failed','cancelled','runtime_fault')",params![label,input.now,input.turn]).map_err(AppStorageError::sqlite)?;
     let mut payload =
-        service::map(json!({"session_id":input.chat,"turn_id":input.turn,"row":input.row}))?;
+        service::map(&json!({"session_id":input.chat,"turn_id":input.turn,"row":input.row}))?;
     if let Some(id) = input.source_event {
         payload.insert("event_id".into(), id.into());
     }

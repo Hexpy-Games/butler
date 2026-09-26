@@ -13,7 +13,7 @@ use crate::{
 #[test]
 fn app_final_projects_bounded_rich_result_then_source_ordered_cancellation() {
     let root = std::env::temp_dir().join(format!("butler-ingress-rich-{}", uuid::Uuid::new_v4()));
-    let queue = NativeInboundQueue::new(root.clone());
+    let queue = NativeInboundQueue::new(&root.clone());
     let binding = binding();
     let (item, envelope) = claimed(&queue, "normal", None);
     let artifact = FinalArtifact {

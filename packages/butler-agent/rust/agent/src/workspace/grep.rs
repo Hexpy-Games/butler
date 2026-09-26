@@ -81,7 +81,7 @@ fn matches_line(matcher: &Regex, line: &str, units: &mut Vec<u16>) -> bool {
     matcher.find_from_ucs2(units, 0).next().is_some()
 }
 
-pub(super) fn read_candidate(input: GrepCandidate) -> GrepRead {
+pub(super) fn read_candidate(input: &GrepCandidate) -> GrepRead {
     if Instant::now() >= input.deadline {
         return GrepRead::skipped("elapsed_ms", 0, false);
     }

@@ -13,7 +13,7 @@ impl DurableWorkService {
         let object = object_mut(&mut identity)?;
         object.remove("backfillToolCallIds");
         object.remove("expectedMaterialFingerprint");
-        let request_sha256 = fingerprint("record_work_disposition", identity)?;
+        let request_sha256 = fingerprint("record_work_disposition", &identity)?;
         let command = DispositionCommand {
             normalized_summary: crate::public_text::trim_js_whitespace(&input.summary).into(),
             action_updates: input.action_updates.clone().unwrap_or_default(),

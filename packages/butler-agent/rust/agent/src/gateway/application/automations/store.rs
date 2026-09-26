@@ -50,12 +50,12 @@ impl AppApplication {
         input: CreateAutomationRequest,
     ) -> Result<AutomationMutationResult, GatewayApplicationError> {
         let title = required(
-            input.title,
+            &input.title,
             "automation_title_required",
             "Automation title is required.",
         )?;
         let prompt = required(
-            input.prompt_body,
+            &input.prompt_body,
             "automation_prompt_required",
             "Automation prompt is required.",
         )?;
@@ -74,7 +74,7 @@ impl AppApplication {
                 params![id,title,prompt,kind,input.target_session_id.trim(),input.interval_seconds,next,now],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
-            publish(db, &subscribers, "automation.created", json!({"automation":automation.summary}), &now)?;
+            publish(db, &subscribers, "automation.created", &json!({"automation":automation.summary}), &now)?;
             Ok(AutomationMutationResult { automation: serde_json::to_value(automation).map_err(json_error)? })
         }).await.map_err(app_error)
     }
@@ -105,7 +105,7 @@ impl AppApplication {
                 params![title,prompt,kind,target_id,seconds,state,next,now,id],
             ).map_err(AppStorageError::sqlite)?;
             let automation = detail(records::active(db, &id)?);
-            publish(db, &subscribers, "automation.updated", json!({"automation":automation.summary}), &now)?;
+            publish(db, &subscribers, "automation.updated", &json!({"automation":automation.summary}), &now)?;
             Ok(AutomationMutationResult { automation: serde_json::to_value(automation).map_err(json_error)? })
         }).await.map_err(app_error)
     }
@@ -121,7 +121,7 @@ impl AppApplication {
             row.state = "deleted".into(); row.next = None; row.updated = now.clone();
             db.execute("UPDATE app_automations SET state='deleted',next_run_at=NULL,updated_at=?1 WHERE id=?2", params![now,id]).map_err(AppStorageError::sqlite)?;
             let automation = records::summary(row);
-            publish(db, &subscribers, "automation.deleted", json!({"automation":automation}), &now)?;
+            publish(db, &subscribers, "automation.deleted", &json!({"automation":automation}), &now)?;
             Ok(AutomationMutationResult { automation: serde_json::to_value(automation).map_err(json_error)? })
         }).await.map_err(app_error)
     }
@@ -167,7 +167,7 @@ impl AppApplication {
                     db,
                     &subscribers,
                     "automation.scheduler_error",
-                    json!({"code":code}),
+                    &json!({"code":code}),
                     &now,
                 )
             })
@@ -179,13 +179,17 @@ pub(super) fn publish(
     db: &rusqlite::Connection,
     subscribers: &events::EventSubscribers,
     kind: &str,
-    value: Value,
+    value: &Value,
     now: &str,
 ) -> Result<(), AppStorageError> {
     let payload = value.as_object().cloned().unwrap_or_else(Map::new);
     events::append(db, subscribers, kind, None, payload, now)?;
     Ok(())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn json_error(error: serde_json::Error) -> AppStorageError {
     AppStorageError::new("automation_json_failed", error.to_string())
 }
@@ -196,11 +200,15 @@ fn detail(row: records::AutomationRow) -> AutomationDetail {
         prompt_body: prompt,
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn target_summary(value: AutomationSummary) -> Value {
     json!({"automation_id":value.id,"title":value.title,"state":value.state,"interval_label":value.interval_label,"next_run_at":value.next_run_at,"last_run_state":value.last_run_state,"safe_error_code":value.last_safe_error_code})
 }
 fn required(
-    value: String,
+    value: &str,
     code: &'static str,
     message: &str,
 ) -> Result<String, GatewayApplicationError> {

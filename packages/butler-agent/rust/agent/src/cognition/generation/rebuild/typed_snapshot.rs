@@ -284,6 +284,10 @@ fn snapshot_changed() -> CognitionError {
     CognitionError::new("memory_snapshot_changed", "memory_snapshot_changed")
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: io::Error) -> CognitionError {
     CognitionError::new("memory_snapshot_copy_failed", error.to_string())
 }

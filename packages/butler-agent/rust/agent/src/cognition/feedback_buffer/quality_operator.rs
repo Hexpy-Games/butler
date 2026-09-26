@@ -52,6 +52,7 @@ impl FeedbackBufferService {
     }
 }
 
+#[derive(Clone, Copy)]
 struct ExclusionOperation<'a> {
     data_root: &'a Path,
     paths: &'a crate::cognition::CognitionPathEnvironment,

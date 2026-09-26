@@ -105,7 +105,7 @@ impl RoutedRound<'_> {
                 let mut result: ModelRoundResult = serde_json::from_value(value).map_err(|_| {
                     failure::durability(
                         "response_acceptance_read",
-                        BtccError::new("model_response_invalid", "invalid accepted response"),
+                        &BtccError::new("model_response_invalid", "invalid accepted response"),
                     )
                 })?;
                 result.accepted_checkpoint.get_or_insert(
@@ -128,7 +128,7 @@ impl RoutedRound<'_> {
                 .map_err(|_| {
                     failure::durability(
                         "attempt_history_read",
-                        BtccError::new("model_history_invalid", "invalid model route history"),
+                        &BtccError::new("model_history_invalid", "invalid model route history"),
                     )
                 })?;
                 self.abandon_open(
@@ -307,7 +307,7 @@ impl RoutedRound<'_> {
             let value = serde_json::to_value(&result).map_err(|_| {
                 failure::durability(
                     "response_acceptance_write",
-                    BtccError::new("model_response_invalid", "cannot encode accepted response"),
+                    &BtccError::new("model_response_invalid", "cannot encode accepted response"),
                 )
             })?;
             self.hooks

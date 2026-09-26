@@ -49,7 +49,7 @@ impl AppContextReadPort for NativeAppContextRead {
                 .snapshot()
                 .await
                 .map_err(|_| GatewayApplicationError::Internal)?;
-            let evaluated = snapshot.evaluate_working(WorkingContextBudgetInput {
+            let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
                 model_ref: Some(query.model_ref.clone()),
                 working_context_tokens: 0.0,
                 static_context_tokens: Some(0.0),

@@ -176,6 +176,10 @@ struct StoredResult<'a> {
     timed_out: bool,
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> ContextError {
     ContextError::new("tool_output_io_error", error.to_string())
 }

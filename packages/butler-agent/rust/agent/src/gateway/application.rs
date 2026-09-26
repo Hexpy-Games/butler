@@ -211,7 +211,7 @@ impl AppApplication {
         let automation_runs = automations::AutomationRunOwner::start();
         let (retention, retention_wake) = retention::RetentionOwner::start(
             storage.clone(),
-            subscribers.clone(),
+            &subscribers.clone(),
             retention_cursor,
         );
         let projection =
@@ -370,6 +370,10 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         message: message.into(),
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn skill_error(error: crate::skills::SkillError) -> GatewayApplicationError {
     match error.code {
         "skill_archive_invalid" | "skill_archive_path_invalid" => {
@@ -379,6 +383,10 @@ fn skill_error(error: crate::skills::SkillError) -> GatewayApplicationError {
         _ => GatewayApplicationError::Internal,
     }
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn app_error(error: AppStorageError) -> GatewayApplicationError {
     match error.code() {
         "session_not_found" => public(404, error.code(), error.detail()),

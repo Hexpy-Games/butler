@@ -165,9 +165,9 @@ impl NativeServiceConfiguration {
     pub(crate) fn persist_session_pointer(&self, session_id: &str) -> Result<(), BtccError> {
         let directory = self.data_root.join("config");
         fs::create_dir_all(&directory)
-            .map_err(|error| io("butler_session_pointer_write_failed", error))?;
+            .map_err(|error| io("butler_session_pointer_write_failed", &error))?;
         fs::write(self.pointer_path(), format!("{session_id}\n"))
-            .map_err(|error| io("butler_session_pointer_write_failed", error))
+            .map_err(|error| io("butler_session_pointer_write_failed", &error))
     }
 
     fn pointer_path(&self) -> std::path::PathBuf {
@@ -187,7 +187,7 @@ fn storage(error: WorkspaceError) -> BtccError {
     BtccError::new(error.code, error.message)
 }
 
-fn io(code: &'static str, error: std::io::Error) -> BtccError {
+fn io(code: &'static str, error: &std::io::Error) -> BtccError {
     BtccError::new(code, error.to_string())
 }
 

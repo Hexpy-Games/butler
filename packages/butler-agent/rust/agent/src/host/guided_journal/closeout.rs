@@ -51,6 +51,10 @@ pub(super) async fn collect(
     })
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn invalid(error: crate::json::JsonError) -> BtccError {
     BtccError::new("guided_journal_result_invalid", error.to_string())
 }

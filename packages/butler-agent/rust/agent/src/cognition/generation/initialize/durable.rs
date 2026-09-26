@@ -60,6 +60,10 @@ pub(in crate::cognition::generation) fn create_dir(path: &Path) -> CognitionResu
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_initialization_io_error", error.to_string())
 }

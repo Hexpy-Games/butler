@@ -182,9 +182,17 @@ fn parse_record(bytes: &[u8]) -> Result<Option<TranscriptEvent>, AppStorageError
     }
     serde_json::from_str(text).map(Some).map_err(json_error)
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
     AppStorageError::new("invalid_json", error.to_string())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> AppStorageError {
     AppStorageError::new("app_transcript_io_failed", error.to_string())
 }

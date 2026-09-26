@@ -1,5 +1,9 @@
 use crate::gateway::GatewayApplicationError;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 pub(super) fn profile_error(error: crate::profile::ProfileError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 500,

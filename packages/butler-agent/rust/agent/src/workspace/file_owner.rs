@@ -125,20 +125,20 @@ impl NativeWorkspaceFiles {
         &self,
         input: ReadFileInput,
     ) -> Result<std::io::Result<WorkspaceFileRead>, FileOwnerError> {
-        self.run(move || read_one_blocking(input)).await
+        self.run(move || read_one_blocking(&input)).await
     }
 
     pub(crate) async fn list_files(
         &self,
         input: WorkspaceListInput,
     ) -> Result<std::io::Result<WorkspaceListOutcome>, FileOwnerError> {
-        self.run(move || list_blocking(input)).await
+        self.run(move || list_blocking(&input)).await
     }
 
     pub(crate) async fn grep_candidate(
         &self,
         input: GrepCandidate,
     ) -> Result<GrepRead, FileOwnerError> {
-        self.run(move || read_candidate(input)).await
+        self.run(move || read_candidate(&input)).await
     }
 }

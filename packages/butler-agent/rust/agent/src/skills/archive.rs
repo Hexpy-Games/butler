@@ -119,6 +119,10 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), SkillError> {
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io(source: std::io::Error) -> SkillError {
     error("skills_io_failed", &source.to_string())
 }

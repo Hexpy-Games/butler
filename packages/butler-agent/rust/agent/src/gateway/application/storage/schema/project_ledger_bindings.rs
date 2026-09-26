@@ -220,6 +220,10 @@ fn key(value: &str) -> String {
 #[cfg(test)]
 mod tests;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn filesystem_error(error: std::io::Error) -> AppStorageError {
     AppStorageError::new(
         "app_project_ledger_path_resolution_failed",

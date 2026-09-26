@@ -99,7 +99,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                     data["readerBackend"].as_str().unwrap_or("unknown"),
                     data["metrics"]["requestCount"].as_u64().unwrap_or(0),
                 );
-                report_success(&options, command.source_name(), data, &human);
+                report_success(&options, command.source_name(), &data, &human);
                 ExitCode::SUCCESS
             }
             Err(error) => report_error(
@@ -135,7 +135,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                             .join(", "),
                         data["preview"].as_str().unwrap_or(""),
                     );
-                    report_success(&options, command.source_name(), data, &human);
+                    report_success(&options, command.source_name(), &data, &human);
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -233,7 +233,7 @@ async fn run_search_test(
             report_success(
                 &options,
                 command.source_name(),
-                data,
+                &data,
                 if human.is_empty() {
                     "Search completed with no results."
                 } else {
@@ -359,7 +359,7 @@ fn command_name(args: &[OsString]) -> &'static str {
     }
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: &str) {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) {
     if options.json {
         println!(
             "{}",

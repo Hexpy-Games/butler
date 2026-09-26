@@ -146,7 +146,7 @@ pub(super) async fn codex(
             "provider_stream_interrupted",
         ))
     })?;
-    Ok(state.response(completed, clock))
+    Ok(state.response(&completed, clock))
 }
 
 struct CodexState {
@@ -206,17 +206,17 @@ impl CodexState {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                 self.fallback_text.push_str(delta);
                 let sequence = self.next();
-                self.emit(observer, serde_json::json!({"type":"text_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"target":"final_candidate","raw":event}));
+                self.emit(observer, &serde_json::json!({"type":"text_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"target":"final_candidate","raw":event}));
             }
         } else if kind.contains("reasoning") && kind.ends_with(".delta") {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                 let sequence = self.next();
-                self.emit(observer, serde_json::json!({"type":"reasoning_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
+                self.emit(observer, &serde_json::json!({"type":"reasoning_delta","streamId":self.stream_id(event),"sequence":sequence,"textDelta":delta,"charCount":delta.encode_utf16().count(),"raw":event}));
             }
         } else if kind == "response.function_call_arguments.delta" {
             if let Some(delta) = event.get("delta").and_then(Value::as_str) {
                 let sequence = self.next();
-                self.emit(observer, serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":event.get("call_id").or_else(||event.get("item_id")),"argumentsDelta":delta,"argumentCharCount":delta.encode_utf16().count(),"publicState":"generating","raw":event}));
+                self.emit(observer, &serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":event.get("call_id").or_else(||event.get("item_id")),"argumentsDelta":delta,"argumentCharCount":delta.encode_utf16().count(),"publicState":"generating","raw":event}));
             }
         } else if kind == "response.output_item.done" {
             if let Some(item) = event.get("item").filter(|value| value.is_object()) {
@@ -224,13 +224,13 @@ impl CodexState {
                 if item.get("type").and_then(Value::as_str) == Some("function_call") {
                     let arguments = item.get("arguments").and_then(Value::as_str).unwrap_or("");
                     let sequence = self.next();
-                    self.emit(observer, serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":item.get("call_id"),"toolName":item.get("name"),"argumentCharCount":arguments.encode_utf16().count(),"publicState":"ready","raw":event}));
+                    self.emit(observer, &serde_json::json!({"type":"tool_call_delta","streamId":self.stream_id(event),"callIndex":event.get("output_index").and_then(Value::as_u64).unwrap_or(0),"sequence":sequence,"toolCallId":item.get("call_id"),"toolName":item.get("name"),"argumentCharCount":arguments.encode_utf16().count(),"publicState":"ready","raw":event}));
                 }
             }
         } else if kind == "response.completed"
             && let Some(response) = event.get("response").filter(|value| value.is_object())
         {
-            self.emit(observer, serde_json::json!({"type":"completed","streamId":self.stream_id(event),"status":"completed","raw":event}));
+            self.emit(observer, &serde_json::json!({"type":"completed","streamId":self.stream_id(event),"status":"completed","raw":event}));
             return Ok(Some(response.clone()));
         }
         Ok(None)
@@ -240,9 +240,9 @@ impl CodexState {
         self.sequence += 1;
         self.sequence
     }
-    fn emit(&self, observer: Option<&dyn crate::btcc::ProviderStreamObserver>, projection: Value) {
+    fn emit(&self, observer: Option<&dyn crate::btcc::ProviderStreamObserver>, projection: &Value) {
         if let Some(observer) = observer {
-            observer.event(&projection);
+            observer.event(projection);
         }
     }
     fn stream_id<'a>(&'a self, event: &'a Value) -> &'a str {
@@ -253,7 +253,7 @@ impl CodexState {
             .and_then(Value::as_str)
             .unwrap_or(&self.fallback_stream_id)
     }
-    fn response(mut self, completed: Value, clock: &dyn ProviderClock) -> Value {
+    fn response(mut self, completed: &Value, clock: &dyn ProviderClock) -> Value {
         if self.output.is_empty() {
             self.output = completed
                 .get("output")
@@ -302,7 +302,7 @@ where
     let mut first_chunk = true;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk
-            .map_err(|error| Box::new(diagnostics::network(provider, api, error.to_string())))?;
+            .map_err(|error| Box::new(diagnostics::network(provider, api, &error.to_string())))?;
         buffer.extend_from_slice(&chunk);
         if first_chunk && buffer.len() >= 3 {
             if buffer.starts_with(&[0xef, 0xbb, 0xbf]) {
@@ -428,7 +428,7 @@ mod clock_tests {
             state.stream_id(&serde_json::json!({"item_id":"item"})),
             "item"
         );
-        let response = state.response(serde_json::json!({"id":"response","output":[]}), &clock);
+        let response = state.response(&serde_json::json!({"id":"response","output":[]}), &clock);
         assert_eq!(response["id"], "response");
         assert_eq!(clock.0.load(Ordering::SeqCst), 91);
     }

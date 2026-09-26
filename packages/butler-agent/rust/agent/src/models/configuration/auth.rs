@@ -68,7 +68,7 @@ impl AuthOwner<'_> {
                 account_id_from_access_token(&profile.access_token).unwrap_or_default();
             return self.codex_auth(
                 ProviderAuthMode::CodexSubscription,
-                profile.access_token,
+                &profile.access_token,
                 account_id,
             );
         }
@@ -82,7 +82,7 @@ impl AuthOwner<'_> {
                 .and_then(|value| trimmed(Some(value)))
         {
             let account_id = codex_account_id(&auth, token).unwrap_or_default();
-            return self.codex_auth(ProviderAuthMode::CodexOauth, token.to_owned(), account_id);
+            return self.codex_auth(ProviderAuthMode::CodexOauth, token, account_id);
         }
         Err(error(
             "provider_auth_missing",
@@ -93,7 +93,7 @@ impl AuthOwner<'_> {
     fn codex_auth(
         &self,
         mode: ProviderAuthMode,
-        token: String,
+        token: &str,
         account_id: String,
     ) -> Result<ProviderAuth, AuthError> {
         let originator = trimmed(self.environment.oauth_originator.as_deref())

@@ -24,7 +24,7 @@ pub(in crate::capabilities) fn changed_file_value(detail: &ChangedFile) -> Value
 
 pub(super) fn project(outcome: MutationOutcome, elapsed: Duration) -> Value {
     match outcome {
-        MutationOutcome::Batch(result) => batch_result(result, elapsed),
+        MutationOutcome::Batch(result) => batch_result(&result, elapsed),
         MutationOutcome::Single(result) => single_result(result, elapsed),
         MutationOutcome::Write(_) => super::failure(
             "workspace_mutation_outcome_mismatch",
@@ -48,7 +48,7 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
                 "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("edit_file",
-                    format!("Edited workspace file {}", committed.path),reference),
+                    &format!("Edited workspace file {}", committed.path),&reference),
                 "evidence_capability_receipts":mutation_evidence::success("edit_file",
                     Some(&committed.path),&[],&[],mutation_evidence::MutationOperation::Edited,committed.bytes)});
             if committed.cleanup_failed {
@@ -98,7 +98,7 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
     }
 }
 
-fn batch_result(result: BatchResult, elapsed: Duration) -> Value {
+fn batch_result(result: &BatchResult, elapsed: Duration) -> Value {
     let applied: Vec<Value> = result.applied.iter().map(applied_record).collect();
     let unchanged: Vec<Value> = result
         .unchanged
@@ -205,8 +205,8 @@ fn batch_result(result: BatchResult, elapsed: Duration) -> Value {
             "files_written":result.applied.len(),"bytes_written":bytes},
         "evidence_receipts":if applied.is_empty(){Vec::new()}else{
             mutation_evidence::execution("edit_file",
-                format!("Edited {} workspace files",applied.len()),
-                json!({"batch":true,"applied":applied}))},
+                &format!("Edited {} workspace files",applied.len()),
+                &json!({"batch":true,"applied":applied}))},
         "evidence_capability_receipts":mutation_evidence::success("edit_file",
             None,&paths,&applied,mutation_evidence::MutationOperation::Batch { edited: !applied.is_empty() },bytes)})
 }

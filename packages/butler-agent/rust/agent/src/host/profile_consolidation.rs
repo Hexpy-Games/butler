@@ -109,6 +109,10 @@ fn now_ms() -> i64 {
     chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis()
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn profile_error(error: crate::profile::ProfileError) -> PhaseError {
     PhaseError {
         code: error.code,
@@ -117,6 +121,10 @@ fn profile_error(error: crate::profile::ProfileError) -> PhaseError {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn feedback_error(error: crate::cognition::CognitionError) -> PhaseError {
     PhaseError {
         code: error.code,

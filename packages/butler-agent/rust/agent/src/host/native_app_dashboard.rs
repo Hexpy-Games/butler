@@ -122,6 +122,10 @@ fn binding(app_project_id: String, ledger_project_id: String) -> ProjectLedgerBi
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn map_error(error: ProjectLedgerReadError) -> AppProjectDashboardLedgerError {
     match error {
         ProjectLedgerReadError::DashboardChanged => AppProjectDashboardLedgerError::Changed,

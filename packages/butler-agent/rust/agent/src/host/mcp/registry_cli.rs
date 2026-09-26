@@ -57,7 +57,7 @@ pub(super) fn recognizes(args: &[OsString]) -> bool {
 pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     let parsed = match parse(&args) {
         Ok(parsed) => parsed,
-        Err(error) => return report_error(&args, error),
+        Err(error) => return report_error(&args, &error),
     };
     let subcommand = parsed
         .positionals
@@ -66,7 +66,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         .unwrap_or("list");
     if (subcommand == "delete" || subcommand == "remove") && !parsed.yes && !parsed.non_interactive
     {
-        return report_error(&args, CliError::invalid("mcp delete requires --yes"));
+        return report_error(&args, &CliError::invalid("mcp delete requires --yes"));
     }
     let id = parsed
         .positionals
@@ -80,7 +80,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
     {
         return report_error(
             &args,
-            CliError::invalid(format!("mcp {subcommand} requires <id>")),
+            &CliError::invalid(format!("mcp {subcommand} requires <id>")),
         );
     }
     // Validated non-empty above for every subcommand that reads it.
@@ -90,48 +90,50 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         Err(message) => {
             return report_error(
                 &args,
-                CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", message, 1),
             );
         }
     };
-    let client = match registry_client(data_root, installation) {
+    let client = match registry_client(data_root, &installation) {
         Ok(client) => client,
         Err(message) => {
             return report_error(
                 &args,
-                CliError::failed("private_environment_unavailable", message, 1),
+                &CliError::failed("private_environment_unavailable", message, 1),
             );
         }
     };
     match subcommand {
         "list" => match client.list_servers() {
-            Ok(data) => report_success(&parsed, "butler mcp list", data.clone(), list_text(&data)),
+            Ok(data) => {
+                report_success(&parsed, "butler mcp list", &data.clone(), &list_text(&data))
+            }
             Err(message) => report_error(
                 &args,
-                CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", message, 1),
             ),
         },
         "add" | "set" => {
             let id = value(&parsed, "--id").or_else(|| parsed.positionals.get(2).cloned());
             let Some(id) = id.filter(|value| !value.trim().is_empty()) else {
-                return report_error(&args, CliError::invalid("mcp add requires --id <id>"));
+                return report_error(&args, &CliError::invalid("mcp add requires --id <id>"));
             };
-            let input = match upsert_input(&parsed, id) {
+            let input = match upsert_input(&parsed, &id) {
                 Ok(input) => input,
-                Err(message) => return report_error(&args, CliError::invalid(message)),
+                Err(message) => return report_error(&args, &CliError::invalid(message)),
             };
             match client.upsert_server(input).await {
                 Ok(server) => report_success(
                     &parsed,
                     "butler mcp add",
-                    json!({"server": server, "redacted": true}),
-                    format!(
+                    &json!({"server": server, "redacted": true}),
+                    &format!(
                         "MCP server saved: {} ({}).",
                         server["id"].as_str().unwrap_or(""),
                         server["transport"].as_str().unwrap_or("stdio")
                     ),
                 ),
-                Err(message) => report_error(&args, CliError::invalid(message)),
+                Err(message) => report_error(&args, &CliError::invalid(message)),
             }
         }
         "enable" | "disable" => {
@@ -144,14 +146,14 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                     } else {
                         "butler mcp disable"
                     },
-                    json!({"server": server}),
-                    format!(
+                    &json!({"server": server}),
+                    &format!(
                         "MCP server {}: {}.",
                         if enabled { "enabled" } else { "disabled" },
                         server["id"].as_str().unwrap_or("")
                     ),
                 ),
-                Err(message) => report_error(&args, CliError::failed("not_found", message, 1)),
+                Err(message) => report_error(&args, &CliError::failed("not_found", message, 1)),
             }
         }
         "delete" | "remove" => match client.delete_server(id).await {
@@ -164,11 +166,11 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                         data["id"].as_str().unwrap_or("")
                     )
                 };
-                report_success(&parsed, "butler mcp delete", data, human)
+                report_success(&parsed, "butler mcp delete", &data, &human)
             }
             Err(message) => report_error(
                 &args,
-                CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", message, 1),
             ),
         },
         "test" | "probe" => {
@@ -191,11 +193,16 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 server["resources"].as_array().map_or(0, Vec::len),
                 server["resource_templates"].as_array().map_or(0, Vec::len),
             );
-            report_success(&parsed, "butler mcp test", json!({"server": server}), text)
+            report_success(
+                &parsed,
+                "butler mcp test",
+                &json!({"server": server}),
+                &text,
+            )
         }
         _ => report_error(
             &args,
-            CliError::failed(
+            &CliError::failed(
                 "unknown_command",
                 format!("unknown mcp command: {subcommand}"),
                 2,
@@ -206,7 +213,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
 
 fn registry_client(
     data_root: PathBuf,
-    installation: ResolvedInstallation,
+    installation: &ResolvedInstallation,
 ) -> Result<NativeMcpClient, String> {
     let install_root = installation.root().to_path_buf();
     let guard_installation = installation.clone();
@@ -340,7 +347,7 @@ fn list_text(data: &Value) -> String {
         .join("\n")
 }
 
-fn report_success(options: &Options, command: &str, data: Value, human: String) -> ExitCode {
+fn report_success(options: &Options, command: &str, data: &Value, human: &str) -> ExitCode {
     if options.json {
         println!(
             "{}",
@@ -358,11 +365,11 @@ fn report_success(options: &Options, command: &str, data: Value, human: String) 
     ExitCode::SUCCESS
 }
 
-fn report_error(args: &[OsString], error: CliError) -> ExitCode {
+fn report_error(args: &[OsString], error: &CliError) -> ExitCode {
     report_error_as(args, &command_name(args), error)
 }
 
-fn report_error_as(args: &[OsString], command: &str, error: CliError) -> ExitCode {
+fn report_error_as(args: &[OsString], command: &str, error: &CliError) -> ExitCode {
     let json_requested = args.iter().any(|arg| arg == "--json");
     if json_requested {
         println!(

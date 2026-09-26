@@ -9,10 +9,10 @@ use crate::public_text::trim_js_whitespace;
 pub(super) fn read(
     butler_data: &Path,
     estimator: &OwnedDefaultTokenEstimator,
-    input: ReadToolOutputInput,
+    input: &ReadToolOutputInput,
 ) -> ContextResult<FocusedToolOutputArtifactRead> {
     let root = butler_data.join("artifacts/tool-output");
-    let path = match reference(&root, &input, None)? {
+    let path = match reference(&root, input, None)? {
         Ok(path) => path,
         Err(error) => return Ok(failure(error)),
     };
@@ -267,6 +267,10 @@ fn under_root(path: &Path, root: &Path) -> ContextResult<bool> {
     Ok(real_path.starts_with(real_root))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "map_err/iterator adapter taking owned values"
+)]
 fn io_error(error: std::io::Error) -> ContextError {
     ContextError::new("tool_output_io_error", error.to_string())
 }

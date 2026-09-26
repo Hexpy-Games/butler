@@ -7,7 +7,7 @@ use crate::btcc::storage::{StorageError, StorageResult};
 
 pub(super) fn start(
     db: &Connection,
-    input: ToolJournalStart,
+    input: &ToolJournalStart,
     clock: &dyn Fn() -> String,
 ) -> StorageResult<()> {
     let arguments_json = canonical_json(&input.arguments)?;

@@ -38,7 +38,7 @@ fn safe_local_session_id(value: &str) -> String {
 pub(super) fn create(
     db: &Connection,
     subscribers: &EventSubscribers,
-    input: AppCreateSessionInput,
+    input: &AppCreateSessionInput,
     clock: &dyn AppIdentityClock,
     emit_created: bool,
 ) -> Result<AppSessionSummary, AppStorageError> {
@@ -75,7 +75,7 @@ pub(super) fn create(
         } else {
             "New chat"
         });
-    let id = identity(&input, clock);
+    let id = identity(input, clock);
     let now = clock.now_iso();
     db.execute(
         r"

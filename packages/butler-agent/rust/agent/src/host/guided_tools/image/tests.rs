@@ -83,10 +83,10 @@ fn result_projection_scrubs_temp_paths_and_keeps_source_fields() {
     let temp_root = PathBuf::from("/private/data/.butler-zai-vision-test");
     let temp_path = temp_root.join("input.png");
     let output = project_result(
-        json!({"ok":true,"result":{"content":[{"type":"text","text":format!("path {0}",temp_path.display())}]}}),
+        &json!({"ok":true,"result":{"content":[{"type":"text","text":format!("path {0}",temp_path.display())}]}}),
         "file-current",
         &temp_root,
-        temp_path,
+        &temp_path,
     );
     assert_eq!(output["analysis"], "path [redacted-image-source]");
     assert_eq!(output["server_id"], "zai-vision");

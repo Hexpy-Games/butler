@@ -20,12 +20,12 @@ use super::contracts::{
 use super::io;
 
 pub(super) fn execute(
-    input: EditMutation,
+    input: &EditMutation,
     paths: Vec<GuardedEdit>,
     observer: &dyn CommitObserver,
 ) -> MutationOutcome {
     if input.batch {
-        MutationOutcome::Batch(batch::execute(paths, observer))
+        MutationOutcome::Batch(batch::execute(&paths, observer))
     } else {
         MutationOutcome::Single(match paths.into_iter().next() {
             Some(edit) => single(edit, observer),

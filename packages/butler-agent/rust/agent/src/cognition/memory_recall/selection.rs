@@ -36,6 +36,7 @@ pub(super) struct Selection {
     pub executed: super::metrics::Executed,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct RecallSelectionInput<'a> {
     pub(super) graph: &'a GraphRecallReader,
     pub(super) canonical: Option<&'a ConversationSourceReader>,

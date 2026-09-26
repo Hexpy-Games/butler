@@ -67,7 +67,7 @@ fn fixture() -> (BindingBatch, ExtractOutput, ExtractInput) {
 fn correction_rewrites_only_selected_span_and_records_supersedes() {
     let (batch, mut output, input) = fixture();
     let warnings = apply(
-        json!({"decisions":[{"target":"f0","candidate":"f0c0","span":"f0c0p0",
+        &json!({"decisions":[{"target":"f0","candidate":"f0c0","span":"f0c0p0",
             "support":["f0u0","f0c0h"]}]}),
         &batch,
         &mut output,
@@ -85,11 +85,11 @@ fn correction_rejects_cross_candidate_evidence_and_unresolved_is_explicit() {
     let (batch, mut output, input) = fixture();
     let bad = json!({"decisions":[{"target":"f0","candidate":"f0c0","span":"f0c0p0","support":["f0u0","another-history"]}]});
     assert_eq!(
-        apply(bad, &batch, &mut output, &input).unwrap_err().code,
+        apply(&bad, &batch, &mut output, &input).unwrap_err().code,
         "memory_extract_invalid_identity_reuse"
     );
     let warning = apply(
-        json!({"decisions":[{"target":"f0","candidate":null,"span":null,"support":[]}]}),
+        &json!({"decisions":[{"target":"f0","candidate":null,"span":null,"support":[]}]}),
         &batch,
         &mut output,
         &input,

@@ -30,7 +30,7 @@ pub(super) fn run(
     let response = recall_legacy(
         data_root,
         paths,
-        LegacyRecallRequest {
+        &LegacyRecallRequest {
             cue,
             limit: Some(5.0),
             ..LegacyRecallRequest::default()

@@ -86,7 +86,7 @@ impl AppApplication {
                 project
                     .as_ref()
                     .map(|project| project.display_name.as_str()),
-                run_id,
+                run_id.as_ref(),
             ))
         })
         .await
@@ -182,7 +182,7 @@ fn fallback(
     moment: &str,
     project_id: Option<&str>,
     project_name: Option<&str>,
-    run_id: Option<String>,
+    run_id: Option<&String>,
 ) -> Value {
     let ko = locale == "ko";
     let project_name = project_name.map(|name| if name == "butler" { "Butler" } else { name });

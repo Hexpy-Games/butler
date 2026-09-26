@@ -255,7 +255,7 @@ pub(crate) enum StopPersistenceOutcome {
     AlreadyDelivered(Box<AlreadyDeliveredOutcome>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProgressEvent {
     Started,
     StateChanged {

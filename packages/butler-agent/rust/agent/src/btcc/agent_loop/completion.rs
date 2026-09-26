@@ -40,7 +40,7 @@ pub(super) async fn record_result(
     super::state::identify_messages(&mut state.messages, &mut state.next_item_ordinal);
     emit(
         input.observer,
-        AgentLoopEvent::ToolResult {
+        &AgentLoopEvent::ToolResult {
             iteration,
             result: result.clone(),
         },

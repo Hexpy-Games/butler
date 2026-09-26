@@ -398,7 +398,7 @@ impl AppApplication {
                     &subscribers,
                     "session_queue.changed",
                     None,
-                    service::map(json!({
+                    service::map(&json!({
                         "session_id": storage_chat_id,
                         "queued_message_id": id,
                         "action": "updated"
@@ -449,7 +449,7 @@ impl AppApplication {
                     &subscribers,
                     "session_queue.changed",
                     None,
-                    service::map(json!({
+                    service::map(&json!({
                         "session_id": chat_id,
                         "queued_message_id": id,
                         "action": "deleted"

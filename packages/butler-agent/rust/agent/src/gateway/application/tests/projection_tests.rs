@@ -332,8 +332,8 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
     let retained_turn = turn.clone();
     app.storage.execute(move|db|{
         let subscribers=EventSubscribers::default();
-        events::append(db,&subscribers,"progress.summary",Some(&retained_turn),service::map(json!({"session_id":"general","turn_id":retained_turn,"row":{"id":"work-1","kind":"used_tool","state":"running","safe_label":"Worked","created_at":"2026-09-14T00:00:01.000Z"}}))?,"2026-09-14T00:00:01.000Z")?;
-        events::append(db,&subscribers,"agent.turn_event",Some(&retained_turn),service::map(json!({"session_id":"general","turn_id":retained_turn,"event":{"kind":"turn.completed","payload":{"delivery_state":"delivered_with_limitations","limitation_codes":["partial"],"limitations":["One result was unavailable."]}}}))?,"2026-09-14T00:00:02.000Z")?;
+        events::append(db,&subscribers,"progress.summary",Some(&retained_turn),service::map(&json!({"session_id":"general","turn_id":retained_turn,"row":{"id":"work-1","kind":"used_tool","state":"running","safe_label":"Worked","created_at":"2026-09-14T00:00:01.000Z"}}))?,"2026-09-14T00:00:01.000Z")?;
+        events::append(db,&subscribers,"agent.turn_event",Some(&retained_turn),service::map(&json!({"session_id":"general","turn_id":retained_turn,"event":{"kind":"turn.completed","payload":{"delivery_state":"delivered_with_limitations","limitation_codes":["partial"],"limitations":["One result was unavailable."]}}}))?,"2026-09-14T00:00:02.000Z")?;
         db.execute("UPDATE turns SET state='delivered',safe_status_label='Delivered' WHERE id=?1",[&retained_turn]).map_err(AppStorageError::sqlite)?;
         db.execute(
             "INSERT INTO messages(id,chat_id,turn_id,role,text,status,created_at,updated_at,retryable) \

@@ -94,9 +94,9 @@ pub(super) fn begin_final_report(state: &mut State) {
     ));
 }
 
-pub(super) fn emit(observer: Option<&dyn AgentLoopObserver>, event: AgentLoopEvent) {
+pub(super) fn emit(observer: Option<&dyn AgentLoopObserver>, event: &AgentLoopEvent) {
     if let Some(observer) = observer {
-        observer.event(&event);
+        observer.event(event);
     }
 }
 

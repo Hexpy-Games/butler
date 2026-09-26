@@ -458,7 +458,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
     assert_eq!(compact.threshold_state, ContextThresholdState::AutoCompact);
     let hard = snapshot.evaluate(Some("local/sample"), 29492.0, &overrides);
     assert_eq!(hard.threshold_state, ContextThresholdState::HardPressure);
-    let working = snapshot.evaluate_working(WorkingContextBudgetInput {
+    let working = snapshot.evaluate_working(&WorkingContextBudgetInput {
         model_ref: Some("local/sample".into()),
         working_context_tokens: 20000.9,
         static_context_tokens: Some(10.9),

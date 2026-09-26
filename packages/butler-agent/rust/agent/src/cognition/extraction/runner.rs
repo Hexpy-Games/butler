@@ -127,7 +127,7 @@ pub(in crate::cognition) async fn run_extractor(
             |value, repair| {
                 let mut next = output.clone();
                 let warnings = if repair == 0 {
-                    binding::apply(value, batch, &mut next, &input)?
+                    binding::apply(&value, batch, &mut next, &input)?
                 } else {
                     binding::apply_repair(value, batch, &mut next, &input)?
                 };

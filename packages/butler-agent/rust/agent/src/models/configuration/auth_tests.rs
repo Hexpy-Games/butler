@@ -76,7 +76,7 @@ async fn token_server(status: &str, body: &str) -> (String, tokio::task::JoinHan
     (format!("http://{address}/token"), task)
 }
 
-fn jwt(payload: Value) -> String {
+fn jwt(payload: &Value) -> String {
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&payload).unwrap());
     format!("header.{encoded}.signature")
@@ -101,7 +101,7 @@ async fn expiring_profile_refreshes_retains_unknown_fields_and_writes_private_fi
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     }
-    let access = jwt(json!({"https://api.openai.com/auth":{"chatgpt_account_id":"account"}}));
+    let access = jwt(&json!({"https://api.openai.com/auth":{"chatgpt_account_id":"account"}}));
     let body = json!({"access_token":access,"expires_in":3600,"scope":"openid"}).to_string();
     let (url, server) = token_server("200 OK", &body).await;
     let owner = fixture.owner(url);
@@ -161,7 +161,7 @@ async fn refresh_http_failure_keeps_original_and_invalid_json_is_reported() {
 #[tokio::test]
 async fn code_exchange_returns_profile_without_writing_it() {
     let fixture = Fixture::new("exchange");
-    let access = jwt(json!({"sub":"account","email":"person@example.com"}));
+    let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
     let body = json!({
         "access_token":access, "refresh_token":"refresh", "expires_in":3600, "scope":"openid"
     })
@@ -189,7 +189,7 @@ async fn code_exchange_returns_profile_without_writing_it() {
 async fn relative_profile_override_is_shared_by_oauth_write_and_model_auth_reader() {
     let fixture = Fixture::new("relative-profile");
     assert_ne!(std::env::current_dir().unwrap(), fixture.0);
-    let access = jwt(json!({"sub":"account","email":"person@example.com"}));
+    let access = jwt(&json!({"sub":"account","email":"person@example.com"}));
     let (token_url, server) = token_server(
         "200 OK",
         &json!({"access_token":access,"refresh_token":"refresh","expires_in":3600}).to_string(),

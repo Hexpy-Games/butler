@@ -66,7 +66,7 @@ impl From<GatewayApplicationError> for HttpError {
     }
 }
 
-pub(super) fn error_response(error: HttpError) -> Response {
+pub(super) fn error_response(error: &HttpError) -> Response {
     if matches!(error, HttpError::PayloadTooLarge) {
         return super::payload_too_large_response();
     }

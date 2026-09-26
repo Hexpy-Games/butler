@@ -88,6 +88,7 @@ pub(crate) struct ToolArtifactSearch {
     pub match_char: Option<usize>,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct SliceInput<'a> {
     pub text: &'a str,
     pub offset_lines: usize,

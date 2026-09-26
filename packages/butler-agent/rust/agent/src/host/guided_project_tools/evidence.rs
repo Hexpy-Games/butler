@@ -35,7 +35,7 @@ pub(super) fn attach(
             result,
             "inspect_project_status",
             "Canonical Project Ledger status was inspected.",
-            "project-ledger-status".into(),
+            "project-ledger-status",
         ),
         "query_project_work" => {
             let kind = text(args, "kind");
@@ -43,7 +43,7 @@ pub(super) fn attach(
                 result,
                 "query_project_work",
                 &format!("Canonical Project Ledger {kind} query results were inspected."),
-                format!("project-ledger-query:{kind}"),
+                &format!("project-ledger-query:{kind}"),
             )
         }
         "project_ledger_render" | "render_project_dashboard" => {
@@ -166,7 +166,7 @@ fn field_capability(
     })
 }
 
-fn shared_source(mut result: Value, tool: &str, summary: &str, task_id: String) -> Value {
+fn shared_source(mut result: Value, tool: &str, summary: &str, task_id: &str) -> Value {
     let Some(object) = result.as_object_mut() else {
         return result;
     };

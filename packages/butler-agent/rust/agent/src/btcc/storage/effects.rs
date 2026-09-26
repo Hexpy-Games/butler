@@ -163,7 +163,7 @@ impl EffectJournal for StorageEffectJournal {
         let clock = self.clock.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(write::prepare(db, identity, recovery, &*clock)))
+                .execute(move |db| inner(write::prepare(db, &identity, recovery.as_ref(), &*clock)))
                 .await
                 .map_err(outer)?
         })
@@ -281,7 +281,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| {
                     inner(write::record_error(
-                        db, &effect_id, revision, error, false, &*clock,
+                        db, &effect_id, revision, &error, false, &*clock,
                     ))
                 })
                 .await
@@ -300,7 +300,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| {
                     inner(write::record_error(
-                        db, &effect_id, revision, error, true, &*clock,
+                        db, &effect_id, revision, &error, true, &*clock,
                     ))
                 })
                 .await

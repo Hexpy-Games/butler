@@ -19,7 +19,7 @@ pub(super) fn safe_error(error: &ProfileError) -> String {
 }
 pub(super) fn empty_result(
     model: ProfilingExtractorModelSnapshot,
-    consent: ProfilingConsentSnapshot,
+    consent: &ProfilingConsentSnapshot,
 ) -> ProfileModelTranscriptCaptureResult {
     result(CaptureResultInput {
         read: &SourceRead {

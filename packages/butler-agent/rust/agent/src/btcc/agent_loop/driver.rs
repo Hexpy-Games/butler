@@ -288,7 +288,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
             for prepared_call in &prepared_calls {
                 emit(
                     input.observer,
-                    AgentLoopEvent::ToolCall {
+                    &AgentLoopEvent::ToolCall {
                         iteration,
                         call: prepared_call.call.clone(),
                     },
@@ -347,7 +347,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
         for (index, prepared_call) in prepared_calls.iter().enumerate().skip(start) {
             emit(
                 input.observer,
-                AgentLoopEvent::ToolCall {
+                &AgentLoopEvent::ToolCall {
                     iteration,
                     call: prepared_call.call.clone(),
                 },

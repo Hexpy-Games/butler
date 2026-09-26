@@ -75,15 +75,15 @@ fn parse_record(fields: &[&str]) -> std::io::Result<Option<WorktreeEntry>> {
 }
 
 pub(super) fn listed_worktree_matches(
-    stdout: String,
-    target: String,
-    branch: String,
+    stdout: &str,
+    target: &str,
+    branch: &str,
 ) -> std::io::Result<bool> {
-    let entries = parse_worktrees(&stdout)?;
+    let entries = parse_worktrees(stdout)?;
     for entry in entries {
         let listed = canonical_path(&entry.path.to_string_lossy())?;
-        let requested = canonical_path(&target)?;
-        if listed == requested && entry.branch.as_deref() == Some(&branch) {
+        let requested = canonical_path(target)?;
+        if listed == requested && entry.branch.as_deref() == Some(branch) {
             return Ok(true);
         }
     }

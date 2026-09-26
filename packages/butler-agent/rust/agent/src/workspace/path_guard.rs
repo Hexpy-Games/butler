@@ -2,7 +2,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{Value, json};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct GuardInput<'a> {
     pub root: &'a Path,
     pub requested: &'a str,
@@ -11,6 +11,7 @@ pub(crate) struct GuardInput<'a> {
     pub protected_roots: &'a [PathBuf],
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct MutationGuardInput<'a> {
     pub root: &'a Path,
     pub requested: &'a str,

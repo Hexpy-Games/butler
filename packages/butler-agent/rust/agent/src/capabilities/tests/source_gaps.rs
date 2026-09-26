@@ -43,8 +43,8 @@ async fn cursor_decoder_accepts_runtime_tolerated_base64url_spellings() {
 async fn containment_and_unicode_sensitive_paths_are_rejected() {
     let fixture = Fixture::new();
     fixture.write("..near.txt", b"near");
-    fixture.write("secret.Key", b"secret");
-    for path in ["..near.txt", "secret.Key"] {
+    fixture.write("secret.Key", b"secret");
+    for path in ["..near.txt", "secret.Key"] {
         let call = json!({ "arguments": { "requests": [{ "path": path }] } });
         let rust = fixture.invoke(&call, None).await;
         assert_eq!(rust["files"][0]["ok"], false);

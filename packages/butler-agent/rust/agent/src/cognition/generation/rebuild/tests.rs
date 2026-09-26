@@ -140,7 +140,7 @@ async fn cancellation_while_waiting_for_write_gate_removes_staged_snapshot() {
     let environment = CognitionPathEnvironment::default();
     let lock_path = environment.consolidation_lock(&fixture.0);
     let held = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock_path,
             "test_held_gate",
         ))
@@ -234,7 +234,7 @@ async fn readiness_rejects_candidate_change_while_waiting_for_commit_gate() {
     let original = fs::read(&manifest).unwrap();
     let lock = environment.consolidation_lock(&fixture.0);
     let held = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock,
             "test_held_readiness_gate",
         ))
@@ -322,7 +322,7 @@ async fn representative_commit_rejects_changed_candidate_after_gate_wait() {
             .unwrap();
     let lock = environment.consolidation_lock(&fixture.0);
     let held = coordinator
-        .try_acquire(CognitionWriteAcquire::immediate(
+        .try_acquire(&CognitionWriteAcquire::immediate(
             lock,
             "test_held_representative_gate",
         ))

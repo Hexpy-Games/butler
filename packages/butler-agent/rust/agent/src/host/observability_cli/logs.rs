@@ -57,7 +57,7 @@ pub(super) async fn run(
     } else {
         render_lines(&lines)
     };
-    report_success(&options, "butler logs", data, &human);
+    report_success(&options, "butler logs", &data, &human);
     if !options.follow || options.json || options.quiet {
         return ExitCode::SUCCESS;
     }
