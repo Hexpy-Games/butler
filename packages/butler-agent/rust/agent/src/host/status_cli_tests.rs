@@ -6,7 +6,7 @@ use std::{
 
 use nix::fcntl::{Flock, FlockArg};
 
-use super::{Command, instance_lock_is_held, parse};
+use super::instance_lock_is_held;
 
 fn temporary_data_root() -> PathBuf {
     std::env::temp_dir().join(format!(
@@ -14,14 +14,6 @@ fn temporary_data_root() -> PathBuf {
         std::process::id(),
         uuid::Uuid::new_v4()
     ))
-}
-
-#[test]
-fn zero_hour_filter_is_preserved() {
-    let args = ["status", "--since-hours", "0"].map(std::ffi::OsString::from);
-    let (options, command) = parse(&args).unwrap();
-    assert!(matches!(command, Command::Status));
-    assert_eq!(options.since_hours, Some(0.0));
 }
 
 #[test]

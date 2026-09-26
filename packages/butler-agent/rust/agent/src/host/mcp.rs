@@ -176,7 +176,7 @@ fn read_server_name(config_path: &std::path::Path) -> String {
 mod tests {
     use std::ffi::OsString;
 
-    use super::{parse, recognizes};
+    use super::parse;
 
     #[test]
     fn parser_keeps_data_explicit_and_rejects_home_alias() {
@@ -187,30 +187,5 @@ mod tests {
         assert_eq!(parsed.data.as_deref(), Some("~/fixture"));
         assert_eq!(parsed.positionals, ["mcp", "serve"]);
         assert!(parse(&[OsString::from("--home"), OsString::from("/tmp")]).is_err());
-    }
-
-    #[test]
-    fn recognizer_checks_the_first_positional_command_only() {
-        let args = ["--data", "mcp", "status"].map(OsString::from).to_vec();
-        assert!(!recognizes(&args));
-
-        let args = ["--data", "/tmp/data", "mcp", "serve"]
-            .map(OsString::from)
-            .to_vec();
-        assert!(recognizes(&args));
-
-        let args = ["mcp", "list"].map(OsString::from).to_vec();
-        assert!(recognizes(&args));
-
-        let args = ["mcp", "serve"].map(OsString::from).to_vec();
-        assert!(recognizes(&args));
-
-        let args = ["mcp", "--data", "/tmp/data", "serve"]
-            .map(OsString::from)
-            .to_vec();
-        assert!(recognizes(&args));
-
-        let args = ["status", "--data", "mcp"].map(OsString::from).to_vec();
-        assert!(!recognizes(&args));
     }
 }

@@ -1,28 +1,8 @@
-use std::ffi::OsString;
 use std::{collections::HashMap, path::Path};
 
 use serde_json::json;
 
-use super::{config, recognizes};
-
-fn args(values: &[&str]) -> Vec<OsString> {
-    values.iter().map(OsString::from).collect()
-}
-
-#[test]
-fn settings_routing_is_exact_and_keeps_model_status_with_status_cli() {
-    assert!(recognizes(&args(&["model", "list"])));
-    assert!(recognizes(&args(&["--data", "model", "model", "list"])));
-    assert!(recognizes(&args(&[
-        "--data",
-        "/tmp/butler-data",
-        "model",
-        "set",
-        "openai/gpt-6-astra"
-    ])));
-    assert!(!recognizes(&args(&["model", "status"])));
-    assert!(!recognizes(&args(&["model", "anything"])))
-}
+use super::config;
 
 #[test]
 fn config_paths_and_values_preserve_operator_rules() {

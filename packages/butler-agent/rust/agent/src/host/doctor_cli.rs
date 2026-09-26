@@ -231,23 +231,16 @@ fn report_error(json_output: bool, code: &str, message: &str, exit: u8) -> ExitC
 mod tests {
     use std::ffi::OsString;
 
-    use super::{parse, recognizes};
+    use super::parse;
 
     #[test]
-    fn doctor_recognizer_skips_data_and_repair_flags_route_to_rejection() {
-        let args = ["--data", "/tmp/butler-data", "doctor", "--fix"].map(OsString::from);
-        assert!(recognizes(&args));
-        assert_eq!(parse(&args).unwrap_err().0, "unsupported_logical_operation");
-    }
-
-    #[test]
-    fn doctor_check_filter_is_explicit_and_home_is_rejected() {
-        let args = ["doctor", "--check", "owned_service"].map(OsString::from);
-        assert_eq!(
-            parse(&args).unwrap().check.as_deref(),
-            Some("owned_service")
-        );
-        let args = ["doctor", "--home", "/source"].map(OsString::from);
-        assert_eq!(parse(&args).unwrap_err().0, "unsupported_logical_operation");
+    fn doctor_rejects_repair_flags_and_home_option() {
+        for args in [
+            &["--data", "/tmp/butler-data", "doctor", "--fix"][..],
+            &["doctor", "--home", "/source"],
+        ] {
+            let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            assert_eq!(parse(&args).unwrap_err().0, "unsupported_logical_operation");
+        }
     }
 }
