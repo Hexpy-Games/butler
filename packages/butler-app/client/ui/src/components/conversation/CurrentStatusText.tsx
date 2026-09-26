@@ -25,7 +25,6 @@ export function CurrentStatusText({
       data-turn-state={row.state}
       tone="secondary"
       minWidth="0"
-      wrap="anywhere"
     >
       {label ?? interfaceProgressLabel(row)}
       {suffix ? ` · ${suffix}` : ""}
