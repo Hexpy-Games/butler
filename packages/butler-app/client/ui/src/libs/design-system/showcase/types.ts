@@ -31,8 +31,39 @@ export interface ShowcaseStory {
   widths?: ShowcaseWidth[];
 }
 
+/**
+ * Interaction states of the states matrix. `hover`, `focus-visible` and
+ * `active` are forced through `data-ds-force-state` (the viewer rewrites the
+ * matching pseudo-classes); `disabled`, `loading`, `selected`, `open` and
+ * `invalid` are real props the story renders for its `state`.
+ */
+export const SHOWCASE_FORCED_STATES = ["hover", "focus-visible", "active"] as const;
+export type ShowcaseForcedState = (typeof SHOWCASE_FORCED_STATES)[number];
+export type ShowcaseState =
+  | "default"
+  | ShowcaseForcedState
+  | "disabled"
+  | "loading"
+  | "selected"
+  | "open"
+  | "invalid";
+
+export interface ShowcaseStateContext extends ShowcaseRenderContext {
+  state: ShowcaseState;
+  /** Row of the matrix, one of `variants` (or "default"). */
+  variant: string;
+}
+
+/** Variants × states grid shown on the item page (S5 states matrix). */
+export interface ShowcaseStateMatrix {
+  states: ShowcaseState[];
+  variants?: string[];
+  render: (context: ShowcaseStateContext) => ReactNode;
+}
+
 /** Shape of a co-located `<Name>.showcase.tsx` module. */
 export interface ShowcaseModule {
   meta: ShowcaseMeta;
   stories: ShowcaseStory[];
+  stateMatrix?: ShowcaseStateMatrix;
 }

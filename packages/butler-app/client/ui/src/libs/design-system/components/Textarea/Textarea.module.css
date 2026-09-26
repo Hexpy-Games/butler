@@ -31,3 +31,14 @@
 .textarea:focus-visible {
   box-shadow: var(--focus-ring);
 }
+
+/* Disabled: the disabled tone and surface, never an editable look. */
+.textarea:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: var(--color-danger-border);
+}

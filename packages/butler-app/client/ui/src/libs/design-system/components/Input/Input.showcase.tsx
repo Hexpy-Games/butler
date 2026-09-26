@@ -1,0 +1,110 @@
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
+import { Field, FieldDescription, FieldLabel } from "../Field";
+import { Stack } from "../Stack";
+import { Input } from "./Input";
+
+export const meta: ShowcaseMeta = {
+  title: "Input",
+  category: "Input",
+  tags: ["form", "text-entry", "settings"],
+  status: "stable",
+};
+
+const labels = {
+  "en-US": {
+    serverId: "Server ID", serverName: "Display name", placeholder: "Placeholder only", apiKey: "API key",
+    apiKeyHint: "Stored in the system keychain; only the last four characters are shown.",
+    modelId: "Model ID", context: "Context window", oauth: "Sign-in link", invalid: "Must be a number",
+    values: { id: "github", name: "GitHub", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
+  },
+  "ko-KR": {
+    serverId: "서버 ID", serverName: "표시 이름", placeholder: "플레이스홀더만", apiKey: "API 키",
+    apiKeyHint: "시스템 키체인에 저장되며 마지막 네 글자만 보입니다.",
+    modelId: "모델 ID", context: "컨텍스트 창", oauth: "로그인 링크", invalid: "숫자를 입력하세요",
+    values: { id: "github", name: "깃허브", key: "sk-…4f2a", model: "qwen2.5-coder:14b", context: "32768" },
+  },
+} as const;
+
+function text({ locale }: ShowcaseRenderContext) {
+  return labels[locale];
+}
+
+export const stories: ShowcaseStory[] = [
+  {
+    // Value vs placeholder: values use the default text color, placeholders stay muted.
+    name: "Value and placeholder",
+    render: (context) => (
+      <Stack gap="sm">
+        <Field>
+          <FieldLabel htmlFor="ds-input-server-id">{text(context).serverId}</FieldLabel>
+          <Input id="ds-input-server-id" defaultValue={text(context).values.id} placeholder={text(context).serverId} />
+        </Field>
+        <Input aria-label="Placeholder input" placeholder={text(context).placeholder} />
+      </Stack>
+    ),
+  },
+  {
+    name: "Settings form (MCP server)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <Stack gap="sm">
+        <Field>
+          <FieldLabel htmlFor="ds-input-mcp-id">{text(context).serverId}</FieldLabel>
+          <Input id="ds-input-mcp-id" defaultValue={text(context).values.id} />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="ds-input-mcp-name">{text(context).serverName}</FieldLabel>
+          <Input id="ds-input-mcp-name" defaultValue={text(context).values.name} />
+        </Field>
+      </Stack>
+    ),
+  },
+  {
+    name: "Masked key (disabled) and read-only link",
+    states: ["disabled", "read-only"],
+    render: (context) => (
+      <Stack gap="sm">
+        <Field>
+          <FieldLabel htmlFor="ds-input-key">{text(context).apiKey}</FieldLabel>
+          <Input id="ds-input-key" value={text(context).values.key} disabled readOnly />
+          <FieldDescription>{text(context).apiKeyHint}</FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="ds-input-oauth">{text(context).oauth}</FieldLabel>
+          <Input id="ds-input-oauth" value="https://auth.example.com/device?code=BTLR-7Q2X" readOnly />
+        </Field>
+      </Stack>
+    ),
+  },
+  {
+    name: "Numeric and invalid",
+    states: ["invalid"],
+    render: (context) => (
+      <Stack gap="sm">
+        <Field>
+          <FieldLabel htmlFor="ds-input-context">{text(context).context}</FieldLabel>
+          <Input id="ds-input-context" inputMode="numeric" defaultValue={text(context).values.context} />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="ds-input-context-bad">{text(context).context}</FieldLabel>
+          <Input id="ds-input-context-bad" aria-invalid="true" inputMode="numeric" defaultValue="32k" />
+          <FieldDescription>{text(context).invalid}</FieldDescription>
+        </Field>
+      </Stack>
+    ),
+  },
+];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "disabled", "invalid"],
+  variants: ["value", "placeholder"],
+  render: (context) => (
+    <Input
+      aria-invalid={context.state === "invalid" ? "true" : undefined}
+      aria-label={text(context).modelId}
+      defaultValue={context.variant === "value" ? text(context).values.model : undefined}
+      disabled={context.state === "disabled"}
+      placeholder={text(context).modelId}
+    />
+  ),
+};

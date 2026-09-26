@@ -90,6 +90,22 @@
   font-size: var(--font-size-3);
 }
 
+/* The rule sits centered behind the optional separator text. */
+.separatorLine {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  translate: 0 -50%;
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
 .separatorContent {
   position: relative;
   display: block;

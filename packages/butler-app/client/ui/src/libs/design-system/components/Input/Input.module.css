@@ -31,6 +31,17 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Disabled: the disabled tone and surface, never an editable look. */
+.input:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger-border);
+}
+
 @media (width <= 640px), (pointer: coarse) {
   .input {
     min-height: var(--control-hit-target);

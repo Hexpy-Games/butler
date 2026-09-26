@@ -23,6 +23,9 @@ for (const [name, path, disabled] of [
   ["ContextMenu item", "./components/ContextMenu/ContextMenu.module.css", /\.item\[data-disabled\]/u],
   ["Clickable", "./components/Clickable/Clickable.module.css", /\.clickable\[data-disabled="true"\]/u],
   ["NavRow", "./blocks/NavRow/NavRow.module.css", /\.disabled\b/u],
+  // A disabled field (the masked hosted API key) must not look editable.
+  ["Input", "./components/Input/Input.module.css", /\.input:disabled/u],
+  ["Textarea", "./components/Textarea/Textarea.module.css", /\.textarea:disabled/u],
 ] as const) {
   test(`${name} renders disabled with the disabled tone and no hover fill`, () => {
     const css = read(path);
