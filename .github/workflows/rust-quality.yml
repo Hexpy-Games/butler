@@ -28,9 +28,6 @@ jobs:
     defaults:
       run:
         working-directory: packages/butler-agent/rust
-    env:
-      # Outside the Cargo target so rust-cache and `cargo clean` never touch it.
-      ORT_CACHE_TARGET: ${{ github.workspace }}/../ort-cache
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -59,10 +56,13 @@ jobs:
         id: ort-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.ORT_CACHE_TARGET }}/native-deps
+          # Outside the Cargo target so rust-cache and `cargo clean` never touch it.
+          path: ${{ runner.temp }}/ort-cache/native-deps
           key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.version }}-${{ hashFiles('packages/butler-agent/rust/scripts/static-ort-macos-arm64.lock.json', 'packages/butler-agent/rust/scripts/prepare-static-ort-macos-arm64.py', 'packages/butler-agent/rust/rust-toolchain.toml') }}
 
       - name: Prepare pinned static ONNX Runtime and protoc
+        env:
+          ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
         run: |
           set -euo pipefail
           prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
@@ -78,7 +78,7 @@ jobs:
         if: steps.ort-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.ORT_CACHE_TARGET }}/native-deps
+          path: ${{ runner.temp }}/ort-cache/native-deps
           key: ${{ steps.ort-cache.outputs.cache-primary-key }}
 
       - name: Cache Cargo build
