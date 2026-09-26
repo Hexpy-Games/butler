@@ -4,7 +4,7 @@
 #[path = "observability_tests.rs"]
 mod tests;
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::{
     collections::VecDeque,
     fs::{self, File},

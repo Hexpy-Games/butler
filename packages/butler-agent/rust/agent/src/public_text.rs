@@ -1,8 +1,8 @@
 //! Shared public-text projection policy. Compiled patterns live for the process;
 //! input, decoded candidates and projected output belong to each call.
 
-pub(crate) mod fixed_regex;
 mod patterns;
+mod source_regex;
 
 use std::borrow::Cow;
 use std::sync::LazyLock;
@@ -12,6 +12,7 @@ use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use serde_json::Value;
 
 use patterns::Patterns;
+pub(crate) use source_regex::{fixed_regex, fixed_regex_ci};
 
 static PATTERNS: LazyLock<Patterns> = LazyLock::new(Patterns::new);
 

@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;

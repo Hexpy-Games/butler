@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use serde_json::{Map, Value};
 use std::sync::LazyLock;
 

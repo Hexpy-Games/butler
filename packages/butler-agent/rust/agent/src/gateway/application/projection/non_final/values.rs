@@ -1,6 +1,6 @@
 //! Transport value normalization shared by non-final projections.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};

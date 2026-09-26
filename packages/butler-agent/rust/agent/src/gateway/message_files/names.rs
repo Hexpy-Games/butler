@@ -1,6 +1,6 @@
 //! Source attachment name, MIME, and kind rules.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::sync::LazyLock;
 
 use regex::Regex;

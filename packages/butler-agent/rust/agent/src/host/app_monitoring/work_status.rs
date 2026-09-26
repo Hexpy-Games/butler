@@ -1,6 +1,6 @@
 //! Actual BTCC Work facts for the source work-status projection.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;

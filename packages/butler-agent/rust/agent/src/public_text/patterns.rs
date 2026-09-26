@@ -1,4 +1,4 @@
-use super::fixed_regex::{fixed_regex, fixed_regex_ci};
+use super::{fixed_regex, fixed_regex_ci};
 use std::borrow::Cow;
 
 use regex::Regex;

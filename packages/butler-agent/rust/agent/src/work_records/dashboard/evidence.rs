@@ -12,7 +12,7 @@ use std::{
 use regex::Regex;
 use serde_json::Value;
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 
 use crate::public_text::trim_js_whitespace as trim;
 

@@ -1,4 +1,4 @@
-use crate::public_text::fixed_regex::fixed_regex_ci;
+use crate::public_text::fixed_regex_ci;
 use std::{collections::HashMap, sync::OnceLock};
 
 use regex::Regex;

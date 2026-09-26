@@ -1,6 +1,6 @@
 //! Pure formatting and compaction for structured generation hot-cache entries.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::{collections::HashSet, sync::OnceLock};
 
 use serde::{Deserialize, Serialize};

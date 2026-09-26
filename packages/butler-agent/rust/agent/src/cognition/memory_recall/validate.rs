@@ -1,6 +1,6 @@
 //! Source-order validation and canonical timestamp normalization.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::sync::OnceLock;
 
 use regex::Regex;

@@ -1,6 +1,6 @@
 //! Bounded-page reads and source-compatible public conversation enrichment.
 
-use crate::public_text::fixed_regex::fixed_regex;
+use crate::public_text::fixed_regex;
 use std::{cmp::Reverse, collections::HashSet, sync::LazyLock};
 
 use regex::Regex;

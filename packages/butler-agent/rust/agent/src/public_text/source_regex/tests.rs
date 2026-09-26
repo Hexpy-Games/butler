@@ -80,7 +80,7 @@ fn every_fixed_pattern_compiles() {
             .unwrap()
             .to_string_lossy()
             .replace('\\', "/");
-        if relative.starts_with("public_text/fixed_regex") {
+        if relative.starts_with("public_text/source_regex") {
             continue;
         }
         let source = fs::read_to_string(&file).unwrap();
