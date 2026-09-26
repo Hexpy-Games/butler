@@ -1,4 +1,4 @@
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Stack } from "../Stack";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
 
@@ -71,3 +71,14 @@ export const stories: ShowcaseStory[] = [
     ),
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "disabled"],
+  variants: ["value", "placeholder"],
+  render: (context) => (
+    <Select defaultValue={context.variant === "value" ? "one" : undefined} disabled={context.state === "disabled"}>
+      <SelectTrigger aria-label={labels[context.locale].choose}><SelectValue placeholder={labels[context.locale].choose} /></SelectTrigger>
+      <SelectContent><SelectItem value="one">{labels[context.locale].one}</SelectItem></SelectContent>
+    </Select>
+  ),
+};

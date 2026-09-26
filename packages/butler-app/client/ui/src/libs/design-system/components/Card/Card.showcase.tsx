@@ -21,7 +21,7 @@ const labels = {
       { title: "Trace send flight at 20 chunks per second", progress: "Plan 4/4", session: "Motion trace" },
     ],
     suggestion: "Draft the weekly release notes",
-    reason: "Three merged PRs are not in any changelog yet.",
+    reason: "Three merged PRs are missing from the changelog.",
     start: "Start",
     seedTitle: "Branched from",
     seed: "Earlier turns summarized the plan and the open questions about the gateway API.",

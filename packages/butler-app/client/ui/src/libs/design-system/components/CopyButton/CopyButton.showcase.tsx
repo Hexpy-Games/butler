@@ -1,4 +1,4 @@
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Inline } from "../Inline";
 import { CopyButton } from "./CopyButton";
 
@@ -37,3 +37,8 @@ export const stories: ShowcaseStory[] = [
     ),
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active"],
+  render: (context) => <CopyButton text="copy" label={text(context).copy} copiedLabel={text(context).copied} />,
+};

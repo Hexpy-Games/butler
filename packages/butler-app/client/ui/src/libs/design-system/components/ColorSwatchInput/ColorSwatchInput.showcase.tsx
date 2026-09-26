@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ShowcaseMeta, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { ColorSwatchInput } from "./ColorSwatchInput";
@@ -46,3 +46,10 @@ export const stories: ShowcaseStory[] = [
     render: ({ locale }) => <Swatch label={labels[locale].disabled} initial="#1f2328" disabled />,
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "disabled"],
+  render: (context) => (
+    <ColorSwatchInput aria-label={labels[context.locale].accent} defaultValue="#007aff" disabled={context.state === "disabled"} />
+  ),
+};

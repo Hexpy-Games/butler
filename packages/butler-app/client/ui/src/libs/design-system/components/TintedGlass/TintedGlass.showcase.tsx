@@ -3,7 +3,7 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { TintedGlass } from "./TintedGlass";
-import styles from "./TintedGlass.fixtures.module.css";
+import styles from "./TintedGlass.showcase.module.css";
 
 export const meta: ShowcaseMeta = {
   title: "TintedGlass",

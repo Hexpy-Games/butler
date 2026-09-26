@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .list {
   display: flex;
   flex-wrap: wrap;

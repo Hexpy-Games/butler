@@ -1,3 +1,3 @@
 export * from "./categories";
 export * from "./types";
-export type { ShowcaseEntry, ShowcaseKind, ShowcaseOrigin } from "./collectShowcaseEntries";
+export type { ShowcaseEntry, ShowcaseKind } from "./collectShowcaseEntries";

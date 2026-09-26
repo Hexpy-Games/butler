@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .trigger {
   display: flex;
   min-height: var(--control-height-lg);

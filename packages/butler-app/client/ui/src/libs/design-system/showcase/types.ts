@@ -61,6 +61,48 @@ export interface ShowcaseStateMatrix {
   render: (context: ShowcaseStateContext) => ReactNode;
 }
 
+export type ShowcaseRender = (context: ShowcaseRenderContext) => ReactNode;
+
+/** "Use X instead": the situation and the DS export (or folder id) that fits it. */
+export interface ShowcaseAlternative {
+  when: string;
+  use: string;
+}
+
+/** A live do/don't pair shown side by side. */
+export interface ShowcaseDoDont {
+  do: { caption: string; render: ShowcaseRender };
+  dont: { caption: string; render: ShowcaseRender };
+}
+
+/**
+ * A composition recipe. Its JSX is shown verbatim: the guidance file wraps the
+ * render function in `// #region recipe: <name>` ... `// #endregion`.
+ */
+export interface ShowcaseRecipe {
+  name: string;
+  description: string;
+  render: ShowcaseRender;
+}
+
+/** Usage guidance for one component or block (`<Name>.guidance.tsx`). */
+export interface ShowcaseGuidance {
+  /** One sentence: what it is for. */
+  purpose: string;
+  /** Needs this item answers; they also feed the decision guide ("I need X"). */
+  whenToUse: string[];
+  whenNotToUse: ShowcaseAlternative[];
+  recipes: ShowcaseRecipe[];
+  doDont: ShowcaseDoDont[];
+  /** Copy length, tone, en/ko notes. */
+  content: string[];
+  accessibility: string[];
+  /** Tokens it is built on (checked against tokens.css). */
+  tokens: string[];
+  /** Exported names that are composed internally and need no story, with the reason. */
+  internalExports?: Record<string, string>;
+}
+
 /** Shape of a co-located `<Name>.showcase.tsx` module. */
 export interface ShowcaseModule {
   meta: ShowcaseMeta;

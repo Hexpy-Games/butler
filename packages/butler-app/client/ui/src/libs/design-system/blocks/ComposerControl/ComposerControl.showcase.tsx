@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { AlertCircle, GitBranch, Monitor, Search, ShieldCheck, SlidersHorizontal } from "../../components/Icons";
 import { Select, SelectContent, SelectItem, SelectValue } from "../../components/Select";
 import { Stack } from "../../components/Stack";
@@ -74,3 +74,12 @@ export const stories: ShowcaseStory[] = [
     ),
   },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active", "selected", "disabled"],
+  variants: ["label", "icon"],
+  render: (context) => (
+    <ComposerControl active={context.state === "selected"} compact={context.variant === "icon" ? "icon" : "label"}
+      disabled={context.state === "disabled"} icon={<ShieldCheck size="md" />} label={copy[context.locale].access} />
+  ),
+};

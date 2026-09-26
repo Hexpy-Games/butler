@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .chart {
   justify-self: stretch;
   width: auto;

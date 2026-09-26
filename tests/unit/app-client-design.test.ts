@@ -1,3 +1,4 @@
+import { buildTokenCatalog, parseTokenDefinitions } from "../../packages/butler-app/client/ui/src/libs/design-system/viewer/foundations/tokenCatalog.ts";
 import { expect, test, describe } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
@@ -2895,8 +2896,8 @@ test("design system exposes a skeleton primitive for loading shells", () => {
   const rootIndex = read(
     "packages/butler-app/client/ui/src/libs/design-system/index.ts",
   );
-  const registry = read(
-    "packages/butler-app/client/ui/src/libs/design-system/registry.tsx",
+  const skeletonShowcase = read(
+    "packages/butler-app/client/ui/src/libs/design-system/components/Skeleton/Skeleton.showcase.tsx",
   );
   const skeleton = read(
     "packages/butler-app/client/ui/src/libs/design-system/shadcn/ui/skeleton.tsx",
@@ -2906,7 +2907,7 @@ test("design system exposes a skeleton primitive for loading shells", () => {
   );
 
   expect(rootIndex).toContain('export * from "./components/Skeleton"');
-  expect(registry).toContain('name: "Skeleton"');
+  expect(skeletonShowcase).toContain('title: "Skeleton"');
   expect(skeleton).toContain('data-slot="skeleton"');
   expect(skeleton).toContain('role={label ? "status" : undefined}');
   expect(skeletonCss).toContain("@keyframes skeleton-shimmer");
@@ -3063,10 +3064,10 @@ test("conversation progress and composer workers use design-system blocks", () =
     "packages/butler-app/client/ui/src/components/conversation/WorkProgressPanel.tsx",
   );
   const workerPanelFixture = read(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkerActivityPanel/WorkerActivityPanel.fixtures.tsx",
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkerActivityPanel/WorkerActivityPanel.showcase.tsx",
   );
   const todoPanelFixture = read(
-    "packages/butler-app/client/ui/src/libs/design-system/blocks/TodoProgressPanel/TodoProgressPanel.fixtures.tsx",
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/TodoProgressPanel/TodoProgressPanel.showcase.tsx",
   );
   const todoProgressPanel = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/TodoProgressPanel/TodoProgressPanel.tsx",
@@ -3120,11 +3121,11 @@ test("conversation progress and composer workers use design-system blocks", () =
   expect(workerPanel).toContain("workerCollapsedSummary(");
   expect(workerPanel).toContain("collapsedSummary={collapsedSummary}");
   expect(todoPanel).toContain("TodoProgressPanel");
-  expect(workerPanelFixture).toContain("<ComposerCard");
+  expect(workerPanelFixture).toContain("<AttachedComposer");
   expect(workerPanelFixture).toContain("adjunct={");
   expect(workerPanelFixture).toContain("<WorkerActivityPanel");
   expect(workerPanelFixture).toContain("collapsedSummary=");
-  expect(todoPanelFixture).toContain("<ComposerCard");
+  expect(todoPanelFixture).toContain("<AttachedComposer");
   expect(todoPanelFixture).toContain("adjunct={");
   expect(todoPanelFixture).toContain("<TodoProgressPanel");
   expect(todoProgressPanel).not.toContain("SurfacePanel");
@@ -3274,14 +3275,14 @@ describe("app-client design system foundation", () => {
     ]) {
       expect(existsSync(componentPath(name, `${name}.tsx`))).toBe(true);
       expect(existsSync(componentPath(name, `${name}.module.css`))).toBe(true);
-      expect(existsSync(componentPath(name, `${name}.fixtures.tsx`))).toBe(
+      expect(existsSync(componentPath(name, `${name}.showcase.tsx`))).toBe(
         true,
       );
       expect(existsSync(componentPath(name, "README.md"))).toBe(true);
       expect(existsSync(componentPath(name, "index.ts"))).toBe(true);
     }
     expect(existsSync(join(designSystemRoot, "index.ts"))).toBe(true);
-    expect(existsSync(join(designSystemRoot, "registry.tsx"))).toBe(true);
+    expect(existsSync(join(designSystemRoot, "showcase/loader.ts"))).toBe(true);
     expect(existsSync(join(designSystemRoot, "tokens.css"))).toBe(true);
   });
 
@@ -3324,8 +3325,8 @@ describe("app-client design system foundation", () => {
     );
     expect(indexContent).toContain('export * from "./blocks/ManagementPage"');
     expect(indexContent).toContain('export * from "./blocks/DashboardHeader"');
-    expect(indexContent).toContain("designSystemComponents");
-    expect(indexContent).toContain("designSystemBlocks");
+    // The DS Viewer registry is gone: showcases are collected, not exported.
+    expect(indexContent).not.toContain("designSystemComponents");
     expect(indexContent).toContain("Typo");
     expect(buttonContainer).toContain("function gapForButtonSize");
     expect(buttonContainer).toContain('size === "xs" || size === "icon-xs"');
@@ -3441,10 +3442,6 @@ describe("app-client design system foundation", () => {
   });
 
   test("design-system block files stay presenter-only and renderable", () => {
-    const registry = readFileSync(
-      join(designSystemRoot, "registry.tsx"),
-      "utf8",
-    );
     const workbench = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
       + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
     const indexContent = readFileSync(
@@ -3455,7 +3452,7 @@ describe("app-client design system foundation", () => {
     for (const name of blockNames) {
       expect(existsSync(blockPath(name, `${name}.tsx`))).toBe(true);
       expect(existsSync(blockPath(name, `${name}.module.css`))).toBe(true);
-      expect(existsSync(blockPath(name, `${name}.fixtures.tsx`))).toBe(true);
+      expect(existsSync(blockPath(name, `${name}.showcase.tsx`))).toBe(true);
       expect(existsSync(blockPath(name, "README.md"))).toBe(true);
       expect(existsSync(blockPath(name, "index.ts"))).toBe(true);
 
@@ -3463,12 +3460,11 @@ describe("app-client design system foundation", () => {
       expect(component).not.toMatch(/from ["']@\/(?:app|stores|components)\//u);
       expect(component).not.toContain("window.butlerApp");
       expect(component).not.toContain("appCopy");
-      expect(registry).toContain(`name: "${name}"`);
-      expect(registry).toContain(`fixture: ${name}Fixture`);
+      expect(readFileSync(blockPath(name, `${name}.showcase.tsx`), "utf8")).toContain(`title: "${name}"`);
       expect(indexContent).toContain(`export * from "./blocks/${name}"`);
     }
 
-    expect(workbench).toContain("designSystemBlocks");
+    expect(workbench).toContain("groupEntries");
     expect(workbench).toContain("Blocks");
     expect(workbench).toContain("data-ds-component={entry.name}");
     expect(blockNames.length).toBeGreaterThanOrEqual(38);
@@ -3495,10 +3491,8 @@ describe("app-client design system foundation", () => {
     );
     const viewer = readUiSources("packages/butler-app/client/ui/src/libs/design-system/viewer")
       + readUiSources("packages/butler-app/client/ui/src/libs/design-system/showcase");
-    const registry = readFileSync(
-      join(designSystemRoot, "registry.tsx"),
-      "utf8",
-    );
+    const registry = readUiSources("packages/butler-app/client/ui/src/libs/design-system/components")
+      + readUiSources("packages/butler-app/client/ui/src/libs/design-system/blocks");
     const tabs = readFileSync(
       join(designSystemRoot, "components/Tabs/Tabs.tsx"),
       "utf8",
@@ -3548,7 +3542,7 @@ describe("app-client design system foundation", () => {
       "utf8",
     );
     const tintedGlassFixture = readFileSync(
-      join(designSystemRoot, "components/TintedGlass/TintedGlass.fixtures.tsx"),
+      join(designSystemRoot, "components/TintedGlass/TintedGlass.showcase.tsx"),
       "utf8",
     );
     const selectStyles = readFileSync(
@@ -3719,7 +3713,7 @@ describe("app-client design system foundation", () => {
     const collapsibleFixture = readFileSync(
       join(
         designSystemRoot,
-        "blocks/CollapsibleNavGroup/CollapsibleNavGroup.fixtures.tsx",
+        "blocks/CollapsibleNavGroup/CollapsibleNavGroup.showcase.tsx",
       ),
       "utf8",
     );
@@ -3728,7 +3722,7 @@ describe("app-client design system foundation", () => {
       scripts: Record<string, string>;
     };
 
-    expect(viewer).toContain("Butler DS Viewer");
+    expect(viewer).toContain("DS Viewer");
     expect(rootPackage.scripts.render).toContain("ds-viewer-render.ts");
     expect(renderScript).toContain("[data-ds-component]");
     expect(renderScript).toContain("data-ds-examples");
@@ -3865,22 +3859,15 @@ describe("app-client design system foundation", () => {
     expect(registry).toContain('orientation="vertical"');
     expect(registry).toContain('tone="accent"');
     expect(registry).toContain("XAxis");
-    expect(registry).toContain("Palette / Grayscale");
-    expect(registry).toContain("--grayscale-01");
-    expect(registry).toContain("--amber-10");
-    expect(registry).toContain("Semantic / Text And Action");
-    expect(registry).toContain("--color-text-primary");
-    expect(registry).toContain("Controls And Overlays");
-    expect(registry).toContain('name: "TintedGlass"');
-    expect(registry).toContain("--tinted-glass-filter");
-    expect(registry).toContain("--placeholder");
-    expect(registry).toContain("Access And Context");
-    expect(registry).toContain("--context-chart-free");
-    expect(registry).toContain('defaultValue="Butler task"');
-    expect(registry).toContain('defaultValue="Actual context value"');
+    // Token pages are generated from tokens.css (?raw), not a hand-written list.
+    expect(viewer).toContain("tokens.css?raw");
+    expect(viewer).toContain("parseTokenDefinitions");
+    expect(registry).toContain('title: "TintedGlass"');
+    expect(registry).toContain('aria-label="Placeholder input"');
+    expect(registry).toContain("<Textarea");
     expect(read("packages/butler-app/client/ui/src/libs/design-system/components/Select/Select.showcase.tsx"))
       .toContain("<SelectTrigger");
-    expect(registry).toContain("designSystemBlocks");
+    expect(viewer).toContain("groupEntries");
     expect(viewer).toContain("Foundations");
     expect(viewer).toContain("ViewerSidebar");
     expect(viewer).toContain("ItemPage");
@@ -4233,10 +4220,10 @@ describe("app-client design system foundation", () => {
     expect(cssContent).not.toMatch(
       /^\s*--(?:ok|danger|icon-muted|placeholder|send-bg|send-fg|worker-active|worker-warning|access-full|switch-thumb|color-mix-light)\s*:\s*#[0-9a-fA-F]/m,
     );
-    const registry = readFileSync(
-      join(appClientPath, "src/libs/design-system/registry.tsx"),
-      "utf8",
-    );
+    const colorTokens = buildTokenCatalog(parseTokenDefinitions(cssContent))
+      .filter((token) => token.category === "color")
+      .map((token) => token.name)
+      .join(" ");
     const paletteNames = [
       "--grayscale-01",
       "--grayscale-12",
@@ -4254,11 +4241,11 @@ describe("app-client design system foundation", () => {
       "--green-worker-active",
       "--amber-worker-warning",
     ];
-    for (const token of paletteNames) expect(registry).toContain(token);
-    expect(registry).toContain("--conversation-bg");
-    expect(registry).toContain("--composer-glass-highlight");
-    expect(registry).toContain("--dialog-overlay-bg");
-    expect(registry).toContain("--context-chart-6");
+    for (const token of paletteNames) expect(colorTokens).toContain(token);
+    expect(colorTokens).toContain("--conversation-bg");
+    expect(colorTokens).toContain("--composer-glass-highlight");
+    expect(colorTokens).toContain("--dialog-overlay-bg");
+    expect(colorTokens).toContain("--context-chart-6");
   });
 
   test("semantic spacing tokens exist and components use them", () => {

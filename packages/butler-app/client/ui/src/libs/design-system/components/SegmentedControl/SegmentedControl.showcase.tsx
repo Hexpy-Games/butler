@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { SegmentedControl } from "./SegmentedControl";
@@ -42,3 +42,16 @@ export const stories: ShowcaseStory[] = [
   { name: "Small", render: (context) => <PeriodStory context={context} size="sm" /> },
   { name: "Disabled option", states: ["disabled"], render: (context) => <KindStory context={context} /> },
 ];
+
+export const stateMatrix: ShowcaseStateMatrix = {
+  states: ["default", "hover", "focus-visible", "active", "disabled"],
+  variants: ["default", "sm"],
+  render: (context) => (
+    <SegmentedControl ariaLabel={text(context).kind} size={context.variant === "sm" ? "sm" : "default"} value="work" onValueChange={() => undefined}
+      options={[
+        { value: "work", label: text(context).work },
+        { value: "plan", label: text(context).plan, disabled: context.state === "disabled" },
+        { value: "task", label: text(context).task, disabled: context.state === "disabled" },
+      ]} />
+  ),
+};
