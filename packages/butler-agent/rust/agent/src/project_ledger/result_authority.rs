@@ -29,7 +29,7 @@ pub(crate) async fn prepare_exact_project_work_result_authority(
             if !active_reference::safe_id(&scope.ledger_project_id)
                 || scope.ledger_root != expected_root
             {
-                return Err(ProjectLedgerReadError::Resolution(
+                return Err(ProjectLedgerReadError::resolution(
                     "active_project_ledger_path_escape",
                 ));
             }
@@ -39,12 +39,12 @@ pub(crate) async fn prepare_exact_project_work_result_authority(
                 || matches!(work_id.as_str(), "." | "..")
                 || work_id.contains(['/', '\\'])
             {
-                return Err(ProjectLedgerReadError::RecordShow(
+                return Err(ProjectLedgerReadError::record_show(
                     "project_work_managed_record_invalid",
                 ));
             }
             let snapshot = work::read_current_project_work(&scope, &work_id, collation)?.ok_or(
-                super::ProjectLedgerReadError::RecordShow("project_work_record_missing"),
+                super::ProjectLedgerReadError::record_show("project_work_record_missing"),
             )?;
             snapshot
                 .children
@@ -108,24 +108,24 @@ fn identity_from_child(
             .get(key)
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .ok_or(super::ProjectLedgerReadError::RecordShow(
+            .ok_or(super::ProjectLedgerReadError::record_show(
                 "project_work_managed_record_invalid",
             ))
     };
     let result = child
         .get("result")
-        .ok_or(super::ProjectLedgerReadError::RecordShow(
+        .ok_or(super::ProjectLedgerReadError::record_show(
             "project_work_managed_record_invalid",
         ))?;
     let scope = child
         .get("scope")
-        .ok_or(super::ProjectLedgerReadError::RecordShow(
+        .ok_or(super::ProjectLedgerReadError::record_show(
             "project_work_managed_record_invalid",
         ))?;
     Ok(ExactProjectWorkResultIdentity {
         result_ref: text(result, "resultRef")?,
         revision: result.get("sequence").and_then(Value::as_f64).ok_or(
-            super::ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid"),
+            super::ProjectLedgerReadError::record_show("project_work_managed_record_invalid"),
         )?,
         work_id: text(child, "workId")?,
         session_id: text(child, "sessionId")?,
@@ -163,11 +163,11 @@ fn storage_error(code: &'static str) -> StorageError {
 )]
 fn read_error(error: ProjectLedgerReadError) -> StorageError {
     match error {
-        ProjectLedgerReadError::Resolution(code)
-        | ProjectLedgerReadError::RecordShow(code)
-        | ProjectLedgerReadError::Owner(code)
-        | ProjectLedgerReadError::DashboardInternal(code)
-        | ProjectLedgerReadError::DashboardUnavailable(code) => storage_error(code),
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => storage_error(code),
         ProjectLedgerReadError::DashboardChanged => storage_error("project_work_snapshot_unstable"),
     }
 }

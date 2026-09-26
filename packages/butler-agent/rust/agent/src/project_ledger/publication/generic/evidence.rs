@@ -104,7 +104,7 @@ pub(super) fn new_journal(root: &Path, attempt: &Attempt, paths: &Paths) -> Jour
 }
 
 pub(super) fn save_journal(paths: &Paths, journal: &Journal) -> Result<(), LedgerEffectError> {
-    shared::atomic_json(&paths.journal, journal).map_err(|_| LedgerEffectError::Uncertain)
+    shared::atomic_json(&paths.journal, journal).map_err(LedgerEffectError::uncertain)
 }
 
 pub(super) fn read_journal(
@@ -115,8 +115,7 @@ pub(super) fn read_journal(
     let Some(bytes) = read_optional(&paths.journal)? else {
         return Ok(None);
     };
-    let journal: Journal =
-        serde_json::from_slice(&bytes).map_err(|_| LedgerEffectError::Uncertain)?;
+    let journal: Journal = serde_json::from_slice(&bytes).map_err(LedgerEffectError::uncertain)?;
     if journal.schema != "project-ledger.publication-transaction.v1"
         || journal.publication_id != attempt.publication_id
         || journal.canonical_root != occurrence.ledger_root
@@ -125,14 +124,14 @@ pub(super) fn read_journal(
         || journal.claim_path != claim::path(Path::new(&occurrence.ledger_root)).to_string_lossy()
         || !journal.base.same_storage(&attempt.expected_base)
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     if matches!(
         journal.status,
         Status::Prepared | Status::Committing | Status::Promoted | Status::Observed
     ) != journal.candidate_head.is_some()
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     Ok(Some(journal))
 }
@@ -145,7 +144,7 @@ pub(super) fn reconcile(
     let attempt = occurrence
         .attempts
         .last()
-        .ok_or(LedgerEffectError::Uncertain)?;
+        .ok_or(LedgerEffectError::Uncertain { source: None })?;
     let paths = paths(data_root, attempt);
     if let Some(receipt) = read_receipt(&paths, occurrence, attempt)? {
         return if receipt.status == ReceiptStatus::Observed {
@@ -163,7 +162,7 @@ pub(super) fn reconcile(
     }
     let Some(journal) = read_journal(&paths, occurrence, attempt)? else {
         if paths.candidate.exists() || claim::path(Path::new(&occurrence.ledger_root)).exists() {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         write_receipt(&paths, occurrence, attempt, ReceiptStatus::NotApplied, None)?;
         return Ok(Reconciled::NotApplied);
@@ -180,12 +179,12 @@ pub(super) fn reconcile(
     let candidate = journal
         .candidate_head
         .as_ref()
-        .ok_or(LedgerEffectError::Uncertain)?;
+        .ok_or(LedgerEffectError::Uncertain { source: None })?;
     if active.same_storage(candidate) {
         return observed(&paths, &journal, occurrence, attempt, collation);
     }
     if journal.status == Status::Committing && !active.same_logical(&journal.base) {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     if journal.status == Status::Prepared && !active.same_logical(&journal.base) {
         cleanup_prepared(&paths, &journal)?;
@@ -207,9 +206,9 @@ fn observed(
         journal
             .candidate_head
             .as_ref()
-            .ok_or(LedgerEffectError::Uncertain)?,
+            .ok_or(LedgerEffectError::Uncertain { source: None })?,
     ) {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     write_receipt(
         paths,
@@ -256,8 +255,7 @@ fn read_receipt(
     let Some(bytes) = read_optional(&paths.receipt)? else {
         return Ok(None);
     };
-    let receipt: Receipt =
-        serde_json::from_slice(&bytes).map_err(|_| LedgerEffectError::Uncertain)?;
+    let receipt: Receipt = serde_json::from_slice(&bytes).map_err(LedgerEffectError::uncertain)?;
     if receipt.schema != "butler.btcc-project-ledger-publication-receipt.v1"
         || receipt.occurrence_id != occurrence.occurrence_id
         || receipt.attempt_number != attempt.number
@@ -266,7 +264,7 @@ fn read_receipt(
         || !receipt.base_head.same_storage(&attempt.expected_base)
         || (receipt.status == ReceiptStatus::Observed) != receipt.candidate_head.is_some()
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     Ok(Some(receipt))
 }
@@ -288,7 +286,7 @@ fn write_receipt(
         base_head: attempt.expected_base.clone(),
         candidate_head,
     };
-    shared::atomic_json(&paths.receipt, &receipt).map_err(|_| LedgerEffectError::Uncertain)
+    shared::atomic_json(&paths.receipt, &receipt).map_err(LedgerEffectError::uncertain)
 }
 
 pub(super) fn cleanup_prepared(paths: &Paths, journal: &Journal) -> Result<(), LedgerEffectError> {
@@ -297,7 +295,7 @@ pub(super) fn cleanup_prepared(paths: &Paths, journal: &Journal) -> Result<(), L
     match fs::remove_file(&paths.journal) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(_) => Err(LedgerEffectError::Uncertain),
+        Err(_) => Err(LedgerEffectError::Uncertain { source: None }),
     }
 }
 
@@ -313,13 +311,13 @@ pub(super) fn release(journal: &Journal) -> Result<(), LedgerEffectError> {
         &journal.publication_id,
         &journal.base.source_sha256,
     )
-    .map_err(|_| LedgerEffectError::Uncertain)
+    .map_err(LedgerEffectError::uncertain)
 }
 
 fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, LedgerEffectError> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(LedgerEffectError::Uncertain),
+        Err(_) => Err(LedgerEffectError::Uncertain { source: None }),
     }
 }

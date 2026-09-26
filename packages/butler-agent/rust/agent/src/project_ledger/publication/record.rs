@@ -20,38 +20,47 @@ pub(super) fn resolve_scope(
     data_root: &Path,
     scope: ResolvedProjectWorkScope,
 ) -> Result<ResolvedProjectWorkScope, ProjectWorkPublicationError> {
-    let actual = fs::canonicalize(&scope.ledger_root)
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_scope_unavailable"))?;
+    let actual = fs::canonicalize(&scope.ledger_root).map_err(|source| {
+        ProjectWorkPublicationError::adapter("project_work_scope_unavailable").with_source(source)
+    })?;
     if !crate::project_ledger::active_reference::safe_id(&scope.ledger_project_id) {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
     let expected = fs::canonicalize(data_root.join("project-ledger/projects"))
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_scope_unavailable"))?
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
+                .with_source(source)
+        })?
         .join(&scope.ledger_project_id);
     if actual != expected
         || actual.file_name().and_then(|name| name.to_str()) != Some(&scope.ledger_project_id)
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
     if fs::symlink_metadata(actual.join("project.json"))
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_scope_unavailable"))?
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_scope_unavailable")
+                .with_source(source)
+        })?
         .file_type()
         .is_symlink()
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
-    let project = fs::read(actual.join("project.json"))
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_scope_unavailable"))?;
-    let project: serde_json::Value = serde_json::from_slice(&project)
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_scope_mismatch"))?;
+    let project = fs::read(actual.join("project.json")).map_err(|source| {
+        ProjectWorkPublicationError::adapter("project_work_scope_unavailable").with_source(source)
+    })?;
+    let project: serde_json::Value = serde_json::from_slice(&project).map_err(|source| {
+        ProjectWorkPublicationError::adapter("project_work_scope_mismatch").with_source(source)
+    })?;
     if project.get("id").and_then(serde_json::Value::as_str) != Some(&scope.ledger_project_id) {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_scope_mismatch",
         ));
     }
@@ -78,19 +87,21 @@ pub(super) fn capture(
         .iter()
         .any(|target| !seen.insert(target.path.clone()))
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_ledger_exact_target_ambiguous",
         ));
     }
     for target in &mut addressed {
         let relative = relative(scope, &target.path)?;
-        let raw =
-            super::super::committed::read_selected(&scope.ledger_root, relative).map_err(|_| {
-                ProjectWorkPublicationError::Adapter("project_ledger_exact_read_failed")
-            })?;
+        let raw = super::super::committed::read_selected(&scope.ledger_root, relative).map_err(
+            |source| {
+                ProjectWorkPublicationError::adapter("project_ledger_exact_read_failed")
+                    .with_source(source)
+            },
+        )?;
         if let Some(raw) = raw {
             let metadata = super::super::records::frontmatter(&raw).ok_or(
-                ProjectWorkPublicationError::Adapter("project_ledger_exact_frontmatter_corrupt"),
+                ProjectWorkPublicationError::adapter("project_ledger_exact_frontmatter_corrupt"),
             )?;
             if metadata.get("id").and_then(serde_json::Value::as_str) != Some(&target.id)
                 || metadata.get("kind").and_then(serde_json::Value::as_str)
@@ -98,7 +109,7 @@ pub(super) fn capture(
                 || metadata.get("parentId").and_then(serde_json::Value::as_str)
                     != target.parent_id.as_deref()
             {
-                return Err(ProjectWorkPublicationError::Adapter(
+                return Err(ProjectWorkPublicationError::adapter(
                     "project_ledger_exact_record_metadata_mismatch",
                 ));
             }
@@ -110,7 +121,7 @@ pub(super) fn capture(
         .iter()
         .any(|target| target.state != super::contracts::ProjectWorkTargetState::Absent)
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_publication_proof_invalid",
         ));
     }
@@ -137,7 +148,7 @@ pub(super) fn target(
     let kind = update
         .kind
         .clone()
-        .ok_or(ProjectWorkPublicationError::Adapter(
+        .ok_or(ProjectWorkPublicationError::adapter(
             "project_work_publication_kind_invalid",
         ))?;
     let id = safe_id(&update.id)?;
@@ -159,7 +170,7 @@ pub(super) fn target(
             id.to_lowercase()
         ),
         _ => {
-            return Err(ProjectWorkPublicationError::Adapter(
+            return Err(ProjectWorkPublicationError::adapter(
                 "project_work_publication_kind_invalid",
             ));
         }
@@ -182,7 +193,7 @@ pub(super) fn relative<'a>(
         "project-ledger/projects/{}/",
         scope.ledger_project_id
     ))
-    .ok_or(ProjectWorkPublicationError::Adapter(
+    .ok_or(ProjectWorkPublicationError::adapter(
         "project_ledger_exact_path_outside_root",
     ))
 }
@@ -205,7 +216,7 @@ pub(super) fn safe_id(id: &str) -> Result<&str, ProjectWorkPublicationError> {
         || matches!(id, "." | "..")
         || id.contains(['/', '\\'])
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_ledger_record_identity_invalid",
         ));
     }
@@ -221,7 +232,7 @@ pub(super) fn record_path(
             .split('/')
             .any(|part| part.is_empty() || matches!(part, "." | ".."))
     {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "invalid_publication_record_path",
         ));
     }
@@ -230,11 +241,14 @@ pub(super) fn record_path(
         path.push(part);
         if path.exists()
             && fs::symlink_metadata(&path)
-                .map_err(|_| ProjectWorkPublicationError::Io("project_ledger_record_io_error"))?
+                .map_err(|source| {
+                    ProjectWorkPublicationError::io("project_ledger_record_io_error")
+                        .with_source(source)
+                })?
                 .file_type()
                 .is_symlink()
         {
-            return Err(ProjectWorkPublicationError::Adapter(
+            return Err(ProjectWorkPublicationError::adapter(
                 "publication_record_is_symlink",
             ));
         }

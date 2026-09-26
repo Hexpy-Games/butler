@@ -48,7 +48,7 @@ pub(super) fn updates(
             "record": record,
         });
         let canonical = crate::project_ledger::work_json::canonical(&value, collation)
-            .map_err(|_| invalid())?;
+            .map_err(|source| invalid().with_source(source))?;
         let id = format!(
             "btcc-project-work-proof-{:x}",
             Sha256::digest(canonical.as_bytes())
@@ -64,5 +64,5 @@ pub(super) fn updates(
 }
 
 fn invalid() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Adapter("project_work_publication_proof_invalid")
+    ProjectWorkPublicationError::adapter("project_work_publication_proof_invalid")
 }

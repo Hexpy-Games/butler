@@ -126,13 +126,13 @@ fn scan_directory(
     directory: &Path,
     issues: &mut Vec<Value>,
 ) -> Result<(), CliFailure> {
-    for entry in fs::read_dir(directory).map_err(|_| io_failure())? {
-        let entry = entry.map_err(|_| io_failure())?;
+    for entry in fs::read_dir(directory).map_err(|source| io_failure().with_source(source))? {
+        let entry = entry.map_err(|source| io_failure().with_source(source))?;
         let path = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
         // Source listFiles uses statSync, including followed symlink targets.
-        let metadata = fs::metadata(&path).map_err(|_| io_failure())?;
+        let metadata = fs::metadata(&path).map_err(|source| io_failure().with_source(source))?;
         if metadata.is_dir() {
             if name != "index" && name != "views" {
                 scan_directory(root, &path, issues)?;
@@ -142,9 +142,12 @@ fn scan_directory(
             && name != ".DS_Store"
             && name != "github-issues.json"
         {
-            let text = fs::read_to_string(&path).map_err(|_| io_failure())?;
+            let text =
+                fs::read_to_string(&path).map_err(|source| io_failure().with_source(source))?;
             if PRIVATE_PATTERNS.is_match(&text) {
-                let relative = path.strip_prefix(root).map_err(|_| io_failure())?;
+                let relative = path
+                    .strip_prefix(root)
+                    .map_err(|source| io_failure().with_source(source))?;
                 issues.push(json!({
                     "code":"possible_private_content","severity":"error",
                     "message":"Record may contain private content; inspect locally without copying raw text.",

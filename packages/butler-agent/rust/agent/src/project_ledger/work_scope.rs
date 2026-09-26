@@ -22,7 +22,7 @@ impl NativeProjectLedger {
                 let ledger_root = match input.ledger_project_id.filter(|id| !id.is_empty()) {
                     Some(id) => {
                         if !active_reference::safe_id(&id) {
-                            return Err(ProjectLedgerReadError::Resolution(
+                            return Err(ProjectLedgerReadError::resolution(
                                 "work_scope_project_resolution_mismatch",
                             ));
                         }
@@ -39,7 +39,7 @@ impl NativeProjectLedger {
                 let ledger_project_id = ledger_root
                     .file_name()
                     .and_then(|id| id.to_str())
-                    .ok_or(ProjectLedgerReadError::Resolution(
+                    .ok_or(ProjectLedgerReadError::resolution(
                         "active_project_ledger_unresolved",
                     ))?
                     .to_owned();
@@ -59,8 +59,9 @@ impl NativeProjectLedger {
                 &data_root.join("project-ledger/projects"),
                 &scope.ledger_root,
             )?;
-            let ledger_root = std::fs::canonicalize(&scope.ledger_root).map_err(|_| {
-                ProjectLedgerReadError::Resolution("active_project_ledger_unresolved")
+            let ledger_root = std::fs::canonicalize(&scope.ledger_root).map_err(|source| {
+                ProjectLedgerReadError::resolution("active_project_ledger_unresolved")
+                    .with_source(source)
             })?;
             Ok(ResolvedProjectWorkScope {
                 ledger_root,
@@ -78,13 +79,15 @@ impl NativeProjectLedger {
 )]
 fn read_error(error: ProjectLedgerReadError) -> ProjectWorkPublicationError {
     match error {
-        ProjectLedgerReadError::Resolution(code)
-        | ProjectLedgerReadError::RecordShow(code)
-        | ProjectLedgerReadError::DashboardInternal(code)
-        | ProjectLedgerReadError::DashboardUnavailable(code) => {
-            ProjectWorkPublicationError::Adapter(code)
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => {
+            ProjectWorkPublicationError::adapter(code)
         }
-        ProjectLedgerReadError::Owner(code) => ProjectWorkPublicationError::Owner(code),
-        ProjectLedgerReadError::DashboardChanged => ProjectWorkPublicationError::Uncertain,
+        ProjectLedgerReadError::Owner { code, .. } => ProjectWorkPublicationError::Owner(code),
+        ProjectLedgerReadError::DashboardChanged => {
+            ProjectWorkPublicationError::Uncertain { source: None }
+        }
     }
 }

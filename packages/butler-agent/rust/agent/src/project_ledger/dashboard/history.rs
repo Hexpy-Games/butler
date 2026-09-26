@@ -21,14 +21,17 @@ pub(super) fn read_reference(
 ) -> Result<DashboardLedgerSource, ProjectLedgerReadError> {
     let (work_id, _) = id
         .split_once('|')
-        .ok_or(ProjectLedgerReadError::DashboardUnavailable(
+        .ok_or(ProjectLedgerReadError::dashboard_unavailable(
             "dashboard_source_unavailable",
         ))?;
     let entry = list(root, binding, snapshot, Some(work_id), collation)
-        .map_err(|_| ProjectLedgerReadError::DashboardInternal("dashboard_history_unavailable"))?
+        .map_err(|source| {
+            ProjectLedgerReadError::dashboard_internal("dashboard_history_unavailable")
+                .with_source(source)
+        })?
         .into_iter()
         .find(|entry| entry.id == id)
-        .ok_or(ProjectLedgerReadError::DashboardUnavailable(
+        .ok_or(ProjectLedgerReadError::dashboard_unavailable(
             "dashboard_source_unavailable",
         ))?;
     if entry.revision != expected_revision {
@@ -54,23 +57,28 @@ pub(super) fn list(
     let directory = root.join("references");
     let entries = match fs::symlink_metadata(&directory) {
         Ok(stat) if stat.file_type().is_symlink() => return Err(unavailable()),
-        Ok(_) => fs::read_dir(&directory).map_err(|_| unavailable())?,
+        Ok(_) => fs::read_dir(&directory).map_err(|source| unavailable().with_source(source))?,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(_) => return Err(unavailable()),
     };
     let mut projected = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|_| unavailable())?;
-        if !entry.file_type().map_err(|_| unavailable())?.is_file()
+        let entry = entry.map_err(|source| unavailable().with_source(source))?;
+        if !entry
+            .file_type()
+            .map_err(|source| unavailable().with_source(source))?
+            .is_file()
             || !entry.file_name().to_string_lossy().ends_with(".md")
         {
             continue;
         }
-        let stat = fs::symlink_metadata(entry.path()).map_err(|_| unavailable())?;
+        let stat = fs::symlink_metadata(entry.path())
+            .map_err(|source| unavailable().with_source(source))?;
         if !stat.is_file() || stat.file_type().is_symlink() || stat.len() > 1_048_576 {
             continue;
         }
-        let raw = fs::read_to_string(entry.path()).map_err(|_| unavailable())?;
+        let raw =
+            fs::read_to_string(entry.path()).map_err(|source| unavailable().with_source(source))?;
         let Some(metadata) = records::frontmatter(&raw) else {
             continue;
         };
@@ -104,7 +112,8 @@ pub(super) fn list(
             .ok_or_else(unavailable)?;
         let child = managed::read_history_child(root, binding, owner, child_id, schema, collation)?;
         let (at, action, status, projection) = public_child(&child)?;
-        let body = serde_json::to_string_pretty(&projection).map_err(|_| unavailable())?;
+        let body = serde_json::to_string_pretty(&projection)
+            .map_err(|source| unavailable().with_source(source))?;
         let revision = format!(
             "{:x}",
             Sha256::digest(format!("{owner}\0{child_id}\0{body}").as_bytes())
@@ -189,5 +198,5 @@ fn public_child(value: &Value) -> Result<(String, String, String, Value), Projec
 }
 
 fn unavailable() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("dashboard_source_unavailable")
+    ProjectLedgerReadError::record_show("dashboard_source_unavailable")
 }

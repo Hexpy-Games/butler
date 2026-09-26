@@ -27,14 +27,17 @@ pub(super) fn read(root: &Path) -> Result<Records, CliFailure> {
             "project.json is missing",
         ));
     }
-    let project_raw = fs::read_to_string(&project_path).map_err(|_| io_failure())?;
-    let project_json: Value = serde_json::from_str(&project_raw)
-        .map_err(|_| CliFailure::new("invalid_json", "Invalid Project Ledger project JSON"))?;
+    let project_raw =
+        fs::read_to_string(&project_path).map_err(|source| io_failure().with_source(source))?;
+    let project_json: Value = serde_json::from_str(&project_raw).map_err(|source| {
+        CliFailure::new("invalid_json", "Invalid Project Ledger project JSON").with_source(source)
+    })?;
     let mut projected = Vec::new();
     let mut issues = Vec::new();
     let mut max_mtime_ms = 0.0_f64;
     let mut source_rows = vec![("project.json".to_owned(), Some(project_raw))];
-    source_rows.extend(committed::read_all(root).map_err(|_| io_failure())?);
+    source_rows
+        .extend(committed::read_all(root).map_err(|source| io_failure().with_source(source))?);
     source_rows.sort_by(|a, b| a.0.cmp(&b.0));
     for (relative, raw) in source_rows {
         let Some(raw) = raw else { continue };

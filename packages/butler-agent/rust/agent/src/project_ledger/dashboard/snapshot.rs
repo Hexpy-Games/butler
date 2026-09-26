@@ -20,8 +20,8 @@ pub(super) fn read(
 ) -> Result<DashboardLedgerSnapshot, ProjectLedgerReadError> {
     for _ in 0..2 {
         let publication = committed::publication_version(root)?;
-        let raw_index =
-            fs::read_to_string(root.join("index/project.json")).map_err(|_| invalid_index())?;
+        let raw_index = fs::read_to_string(root.join("index/project.json"))
+            .map_err(|source| invalid_index().with_source(source))?;
         let mut records = indexed_records(&raw_index, &binding.ledger_project_id)?;
         let metadata = source_metadata(root, &records)?;
         let revision = format!(
@@ -152,7 +152,7 @@ pub(super) fn read(
         if publication != committed::publication_version(root)?
             || raw_index
                 != fs::read_to_string(root.join("index/project.json"))
-                    .map_err(|_| invalid_index())?
+                    .map_err(|source| invalid_index().with_source(source))?
             || metadata != source_metadata(root, &records)?
         {
             continue;
@@ -200,7 +200,7 @@ pub(super) fn read(
             works,
         });
     }
-    Err(ProjectLedgerReadError::RecordShow(
+    Err(ProjectLedgerReadError::record_show(
         "dashboard_ledger_changing",
     ))
 }
@@ -209,7 +209,8 @@ fn indexed_records(
     raw: &str,
     project_id: &str,
 ) -> Result<Vec<DashboardLedgerRecord>, ProjectLedgerReadError> {
-    let index: Value = serde_json::from_str(raw).map_err(|_| invalid_index())?;
+    let index: Value =
+        serde_json::from_str(raw).map_err(|source| invalid_index().with_source(source))?;
     if index.get("schema").and_then(Value::as_str) != Some("project-ledger.index.v1")
         || index.pointer("/project/id").and_then(Value::as_str) != Some(project_id)
     {
@@ -249,7 +250,7 @@ fn indexed_records(
             _ => return Err(invalid_index()),
         };
         if !keys.insert(format!("{kind}\0{id}")) {
-            return Err(ProjectLedgerReadError::RecordShow(
+            return Err(ProjectLedgerReadError::record_show(
                 "dashboard_index_ambiguous",
             ));
         }
@@ -288,9 +289,13 @@ fn source_metadata(
     for directory in ["plans", "references"] {
         let dir = root.join(directory);
         if dir.exists() {
-            for entry in fs::read_dir(&dir).map_err(|_| invalid_index())? {
+            for entry in fs::read_dir(&dir).map_err(|source| invalid_index().with_source(source))? {
                 paths.push(
-                    PathBuf::from(directory).join(entry.map_err(|_| invalid_index())?.file_name()),
+                    PathBuf::from(directory).join(
+                        entry
+                            .map_err(|source| invalid_index().with_source(source))?
+                            .file_name(),
+                    ),
                 );
             }
         }
@@ -317,7 +322,7 @@ fn source_metadata(
             json!([path_string.as_ref(), inode, size, mtime, ctime])
         })
         .collect::<Vec<_>>();
-    serde_json::to_string(&values).map_err(|_| invalid_index())
+    serde_json::to_string(&values).map_err(|source| invalid_index().with_source(source))
 }
 
 fn work_ids(root: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
@@ -329,8 +334,12 @@ fn work_ids(root: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
     };
     let mut ids = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|_| invalid_index())?;
-        if entry.file_type().map_err(|_| invalid_index())?.is_dir() {
+        let entry = entry.map_err(|source| invalid_index().with_source(source))?;
+        if entry
+            .file_type()
+            .map_err(|source| invalid_index().with_source(source))?
+            .is_dir()
+        {
             ids.push(entry.file_name().to_string_lossy().into_owned());
         }
     }
@@ -383,5 +392,5 @@ fn js_string(value: &Value) -> String {
 }
 
 fn invalid_index() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("dashboard_index_invalid")
+    ProjectLedgerReadError::record_show("dashboard_index_invalid")
 }

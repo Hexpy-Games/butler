@@ -37,7 +37,7 @@ pub(in crate::project_ledger::publication) fn acquire(
         return assert_owned(&claim_path, root, publication_id, base_sha256);
     }
     let parent = claim_path.parent().ok_or_else(io)?;
-    fs::create_dir_all(parent).map_err(|_| io())?;
+    fs::create_dir_all(parent).map_err(|source| io().with_source(source))?;
     let candidate = parent.join(format!(
         "{}.candidate-{}",
         claim_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -51,9 +51,9 @@ pub(in crate::project_ledger::publication) fn acquire(
         base_sha256: base_sha256.into(),
         journal_path: journal_path.to_string_lossy().into_owned(),
     };
-    let mut bytes = serde_json::to_vec_pretty(&claim).map_err(|_| io())?;
+    let mut bytes = serde_json::to_vec_pretty(&claim).map_err(|source| io().with_source(source))?;
     bytes.push(b'\n');
-    fs::write(&candidate, bytes).map_err(|_| io())?;
+    fs::write(&candidate, bytes).map_err(|source| io().with_source(source))?;
     let linked = fs::hard_link(&candidate, &claim_path);
     let _ = fs::remove_file(candidate);
     match linked {
@@ -71,16 +71,19 @@ pub(in crate::project_ledger::publication) fn assert_owned(
     publication_id: &str,
     base_sha256: &str,
 ) -> Result<(), ProjectWorkPublicationError> {
-    let bytes = fs::read(path).map_err(|_| ProjectWorkPublicationError::Uncertain)?;
-    let claim: Claim =
-        serde_json::from_slice(&bytes).map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+    let bytes = fs::read(path).map_err(|source| {
+        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+    })?;
+    let claim: Claim = serde_json::from_slice(&bytes).map_err(|source| {
+        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+    })?;
     if claim.schema != "project-ledger.publication-claim.v1"
         || claim.claim_id != publication_id
         || claim.publication_id != publication_id
         || claim.canonical_root != root.to_string_lossy()
         || claim.base_sha256 != base_sha256
     {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     Ok(())
 }
@@ -96,8 +99,9 @@ pub(in crate::project_ledger::publication) fn release_if_owned(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(_) => return Err(io()),
     };
-    let claim: Claim =
-        serde_json::from_slice(&bytes).map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+    let claim: Claim = serde_json::from_slice(&bytes).map_err(|source| {
+        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+    })?;
     if claim.schema != "project-ledger.publication-claim.v1"
         || claim.publication_id != publication_id
         || claim.canonical_root != root.to_string_lossy()
@@ -105,9 +109,9 @@ pub(in crate::project_ledger::publication) fn release_if_owned(
     {
         return Ok(());
     }
-    fs::remove_file(path).map_err(|_| io())
+    fs::remove_file(path).map_err(|source| io().with_source(source))
 }
 
 fn io() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Io("project_ledger_claim_io_error")
+    ProjectWorkPublicationError::io("project_ledger_claim_io_error")
 }

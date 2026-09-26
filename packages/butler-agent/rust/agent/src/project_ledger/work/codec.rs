@@ -110,7 +110,8 @@ pub(super) fn assert_material(
 }
 
 pub(super) fn typed<T: DeserializeOwned>(value: Value) -> Result<T, crate::btcc::BtccError> {
-    serde_json::from_value(value).map_err(|_| invalid("project_work_managed_record_invalid"))
+    serde_json::from_value(value)
+        .map_err(|source| invalid("project_work_managed_record_invalid").with_source(source))
 }
 
 pub(super) fn text<'a>(value: &'a Value, name: &str) -> Result<&'a str, crate::btcc::BtccError> {

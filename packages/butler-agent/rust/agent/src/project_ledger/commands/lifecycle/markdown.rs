@@ -32,7 +32,8 @@ pub(super) fn update(
     updates: &Map<String, Value>,
     body_override: Option<&str>,
 ) -> Result<(), CliFailure> {
-    let original = fs::read_to_string(path).map_err(|_| super::super::io_failure())?;
+    let original = fs::read_to_string(path)
+        .map_err(|source| super::super::io_failure().with_source(source))?;
     let metadata = if path.extension().and_then(|part| part.to_str()) == Some("json") {
         serde_json::from_str::<Value>(&original)
             .map_err(|error| {
@@ -40,6 +41,7 @@ pub(super) fn update(
                     "invalid_json",
                     format!("Invalid JSON at {}: {error}", path.display()),
                 )
+                .with_source(error)
             })?
             .as_object()
             .cloned()
@@ -82,13 +84,13 @@ fn write(path: &Path, mut metadata: Map<String, Value>, body: &str) -> Result<()
             Value::Bool(value) => output.push_str(if value { "true" } else { "false" }),
             Value::Number(value) => output.push_str(
                 &crate::json::stringify(&Value::Number(value))
-                    .map_err(|_| super::super::io_failure())?,
+                    .map_err(|source| super::super::io_failure().with_source(source))?,
             ),
             other => {
                 let text = js_string(&other)?;
                 output.push_str(
                     &crate::json::stringify(&Value::String(text))
-                        .map_err(|_| super::super::io_failure())?,
+                        .map_err(|source| super::super::io_failure().with_source(source))?,
                 );
             }
         }
@@ -97,9 +99,10 @@ fn write(path: &Path, mut metadata: Map<String, Value>, body: &str) -> Result<()
     output.push_str("---\n\n");
     output.push_str(body);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|_| super::super::io_failure())?;
+        fs::create_dir_all(parent)
+            .map_err(|source| super::super::io_failure().with_source(source))?;
     }
-    fs::write(path, output).map_err(|_| super::super::io_failure())
+    fs::write(path, output).map_err(|source| super::super::io_failure().with_source(source))
 }
 
 pub(super) fn append_event(root: &Path, event: &Value) -> Result<(), CliFailure> {
@@ -115,22 +118,22 @@ pub(super) fn append_event(root: &Path, event: &Value) -> Result<(), CliFailure>
             .cloned()
             .ok_or_else(super::super::io_failure)?,
     );
-    let line =
-        crate::json::stringify(&Value::Object(record)).map_err(|_| super::super::io_failure())?;
+    let line = crate::json::stringify(&Value::Object(record))
+        .map_err(|source| super::super::io_failure().with_source(source))?;
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
         .open(root.join("ledger.jsonl"))
-        .map_err(|_| super::super::io_failure())?;
+        .map_err(|source| super::super::io_failure().with_source(source))?;
     file.write_all(line.as_bytes())
         .and_then(|()| file.write_all(b"\n"))
-        .map_err(|_| super::super::io_failure())
+        .map_err(|source| super::super::io_failure().with_source(source))
 }
 
 pub(super) fn epoch_millis_string() -> Result<String, CliFailure> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| super::super::io_failure())?;
+        .map_err(|source| super::super::io_failure().with_source(source))?;
     Ok(elapsed.as_millis().to_string())
 }
 
@@ -139,7 +142,8 @@ fn js_string(value: &Value) -> Result<String, CliFailure> {
         Value::String(value) => Ok(value.clone()),
         Value::Null => Ok("null".into()),
         Value::Bool(value) => Ok(value.to_string()),
-        Value::Number(_) => crate::json::stringify(value).map_err(|_| super::super::io_failure()),
+        Value::Number(_) => crate::json::stringify(value)
+            .map_err(|source| super::super::io_failure().with_source(source)),
         Value::Array(values) => {
             let mut output = String::new();
             for (index, value) in values.iter().enumerate() {

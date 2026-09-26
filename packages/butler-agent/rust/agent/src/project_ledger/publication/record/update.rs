@@ -26,7 +26,7 @@ pub(super) fn apply(
         Err(_) => return Err(io()),
     };
     if create == existing.is_some() {
-        return Err(ProjectWorkPublicationError::Adapter(if create {
+        return Err(ProjectWorkPublicationError::adapter(if create {
             "record_exists"
         } else {
             "record_not_found"
@@ -109,7 +109,7 @@ pub(super) fn apply(
     if let Some(value) = update.priority {
         metadata.insert(
             "priority".into(),
-            serde_json::to_value(value).map_err(|_| invalid())?,
+            serde_json::to_value(value).map_err(|source| invalid().with_source(source))?,
         );
     }
     if update.requires_commit_evidence == Some(true) {
@@ -144,7 +144,10 @@ pub(super) fn apply(
         raw.push_str(": ");
         match value {
             Value::String(text) => {
-                raw.push_str(&crate::json::stringify(&Value::String(text)).map_err(|_| invalid())?);
+                raw.push_str(
+                    &crate::json::stringify(&Value::String(text))
+                        .map_err(|source| invalid().with_source(source))?,
+                );
             }
             Value::Bool(value) => raw.push_str(if value { "true" } else { "false" }),
             Value::Number(value) => raw.push_str(&value.to_string()),
@@ -154,8 +157,9 @@ pub(super) fn apply(
     }
     raw.push_str("---\n\n");
     raw.push_str(body);
-    fs::create_dir_all(path.parent().ok_or_else(invalid)?).map_err(|_| io())?;
-    fs::write(path, raw).map_err(|_| io())
+    fs::create_dir_all(path.parent().ok_or_else(invalid)?)
+        .map_err(|source| io().with_source(source))?;
+    fs::write(path, raw).map_err(|source| io().with_source(source))
 }
 
 fn put_text(map: &mut Map<String, Value>, key: &str, value: Option<&str>) {
@@ -199,14 +203,14 @@ fn work_transition(from: &str, to: &str) -> Result<(), ProjectWorkPublicationErr
     if reachable {
         Ok(())
     } else {
-        Err(ProjectWorkPublicationError::Adapter("invalid_transition"))
+        Err(ProjectWorkPublicationError::adapter("invalid_transition"))
     }
 }
 
 fn now_iso() -> Result<String, ProjectWorkPublicationError> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
     let date = DateTime::<Utc>::from_timestamp(
         i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
         elapsed.subsec_nanos(),
@@ -216,9 +220,9 @@ fn now_iso() -> Result<String, ProjectWorkPublicationError> {
 }
 
 fn invalid() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Adapter("project_work_record_update_invalid")
+    ProjectWorkPublicationError::adapter("project_work_record_update_invalid")
 }
 
 fn io() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Io("project_ledger_record_io_error")
+    ProjectWorkPublicationError::io("project_ledger_record_io_error")
 }

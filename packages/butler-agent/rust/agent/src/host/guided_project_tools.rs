@@ -262,11 +262,11 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
 )]
 fn ledger_error(failure: ProjectLedgerReadError) -> BtccError {
     let code = match failure {
-        ProjectLedgerReadError::Resolution(code)
-        | ProjectLedgerReadError::RecordShow(code)
-        | ProjectLedgerReadError::Owner(code)
-        | ProjectLedgerReadError::DashboardInternal(code)
-        | ProjectLedgerReadError::DashboardUnavailable(code) => code,
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
         ProjectLedgerReadError::DashboardChanged => "project_ledger_changed",
     };
     error(code)

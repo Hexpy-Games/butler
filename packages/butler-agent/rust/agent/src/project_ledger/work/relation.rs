@@ -300,13 +300,15 @@ fn work_paths(
             Ok(entries) => {
                 let mut ids = Vec::new();
                 for entry in entries {
-                    let entry = entry.map_err(|_| {
-                        ProjectLedgerReadError::RecordShow("project_ledger_record_io_error")
+                    let entry = entry.map_err(|source| {
+                        ProjectLedgerReadError::record_show("project_ledger_record_io_error")
+                            .with_source(source)
                     })?;
                     if entry
                         .file_type()
-                        .map_err(|_| {
-                            ProjectLedgerReadError::RecordShow("project_ledger_record_io_error")
+                        .map_err(|source| {
+                            ProjectLedgerReadError::record_show("project_ledger_record_io_error")
+                                .with_source(source)
                         })?
                         .is_dir()
                     {
@@ -317,7 +319,7 @@ fn work_paths(
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(_) => {
-                return Err(ProjectLedgerReadError::RecordShow(
+                return Err(ProjectLedgerReadError::record_show(
                     "project_ledger_record_io_error",
                 ));
             }
@@ -389,7 +391,9 @@ fn source_version(
         Ok(serde_json::json!({"path": path, "raw": committed::read_selected(&scope.ledger_root, path)?}))
     }).collect::<Result<Vec<_>, ProjectLedgerReadError>>()?;
     let source = serde_json::json!([all_paths, records]);
-    let bytes = crate::json::stringify(&source)
-        .map_err(|_| ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid"))?;
+    let bytes = crate::json::stringify(&source).map_err(|source| {
+        ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
+            .with_source(source)
+    })?;
     Ok(format!("{:x}", Sha256::digest(bytes.as_bytes())))
 }

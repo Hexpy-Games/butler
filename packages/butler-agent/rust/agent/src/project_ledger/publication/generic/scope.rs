@@ -13,30 +13,29 @@ pub(super) struct LedgerScope {
 
 pub(super) fn resolve(project_root: &Path) -> Result<LedgerScope, LedgerEffectError> {
     if fs::symlink_metadata(project_root)
-        .map_err(|_| LedgerEffectError::Uncertain)?
+        .map_err(LedgerEffectError::uncertain)?
         .file_type()
         .is_symlink()
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
-    let root = fs::canonicalize(project_root).map_err(|_| LedgerEffectError::Uncertain)?;
+    let root = fs::canonicalize(project_root).map_err(LedgerEffectError::uncertain)?;
     if fs::symlink_metadata(root.join("project.json"))
-        .map_err(|_| LedgerEffectError::Uncertain)?
+        .map_err(LedgerEffectError::uncertain)?
         .file_type()
         .is_symlink()
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
-    let bytes = fs::read(root.join("project.json")).map_err(|_| LedgerEffectError::Uncertain)?;
-    let project: Value =
-        serde_json::from_slice(&bytes).map_err(|_| LedgerEffectError::Uncertain)?;
+    let bytes = fs::read(root.join("project.json")).map_err(LedgerEffectError::uncertain)?;
+    let project: Value = serde_json::from_slice(&bytes).map_err(LedgerEffectError::uncertain)?;
     let id = project
         .get("id")
         .and_then(Value::as_str)
         .filter(|id| valid_id(id))
-        .ok_or(LedgerEffectError::Uncertain)?;
+        .ok_or(LedgerEffectError::Uncertain { source: None })?;
     if root.file_name().and_then(|name| name.to_str()) != Some(id) {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     Ok(LedgerScope {
         root,

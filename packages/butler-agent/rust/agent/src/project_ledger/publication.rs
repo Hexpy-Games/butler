@@ -156,23 +156,24 @@ async fn fs_phase<T: Send + 'static>(
     permits: Arc<Semaphore>,
     phase: impl FnOnce() -> Result<T, ProjectWorkPublicationError> + Send + 'static,
 ) -> Result<T, ProjectWorkPublicationError> {
-    let permit = permits
-        .acquire_owned()
-        .await
-        .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_closed"))?;
+    let permit = permits.acquire_owned().await.map_err(|source| {
+        ProjectWorkPublicationError::Owner("project_ledger_closed").with_source(source)
+    })?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         phase()
     })
     .await
-    .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_worker_failed"))?
+    .map_err(|source| {
+        ProjectWorkPublicationError::Owner("project_ledger_worker_failed").with_source(source)
+    })?
 }
 
 fn required_updates(
     updates: Option<Vec<ProjectLedgerRecordUpdate>>,
 ) -> Result<Option<Vec<ProjectLedgerRecordUpdate>>, ProjectWorkPublicationError> {
     if updates.as_ref().is_some_and(Vec::is_empty) {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_work_publication_empty",
         ));
     }

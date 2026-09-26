@@ -39,10 +39,12 @@ pub(super) fn from_raw(
         return Ok(None);
     }
     let path = root.join(relative);
-    let metadata = fs::metadata(&path).map_err(|_| io_failure())?;
+    let metadata = fs::metadata(&path).map_err(|source| io_failure().with_source(source))?;
     let data = if extension == Some("json") {
-        serde_json::from_str::<Value>(raw)
-            .map_err(|_| CliFailure::new("invalid_json", "Invalid Project Ledger record JSON"))?
+        serde_json::from_str::<Value>(raw).map_err(|source| {
+            CliFailure::new("invalid_json", "Invalid Project Ledger record JSON")
+                .with_source(source)
+        })?
     } else {
         records::frontmatter(raw).unwrap_or_else(|| json!({}))
     };
@@ -74,10 +76,12 @@ pub(super) fn from_raw(
         .map(js_string)
         .transpose()?
         .unwrap_or_else(|| "unknown".into());
-    let modified = metadata.modified().map_err(|_| io_failure())?;
+    let modified = metadata
+        .modified()
+        .map_err(|source| io_failure().with_source(source))?;
     let elapsed = modified
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| io_failure())?;
+        .map_err(|source| io_failure().with_source(source))?;
     let modified_at = DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Millis, true);
     let updated_at = data
         .get("updatedAt")
@@ -178,7 +182,9 @@ fn js_string(value: &Value) -> Result<String, CliFailure> {
     Ok(match value {
         Value::Null => "null".into(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(_) => crate::json::stringify(value).map_err(|_| io_failure())?,
+        Value::Number(_) => {
+            crate::json::stringify(value).map_err(|source| io_failure().with_source(source))?
+        }
         Value::String(value) => value.clone(),
         Value::Array(values) => values
             .iter()

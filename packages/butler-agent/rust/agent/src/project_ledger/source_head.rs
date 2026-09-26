@@ -113,7 +113,9 @@ fn record_data(path: &Path) -> Result<(String, Value), ProjectLedgerReadError> {
     let bytes = fs::read(path).map_err(io)?;
     let raw = String::from_utf8_lossy(&bytes).into_owned();
     let metadata = match path.extension().and_then(|value| value.to_str()) {
-        Some("json") => serde_json::from_str(&raw).map_err(|_| invalid())?,
+        Some("json") => {
+            serde_json::from_str(&raw).map_err(|source| invalid().with_source(source))?
+        }
         Some("md") => records::frontmatter(&raw).unwrap_or_else(|| json!({})),
         _ => json!({}),
     };
@@ -157,13 +159,18 @@ fn write_canonical(
                 if index != 0 {
                     out.push(',');
                 }
-                out.push_str(&js::stringify(&Value::String(key.clone())).map_err(|_| invalid())?);
+                out.push_str(
+                    &js::stringify(&Value::String(key.clone()))
+                        .map_err(|source| invalid().with_source(source))?,
+                );
                 out.push(':');
                 write_canonical(value, collation, out)?;
             }
             out.push('}');
         }
-        scalar => out.push_str(&js::stringify(scalar).map_err(|_| invalid())?),
+        scalar => {
+            out.push_str(&js::stringify(scalar).map_err(|source| invalid().with_source(source))?);
+        }
     }
     Ok(())
 }
@@ -202,7 +209,7 @@ fn root_entries(
         }
         let relative = path
             .strip_prefix(root)
-            .map_err(|_| invalid())?
+            .map_err(|source| invalid().with_source(source))?
             .to_string_lossy()
             .replace('\\', "/");
         entries.push((relative, path.clone(), kind.is_dir()));
@@ -214,8 +221,8 @@ fn root_entries(
 }
 
 fn invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_ledger_source_head_invalid")
+    ProjectLedgerReadError::record_show("project_ledger_source_head_invalid")
 }
 fn io(_: std::io::Error) -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_ledger_source_head_io_error")
+    ProjectLedgerReadError::record_show("project_ledger_source_head_io_error")
 }

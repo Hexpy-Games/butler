@@ -4,17 +4,15 @@ use std::path::Path;
 use super::contracts::LedgerEffectError;
 
 pub(super) fn copy_root(source: &Path, target: &Path) -> Result<(), LedgerEffectError> {
-    fs::create_dir_all(target).map_err(|_| LedgerEffectError::Uncertain)?;
-    for entry in fs::read_dir(source).map_err(|_| LedgerEffectError::Uncertain)? {
-        let entry = entry.map_err(|_| LedgerEffectError::Uncertain)?;
-        let kind = entry
-            .file_type()
-            .map_err(|_| LedgerEffectError::Uncertain)?;
+    fs::create_dir_all(target).map_err(LedgerEffectError::uncertain)?;
+    for entry in fs::read_dir(source).map_err(LedgerEffectError::uncertain)? {
+        let entry = entry.map_err(LedgerEffectError::uncertain)?;
+        let kind = entry.file_type().map_err(LedgerEffectError::uncertain)?;
         let destination = target.join(entry.file_name());
         if kind.is_dir() {
             copy_root(&entry.path(), &destination)?;
         } else if kind.is_file() {
-            fs::copy(entry.path(), destination).map_err(|_| LedgerEffectError::Uncertain)?;
+            fs::copy(entry.path(), destination).map_err(LedgerEffectError::uncertain)?;
         }
         // The source copyDirectory ignores directory entries that are neither
         // ordinary files nor directories, including symlinks.
@@ -26,10 +24,10 @@ pub(super) fn exchange(candidate: &Path, canonical: &Path) -> Result<(), LedgerE
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let left = fs::metadata(candidate).map_err(|_| LedgerEffectError::Uncertain)?;
-        let right = fs::metadata(canonical).map_err(|_| LedgerEffectError::Uncertain)?;
+        let left = fs::metadata(candidate).map_err(LedgerEffectError::uncertain)?;
+        let right = fs::metadata(canonical).map_err(LedgerEffectError::uncertain)?;
         if left.dev() != right.dev() {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         rustix::fs::renameat_with(
             rustix::fs::CWD,
@@ -38,7 +36,7 @@ pub(super) fn exchange(candidate: &Path, canonical: &Path) -> Result<(), LedgerE
             canonical,
             rustix::fs::RenameFlags::EXCHANGE,
         )
-        .map_err(|_| LedgerEffectError::Uncertain)
+        .map_err(LedgerEffectError::uncertain)
     }
     #[cfg(not(unix))]
     {
@@ -53,6 +51,6 @@ pub(super) fn remove_directory(path: &Path) -> Result<(), LedgerEffectError> {
     match fs::remove_dir_all(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(_) => Err(LedgerEffectError::Uncertain),
+        Err(_) => Err(LedgerEffectError::Uncertain { source: None }),
     }
 }

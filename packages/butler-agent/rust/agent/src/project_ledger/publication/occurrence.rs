@@ -63,7 +63,8 @@ pub(super) fn read(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(io()),
     };
-    let stored: Occurrence = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    let stored: Occurrence =
+        serde_json::from_slice(&bytes).map_err(|source| invalid().with_source(source))?;
     validate(&stored, scope, identity)?;
     Ok(Some(stored))
 }
@@ -85,7 +86,7 @@ pub(super) fn reject_legacy(
             .join(format!("{id}.json"))
             .exists()
         {
-            return Err(ProjectWorkPublicationError::Uncertain);
+            return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
     }
     Ok(())
@@ -274,7 +275,7 @@ fn operation_kind(kind: ProjectWorkOperationKind) -> &'static str {
 }
 
 fn digest(value: &serde_json::Value) -> Result<String, ProjectWorkPublicationError> {
-    let encoded = crate::json::stringify(value).map_err(|_| invalid())?;
+    let encoded = crate::json::stringify(value).map_err(|source| invalid().with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(encoded.as_bytes())))
 }
 
@@ -288,15 +289,16 @@ pub(super) fn atomic_json(
     value: &impl Serialize,
 ) -> Result<(), ProjectWorkPublicationError> {
     let parent = path.parent().ok_or_else(io)?;
-    fs::create_dir_all(parent).map_err(|_| io())?;
+    fs::create_dir_all(parent).map_err(|source| io().with_source(source))?;
     let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
-    let mut bytes = serde_json::to_vec_pretty(value).map_err(|_| invalid())?;
+    let mut bytes =
+        serde_json::to_vec_pretty(value).map_err(|source| invalid().with_source(source))?;
     bytes.push(b'\n');
     let result = fs::write(&temporary, bytes).and_then(|()| fs::rename(&temporary, path));
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    result.map_err(|_| io())
+    result.map_err(|source| io().with_source(source))
 }
 
 pub(super) fn with_lock<T>(
@@ -304,64 +306,70 @@ pub(super) fn with_lock<T>(
     id: &str,
     action: impl FnOnce() -> Result<T, ProjectWorkPublicationError>,
 ) -> Result<T, ProjectWorkPublicationError> {
-    let canonical_root = fs::canonicalize(root).map_err(|_| io())?;
+    let canonical_root = fs::canonicalize(root).map_err(|source| io().with_source(source))?;
     let logical = canonical_root
         .join("runtime/btcc-project-ledger-effects-v2/admission-locks")
         .join(id);
     let digest = Sha256::digest(logical.to_string_lossy().as_bytes());
-    let shard = u32::from_be_bytes(digest[..4].try_into().map_err(|_| invalid())?) % 64;
+    let shard = u32::from_be_bytes(
+        digest[..4]
+            .try_into()
+            .map_err(|source| invalid().with_source(source))?,
+    ) % 64;
     let directory = canonical_root.join("runtime/mutation-lock-shards");
     for parent in [canonical_root.join("runtime"), directory.clone()] {
         if parent.exists()
             && fs::symlink_metadata(&parent)
-                .map_err(|_| io())?
+                .map_err(|source| io().with_source(source))?
                 .file_type()
                 .is_symlink()
         {
-            return Err(ProjectWorkPublicationError::Uncertain);
+            return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
     }
-    fs::create_dir_all(&directory).map_err(|_| io())?;
+    fs::create_dir_all(&directory).map_err(|source| io().with_source(source))?;
     if !fs::canonicalize(&directory)
-        .map_err(|_| io())?
+        .map_err(|source| io().with_source(source))?
         .starts_with(&canonical_root)
     {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(|_| io())?;
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+            .map_err(|source| io().with_source(source))?;
     }
     let shard = directory.join(format!("mutation-lock-{shard:02}.sqlite3"));
     if shard.exists()
         && fs::symlink_metadata(&shard)
-            .map_err(|_| io())?
+            .map_err(|source| io().with_source(source))?
             .file_type()
             .is_symlink()
     {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    let mut connection = Connection::open(&shard).map_err(|_| io())?;
+    let mut connection = Connection::open(&shard).map_err(|source| io().with_source(source))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&shard, fs::Permissions::from_mode(0o600)).map_err(|_| io())?;
+        fs::set_permissions(&shard, fs::Permissions::from_mode(0o600))
+            .map_err(|source| io().with_source(source))?;
     }
     connection
         .busy_timeout(Duration::from_millis(250))
-        .map_err(|_| io())?;
-    connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL); INSERT OR IGNORE INTO shard_fence VALUES(1,0); CREATE TABLE IF NOT EXISTS active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL);").map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
+    connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL); INSERT OR IGNORE INTO shard_fence VALUES(1,0); CREATE TABLE IF NOT EXISTS active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL);").map_err(|source| io().with_source(source))?;
     let tx = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|_| conflict())?;
+        .map_err(|source| conflict().with_source(source))?;
     tx.execute(
         "UPDATE shard_fence SET generation=generation+1 WHERE singleton=1",
         [],
     )
-    .map_err(|_| io())?;
+    .map_err(|source| io().with_source(source))?;
     let token = uuid::Uuid::new_v4().to_string();
-    tx.execute("INSERT OR REPLACE INTO active_lock(lock_key,ownership_token,owner_id,acquired_at,renewed_at) VALUES(?1,?2,?3,datetime('now'),datetime('now'))", params![logical.to_string_lossy().as_ref(), token, "native-project-ledger"]).map_err(|_| io())?;
+    tx.execute("INSERT OR REPLACE INTO active_lock(lock_key,ownership_token,owner_id,acquired_at,renewed_at) VALUES(?1,?2,?3,datetime('now'),datetime('now'))", params![logical.to_string_lossy().as_ref(), token, "native-project-ledger"]).map_err(|source| io().with_source(source))?;
     let result = match action() {
         Ok(value) => value,
         Err(error) => {
@@ -373,17 +381,17 @@ pub(super) fn with_lock<T>(
         "DELETE FROM active_lock WHERE lock_key=?1 AND ownership_token=?2",
         params![logical.to_string_lossy().as_ref(), token],
     )
-    .map_err(|_| io())?;
-    tx.commit().map_err(|_| io())?;
+    .map_err(|source| io().with_source(source))?;
+    tx.commit().map_err(|source| io().with_source(source))?;
     Ok(result)
 }
 
 fn invalid() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Adapter("project_ledger_occurrence_invalid")
+    ProjectWorkPublicationError::adapter("project_ledger_occurrence_invalid")
 }
 fn conflict() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Adapter("project_ledger_effect_occurrence_conflict")
+    ProjectWorkPublicationError::adapter("project_ledger_effect_occurrence_conflict")
 }
 fn io() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Io("project_ledger_occurrence_io_error")
+    ProjectWorkPublicationError::io("project_ledger_occurrence_io_error")
 }

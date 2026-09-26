@@ -188,10 +188,14 @@ pub(super) fn read_source(
     expected_revision: &str,
     collation: &LocaleCollation,
 ) -> Result<DashboardLedgerSource, ProjectLedgerReadError> {
-    let root = binding::resolve(root, binding)
-        .map_err(|_| ProjectLedgerReadError::DashboardInternal("dashboard_binding_unavailable"))?;
-    let snapshot = snapshot::read(&root, binding, collation)
-        .map_err(|_| ProjectLedgerReadError::DashboardInternal("dashboard_snapshot_unavailable"))?;
+    let root = binding::resolve(root, binding).map_err(|source| {
+        ProjectLedgerReadError::dashboard_internal("dashboard_binding_unavailable")
+            .with_source(source)
+    })?;
+    let snapshot = snapshot::read(&root, binding, collation).map_err(|source| {
+        ProjectLedgerReadError::dashboard_internal("dashboard_snapshot_unavailable")
+            .with_source(source)
+    })?;
     if kind == "reference" {
         return history::read_reference(
             &root,
@@ -203,8 +207,9 @@ pub(super) fn read_source(
         );
     }
     let source =
-        exact::read_source(&root, binding, &snapshot, kind, id, collation).map_err(|_| {
-            ProjectLedgerReadError::DashboardUnavailable("dashboard_source_unavailable")
+        exact::read_source(&root, binding, &snapshot, kind, id, collation).map_err(|source| {
+            ProjectLedgerReadError::dashboard_unavailable("dashboard_source_unavailable")
+                .with_source(source)
         })?;
     if expected_revision != snapshot.revision && expected_revision != source.revision {
         return Err(ProjectLedgerReadError::DashboardChanged);

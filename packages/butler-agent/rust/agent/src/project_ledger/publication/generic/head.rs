@@ -24,7 +24,7 @@ pub(super) fn observe(
     collation: &LocaleCollation,
 ) -> Result<LedgerHead, LedgerEffectError> {
     let head = crate::project_ledger::source_head::observe(root, collation)
-        .map_err(|_| LedgerEffectError::Uncertain)?;
+        .map_err(LedgerEffectError::uncertain)?;
     Ok(LedgerHead {
         schema: "butler.btcc-project-ledger-head.v1".into(),
         storage_authority: None,

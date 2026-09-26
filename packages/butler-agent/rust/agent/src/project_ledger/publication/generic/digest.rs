@@ -9,7 +9,7 @@ pub(super) fn request(
     collation: &LocaleCollation,
 ) -> Result<String, LedgerEffectError> {
     let sorted = sort(updates, collation);
-    let encoded = crate::json::stringify(&sorted).map_err(|_| LedgerEffectError::Uncertain)?;
+    let encoded = crate::json::stringify(&sorted).map_err(LedgerEffectError::uncertain)?;
     Ok(sha(encoded.as_bytes()))
 }
 

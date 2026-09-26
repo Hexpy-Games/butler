@@ -93,7 +93,7 @@ pub(super) fn reconcile(
     }
     let Some(journal) = read_journal(&paths, occurrence, attempt)? else {
         if paths.candidate.exists() || claim::path(Path::new(&occurrence.ledger_root)).exists() {
-            return Err(ProjectWorkPublicationError::Uncertain);
+            return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
         write_receipt(&paths, occurrence, attempt, ReceiptStatus::NotApplied, None)?;
         return Ok(Reconciled::NotApplied);
@@ -124,13 +124,13 @@ pub(super) fn reconcile(
             let candidate = journal
                 .candidate_head
                 .as_ref()
-                .ok_or(ProjectWorkPublicationError::Uncertain)?;
+                .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
             let active = record::observe_head(
                 Path::new(&occurrence.ledger_root),
                 &journal.base.record_paths,
             )?;
             if !same_head(&active, candidate) {
-                return Err(ProjectWorkPublicationError::Uncertain);
+                return Err(ProjectWorkPublicationError::Uncertain { source: None });
             }
             write_receipt(
                 &paths,
@@ -174,21 +174,21 @@ pub(super) fn apply(
                 journal.status,
                 JournalStatus::Prepared | JournalStatus::Committing
             ) {
-                return Err(ProjectWorkPublicationError::Uncertain);
+                return Err(ProjectWorkPublicationError::Uncertain { source: None });
             }
             journal
         } else {
-            let updates = updates.ok_or(ProjectWorkPublicationError::Uncertain)?;
+            let updates = updates.ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
             commit::prepare(scope, occurrence, attempt, &paths, updates, collation)?
         };
         commit::promote(&mut journal, &paths)?;
         let candidate = journal
             .candidate_head
             .clone()
-            .ok_or(ProjectWorkPublicationError::Uncertain)?;
+            .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
         let active = record::observe_head(&scope.ledger_root, &journal.base.record_paths)?;
         if !same_head(&active, &candidate) {
-            return Err(ProjectWorkPublicationError::Uncertain);
+            return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
         journal.status = JournalStatus::Observed;
         occurrence::atomic_json(&paths.journal, &journal)?;
@@ -206,7 +206,7 @@ pub(super) fn apply(
         Ok(targets) => Ok(targets),
         Err(_) => match reconcile(data_root, occurrence)? {
             Reconciled::Applied(targets) => Ok(targets),
-            Reconciled::Ready => Err(ProjectWorkPublicationError::Uncertain),
+            Reconciled::Ready => Err(ProjectWorkPublicationError::Uncertain { source: None }),
             Reconciled::NotApplied | Reconciled::NotAppliedWithReceipt => {
                 Err(ProjectWorkPublicationError::NotApplied)
             }
@@ -218,7 +218,7 @@ fn latest(occurrence: &Occurrence) -> Result<&Attempt, ProjectWorkPublicationErr
     occurrence
         .attempts
         .last()
-        .ok_or(ProjectWorkPublicationError::Uncertain)
+        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })
 }
 
 fn paths(root: &Path, attempt: &Attempt) -> Paths {
@@ -260,7 +260,7 @@ fn read_receipt(
                 || head.storage_authority.is_some()
         })
     {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     Ok(Some(receipt))
 }
@@ -298,7 +298,7 @@ fn read_journal(
                 || head.storage_authority.as_deref() != Some("project-ledger-record-set-v1")
         })
     {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
     Ok(Some(journal))
 }
@@ -307,11 +307,11 @@ fn read_json<T: for<'de> Deserialize<'de>>(
     path: &Path,
 ) -> Result<Option<T>, ProjectWorkPublicationError> {
     match fs::read(path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map(Some)
-            .map_err(|_| ProjectWorkPublicationError::Uncertain),
+        Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|source| {
+            ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(ProjectWorkPublicationError::Io(
+        Err(_) => Err(ProjectWorkPublicationError::io(
             "project_ledger_publication_io_error",
         )),
     }
@@ -354,17 +354,17 @@ fn cleanup(journal: &Journal, paths: &Paths) -> Result<(), ProjectWorkPublicatio
     )?;
     fs::remove_dir_all(&paths.candidate)
         .or_else(ignore_missing)
-        .map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
     fs::remove_dir_all(paths.candidate.with_extension("before"))
         .or_else(ignore_missing)
-        .map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
     if matches!(
         journal.status,
         JournalStatus::ClaimPending | JournalStatus::Preparing | JournalStatus::Prepared
     ) {
         fs::remove_file(&paths.journal)
             .or_else(ignore_missing)
-            .map_err(|_| io())?;
+            .map_err(|source| io().with_source(source))?;
     }
     Ok(())
 }
@@ -391,5 +391,5 @@ fn same_logical(left: &ProjectWorkHead, right: &ProjectWorkHead) -> bool {
 }
 
 fn io() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Io("project_ledger_publication_io_error")
+    ProjectWorkPublicationError::io("project_ledger_publication_io_error")
 }

@@ -98,8 +98,9 @@ pub(super) fn updates(options: &Value, fields: &[&str]) -> Result<Map<String, Va
     }
     for field in ["priority", "revision", "supersedesRevision"] {
         if let Some(value) = options.get(field) {
-            let number = crate::json::coerce_number(value).map_err(|_| {
+            let number = crate::json::coerce_number(value).map_err(|source| {
                 CliFailure::new("invalid_arguments", format!("--{field} must be a number"))
+                    .with_source(source)
             })?;
             if !number.is_finite() {
                 return Err(CliFailure::new(

@@ -46,24 +46,28 @@ pub(in crate::project_ledger::publication) fn observe_head(
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(_) => {
-                return Err(ProjectWorkPublicationError::Io(
+                return Err(ProjectWorkPublicationError::io(
                     "project_ledger_head_io_error",
                 ));
             }
         };
-        let entry = serde_json::to_vec(&(relative, raw))
-            .map_err(|_| ProjectWorkPublicationError::Adapter("project_ledger_head_invalid"))?;
+        let entry = serde_json::to_vec(&(relative, raw)).map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_ledger_head_invalid").with_source(source)
+        })?;
         hash.update(entry);
     }
     let mut work_directories = Vec::new();
     match fs::read_dir(root.join("work")) {
         Ok(entries) => {
             for entry in entries {
-                let entry = entry
-                    .map_err(|_| ProjectWorkPublicationError::Io("project_ledger_head_io_error"))?;
-                let kind = entry
-                    .file_type()
-                    .map_err(|_| ProjectWorkPublicationError::Io("project_ledger_head_io_error"))?;
+                let entry = entry.map_err(|source| {
+                    ProjectWorkPublicationError::io("project_ledger_head_io_error")
+                        .with_source(source)
+                })?;
+                let kind = entry.file_type().map_err(|source| {
+                    ProjectWorkPublicationError::io("project_ledger_head_io_error")
+                        .with_source(source)
+                })?;
                 if kind.is_dir() {
                     work_directories.push(entry.file_name().to_string_lossy().into_owned());
                 }
@@ -71,14 +75,15 @@ pub(in crate::project_ledger::publication) fn observe_head(
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => {
-            return Err(ProjectWorkPublicationError::Io(
+            return Err(ProjectWorkPublicationError::io(
                 "project_ledger_head_io_error",
             ));
         }
     }
     work_directories.sort();
-    let directory_bytes = serde_json::to_vec(&work_directories)
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_ledger_head_invalid"))?;
+    let directory_bytes = serde_json::to_vec(&work_directories).map_err(|source| {
+        ProjectWorkPublicationError::adapter("project_ledger_head_invalid").with_source(source)
+    })?;
     hash.update(directory_bytes);
     let digest = format!("{:x}", hash.finalize());
     Ok(ProjectWorkHead {
@@ -109,7 +114,10 @@ pub(in crate::project_ledger::publication) fn revalidate_target(
 ) -> Result<(), ProjectWorkPublicationError> {
     let relative = relative(scope, &target.path)?;
     let raw = crate::project_ledger::committed::read_selected(&scope.ledger_root, relative)
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_ledger_exact_read_failed"))?;
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_ledger_exact_read_failed")
+                .with_source(source)
+        })?;
     match (&target.state, raw) {
         (ProjectWorkTargetState::Absent, None) => Ok(()),
         (ProjectWorkTargetState::Present, Some(raw))
@@ -117,7 +125,7 @@ pub(in crate::project_ledger::publication) fn revalidate_target(
         {
             Ok(())
         }
-        _ => Err(ProjectWorkPublicationError::Adapter(
+        _ => Err(ProjectWorkPublicationError::adapter(
             "project_ledger_exact_record_hash_changed",
         )),
     }

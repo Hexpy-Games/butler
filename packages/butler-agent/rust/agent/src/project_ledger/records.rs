@@ -22,7 +22,7 @@ pub(super) fn show_plan(
 ) -> Result<PlanRecordShow, ProjectLedgerReadError> {
     let lookup = crate::public_text::trim_js_whitespace(original_id);
     if lookup.is_empty() {
-        return Err(ProjectLedgerReadError::RecordShow("invalid_input"));
+        return Err(ProjectLedgerReadError::record_show("invalid_input"));
     }
     let mut matches = Vec::new();
     for (relative, raw) in committed::read_all(root)? {
@@ -35,11 +35,14 @@ pub(super) fn show_plan(
         let Some(raw) = raw else { continue };
         let current = root.join(&relative);
         // readRecord observes the current file even when raw is a before-image.
-        let stats = fs::metadata(&current)
-            .map_err(|_| ProjectLedgerReadError::RecordShow("project_ledger_record_io_error"))?;
+        let stats = fs::metadata(&current).map_err(|source| {
+            ProjectLedgerReadError::record_show("project_ledger_record_io_error")
+                .with_source(source)
+        })?;
         let data = if relative.ends_with(".json") {
-            serde_json::from_str::<Value>(&raw)
-                .map_err(|_| ProjectLedgerReadError::RecordShow("invalid_record_json"))?
+            serde_json::from_str::<Value>(&raw).map_err(|source| {
+                ProjectLedgerReadError::record_show("invalid_record_json").with_source(source)
+            })?
         } else {
             frontmatter(&raw).unwrap_or_else(|| Value::Object(Map::new()))
         };
@@ -78,8 +81,9 @@ pub(super) fn show_plan(
         if let Some(updated_at) = data.get("updatedAt").filter(|value| !value.is_null()) {
             js_string(updated_at)?;
         } else {
-            let _ = stats.modified().map_err(|_| {
-                ProjectLedgerReadError::RecordShow("project_ledger_record_io_error")
+            let _ = stats.modified().map_err(|source| {
+                ProjectLedgerReadError::record_show("project_ledger_record_io_error")
+                    .with_source(source)
             })?;
         }
         if id != lookup || kind != "plan" {
@@ -100,9 +104,9 @@ pub(super) fn show_plan(
         });
     }
     match matches.len() {
-        0 => Err(ProjectLedgerReadError::RecordShow("record_not_found")),
+        0 => Err(ProjectLedgerReadError::record_show("record_not_found")),
         1 => Ok(matches.remove(0)),
-        _ => Err(ProjectLedgerReadError::RecordShow("ambiguous_record")),
+        _ => Err(ProjectLedgerReadError::record_show("ambiguous_record")),
     }
 }
 
@@ -205,8 +209,9 @@ fn js_string(value: &Value) -> Result<String, ProjectLedgerReadError> {
     Ok(match value {
         Value::Null => "null".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(_) => crate::json::stringify(value)
-            .map_err(|_| ProjectLedgerReadError::RecordShow("invalid_record_value"))?,
+        Value::Number(_) => crate::json::stringify(value).map_err(|source| {
+            ProjectLedgerReadError::record_show("invalid_record_value").with_source(source)
+        })?,
         Value::String(value) => value.clone(),
         Value::Array(values) => values
             .iter()
@@ -220,7 +225,7 @@ fn js_string(value: &Value) -> Result<String, ProjectLedgerReadError> {
             .collect::<Result<Vec<_>, _>>()?
             .join(","),
         Value::Object(object) if object.contains_key("toString") => {
-            return Err(ProjectLedgerReadError::RecordShow("invalid_record_value"));
+            return Err(ProjectLedgerReadError::record_show("invalid_record_value"));
         }
         Value::Object(_) => "[object Object]".to_owned(),
     })

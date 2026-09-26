@@ -127,14 +127,14 @@ impl ProjectWorkRepository {
                 let path = format!("{directory}/{}.md", id.to_lowercase());
                 let other_path = format!("{other}/{}.md", id.to_lowercase());
                 if committed::read_selected(&scope.ledger_root, &other_path)?.is_some() {
-                    return Err(super::super::ProjectLedgerReadError::RecordShow(
+                    return Err(super::super::ProjectLedgerReadError::record_show(
                         "project_work_immutable_identity_ambiguous",
                     ));
                 }
                 let body = super::super::work_json::canonical(&child, &collation)?;
                 if let Some(raw) = committed::read_selected(&scope.ledger_root, &path)? {
                     let data = records::frontmatter(&raw).ok_or(
-                        super::super::ProjectLedgerReadError::RecordShow(
+                        super::super::ProjectLedgerReadError::record_show(
                             "project_work_immutable_metadata_conflict",
                         ),
                     )?;
@@ -150,12 +150,12 @@ impl ProjectWorkRepository {
                         || data.get("schema").and_then(Value::as_str)
                             != Some(format!("project-ledger.{expected_kind}.v1").as_str())
                     {
-                        return Err(super::super::ProjectLedgerReadError::RecordShow(
+                        return Err(super::super::ProjectLedgerReadError::record_show(
                             "project_work_immutable_metadata_conflict",
                         ));
                     }
                     if records::frontmatter_body_ref(&raw) != body {
-                        return Err(super::super::ProjectLedgerReadError::RecordShow(
+                        return Err(super::super::ProjectLedgerReadError::record_show(
                             "project_work_immutable_content_conflict",
                         ));
                     }

@@ -28,14 +28,16 @@ pub(super) fn resolve_ledger_root(
     }
     let requested = data_root.join("project-ledger/projects").join(id);
     reject_symlink(&requested)?;
-    let root = fs::canonicalize(&requested).map_err(|_| unavailable())?;
+    let root = fs::canonicalize(&requested).map_err(|source| unavailable().with_source(source))?;
     for relative in ["project.json", "index", "index/project.json"] {
         reject_symlink(&root.join(relative))?;
     }
-    let raw = fs::read_to_string(root.join("project.json")).map_err(|_| unavailable())?;
-    let project: Value = serde_json::from_str(&raw).map_err(|_| invalid_identity())?;
+    let raw = fs::read_to_string(root.join("project.json"))
+        .map_err(|source| unavailable().with_source(source))?;
+    let project: Value =
+        serde_json::from_str(&raw).map_err(|source| invalid_identity().with_source(source))?;
     if project.get("id").and_then(Value::as_str) != Some(id) {
-        return Err(ProjectLedgerReadError::Resolution(
+        return Err(ProjectLedgerReadError::resolution(
             "dashboard_ledger_identity_mismatch",
         ));
     }
@@ -52,9 +54,9 @@ fn reject_symlink(path: &Path) -> Result<(), ProjectLedgerReadError> {
 }
 
 fn invalid_identity() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::Resolution("dashboard_ledger_identity_invalid")
+    ProjectLedgerReadError::resolution("dashboard_ledger_identity_invalid")
 }
 
 fn unavailable() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::Resolution("dashboard_ledger_unavailable")
+    ProjectLedgerReadError::resolution("dashboard_ledger_unavailable")
 }

@@ -57,21 +57,22 @@ fn render_unlocked(
     let path = root.join(&relative);
     let display = display_path(root, Path::new(&relative));
     if write {
-        fs::create_dir_all(path.parent().ok_or_else(io_failure)?).map_err(|_| io_failure())?;
-        fs::write(&path, markdown.as_bytes()).map_err(|_| io_failure())?;
+        fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
+            .map_err(|source| io_failure().with_source(source))?;
+        fs::write(&path, markdown.as_bytes()).map_err(|source| io_failure().with_source(source))?;
         let event = json!({
             "schema":"project-ledger.event.v1","ts":now_iso()?,
             "type":"view_rendered","view":view,"path":display,"source":"project-ledger",
         });
         let mut line = crate::json::stringify(&event)
-            .map_err(|_| io_failure())?
+            .map_err(|source| io_failure().with_source(source))?
             .into_bytes();
         line.push(b'\n');
         fs::OpenOptions::new()
             .append(true)
             .open(root.join("ledger.jsonl"))
             .and_then(|mut file| file.write_all(&line))
-            .map_err(|_| io_failure())?;
+            .map_err(|source| io_failure().with_source(source))?;
     }
     Ok(json!({"view":view,"path":display,"markdown":markdown,"written":write}))
 }

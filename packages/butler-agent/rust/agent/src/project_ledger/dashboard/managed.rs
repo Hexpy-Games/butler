@@ -364,5 +364,5 @@ pub(super) fn required_string<'a>(
 }
 
 pub(super) fn invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid")
+    ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
 }

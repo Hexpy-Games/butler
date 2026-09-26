@@ -47,28 +47,110 @@ pub(crate) use tool_scope::ProjectLedgerToolScopeLookup;
 pub(crate) use work::NativeProjectWork;
 pub(crate) use work_scope::ProjectWorkScopeLookup;
 
-/// Failures of Project Ledger reads; each carries its wire code.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+/// Failures of Project Ledger reads. `code()` is the wire code; `source`
+/// keeps the file, JSON or task error behind the failure when there was one.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum ProjectLedgerReadError {
     /// The project or work item could not be resolved.
-    #[error("{0}")]
-    Resolution(&'static str),
+    #[error("{code}")]
+    Resolution {
+        code: &'static str,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
     /// A ledger record could not be read or is malformed.
-    #[error("{0}")]
-    RecordShow(&'static str),
+    #[error("{code}")]
+    RecordShow {
+        code: &'static str,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
     /// The read owner is closed or its task failed.
-    #[error("{0}")]
-    Owner(&'static str),
+    #[error("{code}")]
+    Owner {
+        code: &'static str,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
     /// A dashboard projection failed internally.
-    #[error("{0}")]
-    DashboardInternal(&'static str),
+    #[error("{code}")]
+    DashboardInternal {
+        code: &'static str,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
     /// Dashboard inputs are unavailable.
-    #[error("{0}")]
-    DashboardUnavailable(&'static str),
+    #[error("{code}")]
+    DashboardUnavailable {
+        code: &'static str,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
     /// The ledger changed while the dashboard was being read.
     #[error("project_ledger_changed")]
     DashboardChanged,
 }
+
+impl ProjectLedgerReadError {
+    pub(crate) fn resolution(code: &'static str) -> Self {
+        Self::Resolution { code, source: None }
+    }
+
+    pub(crate) fn record_show(code: &'static str) -> Self {
+        Self::RecordShow { code, source: None }
+    }
+
+    pub(crate) fn owner(code: &'static str) -> Self {
+        Self::Owner { code, source: None }
+    }
+
+    pub(crate) fn dashboard_internal(code: &'static str) -> Self {
+        Self::DashboardInternal { code, source: None }
+    }
+
+    pub(crate) fn dashboard_unavailable(code: &'static str) -> Self {
+        Self::DashboardUnavailable { code, source: None }
+    }
+
+    /// The wire code.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Resolution { code, .. }
+            | Self::RecordShow { code, .. }
+            | Self::Owner { code, .. }
+            | Self::DashboardInternal { code, .. }
+            | Self::DashboardUnavailable { code, .. } => code,
+            Self::DashboardChanged => "project_ledger_changed",
+        }
+    }
+
+    /// Records `cause` as the source when none is recorded yet.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        cause: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        if let Self::Resolution { source, .. }
+        | Self::RecordShow { source, .. }
+        | Self::Owner { source, .. }
+        | Self::DashboardInternal { source, .. }
+        | Self::DashboardUnavailable { source, .. } = &mut self
+            && source.is_none()
+        {
+            *source = Some(Arc::new(cause));
+        }
+        self
+    }
+}
+
+/// Wire equality: the same variant and code (causes are diagnostic only).
+impl PartialEq for ProjectLedgerReadError {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other) && self.code() == other.code()
+    }
+}
+
+impl Eq for ProjectLedgerReadError {}
 
 #[derive(Clone, Debug)]
 pub(crate) struct PlanRecordRead {
@@ -235,7 +317,7 @@ impl NativeProjectLedger {
     ) -> Result<Vec<String>, ProjectLedgerReadError> {
         self.run(move |data_root, _| {
             commands::canonical_record_kinds(data_root, &project_root, &id).map_err(|()| {
-                ProjectLedgerReadError::RecordShow("project_ledger_record_kinds_unavailable")
+                ProjectLedgerReadError::record_show("project_ledger_record_kinds_unavailable")
             })
         })
         .await
@@ -246,17 +328,18 @@ impl NativeProjectLedger {
         &self,
         request: LedgerCommandRequest,
     ) -> Result<serde_json::Value, ProjectLedgerReadError> {
-        let (publication_permit, active) = self
-            .admit_publication()
-            .await
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_closed"))?;
+        let (publication_permit, active) = self.admit_publication().await.map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_closed").with_source(source)
+        })?;
         let fs_permit = self
             .owner
             .permits
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_closed"))?;
+            .map_err(|source| {
+                ProjectLedgerReadError::owner("project_ledger_closed").with_source(source)
+            })?;
         let data_root = self.data_root.clone();
         let collation = Arc::clone(&self.collation);
         tokio::task::spawn_blocking(move || {
@@ -266,7 +349,9 @@ impl NativeProjectLedger {
             commands::execute_sync(&data_root, &request, &collation)
         })
         .await
-        .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_worker_failed"))
+        .map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_worker_failed").with_source(source)
+        })
     }
 
     pub(crate) async fn ensure_project_ledger(
@@ -288,7 +373,9 @@ impl NativeProjectLedger {
                 .await
         })
         .await
-        .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_worker_failed"))?
+        .map_err(|source| {
+            ProjectWorkPublicationError::Owner("project_ledger_worker_failed").with_source(source)
+        })?
     }
 
     pub(crate) async fn publish_work_records<F, Fut>(
@@ -329,7 +416,9 @@ impl NativeProjectLedger {
                 .await
         })
         .await
-        .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_worker_failed"))?
+        .map_err(|source| {
+            ProjectWorkPublicationError::Owner("project_ledger_worker_failed").with_source(source)
+        })?
     }
 
     pub(crate) async fn apply_record_effect(
@@ -395,7 +484,9 @@ impl NativeProjectLedger {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ProjectWorkPublicationError::Owner("project_ledger_closed"))?;
+            .map_err(|source| {
+                ProjectWorkPublicationError::Owner("project_ledger_closed").with_source(source)
+            })?;
         {
             let mut state = self.owner.state.lock();
             if state.closing {
@@ -416,11 +507,13 @@ impl NativeProjectLedger {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_closed"))?;
+            .map_err(|source| {
+                ProjectLedgerReadError::owner("project_ledger_closed").with_source(source)
+            })?;
         {
             let mut state = self.owner.state.lock();
             if state.closing && IN_PUBLICATION.try_with(|()| ()).is_err() {
-                return Err(ProjectLedgerReadError::Owner("project_ledger_closed"));
+                return Err(ProjectLedgerReadError::owner("project_ledger_closed"));
             }
             state.active += 1;
         }
@@ -432,8 +525,9 @@ impl NativeProjectLedger {
             let _permit = permit;
             work(&root, &collation)
         });
-        task.await
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_worker_failed"))?
+        task.await.map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_worker_failed").with_source(source)
+        })?
     }
 
     pub(crate) async fn close(&self) {

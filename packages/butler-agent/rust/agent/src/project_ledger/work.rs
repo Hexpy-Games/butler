@@ -116,8 +116,9 @@ impl MutationOwner {
                 let _ = send.send(operation.await);
             });
         }
-        receive.await.map_err(|_| {
+        receive.await.map_err(|source| {
             BtccError::relayed("project_work_task_lost", "Project Work operation stopped")
+                .with_source(source)
         })?
     }
 

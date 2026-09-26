@@ -71,7 +71,7 @@ pub(super) fn refresh_after_mutation(root: &Path, record: Value) -> Value {
 
 pub(super) fn load(root: &Path, collation: &LocaleCollation) -> Result<Value, CliFailure> {
     if !committed::publication_version(root)
-        .map_err(|_| io_failure())?
+        .map_err(|source| io_failure().with_source(source))?
         .is_empty()
     {
         return build(root);
@@ -91,7 +91,7 @@ pub(super) fn load(root: &Path, collation: &LocaleCollation) -> Result<Value, Cl
 /// The caller already holds the source mutation claim (render --write).
 pub(super) fn load_locked(root: &Path) -> Result<Value, CliFailure> {
     if !committed::publication_version(root)
-        .map_err(|_| io_failure())?
+        .map_err(|source| io_failure().with_source(source))?
         .is_empty()
     {
         return build(root);
@@ -106,7 +106,7 @@ pub(super) fn load_locked(root: &Path) -> Result<Value, CliFailure> {
 
 pub(super) fn read_index(root: &Path) -> Result<Option<Value>, CliFailure> {
     if !committed::publication_version(root)
-        .map_err(|_| io_failure())?
+        .map_err(|source| io_failure().with_source(source))?
         .is_empty()
     {
         return build(root).map(Some);
@@ -115,9 +115,10 @@ pub(super) fn read_index(root: &Path) -> Result<Option<Value>, CliFailure> {
     if !path.exists() {
         return Ok(None);
     }
-    let raw = fs::read_to_string(&path).map_err(|_| io_failure())?;
-    let mut index: Value = serde_json::from_str(&raw)
-        .map_err(|_| CliFailure::new("invalid_json", "Invalid Project Ledger index JSON"))?;
+    let raw = fs::read_to_string(&path).map_err(|source| io_failure().with_source(source))?;
+    let mut index: Value = serde_json::from_str(&raw).map_err(|source| {
+        CliFailure::new("invalid_json", "Invalid Project Ledger index JSON").with_source(source)
+    })?;
     let source_mtime = freshness::source_max_mtime(root)?;
     index["views"] = freshness::views(root, source_mtime)?;
     index["index"] = freshness::index(root, source_mtime)?;
@@ -153,15 +154,17 @@ pub(super) fn build(root: &Path) -> Result<Value, CliFailure> {
 fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
     let mut index = build(root)?;
     let path = root.join(INDEX_PATH);
-    fs::create_dir_all(path.parent().ok_or_else(io_failure)?).map_err(|_| io_failure())?;
+    fs::create_dir_all(path.parent().ok_or_else(io_failure)?)
+        .map_err(|source| io_failure().with_source(source))?;
     let generated_at = now_iso()?;
     index["index"] = json!({
         "available":true,"stale":false,"generatedAt":generated_at,
         "path":display_path(root, Path::new(INDEX_PATH)),
     });
-    let mut bytes = serde_json::to_vec_pretty(&index).map_err(|_| io_failure())?;
+    let mut bytes =
+        serde_json::to_vec_pretty(&index).map_err(|source| io_failure().with_source(source))?;
     bytes.push(b'\n');
-    fs::write(&path, bytes).map_err(|_| io_failure())?;
+    fs::write(&path, bytes).map_err(|source| io_failure().with_source(source))?;
     let event = json!({
         "schema":"project-ledger.event.v1",
         "ts":now_iso()?,
@@ -171,13 +174,13 @@ fn write_unlocked(root: &Path) -> Result<Value, CliFailure> {
         "source":"project-ledger",
     });
     let mut event = crate::json::stringify(&event)
-        .map_err(|_| io_failure())?
+        .map_err(|source| io_failure().with_source(source))?
         .into_bytes();
     event.push(b'\n');
     fs::OpenOptions::new()
         .append(true)
         .open(root.join("ledger.jsonl"))
         .and_then(|mut file| file.write_all(&event))
-        .map_err(|_| io_failure())?;
+        .map_err(|source| io_failure().with_source(source))?;
     read_index(root)?.ok_or_else(io_failure)
 }

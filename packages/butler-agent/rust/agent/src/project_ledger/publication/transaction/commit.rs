@@ -48,20 +48,25 @@ pub(super) fn prepare(
         remove_dir(&paths.candidate)?;
         let before = paths.candidate.with_extension("before");
         remove_dir(&before)?;
-        fs::create_dir_all(&paths.candidate).map_err(|_| io())?;
+        fs::create_dir_all(&paths.candidate).map_err(|source| io().with_source(source))?;
         fs::copy(
             root.join("project.json"),
             paths.candidate.join("project.json"),
         )
-        .map_err(|_| io())?;
-        fs::write(paths.candidate.join("ledger.jsonl"), "").map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
+        fs::write(paths.candidate.join("ledger.jsonl"), "")
+            .map_err(|source| io().with_source(source))?;
         let work_root = root.join("work");
         if work_root.exists() {
-            for entry in fs::read_dir(work_root).map_err(|_| io())? {
-                let entry = entry.map_err(|_| io())?;
-                if entry.file_type().map_err(|_| io())?.is_dir() {
+            for entry in fs::read_dir(work_root).map_err(|source| io().with_source(source))? {
+                let entry = entry.map_err(|source| io().with_source(source))?;
+                if entry
+                    .file_type()
+                    .map_err(|source| io().with_source(source))?
+                    .is_dir()
+                {
                     fs::create_dir_all(paths.candidate.join("work").join(entry.file_name()))
-                        .map_err(|_| io())?;
+                        .map_err(|source| io().with_source(source))?;
                 }
             }
         }
@@ -74,8 +79,9 @@ pub(super) fn prepare(
             };
             for base in [&paths.candidate, &before] {
                 let destination = record::record_path(base, relative)?;
-                fs::create_dir_all(destination.parent().ok_or_else(io)?).map_err(|_| io())?;
-                fs::write(destination, &raw).map_err(|_| io())?;
+                fs::create_dir_all(destination.parent().ok_or_else(io)?)
+                    .map_err(|source| io().with_source(source))?;
+                fs::write(destination, &raw).map_err(|source| io().with_source(source))?;
             }
         }
         record::materialize(&paths.candidate, scope, updates)?;
@@ -121,7 +127,7 @@ pub(super) fn promote(
     let candidate = journal
         .candidate_head
         .as_ref()
-        .ok_or(ProjectWorkPublicationError::Uncertain)?;
+        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
     if journal.status == JournalStatus::Prepared {
         let active = record::observe_head(root, &journal.base.record_paths)?;
         let prepared = record::observe_core_head(&paths.candidate, &journal.base.record_paths)?;
@@ -146,18 +152,19 @@ pub(super) fn promote(
             if raw == old {
                 continue;
             }
-            let raw = raw.ok_or(ProjectWorkPublicationError::Uncertain)?;
+            let raw = raw.ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
             if read_optional(&target)?.as_deref() == Some(raw.as_slice()) {
                 continue;
             }
-            fs::create_dir_all(target.parent().ok_or_else(io)?).map_err(|_| io())?;
+            fs::create_dir_all(target.parent().ok_or_else(io)?)
+                .map_err(|source| io().with_source(source))?;
             let temporary = std::path::PathBuf::from(format!("{}.next", source.display()));
-            fs::copy(&source, &temporary).map_err(|_| io())?;
-            fs::rename(temporary, target).map_err(|_| io())?;
+            fs::copy(&source, &temporary).map_err(|source| io().with_source(source))?;
+            fs::rename(temporary, target).map_err(|source| io().with_source(source))?;
         }
         let active = record::observe_head(root, &journal.base.record_paths)?;
         if active.source_sha256 != candidate.source_sha256 {
-            return Err(ProjectWorkPublicationError::Uncertain);
+            return Err(ProjectWorkPublicationError::Uncertain { source: None });
         }
         journal.status = JournalStatus::Promoted;
         occurrence::atomic_json(&paths.journal, journal)?;

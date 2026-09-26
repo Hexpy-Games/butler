@@ -104,7 +104,7 @@ async fn source_writer_records_full_set_and_projection_inputs() {
     );
     assert_eq!(
         native.show_plan_record(fixture.input("MISSING")).await,
-        Err(ProjectLedgerReadError::RecordShow("record_not_found"))
+        Err(ProjectLedgerReadError::record_show("record_not_found"))
     );
     native.close().await;
 }
@@ -121,20 +121,20 @@ async fn duplicate_and_unrelated_malformed_record_block_show() {
     .unwrap();
     assert_eq!(
         native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::RecordShow("ambiguous_record"))
+        Err(ProjectLedgerReadError::record_show("ambiguous_record"))
     );
     fs::remove_file(fixture.root.join("reports/duplicate.md")).unwrap();
     fs::create_dir_all(fixture.root.join("references")).unwrap();
     fs::write(fixture.root.join("references/bad.json"), "{invalid").unwrap();
     assert_eq!(
         native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::RecordShow("invalid_record_json"))
+        Err(ProjectLedgerReadError::record_show("invalid_record_json"))
     );
     fs::remove_file(fixture.root.join("references/bad.json")).unwrap();
     fs::write(fixture.root.join("plans/plan-4.json"), "false").unwrap();
     assert_eq!(
         native.show_plan_record(fixture.input("plan-4")).await,
-        Err(ProjectLedgerReadError::RecordShow("record_not_found"))
+        Err(ProjectLedgerReadError::record_show("record_not_found"))
     );
     #[cfg(unix)]
     {
@@ -146,7 +146,7 @@ async fn duplicate_and_unrelated_malformed_record_block_show() {
         .unwrap();
         assert_eq!(
             native.show_plan_record(fixture.input("PLAN-1")).await,
-            Err(ProjectLedgerReadError::RecordShow(
+            Err(ProjectLedgerReadError::record_show(
                 "publication_record_is_symlink"
             ))
         );
@@ -183,7 +183,7 @@ async fn initialized_candidate_preference_and_path_escape() {
         fs::write(fixture.workspace.join("project.json"), r#"{"id":"escape"}"#).unwrap();
         assert_eq!(
             native.show_plan_record(fixture.input("PLAN-1")).await,
-            Err(ProjectLedgerReadError::Resolution(
+            Err(ProjectLedgerReadError::resolution(
                 "active_project_ledger_path_escape"
             ))
         );
@@ -311,7 +311,7 @@ async fn dropped_caller_keeps_admitted_read_owned_and_close_drains() {
     closing.await.unwrap();
     assert_eq!(
         native.show_plan_record(fixture.input("PLAN-1")).await,
-        Err(ProjectLedgerReadError::Owner("project_ledger_closed"))
+        Err(ProjectLedgerReadError::owner("project_ledger_closed"))
     );
 }
 
@@ -379,6 +379,6 @@ fn changed_read_set_and_publication_version_retry_without_extending_three_attemp
     assert_eq!(unstable, 3);
     assert_eq!(
         error,
-        ProjectLedgerReadError::RecordShow("project_ledger_changed_during_record_read")
+        ProjectLedgerReadError::record_show("project_ledger_changed_during_record_read")
     );
 }

@@ -129,5 +129,5 @@ fn safe_id(id: &str) -> Result<(), ProjectLedgerReadError> {
 }
 
 fn invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid")
+    ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
 }

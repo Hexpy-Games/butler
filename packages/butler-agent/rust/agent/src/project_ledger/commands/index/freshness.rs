@@ -9,7 +9,8 @@ use super::super::{CliFailure, display_path, io_failure};
 use crate::project_ledger::committed;
 
 pub(super) fn source_max_mtime(root: &Path) -> Result<f64, CliFailure> {
-    let mut paths = committed::record_files(root).map_err(|_| io_failure())?;
+    let mut paths =
+        committed::record_files(root).map_err(|source| io_failure().with_source(source))?;
     let project = root.join("project.json");
     if project.exists() {
         paths.push(project);
@@ -21,7 +22,7 @@ pub(super) fn source_max_mtime(root: &Path) -> Result<f64, CliFailure> {
                 time.duration_since(UNIX_EPOCH)
                     .map_err(std::io::Error::other)
             })
-            .map_err(|_| io_failure())?;
+            .map_err(|source| io_failure().with_source(source))?;
         Ok(max.max(modified.as_secs_f64() * 1000.0))
     })
 }
@@ -34,10 +35,12 @@ pub(super) fn views(root: &Path, source_mtime: f64) -> Result<Value, CliFailure>
         let display = display_path(root, Path::new(&relative));
         let value = match fs::metadata(&path) {
             Ok(metadata) => {
-                let modified = metadata.modified().map_err(|_| io_failure())?;
+                let modified = metadata
+                    .modified()
+                    .map_err(|source| io_failure().with_source(source))?;
                 let elapsed = modified
                     .duration_since(UNIX_EPOCH)
-                    .map_err(|_| io_failure())?;
+                    .map_err(|source| io_failure().with_source(source))?;
                 let updated =
                     DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Millis, true);
                 json!({"name":name,"path":display,"exists":true,
@@ -59,10 +62,12 @@ pub(super) fn index(root: &Path, source_mtime: f64) -> Result<Value, CliFailure>
     let display = display_path(root, relative);
     match fs::metadata(&path) {
         Ok(metadata) => {
-            let modified = metadata.modified().map_err(|_| io_failure())?;
+            let modified = metadata
+                .modified()
+                .map_err(|source| io_failure().with_source(source))?;
             let elapsed = modified
                 .duration_since(UNIX_EPOCH)
-                .map_err(|_| io_failure())?;
+                .map_err(|source| io_failure().with_source(source))?;
             let updated =
                 DateTime::<Utc>::from(modified).to_rfc3339_opts(SecondsFormat::Millis, true);
             Ok(

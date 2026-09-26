@@ -151,23 +151,80 @@ impl ProjectWorkPublicationOutcome {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Failures publishing Project Work to the ledger. `code()` is the wire code.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum ProjectWorkPublicationError {
-    Adapter(&'static str),
+    /// The publication request or a stored record was rejected; `code` says
+    /// which check failed and `source` is the decode error when there was one.
+    #[error("{code}")]
+    Adapter {
+        code: &'static str,
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// Durable work failed.
+    #[error(transparent)]
     Work(crate::btcc::BtccError),
+    /// The publication was verified as not applied.
+    #[error("project_work_publication_not_applied")]
     NotApplied,
-    Uncertain,
-    Io(&'static str),
+    /// The publication state could not be verified.
+    #[error("project_work_publication_uncertain")]
+    Uncertain {
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// A ledger file operation failed; `code` names the step.
+    #[error("{code}")]
+    Io {
+        code: &'static str,
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// The publication owner could not finish; the value is its code.
+    #[error("{0}")]
     Owner(&'static str),
 }
 
 impl ProjectWorkPublicationError {
     pub(crate) fn code(&self) -> &str {
         match self {
-            Self::Adapter(code) | Self::Io(code) | Self::Owner(code) => code,
+            Self::Adapter { code, .. } | Self::Io { code, .. } | Self::Owner(code) => code,
             Self::Work(error) => error.code(),
             Self::NotApplied => "project_work_publication_not_applied",
-            Self::Uncertain => "project_work_publication_uncertain",
+            Self::Uncertain { .. } => "project_work_publication_uncertain",
         }
     }
+
+    pub(crate) fn adapter(code: &'static str) -> Self {
+        Self::Adapter { code, source: None }
+    }
+
+    pub(crate) fn io(code: &'static str) -> Self {
+        Self::Io { code, source: None }
+    }
+
+    /// Records `cause` as the source when the variant has an empty slot.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        cause: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        if let Self::Adapter { source, .. } | Self::Io { source, .. } | Self::Uncertain { source } =
+            &mut self
+            && source.is_none()
+        {
+            *source = Some(std::sync::Arc::new(cause));
+        }
+        self
+    }
 }
+
+/// Wire equality: the same code (causes are diagnostic only).
+impl PartialEq for ProjectWorkPublicationError {
+    fn eq(&self, other: &Self) -> bool {
+        self.code() == other.code()
+    }
+}
+
+impl Eq for ProjectWorkPublicationError {}

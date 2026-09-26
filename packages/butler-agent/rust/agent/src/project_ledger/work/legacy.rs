@@ -243,7 +243,7 @@ fn legacy_children(
     }
     for (index, result) in work.result_refs.iter().enumerate() {
         let mut item = serde_json::to_value(result)
-            .map_err(|_| invalid("project_work_legacy_result_invalid"))?;
+            .map_err(|source| invalid("project_work_legacy_result_invalid").with_source(source))?;
         item["sequence"] = Value::from(index + 1);
         children.push(json!({"schema":"butler.btcc-project-work-result-reference.v1","workId":work.work_id,
             "sessionId":work.session_id,"scope":{"appProjectId":repo.scope.app_project_id,"ledgerProjectId":repo.scope.ledger_project_id},

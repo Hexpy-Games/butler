@@ -28,11 +28,11 @@ impl LegacyProjectWorkSource for NativeProjectLedger {
                 .await
                 .map_err(|error| {
                     let code = match error {
-                        ProjectLedgerReadError::Resolution(code)
-                        | ProjectLedgerReadError::RecordShow(code)
-                        | ProjectLedgerReadError::Owner(code)
-                        | ProjectLedgerReadError::DashboardInternal(code)
-                        | ProjectLedgerReadError::DashboardUnavailable(code) => code,
+                        ProjectLedgerReadError::Resolution { code, .. }
+                        | ProjectLedgerReadError::RecordShow { code, .. }
+                        | ProjectLedgerReadError::Owner { code, .. }
+                        | ProjectLedgerReadError::DashboardInternal { code, .. }
+                        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => code,
                         ProjectLedgerReadError::DashboardChanged => {
                             "project_work_legacy_source_changed"
                         }
@@ -106,7 +106,7 @@ fn read(
                 before.source_sha256,
                 before.source_file_count,
                 id,
-                js::stringify(&json!(revision)).map_err(|_| invalid())?,
+                js::stringify(&json!(revision)).map_err(|source| invalid().with_source(source))?,
             ));
             let planned = planning != "unplanned";
             snapshots.push(LegacyProjectWorkSourceSnapshot {
@@ -131,13 +131,13 @@ fn read(
             continue;
         }
         if snapshots.len() > 1 {
-            return Err(ProjectLedgerReadError::RecordShow(
+            return Err(ProjectLedgerReadError::record_show(
                 "project_work_legacy_multiple_open_programs",
             ));
         }
         return Ok(snapshots.pop());
     }
-    Err(ProjectLedgerReadError::RecordShow(
+    Err(ProjectLedgerReadError::record_show(
         "project_work_legacy_source_changed",
     ))
 }
@@ -154,7 +154,7 @@ fn goal_contract(root: &Path, source: &Value) -> Result<Value, ProjectLedgerRead
         return Err(invalid());
     }
     let encoded = js::canonical_json(&logical["record"], js::CanonicalKeyOrder::Utf16Lexical)
-        .map_err(|_| invalid())?;
+        .map_err(|source| invalid().with_source(source))?;
     let sha = digest_identity(&encoded);
     if source["sha256"].as_str() != Some(sha.as_str())
         || digest_identity(&format!("btcc-goal-contract.v1\0{sha}")) != id
@@ -168,9 +168,11 @@ fn goal_contract(root: &Path, source: &Value) -> Result<Value, ProjectLedgerRead
 }
 
 fn canonical_body(body: &str) -> Result<Value, ProjectLedgerReadError> {
-    let value: Value = serde_json::from_str(body).map_err(|_| invalid())?;
+    let value: Value =
+        serde_json::from_str(body).map_err(|source| invalid().with_source(source))?;
     if !value.is_object()
-        || js::canonical_json(&value, js::CanonicalKeyOrder::Utf16Lexical).map_err(|_| invalid())?
+        || js::canonical_json(&value, js::CanonicalKeyOrder::Utf16Lexical)
+            .map_err(|source| invalid().with_source(source))?
             != body
     {
         return Err(invalid());
@@ -241,7 +243,7 @@ fn reference_body(
             continue;
         };
         let metadata = if relative.ends_with(".json") {
-            serde_json::from_str(&raw).map_err(|_| invalid())?
+            serde_json::from_str(&raw).map_err(|source| invalid().with_source(source))?
         } else {
             records::frontmatter(&raw).unwrap_or_else(|| json!({}))
         };
@@ -268,10 +270,11 @@ fn reference_body(
             continue;
         }
         if found.is_some() {
-            return Err(ProjectLedgerReadError::RecordShow("ambiguous_record"));
+            return Err(ProjectLedgerReadError::record_show("ambiguous_record"));
         }
         // Source resolveRecord sees committed metadata; readRecordBody reads the physical body.
-        let physical = fs::read(root.join(&relative)).map_err(|_| invalid())?;
+        let physical =
+            fs::read(root.join(&relative)).map_err(|source| invalid().with_source(source))?;
         let raw = String::from_utf8_lossy(&physical);
         found = Some(if relative.ends_with(".md") {
             records::frontmatter_body_ref(&raw).to_owned()
@@ -283,5 +286,5 @@ fn reference_body(
 }
 
 fn invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_work_legacy_source_invalid")
+    ProjectLedgerReadError::record_show("project_work_legacy_source_invalid")
 }

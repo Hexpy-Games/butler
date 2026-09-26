@@ -16,7 +16,8 @@ pub(super) fn parse_canonical(
     if body.encode_utf16().count() > 1_048_576 {
         return Err(invalid());
     }
-    let value: Value = serde_json::from_str(body).map_err(|_| invalid())?;
+    let value: Value =
+        serde_json::from_str(body).map_err(|source| invalid().with_source(source))?;
     if !value.is_object() || canonical(&value, collation)? != body {
         return Err(invalid());
     }

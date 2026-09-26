@@ -42,7 +42,7 @@ pub(in crate::project_ledger) fn resolve_record(
     if root.join("project.json").exists() {
         paths.push(root.join("project.json"));
     }
-    paths.extend(committed::record_files(root).map_err(|_| io_failure())?);
+    paths.extend(committed::record_files(root).map_err(|source| io_failure().with_source(source))?);
     for path in paths {
         let Some(record) = read_record_path(root, &path)? else {
             continue;
@@ -87,10 +87,11 @@ pub(in crate::project_ledger) fn read_record_path(
 ) -> Result<Option<ResolvedRecord>, CliFailure> {
     let relative = path
         .strip_prefix(root)
-        .map_err(|_| io_failure())?
+        .map_err(|source| io_failure().with_source(source))?
         .to_path_buf();
     let relative_string = relative.to_str().ok_or_else(io_failure)?;
-    let raw = committed::read_selected(root, relative_string).map_err(|_| io_failure())?;
+    let raw = committed::read_selected(root, relative_string)
+        .map_err(|source| io_failure().with_source(source))?;
     let Some(raw) = raw else { return Ok(None) };
     let projected = record::from_raw(root, &relative, &raw)?;
     let Some(projected) = projected else {

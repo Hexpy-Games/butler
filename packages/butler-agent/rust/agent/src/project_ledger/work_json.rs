@@ -12,7 +12,7 @@ pub(super) fn canonical(
 ) -> Result<String, ProjectLedgerReadError> {
     let normalized = normalize(value)?;
     json::stringify_sorted(&normalized, &|left, right| collation.compare(left, right))
-        .map_err(|_| invalid())
+        .map_err(|source| invalid().with_source(source))
 }
 
 fn normalize(value: &Value) -> Result<Value, ProjectLedgerReadError> {
@@ -41,5 +41,5 @@ fn normalize(value: &Value) -> Result<Value, ProjectLedgerReadError> {
 }
 
 fn invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid")
+    ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
 }

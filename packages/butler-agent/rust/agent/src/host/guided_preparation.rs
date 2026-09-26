@@ -192,11 +192,11 @@ fn contract(code: &str) -> BtccError {
 )]
 fn ledger_error(error: ProjectLedgerReadError) -> BtccError {
     match error {
-        ProjectLedgerReadError::Resolution(code)
-        | ProjectLedgerReadError::RecordShow(code)
-        | ProjectLedgerReadError::Owner(code)
-        | ProjectLedgerReadError::DashboardInternal(code)
-        | ProjectLedgerReadError::DashboardUnavailable(code) => contract(code),
+        ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => contract(code),
         ProjectLedgerReadError::DashboardChanged => contract("source_changed"),
     }
 }

@@ -22,7 +22,7 @@ pub(super) fn apply(
     let attempt = occurrence
         .attempts
         .last()
-        .ok_or(LedgerEffectError::Uncertain)?;
+        .ok_or(LedgerEffectError::Uncertain { source: None })?;
     let paths = evidence::paths(data_root, attempt);
     let existing = evidence::read_journal(&paths, occurrence, attempt)?;
     let result = (|| {
@@ -35,7 +35,7 @@ pub(super) fn apply(
             Some(journal) if matches!(journal.status, Status::Prepared | Status::Committing) => {
                 journal
             }
-            Some(_) => return Err(LedgerEffectError::Uncertain),
+            Some(_) => return Err(LedgerEffectError::Uncertain { source: None }),
             None => prepare(scope, attempt, &paths, updates, collation)?,
         };
         promote(scope, &paths, &mut journal, collation)?;
@@ -55,7 +55,7 @@ pub(super) fn apply(
                     .as_ref()
                     .is_some_and(|journal| journal.status == Status::Committing)
                 {
-                    return Err(LedgerEffectError::Uncertain);
+                    return Err(LedgerEffectError::Uncertain { source: None });
                 }
                 if let Some(journal) = journal.as_ref() {
                     evidence::cleanup_prepared(&paths, journal)?;
@@ -90,7 +90,7 @@ fn prepare(
         &attempt.expected_base.source_sha256,
         &paths.journal,
     )
-    .map_err(|_| LedgerEffectError::Uncertain)?;
+    .map_err(LedgerEffectError::uncertain)?;
     let result = (|| {
         journal.status = Status::Preparing;
         evidence::save_journal(paths, &journal)?;
@@ -123,11 +123,11 @@ fn promote(
         &journal.publication_id,
         &journal.base.source_sha256,
     )
-    .map_err(|_| LedgerEffectError::Uncertain)?;
+    .map_err(LedgerEffectError::uncertain)?;
     let candidate = journal
         .candidate_head
         .as_ref()
-        .ok_or(LedgerEffectError::Uncertain)?;
+        .ok_or(LedgerEffectError::Uncertain { source: None })?;
     if journal.status == Status::Prepared {
         let active = head::observe(&scope.root, collation)?;
         if active.same_storage(candidate) {
@@ -139,11 +139,11 @@ fn promote(
             return Err(LedgerEffectError::NotApplied);
         }
         if !paths.candidate.exists() {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         let prepared = head::inspect(&paths.candidate, collation)?;
         if !prepared.same_storage(candidate) {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         journal.status = Status::Committing;
         evidence::save_journal(paths, journal)?;
@@ -152,13 +152,13 @@ fn promote(
         let active = head::observe(&scope.root, collation)?;
         if !active.same_storage(candidate) {
             if !active.same_logical(&journal.base) {
-                return Err(LedgerEffectError::Uncertain);
+                return Err(LedgerEffectError::Uncertain { source: None });
             }
             commit::exchange(&paths.candidate, &scope.root)?;
         }
         let active = head::inspect(&scope.root, collation)?;
         if !active.same_storage(candidate) {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         journal.status = Status::Promoted;
         evidence::save_journal(paths, journal)?;
@@ -179,9 +179,9 @@ fn observe(
         journal
             .candidate_head
             .as_ref()
-            .ok_or(LedgerEffectError::Uncertain)?,
+            .ok_or(LedgerEffectError::Uncertain { source: None })?,
     ) {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     evidence::write_observed(paths, journal, occurrence, attempt)?;
     journal.status = Status::Observed;

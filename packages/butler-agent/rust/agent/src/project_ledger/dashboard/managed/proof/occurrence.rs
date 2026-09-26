@@ -51,9 +51,10 @@ pub(super) fn validate(
     let occurrence_path = storage
         .join("occurrences")
         .join(format!("{occurrence_id}.json"));
-    let occurrence: Value =
-        serde_json::from_slice(&fs::read(occurrence_path).map_err(|_| invalid())?)
-            .map_err(|_| invalid())?;
+    let occurrence: Value = serde_json::from_slice(
+        &fs::read(occurrence_path).map_err(|source| invalid().with_source(source))?,
+    )
+    .map_err(|source| invalid().with_source(source))?;
     if occurrence.get("schema").and_then(Value::as_str)
         != Some("butler.btcc-project-ledger-effect-occurrence.v2")
         || occurrence.get("occurrenceId").and_then(Value::as_str) != Some(&occurrence_id)
@@ -109,9 +110,9 @@ pub(super) fn validate(
                 .join("receipts")
                 .join(format!("{publication_id}.json")),
         )
-        .map_err(|_| invalid())?,
+        .map_err(|source| invalid().with_source(source))?,
     )
-    .map_err(|_| invalid())?;
+    .map_err(|source| invalid().with_source(source))?;
     if receipt.get("schema").and_then(Value::as_str)
         != Some("butler.btcc-project-ledger-publication-receipt.v1")
         || receipt.get("occurrenceId").and_then(Value::as_str) != Some(&occurrence_id)
@@ -176,7 +177,7 @@ fn expected_publication(
         "expectedBase":attempt.get("expectedBase"),
         "targetPreconditions":attempt.get("targetPreconditions"),
     });
-    let body = json::stringify(&payload).map_err(|_| invalid())?;
+    let body = json::stringify(&payload).map_err(|source| invalid().with_source(source))?;
     Ok(format!("{:x}", Sha256::digest(body.as_bytes())))
 }
 
@@ -293,5 +294,5 @@ fn digest_shape(value: &str) -> bool {
 }
 
 fn string(value: &str) -> Result<String, ProjectLedgerReadError> {
-    json::stringify(&Value::String(value.into())).map_err(|_| invalid())
+    json::stringify(&Value::String(value.into())).map_err(|source| invalid().with_source(source))
 }

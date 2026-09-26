@@ -157,8 +157,9 @@ fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError
                 .any(|item| item.get("bindingRevisionId") == binding.get("bindingRevisionId")),
         );
         bindings.push(
-            serde_json::from_value::<ProjectWorkBinding>(value)
-                .map_err(|_| invalid("project_work_managed_record_invalid"))?,
+            serde_json::from_value::<ProjectWorkBinding>(value).map_err(|source| {
+                invalid("project_work_managed_record_invalid").with_source(source)
+            })?,
         );
     }
     Ok(ProjectWorkObserveWork {

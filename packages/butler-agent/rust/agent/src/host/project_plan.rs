@@ -38,7 +38,7 @@ impl NativeAcceptedPlanProducer {
             .await
         {
             Ok(show) => show,
-            Err(ProjectLedgerReadError::RecordShow(_)) => return Ok(None),
+            Err(ProjectLedgerReadError::RecordShow { code: _, .. }) => return Ok(None),
             Err(error) => return Err(error),
         };
         Ok(accepted_project_plan(
@@ -114,7 +114,7 @@ mod tests {
             .unwrap();
             assert_eq!(
                 read("PLAN-1").await,
-                Err(ProjectLedgerReadError::Resolution(
+                Err(ProjectLedgerReadError::resolution(
                     "active_project_ledger_path_escape"
                 ))
             );

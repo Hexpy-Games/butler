@@ -39,7 +39,7 @@ pub(super) fn read_selected(
             Ok(None) | Err(_) => {}
         }
     }
-    Err(ProjectLedgerReadError::RecordShow(
+    Err(ProjectLedgerReadError::record_show(
         "project_ledger_changed_during_record_read",
     ))
 }
@@ -62,7 +62,7 @@ fn selected(
     });
     let source_root = if let Some(journal) = before {
         let candidate = journal.get("candidateRoot").and_then(Value::as_str).ok_or(
-            ProjectLedgerReadError::RecordShow("invalid_publication_journal"),
+            ProjectLedgerReadError::record_show("invalid_publication_journal"),
         )?;
         PathBuf::from(format!("{candidate}.before"))
     } else {
@@ -108,7 +108,7 @@ pub(super) fn read_all_with_hook(
             Ok(None) | Err(_) => {}
         }
     }
-    Err(ProjectLedgerReadError::RecordShow(
+    Err(ProjectLedgerReadError::record_show(
         "project_ledger_changed_during_record_read",
     ))
 }
@@ -129,7 +129,10 @@ fn read_set(root: &Path, journal: Option<&Value>) -> Result<ReadSet, ProjectLedg
         .map(|path| {
             let relative = path
                 .strip_prefix(root)
-                .map_err(|_| ProjectLedgerReadError::RecordShow("invalid_publication_record_path"))?
+                .map_err(|source| {
+                    ProjectLedgerReadError::record_show("invalid_publication_record_path")
+                        .with_source(source)
+                })?
                 .to_string_lossy()
                 .to_string();
             let in_base = before
@@ -141,7 +144,7 @@ fn read_set(root: &Path, journal: Option<&Value>) -> Result<ReadSet, ProjectLedg
                 let candidate = before
                     .and_then(|value| value.get("candidateRoot"))
                     .and_then(Value::as_str)
-                    .ok_or(ProjectLedgerReadError::RecordShow(
+                    .ok_or(ProjectLedgerReadError::record_show(
                         "invalid_publication_journal",
                     ))?;
                 PathBuf::from(format!("{candidate}.before"))
@@ -196,8 +199,9 @@ pub(super) fn publication_version(root: &Path) -> Result<String, ProjectLedgerRe
     let Some(claim) = read_optional(&claim_path(root))? else {
         return Ok(String::new());
     };
-    let value: Value = serde_json::from_str(&claim)
-        .map_err(|_| ProjectLedgerReadError::RecordShow("invalid_publication_claim"))?;
+    let value: Value = serde_json::from_str(&claim).map_err(|source| {
+        ProjectLedgerReadError::record_show("invalid_publication_claim").with_source(source)
+    })?;
     let mut version = claim;
     if let Some(journal) = value.get("journalPath").and_then(Value::as_str) {
         version.push_str(&read_optional(Path::new(journal))?.unwrap_or_default());
@@ -207,8 +211,9 @@ pub(super) fn publication_version(root: &Path) -> Result<String, ProjectLedgerRe
 
 fn parse_optional(raw: Option<&str>) -> Result<Option<Value>, ProjectLedgerReadError> {
     raw.map(|value| {
-        serde_json::from_str(value)
-            .map_err(|_| ProjectLedgerReadError::RecordShow("invalid_publication_journal"))
+        serde_json::from_str(value).map_err(|source| {
+            ProjectLedgerReadError::record_show("invalid_publication_journal").with_source(source)
+        })
     })
     .transpose()
 }
@@ -225,7 +230,7 @@ fn claim_path(root: &Path) -> PathBuf {
 
 fn record_path(root: &Path, relative: &str) -> Result<PathBuf, ProjectLedgerReadError> {
     if relative.is_empty() || relative.starts_with("..") || Path::new(relative).is_absolute() {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "invalid_publication_record_path",
         ));
     }
@@ -238,7 +243,7 @@ fn record_path(root: &Path, relative: &str) -> Result<PathBuf, ProjectLedgerRead
                 .file_type()
                 .is_symlink()
         {
-            return Err(ProjectLedgerReadError::RecordShow(
+            return Err(ProjectLedgerReadError::record_show(
                 "publication_record_is_symlink",
             ));
         }
@@ -255,5 +260,5 @@ fn read_optional(path: &Path) -> Result<Option<String>, ProjectLedgerReadError> 
 }
 
 fn record_io(_error: std::io::Error) -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_ledger_record_io_error")
+    ProjectLedgerReadError::record_show("project_ledger_record_io_error")
 }

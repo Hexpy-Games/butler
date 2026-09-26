@@ -44,20 +44,27 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         return Err(unavailable());
     }
     let revision = file_revision(&path_metadata);
-    let mut file = File::open(&path).map_err(|_| unavailable())?;
-    let opened_metadata = file.metadata().map_err(|_| unavailable())?;
+    let mut file = File::open(&path).map_err(|source| unavailable().with_source(source))?;
+    let opened_metadata = file
+        .metadata()
+        .map_err(|source| unavailable().with_source(source))?;
     if !opened_metadata.is_file() || file_revision(&opened_metadata) != revision {
         return Err(changed());
     }
     let mut limited = file.take(MAX_HISTORY_BYTES + 1);
     let mut bytes = Vec::with_capacity(usize::try_from(path_metadata.len()).unwrap_or(usize::MAX));
-    limited.read_to_end(&mut bytes).map_err(|_| unavailable())?;
+    limited
+        .read_to_end(&mut bytes)
+        .map_err(|source| unavailable().with_source(source))?;
     file = limited.into_inner();
     if bytes.len() as u64 > MAX_HISTORY_BYTES {
         return Err(unavailable());
     }
-    let descriptor_metadata = file.metadata().map_err(|_| unavailable())?;
-    let final_path_metadata = fs::symlink_metadata(&path).map_err(|_| changed())?;
+    let descriptor_metadata = file
+        .metadata()
+        .map_err(|source| unavailable().with_source(source))?;
+    let final_path_metadata =
+        fs::symlink_metadata(&path).map_err(|source| changed().with_source(source))?;
     if !final_path_metadata.is_file()
         || final_path_metadata.file_type().is_symlink()
         || file_revision(&descriptor_metadata) != revision
@@ -74,7 +81,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         offset -= delimited_line.len();
         let line = delimited_line.strip_suffix(b"\n").unwrap_or(delimited_line);
         if line.len() > MAX_HISTORY_LINE_BYTES {
-            return Err(ProjectLedgerReadError::DashboardInternal(
+            return Err(ProjectLedgerReadError::dashboard_internal(
                 "dashboard_history_record_too_large",
             ));
         }
@@ -93,7 +100,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         }
     }
     if invalid_lines > 0 {
-        return Err(ProjectLedgerReadError::DashboardInternal(
+        return Err(ProjectLedgerReadError::dashboard_internal(
             "dashboard_history_incomplete",
         ));
     }
@@ -183,11 +190,11 @@ fn number_string(value: f64) -> String {
 }
 
 fn unavailable() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::DashboardInternal("dashboard_history_unavailable")
+    ProjectLedgerReadError::dashboard_internal("dashboard_history_unavailable")
 }
 
 fn changed() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::DashboardInternal("dashboard_history_changed")
+    ProjectLedgerReadError::dashboard_internal("dashboard_history_changed")
 }
 
 #[cfg(test)]

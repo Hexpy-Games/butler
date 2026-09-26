@@ -43,7 +43,7 @@ pub(super) fn resolve_reference(
             .and_then(|path| path.components().next())
             .and_then(|part| part.as_os_str().to_str())
             .filter(|id| safe_id(id))
-            .ok_or(ProjectLedgerReadError::Resolution(
+            .ok_or(ProjectLedgerReadError::resolution(
                 "active_project_ledger_unresolved",
             ))?;
         let root = projects_root.join(id);
@@ -96,12 +96,12 @@ pub(super) fn resolve_reference(
         .first()
         .copied()
         .or_else(|| candidates.first())
-        .ok_or(ProjectLedgerReadError::Resolution(
+        .ok_or(ProjectLedgerReadError::resolution(
             "active_project_ledger_unresolved",
         ))?;
     if workspace_path.is_empty() && explicit_ref.is_none_or(|value| Path::new(value).is_absolute())
     {
-        return Err(ProjectLedgerReadError::Resolution(
+        return Err(ProjectLedgerReadError::resolution(
             "active_project_ledger_unresolved",
         ));
     }
@@ -132,8 +132,10 @@ fn json_string(path: &Path, key: &str) -> Option<String> {
 
 fn file_generation(path: &Path) -> Result<(), ProjectLedgerReadError> {
     if path.exists() {
-        fs::metadata(path)
-            .map_err(|_| ProjectLedgerReadError::Resolution("active_project_ledger_unresolved"))?;
+        fs::metadata(path).map_err(|source| {
+            ProjectLedgerReadError::resolution("active_project_ledger_unresolved")
+                .with_source(source)
+        })?;
     }
     Ok(())
 }
@@ -143,14 +145,14 @@ pub(super) fn canonical_containment(
     candidate: &Path,
 ) -> Result<(), ProjectLedgerReadError> {
     if !candidate.starts_with(root) {
-        return Err(ProjectLedgerReadError::Resolution(
+        return Err(ProjectLedgerReadError::resolution(
             "active_project_ledger_path_escape",
         ));
     }
     let real_root = realpath_when_present(root)?;
     let real_candidate = realpath_when_present(candidate)?;
     if !real_candidate.starts_with(&real_root) {
-        return Err(ProjectLedgerReadError::Resolution(
+        return Err(ProjectLedgerReadError::resolution(
             "active_project_ledger_path_escape",
         ));
     }
@@ -159,19 +161,21 @@ pub(super) fn canonical_containment(
 
 fn realpath_when_present(path: &Path) -> Result<PathBuf, ProjectLedgerReadError> {
     if path.exists() {
-        return fs::canonicalize(path)
-            .map_err(|_| ProjectLedgerReadError::Resolution("active_project_ledger_path_escape"));
+        return fs::canonicalize(path).map_err(|source| {
+            ProjectLedgerReadError::resolution("active_project_ledger_path_escape")
+                .with_source(source)
+        });
     }
-    let parent = path.parent().ok_or(ProjectLedgerReadError::Resolution(
+    let parent = path.parent().ok_or(ProjectLedgerReadError::resolution(
         "active_project_ledger_path_escape",
     ))?;
     if parent == path || path.components().next() == Some(Component::CurDir) {
-        return Err(ProjectLedgerReadError::Resolution(
+        return Err(ProjectLedgerReadError::resolution(
             "active_project_ledger_path_escape",
         ));
     }
     Ok(realpath_when_present(parent)?.join(path.file_name().ok_or(
-        ProjectLedgerReadError::Resolution("active_project_ledger_path_escape"),
+        ProjectLedgerReadError::resolution("active_project_ledger_path_escape"),
     )?))
 }
 

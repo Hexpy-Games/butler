@@ -24,13 +24,15 @@ pub(super) fn read_record(
 ) -> Result<ExactRecord, ProjectLedgerReadError> {
     let relative = target_relative(project_id, &target.path)?;
     reject_symlink_components(root, &relative)?;
-    let relative = relative.to_str().ok_or(ProjectLedgerReadError::RecordShow(
-        "project_ledger_exact_path_outside_root",
-    ))?;
+    let relative = relative
+        .to_str()
+        .ok_or(ProjectLedgerReadError::record_show(
+            "project_ledger_exact_path_outside_root",
+        ))?;
     let raw = committed::read_selected(root, relative)?.ok_or(
-        ProjectLedgerReadError::RecordShow("dashboard_source_unavailable"),
+        ProjectLedgerReadError::record_show("dashboard_source_unavailable"),
     )?;
-    let metadata = records::frontmatter(&raw).ok_or(ProjectLedgerReadError::RecordShow(
+    let metadata = records::frontmatter(&raw).ok_or(ProjectLedgerReadError::record_show(
         "project_ledger_exact_frontmatter_corrupt",
     ))?;
     if metadata.get("id").and_then(Value::as_str) != Some(target.id.as_str())
@@ -41,7 +43,7 @@ pub(super) fn read_record(
             .and_then(Value::as_str)
             != target.parent_id.as_deref()
     {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "project_ledger_exact_record_metadata_mismatch",
         ));
     }
@@ -60,7 +62,7 @@ pub(super) fn revalidate(
 ) -> Result<(), ProjectLedgerReadError> {
     let current = read_record(root, project_id, target)?;
     if current.revision != revision {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "project_ledger_exact_record_hash_changed",
         ));
     }
@@ -93,7 +95,7 @@ pub(super) fn read_source(
         .filter(|record| record.kind == kind && record.id == id);
     let first = matches.next();
     if matches.next().is_some() {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "dashboard_source_ambiguous",
         ));
     }
@@ -120,11 +122,11 @@ pub(super) fn read_source(
         .map(|work| &work.record)
         .or(plan_target.as_ref())
         .or(first)
-        .ok_or(ProjectLedgerReadError::RecordShow(
+        .ok_or(ProjectLedgerReadError::record_show(
             "dashboard_source_unavailable",
         ))?;
     if work.is_some_and(|work| work.availability != "ready") {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "dashboard_source_unavailable",
         ));
     }
@@ -132,7 +134,7 @@ pub(super) fn read_source(
     if exact.metadata.get("schema").and_then(Value::as_str)
         != Some(format!("project-ledger.{kind}.v1").as_str())
     {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "dashboard_source_unavailable",
         ));
     }
@@ -151,7 +153,7 @@ pub(super) fn read_source(
             .and_then(|candidate| candidate.revision.as_deref())
             != Some(exact.revision.as_str())
         {
-            return Err(ProjectLedgerReadError::RecordShow(
+            return Err(ProjectLedgerReadError::record_show(
                 "dashboard_source_changed",
             ));
         }
@@ -164,7 +166,7 @@ pub(super) fn read_source(
             root,
             binding,
             &plan_work
-                .ok_or(ProjectLedgerReadError::RecordShow(
+                .ok_or(ProjectLedgerReadError::record_show(
                     "dashboard_source_unavailable",
                 ))?
                 .record
@@ -201,11 +203,12 @@ fn target_relative(
     indexed_path: &str,
 ) -> Result<PathBuf, ProjectLedgerReadError> {
     let prefix = format!("project-ledger/projects/{project_id}/");
-    let relative = indexed_path
-        .strip_prefix(&prefix)
-        .ok_or(ProjectLedgerReadError::RecordShow(
-            "project_ledger_exact_path_outside_root",
-        ))?;
+    let relative =
+        indexed_path
+            .strip_prefix(&prefix)
+            .ok_or(ProjectLedgerReadError::record_show(
+                "project_ledger_exact_path_outside_root",
+            ))?;
     let path = Path::new(relative);
     if relative.is_empty()
         || path.is_absolute()
@@ -213,7 +216,7 @@ fn target_relative(
             .components()
             .any(|component| !matches!(component, std::path::Component::Normal(_)))
     {
-        return Err(ProjectLedgerReadError::RecordShow(
+        return Err(ProjectLedgerReadError::record_show(
             "project_ledger_exact_path_outside_root",
         ));
     }
@@ -226,14 +229,14 @@ fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), Project
         cursor.push(component);
         match fs::symlink_metadata(&cursor) {
             Ok(stat) if stat.file_type().is_symlink() => {
-                return Err(ProjectLedgerReadError::RecordShow(
+                return Err(ProjectLedgerReadError::record_show(
                     "project_ledger_exact_path_symlink",
                 ));
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
             Err(_) => {
-                return Err(ProjectLedgerReadError::RecordShow(
+                return Err(ProjectLedgerReadError::record_show(
                     "project_ledger_record_io_error",
                 ));
             }

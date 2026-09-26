@@ -41,11 +41,11 @@ impl super::ProjectWorkRepository {
 )]
 pub(in crate::project_ledger) fn read_error(error: ProjectLedgerReadError) -> BtccError {
     match error {
-        ProjectLedgerReadError::RecordShow(code)
-        | ProjectLedgerReadError::Resolution(code)
-        | ProjectLedgerReadError::Owner(code)
-        | ProjectLedgerReadError::DashboardInternal(code)
-        | ProjectLedgerReadError::DashboardUnavailable(code) => invalid(code),
+        ProjectLedgerReadError::RecordShow { code, .. }
+        | ProjectLedgerReadError::Resolution { code, .. }
+        | ProjectLedgerReadError::Owner { code, .. }
+        | ProjectLedgerReadError::DashboardInternal { code, .. }
+        | ProjectLedgerReadError::DashboardUnavailable { code, .. } => invalid(code),
         ProjectLedgerReadError::DashboardChanged => invalid("project_work_snapshot_unstable"),
     }
 }
@@ -62,7 +62,7 @@ pub(in crate::project_ledger) fn read_current(
             Attempt::Ready(snapshot) => return Ok(Some(*snapshot)),
         }
     }
-    Err(ProjectLedgerReadError::RecordShow(
+    Err(ProjectLedgerReadError::record_show(
         "project_work_snapshot_unstable",
     ))
 }
@@ -109,7 +109,8 @@ fn current_attempt(
             observed: &mut observed,
         })?;
     }
-    let dependencies = dependencies::refs(&manifest, &children).map_err(|_| managed_invalid())?;
+    let dependencies = dependencies::refs(&manifest, &children)
+        .map_err(|source| managed_invalid().with_source(source))?;
     for (id, kind, schema) in dependencies {
         if let Some(existing) = children.get(&id) {
             if existing.get("schema").and_then(Value::as_str) != Some(schema) {
@@ -133,7 +134,8 @@ fn current_attempt(
     if !unchanged(&scope.ledger_root, &observed)? {
         return Ok(Attempt::Changed);
     }
-    let view = hydrate(&manifest, &children).map_err(|_| managed_invalid())?;
+    let view =
+        hydrate(&manifest, &children).map_err(|source| managed_invalid().with_source(source))?;
     dashboard::validate_managed_work(&scope.ledger_root, scope, work_id, collation)?;
     if !unchanged(&scope.ledger_root, &observed)? {
         return Ok(Attempt::Changed);
@@ -413,5 +415,5 @@ pub(super) fn hydrate(
 }
 
 fn managed_invalid() -> ProjectLedgerReadError {
-    ProjectLedgerReadError::RecordShow("project_work_managed_record_invalid")
+    ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
 }

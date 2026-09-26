@@ -44,7 +44,7 @@ pub(super) fn ensure(
 ) -> Result<(), ProjectWorkPublicationError> {
     let display_name = crate::public_text::trim_js_whitespace(display_name);
     if display_name.is_empty() {
-        return Err(ProjectWorkPublicationError::Adapter(
+        return Err(ProjectWorkPublicationError::adapter(
             "project_ledger_init_name_required",
         ));
     }
@@ -61,9 +61,9 @@ pub(super) fn ensure(
         if project.exists() && ledger.exists() {
             return Ok(());
         }
-        fs::create_dir_all(&root).map_err(|_| io())?;
+        fs::create_dir_all(&root).map_err(|source| io().with_source(source))?;
         for directory in LAYOUT_DIRS {
-            fs::create_dir_all(root.join(directory)).map_err(|_| io())?;
+            fs::create_dir_all(root.join(directory)).map_err(|source| io().with_source(source))?;
         }
         let timestamp = now_iso()?;
         if !project.exists() {
@@ -75,12 +75,13 @@ pub(super) fn ensure(
                 "createdAt":timestamp,
                 "updatedAt":timestamp,
             });
-            let mut bytes = serde_json::to_vec_pretty(&value).map_err(|_| io())?;
+            let mut bytes =
+                serde_json::to_vec_pretty(&value).map_err(|source| io().with_source(source))?;
             bytes.push(b'\n');
-            fs::write(&project, bytes).map_err(|_| io())?;
+            fs::write(&project, bytes).map_err(|source| io().with_source(source))?;
         }
         if !ledger.exists() {
-            fs::write(&ledger, b"").map_err(|_| io())?;
+            fs::write(&ledger, b"").map_err(|source| io().with_source(source))?;
         }
         let event = serde_json::json!({
             "schema":"project-ledger.event.v1",
@@ -90,7 +91,7 @@ pub(super) fn ensure(
             "source":"project-ledger",
         });
         let mut line = crate::json::stringify(&event)
-            .map_err(|_| io())?
+            .map_err(|source| io().with_source(source))?
             .into_bytes();
         line.push(b'\n');
         use std::io::Write;
@@ -98,10 +99,11 @@ pub(super) fn ensure(
             .append(true)
             .open(&ledger)
             .and_then(|mut file| file.write_all(&line))
-            .map_err(|_| io())?;
-        let bytes = fs::read(&project).map_err(|_| io())?;
-        let _: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| {
-            ProjectWorkPublicationError::Adapter("project_ledger_init_project_invalid_json")
+            .map_err(|source| io().with_source(source))?;
+        let bytes = fs::read(&project).map_err(|source| io().with_source(source))?;
+        let _: serde_json::Value = serde_json::from_slice(&bytes).map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_ledger_init_project_invalid_json")
+                .with_source(source)
         })?;
         Ok(())
     })();
@@ -115,14 +117,15 @@ fn canonical_target(
 ) -> Result<PathBuf, ProjectWorkPublicationError> {
     record::safe_id(&scope.ledger_project_id)?;
     let projects = data_root.join("project-ledger/projects");
-    fs::create_dir_all(&projects).map_err(|_| io())?;
-    let canonical_projects = fs::canonicalize(&projects).map_err(|_| io())?;
+    fs::create_dir_all(&projects).map_err(|source| io().with_source(source))?;
+    let canonical_projects =
+        fs::canonicalize(&projects).map_err(|source| io().with_source(source))?;
     let expected = projects.join(&scope.ledger_project_id);
     if scope.ledger_root != expected {
         return Err(mismatch());
     }
     if expected.exists() {
-        let actual = fs::canonicalize(&expected).map_err(|_| io())?;
+        let actual = fs::canonicalize(&expected).map_err(|source| io().with_source(source))?;
         if actual != canonical_projects.join(&scope.ledger_project_id) {
             return Err(mismatch());
         }
@@ -156,74 +159,91 @@ pub(in crate::project_ledger) fn with_mutation_claim<T>(
 
 fn acquire(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicationError> {
     let parent = path.parent().ok_or_else(io)?;
-    fs::create_dir_all(parent).map_err(|_| io())?;
+    fs::create_dir_all(parent).map_err(|source| io().with_source(source))?;
     for _ in 0..2 {
         let candidate = parent.join(format!(
             "{}.candidate-{}",
             path.file_name().unwrap_or_default().to_string_lossy(),
             uuid::Uuid::new_v4()
         ));
-        let mut bytes = serde_json::to_vec_pretty(owner).map_err(|_| io())?;
+        let mut bytes =
+            serde_json::to_vec_pretty(owner).map_err(|source| io().with_source(source))?;
         bytes.push(b'\n');
-        fs::write(&candidate, bytes).map_err(|_| io())?;
+        fs::write(&candidate, bytes).map_err(|source| io().with_source(source))?;
         let link = fs::hard_link(&candidate, path);
         let _ = fs::remove_file(candidate);
         match link {
             Ok(()) => return Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let bytes = fs::read(path).map_err(|_| ProjectWorkPublicationError::Uncertain)?;
-                let existing: serde_json::Value = serde_json::from_slice(&bytes)
-                    .map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+                let bytes = fs::read(path).map_err(|source| {
+                    ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+                })?;
+                let existing: serde_json::Value =
+                    serde_json::from_slice(&bytes).map_err(|source| {
+                        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+                    })?;
                 if existing.get("schema").and_then(serde_json::Value::as_str)
                     != Some("project-ledger.mutation-claim.v1")
                 {
-                    return Err(ProjectWorkPublicationError::Uncertain);
+                    return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                let previous: MutationClaim = serde_json::from_value(existing)
-                    .map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+                let previous: MutationClaim =
+                    serde_json::from_value(existing).map_err(|source| {
+                        ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+                    })?;
                 if previous.host_id != owner.host_id {
-                    return Err(ProjectWorkPublicationError::Uncertain);
+                    return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let observed = process_started_ms(previous.process_id);
                 if observed.is_some_and(|started| started == previous.process_started_at_ms) {
-                    return Err(ProjectWorkPublicationError::Uncertain);
+                    return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 if observed.is_none() && process_alive(previous.process_id) {
-                    return Err(ProjectWorkPublicationError::Uncertain);
+                    return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
                 let quarantine = path.with_extension(format!("dead-{}", previous.claim_id));
-                fs::rename(path, &quarantine)
-                    .map_err(|_| ProjectWorkPublicationError::Uncertain)?;
-                let quarantined: MutationClaim =
-                    serde_json::from_slice(&fs::read(&quarantine).map_err(|_| io())?)
-                        .map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+                fs::rename(path, &quarantine).map_err(|source| {
+                    ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+                })?;
+                let quarantined: MutationClaim = serde_json::from_slice(
+                    &fs::read(&quarantine).map_err(|source| io().with_source(source))?,
+                )
+                .map_err(|source| {
+                    ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+                })?;
                 if quarantined.claim_id != previous.claim_id {
-                    return Err(ProjectWorkPublicationError::Uncertain);
+                    return Err(ProjectWorkPublicationError::Uncertain { source: None });
                 }
-                fs::remove_file(quarantine).map_err(|_| io())?;
+                fs::remove_file(quarantine).map_err(|source| io().with_source(source))?;
             }
             Err(_) => return Err(io()),
         }
     }
-    Err(ProjectWorkPublicationError::Uncertain)
+    Err(ProjectWorkPublicationError::Uncertain { source: None })
 }
 
 fn release(path: &Path, owner: &MutationClaim) -> Result<(), ProjectWorkPublicationError> {
-    let stored: MutationClaim = serde_json::from_slice(&fs::read(path).map_err(|_| io())?)
-        .map_err(|_| ProjectWorkPublicationError::Uncertain)?;
+    let stored: MutationClaim =
+        serde_json::from_slice(&fs::read(path).map_err(|source| io().with_source(source))?)
+            .map_err(|source| {
+                ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+            })?;
     if stored.claim_id != owner.claim_id {
-        return Err(ProjectWorkPublicationError::Uncertain);
+        return Err(ProjectWorkPublicationError::Uncertain { source: None });
     }
-    fs::remove_file(path).map_err(|_| io())
+    fs::remove_file(path).map_err(|source| io().with_source(source))
 }
 
 fn current_claim() -> Result<MutationClaim, ProjectWorkPublicationError> {
     let process_id = std::process::id();
     let host_id = nix::unistd::gethostname()
-        .map_err(|_| ProjectWorkPublicationError::Uncertain)?
+        .map_err(|source| {
+            ProjectWorkPublicationError::Uncertain { source: None }.with_source(source)
+        })?
         .to_string_lossy()
         .into_owned();
-    let started = process_started_ms(process_id).ok_or(ProjectWorkPublicationError::Uncertain)?;
+    let started = process_started_ms(process_id)
+        .ok_or(ProjectWorkPublicationError::Uncertain { source: None })?;
     Ok(MutationClaim {
         schema: "project-ledger.mutation-claim.v1".into(),
         claim_id: uuid::Uuid::new_v4().to_string(),
@@ -285,7 +305,7 @@ fn now_iso() -> Result<String, ProjectWorkPublicationError> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| io())?;
+        .map_err(|source| io().with_source(source))?;
     let date = DateTime::from_timestamp(
         i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
         elapsed.subsec_nanos(),
@@ -295,8 +315,8 @@ fn now_iso() -> Result<String, ProjectWorkPublicationError> {
 }
 
 fn io() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Io("project_ledger_init_io_error")
+    ProjectWorkPublicationError::io("project_ledger_init_io_error")
 }
 fn mismatch() -> ProjectWorkPublicationError {
-    ProjectWorkPublicationError::Adapter("project_work_scope_mismatch")
+    ProjectWorkPublicationError::adapter("project_work_scope_mismatch")
 }

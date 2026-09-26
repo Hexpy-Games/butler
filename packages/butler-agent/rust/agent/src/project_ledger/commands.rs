@@ -208,8 +208,10 @@ pub(in crate::project_ledger::commands) fn with_mutation_claim<T>(
     root: &Path,
     mutation: impl FnOnce() -> Result<T, CliFailure>,
 ) -> Result<T, CliFailure> {
-    crate::project_ledger::publication::with_mutation_claim(root, mutation)
-        .map_err(|_| CliFailure::new("internal_error", "Project Ledger mutation claim failed"))?
+    crate::project_ledger::publication::with_mutation_claim(root, mutation).map_err(|source| {
+        CliFailure::new("internal_error", "Project Ledger mutation claim failed")
+            .with_source(source)
+    })?
 }
 
 pub(super) fn display_path(root: &Path, relative: &Path) -> String {
@@ -222,7 +224,7 @@ pub(in crate::project_ledger::commands) fn now_iso() -> Result<String, CliFailur
     use std::time::{SystemTime, UNIX_EPOCH};
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| io_failure())?;
+        .map_err(|source| io_failure().with_source(source))?;
     let date = chrono::DateTime::from_timestamp(
         i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
         elapsed.subsec_nanos(),
@@ -275,8 +277,10 @@ pub(in crate::project_ledger::commands) fn contained_root(
         },
     )?;
     if expected.exists() {
-        let actual = std::fs::canonicalize(&expected).map_err(|_| io_failure())?;
-        let supplied = std::fs::canonicalize(project_root).map_err(|_| io_failure())?;
+        let actual =
+            std::fs::canonicalize(&expected).map_err(|source| io_failure().with_source(source))?;
+        let supplied = std::fs::canonicalize(project_root)
+            .map_err(|source| io_failure().with_source(source))?;
         if supplied != actual {
             return Err(CliFailure::new(
                 "project_ledger_project_scope_mismatch",

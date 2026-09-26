@@ -63,15 +63,16 @@ fn read_ledger_targets(root: &Path) -> Result<Vec<ProjectBriefingTarget>, Projec
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
         Err(_) => {
-            return Err(ProjectLedgerReadError::Owner(
+            return Err(ProjectLedgerReadError::owner(
                 "project_ledger_briefing_read_failed",
             ));
         }
     };
     let mut targets = Vec::new();
     for entry in entries {
-        let entry = entry
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_briefing_read_failed"))?;
+        let entry = entry.map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_briefing_read_failed").with_source(source)
+        })?;
         if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
             continue;
         }
@@ -170,7 +171,7 @@ fn event_summary(path: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
         Err(_) => {
-            return Err(ProjectLedgerReadError::Owner(
+            return Err(ProjectLedgerReadError::owner(
                 "project_ledger_briefing_read_failed",
             ));
         }
@@ -180,9 +181,9 @@ fn event_summary(path: &Path) -> Result<Vec<String>, ProjectLedgerReadError> {
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = reader
-            .read_until(b'\n', &mut line)
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_briefing_read_failed"))?;
+        let read = reader.read_until(b'\n', &mut line).map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_briefing_read_failed").with_source(source)
+        })?;
         if read == 0 {
             break;
         }
@@ -233,15 +234,16 @@ fn work_titles(project_root: &Path) -> Result<(Vec<String>, Vec<String>), Projec
             return Ok((vec![], vec![]));
         }
         Err(_) => {
-            return Err(ProjectLedgerReadError::Owner(
+            return Err(ProjectLedgerReadError::owner(
                 "project_ledger_briefing_read_failed",
             ));
         }
     };
     let mut records = Vec::new();
     for entry in entries {
-        let entry = entry
-            .map_err(|_| ProjectLedgerReadError::Owner("project_ledger_briefing_read_failed"))?;
+        let entry = entry.map_err(|source| {
+            ProjectLedgerReadError::owner("project_ledger_briefing_read_failed").with_source(source)
+        })?;
         if !entry.file_type().is_ok_and(|kind| kind.is_dir())
             || entry
                 .file_name()

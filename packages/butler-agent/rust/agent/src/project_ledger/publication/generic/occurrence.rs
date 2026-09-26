@@ -53,10 +53,10 @@ pub(super) fn read(
     let bytes = match fs::read(path(data_root, &id)) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(LedgerEffectError::Uncertain),
+        Err(_) => return Err(LedgerEffectError::Uncertain { source: None }),
     };
     let stored: Occurrence =
-        serde_json::from_slice(&bytes).map_err(|_| LedgerEffectError::Uncertain)?;
+        serde_json::from_slice(&bytes).map_err(LedgerEffectError::uncertain)?;
     if stored.schema != "butler.btcc-project-ledger-effect-occurrence.v2"
         || stored.status != "pending"
         || stored.ledger_project_id != scope.project_id
@@ -66,7 +66,7 @@ pub(super) fn read(
         || stored.occurrence_id != id
         || stored.attempts.is_empty()
     {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     for (index, attempt) in stored.attempts.iter().enumerate() {
         if attempt.request_sha256 != request_sha256 {
@@ -80,7 +80,7 @@ pub(super) fn read(
             || attempt.target_preconditions.is_empty()
             || attempt.publication_id != publication_id(&id, attempt)?
         {
-            return Err(LedgerEffectError::Uncertain);
+            return Err(LedgerEffectError::Uncertain { source: None });
         }
         let mut seen = std::collections::HashSet::new();
         let prefix = format!("project-ledger/projects/{}/", scope.project_id);
@@ -88,7 +88,7 @@ pub(super) fn read(
             let relative = target
                 .path
                 .strip_prefix(&prefix)
-                .ok_or(LedgerEffectError::Uncertain)?;
+                .ok_or(LedgerEffectError::Uncertain { source: None })?;
             if relative.is_empty()
                 || relative.contains('\\')
                 || relative
@@ -108,7 +108,7 @@ pub(super) fn read(
                     crate::project_ledger::publication::contracts::ProjectWorkTargetState::Present
                 ) != target.raw_record_sha256.is_some()
             {
-                return Err(LedgerEffectError::Uncertain);
+                return Err(LedgerEffectError::Uncertain { source: None });
             }
         }
     }
@@ -166,7 +166,7 @@ pub(super) fn append(
     )?;
     locked(data_root, &previous.occurrence_id, || {
         let mut stored = read(data_root, scope, effect_key, request_sha256)?
-            .ok_or(LedgerEffectError::Uncertain)?;
+            .ok_or(LedgerEffectError::Uncertain { source: None })?;
         if stored.attempts.len() != previous.attempts.len() {
             return Err(LedgerEffectError::Conflict);
         }
@@ -231,7 +231,7 @@ fn publication_id(id: &str, attempt: &Attempt) -> Result<String, LedgerEffectErr
 }
 
 fn json_hash(value: &serde_json::Value) -> Result<String, LedgerEffectError> {
-    let encoded = crate::json::stringify(value).map_err(|_| LedgerEffectError::Uncertain)?;
+    let encoded = crate::json::stringify(value).map_err(LedgerEffectError::uncertain)?;
     Ok(digest::sha(encoded.as_bytes()))
 }
 
@@ -255,9 +255,9 @@ fn locked<T>(
     shared::with_lock(data_root, id, || {
         action().map_err(|error| match error {
             LedgerEffectError::Conflict => {
-                ProjectWorkPublicationError::Adapter("project_ledger_effect_occurrence_conflict")
+                ProjectWorkPublicationError::adapter("project_ledger_effect_occurrence_conflict")
             }
-            _ => ProjectWorkPublicationError::Uncertain,
+            _ => ProjectWorkPublicationError::Uncertain { source: None },
         })
     })
     .map_err(convert)
@@ -269,9 +269,10 @@ fn locked<T>(
 )]
 fn convert(error: ProjectWorkPublicationError) -> LedgerEffectError {
     match error {
-        ProjectWorkPublicationError::Adapter("project_ledger_effect_occurrence_conflict") => {
-            LedgerEffectError::Conflict
-        }
-        _ => LedgerEffectError::Uncertain,
+        ProjectWorkPublicationError::Adapter {
+            code: "project_ledger_effect_occurrence_conflict",
+            ..
+        } => LedgerEffectError::Conflict,
+        _ => LedgerEffectError::Uncertain { source: None },
     }
 }

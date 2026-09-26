@@ -28,7 +28,7 @@ pub(in crate::project_ledger) fn apply(
     match run(data_root, request, collation, false)? {
         LedgerEffectReconciliation::Applied(result) => Ok(result),
         LedgerEffectReconciliation::NotApplied => Err(LedgerEffectError::NotApplied),
-        LedgerEffectReconciliation::Uncertain => Err(LedgerEffectError::Uncertain),
+        LedgerEffectReconciliation::Uncertain => Err(LedgerEffectError::Uncertain { source: None }),
     }
 }
 
@@ -51,7 +51,7 @@ fn run(
     only_reconcile: bool,
 ) -> Result<LedgerEffectReconciliation, LedgerEffectError> {
     if request.updates.is_empty() || request.effect_key.is_empty() {
-        return Err(LedgerEffectError::Uncertain);
+        return Err(LedgerEffectError::Uncertain { source: None });
     }
     let scope = scope::resolve(&request.project_root)?;
     if occurrence::legacy_exists(
@@ -62,7 +62,7 @@ fn run(
     )? {
         return Ok(LedgerEffectReconciliation::Uncertain);
     }
-    let value = serde_json::to_value(&request.updates).map_err(|_| LedgerEffectError::Uncertain)?;
+    let value = serde_json::to_value(&request.updates).map_err(LedgerEffectError::uncertain)?;
     let request_sha256 = digest::request(&value, collation)?;
     if let Some(existing) =
         occurrence::read(data_root, &scope, &request.effect_key, &request_sha256)?
@@ -128,7 +128,7 @@ fn snapshot(
             return Ok((after, targets));
         }
     }
-    Err(LedgerEffectError::Uncertain)
+    Err(LedgerEffectError::Uncertain { source: None })
 }
 
 fn result(

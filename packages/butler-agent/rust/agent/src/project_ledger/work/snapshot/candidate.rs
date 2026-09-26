@@ -33,7 +33,7 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
     for id in ids {
         let path = format!("work/{id}/work.md");
         let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-            ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid"),
+            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
         )?;
         let manifest = dashboard::decode_manifest_body(
             records::frontmatter_body_ref(&raw),
@@ -42,9 +42,13 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
             &scope.ledger_project_id,
             collation,
         )
-        .map_err(|_| ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid"))?;
-        let refs = child_refs(&manifest).map_err(|_| {
-            ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid")
+        .map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
+                .with_source(source)
+        })?;
+        let refs = child_refs(&manifest).map_err(|source| {
+            ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
+                .with_source(source)
         })?;
         let mut children = HashMap::with_capacity(refs.len());
         for (child_id, kind, schema) in refs {
@@ -54,7 +58,7 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
                 format!("references/{}.md", child_id.to_lowercase())
             };
             let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-                ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid"),
+                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
             )?;
             let child = dashboard::decode_child_body(
                 records::frontmatter_body_ref(&raw),
@@ -63,8 +67,9 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
                 schema,
                 collation,
             )
-            .map_err(|_| {
-                ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid")
+            .map_err(|source| {
+                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
+                    .with_source(source)
             })?;
             children.insert(child_id, child);
         }
@@ -73,7 +78,7 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
         for (child_id, kind, schema) in dependencies {
             if let Some(existing) = children.get(&child_id) {
                 if existing.get("schema").and_then(Value::as_str) != Some(schema) {
-                    return Err(ProjectWorkPublicationError::Adapter(
+                    return Err(ProjectWorkPublicationError::adapter(
                         "project_work_managed_record_invalid",
                     ));
                 }
@@ -85,7 +90,7 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
                 format!("references/{}.md", child_id.to_lowercase())
             };
             let raw = candidate_or_committed(candidate_root, canonical_root, &path)?.ok_or(
-                ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid"),
+                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid"),
             )?;
             let child = dashboard::decode_child_body(
                 records::frontmatter_body_ref(&raw),
@@ -94,8 +99,9 @@ pub(in crate::project_ledger) fn validate_publication_candidate(
                 schema,
                 collation,
             )
-            .map_err(|_| {
-                ProjectWorkPublicationError::Adapter("project_work_managed_record_invalid")
+            .map_err(|source| {
+                ProjectWorkPublicationError::adapter("project_work_managed_record_invalid")
+                    .with_source(source)
             })?;
             children.insert(child_id, child);
         }
@@ -118,7 +124,7 @@ fn candidate_or_committed(
     match fs::read_to_string(selected) {
         Ok(raw) => Ok(Some(raw)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(ProjectWorkPublicationError::Io(
+        Err(_) => Err(ProjectWorkPublicationError::io(
             "project_ledger_record_io_error",
         )),
     }
