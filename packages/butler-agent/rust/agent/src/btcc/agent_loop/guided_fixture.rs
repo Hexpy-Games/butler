@@ -143,6 +143,7 @@ impl ToolPort for Fixture {
                     "turn_cancelled",
                 )));
             }
+            self.note(format!("execute:{}", call.name));
             crate::json::JsonDocument::from_value(
                 &self
                     .tool_outputs
@@ -160,10 +161,13 @@ impl ToolPort for Fixture {
     fn record_unexecuted<'a>(
         &'a self,
         _invocation: GuidedInvocation<'a>,
-        _: &'a ModelRoundToolCall,
+        call: &'a ModelRoundToolCall,
         _: &'a ToolResult,
     ) -> PortFuture<'a, ()> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            self.note(format!("unexecuted:{}", call.id));
+            Ok(())
+        })
     }
     fn operation_result_call_id(&self, provider_call_id: &str) -> Option<String> {
         Some(format!("journal-{provider_call_id}"))

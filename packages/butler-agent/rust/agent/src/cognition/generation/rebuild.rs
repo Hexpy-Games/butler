@@ -120,7 +120,7 @@ pub(crate) async fn prepare(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
+        .map_err(gate_error)?
         .ok_or_else(|| error("memory_write_busy"))?;
     let result = (|| {
         lease
@@ -204,7 +204,7 @@ async fn ensure_legacy_baseline(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|_| error("memory_write_busy"))?
+        .map_err(gate_error)?
         .ok_or_else(|| error("memory_write_busy"))?;
     let result = (|| {
         lease
@@ -494,6 +494,16 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
 fn io_error(error: std::io::Error) -> CognitionError {
     CognitionError::new("memory_rebuild_io_error", error.to_string())
 }
+/// A caller cancellation observed while waiting for the write gate is an abort,
+/// not contention: `memory_write_busy` is retryable for callers.
+fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
+    if failure.code == "memory_write_aborted" {
+        error("memory_operation_aborted")
+    } else {
+        error("memory_write_busy")
+    }
+}
+
 fn error(code: &'static str) -> CognitionError {
     CognitionError::new(code, code)
 }

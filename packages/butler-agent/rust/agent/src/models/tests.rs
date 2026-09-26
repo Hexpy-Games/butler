@@ -108,9 +108,18 @@ fn local_metadata_and_provider_family_preserve_source_rules() {
         "context_window_tokens":16384});
     let normalized = normalize_local_model_config(&unicode, "now").unwrap();
     assert_eq!(normalized.server_url, "https://xn--bcher-kva.example/a%20b");
+    // An explicit API path is kept verbatim; only a bare host defaults to /v1.
     assert_eq!(
         normalized.api_base_url,
-        "https://xn--bcher-kva.example/a%20b/v1"
+        "https://xn--bcher-kva.example/a%20b"
+    );
+    let bare =
+        json!({"model_id":"bare","server_url":"localhost:8080/","context_window_tokens":16384});
+    assert_eq!(
+        normalize_local_model_config(&bare, "now")
+            .unwrap()
+            .api_base_url,
+        "http://localhost:8080/v1"
     );
     let credentialed = json!({"model_id":"bad","server_url":"https://u:p@example.com/v1",
         "context_window_tokens":16384});

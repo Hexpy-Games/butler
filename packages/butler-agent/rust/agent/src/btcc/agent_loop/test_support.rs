@@ -112,7 +112,7 @@ impl Fixture {
         )
     }
 
-    fn note(&self, value: impl Into<String>) {
+    pub(super) fn note(&self, value: impl Into<String>) {
         self.events.lock().unwrap().push(value.into());
     }
 }

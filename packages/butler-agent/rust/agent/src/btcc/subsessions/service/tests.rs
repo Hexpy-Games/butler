@@ -218,6 +218,35 @@ async fn cancelled_child_abandons_bound_work_and_commits_cancelled_result() {
     })
     .await
     .unwrap();
+    // Dispatch creates the child binding before the child can run; the
+    // service validates the root Work scope against it on completion.
+    bindings
+        .upsert(UpsertSessionBinding {
+            session_id: child_session_id.clone(),
+            role: SessionRole::Steward,
+            project_id: None,
+            app_project_id: OwnOptional::Absent,
+            ledger_project_id: OwnOptional::Absent,
+            workspace_path: "/tmp/workspace".into(),
+            runtime_adapter_id: "test-runtime".into(),
+            model_provider_id: "provider".into(),
+            model_ref: "provider/model".into(),
+            runtime_session_ref: None,
+            provider_thread_ref: None,
+            transport_bindings: Vec::new(),
+            lifecycle_state: None,
+            created_at: None,
+            updated_at: None,
+            last_active_at: None,
+            metadata: Some(
+                json!({"runtimePolicy":{"trackingMode":"local"}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        })
+        .await
+        .unwrap();
     let service = NativeSubsessionService::new(
         repository.clone(),
         bindings.clone(),

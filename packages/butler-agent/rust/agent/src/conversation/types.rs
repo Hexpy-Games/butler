@@ -60,6 +60,9 @@ pub(crate) enum ConversationOriginKind {
     Unknown,
 }
 
+/// Field order is persisted: `origin_evidence_json` stores `kind, ref, sha256`
+/// (the legacy Bun writer's order) and origin classification compares the
+/// stored text byte-for-byte, so do not reorder these fields.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ConversationOriginEvidence {
     pub kind: String,
