@@ -127,17 +127,37 @@ test("a bubble that ends outside the viewport after the list scrolls uses the re
 
 test("a layout change after mount keeps the bubble where it is seen and finishes at the new place", async () => {
   recordSendOrigin(element(rect(100, 700, 600, 24)));
-  let box = rect(760, 420, 300, 36);
-  const bubble = element(box);
-  bubble.getBoundingClientRect = () => box;
+  const row = element(rect(700, 410, 400, 56));
+  const bubble = element(rect(760, 420, 300, 36));
+  row.append(bubble);
   flySendBubble(bubble);
-  // The list scrolls the row up by 80px after the flight started (jsdom
-  // computes no translate, so the bubble was drawn at its old layout box).
-  box = rect(760, 340, 300, 36);
+  const [startX, startY] = String(calls[0]!.keyframes[0]!.translate).split(" ").map((part) => Number.parseFloat(part));
+  // The list scrolls the row up by 80px after the flight started, before its
+  // first frame: the bubble was drawn at its start offset from the old place.
+  row.getBoundingClientRect = () => rect(700, 330, 400, 56);
   await Promise.resolve();
   expect(calls[0]!.cancelled).toBe(true);
   // The scroll does not drag the bubble: it continues from where it was drawn.
-  expect(calls[1]!.keyframes[0]).toEqual({ translate: "0px 80px" });
+  expect(calls[1]!.keyframes[0]).toEqual({ translate: `${startX}px ${startY! + 80}px` });
+});
+
+test("retargeting reads layout from the unanimated row and never samples the animated style", async () => {
+  recordSendOrigin(element(rect(100, 700, 600, 24)));
+  const row = element(rect(700, 410, 400, 56));
+  const bubble = element(rect(760, 420, 300, 36));
+  row.append(bubble);
+  let bubbleReads = 0;
+  bubble.getBoundingClientRect = () => { bubbleReads += 1; return rect(760, 420, 300, 36); };
+  const computed = window.getComputedStyle.bind(window);
+  let styleReads = 0;
+  window.getComputedStyle = ((node: Element) => { if (node === bubble) styleReads += 1; return computed(node); }) as typeof window.getComputedStyle;
+  flySendBubble(bubble);
+  const before = { bubbleReads, styleReads };
+  await Promise.resolve();
+  // Reading the animated bubble (its box or computed translate) would pull a
+  // compositor animation back to the main thread every retarget frame.
+  expect(bubbleReads).toBe(before.bubbleReads);
+  expect(styleReads).toBe(before.styleReads);
 });
 
 test("a long message (tall origin text or tall bubble) uses the regular insert", () => {
@@ -158,4 +178,30 @@ test("without a measurable origin nothing is recorded", () => {
   expect(hasSendOrigin()).toBe(false);
   recordSendOrigin(element(rect(0, 0, 0, 0)));
   expect(hasSendOrigin()).toBe(false);
+});
+
+test("retargeting stops after its time window whatever the frame rate", async () => {
+  recordSendOrigin(element(rect(100, 700, 600, 24)));
+  const row = element(rect(700, 410, 400, 56));
+  const bubble = element(rect(760, 420, 300, 36));
+  row.append(bubble);
+  const realPerformanceNow = performance.now.bind(performance);
+  let clock = 0;
+  performance.now = () => clock;
+  const scheduled: FrameRequestCallback[] = [];
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => { scheduled.push(callback); return scheduled.length; }) as typeof requestAnimationFrame;
+  try {
+    flySendBubble(bubble);
+    await Promise.resolve();
+    // 60Hz frames: 8 frames would last 133ms; the window ends at 64ms.
+    let frames = 0;
+    while (scheduled.length > 0 && frames < 20) {
+      clock += 16.7;
+      scheduled.shift()!(clock);
+      frames += 1;
+    }
+    expect(frames).toBeLessThanOrEqual(4);
+  } finally {
+    performance.now = realPerformanceNow;
+  }
 });

@@ -242,9 +242,15 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   const rounds = 3;
   const { events, thread } = await traced(browser, page, async () => {
     for (let round = 0; round < rounds; round += 1) {
-      await markNow(page, `flight-${round}`);
-      // A programmatic click keeps the pointer (and the send tooltip) out of the frames.
-      await scope.evaluate((story) => (story.querySelector('[data-ds-motion="send-flight"]') as HTMLElement).click());
+      // The window is anchored on the click itself: the mark and a
+      // programmatic click (which keeps the pointer and the send tooltip out
+      // of the frames) run in one task. A mark from a separate evaluate
+      // landed 4-50ms before the click depending on load, sliding the
+      // mount/retarget frames into the judged window (the old flake).
+      await scope.evaluate((story, label) => {
+        performance.mark(label);
+        (story.querySelector('[data-ds-motion="send-flight"]') as HTMLElement).click();
+      }, `flight-${round}`);
       await page.waitForTimeout(700);
     }
     return {};
@@ -265,9 +271,10 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   });
   const windows = Array.from({ length: rounds }, (_, round) => {
     const start = markTs(events, `flight-${round}`);
-    // Skip the input, mount and retarget frames (about the first 60ms) and the
-    // final ~40ms, where Chromium hands the finishing animation back to the
-    // main thread; judge the travel frames in between. The bubble starts
+    // Skip the mount and retarget frames (sendFlight bounds retargeting to
+    // 64ms, whatever the frame rate) and the final ~40ms, where Chromium hands
+    // the finishing animation back to the main thread; judge the travel
+    // frames in between. The bubble starts
     // right-aligned to the composer text, so travel is mostly vertical and
     // can use the shorter --motion-slow (220ms) flight.
     return windowStats(events, thread, start + 80_000, start + 160_000);

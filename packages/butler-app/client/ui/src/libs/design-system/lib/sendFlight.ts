@@ -19,8 +19,10 @@ export const SEND_ORIGIN_MAX_AGE_MS = 800;
 export const SEND_FLIGHT_MAX_HEIGHT_RATIO = 0.35;
 /** Travel beyond this uses --motion-deliberate instead of --motion-slow. */
 const LONG_TRAVEL_PX = 240;
-/** Frames in which the list may still scroll or re-measure the new row. */
+/** Frames in which the list may still scroll or re-measure the new row... */
 const RETARGET_FRAMES = 8;
+/** ...bounded in time, so the main-thread phase does not stretch at low frame rates. */
+const RETARGET_WINDOW_MS = 64;
 
 interface SendOrigin {
   /** Right edge of the composer's text box (content edge, inside padding). */
@@ -89,13 +91,6 @@ function px(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function currentTranslate(target: HTMLElement): [number, number] {
-  const value = window.getComputedStyle(target).translate || "";
-  if (!value || value === "none") return [0, 0];
-  const [x = "0", y = "0"] = value.split(/\s+/u);
-  return [px(x), px(y)];
-}
-
 export interface SendFlight {
   cancel: () => void;
 }
@@ -120,10 +115,25 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   const dy = Math.round(startTop - box.top);
   if (Math.abs(dy) > window.innerHeight * 3) return null;
   const duration = Math.hypot(dx, dy) > LONG_TRAVEL_PX ? "deliberate" : "slow";
-  const fly = (x: number, y: number) =>
-    animateMotion(target, [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }], { duration, easing: "decelerate" });
+  // Where the flight currently starts from (its first keyframe offset).
+  let fromX = dx;
+  let fromY = dy;
+  const fly = (x: number, y: number) => {
+    fromX = x;
+    fromY = y;
+    return animateMotion(target, [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }], { duration, easing: "decelerate" });
+  };
   let animation = fly(dx, dy);
   if (!animation) return null;
+  // Layout is read from the bubble's unanimated parent (plus the bubble's
+  // offset in it), never from the bubble: reading the animated element's box
+  // or computed translate would sample the compositor animation on the main
+  // thread (style, layout and paint) in every retarget frame.
+  const anchor = target.parentElement;
+  const anchorStart = anchor?.getBoundingClientRect();
+  const offsetLeft = box.left - (anchorStart?.left ?? 0);
+  const offsetTop = box.top - (anchorStart?.top ?? 0);
+  const startedAt = performance.now();
 
   // The list scrolls to the new row (in the same commit or a later frame) and
   // re-measures it during the next frames. Follow the new layout position
@@ -136,12 +146,15 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
   let frame = 0;
   const check = () => {
     frame = 0;
-    if (!animation || !target.isConnected) return;
-    const seen = target.getBoundingClientRect();
-    const [tx, ty] = currentTranslate(target);
-    const left = seen.left - tx;
-    const top = seen.top - ty;
-    if (frames === 0 && (top + seen.height <= 0 || top >= window.innerHeight)) {
+    if (!animation || !target.isConnected || !anchor) return;
+    const anchorBox = anchor.getBoundingClientRect();
+    const left = anchorBox.left + offsetLeft;
+    const top = anchorBox.top + offsetTop;
+    // The eased progress gives the translate the bubble is drawn with.
+    const progress = animation.effect?.getComputedTiming().progress ?? 0;
+    const tx = fromX * (1 - progress);
+    const ty = fromY * (1 - progress);
+    if (frames === 0 && (top + box.height <= 0 || top >= window.innerHeight)) {
       animation.cancel();
       animation = animateMotion(target, [
         { opacity: 0, translate: `0px ${motionDistance("sm")}px` },
@@ -167,7 +180,9 @@ export function flySendBubble(target: HTMLElement): SendFlight | null {
       }
     }
     frames += 1;
-    if (animation && frames < RETARGET_FRAMES) frame = window.requestAnimationFrame(check);
+    if (animation && frames < RETARGET_FRAMES && performance.now() - startedAt < RETARGET_WINDOW_MS) {
+      frame = window.requestAnimationFrame(check);
+    }
   };
   // After the commit (the list's scroll to the new row) and before paint.
   queueMicrotask(check);
