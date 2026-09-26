@@ -29,7 +29,7 @@ impl AppExecutorReadiness for NativeAppReadiness {
         let published = self
             .receipt
             .published_identity()
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         let authenticated_gateway_ready = self.listener_ready.load(Ordering::Acquire);
         Ok(RuntimeReadinessView {
             authenticated_gateway_ready,

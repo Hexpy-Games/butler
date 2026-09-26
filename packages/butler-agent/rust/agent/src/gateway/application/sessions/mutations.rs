@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::read;
 use crate::gateway::GatewayApplicationError;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppApplication, app_error, events, storage::AppStorageError};
 use crate::public_text::trim_js_whitespace;
 
@@ -188,7 +189,7 @@ fn mutate_session(
     let current = read::session(&tx, session_id)?;
     if session_id == "general" && archived == Some(true) {
         return Err(AppStorageError::new(
-            "general_channel_protected",
+            AppStorageCode::GeneralChannelProtected,
             "일반 채널은 보관하거나 삭제할 수 없습니다.",
         ));
     }
@@ -223,7 +224,7 @@ fn delete_permanently(
     let session = read::session(&tx, session_id)?;
     if session_id == "general" {
         return Err(AppStorageError::new(
-            "general_channel_protected",
+            AppStorageCode::GeneralChannelProtected,
             "일반 채널은 보관하거나 삭제할 수 없습니다.",
         ));
     }
@@ -246,5 +247,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

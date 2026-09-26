@@ -64,12 +64,12 @@ impl ProjectCreationOwner {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         let (send, receive) = oneshot::channel();
         {
             let state = self.0.state.lock();
             if state.closing {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             let root = state.workspace_root.clone();
             let secret = self.0.secret.clone();
@@ -83,7 +83,7 @@ impl ProjectCreationOwner {
         }
         receive
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
 
     pub(in crate::gateway::application) async fn close(&self) {

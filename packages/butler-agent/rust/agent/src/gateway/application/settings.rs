@@ -125,7 +125,8 @@ pub(super) fn resolve_for_message_send(
 }
 
 pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution, AppStorageError> {
-    let value: Value = serde_json::from_str(value).map_err(|_| invalid_resolution())?;
+    let value: Value =
+        serde_json::from_str(value).map_err(|source| invalid_resolution().with_source(source))?;
     let object = value.as_object().ok_or_else(invalid_resolution)?;
     let controls = object
         .get("controls")
@@ -171,13 +172,13 @@ pub(super) fn resolution_from_persisted(value: &str) -> Result<ControlResolution
         .cloned()
         .map(serde_json::from_value)
         .transpose()
-        .map_err(|_| invalid_resolution())?;
+        .map_err(|source| invalid_resolution().with_source(source))?;
     let subsession_result = object
         .get("subsession_result")
         .cloned()
         .map(serde_json::from_value)
         .transpose()
-        .map_err(|_| invalid_resolution())?;
+        .map_err(|source| invalid_resolution().with_source(source))?;
     Ok(ControlResolution {
         model,
         reasoning_effort,

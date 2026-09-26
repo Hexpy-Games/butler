@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
 use super::{final_candidate::FinalCandidate, staging};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     MaterializedResponderFile,
     events::EventSubscribers,
@@ -68,7 +69,7 @@ pub(super) fn apply(
         params![input.chat_id,input.turn_id],|row|row.get(0)).optional().map_err(AppStorageError::sqlite)?;
     if current_existing != input.existing_message_id {
         return Err(AppStorageError::new(
-            "app_projection_message_changed",
+            AppStorageCode::AppProjectionMessageChanged,
             "Assistant message changed during artifact materialization.",
         ));
     }
@@ -204,7 +205,7 @@ pub(super) fn apply(
             .find(|row| row.id == message_id)
             .ok_or_else(|| {
                 AppStorageError::new(
-                    "projected_message_missing",
+                    AppStorageCode::ProjectedMessageMissing,
                     "Projected message was not found.",
                 )
             })?;
@@ -256,7 +257,7 @@ fn settle(
     }
     let claim = input.claim_id.as_deref().ok_or_else(|| {
         AppStorageError::new(
-            "queued_message_claim_missing",
+            AppStorageCode::QueuedMessageClaimMissing,
             "Queued result omitted its claim.",
         )
     })?;
@@ -270,7 +271,7 @@ fn settle(
         now,
     )? {
         return Err(AppStorageError::new(
-            "queued_message_claim_lost",
+            AppStorageCode::QueuedMessageClaimLost,
             "Queued message claim was lost.",
         ));
     }
@@ -328,7 +329,10 @@ fn append_turn_state_changed(
         .into_iter()
         .find(|row| row.id == turn)
         .ok_or_else(|| {
-            AppStorageError::new("projected_turn_missing", "Projected Turn was not found.")
+            AppStorageError::new(
+                AppStorageCode::ProjectedTurnMissing,
+                "Projected Turn was not found.",
+            )
         })?;
     super::super::events::append(
         db,
@@ -344,7 +348,7 @@ fn append_turn_state_changed(
 fn object_value(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
         AppStorageError::new(
-            "app_projection_payload_invalid",
+            AppStorageCode::AppProjectionPayloadInvalid,
             "Projection payload is invalid.",
         )
     })

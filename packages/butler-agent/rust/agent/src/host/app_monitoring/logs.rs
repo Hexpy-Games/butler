@@ -19,7 +19,7 @@ pub(super) fn read(
     let contents = match fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(_) => return Err(GatewayApplicationError::Internal),
+        Err(_) => return Err(GatewayApplicationError::internal()),
     };
     let kind = query
         .kind

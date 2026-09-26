@@ -6,58 +6,58 @@ struct TestRelocation;
 
 impl crate::gateway::AppRelocationHost for TestRelocation {
     fn inspect(&self, _: String) -> ApplicationFuture<crate::gateway::AppRelocationSnapshot> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn ensure_binding(
         &self,
         _: crate::gateway::AppRelocationBindingSeed,
     ) -> ApplicationFuture<crate::gateway::AppRelocationBinding> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn plan_workspace(
         &self,
         _: crate::gateway::AppRelocationWorkspaceRequest,
     ) -> ApplicationFuture<crate::gateway::AppRelocationWorkspacePlan> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn prepare_workspace(
         &self,
         _: crate::gateway::AppRelocationWorkspacePlan,
     ) -> ApplicationFuture<crate::gateway::AppRelocationWorkspacePlan> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn compare_and_set_binding(
         &self,
         _: crate::gateway::AppRelocationBindingUpdate,
     ) -> ApplicationFuture<crate::gateway::AppRelocationBindingResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn sync_conversation_context(
         &self,
         _: crate::gateway::AppRelocationCanonicalUpdate,
     ) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn discard_workspace(
         &self,
         _: crate::gateway::AppRelocationWorkspacePlan,
     ) -> ApplicationFuture<bool> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
 impl crate::gateway::AppMonitoringPort for TestMonitoring {
     fn work_status(&self) -> ApplicationFuture<Vec<crate::gateway::AppBoundWorkStatusFact>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn usage_monitor(&self, _: crate::gateway::AppUsageMonitorQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn system_events(&self, _: crate::gateway::AppMonitorPage) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn developer_logs(&self, _: crate::gateway::AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -118,7 +118,7 @@ impl crate::gateway::AppPersonalizationPort for TestPersonalization {
         _: crate::gateway::AppPersonalizationCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> crate::gateway::ApplicationFuture<crate::gateway::AppPersonalizationResult> {
-        Box::pin(async { Err(crate::gateway::GatewayApplicationError::Internal) })
+        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
 }
 
@@ -128,7 +128,7 @@ impl crate::gateway::AppModelCatalogPort for TestModelCatalog {
         _: crate::gateway::AppModelCatalogCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> crate::gateway::ApplicationFuture<Value> {
-        Box::pin(async { Err(crate::gateway::GatewayApplicationError::Internal) })
+        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
     }
 }
 
@@ -274,14 +274,14 @@ impl AppAdmissionAuthority for TestAdmission {
         &self,
         _: AppLedgerSourceRequest,
     ) -> ApplicationFuture<AppSourceDocument> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn snapshot_source(
         &self,
         _: AppSourceSnapshotRequest,
     ) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value> {
@@ -310,15 +310,15 @@ impl AppArtifactMaterializer for TestMaterializer {
 
 impl AppMessageFileStorage for TestMaterializer {
     fn write_upload(&self, _: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn prepare_uploaded(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn read_original(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<Bytes> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -427,7 +427,7 @@ impl AppSessionWorkspaceProvisioner for TestSessions {
         _: AppSessionWorkspaceSnapshot,
         _: CancellationToken,
     ) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn branch_info(
@@ -464,10 +464,10 @@ impl AppSubsessionPort for TestSessions {
         Box::pin(async { Ok(json!({"steward_children":[],"workers":[]})) })
     }
     fn cancel(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn resume(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_operation_output_chunks(
         &self,

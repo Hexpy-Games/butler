@@ -61,7 +61,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
             if bindings
                 .get_by_session_id(&snapshot.runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
                 .is_some()
             {
                 return Err(provisioning_error());
@@ -104,7 +104,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     metadata: Some(metadata),
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let result = worktrees
                 .bind(BindSessionWorktreeInput {
                     action: SessionWorktreeAction::Create,
@@ -126,7 +126,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     ..
                 }) => Some(Ok(())),
                 Ok(BindSessionWorktreeResult::Failed { .. }) => Some(Err(provisioning_error())),
-                Err(_) => Some(Err(GatewayApplicationError::Internal)),
+                Err(_) => Some(Err(GatewayApplicationError::internal())),
             };
             match failed {
                 None => Ok(()),
@@ -134,7 +134,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     bindings
                         .delete_session(&snapshot.runtime_session_id)
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)?;
+                        .map_err(GatewayApplicationError::internal_from)?;
                     outcome
                 }
             }
@@ -155,7 +155,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     cancellation.clone(),
                 )
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let value = match recovered.authority {
                 SessionWorkspaceAuthority::Unavailable {
                     workspace_label,
@@ -195,7 +195,7 @@ impl AppSessionWorkspaceProvisioner for NativeAppSessionWorkspaces {
                     match recovery
                         .inspect_project(path, cancellation)
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)?
+                        .map_err(GatewayApplicationError::internal_from)?
                     {
                         ProjectWorkspaceInspection::Folder => serde_json::json!({
                             "available":false,"workspace_mode":"folder","safe_status":"Project workspace",
@@ -246,5 +246,6 @@ fn provisioning_error() -> GatewayApplicationError {
         status: 409,
         code: "session_worktree_creation_failed".into(),
         message: "Project session worktree could not be created.".into(),
+        source: None,
     }
 }

@@ -86,6 +86,7 @@ pub(super) fn require_relation(projection: &Value) -> Result<(), GatewayApplicat
             status: 404,
             code: "session_not_found".into(),
             message: "Session not found.".into(),
+            source: None,
         })
     }
 }
@@ -115,5 +116,5 @@ pub(super) fn serialize_option<T: serde::Serialize>(
 }
 
 pub(super) fn json_error(_: serde_json::Error) -> GatewayApplicationError {
-    GatewayApplicationError::Internal
+    GatewayApplicationError::internal()
 }

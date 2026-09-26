@@ -24,7 +24,7 @@ pub(super) async fn read(
         )
         .map(|(order, project, item)| {
             item.map(|item| (order, project, item))
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
         .collect::<Result<Vec<_>, _>>()?;
     items.sort_by(|left, right| right.0.cmp(&left.0));

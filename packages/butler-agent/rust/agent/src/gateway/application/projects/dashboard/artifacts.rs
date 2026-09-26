@@ -349,5 +349,6 @@ fn source_unavailable() -> GatewayApplicationError {
         status: 404,
         code: "source_unavailable".into(),
         message: "Source unavailable.".into(),
+        source: None,
     }
 }

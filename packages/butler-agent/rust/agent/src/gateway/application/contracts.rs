@@ -46,7 +46,7 @@ pub(crate) trait AppNativeIngress: Send + Sync + 'static {
         &self,
         _cancel: NativeAppCancellation,
     ) -> ApplicationFuture<NativeEnqueueReceipt> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 

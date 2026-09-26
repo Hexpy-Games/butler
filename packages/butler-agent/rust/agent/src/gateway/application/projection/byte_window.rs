@@ -7,6 +7,7 @@ use std::{
 };
 
 use super::{TranscriptEvent, checkpoint::Checkpoint};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
 
 const BYTE_WINDOW: usize = 64 * 1024;
@@ -176,8 +177,9 @@ fn parse_spool(path: &Path) -> Result<Option<TranscriptEvent>, AppStorageError> 
     serde_json::from_reader(file).map(Some).map_err(json_error)
 }
 fn parse_record(bytes: &[u8]) -> Result<Option<TranscriptEvent>, AppStorageError> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|error| AppStorageError::new("invalid_utf8", error.to_string()))?;
+    let text = std::str::from_utf8(bytes).map_err(|error| {
+        AppStorageError::new(AppStorageCode::InvalidUtf8, error.to_string()).with_source(error)
+    })?;
     if text
         .bytes()
         .all(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
@@ -186,17 +188,10 @@ fn parse_record(bytes: &[u8]) -> Result<Option<TranscriptEvent>, AppStorageError
     }
     serde_json::from_str(text).map(Some).map_err(json_error)
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
-    AppStorageError::new("invalid_json", error.to_string())
+    AppStorageError::new(AppStorageCode::InvalidJson, error.to_string()).with_source(error)
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> AppStorageError {
-    AppStorageError::new("app_transcript_io_failed", error.to_string())
+    AppStorageError::new(AppStorageCode::AppTranscriptIoFailed, error.to_string())
+        .with_source(error)
 }

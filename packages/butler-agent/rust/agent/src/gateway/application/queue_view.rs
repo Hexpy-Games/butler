@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::storage::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     MessageFileRef, QueueState, QueuedMessageRecord, SessionControlState, SessionQueueView,
 };
@@ -19,7 +20,7 @@ pub(super) fn list(
         .map_err(AppStorageError::sqlite)?;
     if found.is_none() {
         return Err(AppStorageError::new(
-            "session_not_found",
+            AppStorageCode::SessionNotFound,
             "Session not found.",
         ));
     }
@@ -193,7 +194,9 @@ fn queue_record(
         plan_id: public_plan_id(row.control_resolution_json.as_deref()),
         attachments: (!files.is_empty()).then_some(files),
         controls: serde_json::from_str::<SessionControlState>(&row.controls_json).map_err(
-            |error| AppStorageError::new("app_projection_json_invalid", error.to_string()),
+            |error| {
+                AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+            },
         )?,
         state: parse_enum::<QueueState>(&row.state)?,
         safe_error_code: row.safe_error_code,
@@ -245,8 +248,10 @@ fn files_for_ids(
 }
 
 fn parse_enum<T: DeserializeOwned>(value: &str) -> Result<T, AppStorageError> {
-    serde_json::from_value(Value::String(value.to_owned()))
-        .map_err(|error| AppStorageError::new("app_projection_value_invalid", error.to_string()))
+    serde_json::from_value(Value::String(value.to_owned())).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppProjectionValueInvalid, error.to_string())
+            .with_source(error)
+    })
 }
 fn parse_sql_enum<T: DeserializeOwned>(value: String) -> rusqlite::Result<T> {
     serde_json::from_value(Value::String(value)).map_err(|error| {
@@ -257,7 +262,8 @@ fn parse_optional<T: DeserializeOwned>(value: Option<&str>) -> Result<Option<T>,
     value
         .map(|json| {
             serde_json::from_str(json).map_err(|error| {
-                AppStorageError::new("app_projection_json_invalid", error.to_string())
+                AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+                    .with_source(error)
             })
         })
         .transpose()

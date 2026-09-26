@@ -80,7 +80,7 @@ pub(super) fn input_digest_with_plan(
     if let Some(content) = request.content_parts.as_ref() {
         object.insert(
             "content_parts".into(),
-            serde_json::to_value(content).map_err(|_| GatewayApplicationError::Internal)?,
+            serde_json::to_value(content).map_err(GatewayApplicationError::internal_from)?,
         );
     }
     if let Some(project) = request.expected_project_id.as_ref() {
@@ -95,7 +95,7 @@ pub(super) fn input_digest_with_plan(
     if !requested_ids.is_empty() {
         object.insert(
             "requested_attachment_ids".into(),
-            serde_json::to_value(requested_ids).map_err(|_| GatewayApplicationError::Internal)?,
+            serde_json::to_value(requested_ids).map_err(GatewayApplicationError::internal_from)?,
         );
     }
     let value = Value::Object(object);
@@ -110,5 +110,5 @@ pub(super) fn serialize_optional(
     value.map(stringify).transpose()
 }
 pub(super) fn stringify(value: &impl serde::Serialize) -> Result<String, GatewayApplicationError> {
-    serde_json::to_string(value).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_string(value).map_err(GatewayApplicationError::internal_from)
 }

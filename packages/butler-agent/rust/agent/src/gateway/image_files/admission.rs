@@ -91,8 +91,8 @@ pub(super) fn parse_queued(
         let Some(raw) = object.get("image_admission") else {
             return Err(invalid_queue());
         };
-        let current: VisualImageAdmissionResult =
-            serde_json::from_value(raw.clone()).map_err(|_| invalid_queue())?;
+        let current: VisualImageAdmissionResult = serde_json::from_value(raw.clone())
+            .map_err(|source| invalid_queue().with_source(source))?;
         if let Some(first) = &mut parsed {
             if first.tuple != current.tuple || first.capability != current.capability {
                 return Err(invalid_queue());
@@ -142,7 +142,7 @@ pub(super) fn validate(
         .map_err(|error| image_error(error.code()))?;
         files::verified_derivative(root, manifest)?;
     }
-    serde_json::to_value(checked).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_value(checked).map_err(GatewayApplicationError::internal_from)
 }
 
 fn route(entry: Option<&ModelProviderMetadata>) -> crate::context::ImageCarrierTuple {

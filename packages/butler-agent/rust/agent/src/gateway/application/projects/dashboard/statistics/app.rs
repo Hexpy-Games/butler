@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use super::super::super::super::storage::AppStorageError;
 use super::calendar::{self, Calendar};
 use super::view::{self, add, set_source};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::public_text::sanitize_public_text;
 
 const MAX_ROWS: usize = 20_000;
@@ -273,7 +274,7 @@ fn read_turns(
 
 fn limit_error() -> AppStorageError {
     AppStorageError::new(
-        "project_statistics_limit",
+        AppStorageCode::ProjectStatisticsLimit,
         "Statistics exceed the bounded read limit.",
     )
 }

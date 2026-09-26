@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 
 use super::{AppSessionBranchDestination, AppSessionBranchRequest, AppSessionBranchSeed};
 use crate::gateway::application::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 
 #[derive(Clone)]
 pub(super) struct BranchRow {
@@ -44,8 +45,10 @@ pub(super) fn row(db: &Connection, id: &str) -> Result<Option<BranchRow>, AppSto
 }
 
 pub(super) fn saved_request(row: &BranchRow) -> Result<AppSessionBranchRequest, AppStorageError> {
-    serde_json::from_str(&row.source_json)
-        .map_err(|error| AppStorageError::new("branch_json_invalid", error.to_string()))
+    serde_json::from_str(&row.source_json).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })
 }
 
 pub(super) fn insert(
@@ -55,10 +58,14 @@ pub(super) fn insert(
     target_session_id: &str,
     seed: &AppSessionBranchSeed,
 ) -> Result<(), AppStorageError> {
-    let source_json = serde_json::to_string(request)
-        .map_err(|error| AppStorageError::new("branch_json_invalid", error.to_string()))?;
-    let seed_json = serde_json::to_string(seed)
-        .map_err(|error| AppStorageError::new("branch_json_invalid", error.to_string()))?;
+    let source_json = serde_json::to_string(request).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })?;
+    let seed_json = serde_json::to_string(seed).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })?;
     db.execute(
         "INSERT INTO app_session_branches(request_id,input_digest,target_session_id,source_json,seed_json,state) \
          VALUES(?1,?2,?3,?4,?5,'prepared')",
@@ -220,8 +227,10 @@ pub(super) fn input_digest(request: &AppSessionBranchRequest) -> Result<String, 
             .map(|value| Value::String(value.to_owned()))
             .unwrap_or(Value::Null),
     ]);
-    let encoded = serde_json::to_string(&digest_input)
-        .map_err(|error| AppStorageError::new("branch_json_invalid", error.to_string()))?;
+    let encoded = serde_json::to_string(&digest_input).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })?;
     use sha2::{Digest, Sha256};
     let mut digest = String::with_capacity(64);
     for byte in Sha256::digest(encoded.as_bytes()) {
@@ -233,8 +242,10 @@ pub(super) fn input_digest(request: &AppSessionBranchRequest) -> Result<String, 
 }
 
 pub(super) fn seed(row: &BranchRow) -> Result<AppSessionBranchSeed, AppStorageError> {
-    serde_json::from_str(&row.seed_json)
-        .map_err(|error| AppStorageError::new("branch_json_invalid", error.to_string()))
+    serde_json::from_str(&row.seed_json).map_err(|error| {
+        AppStorageError::new(AppStorageCode::BranchJsonInvalid, error.to_string())
+            .with_source(error)
+    })
 }
 
 fn message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BranchSourceMessage> {

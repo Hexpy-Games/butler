@@ -72,7 +72,7 @@ impl NativeAppSettingsMutation {
             self.profile
                 .set_extractor_model(Some(model.to_owned()))
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
         if let Some(effort) = patch
             .get("consolidation_reasoning_effort")
@@ -81,13 +81,13 @@ impl NativeAppSettingsMutation {
             self.profile
                 .set_extractor_reasoning_effort(Some(effort.to_owned()))
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
         if let (Some(key), Some(value)) = (environment_key, api_key) {
             self.configuration
                 .upsert_private_environment_value(key, value, &root)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
         if patch.contains_key("web_search") {
             let web_search = projection.get("web_search").unwrap_or(&Value::Null);
@@ -102,7 +102,7 @@ impl NativeAppSettingsMutation {
             self.configuration
                 .update_web_search_settings(&config_patch, &root)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
 
         let mut user_patch = Map::new();
@@ -121,7 +121,7 @@ impl NativeAppSettingsMutation {
             self.configuration
                 .update_user_settings(&Value::Object(user_patch), Some(&root))
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
         Ok(())
     }
@@ -173,5 +173,6 @@ fn unsafe_path() -> GatewayApplicationError {
         status: 400,
         code: "settings_path_unsafe".into(),
         message: "Settings destination is not safe.".into(),
+        source: None,
     }
 }

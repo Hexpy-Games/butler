@@ -13,6 +13,7 @@ use super::{
     io::{atomic_write, ensure_dir, file_names, read},
     record_path,
 };
+use crate::gateway::NativeQueueCode;
 use crate::gateway::native_queue::{
     ClaimedInboundEvent, NativeQueueError, QueueResult, record::ProcessingLease,
 };
@@ -50,7 +51,10 @@ pub(in crate::gateway::native_queue) fn claim(
         let expires: DateTime<Utc> = now
             .checked_add(LEASE)
             .ok_or_else(|| {
-                NativeQueueError::new("inbound_queue_time_invalid", "Invalid queue lease")
+                NativeQueueError::new(
+                    NativeQueueCode::InboundQueueTimeInvalid,
+                    "Invalid queue lease",
+                )
             })?
             .into();
         let lease = ProcessingLease {
@@ -157,7 +161,11 @@ pub(in crate::gateway::native_queue) fn recover_stale(
             record.metadata.insert(
                 "previousProcessing".into(),
                 serde_json::to_value(previous).map_err(|error| {
-                    NativeQueueError::new("inbound_queue_encode_failed", error.to_string())
+                    NativeQueueError::new(
+                        NativeQueueCode::InboundQueueEncodeFailed,
+                        error.to_string(),
+                    )
+                    .with_source(error)
                 })?,
             );
         }

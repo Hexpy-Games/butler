@@ -24,6 +24,6 @@ impl AutomationEnqueue for NativeAutomationQueue {
         self.0
             .enqueue_idempotent_with_metadata(document, metadata)
             .map(|_| ())
-            .map_err(|error| AutomationError::port(error.code, error.message.clone(), error))
+            .map_err(|error| AutomationError::port(error.code(), error.message().clone(), error))
     }
 }

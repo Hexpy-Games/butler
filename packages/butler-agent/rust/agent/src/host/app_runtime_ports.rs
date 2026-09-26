@@ -54,7 +54,7 @@ impl AppApprovalClaims for NativeAppApprovalClaims {
             authority
                 .retains_approval_claim(turn_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 }

@@ -59,6 +59,7 @@ pub(super) fn invalid_settings() -> GatewayApplicationError {
         status: 400,
         code: "invalid_settings_request".into(),
         message: "Settings update contains unsupported fields.".into(),
+        source: None,
     }
 }
 

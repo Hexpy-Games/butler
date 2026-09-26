@@ -59,7 +59,7 @@ pub(super) fn write(
     }
     let id = format!("file-{}", clock.new_uuid());
     if !valid_id(&id) {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
         id: id.clone(),
@@ -139,9 +139,10 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }
 
 fn internal(_: std::io::Error) -> GatewayApplicationError {
-    GatewayApplicationError::Internal
+    GatewayApplicationError::internal()
 }

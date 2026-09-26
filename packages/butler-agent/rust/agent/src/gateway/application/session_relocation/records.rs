@@ -72,7 +72,7 @@ pub(super) fn reserve(
             ));
         }
         Some("turn") | None => {}
-        Some(_) => return Err(GatewayApplicationError::Internal),
+        Some(_) => return Err(GatewayApplicationError::internal()),
     }
     let before = Before {
         binding: snapshot.binding.clone(),
@@ -117,7 +117,7 @@ pub(super) fn reserve(
             sqlite_error(error)
         }
     })?;
-    let row = read_row(&tx, &request.operation_id)?.ok_or(GatewayApplicationError::Internal)?;
+    let row = read_row(&tx, &request.operation_id)?.ok_or(GatewayApplicationError::internal())?;
     tx.commit().map_err(sqlite_error)?;
     Ok(row)
 }
@@ -180,7 +180,7 @@ pub(super) fn store_binding(
     binding: AppRelocationBinding,
 ) -> Result<(), GatewayApplicationError> {
     let tx = db.transaction().map_err(sqlite_error)?;
-    let mut row = read_row(&tx, operation_id)?.ok_or(GatewayApplicationError::Internal)?;
+    let mut row = read_row(&tx, operation_id)?.ok_or(GatewayApplicationError::internal())?;
     let mut before: Before = serde_json::from_str(&row.from_json).map_err(json_error)?;
     before.binding = Some(binding);
     row.from_json = serde_json::to_string(&before).map_err(json_error)?;
@@ -339,7 +339,7 @@ fn sqlite_error(error: rusqlite::Error) -> GatewayApplicationError {
 }
 
 fn json_error(_error: serde_json::Error) -> GatewayApplicationError {
-    GatewayApplicationError::Internal
+    GatewayApplicationError::internal()
 }
 
 fn relocation_error(code: &str, message: &str) -> GatewayApplicationError {
@@ -347,5 +347,6 @@ fn relocation_error(code: &str, message: &str) -> GatewayApplicationError {
         status: 409,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

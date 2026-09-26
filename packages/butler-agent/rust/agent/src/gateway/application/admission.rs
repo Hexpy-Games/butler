@@ -12,6 +12,7 @@ use super::{
     admission_identity::{input_digest, stringify},
     storage::AppStorageError,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     gateway::{MessageContentPart, MessageSendRequest},
     public_text::trim_js_whitespace,
@@ -58,7 +59,7 @@ pub(super) fn inspect_with_attachment_source(
         .is_some();
     if relocating {
         return Err(AppStorageError::new(
-            "session_relocating",
+            AppStorageCode::SessionRelocating,
             "Session context is relocating.",
         ));
     }
@@ -91,7 +92,7 @@ pub(super) fn inspect_with_attachment_source(
             }
             let digest = digest.ok_or_else(|| {
                 AppStorageError::new(
-                    "queued_message_identity_conflict",
+                    AppStorageCode::QueuedMessageIdentityConflict,
                     "This client message id was already accepted with different input.",
                 )
             })?;
@@ -112,25 +113,28 @@ pub(super) fn inspect_with_attachment_source(
                 .collect();
             if unique.len() > 12 {
                 return Err(AppStorageError::new(
-                    "too_many_attachments",
+                    AppStorageCode::TooManyAttachments,
                     "Too many attachments.",
                 ));
             }
             let mut files = Vec::new();
             for id in unique {
                 let file = file(db, id)?.ok_or_else(|| {
-                    AppStorageError::new("message_file_not_found", "Attachment file not found.")
+                    AppStorageError::new(
+                        AppStorageCode::MessageFileNotFound,
+                        "Attachment file not found.",
+                    )
                 })?;
                 if let Some(source_message_id) = reused_from_message_id {
                     if !is_user_attachment_for_message(db, &file.id, source_message_id, chat_id)? {
                         return Err(AppStorageError::new(
-                            "message_file_already_attached",
+                            AppStorageCode::MessageFileAlreadyAttached,
                             "Attachment file was not attached to the retried message.",
                         ));
                     }
                 } else if file.message_id.as_deref().is_some_and(|id| !id.is_empty()) {
                     return Err(AppStorageError::new(
-                        "message_file_already_attached",
+                        AppStorageCode::MessageFileAlreadyAttached,
                         "Attachment file was already sent.",
                     ));
                 }
@@ -140,7 +144,7 @@ pub(super) fn inspect_with_attachment_source(
                     .is_some_and(|owner| !owner.is_empty() && owner != chat_id)
                 {
                     return Err(AppStorageError::new(
-                        "message_file_wrong_session",
+                        AppStorageCode::MessageFileWrongSession,
                         "Attachment file belongs to a different session.",
                     ));
                 }
@@ -148,7 +152,7 @@ pub(super) fn inspect_with_attachment_source(
             }
             if text.is_empty() && files.is_empty() {
                 return Err(AppStorageError::new(
-                    "empty_queued_message",
+                    AppStorageCode::EmptyQueuedMessage,
                     "Queued message text is required.",
                 ));
             }
@@ -279,7 +283,7 @@ fn chat(db: &Connection, id: &str) -> Result<AppChatSnapshot, AppStorageError> {
     )
     .optional()
     .map_err(AppStorageError::sqlite)?
-    .ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))
+    .ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))
 }
 
 fn requested_ids(request: &MessageSendRequest) -> Vec<String> {

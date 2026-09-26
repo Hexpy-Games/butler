@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use super::storage::AppStorageError;
 use crate::gateway::TurnProgressSnapshotView;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     ChangedFileDetail, MessageFileRef, MessageListView, MessageRecord, SessionArtifactSummary,
     TurnListView, TurnRecord,
@@ -430,7 +431,11 @@ fn changed_files(
             .map(|(path, json)| {
                 let mut detail =
                     serde_json::from_str::<ChangedFileDetail>(&json).map_err(|error| {
-                        AppStorageError::new("app_projection_json_invalid", error.to_string())
+                        AppStorageError::new(
+                            AppStorageCode::AppProjectionJsonInvalid,
+                            error.to_string(),
+                        )
+                        .with_source(error)
                     })?;
                 detail.path = path;
                 Ok(detail)
@@ -446,7 +451,7 @@ fn require_chat(connection: &Connection, chat_id: &str) -> Result<(), AppStorage
         .query_row("SELECT 1 FROM chats WHERE id=?1", [chat_id], |_| Ok(()))
         .optional()
         .map_err(AppStorageError::sqlite)?;
-    found.ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))
+    found.ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))
 }
 
 fn message_cursor(value: f64) -> u64 {
@@ -460,8 +465,10 @@ fn turn_cursor(value: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 fn parse_enum<T: DeserializeOwned>(value: &str) -> Result<T, AppStorageError> {
-    serde_json::from_value(Value::String(value.to_owned()))
-        .map_err(|error| AppStorageError::new("app_projection_value_invalid", error.to_string()))
+    serde_json::from_value(Value::String(value.to_owned())).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppProjectionValueInvalid, error.to_string())
+            .with_source(error)
+    })
 }
 fn parse_sql_enum<T: DeserializeOwned>(value: String) -> rusqlite::Result<T> {
     serde_json::from_value(Value::String(value)).map_err(|error| {
@@ -472,7 +479,8 @@ fn parse_optional<T: DeserializeOwned>(value: Option<&str>) -> Result<Option<T>,
     value
         .map(|json| {
             serde_json::from_str(json).map_err(|error| {
-                AppStorageError::new("app_projection_json_invalid", error.to_string())
+                AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+                    .with_source(error)
             })
         })
         .transpose()

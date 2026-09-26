@@ -83,19 +83,21 @@ pub(super) fn create_scratch(
     root: &Path,
     name: &str,
 ) -> Result<ScratchFolder, GatewayApplicationError> {
-    fs::create_dir_all(root).map_err(|_| {
+    fs::create_dir_all(root).map_err(|source| {
         error(
             400,
             "project_workspace_unavailable",
             "Project workspace is not available.",
         )
+        .with_source(source)
     })?;
-    let root = fs::canonicalize(root).map_err(|_| {
+    let root = fs::canonicalize(root).map_err(|source| {
         error(
             400,
             "project_workspace_unavailable",
             "Project workspace is not available.",
         )
+        .with_source(source)
     })?;
     for index in 1..=MAX_ATTEMPTS {
         let label = if index == 1 {
@@ -113,12 +115,13 @@ pub(super) fn create_scratch(
         }
         match fs::create_dir(&path) {
             Ok(()) => {
-                let real = fs::canonicalize(&path).map_err(|_| {
+                let real = fs::canonicalize(&path).map_err(|source| {
                     error(
                         400,
                         "project_folder_unavailable",
                         "Project folder could not be created.",
                     )
+                    .with_source(source)
                 })?;
                 if real == root || !real.starts_with(&root) {
                     return Err(error(
@@ -127,12 +130,13 @@ pub(super) fn create_scratch(
                         "Project folder is not safe to use.",
                     ));
                 }
-                let metadata = fs::symlink_metadata(&real).map_err(|_| {
+                let metadata = fs::symlink_metadata(&real).map_err(|source| {
                     error(
                         400,
                         "project_folder_unavailable",
                         "Project folder could not be created.",
                     )
+                    .with_source(source)
                 })?;
                 return Ok(ScratchFolder {
                     path: real,
@@ -164,7 +168,7 @@ pub(super) fn validate_existing(path: &Path) -> Result<PathBuf, GatewayApplicati
             "Project folder is not available.",
         )
     };
-    let metadata = fs::metadata(path).map_err(|_| invalid())?;
+    let metadata = fs::metadata(path).map_err(|source| invalid().with_source(source))?;
     if !metadata.is_dir() {
         return Err(error(
             400,
@@ -172,8 +176,8 @@ pub(super) fn validate_existing(path: &Path) -> Result<PathBuf, GatewayApplicati
             "Project folder must be a directory.",
         ));
     }
-    fs::read_dir(path).map_err(|_| invalid())?;
-    let real = fs::canonicalize(path).map_err(|_| invalid())?;
+    fs::read_dir(path).map_err(|source| invalid().with_source(source))?;
+    let real = fs::canonicalize(path).map_err(|source| invalid().with_source(source))?;
     if sensitive(&real) {
         return Err(error(
             400,

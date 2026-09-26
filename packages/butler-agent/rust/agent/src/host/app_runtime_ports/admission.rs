@@ -112,12 +112,13 @@ fn ledger_error(error: ProjectLedgerReadError) -> GatewayApplicationError {
             status: 409,
             code: "source_changed".into(),
             message: "Source changed. Reload it.".into(),
+            source: None,
         },
         ProjectLedgerReadError::DashboardUnavailable(_) => unavailable(),
         ProjectLedgerReadError::DashboardInternal(_)
         | ProjectLedgerReadError::Resolution(_)
         | ProjectLedgerReadError::RecordShow(_)
-        | ProjectLedgerReadError::Owner(_) => GatewayApplicationError::Internal,
+        | ProjectLedgerReadError::Owner(_) => GatewayApplicationError::internal(),
     }
 }
 
@@ -126,5 +127,6 @@ fn unavailable() -> GatewayApplicationError {
         status: 404,
         code: "source_unavailable".into(),
         message: "Source unavailable.".into(),
+        source: None,
     }
 }

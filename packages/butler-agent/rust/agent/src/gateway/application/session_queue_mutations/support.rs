@@ -2,6 +2,7 @@ use super::super::{
     AppStorageError, GatewayApplicationError, MessageContent, SessionQueueUpdateRequest, app_error,
     queue_view,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     gateway::{MessageContentPart, MessageSendRequest},
     public_text::trim_js_whitespace,
@@ -41,12 +42,13 @@ pub(super) fn update_content(
             .content_parts_json
             .as_deref()
             .map(|value| {
-                serde_json::from_str(value).map_err(|_| {
+                serde_json::from_str(value).map_err(|source| {
                     public_error(
                         400,
                         "invalid_message_content",
                         "Queued message content is invalid.",
                     )
+                    .with_source(source)
                 })
             })
             .transpose();
@@ -122,23 +124,25 @@ pub(super) fn content_matches_current(
         .as_ref()
         .map(serde_json::to_value)
         .transpose()
-        .map_err(|_| {
+        .map_err(|source| {
             public_error(
                 500,
                 "app_json_failed",
                 "Message content could not be encoded.",
             )
+            .with_source(source)
         })?;
     Ok(requested == current)
 }
 
 fn parse_json_value(value: &str) -> Result<Value, GatewayApplicationError> {
-    serde_json::from_str(value).map_err(|_| {
+    serde_json::from_str(value).map_err(|source| {
         public_error(
             500,
             "app_projection_json_invalid",
             "Stored queue data is invalid.",
         )
+        .with_source(source)
     })
 }
 
@@ -185,24 +189,33 @@ pub(super) fn has_authority(value: Option<&String>) -> bool {
 }
 
 pub(super) fn json_string(value: &Value) -> Result<String, GatewayApplicationError> {
-    serde_json::to_string(value)
-        .map_err(|_| public_error(500, "app_json_failed", "Queue data could not be encoded."))
+    serde_json::to_string(value).map_err(|source| {
+        public_error(500, "app_json_failed", "Queue data could not be encoded.").with_source(source)
+    })
 }
 
 pub(super) fn json_string_storage(value: &Value) -> Result<String, AppStorageError> {
-    serde_json::to_string(value)
-        .map_err(|_| AppStorageError::new("app_json_failed", "Queue data could not be encoded."))
+    serde_json::to_string(value).map_err(|source| {
+        AppStorageError::new(
+            AppStorageCode::AppJsonFailed,
+            "Queue data could not be encoded.",
+        )
+        .with_source(source)
+    })
 }
 
 pub(super) fn invalid_resolution_storage() -> AppStorageError {
     AppStorageError::new(
-        "turn_control_resolution_invalid",
+        AppStorageCode::TurnControlResolutionInvalid,
         "Turn controls are unavailable.",
     )
 }
 
 pub(super) fn storage_not_found() -> AppStorageError {
-    AppStorageError::new("queued_message_not_found", "Queued message not found.")
+    AppStorageError::new(
+        AppStorageCode::QueuedMessageNotFound,
+        "Queued message not found.",
+    )
 }
 
 pub(super) fn not_found_error() -> GatewayApplicationError {
@@ -230,5 +243,6 @@ pub(super) fn public_error(status: u16, code: &str, message: &str) -> GatewayApp
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

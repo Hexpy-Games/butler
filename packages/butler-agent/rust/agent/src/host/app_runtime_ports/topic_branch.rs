@@ -39,14 +39,14 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             if let Some(session) = store
                 .get_session_by_gateway_binding("app", &id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
             {
                 return Ok((session.status == "active").then_some((session.id, id)));
             }
             let Some(session) = store
                 .get_session(&id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
             else {
                 return Ok(None);
             };
@@ -56,7 +56,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             let binding = store
                 .get_gateway_binding_for_conversation(&session.id, "app")
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(binding.map(|value| (session.id, value.external_session_id)))
         })
     }
@@ -67,7 +67,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             let Some(message) = store
                 .read_message_by_id(&message_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
             else {
                 return Ok(None);
             };
@@ -77,7 +77,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             let outcome = store
                 .read_turn_outcome(&turn_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let valid = message.message.role == ConversationRole::Assistant
                 && message.message.status == ConversationStatus::Complete
                 && outcome.as_ref().is_some_and(|outcome| {
@@ -101,7 +101,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             let Some(anchor) = store
                 .read_message_by_id(&message_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
             else {
                 return Ok(None);
             };
@@ -114,7 +114,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
             let summaries = store
                 .read_summaries(&session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let summary = summaries
                 .into_iter()
                 .filter(|value| {
@@ -131,7 +131,7 @@ impl AppBranchConversationReader for NativeAppBranchConversations {
                     include_compacted: true,
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let mut selected = history
                 .into_iter()
                 .filter(|message| {
@@ -270,6 +270,7 @@ impl AppBranchSummarizer for NativeAppBranchSummarizer {
                     status: 409,
                     code: "branch_cancelled".into(),
                     message: "새 대화 만들기가 취소되었습니다.".into(),
+                    source: None,
                 });
             }
             let text = result
@@ -369,5 +370,6 @@ fn summary_error() -> GatewayApplicationError {
         status: 502,
         code: "branch_summary_failed".into(),
         message: "새 대화의 맥락 요약을 만들지 못했습니다.".into(),
+        source: None,
     }
 }

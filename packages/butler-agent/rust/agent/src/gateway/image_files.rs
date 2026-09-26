@@ -94,7 +94,7 @@ impl NativeAppImageFiles {
 
     fn ensure_open(&self) -> Result<(), GatewayApplicationError> {
         if *self.closing.lock() {
-            Err(GatewayApplicationError::Internal)
+            Err(GatewayApplicationError::internal())
         } else {
             Ok(())
         }
@@ -110,12 +110,12 @@ impl NativeAppImageFiles {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         let (sender, receiver) = oneshot::channel();
         {
             let closing = self.closing.lock();
             if *closing {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             self.jobs.spawn(async move {
                 let result = tokio::task::spawn_blocking(move || {
@@ -123,14 +123,14 @@ impl NativeAppImageFiles {
                     work()
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
                 .and_then(|result| result);
                 let _ = sender.send(result);
             });
         }
         receiver
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
 }
 
@@ -160,6 +160,7 @@ fn image_error(code: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }
 
@@ -168,5 +169,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

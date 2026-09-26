@@ -6,6 +6,7 @@ use std::path::Path;
 
 use super::event::TranscriptEvent;
 use super::{TranscriptError, TranscriptResult};
+use crate::gateway::TranscriptCode;
 
 pub(super) fn append(
     root: &Path,
@@ -26,7 +27,11 @@ pub(super) fn append(
     let path = directory.join(format!("{name}.jsonl"));
     for event in events {
         let mut line = serde_json::to_vec(event).map_err(|error| {
-            TranscriptError::new("transcript_event_json_invalid", error.to_string())
+            TranscriptError::new(
+                TranscriptCode::TranscriptEventJsonInvalid,
+                error.to_string(),
+            )
+            .with_source(error)
         })?;
         line.push(b'\n');
         let mut file = OpenOptions::new()
@@ -39,10 +44,7 @@ pub(super) fn append(
     Ok(())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> TranscriptError {
-    TranscriptError::new("transcript_append_failed", error.to_string())
+    TranscriptError::new(TranscriptCode::TranscriptAppendFailed, error.to_string())
+        .with_source(error)
 }

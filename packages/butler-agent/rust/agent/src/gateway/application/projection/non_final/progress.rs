@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
 use super::{copy_string, short_text, text, token};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     events::{self, EventSubscribers},
     service,
@@ -234,8 +235,9 @@ pub(super) struct ProgressAppend<'a> {
 }
 
 pub(super) fn append_progress(input: &ProgressAppend<'_>) -> Result<(), AppStorageError> {
-    let encoded = serde_json::to_string(&input.row)
-        .map_err(|e| AppStorageError::new("app_projection_json_invalid", e.to_string()))?;
+    let encoded = serde_json::to_string(&input.row).map_err(|e| {
+        AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, e.to_string()).with_source(e)
+    })?;
     let exists = input
         .db
         .query_row(

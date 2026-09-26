@@ -2,6 +2,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 
 use super::super::storage::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 
 pub(in crate::gateway::application) fn latest_plan_document_status(
     connection: &Connection,
@@ -23,7 +24,8 @@ pub(in crate::gateway::application) fn latest_plan_document_status(
     for row in rows {
         let encoded = row.map_err(AppStorageError::sqlite)?;
         let document = serde_json::from_str::<Value>(&encoded).map_err(|error| {
-            AppStorageError::new("app_projection_json_invalid", error.to_string())
+            AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+                .with_source(error)
         })?;
         if document.get("id").and_then(Value::as_str) == Some(plan_id) {
             return Ok(document

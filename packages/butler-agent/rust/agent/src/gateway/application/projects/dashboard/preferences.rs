@@ -10,6 +10,7 @@ use super::contracts::{
 };
 use super::project::{pins, read_project};
 use crate::gateway::application::events;
+use crate::gateway::application::storage::AppStorageCode;
 
 const PIN_KINDS: &[&str] = &["work", "task", "plan", "spec", "report", "artifact"];
 
@@ -86,12 +87,15 @@ pub(super) async fn update(
     if let Some(pins) = resolved {
         preferences["pinnedSourceRefs"] = Value::Array(pins);
     }
-    let preferences_json =
-        serde_json::to_string(&preferences).map_err(|error| GatewayApplicationError::Public {
+    let preferences_json = serde_json::to_string(&preferences).map_err(|error| {
+        GatewayApplicationError::Public {
             status: 500,
             code: "app_project_preferences_invalid".into(),
             message: error.to_string(),
-        })?;
+            source: None,
+        }
+        .with_source(error)
+    })?;
     let description = update.description.or(project.description);
     let project_key = project.id.clone();
     let expected = update.expected_revision;
@@ -111,7 +115,7 @@ pub(super) async fn update(
                 .map_err(AppStorageError::sqlite)?;
             if current.map(|value| u64::try_from(value.max(0)).unwrap_or_default()) != Some(expected) {
                 return Err(AppStorageError::new(
-                    "preferences_changed",
+                    AppStorageCode::PreferencesChanged,
                     "Preferences changed. Reload them.",
                 ));
             }
@@ -122,7 +126,7 @@ pub(super) async fn update(
             )
             .map_err(AppStorageError::sqlite)?;
             let row = super::super::rows::any_by_id(&tx, &project_key)?
-                .ok_or_else(|| AppStorageError::new("project_not_found", "Project not found."))?;
+                .ok_or_else(|| AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found."))?;
             let project = super::super::rows::summary(row, None);
             let payload = crate::json::json_object!({"project":project});
             let event = events::append_unpublished(

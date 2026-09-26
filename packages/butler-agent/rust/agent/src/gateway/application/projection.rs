@@ -237,7 +237,7 @@ async fn project_event(
         terminal_records::disposition(&terminal_root, &terminal_event)
     })
     .await
-    .map_err(|_| GatewayApplicationError::Internal)?;
+    .map_err(GatewayApplicationError::internal_from)?;
     match disposition {
         terminal_records::Disposition::Accept => {}
         terminal_records::Disposition::Defer => {
@@ -289,7 +289,7 @@ async fn project_final(
         terminal_records::verified_processed_claim(&terminal_root, &terminal_event)
     })
     .await
-    .map_err(|_| GatewayApplicationError::Internal)?;
+    .map_err(GatewayApplicationError::internal_from)?;
     let data = context.butler_data.clone();
     let candidate_event = outbound.clone();
     let candidate = context
@@ -344,7 +344,7 @@ async fn project_final(
             plan.get("id").and_then(Value::as_str),
             plan.get("title").and_then(Value::as_str),
         ) else {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         };
         let source_client_id = format!("client-plan-activated-{}", candidate.turn_id);
         let client_message_id = super::admission_identity::stable_client_id(

@@ -27,7 +27,7 @@ impl QueueWake {
         self.0
             .send(Command::Wake(Some(chat_id)))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 
     pub(super) async fn drain_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
@@ -35,10 +35,10 @@ impl QueueWake {
         self.0
             .send(Command::Drain { chat_id, reply })
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         result
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
 }
 
@@ -95,7 +95,7 @@ impl QueueDispatcher {
             .sender
             .send(Command::Initialize(app))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 
     pub(super) async fn wake_chat(&self, chat_id: String) -> Result<(), GatewayApplicationError> {
@@ -103,7 +103,7 @@ impl QueueDispatcher {
             .sender
             .send(Command::Wake(Some(chat_id)))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 
     pub(super) async fn close(&self) -> Result<(), GatewayApplicationError> {
@@ -128,7 +128,7 @@ impl QueueDispatcher {
                     let _ = inner.sender.send(Command::Close).await;
                     let result = task
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)
+                        .map_err(GatewayApplicationError::internal_from)
                         .and_then(|value| value);
                     lock(&inner.close).result = Some(result);
                     inner.closed.notify_waiters();
@@ -178,11 +178,11 @@ async fn run(
                 }
                 Some(Command::Drain { chat_id, reply }) => {
                     let result = tokio::select! {
-                        () = cancellation.cancelled() => Err(GatewayApplicationError::Internal),
+                        () = cancellation.cancelled() => Err(GatewayApplicationError::internal()),
                         result = async {
                             match application.as_ref() {
                                 Some(app) => recover_and_drain(&cancellation, app, Some(&chat_id)).await,
-                                None => Err(GatewayApplicationError::Internal),
+                                None => Err(GatewayApplicationError::internal()),
                             }
                         } => result,
                     };
@@ -216,7 +216,7 @@ async fn recover_and_drain(
     only_chat: Option<&str>,
 ) -> Result<(), GatewayApplicationError> {
     if cancellation.is_cancelled() {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     app.recover_expired().await?;
     let chats = if let Some(chat) = only_chat {

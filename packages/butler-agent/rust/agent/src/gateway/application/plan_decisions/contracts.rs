@@ -40,11 +40,48 @@ pub(crate) struct AppPlanDecisionPlan {
     pub body: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Failures of the Project Ledger port behind plan decisions.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum AppPlanDecisionLedgerError {
+    /// The ledger changed during the read; the client may retry.
+    #[error("project_ledger_changed")]
     Changed,
-    Unavailable,
-    Internal,
+    /// The ledger is unavailable (missing or unreadable inputs).
+    #[error("project_ledger_unavailable")]
+    Unavailable {
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// The ledger read failed unexpectedly.
+    #[error("project_ledger_internal")]
+    Internal {
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+}
+
+impl AppPlanDecisionLedgerError {
+    pub(crate) fn unavailable() -> Self {
+        Self::Unavailable { source: None }
+    }
+
+    pub(crate) fn internal() -> Self {
+        Self::Internal { source: None }
+    }
+
+    /// Records the ledger error behind an unavailable or internal failure.
+    #[must_use]
+    pub(crate) fn with_source(self, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+        match self {
+            Self::Unavailable { source: None } => Self::Unavailable {
+                source: Some(std::sync::Arc::new(cause)),
+            },
+            Self::Internal { source: None } => Self::Internal {
+                source: Some(std::sync::Arc::new(cause)),
+            },
+            other => other,
+        }
+    }
 }
 
 pub(crate) type AppPlanDecisionLedgerFuture<T> =
@@ -99,7 +136,7 @@ impl AppPlanDecisionLedgerPort for TestAppPlanDecisionLedger {
         _: String,
         _: String,
     ) -> AppPlanDecisionLedgerFuture<Option<AppPlanDecisionPlan>> {
-        Box::pin(async { Err(AppPlanDecisionLedgerError::Internal) })
+        Box::pin(async { Err(AppPlanDecisionLedgerError::internal()) })
     }
 
     fn update_plan_status(
@@ -109,6 +146,6 @@ impl AppPlanDecisionLedgerPort for TestAppPlanDecisionLedger {
         _: String,
         _: AppPlanDecisionStatus,
     ) -> AppPlanDecisionLedgerFuture<()> {
-        Box::pin(async { Err(AppPlanDecisionLedgerError::Internal) })
+        Box::pin(async { Err(AppPlanDecisionLedgerError::internal()) })
     }
 }

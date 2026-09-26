@@ -5,6 +5,7 @@ use super::super::AppProjectSummary;
 use super::super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
 use super::contracts::project_not_found;
 use crate::gateway::AppSessionSummary;
+use crate::gateway::application::storage::AppStorageCode;
 
 #[derive(Clone, Debug)]
 pub(super) struct DashboardProject {
@@ -98,7 +99,11 @@ pub(super) fn project_summary(
 pub(super) fn preferences(project: &DashboardProject) -> Result<Value, AppStorageError> {
     match project.preferences_json.as_deref() {
         Some(raw) => serde_json::from_str(raw).map_err(|error| {
-            AppStorageError::new("app_project_preferences_invalid", error.to_string())
+            AppStorageError::new(
+                AppStorageCode::AppProjectPreferencesInvalid,
+                error.to_string(),
+            )
+            .with_source(error)
         }),
         None => Ok(serde_json::json!({})),
     }
@@ -109,7 +114,7 @@ pub(super) fn pins(project: &DashboardProject) -> Result<Vec<Value>, AppStorageE
     match value.get("pinnedSourceRefs") {
         Some(Value::Array(values)) => Ok(values.clone()),
         Some(_) => Err(AppStorageError::new(
-            "app_project_preferences_invalid",
+            AppStorageCode::AppProjectPreferencesInvalid,
             "Project dashboard preferences are invalid.",
         )),
         None => Ok(Vec::new()),

@@ -29,7 +29,7 @@ impl AppNativeIngress for NativeAppIngress {
             let document = envelope(turn)?;
             let record = queue
                 .enqueue_idempotent(document)
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(NativeEnqueueReceipt {
                 queue_id: record.queue_id,
             })
@@ -47,7 +47,7 @@ impl AppNativeIngress for NativeAppIngress {
                         queue_id: item.queue_id,
                     })
                 })
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 
@@ -70,10 +70,10 @@ impl AppNativeIngress for NativeAppIngress {
                 value["routingHints"]["appQueueClaimId"] = claim.into();
             }
             let document =
-                JsonDocument::from_value(&value).map_err(|_| GatewayApplicationError::Internal)?;
+                JsonDocument::from_value(&value).map_err(GatewayApplicationError::internal_from)?;
             let record = queue
                 .enqueue_idempotent(document)
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(NativeEnqueueReceipt {
                 queue_id: record.queue_id,
             })
@@ -128,7 +128,7 @@ fn envelope(turn: NativeAppTurn) -> Result<JsonDocument, GatewayApplicationError
     if let Some(image) = turn.image_admission {
         value["message"]["imageAdmission"] = image;
     }
-    JsonDocument::from_value(&value).map_err(|_| GatewayApplicationError::Internal)
+    JsonDocument::from_value(&value).map_err(GatewayApplicationError::internal_from)
 }
 
 #[cfg(test)]

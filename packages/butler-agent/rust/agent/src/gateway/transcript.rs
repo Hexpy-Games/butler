@@ -1,8 +1,10 @@
 //! Bounded transcript append owner for actual App transport delivery.
 
+mod error;
 mod event;
 mod file;
 
+pub(crate) use error::{TranscriptCode, TranscriptError};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -15,26 +17,6 @@ use super::AppIdentityClock;
 const CAPACITY: usize = 64;
 
 type TranscriptResult<T> = Result<T, TranscriptError>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct TranscriptError {
-    pub code: &'static str,
-    pub message: String,
-}
-impl TranscriptError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-impl std::fmt::Display for TranscriptError {
-    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(out, "{}: {}", self.code, self.message)
-    }
-}
-impl std::error::Error for TranscriptError {}
 
 struct Job {
     session_id: String,
@@ -121,9 +103,11 @@ impl NativeTranscriptWriter {
                 result: reply,
             })
             .await
-            .map_err(|_| closed())?;
+            .map_err(|source| closed().with_source(source))?;
         drop(state);
-        result.await.map_err(|_| closed())?
+        result
+            .await
+            .map_err(|source| closed().with_source(source))?
     }
 
     pub(crate) async fn close(&self) -> TranscriptResult<()> {
@@ -132,15 +116,22 @@ impl NativeTranscriptWriter {
         if let Some(worker) = state.worker.take() {
             tokio::task::spawn_blocking(move || worker.join())
                 .await
-                .map_err(|error| TranscriptError::new("transcript_join_failed", error.to_string()))?
-                .map_err(|_| closed())?;
+                .map_err(|error| {
+                    TranscriptError::new(TranscriptCode::TranscriptJoinFailed, error.to_string())
+                        .with_source(error)
+                })?
+                // A panic payload is not an Error; the code records the failure.
+                .map_err(|_panic_payload| closed())?;
         }
         Ok(())
     }
 }
 
 fn closed() -> TranscriptError {
-    TranscriptError::new("transcript_writer_closed", "Transcript writer is closed")
+    TranscriptError::new(
+        TranscriptCode::TranscriptWriterClosed,
+        "Transcript writer is closed",
+    )
 }
 
 #[cfg(test)]

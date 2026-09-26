@@ -39,12 +39,12 @@ impl SessionBranchOwner {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         let (send, receive) = oneshot::channel();
         {
             let closing = self.0.closing.lock();
             if *closing {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             let owner_shutdown = self.0.shutdown.clone();
             self.0.tasks.spawn(async move {
@@ -57,7 +57,7 @@ impl SessionBranchOwner {
         }
         receive
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
 
     pub(in crate::gateway::application) async fn close(&self) {

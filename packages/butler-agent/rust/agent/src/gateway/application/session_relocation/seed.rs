@@ -4,6 +4,7 @@ use rusqlite::OptionalExtension;
 
 use super::super::{AppApplication, AppRelocationBindingSeed, AppStorageError, app_error};
 use crate::gateway::GatewayApplicationError;
+use crate::gateway::application::storage::AppStorageCode;
 
 impl AppApplication {
     pub(super) async fn binding_seed(
@@ -27,13 +28,13 @@ impl AppApplication {
                 let model_ref = settings.model;
                 let Some((provider, model)) = model_ref.split_once('/') else {
                     return Err(AppStorageError::new(
-                        "model_not_configured",
+                        AppStorageCode::ModelNotConfigured,
                         "The session model is not configured.",
                     ));
                 };
                 if provider.is_empty() || model.is_empty() {
                     return Err(AppStorageError::new(
-                        "model_not_configured",
+                        AppStorageCode::ModelNotConfigured,
                         "The session model is not configured.",
                     ));
                 }

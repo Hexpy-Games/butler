@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension};
 
 use super::contracts::{AppPlanDecisionLedgerError, AppPlanDecisionPlan};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     gateway::application::{AppStorageError, read_model},
     public_text::trim_js_whitespace,
@@ -30,13 +31,15 @@ pub(super) fn decision_project(
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))?;
+        .ok_or_else(|| {
+            AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found.")
+        })?;
     let app_project_id = row
         .0
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             AppStorageError::new(
-                "plan_project_required",
+                AppStorageCode::PlanProjectRequired,
                 "Plan mode is available only in a project session.",
             )
         })?;
@@ -46,14 +49,14 @@ pub(super) fn decision_project(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             AppStorageError::new(
-                "project_ledger_identity_missing",
+                AppStorageCode::ProjectLedgerIdentityMissing,
                 "This project has no canonical Project Ledger identity.",
             )
         })?;
     if read_model::latest_plan_document_status(db, session_id, plan_id)?.as_deref() != Some("draft")
     {
         return Err(AppStorageError::new(
-            "plan_not_awaiting_decision",
+            AppStorageCode::PlanNotAwaitingDecision,
             "This Plan is not awaiting a decision in this session.",
         ));
     }
@@ -69,7 +72,7 @@ pub(super) fn map_decision_project_error(
     match error.code() {
         "plan_project_required"
         | "project_ledger_identity_missing"
-        | "plan_not_awaiting_decision" => public(409, error.code(), error.detail()),
+        | "plan_not_awaiting_decision" => public(409, error.code(), &error.detail()),
         _ => crate::gateway::application::app_error(error),
     }
 }
@@ -140,12 +143,15 @@ pub(super) fn map_read_error(
             "plan_decision_conflict",
             "This Project Ledger Plan has changed.",
         ),
-        AppPlanDecisionLedgerError::Unavailable => public(
+        AppPlanDecisionLedgerError::Unavailable { .. } => public(
             409,
             "project_ledger_resolution_failed",
             "The canonical Project Ledger for this project could not be resolved.",
-        ),
-        AppPlanDecisionLedgerError::Internal => GatewayApplicationError::Internal,
+        )
+        .with_source(error),
+        AppPlanDecisionLedgerError::Internal { .. } => {
+            GatewayApplicationError::internal_from(error)
+        }
     }
 }
 
@@ -154,5 +160,6 @@ fn public(status: u16, code: &str, message: &str) -> crate::gateway::GatewayAppl
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

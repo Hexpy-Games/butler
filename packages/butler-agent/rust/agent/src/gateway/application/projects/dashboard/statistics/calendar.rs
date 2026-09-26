@@ -33,10 +33,10 @@ pub(super) fn build(
     }
     let zone = read_timezone(timezone)?;
     let now_ms = DateTime::parse_from_rfc3339(&observed_at)
-        .map_err(|_| GatewayApplicationError::Internal)?
+        .map_err(GatewayApplicationError::internal_from)?
         .timestamp_millis();
     let today = local_date(&zone, now_ms)?;
-    let today_days = parse_date(&today).ok_or(GatewayApplicationError::Internal)?;
+    let today_days = parse_date(&today).ok_or(GatewayApplicationError::internal())?;
     let labels = (0..=period)
         .map(|offset| date_string(today_days + i64::from(offset) - i64::from(period) + 1))
         .collect::<Vec<_>>();
@@ -81,8 +81,9 @@ fn read_timezone(value: &str) -> Result<tz::TimeZone, GatewayApplicationError> {
         return Err(invalid_timezone());
     }
     let path = Path::new("/usr/share/zoneinfo").join(path);
-    let bytes = std::fs::read(path).map_err(|_| invalid_timezone())?;
-    let mut zone = tz::TimeZone::from_tz_data(&bytes).map_err(|_| invalid_timezone())?;
+    let bytes = std::fs::read(path).map_err(|source| invalid_timezone().with_source(source))?;
+    let mut zone = tz::TimeZone::from_tz_data(&bytes)
+        .map_err(|source| invalid_timezone().with_source(source))?;
     let view = zone.as_ref();
     if view.extra_rule().is_none()
         && let Some(last) = view.transitions().last()
@@ -94,7 +95,7 @@ fn read_timezone(value: &str) -> Result<tz::TimeZone, GatewayApplicationError> {
             view.leap_seconds().to_vec(),
             Some(tz::timezone::TransitionRule::Fixed(fixed)),
         )
-        .map_err(|_| invalid_timezone())?;
+        .map_err(|source| invalid_timezone().with_source(source))?;
     }
     Ok(zone)
 }
@@ -102,7 +103,7 @@ fn read_timezone(value: &str) -> Result<tz::TimeZone, GatewayApplicationError> {
 fn local_date(zone: &tz::TimeZone, epoch_ms: i64) -> Result<String, GatewayApplicationError> {
     let offset = zone
         .find_local_time_type(epoch_ms.div_euclid(1_000))
-        .map_err(|_| invalid_timezone())?
+        .map_err(|source| invalid_timezone().with_source(source))?
         .ut_offset();
     let local_ms = epoch_ms + i64::from(offset) * 1_000;
     let days = local_ms.div_euclid(DAY_MS);
@@ -139,6 +140,7 @@ fn invalid_statistics() -> GatewayApplicationError {
         status: 400,
         code: "invalid_statistics_query".into(),
         message: "Invalid statistics query.".into(),
+        source: None,
     }
 }
 
@@ -147,5 +149,6 @@ fn invalid_timezone() -> GatewayApplicationError {
         status: 400,
         code: "invalid_timezone".into(),
         message: "Invalid timezone.".into(),
+        source: None,
     }
 }

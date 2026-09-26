@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::*;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{MessageContentPart, NativeProjectSnapshot, ProjectSourceReference};
 use crate::json::Utf16Prefix;
 use crate::public_text::{sanitize_public_text, trim_js_whitespace};
@@ -161,7 +162,7 @@ fn project_row(db: &Connection, id: &str) -> Result<NativeProjectSnapshot, AppSt
     )
     .optional()
     .map_err(AppStorageError::sqlite)?
-    .ok_or_else(|| AppStorageError::new("project_not_found", "Project not found."))
+    .ok_or_else(|| AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found."))
 }
 
 fn read_app_source(
@@ -173,7 +174,7 @@ fn read_app_source(
         "message" => read_message(db, project_id, source),
         "artifact" => read_artifact(db, project_id, source),
         _ => Err(AppStorageError::new(
-            "source_unavailable",
+            AppStorageCode::SourceUnavailable,
             "Source unavailable.",
         )),
     }
@@ -195,15 +196,20 @@ fn read_message(
                  row.get::<_, String>(3)?,row.get::<_, String>(4)?,row.get::<_, i64>(5)?,
                  row.get::<_, String>(6)?)),
     ).optional().map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("source_unavailable", "Source unavailable."))?;
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::SourceUnavailable, "Source unavailable."))?;
     let revision = digest(&row.3);
-    let locator =
-        serde_json::to_string(&json!([&row.0, &row.1, &row.4, row.5, &row.6])).map_err(|_| {
-            AppStorageError::new("app_json_failed", "Source identity could not be encoded.")
-        })?;
+    let locator = serde_json::to_string(&json!([&row.0, &row.1, &row.4, row.5, &row.6])).map_err(
+        |source| {
+            AppStorageError::new(
+                AppStorageCode::AppJsonFailed,
+                "Source identity could not be encoded.",
+            )
+            .with_source(source)
+        },
+    )?;
     if source.revision != digest(&locator) && source.revision != revision {
         return Err(AppStorageError::new(
-            "source_changed",
+            AppStorageCode::SourceChanged,
             "Source changed. Reload it.",
         ));
     }
@@ -221,7 +227,7 @@ fn read_artifact(
 ) -> Result<AppSourceDocument, AppStorageError> {
     let Some(file_id) = source.id.strip_prefix("artifact-file-") else {
         return Err(AppStorageError::new(
-            "source_unavailable",
+            AppStorageCode::SourceUnavailable,
             "Source unavailable.",
         ));
     };
@@ -235,10 +241,10 @@ fn read_artifact(
         params![project_id, file_id],
         |row| Ok((row.get::<_, String>(0)?,row.get::<_, String>(1)?,row.get::<_, String>(2)?)),
     ).optional().map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("source_unavailable", "Source unavailable."))?;
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::SourceUnavailable, "Source unavailable."))?;
     if source.revision != row.1 {
         return Err(AppStorageError::new(
-            "source_changed",
+            AppStorageCode::SourceChanged,
             "Source changed. Reload it.",
         ));
     }

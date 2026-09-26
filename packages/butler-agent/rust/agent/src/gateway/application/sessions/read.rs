@@ -2,6 +2,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params_from_iter};
 use serde_json::Value;
 
 use super::{AppStorageError, contracts::*, json_error};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::public_text::trim_js_whitespace;
 
 pub(super) struct WorkspaceProject {
@@ -31,7 +32,7 @@ pub(super) fn workspace_project(
     .map_err(AppStorageError::sqlite)?
     .ok_or_else(|| {
         AppStorageError::new(
-            "session_worktree_creation_failed",
+            AppStorageCode::SessionWorktreeCreationFailed,
             "Project session worktree could not be created.",
         )
     })
@@ -103,7 +104,9 @@ pub(super) fn session(db: &Connection, id: &str) -> Result<AppSessionSummary, Ap
         .query_row(&sql, [id], session_row)
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))?;
+        .ok_or_else(|| {
+            AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found.")
+        })?;
     let mut summary = project(row)?;
     let seed: Option<String> = db.query_row(
         "SELECT seed_json FROM app_session_branches WHERE target_session_id=?1 AND state='ready'",
@@ -284,7 +287,7 @@ fn chat_kind(value: &str) -> Result<AppChatKind, AppStorageError> {
         "chat" => Ok(AppChatKind::Chat),
         "project" => Ok(AppChatKind::Project),
         _ => Err(AppStorageError::new(
-            "app_session_kind_invalid",
+            AppStorageCode::AppSessionKindInvalid,
             "Invalid stored session kind",
         )),
     }

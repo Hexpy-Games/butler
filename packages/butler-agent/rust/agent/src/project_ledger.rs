@@ -47,13 +47,26 @@ pub(crate) use tool_scope::ProjectLedgerToolScopeLookup;
 pub(crate) use work::NativeProjectWork;
 pub(crate) use work_scope::ProjectWorkScopeLookup;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Failures of Project Ledger reads; each carries its wire code.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum ProjectLedgerReadError {
+    /// The project or work item could not be resolved.
+    #[error("{0}")]
     Resolution(&'static str),
+    /// A ledger record could not be read or is malformed.
+    #[error("{0}")]
     RecordShow(&'static str),
+    /// The read owner is closed or its task failed.
+    #[error("{0}")]
     Owner(&'static str),
+    /// A dashboard projection failed internally.
+    #[error("{0}")]
     DashboardInternal(&'static str),
+    /// Dashboard inputs are unavailable.
+    #[error("{0}")]
     DashboardUnavailable(&'static str),
+    /// The ledger changed while the dashboard was being read.
+    #[error("project_ledger_changed")]
     DashboardChanged,
 }
 

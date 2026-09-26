@@ -42,7 +42,7 @@ impl AppProjectDashboardBriefingPort for NativeAppDashboardBriefing {
             let metadata = configuration
                 .read_metadata()
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             catalog
                 .estimate_tokens(
                     &metadata.catalog,
@@ -50,7 +50,7 @@ impl AppProjectDashboardBriefingPort for NativeAppDashboardBriefing {
                     Some(&model_ref),
                 )
                 .map(|result| result.tokens)
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 
@@ -94,7 +94,7 @@ impl AppProjectDashboardBriefingPort for NativeAppDashboardBriefing {
                 )
                 .await
                 .map(|result| result.text)
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
 }
@@ -107,6 +107,6 @@ fn parse_effort(value: &str) -> Result<ReasoningEffort, GatewayApplicationError>
         "high" => Ok(ReasoningEffort::High),
         "xhigh" => Ok(ReasoningEffort::Xhigh),
         "max" => Ok(ReasoningEffort::Max),
-        _ => Err(GatewayApplicationError::Internal),
+        _ => Err(GatewayApplicationError::internal()),
     }
 }

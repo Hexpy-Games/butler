@@ -4,6 +4,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::super::storage::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 
 const CHUNK_BYTES: usize = 32 * 1024;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
@@ -103,8 +104,12 @@ where
     let page_end = byte_start
         .saturating_add(page_bytes as u64)
         .min(byte_length);
-    let page_capacity = usize::try_from(page_end - byte_start).map_err(|_| {
-        AppStorageError::new("operation_output_invalid", "Output page is too large")
+    let page_capacity = usize::try_from(page_end - byte_start).map_err(|source| {
+        AppStorageError::new(
+            AppStorageCode::OperationOutputInvalid,
+            "Output page is too large",
+        )
+        .with_source(source)
     })?;
     let mut content = Vec::with_capacity(page_capacity);
     let mut expected_start = 0_i64;
@@ -146,11 +151,19 @@ where
         let overlap_start = chunk_start.max(byte_start);
         let overlap_end = chunk_end.min(page_end);
         if overlap_start < overlap_end {
-            let local_start = usize::try_from(overlap_start - chunk_start).map_err(|_| {
-                AppStorageError::new("operation_output_invalid", "Invalid chunk range")
+            let local_start = usize::try_from(overlap_start - chunk_start).map_err(|source| {
+                AppStorageError::new(
+                    AppStorageCode::OperationOutputInvalid,
+                    "Invalid chunk range",
+                )
+                .with_source(source)
             })?;
-            let local_end = usize::try_from(overlap_end - chunk_start).map_err(|_| {
-                AppStorageError::new("operation_output_invalid", "Invalid chunk range")
+            let local_end = usize::try_from(overlap_end - chunk_start).map_err(|source| {
+                AppStorageError::new(
+                    AppStorageCode::OperationOutputInvalid,
+                    "Invalid chunk range",
+                )
+                .with_source(source)
             })?;
             content.extend_from_slice(&chunk[local_start..local_end]);
         }

@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::{AppIdentityClock, TranscriptError, TranscriptResult};
+use crate::gateway::TranscriptCode;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +31,7 @@ pub(super) fn outbound(
     let transport = text(&action, "transport")?.to_owned();
     let action = action
         .as_object_mut()
-        .ok_or_else(|| error("transcript_action_invalid"))?;
+        .ok_or_else(|| error(TranscriptCode::TranscriptActionInvalid))?;
     let account_id = required(action, "accountId")?;
     let peer = required(action, "peer")?;
     let message = required(action, "message")?;
@@ -38,10 +39,10 @@ pub(super) fn outbound(
     let delivered = delivery
         .get("ok")
         .and_then(Value::as_bool)
-        .ok_or_else(|| error("transcript_delivery_invalid"))?;
+        .ok_or_else(|| error(TranscriptCode::TranscriptDeliveryInvalid))?;
     let delivery = delivery
         .as_object_mut()
-        .ok_or_else(|| error("transcript_delivery_invalid"))?;
+        .ok_or_else(|| error(TranscriptCode::TranscriptDeliveryInvalid))?;
     let transport_message_id = delivery.remove("transportMessageId").unwrap_or(Value::Null);
     let delivery_error = delivery.remove("error").unwrap_or(Value::Null);
     let raw = delivery.remove("raw").unwrap_or(Value::Null);
@@ -120,19 +121,19 @@ fn text<'a>(value: &'a Value, name: &str) -> TranscriptResult<&'a str> {
     value
         .get(name)
         .and_then(Value::as_str)
-        .ok_or_else(|| error("transcript_action_invalid"))
+        .ok_or_else(|| error(TranscriptCode::TranscriptActionInvalid))
 }
 
 fn required(value: &mut Map<String, Value>, name: &str) -> TranscriptResult<Value> {
     value
         .remove(name)
-        .ok_or_else(|| error("transcript_action_invalid"))
+        .ok_or_else(|| error(TranscriptCode::TranscriptActionInvalid))
 }
 
 fn optional_metadata(value: Value) -> Option<Value> {
     if value.is_null() { None } else { Some(value) }
 }
 
-fn error(code: &'static str) -> TranscriptError {
-    TranscriptError::new(code, code)
+fn error(code: TranscriptCode) -> TranscriptError {
+    TranscriptError::new(code, code.as_str())
 }

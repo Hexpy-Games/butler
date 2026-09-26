@@ -151,7 +151,7 @@ impl AppApplication {
             })
             .await?;
         if plan.operation_id != row.operation_id {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         self.storage
             .execute({
@@ -172,7 +172,7 @@ impl AppApplication {
             || prepared.marker != plan.marker
             || prepared.created != plan.created
         {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         let prepared_for_storage = prepared.clone();
         self.storage
@@ -193,7 +193,7 @@ impl AppApplication {
             Some(marker) => {
                 metadata.insert(
                     "sessionWorkspace".into(),
-                    serde_json::to_value(marker).map_err(|_| GatewayApplicationError::Internal)?,
+                    serde_json::to_value(marker).map_err(GatewayApplicationError::internal_from)?,
                 );
             }
             None => {
@@ -317,7 +317,7 @@ impl AppApplication {
             .execute(move |db| Ok(records::read_row(db, &operation_id)))
             .await
             .map_err(app_error)??
-            .ok_or(GatewayApplicationError::Internal)?;
+            .ok_or(GatewayApplicationError::internal())?;
         self.storage
             .execute({
                 let current = current.clone();
@@ -351,5 +351,6 @@ fn public(code: &str, message: &str) -> GatewayApplicationError {
         status: 409,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

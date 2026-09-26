@@ -93,7 +93,7 @@ impl AppApplication {
             )
         })
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
         let static_tokens =
             tokens("Butler runtime contract, role policy, transport contract, and safety rules.");
         let live_tokens = tokens(&json!({

@@ -8,6 +8,7 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::btcc::ExecutionControls;
 use crate::gateway::MessageContentPart;
+use crate::gateway::application::storage::AppStorageCode;
 
 impl AppApplication {
     pub(super) async fn prepare_claimed_native(
@@ -22,19 +23,21 @@ impl AppApplication {
             .await
             .map_err(app_error)?;
         let controls: ExecutionControls =
-            serde_json::from_value(snapshot.execution_controls.clone()).map_err(|_| {
+            serde_json::from_value(snapshot.execution_controls.clone()).map_err(|source| {
                 public(
                     500,
                     "turn_execution_controls_invalid",
                     "Turn controls are unavailable.",
                 )
+                .with_source(source)
             })?;
-        let verified = controls.verify().map_err(|_| {
+        let verified = controls.verify().map_err(|source| {
             public(
                 500,
                 "turn_execution_controls_invalid",
                 "Turn controls are unavailable.",
             )
+            .with_source(source)
         })?;
         if verified.turn_id != snapshot.turn_id || verified.session_id != snapshot.chat_id {
             return Err(public(
@@ -146,7 +149,7 @@ fn claimed_snapshot(
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| {
             AppStorageError::new(
-                "queued_message_claim_lost",
+                AppStorageCode::QueuedMessageClaimLost,
                 "Queued message claim was lost.",
             )
         })?;

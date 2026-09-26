@@ -22,5 +22,6 @@ pub(super) fn update_error(error: &crate::operations::UpdateError) -> GatewayApp
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

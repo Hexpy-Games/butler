@@ -10,6 +10,7 @@ use super::contracts::{
 };
 use super::cursor::{self, RevisionOffsetCursor};
 use super::project::{DashboardProject, read_project};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::json::Utf16Slice;
 use crate::public_text::sanitize_public_text;
 
@@ -204,13 +205,16 @@ fn read_report(
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("source_unavailable", "Source unavailable."))?;
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::SourceUnavailable, "Source unavailable."))?;
     let revision = digest(row.3.as_bytes());
-    let locator = serde_json::to_vec(&json!([row.0, row.1, row.4, row.5, row.6]))
-        .map_err(|error| AppStorageError::new("app_json_failed", error.to_string()))?;
+    let locator =
+        serde_json::to_vec(&json!([row.0, row.1, row.4, row.5, row.6])).map_err(|error| {
+            AppStorageError::new(AppStorageCode::AppJsonFailed, error.to_string())
+                .with_source(error)
+        })?;
     if expected != digest(&locator) && expected != revision {
         return Err(AppStorageError::new(
-            "source_changed",
+            AppStorageCode::SourceChanged,
             "Source changed. Reload it.",
         ));
     }
@@ -323,6 +327,7 @@ fn source_error(error: AppStorageError) -> GatewayApplicationError {
             status: 404,
             code: "source_unavailable".into(),
             message: "Source unavailable.".into(),
+            source: None,
         },
         _ => app_error(error),
     }
@@ -331,12 +336,16 @@ fn source_error(error: AppStorageError) -> GatewayApplicationError {
 fn ledger_source_error(error: AppProjectDashboardLedgerError) -> GatewayApplicationError {
     match error {
         AppProjectDashboardLedgerError::Changed => source_changed("Source changed. Reload it."),
-        AppProjectDashboardLedgerError::Unavailable => GatewayApplicationError::Public {
+        AppProjectDashboardLedgerError::Unavailable { .. } => GatewayApplicationError::Public {
             status: 404,
             code: "source_unavailable".into(),
             message: "Source unavailable.".into(),
-        },
-        AppProjectDashboardLedgerError::Internal => GatewayApplicationError::Internal,
+            source: None,
+        }
+        .with_source(error),
+        AppProjectDashboardLedgerError::Internal { .. } => {
+            GatewayApplicationError::internal_from(error)
+        }
     }
 }
 
@@ -345,5 +354,6 @@ fn source_unavailable() -> GatewayApplicationError {
         status: 404,
         code: "source_unavailable".into(),
         message: "Source unavailable.".into(),
+        source: None,
     }
 }

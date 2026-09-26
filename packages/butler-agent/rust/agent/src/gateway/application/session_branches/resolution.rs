@@ -303,5 +303,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

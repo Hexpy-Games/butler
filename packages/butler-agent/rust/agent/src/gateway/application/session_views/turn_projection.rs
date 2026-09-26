@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use super::super::{AppApplication, GatewayApplicationError};
 use crate::btcc::{ControlSource, ExecutionControls, ReasoningEffort, SubsessionResultContext};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{DeliveryState, TurnProgressSnapshotView, TurnRecord, TurnState};
 
 #[derive(Clone, Serialize)]
@@ -53,7 +54,7 @@ pub(super) async fn read_latest(
             };
             let progress = super::super::progress_view::read(db, &turn.id)?.ok_or_else(|| {
                 super::super::storage::AppStorageError::new(
-                    "app_projection_missing",
+                    AppStorageCode::AppProjectionMissing,
                     "Turn progress is unavailable.",
                 )
             })?;
@@ -86,12 +87,12 @@ pub(super) fn project(
         || progress.state.is_none()
         || progress.delivery_state.is_none()
     {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     let delivery_state = progress
         .delivery_state
         .clone()
-        .ok_or(GatewayApplicationError::Internal)?;
+        .ok_or(GatewayApplicationError::internal())?;
     let execution_controls = public_execution_controls(turn, chat_id);
     let execution_model = public_execution_model(turn.execution_model.as_ref());
     Ok(SessionViewTurnProjection {

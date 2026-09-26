@@ -96,17 +96,18 @@ impl AppApplication {
                         status,
                     )
                     .await
-                    .map_err(|_| {
+                    .map_err(|source| {
                         public(
                             409,
                             "plan_update_failed",
                             "Project Ledger Plan could not be updated.",
                         )
+                        .with_source(source)
                     })?;
                 plan = self
                     .read_plan(&project, &plan_id)
                     .await?
-                    .ok_or(GatewayApplicationError::Internal)?;
+                    .ok_or(GatewayApplicationError::internal())?;
                 let controls = self
                     .update_session_controls_view_owned(
                         session_id.clone(),
@@ -328,5 +329,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

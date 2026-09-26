@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use super::contracts::{AutomationRunSummary, AutomationSummary};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
 
 const COLUMNS: &str = "a.id,a.title,a.prompt_body,a.target_kind,a.target_session_id,a.interval_seconds,a.state,a.next_run_at,a.last_run_at,a.last_run_state,a.last_safe_error_code,a.run_count,a.consecutive_failure_count,a.created_at,a.updated_at,COALESCE(c.title,'Unavailable session')";
@@ -39,7 +40,7 @@ pub(super) fn target(db: &Connection, id: &str) -> Result<(String, String), AppS
     })
     .optional()
     .map_err(AppStorageError::sqlite)?
-    .ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))
+    .ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))
 }
 
 pub(super) fn get(db: &Connection, id: &str) -> Result<Option<AutomationRow>, AppStorageError> {
@@ -150,7 +151,7 @@ pub(super) fn summary(value: AutomationRow) -> AutomationSummary {
 }
 
 pub(super) fn not_found() -> AppStorageError {
-    AppStorageError::new("automation_not_found", "Automation not found.")
+    AppStorageError::new(AppStorageCode::AutomationNotFound, "Automation not found.")
 }
 
 fn row(item: &Row<'_>) -> rusqlite::Result<AutomationRow> {

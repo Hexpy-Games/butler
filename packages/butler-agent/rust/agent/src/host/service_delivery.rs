@@ -53,7 +53,7 @@ impl NativeIngressDelivery for NativeAppDelivery {
                     json!({"source":"transport/delivery-guard.ts","attempts":1}),
                 )
                 .await
-                .map_err(|e| NativeIngressError::new(e.code, e.message))?;
+                .map_err(|e| NativeIngressError::new(e.code(), e.message()))?;
             Ok(true)
         })
     }

@@ -91,7 +91,7 @@ pub(super) async fn get(
 
     filter_available_series(&mut output);
     if view::source_count(&output) > 20_000 {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     Ok(output)
 }

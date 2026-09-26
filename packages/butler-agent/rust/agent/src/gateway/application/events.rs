@@ -10,6 +10,7 @@ use rusqlite::{Connection, params};
 use serde_json::{Map, Value};
 
 use super::storage::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{AppEventEnvelope, EventSubscription};
 
 const APP_PROTOCOL_VERSION: &str = "butler.app.v1";
@@ -94,8 +95,10 @@ pub(super) fn append_unpublished(
     payload: Map<String, Value>,
     created_at: &str,
 ) -> Result<AppEventEnvelope, AppStorageError> {
-    let payload_json = serde_json::to_string(&payload)
-        .map_err(|error| AppStorageError::new("app_event_json_failed", error.to_string()))?;
+    let payload_json = serde_json::to_string(&payload).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppEventJsonFailed, error.to_string())
+            .with_source(error)
+    })?;
     let turn_id = turn_id.unwrap_or("");
     connection
         .execute(

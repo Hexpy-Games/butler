@@ -3,6 +3,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{events, events::EventSubscribers, service, storage::AppStorageError};
+use crate::gateway::application::storage::AppStorageCode;
 
 pub(super) const SESSION_QUEUE_LEASE_MILLIS: i64 = 60_000;
 
@@ -63,13 +64,13 @@ pub(super) fn existing_control_resolution(
     };
     if digest.as_deref() != Some(input_identity_digest) {
         return Err(AppStorageError::new(
-            "queued_message_identity_conflict",
+            AppStorageCode::QueuedMessageIdentityConflict,
             "This client message id was already accepted with different input.",
         ));
     }
     resolution.map(Some).ok_or_else(|| {
         AppStorageError::new(
-            "turn_control_resolution_invalid",
+            AppStorageCode::TurnControlResolutionInvalid,
             "Turn controls are unavailable.",
         )
     })
@@ -93,7 +94,7 @@ pub(super) fn reserve(
             return Ok(false);
         }
         return Err(AppStorageError::new(
-            "queued_message_identity_conflict",
+            AppStorageCode::QueuedMessageIdentityConflict,
             "This client message id was already accepted with different input.",
         ));
     }

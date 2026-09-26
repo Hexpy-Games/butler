@@ -277,7 +277,7 @@ impl Drop for NativeAppServer {
 fn app_error(error: GatewayApplicationError) -> BtccError {
     match error {
         GatewayApplicationError::Public { code, message, .. } => BtccError::relayed(code, message),
-        GatewayApplicationError::Internal => {
+        GatewayApplicationError::Internal { .. } => {
             BtccError::relayed("app_application_failed", "App application is unavailable")
         }
     }

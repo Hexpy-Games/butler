@@ -6,6 +6,7 @@ use super::{
     AppApplication, AppFileDownload, AppFileUpload, AppMessageFileSnapshot, AppStorageError,
     GatewayApplicationError, app_error, public, read_model,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     gateway::{AppFileWrite, MessageFileRef},
     public_text::trim_js_whitespace,
@@ -59,7 +60,7 @@ impl AppApplication {
             .await
             .map_err(|error| {
                 if error.code() == "message_file_not_found" {
-                    public(404, error.code(), error.detail())
+                    public(404, error.code(), &error.detail())
                 } else {
                     app_error(error)
                 }
@@ -77,7 +78,7 @@ fn ensure_chat(db: &Connection, id: &str) -> Result<(), AppStorageError> {
         .map_err(AppStorageError::sqlite)?;
     if exists.is_none() {
         return Err(AppStorageError::new(
-            "unknown_chat",
+            AppStorageCode::UnknownChat,
             format!("Unknown chat: {id}"),
         ));
     }
@@ -105,8 +106,12 @@ fn insert_uploaded(
         ],
     )
     .map_err(AppStorageError::sqlite)?;
-    super::admission::file(db, &file.id)?
-        .ok_or_else(|| AppStorageError::new("message_file_not_found", "Attachment file not found."))
+    super::admission::file(db, &file.id)?.ok_or_else(|| {
+        AppStorageError::new(
+            AppStorageCode::MessageFileNotFound,
+            "Attachment file not found.",
+        )
+    })
 }
 
 fn downloadable(db: &Connection, id: &str) -> Result<AppMessageFileSnapshot, AppStorageError> {
@@ -129,5 +134,8 @@ fn valid_file_id(id: &str) -> bool {
 }
 
 fn not_found() -> AppStorageError {
-    AppStorageError::new("message_file_not_found", "Attachment file not found.")
+    AppStorageError::new(
+        AppStorageCode::MessageFileNotFound,
+        "Attachment file not found.",
+    )
 }

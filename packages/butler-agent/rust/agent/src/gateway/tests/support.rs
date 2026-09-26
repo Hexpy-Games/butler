@@ -73,40 +73,40 @@ impl GatewayMutationCommands for TestApplication {
         &self,
         _: AppRelocateSessionRequest,
     ) -> ApplicationFuture<AppSpaceMutationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn update_project(
         &self,
         _: String,
         _: AppProjectUpdate,
     ) -> ApplicationFuture<AppProjectActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn archive_project(&self, _: String) -> ApplicationFuture<AppProjectActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn pin_project(&self, _: String, _: Option<bool>) -> ApplicationFuture<AppProjectActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn delete_project(&self, _: String, _: bool) -> ApplicationFuture<AppProjectActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn update_session(
         &self,
         _: String,
         _: AppSessionUpdate,
     ) -> ApplicationFuture<AppSessionActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn archive_session(
         &self,
         _: String,
         _: Option<String>,
     ) -> ApplicationFuture<AppSessionActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn delete_session(&self, _: String, _: bool) -> ApplicationFuture<AppSessionActionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn mutate_space(
         &self,
@@ -114,7 +114,7 @@ impl GatewayMutationCommands for TestApplication {
         _: AppSpaceOrigin,
         _: Option<String>,
     ) -> ApplicationFuture<AppSpaceMutationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -126,75 +126,75 @@ impl GatewayApplication for TestApplication {
         _: String,
         _: u64,
     ) -> ApplicationFuture<Option<OperationOutputView>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn retry_turn(&self, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn retry_turn_with_current_controls(&self, _: String) -> ApplicationFuture<MessageSendResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn get_usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn work_status_conversation(
         &self,
         _: String,
     ) -> ApplicationFuture<AppWorkStatusConversationFact> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_developer_logs(&self, _: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn check_app_update(
         &self,
         _request: crate::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn apply_app_update(
         &self,
         _request: crate::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn create_project(
         &self,
         _: AppCreateProjectRequest,
     ) -> ApplicationFuture<AppCreateProjectResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_projects(&self, _: bool) -> ApplicationFuture<AppProjectList> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn new_chat_briefing(&self, _: Option<String>, _: Option<String>) -> ApplicationFuture<Value> {
         let view = self.briefing.lock().unwrap().clone();
-        Box::pin(async move { view.ok_or(GatewayApplicationError::Internal) })
+        Box::pin(async move { view.ok_or(GatewayApplicationError::internal()) })
     }
     fn create_session(
         &self,
         _: AppCreateSessionRequest,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<AppCreateSessionResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_navigation(&self) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn search_command_palette(&self, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_archives(&self, _: Option<usize>, _: Option<usize>) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_app_info(&self) -> ApplicationFuture<Value> {
         Box::pin(async { Ok(json!({"name":"Butler","version":"1.0.0"})) })
@@ -204,59 +204,59 @@ impl GatewayApplication for TestApplication {
         _: AppModelCatalogCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn personalization(
         &self,
         _: AppPersonalizationCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_sessions(
         &self,
         _: Option<String>,
         _: Option<String>,
     ) -> ApplicationFuture<Vec<AppSessionSummary>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_automations(&self, _: Option<String>) -> ApplicationFuture<AutomationListView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn get_automation(&self, _: String) -> ApplicationFuture<AutomationDetailView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn create_automation(
         &self,
         _: CreateAutomationRequest,
     ) -> ApplicationFuture<AutomationMutationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn update_automation(
         &self,
         _: String,
         _: UpdateAutomationRequest,
     ) -> ApplicationFuture<AutomationMutationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn delete_automation(&self, _: String) -> ApplicationFuture<AutomationMutationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn run_automation(&self, _: String) -> ApplicationFuture<AutomationRunResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_automation_runs(&self, _: String) -> ApplicationFuture<AutomationRunListView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn upload_message_file(&self, _: AppFileUpload) -> ApplicationFuture<MessageFileRef> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn download_message_file(&self, _: String) -> ApplicationFuture<AppFileDownload> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 
     fn runtime_readiness(&self) -> Result<RuntimeReadinessView, GatewayApplicationError> {
@@ -347,20 +347,20 @@ impl GatewayApplication for TestApplication {
         &self,
         _request: MessageSendRequest,
     ) -> ApplicationFuture<SessionQueueView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn update_session_queue(
         &self,
         _queued_message_id: String,
         _request: SessionQueueUpdateRequest,
     ) -> ApplicationFuture<SessionQueueView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn delete_session_queue(
         &self,
         _queued_message_id: String,
     ) -> ApplicationFuture<SessionQueueView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_turns(&self, chat_id: String, after_cursor: f64) -> ApplicationFuture<TurnListView> {
         Box::pin(async move {

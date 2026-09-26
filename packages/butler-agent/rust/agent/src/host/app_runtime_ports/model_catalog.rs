@@ -98,7 +98,7 @@ impl NativeAppModelCatalog {
                         })
                     })
                     .cloned()
-                    .ok_or(GatewayApplicationError::Internal)?;
+                    .ok_or(GatewayApplicationError::internal())?;
                 Ok(json!({"model":model,"catalog":catalog}))
             }
             AppModelCatalogCommand::DeleteHosted(lookup) => {
@@ -123,7 +123,7 @@ impl NativeAppModelCatalog {
                         input.api_key.as_deref(),
                         Some(&root),
                     ) => result,
-                    () = cancellation.cancelled() => return Err(GatewayApplicationError::Internal),
+                    () = cancellation.cancelled() => return Err(GatewayApplicationError::internal()),
                 }
                 .map_err(|error| {
                     operation_error_status("local_model_discovery_failed", 502, &error)
@@ -212,7 +212,7 @@ impl NativeAppModelCatalog {
         self.configuration
             .read()
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 
     async fn refresh_catalog(&self) -> Result<Value, GatewayApplicationError> {
@@ -305,7 +305,7 @@ fn discovered_model(
     model: &crate::models::DiscoveredLocalModel,
 ) -> Result<Value, GatewayApplicationError> {
     serde_json::to_value(crate::models::ModelProviderMetadata::from(model))
-        .map_err(|_| GatewayApplicationError::Internal)
+        .map_err(GatewayApplicationError::internal_from)
 }
 
 fn catalog_model(catalog: &Value, model_ref: &str) -> Result<Value, GatewayApplicationError> {
@@ -318,11 +318,11 @@ fn catalog_model(catalog: &Value, model_ref: &str) -> Result<Value, GatewayAppli
                 .find(|model| model.get("model_ref").and_then(Value::as_str) == Some(model_ref))
         })
         .cloned()
-        .ok_or(GatewayApplicationError::Internal)
+        .ok_or(GatewayApplicationError::internal())
 }
 
 fn catalog_value<T: serde::Serialize>(catalog: &T) -> Result<Value, GatewayApplicationError> {
-    serde_json::to_value(catalog).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_value(catalog).map_err(GatewayApplicationError::internal_from)
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, GatewayApplicationError> {
@@ -334,6 +334,7 @@ fn invalid_model_input() -> GatewayApplicationError {
         status: 400,
         code: "invalid_model_catalog_request".into(),
         message: "Model catalog request is invalid.".into(),
+        source: None,
     }
 }
 
@@ -350,6 +351,7 @@ fn operation_error_status(
         status,
         code: code.into(),
         message: error.to_string(),
+        source: None,
     }
 }
 
@@ -358,5 +360,6 @@ fn unsafe_model_path() -> GatewayApplicationError {
         status: 409,
         code: "unsafe_configuration_path".into(),
         message: "Model configuration is outside the selected DATA directory.".into(),
+        source: None,
     }
 }

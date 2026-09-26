@@ -216,7 +216,7 @@ async fn metrics(
     active_sessions: usize,
 ) -> Result<ProjectMetrics, GatewayApplicationError> {
     let date = DateTime::parse_from_rfc3339(now)
-        .map_err(|_| GatewayApplicationError::Internal)?
+        .map_err(GatewayApplicationError::internal_from)?
         .with_timezone(&Utc)
         .date_naive();
     let first_date = date - Duration::days(29);

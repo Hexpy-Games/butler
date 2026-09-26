@@ -48,7 +48,7 @@ impl AppContextReadPort for NativeAppContextRead {
             let snapshot = budget
                 .snapshot()
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let evaluated = snapshot.evaluate_working(&WorkingContextBudgetInput {
                 model_ref: Some(query.model_ref.clone()),
                 working_context_tokens: 0.0,
@@ -73,12 +73,12 @@ impl AppContextReadPort for NativeAppContextRead {
             let telemetry =
                 tokio::task::spawn_blocking(move || read_usage(&root, &telemetry_query))
                     .await
-                    .map_err(|_| GatewayApplicationError::Internal)?;
+                    .map_err(GatewayApplicationError::internal_from)?;
             let native_summary = match query.turn_id.as_deref() {
                 Some(turn_id) => compactions
                     .load(turn_id)
                     .await
-                    .map_err(|_| GatewayApplicationError::Internal)?
+                    .map_err(GatewayApplicationError::internal_from)?
                     .first()
                     .map(|record| bounded_summary(&record.summary)),
                 None => None,

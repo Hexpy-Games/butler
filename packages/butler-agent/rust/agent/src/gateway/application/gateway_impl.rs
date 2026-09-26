@@ -227,13 +227,15 @@ impl GatewayApplication for AppApplication {
     fn list_mcp_servers(&self) -> ApplicationFuture<serde_json::Value> {
         let client = self.dependencies.mcp_client.clone();
         Box::pin(async move {
-            client
-                .list_servers()
-                .map_err(|_| GatewayApplicationError::Public {
+            client.list_servers().map_err(|source| {
+                GatewayApplicationError::Public {
                     status: 500,
                     code: "mcp_registry_unavailable".into(),
                     message: "MCP server registry is unavailable.".into(),
-                })
+                    source: None,
+                }
+                .with_source(source)
+            })
         })
     }
     fn list_mcp_capabilities(
@@ -248,6 +250,7 @@ impl GatewayApplication for AppApplication {
                     status: 500,
                     code: error.code.into(),
                     message: error.message.into(),
+                    source: None,
                 })
         })
     }
@@ -258,10 +261,14 @@ impl GatewayApplication for AppApplication {
                 .upsert_server(input)
                 .await
                 .map(|server| serde_json::json!({"server": server}))
-                .map_err(|error| GatewayApplicationError::Public {
-                    status: 400,
-                    code: "mcp_server_save_failed".into(),
-                    message: error.to_string(),
+                .map_err(|error| {
+                    GatewayApplicationError::Public {
+                        status: 400,
+                        code: "mcp_server_save_failed".into(),
+                        message: error.to_string(),
+                        source: None,
+                    }
+                    .with_source(error)
                 })
         })
     }
@@ -287,6 +294,7 @@ impl GatewayApplication for AppApplication {
                     },
                     code: "mcp_server_update_failed".into(),
                     message: error.to_string(),
+                    source: None,
                 })
         })
     }
@@ -296,7 +304,7 @@ impl GatewayApplication for AppApplication {
             client
                 .delete_server(id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         })
     }
     fn probe_mcp_server(
@@ -317,6 +325,7 @@ impl GatewayApplication for AppApplication {
                     },
                     code: error.code.into(),
                     message: error.message.into(),
+                    source: None,
                 })
         })
     }

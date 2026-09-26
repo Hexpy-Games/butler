@@ -29,13 +29,13 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
             let binding = bindings
                 .get_by_session_id(&runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
                 .as_ref()
                 .map(to_app_binding);
             let active_execution = subsessions
                 .has_unfinished_execution(&runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let open_child = has_open_child(&subsessions, runtime_session_id).await?;
             Ok(AppRelocationSnapshot {
                 binding,
@@ -54,7 +54,7 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
             if let Some(binding) = bindings
                 .get_by_session_id(&seed.runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
             {
                 return Ok(to_app_binding(&binding));
             }
@@ -99,7 +99,7 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
                     metadata: Some(metadata),
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(to_app_binding(&binding))
         })
     }
@@ -155,7 +155,7 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
                     metadata: input.metadata,
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(match result {
                 RebindWorkspaceResult::Applied(_) => AppRelocationBindingResult::Applied,
                 RebindWorkspaceResult::Changed(_) => AppRelocationBindingResult::Changed,
@@ -173,12 +173,12 @@ impl AppRelocationHost for NativeAppSessionWorkspaces {
             let canonical = conversations
                 .get_session_by_gateway_binding("app", &input.runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             if let Some(canonical) = canonical {
                 conversations
                     .sync_session_context(&canonical.id, input.project_id, &input.revision)
                     .await
-                    .map_err(|_| GatewayApplicationError::Internal)?;
+                    .map_err(GatewayApplicationError::internal_from)?;
             }
             Ok(())
         })
@@ -209,14 +209,14 @@ async fn has_open_child(
         if repository
             .has_active_child(session_id.clone())
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
         {
             return Ok(true);
         }
         let relations = repository
             .relations_for_parent(session_id)
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         pending.extend(
             relations
                 .into_iter()
@@ -309,5 +309,6 @@ fn relocation_error(error: WorkspaceError) -> GatewayApplicationError {
         status: 409,
         code: error.code().into(),
         message: "대화의 작업공간을 이동할 수 없습니다.".into(),
+        source: None,
     }
 }

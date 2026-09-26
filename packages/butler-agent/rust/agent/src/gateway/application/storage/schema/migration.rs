@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use super::super::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 
 const COLUMNS: &[(&str, &str, &str)] = &[
     ("chats", "conversation_session_id", "TEXT"),
@@ -260,8 +261,10 @@ fn legacy_identity_digest(
         "explicit_controls": explicit,
         "admission_identity": admission
     });
-    let bytes = serde_json::to_vec(&value)
-        .map_err(|error| AppStorageError::new("app_schema_json_failed", error.to_string()))?;
+    let bytes = serde_json::to_vec(&value).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppSchemaJsonFailed, error.to_string())
+            .with_source(error)
+    })?;
     Ok(sha256_hex(&bytes))
 }
 

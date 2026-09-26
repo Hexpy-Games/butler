@@ -6,6 +6,7 @@ use super::{
     records::{self, AutomationRow, QueuedRunRow},
     store::publish,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     MessageRecord, MessageRole, MessageSendRequest, MessageStatus,
     application::{
@@ -51,7 +52,7 @@ impl AppApplication {
         let (row, queued) = self.storage.execute(move |db| {
             let row = records::active(db, &automation_id)?;
             if trigger == "scheduled" && row.state != "enabled" {
-                return Err(AppStorageError::new("automation_not_enabled", "Automation is not enabled."));
+                return Err(AppStorageError::new(AppStorageCode::AutomationNotEnabled, "Automation is not enabled."));
             }
             let busy = session_has_active_turn(db, &row.target_id)?;
             db.execute(

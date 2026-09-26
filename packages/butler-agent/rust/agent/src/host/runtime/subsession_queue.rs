@@ -108,7 +108,7 @@ fn invalid() -> BtccError {
 }
 
 fn queue_error(error: crate::gateway::NativeQueueError) -> BtccError {
-    BtccError::relayed(error.code, error.message)
+    BtccError::relay(error.code(), error.message(), error)
 }
 
 #[cfg(test)]

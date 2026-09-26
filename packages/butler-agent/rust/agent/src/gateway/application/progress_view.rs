@@ -1,5 +1,6 @@
 //! Public progress read model combining retained terminal snapshots with the live replay tail.
 
+use crate::gateway::application::storage::AppStorageCode;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
@@ -158,10 +159,7 @@ fn string_list(values: &[Value]) -> Vec<String> {
         .map(str::to_owned)
         .collect()
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
-    AppStorageError::new("app_projection_json_invalid", error.to_string())
+    AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+        .with_source(error)
 }

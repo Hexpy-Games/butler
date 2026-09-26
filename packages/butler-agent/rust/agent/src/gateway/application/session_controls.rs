@@ -102,6 +102,7 @@ fn validate_update(update: &AppSessionControlUpdate) -> Result<(), GatewayApplic
             status: 400,
             code: "invalid_session_controls".into(),
             message: "Session controls update contains unsupported fields.".into(),
+            source: None,
         });
     }
     Ok(())

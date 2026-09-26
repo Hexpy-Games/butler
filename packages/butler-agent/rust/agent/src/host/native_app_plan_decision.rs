@@ -32,7 +32,7 @@ impl AppPlanDecisionLedgerPort for NativeAppPlanDecisionLedger {
             let root = ledger
                 .resolve_app_plan_root(app_project_id.clone(), ledger_project_id)
                 .await
-                .map_err(|_| AppPlanDecisionLedgerError::Unavailable)?;
+                .map_err(|source| AppPlanDecisionLedgerError::unavailable().with_source(source))?;
             let Ok(plan) = ledger
                 .show_plan_record(PlanRecordRead {
                     workspace_path: root.to_string_lossy().into_owned(),
@@ -70,7 +70,7 @@ impl AppPlanDecisionLedgerPort for NativeAppPlanDecisionLedger {
             let root = ledger
                 .resolve_app_plan_root(app_project_id, ledger_project_id)
                 .await
-                .map_err(|_| AppPlanDecisionLedgerError::Unavailable)?;
+                .map_err(|source| AppPlanDecisionLedgerError::unavailable().with_source(source))?;
             let result = ledger
                 .execute_command(LedgerCommandRequest {
                     project_root: root,
@@ -78,7 +78,7 @@ impl AppPlanDecisionLedgerPort for NativeAppPlanDecisionLedger {
                     options: json!({"kind":"plan","id":plan_id,"status":status.as_str()}),
                 })
                 .await
-                .map_err(|_| AppPlanDecisionLedgerError::Internal)?;
+                .map_err(|source| AppPlanDecisionLedgerError::internal().with_source(source))?;
             if result.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
                 return Err(AppPlanDecisionLedgerError::Changed);
             }

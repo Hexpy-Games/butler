@@ -156,7 +156,10 @@ async fn run(
     // Admission and dispatcher tasks have ended before BTCC closes its services.
     // The transcript lane outlives all producers and is joined last.
     let runtime_close = close_runtime(runtime).await;
-    let transcript_close = writer.close().await.map_err(|e| failure(e.code, e.message));
+    let transcript_close = writer
+        .close()
+        .await
+        .map_err(|e| failure(e.code(), e.message()));
     match result {
         Err(error) => Err(error),
         Ok(session) => runtime_close.and(transcript_close).map(|()| session),
@@ -186,7 +189,7 @@ async fn serve(
                 json!({"projectId":binding.project_id,"workspacePath":binding.workspace_path}),
             )
             .await
-            .map_err(|e| failure(e.code, e.message))?;
+            .map_err(|e| failure(e.code(), e.message()))?;
     }
     config.persist_session_pointer(&binding.session_id)?;
     let model = require_model_ref(&binding)?;
@@ -204,7 +207,7 @@ async fn serve(
     ));
     queue
         .recover_runtime_interruptions()
-        .map_err(|e| failure(e.code, e.message))?;
+        .map_err(|e| failure(e.code(), e.message()))?;
     let dispatcher = NativeIngressDispatcher::new(
         queue.clone(),
         runtime.btcc.clone(),

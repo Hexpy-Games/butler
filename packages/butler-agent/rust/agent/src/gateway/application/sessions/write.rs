@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{AppStorageError, contracts::*, read};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{AppIdentityClock, EventSubscribers, events};
 use crate::public_text::trim_js_whitespace;
 
@@ -49,7 +50,10 @@ pub(super) fn create(
             .map(trim_js_whitespace)
             .filter(|id| !id.is_empty())
             .ok_or_else(|| {
-                AppStorageError::new("project_required", "Project session requires a project.")
+                AppStorageError::new(
+                    AppStorageCode::ProjectRequired,
+                    "Project session requires a project.",
+                )
             })?;
         let present = db
             .query_row("SELECT id FROM projects WHERE id=?1", [id], |_| Ok(()))
@@ -57,7 +61,7 @@ pub(super) fn create(
             .map_err(AppStorageError::sqlite)?;
         if present.is_none() {
             return Err(AppStorageError::new(
-                "project_not_found",
+                AppStorageCode::ProjectNotFound,
                 "Project not found.",
             ));
         }
@@ -126,7 +130,7 @@ fn append_created(
 pub(super) fn rollback(db: &Connection, id: &str) -> Result<(), AppStorageError> {
     if id == "general" {
         return Err(AppStorageError::new(
-            "general_channel_protected",
+            AppStorageCode::GeneralChannelProtected,
             "일반 채널은 보관하거나 삭제할 수 없습니다.",
         ));
     }

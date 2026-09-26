@@ -71,7 +71,7 @@ impl AppSubsessionPort for NativeAppSubsessions {
                     page.limit,
                 )
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let messages = page
                 .messages
                 .iter()
@@ -85,12 +85,12 @@ impl AppSubsessionPort for NativeAppSubsessions {
                 Some(turn_id) => conversations
                     .read_turn(&turn_id)
                     .await
-                    .map_err(|_| GatewayApplicationError::Internal)?,
+                    .map_err(GatewayApplicationError::internal_from)?,
                 None => None,
             };
             let object = projection
                 .as_object_mut()
-                .ok_or(GatewayApplicationError::Internal)?;
+                .ok_or(GatewayApplicationError::internal())?;
             object.insert("messages".into(), serde_json::json!(messages));
             object.insert("messages_has_more".into(), serde_json::json!(page.has_more));
             if let Some(turn) = turn {
@@ -165,7 +165,7 @@ impl AppSubsessionPort for NativeAppSubsessions {
             let events = progress
                 .read_child_operation_output_events(turn_id, request_id.clone(), result_id.clone())
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             Ok(events
                 .iter()
                 .filter_map(|event| {
@@ -250,7 +250,7 @@ fn map_error(error: &crate::btcc::BtccError) -> GatewayApplicationError {
         _ => 500,
     };
     if status == 500 {
-        GatewayApplicationError::Internal
+        GatewayApplicationError::internal()
     } else {
         let message = match error.code() {
             "steward_relation_not_active" => "Steward relation is not active.",
@@ -261,6 +261,7 @@ fn map_error(error: &crate::btcc::BtccError) -> GatewayApplicationError {
             status,
             code: error.code().to_owned(),
             message: message.into(),
+            source: None,
         }
     }
 }

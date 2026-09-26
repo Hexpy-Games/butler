@@ -16,7 +16,7 @@ pub(super) async fn read(
     let observations = session_work
         .work_status_observations()
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
     Ok(observations
         .into_iter()
         .filter_map(project_observation)

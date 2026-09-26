@@ -20,6 +20,7 @@ impl AppRuntimeInfoProvider for NativeAppRuntimeInfo {
                 status: 503,
                 code: "app_info_unavailable".into(),
                 message: "Installed App version metadata is unavailable.".into(),
+                source: None,
             })
     }
 }

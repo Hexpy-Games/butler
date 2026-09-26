@@ -74,7 +74,7 @@ pub(crate) trait AppSessionWorkspaceProvisioner: Send + Sync + 'static {
         _query: AppSessionBranchQuery,
         _cancellation: CancellationToken,
     ) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 

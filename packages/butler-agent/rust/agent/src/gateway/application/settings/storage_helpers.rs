@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{btcc::AccessMode, gateway::application::storage::AppStorageError};
 
 pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
@@ -32,7 +33,7 @@ pub(super) fn safe_integer(value: &Value) -> Option<u64> {
 
 pub(super) fn invalid_resolution() -> AppStorageError {
     AppStorageError::new(
-        "turn_control_resolution_invalid",
+        AppStorageCode::TurnControlResolutionInvalid,
         "Turn controls are unavailable.",
     )
 }

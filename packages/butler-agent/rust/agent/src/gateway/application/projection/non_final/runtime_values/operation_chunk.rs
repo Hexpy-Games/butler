@@ -4,6 +4,7 @@ use base64::{Engine, alphabet, engine::general_purpose};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
 
 const CHUNK_BYTES: usize = 32 * 1024;
@@ -37,7 +38,9 @@ pub(super) fn normalize(
     }
     // Bun accepts nonzero unused bits in otherwise well-formed padded Base64.
     // The source regex still requires the canonical alphabet and padding shape.
-    let bytes = BASE64.decode(content).map_err(|_| invalid())?;
+    let bytes = BASE64
+        .decode(content)
+        .map_err(|source| invalid().with_source(source))?;
     if bytes.len() as u64 != byte_end - byte_start
         || format!("{:x}", Sha256::digest(&bytes)) != content_sha
     {
@@ -102,7 +105,7 @@ fn integer(
 
 fn invalid() -> AppStorageError {
     AppStorageError::new(
-        "operation_output_chunk_invalid",
+        AppStorageCode::OperationOutputChunkInvalid,
         "Invalid operation output chunk",
     )
 }

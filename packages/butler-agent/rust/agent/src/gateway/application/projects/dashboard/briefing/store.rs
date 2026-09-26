@@ -11,6 +11,7 @@ use super::generation;
 use super::pack::{self, GENERATOR_VERSION, Pack, PackInput};
 use super::{BriefingState, ProjectDashboardBriefingOwner};
 use crate::gateway::application::events;
+use crate::gateway::application::storage::AppStorageCode;
 
 pub(super) async fn read(
     application: &AppApplication,
@@ -89,7 +90,7 @@ async fn read_pack(
     let model = settings
         .get("effective_consolidation_model")
         .and_then(Value::as_str)
-        .ok_or(GatewayApplicationError::Internal)?
+        .ok_or(GatewayApplicationError::internal())?
         .to_owned();
     let reasoning_effort = settings
         .get("consolidation_reasoning_effort")
@@ -338,7 +339,7 @@ async fn publish_update(
                             .cloned()
                             .ok_or_else(|| {
                                 AppStorageError::new(
-                                    "app_event_json_failed",
+                                    AppStorageCode::AppEventJsonFailed,
                                     "Invalid event payload.",
                                 )
                             })?;
@@ -375,6 +376,7 @@ fn briefing_unavailable() -> GatewayApplicationError {
         status: 503,
         code: "briefing_unavailable".into(),
         message: "Briefing unavailable.".into(),
+        source: None,
     }
 }
 

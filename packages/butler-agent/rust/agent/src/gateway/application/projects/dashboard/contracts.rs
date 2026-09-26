@@ -8,11 +8,48 @@ use crate::gateway::{ApplicationFuture, GatewayApplicationError};
 pub(crate) type AppProjectDashboardLedgerFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, AppProjectDashboardLedgerError>> + Send + 'static>>;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Failures of the Project Ledger port behind the project dashboard.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum AppProjectDashboardLedgerError {
+    /// The ledger changed during the read; the client may retry.
+    #[error("project_ledger_changed")]
     Changed,
-    Unavailable,
-    Internal,
+    /// The ledger is unavailable (missing or unreadable inputs).
+    #[error("project_ledger_unavailable")]
+    Unavailable {
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// The ledger read failed unexpectedly.
+    #[error("project_ledger_internal")]
+    Internal {
+        #[source]
+        source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
+    },
+}
+
+impl AppProjectDashboardLedgerError {
+    pub(crate) fn unavailable() -> Self {
+        Self::Unavailable { source: None }
+    }
+
+    pub(crate) fn internal() -> Self {
+        Self::Internal { source: None }
+    }
+
+    /// Records the ledger error behind an unavailable or internal failure.
+    #[must_use]
+    pub(crate) fn with_source(self, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+        match self {
+            Self::Unavailable { source: None } => Self::Unavailable {
+                source: Some(std::sync::Arc::new(cause)),
+            },
+            Self::Internal { source: None } => Self::Internal {
+                source: Some(std::sync::Arc::new(cause)),
+            },
+            other => other,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -171,7 +208,7 @@ impl AppProjectDashboardLedgerPort for TestProjectDashboardLedger {
         _: String,
         _: String,
     ) -> AppProjectDashboardLedgerFuture<AppProjectDashboardSnapshot> {
-        Box::pin(async { Err(AppProjectDashboardLedgerError::Unavailable) })
+        Box::pin(async { Err(AppProjectDashboardLedgerError::unavailable()) })
     }
 
     fn source(
@@ -182,14 +219,14 @@ impl AppProjectDashboardLedgerPort for TestProjectDashboardLedger {
         _: String,
         _: String,
     ) -> AppProjectDashboardLedgerFuture<AppProjectDashboardSource> {
-        Box::pin(async { Err(AppProjectDashboardLedgerError::Unavailable) })
+        Box::pin(async { Err(AppProjectDashboardLedgerError::unavailable()) })
     }
 
     fn history(
         &self,
         _: String,
     ) -> AppProjectDashboardLedgerFuture<AppProjectDashboardLedgerHistory> {
-        Box::pin(async { Err(AppProjectDashboardLedgerError::Unavailable) })
+        Box::pin(async { Err(AppProjectDashboardLedgerError::unavailable()) })
     }
 
     fn work_history(
@@ -199,7 +236,7 @@ impl AppProjectDashboardLedgerPort for TestProjectDashboardLedger {
         _: String,
         _: Option<String>,
     ) -> AppProjectDashboardLedgerFuture<Vec<AppProjectDashboardWorkHistoryEntry>> {
-        Box::pin(async { Err(AppProjectDashboardLedgerError::Unavailable) })
+        Box::pin(async { Err(AppProjectDashboardLedgerError::unavailable()) })
     }
 }
 
@@ -289,7 +326,7 @@ impl AppProjectDashboardBriefingPort for TestProjectDashboardBriefing {
         _: AppProjectDashboardBriefingPrompt,
         _: CancellationToken,
     ) -> ApplicationFuture<String> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -298,6 +335,7 @@ pub(crate) fn project_not_found() -> GatewayApplicationError {
         status: 404,
         code: "project_not_found".into(),
         message: "Project not found.".into(),
+        source: None,
     }
 }
 
@@ -306,6 +344,7 @@ pub(crate) fn invalid_cursor() -> GatewayApplicationError {
         status: 400,
         code: "invalid_cursor".into(),
         message: "Invalid cursor.".into(),
+        source: None,
     }
 }
 
@@ -314,6 +353,7 @@ pub(crate) fn source_changed(message: &'static str) -> GatewayApplicationError {
         status: 409,
         code: "source_changed".into(),
         message: message.into(),
+        source: None,
     }
 }
 
@@ -322,6 +362,7 @@ pub(crate) fn preferences_changed() -> GatewayApplicationError {
         status: 409,
         code: "preferences_changed".into(),
         message: "Preferences changed. Reload them.".into(),
+        source: None,
     }
 }
 
@@ -330,6 +371,7 @@ pub(crate) fn invalid_request() -> GatewayApplicationError {
         status: 400,
         code: "invalid_request".into(),
         message: "Invalid project dashboard request.".into(),
+        source: None,
     }
 }
 

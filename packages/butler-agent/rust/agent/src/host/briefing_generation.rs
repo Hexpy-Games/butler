@@ -224,11 +224,12 @@ impl BriefingInputSource for NativeBriefingSource {
                         )
                         .with_source(source)
                     })?
-                    .map_err(|_| {
+                    .map_err(|source| {
                         BriefingGenerationError::new(
                             BriefingGenerationCode::NewChatBriefingAppReadFailed,
                             "App project snapshot could not be read",
                         )
+                        .with_source(source)
                     })?;
             let targets = app_projects.map(|projects| {
                 projects

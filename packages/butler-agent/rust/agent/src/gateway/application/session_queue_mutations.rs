@@ -7,6 +7,7 @@ use super::{
     SessionQueueView, admission, admission_identity, app_error, events, queue, queue_view, service,
     settings,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     gateway::{MessageSendRequest, SessionControlState, VisualAdmissionRequest},
     public_text::trim_js_whitespace,
@@ -372,7 +373,7 @@ impl AppApplication {
                     .ok_or_else(storage_not_found)?;
                 if has_authority(row.control_resolution_json.as_ref()) {
                     return Err(AppStorageError::new(
-                        "authority_queue_immutable",
+                        AppStorageCode::AuthorityQueueImmutable,
                         "Approved command queue entries cannot be edited.",
                     ));
                 }
@@ -390,7 +391,7 @@ impl AppApplication {
                     .map_err(AppStorageError::sqlite)?;
                 if changed != 1 {
                     return Err(AppStorageError::new(
-                        "queued_message_changed",
+                        AppStorageCode::QueuedMessageChanged,
                         "Queued message changed. Reload it.",
                     ));
                 }
@@ -431,7 +432,7 @@ impl AppApplication {
                 }
                 if has_authority(row.control_resolution_json.as_ref()) {
                     return Err(AppStorageError::new(
-                        "authority_queue_immutable",
+                        AppStorageCode::AuthorityQueueImmutable,
                         "Approved command queue entries cannot be deleted.",
                     ));
                 }

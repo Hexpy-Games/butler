@@ -271,13 +271,13 @@ impl AppApplication {
     pub(crate) async fn start_dispatch(&self) -> Result<(), GatewayApplicationError> {
         self.queue_dispatcher
             .as_ref()
-            .ok_or(GatewayApplicationError::Internal)?
+            .ok_or(GatewayApplicationError::internal())?
             .initialize(self.clone_handle())
             .await?;
         let automation_scheduler = self
             .automation_scheduler
             .as_ref()
-            .ok_or(GatewayApplicationError::Internal)?;
+            .ok_or(GatewayApplicationError::internal())?;
         self.automation_runs.initialize(self.clone_handle()).await?;
         automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
@@ -368,6 +368,7 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }
 #[expect(
@@ -381,7 +382,7 @@ fn skill_error(error: crate::skills::SkillError) -> GatewayApplicationError {
             public(400, error.code(), &error.message())
         }
         crate::skills::SkillError::Closed => public(503, error.code(), &error.message()),
-        _ => GatewayApplicationError::Internal,
+        _ => GatewayApplicationError::internal(),
     }
 }
 #[expect(
@@ -395,7 +396,7 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "message_file_not_found"
         | "too_many_attachments"
         | "empty_queued_message"
-        | "invalid_message_content" => public(400, error.code(), error.detail()),
+        | "invalid_message_content" => public(400, error.code(), &error.detail()),
         "automation_not_enabled"
         | "automation_state_invalid"
         | "message_file_already_attached"
@@ -407,15 +408,15 @@ fn app_error(error: AppStorageError) -> GatewayApplicationError {
         | "session_model_unavailable"
         | "authority_queue_immutable"
         | "queued_message_cas_conflict"
-        | "turn_not_cancellable" => public(409, error.code(), error.detail()),
-        "message_file_wrong_session" => public(403, error.code(), error.detail()),
+        | "turn_not_cancellable" => public(409, error.code(), &error.detail()),
+        "message_file_wrong_session" => public(403, error.code(), &error.detail()),
         "session_not_found"
         | "automation_not_found"
         | "project_not_found"
         | "queued_message_not_found"
-        | "turn_not_found" => public(404, error.code(), error.detail()),
-        "turn_control_resolution_invalid" => public(500, error.code(), error.detail()),
-        _ => GatewayApplicationError::Internal,
+        | "turn_not_found" => public(404, error.code(), &error.detail()),
+        "turn_control_resolution_invalid" => public(500, error.code(), &error.detail()),
+        _ => GatewayApplicationError::internal(),
     }
 }
 

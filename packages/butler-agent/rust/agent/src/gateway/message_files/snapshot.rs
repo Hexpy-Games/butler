@@ -33,7 +33,7 @@ pub(super) fn write(
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
     {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     let file = MaterializedResponderFile {
         id: id.clone(),
@@ -45,8 +45,8 @@ pub(super) fn write(
         storage_name: id.clone(),
         created_at: clock.now_iso(),
     };
-    fs::create_dir_all(root).map_err(|_| GatewayApplicationError::Internal)?;
-    fs::write(root.join(id), body.as_bytes()).map_err(|_| GatewayApplicationError::Internal)?;
+    fs::create_dir_all(root).map_err(GatewayApplicationError::internal_from)?;
+    fs::write(root.join(id), body.as_bytes()).map_err(GatewayApplicationError::internal_from)?;
     Ok(file)
 }
 
@@ -55,5 +55,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

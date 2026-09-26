@@ -8,6 +8,7 @@ mod owner;
 mod rows;
 mod token;
 
+use crate::gateway::application::storage::AppStorageCode;
 pub(crate) use contracts::{
     AppCreateProjectRequest, AppCreateProjectResult, AppProjectList, AppProjectSource,
     AppProjectSummary,
@@ -100,7 +101,11 @@ pub(super) fn initial_root(db: &Connection, fallback: &Path) -> Result<PathBuf, 
         std::env::current_dir()
             .map(|cwd| cwd.join(path))
             .map_err(|error| {
-                AppStorageError::new("project_workspace_unavailable", error.to_string())
+                AppStorageError::new(
+                    AppStorageCode::ProjectWorkspaceUnavailable,
+                    error.to_string(),
+                )
+                .with_source(error)
             })
     }
 }
@@ -159,7 +164,7 @@ impl AppApplication {
             }
         })
         .await
-        .map_err(|_| GatewayApplicationError::Internal)??;
+        .map_err(GatewayApplicationError::internal_from)??;
         let (workspace, scratch, display_name) = prepared;
         let clock = self.dependencies.identity_clock.clone();
         let subscribers = self.subscribers.clone();
@@ -242,5 +247,6 @@ fn error(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

@@ -72,10 +72,10 @@ async fn finish(
             )
         })
         .and_then(|value| {
-            serde_json::from_str(value).map_err(|_| GatewayApplicationError::Internal)
+            serde_json::from_str(value).map_err(GatewayApplicationError::internal_from)
         })?;
     if plan.operation_id != row.operation_id || plan.runtime_session_id != runtime_session_id {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     let destination = records::decode_destination(&row)?;
     app.dependencies
@@ -122,12 +122,12 @@ async fn cleanup_plan(app: &AppApplication, row: Row) -> Result<(), GatewayAppli
         return Ok(());
     };
     let Ok(plan) = serde_json::from_str::<AppRelocationWorkspacePlan>(encoded) else {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     };
     if plan.operation_id != row.operation_id
         || plan.runtime_session_id != app_session_hint(&row.session_id)
     {
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     if app
         .dependencies
@@ -167,5 +167,6 @@ fn public(code: &str, message: &str) -> GatewayApplicationError {
         status: 409,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

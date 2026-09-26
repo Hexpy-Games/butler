@@ -13,6 +13,7 @@ use super::{
     io::{atomic_write, read},
     record_path,
 };
+use crate::gateway::NativeQueueCode;
 use crate::{
     gateway::native_queue::{NativeQueueError, QueueResult, QueuedInboundEvent},
     json::JsonDocument,
@@ -32,12 +33,13 @@ struct RoutingHints {
 }
 
 fn identity(envelope: &JsonDocument) -> QueueResult<EnvelopeIdentity> {
-    let id: EnvelopeIdentity = envelope
-        .read()
-        .map_err(|error| NativeQueueError::new("inbound_envelope_invalid", error.to_string()))?;
+    let id: EnvelopeIdentity = envelope.read().map_err(|error| {
+        NativeQueueError::new(NativeQueueCode::InboundEnvelopeInvalid, error.to_string())
+            .with_source(error)
+    })?;
     if id.event_id.is_empty() {
         return Err(NativeQueueError::new(
-            "inbound_envelope_invalid",
+            NativeQueueCode::InboundEnvelopeInvalid,
             "Missing event identity",
         ));
     }
@@ -206,14 +208,17 @@ fn patch_envelope(
         "routingHints".into(),
         RawValue::from_string(serde_json::to_string(&hints).map_err(encode)?).map_err(encode)?,
     );
-    JsonDocument::from_encoded(serde_json::to_string(&outer).map_err(encode)?)
-        .map_err(|error| NativeQueueError::new("inbound_queue_encode_failed", error.to_string()))
+    JsonDocument::from_encoded(serde_json::to_string(&outer).map_err(encode)?).map_err(|error| {
+        NativeQueueError::new(NativeQueueCode::InboundQueueEncodeFailed, error.to_string())
+            .with_source(error)
+    })
 }
 
 fn raw_string(value: &str) -> QueueResult<Box<RawValue>> {
     RawValue::from_string(serde_json::to_string(value).map_err(encode)?).map_err(encode)
 }
 
-fn encode(error: impl std::fmt::Display) -> NativeQueueError {
-    NativeQueueError::new("inbound_queue_encode_failed", error.to_string())
+fn encode(error: impl std::error::Error + Send + Sync + 'static) -> NativeQueueError {
+    NativeQueueError::new(NativeQueueCode::InboundQueueEncodeFailed, error.to_string())
+        .with_source(error)
 }

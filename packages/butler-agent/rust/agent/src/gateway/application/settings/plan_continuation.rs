@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::resolve_for_message_send;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     MessageSendRequest,
     application::{AppSettingsFacts, events::EventSubscribers, storage::AppStorageError},
@@ -105,7 +106,7 @@ fn create_plan_queue_message(
     if let Some(existing) = existing {
         if existing.as_deref() != Some(&digest) {
             return Err(AppStorageError::new(
-                "queued_message_identity_conflict",
+                AppStorageCode::QueuedMessageIdentityConflict,
                 input.replay_conflict,
             ));
         }
@@ -196,6 +197,8 @@ fn stable_client_message_id(value: &str) -> String {
 }
 
 fn encoded(value: &Value) -> Result<String, AppStorageError> {
-    crate::json::stringify(value)
-        .map_err(|error| AppStorageError::new("settings_json_failed", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        AppStorageError::new(AppStorageCode::SettingsJsonFailed, error.to_string())
+            .with_source(error)
+    })
 }

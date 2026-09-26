@@ -2,6 +2,7 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::gateway::application::storage::AppStorageCode;
 
 impl AppApplication {
     pub(super) async fn recover_turn_cancellations(&self) -> Result<(), GatewayApplicationError> {
@@ -61,7 +62,7 @@ impl AppApplication {
                     .optional()
                     .map_err(AppStorageError::sqlite)?
                     .ok_or_else(|| {
-                        AppStorageError::new("turn_not_found", "Turn not found.")
+                        AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found.")
                     })?;
                 if row.1 == "cancelled" {
                     return Ok((row.0, None, true));
@@ -70,7 +71,7 @@ impl AppApplication {
                     || matches!(row.1.as_str(), "delivered" | "failed" | "runtime_fault")
                 {
                     return Err(AppStorageError::new(
-                        "turn_not_cancellable",
+                        AppStorageCode::TurnNotCancellable,
                         "Turn is not cancellable.",
                     ));
                 }

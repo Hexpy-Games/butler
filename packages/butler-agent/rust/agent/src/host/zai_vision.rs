@@ -49,7 +49,7 @@ pub(crate) async fn catalog_for_visual_admission(
     let read = models
         .read()
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
     let mut catalog = read.catalog.view().registered_models.clone();
     let Some(entry) = catalog
         .iter_mut()
@@ -86,5 +86,6 @@ fn carrier_unavailable() -> GatewayApplicationError {
         status: 409,
         code: "image_carrier_unavailable".into(),
         message: "The Z.AI image carrier could not be verified.".into(),
+        source: None,
     }
 }

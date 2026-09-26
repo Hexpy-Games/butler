@@ -6,6 +6,7 @@ pub(super) fn error(code: &'static str, message: &'static str) -> GatewayApplica
         status: 409,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }
 

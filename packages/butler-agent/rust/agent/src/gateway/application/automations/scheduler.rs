@@ -45,7 +45,7 @@ impl AutomationScheduler {
         self.cancellation.cancel();
         let task = self.task.lock().take();
         if let Some(task) = task {
-            task.await.map_err(|_| GatewayApplicationError::Internal)?;
+            task.await.map_err(GatewayApplicationError::internal_from)?;
         }
         Ok(())
     }

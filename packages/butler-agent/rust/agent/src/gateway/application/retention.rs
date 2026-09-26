@@ -33,7 +33,7 @@ impl RetentionWake {
         self.0
             .send(Command::Turn(turn_id))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 }
 
@@ -116,7 +116,7 @@ impl RetentionOwner {
                     let _ = inner.sender.send(Command::Close).await;
                     let result = task
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)
+                        .map_err(GatewayApplicationError::internal_from)
                         .and_then(|v| v);
                     lock(&inner.close).result = Some(result);
                     inner.closed.notify_waiters();

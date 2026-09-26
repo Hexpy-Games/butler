@@ -5,6 +5,7 @@ mod operation_chunk;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value};
 
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
 
 pub(super) fn next_sequence(
@@ -29,7 +30,7 @@ pub(super) fn prepare_runtime_payload(
 ) -> Result<Map<String, Value>, AppStorageError> {
     if !valid_kind(kind) {
         return Err(AppStorageError::new(
-            "app_turn_event_invalid",
+            AppStorageCode::AppTurnEventInvalid,
             "Unknown turn event kind",
         ));
     }
@@ -118,8 +119,12 @@ fn validate_provider_stream(
     visibility: &str,
     payload: &Map<String, Value>,
 ) -> Result<(), AppStorageError> {
-    let invalid =
-        || AppStorageError::new("app_turn_event_invalid", "Invalid provider stream payload");
+    let invalid = || {
+        AppStorageError::new(
+            AppStorageCode::AppTurnEventInvalid,
+            "Invalid provider stream payload",
+        )
+    };
     let required_text = |key: &str| {
         payload
             .get(key)

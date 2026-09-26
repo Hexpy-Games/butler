@@ -20,6 +20,7 @@ pub(super) use owner::SessionCreationOwner;
 
 use super::events::EventSubscribers;
 use super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
+use crate::gateway::application::storage::AppStorageCode;
 use rusqlite::Connection;
 use tokio_util::sync::CancellationToken;
 
@@ -124,7 +125,7 @@ impl AppApplication {
         let project_id = created
             .project_id
             .clone()
-            .ok_or(GatewayApplicationError::Internal)?;
+            .ok_or(GatewayApplicationError::internal())?;
         let session_id = created.id.clone();
         let runtime_session_id = created.session_hint.clone();
         let facts = self.dependencies.settings_facts.snapshot()?;
@@ -275,10 +276,7 @@ impl AppApplication {
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_error(error: serde_json::Error) -> AppStorageError {
-    AppStorageError::new("app_session_json_invalid", error.to_string())
+    AppStorageError::new(AppStorageCode::AppSessionJsonInvalid, error.to_string())
+        .with_source(error)
 }

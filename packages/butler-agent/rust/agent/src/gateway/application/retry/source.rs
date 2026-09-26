@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::{AppStorageError, execution_controls_error, not_retryable_error, queue_snapshot_error};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     btcc::{ControlResolution, ExecutionControls, VerifiedExecutionControls},
     public_text::sanitize_public_text,
@@ -53,12 +54,15 @@ pub(super) fn retry_snapshot(
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("turn_not_found", "Turn not found."))?;
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
     if turn.2 != "runtime_fault" || turn.3 != 1 || !runtime_fault_retryable(db, turn_id)? {
         return Err(not_retryable_error());
     }
     let user_message_id = turn.1.ok_or_else(|| {
-        AppStorageError::new("turn_missing_user_message", "Turn cannot be retried.")
+        AppStorageError::new(
+            AppStorageCode::TurnMissingUserMessage,
+            "Turn cannot be retried.",
+        )
     })?;
     let (message_chat, message_turn, role, text): (String, Option<String>, String, String) = db
         .query_row(
@@ -69,11 +73,14 @@ pub(super) fn retry_snapshot(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| {
-            AppStorageError::new("turn_missing_user_message", "Turn cannot be retried.")
+            AppStorageError::new(
+                AppStorageCode::TurnMissingUserMessage,
+                "Turn cannot be retried.",
+            )
         })?;
     if message_chat != turn.0 || message_turn.as_deref() != Some(turn_id) || role != "user" {
         return Err(AppStorageError::new(
-            "turn_missing_user_message",
+            AppStorageCode::TurnMissingUserMessage,
             "Turn cannot be retried.",
         ));
     }
@@ -109,12 +116,13 @@ pub(super) fn retry_snapshot(
     }
     let control_resolution_json = queue.2.ok_or_else(queue_snapshot_error)?;
     let controls_json = queue.3;
-    let attachments: Value = serde_json::from_str(&queue.4).map_err(|_| queue_snapshot_error())?;
+    let attachments: Value = serde_json::from_str(&queue.4)
+        .map_err(|source| queue_snapshot_error().with_source(source))?;
     if !attachments.is_array() {
         return Err(queue_snapshot_error());
     }
-    let project_source_refs: Value =
-        serde_json::from_str(&queue.6).map_err(|_| queue_snapshot_error())?;
+    let project_source_refs: Value = serde_json::from_str(&queue.6)
+        .map_err(|source| queue_snapshot_error().with_source(source))?;
     if !project_source_refs.is_array() {
         return Err(queue_snapshot_error());
     }
@@ -143,15 +151,15 @@ pub(super) fn verified_execution_controls(
 ) -> Result<(VerifiedExecutionControls, ControlResolution), AppStorageError> {
     let execution_controls: ExecutionControls =
         serde_json::from_str(&snapshot.execution_controls_json)
-            .map_err(|_| execution_controls_error())?;
+            .map_err(|source| execution_controls_error().with_source(source))?;
     let verified = execution_controls
         .verify()
-        .map_err(|_| execution_controls_error())?;
+        .map_err(|source| execution_controls_error().with_source(source))?;
     if verified.turn_id != snapshot.turn_id || verified.session_id != snapshot.chat_id {
         return Err(execution_controls_error());
     }
     let controls = super::settings::resolution_from_persisted(&snapshot.control_resolution_json)
-        .map_err(|_| queue_snapshot_error())?;
+        .map_err(|source| queue_snapshot_error().with_source(source))?;
     Ok((verified, controls))
 }
 
@@ -167,12 +175,15 @@ pub(super) fn current_controls_retry_source(
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("turn_not_found", "Turn not found."))?;
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
     if state != "runtime_fault" || retryable != 1 || !runtime_fault_retryable(db, turn_id)? {
         return Err(not_retryable_error());
     }
     let user_message_id = user_message_id.ok_or_else(|| {
-        AppStorageError::new("turn_missing_user_message", "Turn cannot be retried.")
+        AppStorageError::new(
+            AppStorageCode::TurnMissingUserMessage,
+            "Turn cannot be retried.",
+        )
     })?;
     let (message_chat, message_turn, role, text): (String, Option<String>, String, String) = db
         .query_row(
@@ -183,11 +194,14 @@ pub(super) fn current_controls_retry_source(
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| {
-            AppStorageError::new("turn_missing_user_message", "Turn cannot be retried.")
+            AppStorageError::new(
+                AppStorageCode::TurnMissingUserMessage,
+                "Turn cannot be retried.",
+            )
         })?;
     if message_chat != chat_id || message_turn.as_deref() != Some(turn_id) || role != "user" {
         return Err(AppStorageError::new(
-            "turn_missing_user_message",
+            AppStorageCode::TurnMissingUserMessage,
             "Turn cannot be retried.",
         ));
     }

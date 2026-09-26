@@ -15,8 +15,8 @@ pub(super) fn decode<T: DeserializeOwned>(
     }
     let bytes = URL_SAFE_NO_PAD
         .decode(value)
-        .map_err(|_| invalid_cursor())?;
-    serde_json::from_slice(&bytes).map_err(|_| invalid_cursor())
+        .map_err(|source| invalid_cursor().with_source(source))?;
+    serde_json::from_slice(&bytes).map_err(|source| invalid_cursor().with_source(source))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

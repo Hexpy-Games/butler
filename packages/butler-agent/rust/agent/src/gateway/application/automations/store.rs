@@ -6,6 +6,7 @@ use super::{
     AutomationRunListView, AutomationSummary, CreateAutomationRequest, UpdateAutomationRequest,
     records,
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     AppApplication, AppStorageError, GatewayApplicationError, app_error, events, public,
 };
@@ -97,7 +98,7 @@ impl AppApplication {
             validate_interval_row(seconds)?;
             let state = input.state.unwrap_or(old.state);
             if state != "enabled" && state != "paused" {
-                return Err(AppStorageError::new("automation_state_invalid", "Automation state must be enabled or paused."));
+                return Err(AppStorageError::new(AppStorageCode::AutomationStateInvalid, "Automation state must be enabled or paused."));
             }
             let next = if state == "enabled" { Some(clock.iso_after_millis(u64::try_from(seconds).unwrap_or_default() * 1000)) } else { old.next };
             db.execute(
@@ -186,12 +187,8 @@ pub(super) fn publish(
     events::append(db, subscribers, kind, None, payload, now)?;
     Ok(())
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn json_error(error: serde_json::Error) -> AppStorageError {
-    AppStorageError::new("automation_json_failed", error.to_string())
+    AppStorageError::new(AppStorageCode::AutomationJsonFailed, error.to_string()).with_source(error)
 }
 fn detail(row: records::AutomationRow) -> AutomationDetail {
     let prompt = row.prompt.clone();
@@ -240,7 +237,7 @@ fn validate_interval_row(value: i64) -> Result<(), AppStorageError> {
         Ok(())
     } else {
         Err(AppStorageError::new(
-            "automation_interval_invalid",
+            AppStorageCode::AutomationIntervalInvalid,
             "Automation interval must be between 5 minutes and 24 hours.",
         ))
     }

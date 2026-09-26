@@ -48,7 +48,7 @@ pub(crate) async fn resolve_session_references(
         let canonical = conversations
             .get_session_by_gateway_binding("app", &app_session_hint(&chat.id))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         let preview = if let Some(canonical) = canonical.as_ref().filter(|_| preview_budget > 0) {
             let mut messages = conversations
                 .read_cognition_messages(ReadCognitionMessagesInput {
@@ -59,7 +59,7 @@ pub(crate) async fn resolve_session_references(
                     ..Default::default()
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             messages.reverse();
             let text = messages
                 .iter()

@@ -1,16 +1,17 @@
 //! Source-compatible durable inbound queue for the standalone native owner.
 
+mod error;
 mod record;
 mod storage;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use error::{NativeQueueCode, NativeQueueError};
 pub(crate) use record::{ClaimedInboundEvent, QueuedInboundEvent};
 
 use parking_lot::Mutex;
 use std::{
     collections::HashSet,
-    fmt,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -27,29 +28,6 @@ pub(crate) struct NativeInboundQueue {
     lane: Arc<Mutex<()>>,
     enqueue_wake: Arc<Notify>,
 }
-
-#[derive(Clone, Debug)]
-pub(crate) struct NativeQueueError {
-    pub code: &'static str,
-    pub message: String,
-}
-
-impl NativeQueueError {
-    pub(super) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for NativeQueueError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for NativeQueueError {}
 
 pub(crate) type QueueResult<T> = Result<T, NativeQueueError>;
 

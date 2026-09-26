@@ -48,7 +48,7 @@ impl AppModelCatalogPort for ModelCatalog {
         _: AppModelCatalogCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -60,7 +60,7 @@ impl AppPersonalizationPort for Personalization {
         _: AppPersonalizationCommand,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<AppPersonalizationResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -98,7 +98,7 @@ impl AppSessionWorkspaceProvisioner for UnprovidedSessions {
         _: AppSessionWorkspaceSnapshot,
         _: tokio_util::sync::CancellationToken,
     ) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn branch_info(
         &self,
@@ -156,7 +156,7 @@ impl crate::gateway::application::AppBranchSummarizer for TestBranchSummarizer {
 
 impl AppSessionWorkProgress for UnprovidedSessions {
     fn read(&self, _: String) -> ApplicationFuture<Option<AppWorkProgress>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -175,10 +175,10 @@ impl AppSubsessionPort for UnprovidedSessions {
         Box::pin(async { Ok(json!({"steward_children":[],"workers":[]})) })
     }
     fn cancel(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn resume(&self, _: String, _: String) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_operation_output_chunks(
         &self,
@@ -226,13 +226,13 @@ impl AppAdmissionAuthority for Admission {
         &self,
         _: AppLedgerSourceRequest,
     ) -> ApplicationFuture<AppSourceDocument> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn snapshot_source(
         &self,
         _: AppSourceSnapshotRequest,
     ) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn admit_visual(&self, request: VisualAdmissionRequest) -> ApplicationFuture<Value> {
         Box::pin(async move {
@@ -311,13 +311,13 @@ impl AppArtifactMaterializer for Materializer {
 
 impl AppMessageFileStorage for Materializer {
     fn write_upload(&self, _: AppFileWrite) -> ApplicationFuture<MaterializedResponderFile> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn prepare_uploaded(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<()> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn read_original(&self, _: AppMessageFileSnapshot) -> ApplicationFuture<bytes::Bytes> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 
@@ -367,16 +367,16 @@ pub(super) struct UnprovidedMonitoring;
 
 impl AppMonitoringPort for UnprovidedMonitoring {
     fn work_status(&self) -> ApplicationFuture<Vec<AppBoundWorkStatusFact>> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn usage_monitor(&self, _: AppUsageMonitorQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn system_events(&self, _: AppMonitorPage) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn developer_logs(&self, _: AppDeveloperLogsQuery) -> ApplicationFuture<Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
 }
 

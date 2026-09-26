@@ -29,7 +29,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     let path_for_read = path.clone();
     let state = tokio::task::spawn_blocking(move || file_state(&path_for_read))
         .await
-        .map_err(|_| GatewayApplicationError::Internal)??;
+        .map_err(GatewayApplicationError::internal_from)??;
     let Some(state) = state else { return Ok(false) };
     let spool_path = spool_path(&context.butler_data, chat_id, &path);
     let mut checkpoint = prior
@@ -51,7 +51,7 @@ pub(in crate::gateway::application) async fn sync_chat_once(
         super::byte_window::read_record(checkpoint, state.size, state.modified_at_ms)
     })
     .await
-    .map_err(|_| GatewayApplicationError::Internal)?
+    .map_err(GatewayApplicationError::internal_from)?
     .map_err(app_error)?;
     if read.checkpoint.spool_bytes == 0 {
         read.checkpoint.spool_path.clear();
@@ -83,7 +83,7 @@ fn file_state(path: &std::path::Path) -> Result<Option<FileState>, GatewayApplic
     let metadata = match std::fs::metadata(path) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(GatewayApplicationError::Internal),
+        Err(_) => return Err(GatewayApplicationError::internal()),
     };
     if !metadata.is_file() {
         return Ok(None);

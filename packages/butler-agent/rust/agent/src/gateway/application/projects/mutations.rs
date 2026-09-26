@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{app_error, events, storage::AppStorageError};
 use crate::public_text::trim_js_whitespace;
 
@@ -167,8 +168,9 @@ fn update_project(
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
-    let row = rows::any_by_id(&tx, project_id)?
-        .ok_or_else(|| AppStorageError::new("project_not_found", "Project not found."))?;
+    let row = rows::any_by_id(&tx, project_id)?.ok_or_else(|| {
+        AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
+    })?;
     let display_name = input
         .display_name
         .as_deref()
@@ -204,8 +206,9 @@ fn lifecycle_project(
     clock: &dyn crate::gateway::application::AppIdentityClock,
 ) -> Result<AppProjectActionResult, AppStorageError> {
     let tx = db.transaction().map_err(AppStorageError::sqlite)?;
-    let row = rows::any_by_id(&tx, project_id)?
-        .ok_or_else(|| AppStorageError::new("project_not_found", "Project not found."))?;
+    let row = rows::any_by_id(&tx, project_id)?.ok_or_else(|| {
+        AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
+    })?;
     if action == ProjectLifecycle::PermanentDelete {
         let project = rows::summary(row, None);
         tx.execute("DELETE FROM chats WHERE project_id=?", [project_id])
@@ -255,7 +258,7 @@ fn lifecycle_project(
 fn read_project(db: &Connection, id: &str) -> Result<AppProjectSummary, AppStorageError> {
     rows::any_by_id(db, id)?
         .map(|row| rows::summary(row, None))
-        .ok_or_else(|| AppStorageError::new("project_not_found", "Project not found."))
+        .ok_or_else(|| AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found."))
 }
 
 fn append_project_event(
@@ -278,5 +281,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

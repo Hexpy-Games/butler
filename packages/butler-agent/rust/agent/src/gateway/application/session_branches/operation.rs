@@ -8,6 +8,7 @@ use super::{
     reservation::SaveOutcome,
     store::{self, BranchRow},
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     AppChatKind, AppSessionBranchQuery, AppSessionWorkspaceSnapshot, GatewayApplicationError,
     application::{AppApplication, AppStorageError},
@@ -111,7 +112,7 @@ impl AppApplication {
                     move |db| {
                         store::row(db, &request_id)?.ok_or_else(|| {
                             AppStorageError::new(
-                                "branch_reservation_lost",
+                                AppStorageCode::BranchReservationLost,
                                 "Branch reservation was not saved.",
                             )
                         })
@@ -137,7 +138,7 @@ impl AppApplication {
         let path = self
             .project_workspace_path(session.project_id.clone())
             .await?
-            .ok_or(GatewayApplicationError::Internal)?;
+            .ok_or(GatewayApplicationError::internal())?;
         let runtime_session_id = session.session_hint.clone();
         let cancellation = CancellationToken::new();
         let info = self
@@ -193,5 +194,6 @@ fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
         status,
         code: code.to_owned(),
         message: message.to_owned(),
+        source: None,
     }
 }

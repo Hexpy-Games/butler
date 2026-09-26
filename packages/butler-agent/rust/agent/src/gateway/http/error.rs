@@ -56,12 +56,13 @@ impl From<GatewayApplicationError> for HttpError {
                 status,
                 code,
                 message,
+                ..
             } => Self::Public {
                 status,
                 code,
                 message,
             },
-            GatewayApplicationError::Internal => Self::Internal,
+            GatewayApplicationError::Internal { .. } => Self::Internal,
         }
     }
 }

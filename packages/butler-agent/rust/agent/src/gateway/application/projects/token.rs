@@ -33,8 +33,11 @@ pub(super) fn selected_path(
     {
         return Err(invalid());
     }
-    let decoded = URL_SAFE_NO_PAD.decode(payload).map_err(|_| invalid())?;
-    let value: Value = serde_json::from_slice(&decoded).map_err(|_| invalid())?;
+    let decoded = URL_SAFE_NO_PAD
+        .decode(payload)
+        .map_err(|source| invalid().with_source(source))?;
+    let value: Value =
+        serde_json::from_slice(&decoded).map_err(|source| invalid().with_source(source))?;
     if value
         .get("expires_at")
         .and_then(Value::as_f64)

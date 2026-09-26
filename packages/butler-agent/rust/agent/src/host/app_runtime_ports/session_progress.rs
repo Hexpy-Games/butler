@@ -35,7 +35,7 @@ impl AppSessionWorkProgress for NativeAppSessionProgress {
             let observation = session_work
                 .observe_session_plan(runtime_session_id)
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let Some(observation) = observation else {
                 return Ok(None);
             };
@@ -57,7 +57,7 @@ impl AppSessionWorkProgress for NativeAppSessionProgress {
                             work_id,
                         })
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)?
+                        .map_err(GatewayApplicationError::internal_from)?
                     else {
                         return Ok(None);
                     };

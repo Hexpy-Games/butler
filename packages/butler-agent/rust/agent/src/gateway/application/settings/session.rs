@@ -4,6 +4,7 @@ use crate::gateway::SessionControlState;
 use rusqlite::OptionalExtension;
 
 use super::super::AppSessionControlUpdate;
+use crate::gateway::application::storage::AppStorageCode;
 
 pub(in crate::gateway::application) struct SessionWorkspaceSettings {
     pub model: String,
@@ -135,12 +136,12 @@ fn require_chat(db: &Connection, chat_id: &str) -> Result<(), AppStorageError> {
         .query_row("SELECT 1 FROM chats WHERE id=?1", [chat_id], |_| Ok(()))
         .optional()
         .map_err(AppStorageError::sqlite)?;
-    found.ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))
+    found.ok_or_else(|| AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found."))
 }
 
 fn invalid_session_controls() -> AppStorageError {
     AppStorageError::new(
-        "invalid_session_controls",
+        AppStorageCode::InvalidSessionControls,
         "Session controls update contains unsupported fields.",
     )
 }

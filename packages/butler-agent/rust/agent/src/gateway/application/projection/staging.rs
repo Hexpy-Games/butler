@@ -3,6 +3,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{super::storage::AppStorageError, TranscriptEvent};
+use crate::gateway::application::storage::AppStorageCode;
 
 pub(super) fn stage(
     db: &Connection,
@@ -12,8 +13,10 @@ pub(super) fn stage(
     claim_id: Option<&str>,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let event_json = serde_json::to_string(event)
-        .map_err(|error| AppStorageError::new("app_projection_json_invalid", error.to_string()))?;
+    let event_json = serde_json::to_string(event).map_err(|error| {
+        AppStorageError::new(AppStorageCode::AppProjectionJsonInvalid, error.to_string())
+            .with_source(error)
+    })?;
     if let Some(existing) = load(db, action_id)? {
         let existing_claim = claim_id_from_event(&existing.1);
         if existing_claim.is_some() && existing_claim.as_deref() != claim_id {
@@ -33,14 +36,14 @@ pub(super) fn stage(
     .map_err(AppStorageError::sqlite)?;
     let stored = load(db, action_id)?.ok_or_else(|| {
         AppStorageError::new(
-            "app_staged_outbound_missing",
+            AppStorageCode::AppStagedOutboundMissing,
             "Staged outbound was not found.",
         )
     })?;
     if stored.0 != chat_id || serde_json::to_string(&stored.1).ok().as_deref() != Some(&event_json)
     {
         return Err(AppStorageError::new(
-            "app_staged_outbound_identity_conflict",
+            AppStorageCode::AppStagedOutboundIdentityConflict,
             "Transport staged outbound identity conflict",
         ));
     }

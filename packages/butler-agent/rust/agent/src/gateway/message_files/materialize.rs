@@ -124,10 +124,10 @@ pub(super) fn run(
         }
         let id = format!("file-{}", clock.new_uuid());
         if !valid_file_id(&id) {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         let created_at = clock.now_iso();
-        let staged = item.staged.ok_or(GatewayApplicationError::Internal)?;
+        let staged = item.staged.ok_or(GatewayApplicationError::internal())?;
         fs::rename(staged, root.join(&id)).map_err(internal)?;
         files.push(MaterializedResponderFile {
             id: id.clone(),
@@ -189,12 +189,13 @@ fn valid_file_id(id: &str) -> bool {
 }
 
 fn internal(_: std::io::Error) -> GatewayApplicationError {
-    GatewayApplicationError::Internal
+    GatewayApplicationError::internal()
 }
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status,
         code: code.into(),
         message: message.into(),
+        source: None,
     }
 }

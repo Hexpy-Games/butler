@@ -101,7 +101,7 @@ async fn load(
     let read = configuration
         .read()
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
     let catalog = read.catalog.view();
     let config_default_model = read
         .config
@@ -135,10 +135,10 @@ async fn load(
     let extractor = profile
         .read_extractor_model()
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
     let private_environment =
         crate::configuration::read_private_environment(&data_root.join(".env"))
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
     let web_search = read.config.get("webSearch").unwrap_or(&Value::Null);
     let planning = web_search.get("planning").unwrap_or(&Value::Null);
     let native_settings = serde_json::json!({

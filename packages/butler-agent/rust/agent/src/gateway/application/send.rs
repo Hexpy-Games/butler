@@ -8,6 +8,7 @@ use super::{
     queue::QueueReservation,
     service::{accept_turn, assert_scope},
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::{
     btcc::{ControlResolution, ExecutionControls},
     gateway::MessageContentPart,
@@ -160,18 +161,20 @@ impl AppApplication {
                 )?;
                 let mut reservation = reservation_base;
                 reservation.control_resolution_json =
-                    stringify(&resolved.persisted).map_err(|_| {
+                    stringify(&resolved.persisted).map_err(|source| {
                         AppStorageError::new(
-                            "settings_json_failed",
+                            AppStorageCode::SettingsJsonFailed,
                             "Settings could not be encoded.",
                         )
+                        .with_source(source)
                     })?;
                 reservation.controls_json =
-                    stringify(&resolved.persisted["controls"]).map_err(|_| {
+                    stringify(&resolved.persisted["controls"]).map_err(|source| {
                         AppStorageError::new(
-                            "settings_json_failed",
+                            AppStorageCode::SettingsJsonFailed,
                             "Settings could not be encoded.",
                         )
+                        .with_source(source)
                     })?;
                 let inserted = queue::reserve(&transaction, &reservation)?;
                 transaction.commit().map_err(AppStorageError::sqlite)?;
@@ -262,19 +265,21 @@ impl AppApplication {
             let now = self.dependencies.identity_clock.now_iso();
             let controls =
                 ExecutionControls::create(&turn_id, &claim.chat_id, prepared.controls, &now)
-                    .map_err(|_| {
+                    .map_err(|source| {
                         public(
                             500,
                             "turn_execution_controls_invalid",
                             "Turn controls are unavailable.",
                         )
+                        .with_source(source)
                     })?;
-            controls.verify().map_err(|_| {
+            controls.verify().map_err(|source| {
                 public(
                     500,
                     "turn_execution_controls_invalid",
                     "Turn controls are unavailable.",
                 )
+                .with_source(source)
             })?;
             let controls_value = controls.as_json().clone();
             let claim_db = claim.clone();

@@ -3,6 +3,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value, json};
 
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{events::EventSubscribers, storage::AppStorageError};
 
 pub(super) struct FinalTurnEventIds {
@@ -68,6 +69,9 @@ fn has_kind(db: &Connection, turn_id: &str, kind: &str) -> Result<bool, AppStora
 
 fn object(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
-        AppStorageError::new("app_event_payload_invalid", "Event payload is invalid.")
+        AppStorageError::new(
+            AppStorageCode::AppEventPayloadInvalid,
+            "Event payload is invalid.",
+        )
     })
 }

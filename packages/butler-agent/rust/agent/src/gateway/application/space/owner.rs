@@ -42,7 +42,7 @@ impl SpaceMutationOwner {
         let lock = {
             let mut locks = self.relocation_locks.lock();
             if self.closed.load(Ordering::Acquire) {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             let lock = locks
                 .get(session_id)
@@ -53,7 +53,7 @@ impl SpaceMutationOwner {
         };
         let guard = lock.lock_owned().await;
         if self.closed.load(Ordering::Acquire) {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         Ok(guard)
     }
@@ -64,7 +64,7 @@ impl SpaceMutationOwner {
     ) -> Result<Value, GatewayApplicationError> {
         let state = self.state.lock().await;
         if self.closed.load(Ordering::Acquire) {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         let mut view = storage
             .execute(|db| super::reader::read(db))
@@ -76,7 +76,7 @@ impl SpaceMutationOwner {
         {
             view.smart_notice = Some(notice.clone());
         }
-        serde_json::to_value(view).map_err(|_| GatewayApplicationError::Internal)
+        serde_json::to_value(view).map_err(GatewayApplicationError::internal_from)
     }
 
     pub(super) async fn execute(
@@ -90,7 +90,7 @@ impl SpaceMutationOwner {
     ) -> Result<AppSpaceMutationResult, GatewayApplicationError> {
         let mut state = self.state.lock().await;
         if self.closed.load(Ordering::Acquire) {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         let previous = state.clone();
         let publish_to = subscribers.clone();
@@ -124,7 +124,7 @@ impl SpaceMutationOwner {
     ) -> Result<AppSpaceMutationResult, GatewayApplicationError> {
         let mut history = self.state.lock().await;
         if self.closed.load(Ordering::Acquire) {
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         let publish_to = subscribers.clone();
         let result = storage
@@ -205,7 +205,7 @@ fn commit_relocation(
                 events: Vec::new(),
             });
         }
-        return Err(GatewayApplicationError::Internal);
+        return Err(GatewayApplicationError::internal());
     }
     let project_id = destination
         .project

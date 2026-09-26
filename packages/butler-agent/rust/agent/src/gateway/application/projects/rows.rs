@@ -5,6 +5,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{AppProjectSource, AppProjectSummary, AppSessionSummary};
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     AppIdentityClock, EventSubscribers, events, storage::AppStorageError,
 };
@@ -89,7 +90,7 @@ fn active_by_path(db: &Connection, path: &str) -> Result<Option<ProjectRow>, App
         .is_some_and(|id| !safe_ledger_id(id))
     {
         return Err(AppStorageError::new(
-            "app_project_ledger_identity_invalid",
+            AppStorageCode::AppProjectLedgerIdentityInvalid,
             "app_project_ledger_identity_invalid",
         ));
     }
@@ -154,7 +155,10 @@ pub(super) fn create_or_reuse(
         params![id, display_name, workspace_path, workspace_label, now],
     ).map_err(AppStorageError::sqlite)?;
     let row = active_by_id(db, &id)?.ok_or_else(|| {
-        AppStorageError::new("project_creation_failed", "Failed to create project.")
+        AppStorageError::new(
+            AppStorageCode::ProjectCreationFailed,
+            "Failed to create project.",
+        )
     })?;
     let project = summary(row, None);
     let event_error = append_created(db, subscribers, clock, &project).err();
@@ -170,7 +174,7 @@ pub(super) fn insert_scratch(
     let workspace_path = workspace.to_string_lossy().into_owned();
     if active_by_path(db, &workspace_path)?.is_some() {
         return Err(AppStorageError::new(
-            "project_workspace_already_registered",
+            AppStorageCode::ProjectWorkspaceAlreadyRegistered,
             "Project workspace is already registered.",
         ));
     }
@@ -194,7 +198,10 @@ pub(super) fn insert_scratch(
     )
     .map_err(AppStorageError::sqlite)?;
     let row = active_by_id(db, &id)?.ok_or_else(|| {
-        AppStorageError::new("project_creation_failed", "Failed to create project.")
+        AppStorageError::new(
+            AppStorageCode::ProjectCreationFailed,
+            "Failed to create project.",
+        )
     })?;
     Ok(summary(row, None))
 }

@@ -1,8 +1,10 @@
 //! Single-owner SQLite lane for the App database.
 
+mod error;
 mod schema;
 
-use std::{fmt, path::PathBuf, sync::Arc, thread::JoinHandle, time::Duration};
+pub(super) use error::{AppStorageCode, AppStorageError};
+use std::{path::PathBuf, sync::Arc, thread::JoinHandle, time::Duration};
 
 use rusqlite::Connection;
 use tokio::sync::{Mutex, mpsc, oneshot};
@@ -11,43 +13,6 @@ const OPERATION_QUEUE_CAPACITY: usize = 64;
 
 type StorageResult<T> = Result<T, AppStorageError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) struct AppStorageError {
-    code: &'static str,
-    detail: String,
-}
-
-impl AppStorageError {
-    pub(super) fn new(code: &'static str, detail: impl Into<String>) -> Self {
-        Self {
-            code,
-            detail: detail.into(),
-        }
-    }
-
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "map_err/iterator adapter taking owned values"
-    )]
-    pub(super) fn sqlite(error: rusqlite::Error) -> Self {
-        Self::new("app_sqlite_error", error.to_string())
-    }
-
-    pub(super) fn code(&self) -> &'static str {
-        self.code
-    }
-
-    pub(super) fn detail(&self) -> &str {
-        &self.detail
-    }
-}
-
-impl fmt::Display for AppStorageError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.detail)
-    }
-}
 
 #[derive(Clone)]
 pub(super) struct AppStorage {
@@ -85,7 +50,11 @@ impl AppStorage {
                 )
             })
             .map_err(|error| {
-                AppStorageError::new("app_sqlite_thread_spawn_failed", error.to_string())
+                AppStorageError::new(
+                    AppStorageCode::AppSqliteThreadSpawnFailed,
+                    error.to_string(),
+                )
+                .with_source(error)
             })?;
         match initialized_rx.await {
             Ok(Ok(())) => Ok(Self {
@@ -105,7 +74,7 @@ impl AppStorage {
             Err(_) => {
                 join_failed_initialization(thread).await;
                 Err(AppStorageError::new(
-                    "app_sqlite_initialization_channel_closed",
+                    AppStorageCode::AppSqliteInitializationChannelClosed,
                     "App SQLite owner exited before initialization completed",
                 ))
             }
@@ -123,18 +92,26 @@ impl AppStorage {
         });
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
-            AppStorageError::new("app_sqlite_owner_closed", "App SQLite owner is closing")
+            AppStorageError::new(
+                AppStorageCode::AppSqliteOwnerClosed,
+                "App SQLite owner is closing",
+            )
         })?;
-        let permit = sender.reserve().await.map_err(|_| {
-            AppStorageError::new("app_sqlite_owner_closed", "App SQLite lane has closed")
+        let permit = sender.reserve().await.map_err(|source| {
+            AppStorageError::new(
+                AppStorageCode::AppSqliteOwnerClosed,
+                "App SQLite lane has closed",
+            )
+            .with_source(source)
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|_| {
+        completion_rx.await.map_err(|source| {
             AppStorageError::new(
-                "app_sqlite_operation_completion_lost",
+                AppStorageCode::AppSqliteOperationCompletionLost,
                 "App SQLite operation ended without a result",
             )
+            .with_source(source)
         })?
     }
 
@@ -166,11 +143,12 @@ impl AppStorage {
                 }
             });
         }
-        waiter_rx.await.map_err(|_| {
+        waiter_rx.await.map_err(|source| {
             AppStorageError::new(
-                "app_sqlite_close_completion_lost",
+                AppStorageCode::AppSqliteCloseCompletionLost,
                 "App SQLite close ended without a result",
             )
+            .with_source(source)
         })?
     }
 }
@@ -194,7 +172,11 @@ fn run_connection_lane(
     let setup: StorageResult<Connection> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
-                AppStorageError::new("app_sqlite_parent_create_failed", error.to_string())
+                AppStorageError::new(
+                    AppStorageCode::AppSqliteParentCreateFailed,
+                    error.to_string(),
+                )
+                .with_source(error)
             })?;
         }
         let mut connection = Connection::open(path).map_err(AppStorageError::sqlite)?;
@@ -240,7 +222,7 @@ fn configure(connection: &Connection) -> StorageResult<()> {
 fn close_connection(connection: Connection) -> StorageResult<()> {
     if !connection.is_autocommit() {
         return Err(AppStorageError::new(
-            "app_sqlite_transaction_open_at_close",
+            AppStorageCode::AppSqliteTransactionOpenAtClose,
             "App SQLite transaction remained open at close",
         ));
     }
@@ -256,8 +238,14 @@ async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {
 async fn join_owner(thread: JoinHandle<StorageResult<()>>) -> StorageResult<()> {
     tokio::task::spawn_blocking(move || thread.join())
         .await
-        .map_err(|error| AppStorageError::new("app_sqlite_join_failed", error.to_string()))?
+        .map_err(|error| {
+            AppStorageError::new(AppStorageCode::AppSqliteJoinFailed, error.to_string())
+                .with_source(error)
+        })?
         .map_err(|_| {
-            AppStorageError::new("app_sqlite_thread_panicked", "App SQLite owner panicked")
+            AppStorageError::new(
+                AppStorageCode::AppSqliteThreadPanicked,
+                "App SQLite owner panicked",
+            )
         })?
 }

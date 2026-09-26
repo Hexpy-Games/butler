@@ -211,7 +211,7 @@ impl AppWorkStreamReader for NativeWorkStreams {
         Box::pin(async move {
             Self::submit_state(state, |reply| Job::Active(query, reply))
                 .await
-                .map_err(|_| crate::gateway::GatewayApplicationError::Internal)
+                .map_err(crate::gateway::GatewayApplicationError::internal_from)
         })
     }
 
@@ -221,7 +221,7 @@ impl AppWorkStreamReader for NativeWorkStreams {
             Self::submit_state(state, |reply| Job::Reconcile(outcome, reply))
                 .await
                 .map(|_| ())
-                .map_err(|_| crate::gateway::GatewayApplicationError::Internal)
+                .map_err(crate::gateway::GatewayApplicationError::internal_from)
         })
     }
 }

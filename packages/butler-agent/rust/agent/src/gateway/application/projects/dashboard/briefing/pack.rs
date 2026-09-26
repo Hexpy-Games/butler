@@ -215,7 +215,7 @@ pub(super) async fn build(
             candidates: &proposed_candidates,
             coverage: &coverage,
         })
-        .map_err(|_| GatewayApplicationError::Internal)?;
+        .map_err(GatewayApplicationError::internal_from)?;
         let estimated = application
             .dependencies
             .project_dashboard_briefing
@@ -267,7 +267,8 @@ pub(super) async fn build(
         reasoning_effort: &pack.reasoning_effort,
         generator: GENERATOR_VERSION,
     };
-    let encoded = serde_json::to_vec(&hash_input).map_err(|_| GatewayApplicationError::Internal)?;
+    let encoded =
+        serde_json::to_vec(&hash_input).map_err(GatewayApplicationError::internal_from)?;
     pack.revision = format!("{:x}", Sha256::digest(encoded));
     Ok(pack)
 }
@@ -280,19 +281,19 @@ pub(super) fn prompt_json(pack: &Pack) -> Result<String, GatewayApplicationError
         candidates: &pack.candidates,
         coverage: &pack.coverage,
     })
-    .map_err(|_| GatewayApplicationError::Internal)
+    .map_err(GatewayApplicationError::internal_from)
 }
 
 pub(super) fn public_sources(pack: &Pack) -> Result<Value, GatewayApplicationError> {
-    serde_json::to_value(&pack.sources).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_value(&pack.sources).map_err(GatewayApplicationError::internal_from)
 }
 
 pub(super) fn public_candidates(pack: &Pack) -> Result<Value, GatewayApplicationError> {
-    serde_json::to_value(&pack.candidates).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_value(&pack.candidates).map_err(GatewayApplicationError::internal_from)
 }
 
 pub(super) fn public_coverage(pack: &Pack) -> Result<Value, GatewayApplicationError> {
-    serde_json::to_value(&pack.coverage).map_err(|_| GatewayApplicationError::Internal)
+    serde_json::to_value(&pack.coverage).map_err(GatewayApplicationError::internal_from)
 }
 
 pub(super) fn same_source_inputs(left: &Pack, right: &Pack) -> bool {

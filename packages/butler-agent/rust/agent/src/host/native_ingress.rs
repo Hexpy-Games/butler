@@ -54,7 +54,7 @@ impl std::error::Error for NativeIngressError {}
 
 impl From<NativeQueueError> for NativeIngressError {
     fn from(error: NativeQueueError) -> Self {
-        Self::new(error.code, error.message)
+        Self::new(error.code(), error.message())
     }
 }
 

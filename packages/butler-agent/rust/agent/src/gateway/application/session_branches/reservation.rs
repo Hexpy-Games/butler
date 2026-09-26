@@ -9,6 +9,7 @@ use super::{
     AppSessionBranchDestination, AppSessionBranchRequest, AppSessionBranchSeed,
     store::{self, BranchRow},
 };
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::{
     AppChatKind, AppCreateSessionInput, AppEventEnvelope, GatewayApplicationError,
     application::{AppApplication, AppStorageError},
@@ -37,7 +38,7 @@ impl AppApplication {
                     super::super::projects::prepare_branch_scratch(&root, &scratch_name)
                 })
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)??;
+                .map_err(GatewayApplicationError::internal_from)??;
                 (Some(name), Some(made))
             }
             _ => (None, None),
@@ -88,7 +89,7 @@ impl AppApplication {
                     .optional()
                     .map_err(AppStorageError::sqlite)?
                     .ok_or_else(|| {
-                        AppStorageError::new("project_not_found", "Project not found.")
+                        AppStorageError::new(AppStorageCode::ProjectNotFound, "Project not found.")
                     })?;
                     None
                 } else {
@@ -123,7 +124,7 @@ impl AppApplication {
                 store::insert(&tx, &request, &digest, &session.id, &seed)?;
                 let row = store::row(&tx, &request.request_id)?.ok_or_else(|| {
                     AppStorageError::new(
-                        "branch_reservation_lost",
+                        AppStorageCode::BranchReservationLost,
                         "Branch reservation was not saved.",
                     )
                 })?;
@@ -162,5 +163,6 @@ fn cancelled() -> GatewayApplicationError {
         status: 409,
         code: "branch_cancelled".to_owned(),
         message: "새 대화 만들기가 취소되었습니다.".to_owned(),
+        source: None,
     }
 }

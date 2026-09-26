@@ -33,7 +33,7 @@ pub(super) async fn sync_deferred_step(
     let disposition =
         tokio::task::spawn_blocking(move || terminal_records::disposition(&root, &check))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
     match disposition {
         terminal_records::Disposition::Defer => {}
         terminal_records::Disposition::Accept => {

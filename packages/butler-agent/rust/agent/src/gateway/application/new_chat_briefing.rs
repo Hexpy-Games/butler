@@ -33,6 +33,7 @@ impl AppApplication {
                         status: 404,
                         code: "project_not_found".into(),
                         message: "Project not found.".into(),
+                        source: None,
                     })?,
             )
         } else {
@@ -42,7 +43,7 @@ impl AppApplication {
         let now = self.dependencies.identity_clock.now_iso();
         tokio::task::spawn_blocking(move || {
             let epoch_ms = DateTime::parse_from_rfc3339(&now)
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
                 .timestamp_millis();
             let minute = local_minute(epoch_ms)?;
             let hour = minute / 60;
@@ -94,7 +95,7 @@ impl AppApplication {
             ))
         })
         .await
-        .map_err(|_| GatewayApplicationError::Internal)?
+        .map_err(GatewayApplicationError::internal_from)?
     }
 }
 
@@ -108,17 +109,17 @@ fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
             } else if !zone.split('/').any(|part| matches!(part, "" | "." | "..")) {
                 Some(std::path::Path::new("/usr/share/zoneinfo").join(zone))
             } else {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
         }
         Err(_) => Some(std::path::PathBuf::from("/etc/localtime")),
     };
     let offset = if let Some(path) = path {
-        let bytes = std::fs::read(path).map_err(|_| GatewayApplicationError::Internal)?;
+        let bytes = std::fs::read(path).map_err(GatewayApplicationError::internal_from)?;
         let zone =
-            tz::TimeZone::from_tz_data(&bytes).map_err(|_| GatewayApplicationError::Internal)?;
+            tz::TimeZone::from_tz_data(&bytes).map_err(GatewayApplicationError::internal_from)?;
         zone.find_local_time_type(epoch_ms.div_euclid(1000))
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
             .ut_offset()
     } else {
         0

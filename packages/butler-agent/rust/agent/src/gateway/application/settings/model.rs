@@ -1,4 +1,5 @@
 use super::Controls;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::public_text::trim_js_whitespace;
 use crate::{
     btcc::{ModelFallback, ReasoningEffort},
@@ -122,7 +123,7 @@ pub(super) fn assert_selectable(
 ) -> Result<(), AppStorageError> {
     selectable(model, models).map(|_| ()).ok_or_else(|| {
         AppStorageError::new(
-            "session_model_unavailable",
+            AppStorageCode::SessionModelUnavailable,
             format!("The selected model is no longer available: {model}"),
         )
     })

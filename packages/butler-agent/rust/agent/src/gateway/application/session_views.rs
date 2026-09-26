@@ -299,7 +299,7 @@ impl AppApplication {
             "cursors".into(),
             json!({"messages":next_cursor,"events":self.latest_event_cursor_owned().await?}),
         );
-        let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::Internal)?;
+        let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::internal())?;
         view.insert(
             "generated_at".into(),
             json!(self.dependencies.identity_clock.now_iso()),
@@ -332,7 +332,7 @@ impl AppApplication {
             .get("latest_turn")
             .cloned()
             .unwrap_or(Value::Null);
-        let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::Internal)?;
+        let updated = child_updated_at(&projection).ok_or(GatewayApplicationError::internal())?;
         let mut view = Map::new();
         view.insert("session_id".into(), json!(session_id));
         view.insert("latest_turn".into(), latest.clone());

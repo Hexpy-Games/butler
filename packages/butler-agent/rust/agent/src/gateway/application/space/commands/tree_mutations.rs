@@ -124,7 +124,7 @@ pub(super) fn group_sessions(
         .nodes
         .into_iter()
         .find(|node| node.key == format!("g:{id}"))
-        .ok_or(GatewayApplicationError::Internal)?;
+        .ok_or(GatewayApplicationError::internal())?;
     let mut siblings = tree::ordered_children(before, target.parent_key.as_deref())
         .into_iter()
         .filter(|node| node.key != source_key)

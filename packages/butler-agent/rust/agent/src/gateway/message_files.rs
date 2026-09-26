@@ -83,14 +83,14 @@ impl NativeAppMessageFiles {
             let permit = permits
                 .acquire_owned()
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
             let (send, receive) = oneshot::channel();
             // Close and registration share a lock; caller cancellation cannot
             // detach file writes from the runtime's shutdown sequence.
             {
                 let closing = closing.lock();
                 if *closing {
-                    return Err(GatewayApplicationError::Internal);
+                    return Err(GatewayApplicationError::internal());
                 }
                 jobs.spawn(async move {
                     let result = tokio::task::spawn_blocking(move || {
@@ -98,14 +98,14 @@ impl NativeAppMessageFiles {
                         operation(&root, clock.as_ref())
                     })
                     .await
-                    .map_err(|_| GatewayApplicationError::Internal)
+                    .map_err(GatewayApplicationError::internal_from)
                     .and_then(|result| result);
                     let _ = send.send(result);
                 });
             }
             receive
                 .await
-                .map_err(|_| GatewayApplicationError::Internal)?
+                .map_err(GatewayApplicationError::internal_from)?
         })
     }
 }

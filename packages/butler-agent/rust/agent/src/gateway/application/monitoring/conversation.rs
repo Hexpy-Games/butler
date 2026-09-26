@@ -69,7 +69,7 @@ impl AppApplication {
                 break;
             };
             if after_cursor.is_some_and(|previous| previous >= cursor) {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             after_cursor = Some(cursor);
         }
@@ -121,7 +121,7 @@ impl AppApplication {
                 break;
             };
             if after_cursor.is_some_and(|previous| previous >= cursor) {
-                return Err(GatewayApplicationError::Internal);
+                return Err(GatewayApplicationError::internal());
             }
             after_cursor = Some(cursor);
         }

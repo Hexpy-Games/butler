@@ -47,7 +47,7 @@ impl NativeAuthorityHandoff {
             destination
                 .get("peer")
                 .cloned()
-                .ok_or(GatewayApplicationError::Internal)?
+                .ok_or(GatewayApplicationError::internal())?
         } else {
             json!({"kind":"dm","id":source.session_id})
         };
@@ -88,10 +88,10 @@ impl NativeAuthorityHandoff {
             envelope["routingHints"]["appQueueClaimId"] = claim.clone();
         }
         let document =
-            JsonDocument::from_value(&envelope).map_err(|_| GatewayApplicationError::Internal)?;
+            JsonDocument::from_value(&envelope).map_err(GatewayApplicationError::internal_from)?;
         self.queue
             .enqueue_idempotent(document)
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         Ok(())
     }
 }
@@ -213,11 +213,12 @@ fn authority_error(error: AuthorityError) -> GatewayApplicationError {
             "authority_request_not_found",
             "Authority request not found.",
         ),
-        _ => return GatewayApplicationError::Internal,
+        _ => return GatewayApplicationError::internal(),
     };
     GatewayApplicationError::Public {
         status,
         code: public_code.into(),
         message: message.into(),
+        source: None,
     }
 }

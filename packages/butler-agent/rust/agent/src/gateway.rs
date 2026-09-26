@@ -83,7 +83,7 @@ pub(crate) use auth::LocalAuthConfig;
 pub(crate) use image_files::NativeAppImageFiles;
 pub(crate) use message_files::NativeAppMessageFiles;
 pub(crate) use native_queue::{
-    ClaimedInboundEvent, NativeInboundQueue, NativeQueueError, QueuedInboundEvent,
+    ClaimedInboundEvent, NativeInboundQueue, NativeQueueCode, NativeQueueError, QueuedInboundEvent,
 };
 pub(crate) use protocol::{
     AppEventEnvelope, ArtifactKind, ArtifactOpenAction, ChangedFileDetail, DeliveryState,
@@ -95,20 +95,87 @@ pub(crate) use protocol::{
     TurnRecord, TurnState,
 };
 pub(crate) use session_references::resolve_session_references;
-pub(crate) use transcript::NativeTranscriptWriter;
+pub(crate) use transcript::{NativeTranscriptWriter, TranscriptCode};
 
 pub(crate) type ApplicationFuture<T> =
     Pin<Box<dyn Future<Output = Result<T, GatewayApplicationError>> + Send + 'static>>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// A gateway application failure as the HTTP layer reports it.
+#[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum GatewayApplicationError {
+    /// A failure shown to the client with this status, code and message;
+    /// `source` keeps the underlying error (never shown to the client).
+    #[error("{code}: {message}")]
     Public {
         status: u16,
         code: String,
         message: String,
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
     },
-    Internal,
+    /// An unexpected failure; the client sees a generic 500. `source` keeps
+    /// the underlying error when there is one (an unsupported default port
+    /// operation has none).
+    #[error("internal gateway error")]
+    Internal {
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
 }
+
+impl GatewayApplicationError {
+    /// An internal failure without an underlying error.
+    pub(crate) fn internal() -> Self {
+        Self::Internal { source: None }
+    }
+
+    /// Records `cause` as the source when none is recorded yet.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        cause: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        let (Self::Public { source, .. } | Self::Internal { source }) = &mut self;
+        if source.is_none() {
+            *source = Some(Arc::new(cause));
+        }
+        self
+    }
+
+    /// An internal failure caused by `source`.
+    pub(crate) fn internal_from(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Internal {
+            source: Some(Arc::new(source)),
+        }
+    }
+}
+
+/// Wire equality: the same status, code and message; internal failures are
+/// equal to each other (causes are diagnostic only).
+impl PartialEq for GatewayApplicationError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Public {
+                    status,
+                    code,
+                    message,
+                    ..
+                },
+                Self::Public {
+                    status: other_status,
+                    code: other_code,
+                    message: other_message,
+                    ..
+                },
+            ) => status == other_status && code == other_code && message == other_message,
+            (Self::Internal { .. }, Self::Internal { .. }) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for GatewayApplicationError {}
 
 pub(crate) struct SendMessageCommand {
     pub request: MessageSendRequest,
@@ -201,14 +268,14 @@ pub(crate) trait GatewayApplication:
         request: crate::operations::UpdateRequest,
     ) -> ApplicationFuture<serde_json::Value>;
     fn list_skills(&self) -> ApplicationFuture<crate::skills::SkillSettingsView> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn import_skill(
         &self,
         _archive: crate::skills::StagedSkillArchive,
         _project_id: Option<String>,
     ) -> ApplicationFuture<crate::skills::SkillImportResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn create_project(
         &self,
@@ -230,7 +297,7 @@ pub(crate) trait GatewayApplication:
         _request: AppStartTopicConversationRequest,
         _server_shutdown: CancellationToken,
     ) -> ApplicationFuture<AppSessionBranchResult> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_chats(&self) -> ApplicationFuture<Vec<AppChatSummary>>;
     fn read_navigation(&self) -> ApplicationFuture<serde_json::Value>;
@@ -294,36 +361,36 @@ pub(crate) trait GatewayApplication:
     fn read_settings(&self) -> ApplicationFuture<serde_json::Value>;
     fn update_settings(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
         let _ = input;
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_mcp_servers(&self) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn list_mcp_capabilities(
         &self,
         _shutdown: CancellationToken,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn create_mcp_server(&self, _input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn update_mcp_server(
         &self,
         _id: String,
         _input: serde_json::Value,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn delete_mcp_server(&self, _id: String) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn probe_mcp_server(
         &self,
         _id: String,
         _shutdown: CancellationToken,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult>;
     fn authority_list(&self, owner_session_id: String) -> ApplicationFuture<AppAuthorityPage>;
@@ -368,7 +435,7 @@ pub(crate) trait GatewayApplication:
         byte_start: u64,
     ) -> ApplicationFuture<Option<OperationOutputView>>;
     fn cancel_turn(&self, _turn_id: String) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn retry_turn(&self, turn_id: String) -> ApplicationFuture<serde_json::Value>;
     fn retry_turn_with_current_controls(
@@ -376,34 +443,34 @@ pub(crate) trait GatewayApplication:
         turn_id: String,
     ) -> ApplicationFuture<MessageSendResult>;
     fn subsession_projection(&self, _session_id: String) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn session_view(
         &self,
         _session_id: String,
         _page: AppSessionViewPage,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn session_summary_view(&self, _session_id: String) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn context_details(&self, _session_id: String) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn cancel_subsession(
         &self,
         _parent_session_id: String,
         _relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn resume_subsession(
         &self,
         _parent_session_id: String,
         _relation_id: String,
     ) -> ApplicationFuture<serde_json::Value> {
-        Box::pin(async { Err(GatewayApplicationError::Internal) })
+        Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn latest_event_cursor(&self) -> ApplicationFuture<u64>;
     fn replay_events(

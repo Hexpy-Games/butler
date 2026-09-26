@@ -62,7 +62,7 @@ impl AutomationRunOwner {
         .await?;
         reply_rx
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
     pub(crate) async fn execute(
         &self,
@@ -78,21 +78,21 @@ impl AutomationRunOwner {
         .await?;
         reply_rx
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
     pub(crate) async fn due(&self) -> Result<AutomationRunListView, GatewayApplicationError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.admit(Command::Due { reply: reply_tx }).await?;
         reply_rx
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         let sender = self.inner.admission.lock().await.sender.take();
         drop(sender);
         let task = self.inner.task.lock().take();
         if let Some(task) = task {
-            task.await.map_err(|_| GatewayApplicationError::Internal)?;
+            task.await.map_err(GatewayApplicationError::internal_from)?;
         }
         Ok(())
     }
@@ -102,10 +102,10 @@ impl AutomationRunOwner {
         admission
             .sender
             .as_ref()
-            .ok_or(GatewayApplicationError::Internal)?
+            .ok_or(GatewayApplicationError::internal())?
             .send(command)
             .await
-            .map_err(|_| GatewayApplicationError::Internal)
+            .map_err(GatewayApplicationError::internal_from)
     }
 }
 
@@ -115,7 +115,7 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
         match command {
             Command::Initialize { app: value, reply } => {
                 let result = if app.is_some() {
-                    Err(GatewayApplicationError::Internal)
+                    Err(GatewayApplicationError::internal())
                 } else {
                     app = Some(value);
                     Ok(())
@@ -125,14 +125,14 @@ async fn run(mut receiver: mpsc::Receiver<Command>) {
             Command::Run { id, trigger, reply } => {
                 let result = match app.as_ref() {
                     Some(app) => app.execute_automation(id, trigger).await,
-                    None => Err(GatewayApplicationError::Internal),
+                    None => Err(GatewayApplicationError::internal()),
                 };
                 let _ = reply.send(result);
             }
             Command::Due { reply } => {
                 let result = match app.as_ref() {
                     Some(app) => app.execute_due_automations().await,
-                    None => Err(GatewayApplicationError::Internal),
+                    None => Err(GatewayApplicationError::internal()),
                 };
                 let _ = reply.send(result);
             }
@@ -157,7 +157,7 @@ mod tests {
         // Uninitialized, the owner answers the drained command instead of dropping it.
         assert!(matches!(
             admitted.await.expect("admitted command completed"),
-            Err(GatewayApplicationError::Internal)
+            Err(GatewayApplicationError::Internal { .. })
         ));
 
         assert!(owner.due().await.is_err());

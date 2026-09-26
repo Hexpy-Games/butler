@@ -13,8 +13,9 @@ impl VerifiedImagePayloadPort for NativeAppImageFiles {
     fn read<'a>(&'a self, reference: &'a Value) -> PortFuture<'a, Vec<u8>> {
         Box::pin(async move {
             let manifest: VisualAttachmentManifest = serde_json::from_value(reference.clone())
-                .map_err(|_| {
+                .map_err(|source| {
                     BtccError::relayed("image_payload_invalid", "file_identity_invalid")
+                        .with_source(source)
                 })?;
             let file_id = trim_js_whitespace(&manifest.file_id);
             if !valid_file_id(file_id) || !valid_digest(&manifest.derivative_digest) {
@@ -30,7 +31,7 @@ impl VerifiedImagePayloadPort for NativeAppImageFiles {
                     GatewayApplicationError::Public { code, message, .. } => {
                         BtccError::relayed(code, message)
                     }
-                    GatewayApplicationError::Internal => {
+                    GatewayApplicationError::Internal { .. } => {
                         BtccError::relayed("image_payload_invalid", "derivative_missing")
                     }
                 })

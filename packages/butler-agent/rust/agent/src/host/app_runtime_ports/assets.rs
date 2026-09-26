@@ -55,7 +55,7 @@ impl AppNativeAssetResolver for NativeAppAssets {
                     .execution_controls
                     .get("model_ref")
                     .and_then(Value::as_str)
-                    .ok_or(GatewayApplicationError::Internal)?;
+                    .ok_or(GatewayApplicationError::internal())?;
                 let catalog = Box::pin(crate::host::catalog_for_visual_admission(
                     &models, &mcp, model_ref,
                 ))
@@ -75,7 +75,7 @@ impl AppNativeAssetResolver for NativeAppAssets {
                 .as_ref()
                 .map(|value| {
                     serde_json::from_value::<VisualImageAdmissionResult>(value.clone())
-                        .map_err(|_| GatewayApplicationError::Internal)
+                        .map_err(GatewayApplicationError::internal_from)
                 })
                 .transpose()?;
             let references = resolve_session_references(
@@ -99,6 +99,7 @@ impl AppNativeAssetResolver for NativeAppAssets {
                             status: 409,
                             code: "image_admission_missing".into(),
                             message: "Image attachment admission is missing.".into(),
+                            source: None,
                         });
                     }
                     let kind = if file.kind == "image" {
@@ -119,12 +120,12 @@ impl AppNativeAssetResolver for NativeAppAssets {
                     });
                     if let Some(manifest) = manifest {
                         attachment["visualManifest"] = serde_json::to_value(manifest)
-                            .map_err(|_| GatewayApplicationError::Internal)?;
+                            .map_err(GatewayApplicationError::internal_from)?;
                     } else {
                         attachment["localPath"] = files_root
                             .join(&file.storage_name)
                             .to_str()
-                            .ok_or(GatewayApplicationError::Internal)?
+                            .ok_or(GatewayApplicationError::internal())?
                             .into();
                     }
                     Ok(attachment)

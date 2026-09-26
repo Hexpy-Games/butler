@@ -17,12 +17,13 @@ pub(super) fn source(
     root: &Path,
     row: &AppMessageFileSnapshot,
 ) -> Result<Vec<u8>, GatewayApplicationError> {
-    let bytes = read_bounded(&root.join(&row.storage_name), MAX_BYTES).map_err(|_| {
+    let bytes = read_bounded(&root.join(&row.storage_name), MAX_BYTES).map_err(|source| {
         public(
             422,
             "image_payload_invalid",
             "이미지 첨부를 처리할 수 없습니다.",
         )
+        .with_source(source)
     })?;
     if bytes.len() as u64 != row.size_bytes || digest(&bytes) != row.sha256 {
         return Err(public(
@@ -38,13 +39,15 @@ pub(super) fn verified_derivative(
     root: &Path,
     manifest: &VisualAttachmentManifest,
 ) -> Result<Vec<u8>, GatewayApplicationError> {
-    let bytes = read_bounded(&root.join(derivative_name(manifest)), MAX_BYTES).map_err(|_| {
-        public(
-            422,
-            "image_payload_invalid",
-            "이미지 첨부를 처리할 수 없습니다.",
-        )
-    })?;
+    let bytes =
+        read_bounded(&root.join(derivative_name(manifest)), MAX_BYTES).map_err(|source| {
+            public(
+                422,
+                "image_payload_invalid",
+                "이미지 첨부를 처리할 수 없습니다.",
+            )
+            .with_source(source)
+        })?;
     if bytes.len() != manifest.derivative_size_bytes || digest(&bytes) != manifest.derivative_digest
     {
         return Err(public(
@@ -61,11 +64,12 @@ pub(super) fn provider_derivative(
     manifest: &VisualAttachmentManifest,
 ) -> Result<Vec<u8>, GatewayApplicationError> {
     let path = root.join(derivative_name(manifest));
-    let file =
-        File::open(path).map_err(|_| public(413, "image_payload_invalid", "derivative_missing"))?;
+    let file = File::open(path).map_err(|source| {
+        public(413, "image_payload_invalid", "derivative_missing").with_source(source)
+    })?;
     if file
         .metadata()
-        .map_err(|_| GatewayApplicationError::Internal)?
+        .map_err(GatewayApplicationError::internal_from)?
         .len()
         > MAX_BYTES
     {
@@ -78,7 +82,9 @@ pub(super) fn provider_derivative(
     let mut bytes = Vec::new();
     file.take(MAX_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| public(413, "image_payload_invalid", "derivative_missing"))?;
+        .map_err(|source| {
+            public(413, "image_payload_invalid", "derivative_missing").with_source(source)
+        })?;
     if bytes.len() != manifest.derivative_size_bytes {
         return Err(public(
             413,
@@ -134,20 +140,20 @@ impl Stage {
         manifest: VisualAttachmentManifest,
         bytes: &[u8],
     ) -> Result<Self, GatewayApplicationError> {
-        fs::create_dir_all(root).map_err(|_| GatewayApplicationError::Internal)?;
+        fs::create_dir_all(root).map_err(GatewayApplicationError::internal_from)?;
         let path = root.join(format!(".visual-stage-{}", uuid::Uuid::new_v4()));
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         if file
             .write_all(bytes)
             .and_then(|()| file.sync_all())
             .is_err()
         {
             let _ = fs::remove_file(&path);
-            return Err(GatewayApplicationError::Internal);
+            return Err(GatewayApplicationError::internal());
         }
         Ok(Self { manifest, path })
     }
@@ -157,7 +163,8 @@ impl Stage {
         match fs::hard_link(&self.path, &destination) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                let existing = read_bounded(&destination, MAX_BYTES).map_err(|_| conflict())?;
+                let existing = read_bounded(&destination, MAX_BYTES)
+                    .map_err(|source| conflict().with_source(source))?;
                 if existing.len() != self.manifest.derivative_size_bytes
                     || digest(&existing) != self.manifest.derivative_digest
                 {
@@ -165,7 +172,7 @@ impl Stage {
                 }
                 Ok(())
             }
-            Err(_) => Err(GatewayApplicationError::Internal),
+            Err(_) => Err(GatewayApplicationError::internal()),
         }
     }
 }

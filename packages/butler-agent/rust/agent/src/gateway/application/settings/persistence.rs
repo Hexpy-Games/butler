@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::storage::AppStorageError;
 use crate::public_text::trim_js_whitespace;
 
@@ -35,8 +36,10 @@ pub(super) fn write_json(
     value: &Value,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let encoded = serde_json::to_string(value)
-        .map_err(|error| AppStorageError::new("settings_json_failed", error.to_string()))?;
+    let encoded = serde_json::to_string(value).map_err(|error| {
+        AppStorageError::new(AppStorageCode::SettingsJsonFailed, error.to_string())
+            .with_source(error)
+    })?;
     db.execute(
         "INSERT INTO app_settings(key,value_json,updated_at) VALUES(?1,?2,?3) \
          ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",

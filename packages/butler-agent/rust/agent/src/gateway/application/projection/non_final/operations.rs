@@ -10,6 +10,7 @@ use super::{
     token,
 };
 use crate::gateway::application::projection::staging;
+use crate::gateway::application::storage::AppStorageCode;
 use crate::gateway::application::{
     events::{self, EventSubscribers},
     queue::{self, QueuedTurnClaimStatus},
@@ -229,12 +230,15 @@ pub(super) fn operation_output(
             .and_then(Value::as_i64)
             .filter(|v| *v >= 0)
             .ok_or_else(|| {
-                AppStorageError::new("operation_output_chunk_invalid", format!("{key} invalid"))
+                AppStorageError::new(
+                    AppStorageCode::OperationOutputChunkInvalid,
+                    format!("{key} invalid"),
+                )
             })?;
     }
     if values[1] < 1 || values[0] >= values[1] || values[2] > values[3] || values[3] > values[4] {
         return Err(AppStorageError::new(
-            "operation_output_chunk_invalid",
+            AppStorageCode::OperationOutputChunkInvalid,
             "operation output chunk range invalid",
         ));
     }
@@ -242,24 +246,31 @@ pub(super) fn operation_output(
         .get("contentBase64")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            AppStorageError::new("operation_output_chunk_invalid", "contentBase64 invalid")
+            AppStorageError::new(
+                AppStorageCode::OperationOutputChunkInvalid,
+                "contentBase64 invalid",
+            )
         })?;
     if content.len() > 65_536 {
         return Err(AppStorageError::new(
-            "operation_output_chunk_invalid",
+            AppStorageCode::OperationOutputChunkInvalid,
             "contentBase64 invalid",
         ));
     }
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(content)
-        .map_err(|_| {
-            AppStorageError::new("operation_output_chunk_invalid", "contentBase64 invalid")
+        .map_err(|source| {
+            AppStorageError::new(
+                AppStorageCode::OperationOutputChunkInvalid,
+                "contentBase64 invalid",
+            )
+            .with_source(source)
         })?;
     if i64::try_from(decoded.len()).unwrap_or(i64::MAX) != values[3] - values[2]
         || format!("{:x}", Sha256::digest(&decoded)) != content_digest
     {
         return Err(AppStorageError::new(
-            "operation_output_chunk_invalid",
+            AppStorageCode::OperationOutputChunkInvalid,
             "operation output chunk digest mismatch",
         ));
     }
@@ -268,7 +279,7 @@ pub(super) fn operation_output(
         let same:Option<i64>=db.query_row("SELECT 1 FROM app_operation_output_chunks WHERE turn_id=?1 AND request_id=?2 AND result_id=?3 AND result_sha256=?4 AND chunk_index=?5 AND chunk_count=?6 AND byte_start=?7 AND byte_end=?8 AND byte_length=?9 AND content_base64=?10 AND content_sha256=?11",params![turn,request,result,digest,values[0],values[1],values[2],values[3],values[4],content,content_digest],|r|r.get(0)).optional().map_err(AppStorageError::sqlite)?;
         if same.is_none() {
             return Err(AppStorageError::new(
-                "operation_output_chunk_conflict",
+                AppStorageCode::OperationOutputChunkConflict,
                 "Conflicting operation output chunk replay",
             ));
         }
@@ -317,7 +328,10 @@ pub(super) fn project_worker_result(
         .into_iter()
         .find(|m| m.id == ids.message_id)
         .ok_or_else(|| {
-            AppStorageError::new("projected_message_missing", "Projected message missing")
+            AppStorageError::new(
+                AppStorageCode::ProjectedMessageMissing,
+                "Projected message missing",
+            )
         })?;
     events::append(
         &tx,
@@ -370,7 +384,10 @@ fn operation_token(payload: &Map<String, Value>, key: &str) -> Result<String, Ap
         .filter(|value| !value.trim().is_empty() && value.len() <= 512)
         .map(str::to_owned)
         .ok_or_else(|| {
-            AppStorageError::new("operation_output_chunk_invalid", format!("{key} invalid"))
+            AppStorageError::new(
+                AppStorageCode::OperationOutputChunkInvalid,
+                format!("{key} invalid"),
+            )
         })
 }
 
@@ -386,6 +403,9 @@ fn operation_digest(payload: &Map<String, Value>, key: &str) -> Result<String, A
         })
         .map(str::to_owned)
         .ok_or_else(|| {
-            AppStorageError::new("operation_output_chunk_invalid", format!("{key} invalid"))
+            AppStorageError::new(
+                AppStorageCode::OperationOutputChunkInvalid,
+                format!("{key} invalid"),
+            )
         })
 }

@@ -59,7 +59,7 @@ impl ProjectionOwner {
             let path = context.butler_data.join(relative);
             std::fs::create_dir_all(&path)
                 .and_then(|()| std::fs::canonicalize(&path))
-                .map_err(|_| GatewayApplicationError::Internal)
+                .map_err(GatewayApplicationError::internal_from)
         };
         let transcript_root = watched_root("transcripts")?;
         let processed_root = watched_root("runtime/inbound-events/processed")?;
@@ -91,11 +91,11 @@ impl ProjectionOwner {
                     }
                 }
             })
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         for path in &roots {
             watcher
                 .watch(path, RecursiveMode::NonRecursive)
-                .map_err(|_| GatewayApplicationError::Internal)?;
+                .map_err(GatewayApplicationError::internal_from)?;
         }
         let task = tokio::spawn(run(context, receiver));
         let owner = Self {
@@ -123,10 +123,10 @@ impl ProjectionOwner {
             .sender
             .send(Command::Refresh(chat_id, sender))
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?;
+            .map_err(GatewayApplicationError::internal_from)?;
         receiver
             .await
-            .map_err(|_| GatewayApplicationError::Internal)?
+            .map_err(GatewayApplicationError::internal_from)?
     }
 
     pub(in crate::gateway::application) async fn close(
@@ -153,7 +153,7 @@ impl ProjectionOwner {
                     let _ = inner.sender.send(Command::Close).await;
                     let result = task
                         .await
-                        .map_err(|_| GatewayApplicationError::Internal)
+                        .map_err(GatewayApplicationError::internal_from)
                         .and_then(|value| value);
                     lock(&inner.close).result = Some(result);
                     inner.closed.notify_waiters();

@@ -1,6 +1,7 @@
 //! Transactional admission, queue recovery, and dispatch helpers.
 
 use super::*;
+use crate::gateway::application::storage::AppStorageCode;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Map, Value, json};
 
@@ -40,7 +41,11 @@ impl AppApplication {
                     )
                     .map_err(AppStorageError::sqlite)?;
                 let controls: Value = serde_json::from_str(&controls).map_err(|error| {
-                    AppStorageError::new("app_projection_json_invalid", error.to_string())
+                    AppStorageError::new(
+                        AppStorageCode::AppProjectionJsonInvalid,
+                        error.to_string(),
+                    )
+                    .with_source(error)
                 })?;
                 events::append(
                     db,
@@ -87,7 +92,7 @@ impl AppApplication {
                         turn_id,
                     })),
                     Some(_) => Err(AppStorageError::new(
-                        "queued_message_link_incomplete",
+                        AppStorageCode::QueuedMessageLinkIncomplete,
                         "Queued message durable link is incomplete.",
                     )),
                 }
@@ -115,7 +120,7 @@ impl AppApplication {
                     .find(|row| row.id == message)
                     .ok_or_else(|| {
                         AppStorageError::new(
-                            "accepted_message_missing",
+                            AppStorageCode::AcceptedMessageMissing,
                             "Accepted message was not found.",
                         )
                     })?;
@@ -125,7 +130,7 @@ impl AppApplication {
                     .find(|row| row.id == turn)
                     .ok_or_else(|| {
                         AppStorageError::new(
-                            "accepted_turn_missing",
+                            AppStorageCode::AcceptedTurnMissing,
                             "Accepted Turn was not found.",
                         )
                     })?;
@@ -178,7 +183,9 @@ impl AppApplication {
     ) -> Result<(), GatewayApplicationError> {
         let code = match error {
             GatewayApplicationError::Public { code, .. } => code.clone(),
-            GatewayApplicationError::Internal => "queued_message_admission_failed".to_owned(),
+            GatewayApplicationError::Internal { .. } => {
+                "queued_message_admission_failed".to_owned()
+            }
         };
         let chat = chat_id.to_owned();
         let queued = queued_id.to_owned();
@@ -245,7 +252,7 @@ impl AppApplication {
             let tx=db.transaction().map_err(AppStorageError::sqlite)?;
             let turn_id=tx.query_row("SELECT turn_id FROM session_queued_messages WHERE id=?1 AND state='dispatching' AND claim_id=?2",params![claim.queued_message_id,claim.claim_id],|row|row.get::<_,Option<String>>(0)).optional().map_err(AppStorageError::sqlite)?.flatten();
             let changed=tx.execute("UPDATE session_queued_messages SET state='failed',safe_error_code=?1,claim_id=NULL,claim_owner=NULL,claimed_at=NULL,lease_expires_at=NULL,updated_at=?2 WHERE id=?3 AND chat_id=?4 AND state='dispatching' AND claim_id=?5",params![code,now,claim.queued_message_id,claim.chat_id,claim.claim_id]).map_err(AppStorageError::sqlite)?;
-            if changed!=1{return Err(AppStorageError::new("queued_message_claim_lost","Queued message claim was lost."))}
+            if changed!=1{return Err(AppStorageError::new(AppStorageCode::QueuedMessageClaimLost,"Queued message claim was lost."))}
             if let Some(turn)=turn_id.as_deref(){tx.execute("UPDATE turns SET state='failed',safe_status_label='Failed',safe_error_code=?1,retryable=1,cancellable=0,updated_at=?2 WHERE id=?3",params![code,now,turn]).map_err(AppStorageError::sqlite)?;}
             let payload=map(&json!({"session_id":claim.chat_id,"queued_message_id":claim.queued_message_id,"action":"failed","safe_error_code":code}))?;
             events::append(&tx,&subscribers,"session_queue.changed",turn_id.as_deref(),payload,&now)?;
@@ -277,7 +284,9 @@ pub(super) fn assert_scope(
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
-        .ok_or_else(|| AppStorageError::new("session_not_found", "Session not found."))?;
+        .ok_or_else(|| {
+            AppStorageError::new(AppStorageCode::SessionNotFound, "Session not found.")
+        })?;
     let relocating = db
         .query_row(
             "SELECT 1 FROM app_session_context_gate WHERE session_id=?1 AND owner_kind='relocate'",
@@ -289,7 +298,7 @@ pub(super) fn assert_scope(
         .is_some();
     if relocating {
         return Err(AppStorageError::new(
-            "session_relocating",
+            AppStorageCode::SessionRelocating,
             "Session context is relocating.",
         ));
     }
@@ -303,7 +312,7 @@ pub(super) fn assert_scope(
         || source_mismatch
     {
         return Err(AppStorageError::new(
-            "project_source_scope_changed",
+            AppStorageCode::ProjectSourceScopeChanged,
             "Project source scope changed.",
         ));
     }
@@ -325,7 +334,7 @@ pub(super) fn accept_turn(
         let present=tx.query_row("SELECT 1 FROM session_queued_messages WHERE id=?1 AND chat_id=?2 AND state='dispatching' AND claim_id=?3",params![claim.queued_message_id,claim.chat_id,claim.claim_id],|_|Ok(())).optional().map_err(AppStorageError::sqlite)?.is_some();
         if !present {
             return Err(AppStorageError::new(
-                "queued_message_claim_lost",
+                AppStorageCode::QueuedMessageClaimLost,
                 "Queued message claim was lost.",
             ));
         }
@@ -343,7 +352,7 @@ pub(super) fn accept_turn(
     tx.execute("UPDATE turns SET user_message_id=?1,state='thinking',safe_status_label='Thinking',cancellable=1,updated_at=?2 WHERE id=?3",params![message_id,now,turn_id]).map_err(AppStorageError::sqlite)?;
     if !queue::link_dispatch(&tx, claim, message_id, turn_id, now)? {
         return Err(AppStorageError::new(
-            "queued_message_claim_lost",
+            AppStorageCode::QueuedMessageClaimLost,
             "Queued message claim was lost.",
         ));
     }
@@ -385,7 +394,7 @@ fn attach_queued_files(
 pub(super) fn map(value: &Value) -> Result<Map<String, Value>, AppStorageError> {
     value.as_object().cloned().ok_or_else(|| {
         AppStorageError::new(
-            "app_event_payload_invalid",
+            AppStorageCode::AppEventPayloadInvalid,
             "Event payload must be an object.",
         )
     })

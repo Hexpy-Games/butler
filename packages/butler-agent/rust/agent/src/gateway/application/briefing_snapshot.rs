@@ -13,8 +13,11 @@ pub(crate) struct AppNewChatBriefingProject {
     pub recent_session_titles: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct AppNewChatBriefingReadError;
+/// The App database could not be read for new-chat briefing projects; the
+/// SQLite error is the source.
+#[derive(Debug, thiserror::Error)]
+#[error("App project snapshot could not be read")]
+pub(crate) struct AppNewChatBriefingReadError(#[from] rusqlite::Error);
 
 pub(crate) fn read_new_chat_briefing_settings(database_path: &Path) -> Value {
     if !database_path.exists() {
@@ -36,7 +39,7 @@ pub(crate) fn read_new_chat_briefing_projects(
         return Ok(None);
     }
     let database = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| AppNewChatBriefingReadError)?;
+        .map_err(AppNewChatBriefingReadError)?;
     let projects = read_projects(&database)?;
     drop(database);
     Ok(Some(projects))
@@ -81,7 +84,7 @@ fn read_projects(
             "SELECT id, display_name, ledger_project_id FROM projects \
              WHERE archived = 0 AND status = 'active' ORDER BY display_name ASC",
         )
-        .map_err(|_| AppNewChatBriefingReadError)?
+        .map_err(AppNewChatBriefingReadError)?
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -89,8 +92,8 @@ fn read_projects(
                 row.get::<_, Option<String>>(2)?,
             ))
         })
-        .map_err(|_| AppNewChatBriefingReadError)?
-        .map(|row| row.map_err(|_| AppNewChatBriefingReadError))
+        .map_err(AppNewChatBriefingReadError)?
+        .map(|row| row.map_err(AppNewChatBriefingReadError))
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut titles = database
@@ -98,13 +101,13 @@ fn read_projects(
             "SELECT title FROM chats WHERE project_id = ?1 AND archived = 0 \
              ORDER BY updated_at DESC LIMIT 8",
         )
-        .map_err(|_| AppNewChatBriefingReadError)?;
+        .map_err(AppNewChatBriefingReadError)?;
     let mut output = Vec::with_capacity(projects.len());
     for (id, display_name, ledger_project_id) in projects.drain(..) {
         let recent_session_titles = titles
             .query_map([&id], |row| row.get::<_, String>(0))
-            .map_err(|_| AppNewChatBriefingReadError)?
-            .map(|row| row.map_err(|_| AppNewChatBriefingReadError))
+            .map_err(AppNewChatBriefingReadError)?
+            .map(|row| row.map_err(AppNewChatBriefingReadError))
             .collect::<Result<Vec<_>, _>>()?;
         output.push(AppNewChatBriefingProject {
             id,

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{Connection, params};
 
 use super::super::AppStorageError;
+use crate::gateway::application::storage::AppStorageCode;
 use filesystem::{Candidate, candidates, initialized_root, root_available, safe_id, trim};
 
 struct Project {
@@ -220,13 +221,10 @@ fn key(value: &str) -> String {
 #[cfg(test)]
 mod tests;
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn filesystem_error(error: std::io::Error) -> AppStorageError {
     AppStorageError::new(
-        "app_project_ledger_path_resolution_failed",
+        AppStorageCode::AppProjectLedgerPathResolutionFailed,
         error.to_string(),
     )
+    .with_source(error)
 }

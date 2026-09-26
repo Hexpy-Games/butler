@@ -9,6 +9,7 @@ pub(super) fn profile_error(error: crate::profile::ProfileError) -> GatewayAppli
         status: 500,
         code: error.code().into(),
         message: "Personalization operation failed.".into(),
+        source: None,
     }
 }
 
@@ -17,6 +18,7 @@ pub(super) fn model_error(_error: crate::models::SettingsError) -> GatewayApplic
         status: 500,
         code: "personalization_settings_unavailable".into(),
         message: "Personalization settings are unavailable.".into(),
+        source: None,
     }
 }
 
@@ -25,6 +27,7 @@ pub(super) fn invalid_request() -> GatewayApplicationError {
         status: 400,
         code: "invalid_personalization_request".into(),
         message: "Personalization update contains unsupported fields.".into(),
+        source: None,
     }
 }
 
@@ -33,5 +36,6 @@ pub(super) fn unsafe_personalization_path() -> GatewayApplicationError {
         status: 409,
         code: "unsafe_personalization_path".into(),
         message: "Personalization storage is outside the selected DATA directory.".into(),
+        source: None,
     }
 }
