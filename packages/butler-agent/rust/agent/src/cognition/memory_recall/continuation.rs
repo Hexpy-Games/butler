@@ -172,7 +172,12 @@ pub(super) fn run(
         let minimum = envelope::minimum(
             item,
             |evidence| {
-                let row = rows.get(&item.episode_ref).expect("page row");
+                let Some(row) = rows.get(&item.episode_ref) else {
+                    return Err(CognitionError::new(
+                        "memory_recall_unavailable",
+                        "memory_recall_unavailable",
+                    ));
+                };
                 let episode_mentions = mentions
                     .iter()
                     .filter(|m| m.episode_id == row.episode_id)

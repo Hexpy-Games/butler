@@ -149,7 +149,7 @@ pub(super) fn replay(
         ids.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
         tx.execute(
             "UPDATE memory_projection_jobs SET observed_completion_job_ids=?1 WHERE job_id=?2",
-            params![serde_json::to_string(&ids).unwrap(), job_id],
+            params![serde_json::Value::from(ids).to_string(), job_id],
         )
         .map_err(db_error)?;
     }
@@ -235,18 +235,15 @@ pub(super) fn refresh_semantic_state(
     let state = if complete == total {
         serde_json::json!({"state":"complete","completed_units":complete,"total_units":total})
     } else if complete > 0 || failed > 0 || warnings > 0 {
-        let mut value = serde_json::json!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed});
+        let mut value = crate::json::json_object!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed});
         if warnings > 0 {
-            value
-                .as_object_mut()
-                .unwrap()
-                .insert("warning_units".into(), warnings.into());
+            value.insert("warning_units".into(), warnings.into());
         }
-        value
+        serde_json::Value::Object(value)
     } else {
         serde_json::json!({"state":"pending","blocked_by":null})
     };
-    connection.execute("UPDATE memory_projection_jobs SET semantic_graph_state=?1,last_served_at=?2 WHERE job_id=?3",params![serde_json::to_string(&state).unwrap(),now,job_id]).map_err(db_error)?;
+    connection.execute("UPDATE memory_projection_jobs SET semantic_graph_state=?1,last_served_at=?2 WHERE job_id=?3",params![state.to_string(),now,job_id]).map_err(db_error)?;
     if complete + warnings == total {
         let nodes: i64 = connection
             .query_row(

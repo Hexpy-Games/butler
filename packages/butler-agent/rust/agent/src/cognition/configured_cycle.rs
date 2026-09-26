@@ -232,8 +232,9 @@ async fn append(data_root: PathBuf, path: PathBuf, event: Value) -> CognitionRes
     tokio::task::spawn_blocking(move || {
         use std::io::Write;
         ensure_data_authority(&data_root, &[&path])?;
-        std::fs::create_dir_all(path.parent().expect("configured event parent"))
-            .map_err(log_error)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(log_error)?;
+        }
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

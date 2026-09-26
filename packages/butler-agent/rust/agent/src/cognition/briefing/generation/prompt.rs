@@ -76,13 +76,15 @@ pub(super) fn prompt(
             "Do not turn unfinished work into pressure or obligation.",
         ]
     };
-    serde_json::to_string_pretty(&json!({
+    // Pretty-printing a `Value` cannot fail; fall back to compact text regardless.
+    let prompt = json!({
         "task": if project.is_some() { "project_new_chat_briefing" } else { "general_new_chat_briefing" },
         "locale":locale, "now":now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         "time_of_day":time_of_day(local_minute), "consolidation_run_id":run_id,
         "persona":persona, "runtime_projection":projection, "profile_summaries":[],
         "project":project_payload, "scope_rules":rules, "output_shape":output_shape,
-    })).expect("briefing prompt is JSON")
+    });
+    serde_json::to_string_pretty(&prompt).unwrap_or_else(|_| prompt.to_string())
 }
 
 pub(super) fn instructions(locale: &str, has_persona: bool) -> String {

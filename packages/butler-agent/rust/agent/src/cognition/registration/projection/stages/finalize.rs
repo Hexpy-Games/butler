@@ -5,7 +5,7 @@ pub(super) async fn validate_and_save(
     claim: &ClaimedProjectionWindow,
     input: &ExtractInput,
     output: &ExtractOutput,
-    save_result: bool,
+    // Present when the attempt result must be saved with its evidence.
     evidence: Option<serde_json::Value>,
 ) -> CognitionResult<NormalizedPlan> {
     let job = claim.job_id.clone();
@@ -17,7 +17,7 @@ pub(super) async fn validate_and_save(
     operation
         .write(move |state| {
             assert_current(state, &clock())?;
-            if save_result {
+            if let Some(evidence) = evidence.as_ref() {
                 state
                     .graph
                     .pin_binding_candidates(&window, &nonce, &input)?;
@@ -25,7 +25,7 @@ pub(super) async fn validate_and_save(
                     &window,
                     &nonce,
                     &serde_json::to_value(&output).map_err(json_error)?,
-                    evidence.as_ref().expect("result evidence"),
+                    evidence,
                     &clock(),
                 )?;
             }

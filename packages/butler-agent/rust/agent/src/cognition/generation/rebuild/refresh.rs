@@ -217,9 +217,11 @@ fn stage_snapshot(
             File::open(&staged_snapshot)
                 .and_then(|file| file.sync_all())
                 .map_err(io_error)?;
-            File::open(staged_snapshot.parent().unwrap())
-                .and_then(|dir| dir.sync_all())
-                .map_err(io_error)?;
+            if let Some(directory) = staged_snapshot.parent() {
+                File::open(directory)
+                    .and_then(|dir| dir.sync_all())
+                    .map_err(io_error)?;
+            }
             if cancellation.is_cancelled() {
                 return Err(error("memory_operation_aborted"));
             }

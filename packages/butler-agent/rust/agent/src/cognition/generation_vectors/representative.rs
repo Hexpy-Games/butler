@@ -144,18 +144,26 @@ pub(crate) async fn prepare_representatives(
             .map(|(unit, _)| unit.unit_id.clone())
             .collect::<Vec<_>>();
         affected_unit_ids.sort();
-        let representative = valid
+        let Some((representative, _)) = valid
             .iter()
             .min_by(|(a, _), (b, _)| a.unit_id.cmp(&b.unit_id))
-            .unwrap()
-            .0;
+        else {
+            continue;
+        };
+        // stable_matches admitted only units with these source fields.
+        let (Some(source_kind), Some(source_observed_at), Some(source_refs_json)) = (
+            representative.source_kind.clone(),
+            normalized_time(representative.source_observed_at.as_deref()),
+            representative.source_ids_json.clone(),
+        ) else {
+            continue;
+        };
         let mut row = persisted.clone();
         row.source_revision = representative.source_revision.clone();
-        row.source_kind = representative.source_kind.clone().unwrap();
+        row.source_kind = source_kind;
         row.conversation_session_id = representative.conversation_session_id.clone();
-        row.source_observed_at =
-            normalized_time(representative.source_observed_at.as_deref()).unwrap();
-        row.source_refs_json = representative.source_ids_json.clone().unwrap();
+        row.source_observed_at = source_observed_at;
+        row.source_refs_json = source_refs_json;
         prepared.push(PreparedRepresentative {
             row,
             affected_unit_ids,

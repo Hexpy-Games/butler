@@ -99,10 +99,7 @@ pub(super) fn load(
         }
     }
     drop(loaded);
-    Ok(result
-        .into_iter()
-        .map(|candidate| Arc::try_unwrap(candidate).expect("candidate has one result owner"))
-        .collect())
+    Ok(result.into_iter().map(Arc::unwrap_or_clone).collect())
 }
 
 struct CandidateSlices<'a>(&'a [Arc<ExtractCandidate>], &'a [Arc<ExtractCandidate>]);

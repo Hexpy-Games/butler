@@ -92,10 +92,9 @@ impl NativeMemoryRecall {
                 "Recall result encoding failed",
             )
         })?;
-        value
-            .as_object_mut()
-            .expect("recall response object")
-            .insert("ok".into(), true.into());
+        if let Some(object) = value.as_object_mut() {
+            object.insert("ok".into(), true.into());
+        }
         Ok(value)
     }
 

@@ -225,7 +225,9 @@ fn validate_record_id(value: &str) -> CognitionResult<()> {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
-    let parent = path.parent().expect("fixed memory owner path");
+    let parent = path
+        .parent()
+        .ok_or_else(|| error("memory_data_path_unsafe"))?;
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -260,7 +262,9 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
 }
 
 fn append_durable(path: &Path, bytes: &[u8]) -> CognitionResult<()> {
-    let parent = path.parent().expect("fixed memory owner path");
+    let parent = path
+        .parent()
+        .ok_or_else(|| error("memory_data_path_unsafe"))?;
     let existed = path.exists();
     let mut options = OpenOptions::new();
     options.create(true).append(true);

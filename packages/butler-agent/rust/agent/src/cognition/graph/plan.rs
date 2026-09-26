@@ -104,10 +104,9 @@ pub(super) fn normalize(
             &claim.local_ref,
         )?;
         let mut content = serde_json::to_value(claim).map_err(json_error)?;
-        content
-            .as_object_mut()
-            .expect("claim object")
-            .shift_remove("resolution");
+        if let Some(object) = content.as_object_mut() {
+            object.shift_remove("resolution");
+        }
         refs.insert(
             claim.local_ref.clone(),
             hash(vec![

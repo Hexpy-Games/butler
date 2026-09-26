@@ -24,9 +24,6 @@ impl GraphRepository {
 }
 
 fn consume(connection: &mut Connection, input: TypedLifecycleInput<'_>) -> CognitionResult<()> {
-    if input.disposition == TypedMemoryLifecycle::Current {
-        return Err(source_changed());
-    }
     let transaction = connection.transaction().map_err(db_error)?;
     let source_key = format!("{}:{}", input.source_kind, input.record_id);
     match input.disposition {
@@ -46,7 +43,7 @@ fn consume(connection: &mut Connection, input: TypedLifecycleInput<'_>) -> Cogni
                 )
                 .map_err(db_error)?;
         }
-        TypedMemoryLifecycle::Current => unreachable!(),
+        TypedMemoryLifecycle::Current => return Err(source_changed()),
     }
     let state = lifecycle_state_json(&input)?;
     transaction

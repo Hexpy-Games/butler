@@ -284,7 +284,10 @@ impl Scan<'_> {
             );
             return Ok(());
         }
-        let mut messages = vec![request.expect("validated")];
+        let Some(request) = request else {
+            return Ok(());
+        };
+        let mut messages = vec![request];
         if let Some(assistant) = assistant {
             messages.push(assistant);
         }

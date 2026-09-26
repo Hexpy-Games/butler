@@ -143,7 +143,7 @@ fn filter(
 }
 
 fn digest(values: &[&str]) -> String {
-    let json = serde_json::to_string(values).expect("string digest array");
+    let json = serde_json::Value::from(values).to_string();
     format!("{:x}", Sha256::digest(json.as_bytes()))
 }
 

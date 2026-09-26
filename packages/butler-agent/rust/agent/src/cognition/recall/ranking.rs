@@ -142,10 +142,10 @@ pub(in crate::cognition) fn diversify_by_session(
         let score = head.score;
         let priority = head.input.explicit_priority.unwrap_or(false);
         let mut remaining = vec![head];
-        while groups.peek().is_some_and(|value| {
+        while let Some(value) = groups.next_if(|value| {
             value.score == score && value.input.explicit_priority.unwrap_or(false) == priority
         }) {
-            remaining.push(groups.next().expect("peeked value"));
+            remaining.push(value);
         }
         while !remaining.is_empty() && selected.len() < limit {
             let unseen = remaining

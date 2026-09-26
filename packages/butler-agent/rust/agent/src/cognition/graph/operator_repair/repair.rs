@@ -57,7 +57,13 @@ pub(super) fn repair_candidate_inputs(
             .ok_or_else(|| error("memory_input_repair_precondition_changed"))?;
         validate_repair_window(&tx, expected, &row, dry_run)?;
 
-        let pinned_value = parse_input_value(row.input_json.as_deref().unwrap())?;
+        // validate_repair_window admitted only rows with a prior input and digest.
+        let (Some(prior_input_json), Some(prior_sha)) =
+            (row.input_json.as_deref(), row.input_sha256.as_deref())
+        else {
+            return Err(error("memory_input_repair_precondition_changed"));
+        };
+        let pinned_value = parse_input_value(prior_input_json)?;
         let pinned: ExtractInput = serde_json::from_value(pinned_value.clone())
             .map_err(|_| error("memory_input_repair_precondition_changed"))?;
         if pinned.schema != EXTRACT_INPUT_SCHEMA
@@ -123,7 +129,6 @@ pub(super) fn repair_candidate_inputs(
             return Err(error("memory_input_repair_candidates_incomplete"));
         }
 
-        let prior_sha = row.input_sha256.as_deref().unwrap();
         let digest = extract_input_sha256(&serialized)?;
         if dry_run {
             result.receipts.push(json!({
@@ -150,7 +155,7 @@ pub(super) fn repair_candidate_inputs(
         let receipt_ref = repair_receipt_ref(&expected.window_ref, prior_sha, &digest)?;
         let receipt = stringify(&json!({
             "schema": INPUT_REPAIR_RECEIPT_SCHEMA,
-            "prior_input_json": row.input_json.as_deref().unwrap(),
+            "prior_input_json": prior_input_json,
             "prior_input_sha256": prior_sha,
             "repaired_input_sha256": digest,
             "candidate_source_sha256": expected.candidate_source_sha256.as_deref().unwrap_or(prior_sha),

@@ -176,7 +176,10 @@ fn condition(
 }
 
 pub(super) fn map_condition(value: &Value) -> Value {
-    let object = value.as_object().expect("validated condition object");
+    // Conditions were validated as objects; anything else maps to null.
+    let Some(object) = value.as_object() else {
+        return Value::Null;
+    };
     if let Some(subject) = object.get("subject") {
         return serde_json::json!({"subject":subject.as_u64().map(|index|format!("n{index}")),
             "state":object.get("state")});
@@ -189,12 +192,11 @@ pub(super) fn map_condition(value: &Value) -> Value {
     } else {
         "any"
     };
-    let children = object[key]
-        .as_array()
-        .expect("validated children")
-        .iter()
-        .map(map_condition)
-        .collect();
+    let children = object
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|children| children.iter().map(map_condition).collect())
+        .unwrap_or_default();
     Value::Object(Map::from_iter([(key.into(), Value::Array(children))]))
 }
 

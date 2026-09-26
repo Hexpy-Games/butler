@@ -37,6 +37,20 @@ pub(crate) enum ReasoningEffort {
     Max,
 }
 
+impl ReasoningEffort {
+    /// The serde (`snake_case`) name.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ProviderAuthMethod {

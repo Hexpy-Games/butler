@@ -143,13 +143,14 @@ pub(super) fn read_descriptor(memory_root: &Path) -> Result<ActiveDescriptor, Co
     let value = read_json(&memory_root.join("active-generation.json"))?;
     let schema = string(&value, "schema");
     let generation_id = string(&value, "generation_id");
-    if schema != Some("butler.memory-active-generation.v2")
-        || generation_id.is_none_or(str::is_empty)
-    {
+    let Some(generation_id) = generation_id.filter(|id| !id.is_empty()) else {
+        return Err(error("memory_generation_unavailable"));
+    };
+    if schema != Some("butler.memory-active-generation.v2") {
         return Err(error("memory_generation_unavailable"));
     }
     Ok(ActiveDescriptor {
-        generation_id: generation_id.unwrap().to_owned(),
+        generation_id: generation_id.to_owned(),
         projection_mode: string(&value, "projection_mode").map(str::to_owned),
     })
 }

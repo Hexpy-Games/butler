@@ -210,11 +210,8 @@ fn node_projection(
         format!("statement:{}", json_string(claim.statement.as_deref())?),
         format!("condition:{}", json_string(claim.condition.as_deref())?),
     ];
-    if claim.requirement.as_ref().is_some_and(js_truthy) {
-        fields.push(format!(
-            "requirement:{}",
-            stringify(claim.requirement.as_ref().expect("checked"))?
-        ));
+    if let Some(requirement) = claim.requirement.as_ref().filter(|value| js_truthy(value)) {
+        fields.push(format!("requirement:{}", stringify(requirement)?));
     }
     fields.push(format!(
         "polarity:{}",

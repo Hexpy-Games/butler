@@ -26,8 +26,10 @@ pub(super) fn select(
     let mut visited_jobs = HashSet::new();
     let mut worklist = VecDeque::from([target.to_owned()]);
     let mut visited_targets = HashSet::new();
-    while !worklist.is_empty() && members.len() < limit && now_millis() < scope.deadline_at {
-        let indexed_target = worklist.pop_front().expect("nonempty worklist");
+    while members.len() < limit && now_millis() < scope.deadline_at {
+        let Some(indexed_target) = worklist.pop_front() else {
+            break;
+        };
         if !visited_targets.insert(indexed_target.clone()) {
             continue;
         }

@@ -16,9 +16,9 @@ pub(super) fn append(
     created_at: &str,
     acquired_at: &str,
 ) -> CognitionResult<()> {
-    let path = root.join("queue/sync.jsonl");
-    let parent = path.parent().expect("fixed queue path");
-    fs::create_dir_all(parent).map_err(io_error)?;
+    let parent = root.join("queue");
+    let path = parent.join("sync.jsonl");
+    fs::create_dir_all(&parent).map_err(io_error)?;
     let lock_path = path.with_extension("jsonl.coord.sqlite");
     let db = Connection::open(lock_path).map_err(sqlite_error)?;
     db.busy_timeout(std::time::Duration::ZERO)
@@ -130,9 +130,9 @@ fn append_idempotent(
     entry: &str,
     acquired_at: &str,
 ) -> CognitionResult<()> {
-    let path = root.join("queue/sync.jsonl");
-    let parent = path.parent().expect("fixed queue path");
-    fs::create_dir_all(parent).map_err(io_error)?;
+    let parent = root.join("queue");
+    let path = parent.join("sync.jsonl");
+    fs::create_dir_all(&parent).map_err(io_error)?;
     let lock_path = path.with_extension("jsonl.coord.sqlite");
     let db = Connection::open(lock_path).map_err(sqlite_error)?;
     db.busy_timeout(std::time::Duration::ZERO)
@@ -286,9 +286,11 @@ fn rewrite_without(path: &Path, expected: &str) -> CognitionResult<bool> {
         output.sync_all().map_err(io_error)?;
         drop(output);
         fs::rename(&temporary, path).map_err(io_error)?;
-        File::open(path.parent().expect("queue parent"))
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)?;
+        if let Some(parent) = path.parent() {
+            File::open(parent)
+                .and_then(|directory| directory.sync_all())
+                .map_err(io_error)?;
+        }
         Ok(true)
     })();
     let _ = fs::remove_file(temporary);

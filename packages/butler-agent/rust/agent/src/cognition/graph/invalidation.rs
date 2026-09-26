@@ -206,7 +206,7 @@ fn make_record(connection: &Connection, input: RecordInput<'_>) -> CognitionResu
             None => node.id.clone(),
         },
     );
-    value.insert("source_refs".into(), serde_json::to_value(refs).unwrap());
+    value.insert("source_refs".into(), Value::from(refs));
     put(&mut value, "source_revision", input.new_revision);
     value.insert(
         "decision_source".into(),

@@ -238,7 +238,7 @@ pub(super) fn append_record(
         connection
             .execute(
                 "UPDATE memory_projection_jobs SET identity_decisions_json=?1 WHERE job_id=?2",
-                params![serde_json::to_string(&records).unwrap(), job],
+                params![Value::Array(records).to_string(), job],
             )
             .map_err(db_error)?;
     }

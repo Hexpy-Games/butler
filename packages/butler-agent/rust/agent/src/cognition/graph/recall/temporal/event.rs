@@ -2,23 +2,23 @@
 
 use rusqlite::{Connection, params_from_iter, types::Value};
 
-use crate::cognition::{CognitionResult, recall::RecallRequest};
+use crate::cognition::{
+    CognitionResult,
+    recall::{RecallRequest, RecallTime},
+};
 
 use super::super::{db_error, scope};
 
 pub(super) fn select(
     db: &Connection,
     input: &RecallRequest,
+    time: &RecallTime,
     from_ms: f64,
     duration: f64,
     bins: i64,
 ) -> CognitionResult<Vec<(String, Option<String>)>> {
     // scope::source excludes event-time clauses and retains the as-of source ceiling.
     let source = scope::source(input, "s", "c");
-    let time = input
-        .time
-        .as_ref()
-        .expect("event selector requires a time window");
     let sql = format!(
         r#"
       WITH event_claims AS (

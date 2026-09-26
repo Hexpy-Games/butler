@@ -12,7 +12,9 @@ pub(in crate::cognition::generation) fn write_json(
     path: &Path,
     value: &Value,
 ) -> CognitionResult<()> {
-    let parent = path.parent().expect("generation path has parent");
+    let parent = path.parent().ok_or_else(|| {
+        CognitionError::new("memory_generation_path_invalid", "path has no parent")
+    })?;
     create_dir(parent)?;
     let temporary = path.with_extension(format!(
         "{}.{}.tmp",

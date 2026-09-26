@@ -206,7 +206,7 @@ fn dead_letter(
         io::Write,
     };
     let path = root.join("queue/dead-letter.jsonl");
-    fs::create_dir_all(path.parent().expect("DLQ parent"))
+    fs::create_dir_all(root.join("queue"))
         .map_err(|e| CognitionError::new("memory_sync_dlq_error", e.to_string()))?;
     let mut file = OpenOptions::new()
         .create(true)

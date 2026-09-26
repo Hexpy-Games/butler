@@ -37,6 +37,10 @@ pub(in crate::cognition) fn terms(value: &str) -> IndexSet<String> {
     terms
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "bundled generated table; every row is parsed by tests::bundled_case_fold_table_parses"
+)]
 fn table() -> &'static [(u32, &'static str)] {
     TABLE.get_or_init(|| {
         include_str!("casefold-15.1.tsv")
@@ -50,4 +54,12 @@ fn table() -> &'static [(u32, &'static str)] {
             })
             .collect()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn bundled_case_fold_table_parses() {
+        assert!(!super::table().is_empty());
+    }
 }

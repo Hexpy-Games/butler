@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::CompletionNotice;
@@ -41,7 +41,7 @@ pub(super) fn publish(
     } else {
         Value::Null
     };
-    let base = json!({
+    let mut value = crate::json::json_object!({
         "schema_version": "butler.conversation-completion-observation.v1",
         "job_id": job_id,
         "scope": if project.is_some() { "project" } else { "global" },
@@ -54,11 +54,8 @@ pub(super) fn publish(
         "outcome_generation": generation_json,
         "completed_at": required(&input.completed_at)?,
     });
-    let mut value = base.as_object().expect("object literal").clone();
-    value.insert(
-        "integrity_sha256".into(),
-        Value::String(sha(canonical(&base)?.as_bytes())),
-    );
+    let integrity = sha(canonical(&Value::Object(value.clone()))?.as_bytes());
+    value.insert("integrity_sha256".into(), Value::String(integrity));
     let observation = Value::Object(value);
     let path = root
         .join("queue/completion-observations")

@@ -5,7 +5,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -15,16 +14,6 @@ use crate::cognition::{
 };
 
 use super::{FeedbackBufferService, operator::read_entries};
-
-#[derive(Serialize)]
-struct FeedbackOwnerRevision<'a> {
-    feedback_id: &'a str,
-    created_at: &'a str,
-    scope: &'a str,
-    category: &'a str,
-    target_ref: &'a str,
-    text: &'a str,
-}
 
 impl FeedbackBufferService {
     pub(crate) async fn operator_quality_exclusion(
@@ -241,16 +230,17 @@ fn same_operation(prior: &Value, expected: &Value) -> bool {
 }
 
 fn owner_revision(entry: &super::FeedbackEntry) -> String {
-    let owner = FeedbackOwnerRevision {
-        feedback_id: &entry.feedback_id,
-        created_at: &entry.created_at,
-        scope: &entry.scope,
-        category: &entry.category,
-        target_ref: &entry.target_ref,
-        text: &entry.text,
-    };
-    let bytes = serde_json::to_vec(&owner).expect("feedback owner projection is serializable");
-    format!("{:x}", Sha256::digest(bytes))
+    // Same fields and order as `cognition::feedback::FeedbackOwnerRevision`, so
+    // revisions computed here match the feedback owner's.
+    let owner = serde_json::json!({
+        "feedback_id": entry.feedback_id,
+        "created_at": entry.created_at,
+        "scope": entry.scope,
+        "category": entry.category,
+        "target_ref": entry.target_ref,
+        "text": entry.text,
+    });
+    format!("{:x}", Sha256::digest(owner.to_string()))
 }
 
 fn create_private_dir(path: &Path) -> CognitionResult<()> {

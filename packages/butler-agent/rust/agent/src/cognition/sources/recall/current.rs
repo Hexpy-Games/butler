@@ -70,7 +70,10 @@ fn turn_current(
     {
         return false;
     }
-    let mut messages = vec![request.expect("validated")];
+    let Some(request) = request else {
+        return false;
+    };
+    let mut messages = vec![request];
     if let Some(assistant) = assistant {
         messages.push(assistant);
     }

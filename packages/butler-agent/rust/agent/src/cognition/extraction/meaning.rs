@@ -42,15 +42,14 @@ pub(in crate::cognition) fn source_passages(input: &ExtractInput) -> CognitionRe
                 let end = sentence.start + group.last().map_or(0, |x| x.end);
                 let text = unit.text[start..end].to_owned();
                 let occurrence = unit.text[..start].match_indices(&text).count();
-                let context = input.context_units.iter().find(|entry| {
-                    entry.source_span.as_ref().is_some_and(|span| {
-                        span.source_ref == unit.ref_id
-                            && span.focus_start == start as f64
-                            && span.focus_end == end as f64
-                    })
+                let context = input.context_units.iter().find_map(|entry| {
+                    let span = entry.source_span.as_ref()?;
+                    (span.source_ref == unit.ref_id
+                        && span.focus_start == start as f64
+                        && span.focus_end == end as f64)
+                        .then_some((entry, span))
                 });
-                let (quote, before, after) = if let Some(context) = context {
-                    let span = context.source_span.as_ref().unwrap();
+                let (quote, before, after) = if let Some((context, span)) = context {
                     let prefix = span.prefix_bytes as usize;
                     let focus_end = prefix + text.len();
                     (

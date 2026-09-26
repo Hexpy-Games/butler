@@ -41,13 +41,12 @@ pub(in crate::cognition) fn apply(
         let support = o["support"]
             .as_array()
             .ok_or_else(|| error("memory_extract_invalid_binding"))?;
-        if support.len() > 4 || support.iter().any(|v| !v.is_string()) {
-            return Err(error("memory_extract_invalid_binding"));
-        }
         let refs = support
             .iter()
-            .map(|v| v.as_str().unwrap())
-            .collect::<Vec<_>>();
+            .map(Value::as_str)
+            .collect::<Option<Vec<_>>>()
+            .filter(|refs| refs.len() <= 4)
+            .ok_or_else(|| error("memory_extract_invalid_binding"))?;
         let span = o["span"].as_str();
         if !o["span"].is_null() && span.is_none() {
             return Err(error("memory_extract_invalid_binding"));

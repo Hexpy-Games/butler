@@ -115,12 +115,12 @@ pub(super) fn argument_hash(input: &RecallRequest, as_of: &str) -> CognitionResu
 }
 
 pub(super) fn encode(key: &str, offset: usize) -> String {
-    let wire = WireCursor {
-        schema: "butler.recall-cursor.v2".into(),
-        key: key.into(),
-        offset: offset as u64,
-    };
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&wire).expect("fixed cursor schema"))
+    let wire = serde_json::json!({
+        "schema": "butler.recall-cursor.v2",
+        "key": key,
+        "offset": offset,
+    });
+    URL_SAFE_NO_PAD.encode(wire.to_string())
 }
 
 fn decode(cursor: &str) -> CognitionResult<WireCursor> {
@@ -140,12 +140,12 @@ fn decode(cursor: &str) -> CognitionResult<WireCursor> {
     }) else {
         return Err(invalid_arguments());
     };
-    if schema != Some("butler.recall-cursor.v2") || key.is_none() {
+    let (Some(schema @ "butler.recall-cursor.v2"), Some(key)) = (schema, key) else {
         return Err(invalid_arguments());
-    }
+    };
     Ok(WireCursor {
-        schema: schema.unwrap().into(),
-        key: key.unwrap().into(),
+        schema: schema.into(),
+        key: key.into(),
         offset: offset as u64,
     })
 }
