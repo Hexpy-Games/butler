@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
-import { MessageStatusLabel } from "@/butler-ds";
+import { ButlerThinkingMark, MessageStatusLabel } from "@/butler-ds";
 
 export type AssistantStatusVisualState =
   | "active"

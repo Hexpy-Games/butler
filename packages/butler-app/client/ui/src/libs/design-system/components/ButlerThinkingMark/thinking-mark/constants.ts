@@ -51,11 +51,21 @@ export const RISO_MOTION = {
   lightRate: 1.1,
 } as const;
 
-export const REDUCED_MOTION = {
-  /** Time constant of the reduced-motion fade, seconds. */
-  tau: 0.28,
-  /** Breathe period, seconds. */
-  period: 3.4,
-} as const;
+/**
+ * Reduced motion dims the filled logo to the Spinner's reduced-motion pulse
+ * floor (opacity 0.45); its fade and cadence come from DS motion tokens.
+ */
+export const BREATHE_DEPTH = 0.55;
+
+/*
+ * Simulation clock. Intrinsic to the canvas engine (not UI transition timing),
+ * allowlisted in lint:motion (CANVAS_MOTION_ENGINES):
+ * FRAME_INTERVAL_MS caps drawing at 60fps on high-refresh displays (2ms slack
+ * for rAF jitter), MAX_STEP_S keeps the spring stable after a stalled frame,
+ * SPRING_SUBSTEP_S is the spring integrator step.
+ */
+export const FRAME_INTERVAL_MS = 1000 / 60 - 2;
+export const MAX_STEP_S = 0.05;
+export const SPRING_SUBSTEP_S = 0.005;
 
 export const GRAIN_TILE = 128;

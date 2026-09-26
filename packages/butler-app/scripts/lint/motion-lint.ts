@@ -12,6 +12,7 @@ export const MOTION_RULES = [
   "keyword-easing",
   "transition-property",
   "waapi-outside-helper",
+  "canvas-motion",
 ] as const;
 
 export type MotionRule = (typeof MOTION_RULES)[number];
@@ -236,6 +237,81 @@ export function lintMotionScript(path: string, source: string): MotionFinding[] 
   return findings;
 }
 
+/**
+ * Canvas animation engines: JS frame loops that draw a simulation, which the
+ * CSS/WAAPI token rules cannot see. Every file that draws on a canvas must sit
+ * under one of these prefixes, and every timing-named constant in an engine
+ * must be listed with the reason it is intrinsic to the simulation. UI timing
+ * (fades, transitions, loop cadence) is read from the --motion-* tokens through
+ * lib/motion.ts instead.
+ */
+export interface CanvasMotionEngine {
+  prefix: string;
+  justification: string;
+  /** Timing-named constants allowed as literals, each with its reason. */
+  constants: Record<string, string>;
+}
+
+export const CANVAS_MOTION_ENGINES: readonly CanvasMotionEngine[] = [
+  {
+    prefix: "libs/design-system/components/ButlerThinkingMark/",
+    justification: "Riso halftone thinking mark: a spring-driven morph and an orbiting-light simulation drawn per frame on a canvas.",
+    constants: {
+      MORPH_SPRING: "Spring stiffness/damping of the logo-to-moon morph; a physical morph, not a UI transition (starts at zero velocity, so no first-frame jump).",
+      RISO_MOTION: "Ripple, ink-sweep and light-orbit rates of the simulation clock while working (the look of the mark, not UI timing).",
+      FRAME_INTERVAL_MS: "Caps canvas drawing at 60fps on high-refresh displays; a performance budget, not a duration.",
+      MAX_STEP_S: "Clamps the simulation step after a stalled frame so the spring stays stable.",
+      SPRING_SUBSTEP_S: "Integrator sub-step of the spring solver (numerical stability).",
+    },
+  },
+  {
+    prefix: "libs/design-system/blocks/PromptSuggestionList/",
+    justification: "Ambient WebGL fluid behind the new-chat prompt suggestions.",
+    constants: {
+      FRAME_INTERVAL_MS: "Caps the ambient fluid at 20fps to bound GPU/CPU cost; a performance budget, not a duration.",
+      FLUID_TIME_PERIOD_SECONDS: "Common period of the shader's time terms, used to wrap the uniform for mediump precision; not a duration.",
+    },
+  },
+];
+
+const CANVAS_CONTEXT = /\.getContext\(/u;
+const TIMING_CONSTANT = /^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_]*)\s*[:=]/u;
+const TIMING_NAME = /(?:^|_)(?:MS|S|SEC|SECONDS|DURATION|PERIOD|INTERVAL|DELAY|SPRING|MOTION|RATE|SPEED|FPS|EASE|EASING)(?:_|$)/u;
+const EXAMPLE_FILE = /\.(?:showcase|guidance|test)\.tsx?$/u;
+
+/** canvas-motion findings for UI script sources keyed by path relative to the UI root. */
+export function lintCanvasEngines(files: Record<string, string>, engines: readonly CanvasMotionEngine[] = CANVAS_MOTION_ENGINES): MotionFinding[] {
+  const findings: MotionFinding[] = [];
+  const seen = new Map<CanvasMotionEngine, Set<string>>(engines.map((engine) => [engine, new Set()]));
+  for (const [path, source] of Object.entries(files)) {
+    if (EXAMPLE_FILE.test(path)) continue;
+    const engine = engines.find((candidate) => path.startsWith(candidate.prefix));
+    const lines = source.split("\n");
+    if (!engine) {
+      const index = lines.findIndex((text) => CANVAS_CONTEXT.test(text));
+      if (index >= 0) {
+        findings.push({ rule: "canvas-motion", path, line: index + 1, message: "canvas drawing outside an allowlisted engine; register it in CANVAS_MOTION_ENGINES with a justification" });
+      }
+      continue;
+    }
+    lines.forEach((text, index) => {
+      const name = TIMING_CONSTANT.exec(text)?.[1];
+      if (!name || !TIMING_NAME.test(name)) return;
+      seen.get(engine)?.add(name);
+      if (name in engine.constants) return;
+      findings.push({ rule: "canvas-motion", path, line: index + 1, message: `${name} is a timing constant in a canvas engine; read UI timing from --motion-* tokens (lib/motion.ts) or allowlist it with a reason` });
+    });
+  }
+  for (const [engine, names] of seen) {
+    const touched = Object.keys(files).some((path) => path.startsWith(engine.prefix) && !EXAMPLE_FILE.test(path));
+    if (!touched) continue;
+    for (const name of Object.keys(engine.constants).filter((constant) => !names.has(constant))) {
+      findings.push({ rule: "canvas-motion", path: engine.prefix, line: 1, message: `${name} is allowlisted but no longer declared; remove it from CANVAS_MOTION_ENGINES` });
+    }
+  }
+  return findings;
+}
+
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).flatMap((entry) => {
@@ -248,14 +324,17 @@ function walk(dir: string): string[] {
 /** Findings for every UI source file, keyed relative to the UI source root. */
 export function collectMotionFindings(repoRoot: string): MotionFinding[] {
   const sourceRoot = join(repoRoot, UI_SOURCE_ROOT);
-  return walk(sourceRoot).flatMap((absolute) => {
+  const scripts: Record<string, string> = {};
+  const findings = walk(sourceRoot).flatMap((absolute) => {
     const path = relative(sourceRoot, absolute).split("\\").join("/");
     if (path.endsWith(".css")) return lintMotionCss(path, readFileSync(absolute, "utf8"));
     if (/\.(?:ts|tsx)$/u.test(path) && !/\.test\.tsx?$/u.test(path) && !path.endsWith(".d.ts")) {
-      return lintMotionScript(path, readFileSync(absolute, "utf8"));
+      scripts[path] = readFileSync(absolute, "utf8");
+      return lintMotionScript(path, scripts[path]);
     }
     return [];
   });
+  return [...findings, ...lintCanvasEngines(scripts)];
 }
 
 function countsByRule(findings: MotionFinding[]): Record<MotionRule, FileCounts> {

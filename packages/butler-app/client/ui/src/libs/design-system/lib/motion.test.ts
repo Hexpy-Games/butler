@@ -3,11 +3,13 @@ import { afterEach, expect, test } from "bun:test";
 import {
   animateMotion,
   easeProgress,
+  loopDuration,
   motionDistance,
   motionDuration,
   motionEasing,
   prefersReducedMotion,
   reducedMotionKeyframes,
+  subscribeReducedMotion,
 } from "./motion";
 
 const GLOBAL_KEYS = ["window", "document", "getComputedStyle"] as const;
@@ -133,4 +135,45 @@ test("easeProgress samples the token cubic-bezier curves and clamps to 0..1", ()
   expect(easeProgress("decelerate", 0.5)).toBeGreaterThan(easeProgress("decelerate", 0.25));
   expect(easeProgress("linear", 0.5)).toBeCloseTo(0.5, 5);
   restoreGlobals();
+});
+
+test("loop durations come from the loop tokens with fallbacks", () => {
+  installEnvironment({ reduce: false, tokens: { "--pulse-duration": "1250ms", "--spinner-duration": "1.32s" } });
+  expect(loopDuration("pulse")).toBe(1250);
+  expect(loopDuration("spinner")).toBe(1320);
+  expect(loopDuration("shimmer")).toBe(1400);
+});
+
+test("subscribeReducedMotion reports the media query and the data-motion scope", () => {
+  const listeners: Array<() => void> = [];
+  const observers: Array<() => void> = [];
+  let reduce = false;
+  const media = {
+    get matches() { return reduce; },
+    addEventListener: (_: string, listener: () => void) => listeners.push(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.splice(listeners.indexOf(listener), 1),
+  };
+  const body = { dataset: {} as Record<string, string> };
+  class FakeObserver {
+    constructor(private readonly callback: () => void) {}
+    observe() { observers.push(this.callback); }
+    disconnect() { observers.splice(observers.indexOf(this.callback), 1); }
+  }
+  Object.assign(globalThis, {
+    window: { matchMedia: () => media, getComputedStyle: () => ({ getPropertyValue: () => "" }) },
+    document: { documentElement: {}, body },
+    MutationObserver: FakeObserver,
+  });
+  const seen: boolean[] = [];
+  const unsubscribe = subscribeReducedMotion((reduced) => seen.push(reduced));
+  reduce = true;
+  listeners.forEach((listener) => listener());
+  reduce = false;
+  body.dataset.motion = "reduced";
+  observers.forEach((callback) => callback());
+  expect(seen).toEqual([true, true]);
+  unsubscribe();
+  expect(listeners).toHaveLength(0);
+  expect(observers).toHaveLength(0);
+  delete (globalThis as Record<string, unknown>).MutationObserver;
 });

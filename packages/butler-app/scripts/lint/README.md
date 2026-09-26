@@ -65,6 +65,13 @@ tests excluded) with shrink-only baselines in `motion/baseline/<rule>.json`
   (`components/Collapsible`) that set `interpolate-size: allow-keywords`.
 - `waapi-outside-helper`: `.animate(` and `startViewTransition` outside
   `libs/design-system/lib/motion.ts` (use `animateMotion`).
+- `canvas-motion`: canvas drawing (`.getContext(`) only under a registered
+  `CANVAS_MOTION_ENGINES` prefix (with a justification); inside an engine,
+  every timing-named constant (`*_MS`, `*_S`, `*PERIOD*`, `*SPRING*`,
+  `*MOTION*`, `*RATE*`, ...) must be allowlisted with the reason it is
+  intrinsic to the simulation. UI timing (fades, loop cadence) is read from
+  the tokens via `lib/motion.ts` (`motionDuration`, `loopDuration`,
+  `easeProgress`, `subscribeReducedMotion`). Stale allowlist entries fail.
 
 ## Boundaries
 

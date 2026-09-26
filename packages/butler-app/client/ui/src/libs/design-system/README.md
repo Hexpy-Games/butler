@@ -17,6 +17,7 @@ Butler Design System is the client UI foundation for reusable primitives, tokens
 - `tokens.css` is the source stylesheet for shared tokens and shadcn-compatible variables.
 - Raw shadcn files live under `shadcn/ui`; app code should not import that path directly.
 - Use `Spinner` for indeterminate loading. It owns the official traveling-gap geometry, motion, and reduced-motion behavior; do not animate separate loading icons in product CSS. See [Spinner](components/Spinner/README.md).
+- Use `ButlerThinkingMark` when Butler itself is thinking; it is the identity mark, not a generic loader. See [ButlerThinkingMark](components/ButlerThinkingMark/README.md).
 
 ## Motion
 
@@ -24,7 +25,11 @@ Motion lives in DS components and tokens (DS spec Motion Contract). Use the
 `--motion-*` duration, exit, easing, distance and scale tokens in DS CSS, and
 `animateMotion()` from `lib/motion.ts` instead of `element.animate()`.
 Reduced motion zeroes `--motion-distance-*` and resets `--motion-scale-*`, so
-token-driven animations become an opacity fade. Product code never declares
+token-driven animations become an opacity fade. JS-driven loops read timing
+with `motionDuration()`, `loopDuration()` and `easeProgress()` and follow
+reduced motion with `subscribeReducedMotion()`; canvas engines and their
+intrinsic simulation constants are allowlisted in `lint:motion`
+(`CANVAS_MOTION_ENGINES`). Product code never declares
 transitions, animations or keyframes (`bun run lint:motion`).
 
 ## Product Code Constraints

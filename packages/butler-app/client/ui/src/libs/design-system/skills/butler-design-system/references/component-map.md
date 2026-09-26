@@ -24,7 +24,7 @@ Read this before adding primitives, blocks, product containers, or CSS.
 | Navigation           | `Tabs`, `Breadcrumb`, `Separator`                                | Sidebar/list navigation is needed, such as `NavRow`, `NavSection`, `CollapsibleNavGroup`, `SettingsNav` | Active outlines, shadows, or indented collapsible children |
 | Overlays             | `Dialog`, `Popover`, `Tooltip`, menus                            | Modal form composition is needed, such as `DialogForm` or `CommandPanel`                                | Long workflows in popovers                                 |
 | Surfaces             | `Card`, `TintedGlass`                                            | Repeated panel or overlay treatment is needed, such as `SurfacePanel`                                   | Local glass gradients or Radix wrapper DOM                 |
-| Status and feedback  | `Spinner`, `Skeleton`, `Icons`, `Typo`, `ProgressMeter`          | Empty, notice, activity, or worker rows repeat                                                          | Feature-local loading icons or spinner keyframes           |
+| Status and feedback  | `Spinner`, `LoadingIndicator`, `ButlerThinkingMark`, `Skeleton`, `Icons`, `Typo`, `ProgressMeter` | Empty, notice, activity, or worker rows repeat                                                          | Feature-local loading icons or spinner keyframes           |
 | App shell            | `Stack`, `Grid`, `Typo`                                          | Window/titlebar/frame pattern repeats, such as `ChromeFrame`, `TitlebarShell`                           | Decorative cards that imitate shell chrome                 |
 
 ## Layout
@@ -121,6 +121,11 @@ Use fast, subtle transitions. Dialogs and popovers should open with a quick
 fade/scale or fade/slide motion; collapsible groups should animate expansion
 without changing row alignment. Navigation hover should transition background
 and small motion only.
+
+Loading and thinking: `Spinner` for generic indeterminate work,
+`LoadingIndicator` when a task's success replaces the spinner with a drawn
+check, `ButlerThinkingMark` when Butler itself is thinking (it settles back to
+the logo when done; no check).
 
 Wrong turns:
 

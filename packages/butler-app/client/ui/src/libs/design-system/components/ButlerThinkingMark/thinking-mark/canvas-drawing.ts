@@ -1,5 +1,5 @@
-import type { RisoInk } from "../butlerMarkTheme.ts";
-import { CENTER, GRAIN_TILE, HALFTONE_PRESETS, REDUCED_MOTION, RHO, RING_R, RING_W, TAU } from "./constants";
+import type { RisoInk } from "../butlerMarkTheme";
+import { BREATHE_DEPTH, CENTER, GRAIN_TILE, HALFTONE_PRESETS, RHO, RING_R, RING_W, TAU } from "./constants";
 import { dotRadius, renderMode, setFrameParams, type FrameParams, type HalftoneLayer } from "./halftone-model";
 import { clamp, ease, type MorphSim } from "./motion";
 import { traceRibbon } from "./ribbon-geometry";
@@ -34,9 +34,9 @@ export function drawRest(s: MarkSurface, alpha = 1) {
   drawRing(s);
 }
 
-/** Reduced motion: the filled logo with a gentle opacity breathe while working. */
+/** Reduced motion: the filled logo breathing in opacity while working, like the Spinner's reduced pulse. */
 export function drawReduced(s: MarkSurface, sim: MorphSim) {
-  drawRest(s, 1 - sim.rm * (0.42 + 0.08 * Math.sin((sim.clock * TAU) / REDUCED_MOTION.period)));
+  drawRest(s, 1 - sim.rm * BREATHE_DEPTH * sim.breathe());
 }
 
 function drawHalftoneInk(c: Ctx, L: HalftoneLayer, ink: number, offx: number, offy: number, p: FrameParams) {

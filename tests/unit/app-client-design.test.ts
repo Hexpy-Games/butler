@@ -2819,9 +2819,10 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
 });
 
 test("thinking mark components expose state and theme contracts", () => {
-  const canvasMark = read(
-    "packages/butler-app/client/ui/src/components/common/ButlerThinkingMark.tsx",
-  );
+  const canvasMark = [
+    "ButlerThinkingMark.tsx",
+    "markLoop.ts",
+  ].map((file) => read(`packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/${file}`)).join("\n");
   const svgIcon = read(
     "packages/butler-app/client/ui/src/components/common/ButlerMarkIcon.tsx",
   );
@@ -2829,7 +2830,7 @@ test("thinking mark components expose state and theme contracts", () => {
     "packages/butler-app/client/ui/src/components/common/butler-mark.svg",
   );
   const theme = read(
-    "packages/butler-app/client/ui/src/components/common/butlerMarkTheme.ts",
+    "packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/butlerMarkTheme.ts",
   );
   const harness = read(
     "packages/butler-app/client/ui/src/pages/ThinkingMarkHarness.tsx",
@@ -2844,10 +2845,13 @@ test("thinking mark components expose state and theme contracts", () => {
   expect(canvasMark).toContain("state?: ButlerThinkingMarkState");
   expect(canvasMark).toContain("theme?: ButlerMarkTheme");
   expect(canvasMark).toContain("themeColors?: ButlerMarkThemeColors");
-  expect(canvasMark).toContain("variant?: ButlerThinkingMarkVariant");
+  expect(canvasMark).toContain("size?: IconSize");
+  expect(canvasMark).toContain("reducedMotion?: boolean");
+  expect(canvasMark).not.toContain("className");
+  expect(canvasMark).not.toContain("style?:");
   expect(canvasMark).toContain("pixelSide / DESIGN_SIZE");
   expect(canvasMark).toContain('canvas.getContext("2d", { alpha: true })');
-  expect(canvasMark).toContain("1000 / 60");
+  expect(canvasMark).toContain("FRAME_INTERVAL_MS");
   expect(svgIcon).toContain('viewBox="0 0 1200 1200"');
   expect(svgIcon).toContain("theme?: ButlerMarkTheme");
   expect(svgIcon).toContain("themeColors?: ButlerMarkThemeColors");

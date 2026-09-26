@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CANVAS_MOTION_ENGINES,
   MOTION_RULES,
+  lintCanvasEngines,
   lintMotionCss,
   lintMotionScript,
   type MotionFinding,
@@ -14,12 +16,13 @@ function rules(findings: MotionFinding[]): string[] {
 }
 
 describe("motion lint rules", () => {
-  test("exposes the four ratcheted motion rules", () => {
+  test("exposes the five ratcheted motion rules", () => {
     expect([...MOTION_RULES]).toEqual([
       "motion-outside-ds",
       "keyword-easing",
       "transition-property",
       "waapi-outside-helper",
+      "canvas-motion",
     ]);
   });
 
@@ -103,5 +106,41 @@ describe("motion lint rules", () => {
       .toEqual(["waapi-outside-helper", "waapi-outside-helper"]);
     expect(lintMotionScript("libs/design-system/lib/motion.ts", code)).toEqual([]);
     expect(lintMotionScript("components/x.tsx", "animateMotion(element, 'enter');")).toEqual([]);
+  });
+
+  test("canvas-motion requires canvas drawing to live in an allowlisted engine", () => {
+    const files = { "libs/design-system/components/Glow/Glow.tsx": "const ctx = canvas.getContext(\"2d\");" };
+    expect(rules(lintCanvasEngines(files, []))).toEqual(["canvas-motion"]);
+    const engine = { prefix: "libs/design-system/components/Glow/", justification: "test", constants: {} };
+    expect(lintCanvasEngines(files, [engine])).toEqual([]);
+    // Showcases may draw canvases for demos.
+    expect(lintCanvasEngines({ "libs/design-system/components/Glow/Glow.showcase.tsx": "canvas.getContext(\"2d\")" }, [])).toEqual([]);
+  });
+
+  test("canvas-motion requires timing constants in an engine to be allowlisted with a reason", () => {
+    const engine = { prefix: "libs/design-system/components/Glow/", justification: "test", constants: { GLOW_SPRING: "physics" } };
+    const code = [
+      "export const GLOW_SPRING = { k: 9 };",
+      "export const FADE_MS = 220;",
+      "const PULSE_PERIOD = 3.4;",
+      "export const TAU = Math.PI * 2;",
+      "export const RING_R = 435;",
+    ].join("\n");
+    const findings = lintCanvasEngines({ "libs/design-system/components/Glow/constants.ts": code }, [engine]);
+    expect(findings.map((finding) => finding.message.split(" ")[0])).toEqual(["FADE_MS", "PULSE_PERIOD"]);
+    expect(findings.map((finding) => finding.line)).toEqual([2, 3]);
+  });
+
+  test("canvas-motion flags allowlisted constants that no longer exist", () => {
+    const engine = { prefix: "libs/design-system/components/Glow/", justification: "test", constants: { GONE_MS: "stale" } };
+    expect(rules(lintCanvasEngines({ "libs/design-system/components/Glow/Glow.tsx": "canvas.getContext(\"2d\")" }, [engine])))
+      .toEqual(["canvas-motion"]);
+  });
+
+  test("the thinking-mark engine allowlists only its simulation constants, each with a reason", () => {
+    const mark = CANVAS_MOTION_ENGINES.find((engine) => engine.prefix.endsWith("ButlerThinkingMark/"));
+    expect(mark).toBeDefined();
+    expect(Object.keys(mark!.constants).sort()).toEqual(["FRAME_INTERVAL_MS", "MAX_STEP_S", "MORPH_SPRING", "RISO_MOTION", "SPRING_SUBSTEP_S"]);
+    for (const reason of Object.values(mark!.constants)) expect(reason.length).toBeGreaterThan(20);
   });
 });

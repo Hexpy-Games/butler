@@ -1,4 +1,4 @@
-import type { RisoInks } from "../butlerMarkTheme.ts";
+import type { RisoInks } from "../butlerMarkTheme";
 import { GRAIN_TILE, RHO, type SizeClass } from "./constants";
 import { createFrameParams, latticeFor, type FrameParams, type HalftoneLayer } from "./halftone-model";
 import { createRand } from "./motion";

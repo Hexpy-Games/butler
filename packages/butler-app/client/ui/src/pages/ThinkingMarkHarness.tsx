@@ -1,7 +1,7 @@
 import { appCopy } from "@/app/copy.ts";
 import { type CSSProperties, useState } from "react";
 import { ButlerMarkIcon } from "@/components/common/ButlerMarkIcon.tsx";
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
+import { ButlerThinkingMark } from "@/butler-ds";
 import { AssistantStatusLabel } from "@/components/conversation/AssistantStatusLabel.tsx";
 import styles from "./ThinkingMarkHarness.module.css";
 

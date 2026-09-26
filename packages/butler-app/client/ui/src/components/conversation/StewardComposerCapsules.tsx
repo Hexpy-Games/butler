@@ -3,8 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { StewardSessionSummaryView } from "@/app/types.ts";
 import type { ReactNode } from "react";
 import { useButlerStore } from "@/app/store.ts";
-import { PillButton, Stack, StatusCapsule } from "@/butler-ds";
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
+import { ButlerThinkingMark, PillButton, Stack, StatusCapsule } from "@/butler-ds";
 import {
   activeStewardChildren,
   stewardCurrentActivityTitle,

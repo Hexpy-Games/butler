@@ -70,10 +70,40 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/**
+ * Calls back with the current reduced-motion state whenever the OS setting or
+ * the DS Viewer's data-motion scope changes. JS-driven loops (canvas marks)
+ * use it to stop or restart; returns the unsubscribe function.
+ */
+export function subscribeReducedMotion(callback: (reduced: boolean) => void): () => void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
+  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const notify = () => callback(prefersReducedMotion());
+  media.addEventListener("change", notify);
+  const body = typeof document === "undefined" ? null : document.body;
+  const observer = body && typeof MutationObserver === "function" ? new MutationObserver(notify) : null;
+  observer?.observe(body as Node, { attributes: true, attributeFilter: ["data-motion"] });
+  return () => {
+    media.removeEventListener("change", notify);
+    observer?.disconnect();
+  };
+}
+
 export function motionDuration(name: MotionDurationName): number {
   const raw = tokenValue(`--motion-${name}`);
   const match = /^(\d*\.?\d+)(ms|s)$/u.exec(raw);
   if (!match) return DURATION_FALLBACK[name];
+  return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
+}
+
+export type LoopDurationName = "spinner" | "pulse" | "shimmer";
+
+const LOOP_FALLBACK: Record<LoopDurationName, number> = { spinner: 1320, pulse: 1250, shimmer: 1400 };
+
+/** Loop cadence in ms from --spinner-duration, --pulse-duration or --shimmer-duration. */
+export function loopDuration(name: LoopDurationName): number {
+  const match = /^(\d*\.?\d+)(ms|s)$/u.exec(tokenValue(`--${name}-duration`));
+  if (!match) return LOOP_FALLBACK[name];
   return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
 }
 

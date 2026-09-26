@@ -1,4 +1,4 @@
-import { MORPH_SPRING, REDUCED_MOTION, WAVE } from "./constants";
+import { MORPH_SPRING, SPRING_SUBSTEP_S, TAU, WAVE } from "./constants";
 
 export interface SpringState {
   x: number;
@@ -23,7 +23,7 @@ export function ease(value: number) {
 /** Damped spring, sub-stepped at 5ms for stability. */
 export function spring(state: SpringState, target: number, k: number, zeta: number, dt: number) {
   const damping = 2 * zeta * Math.sqrt(k);
-  const steps = Math.max(1, Math.ceil(dt / 0.005));
+  const steps = Math.max(1, Math.ceil(dt / SPRING_SUBSTEP_S));
   const h = dt / steps;
   for (let i = 0; i < steps; i += 1) {
     state.v += (k * (target - state.x) - damping * state.v) * h;
@@ -51,6 +51,16 @@ export function createRand(seed: number) {
   };
 }
 
+/** UI timing from DS motion tokens (seconds), passed in by the component. */
+export interface MorphTiming {
+  /** Reduced-motion fade in/out (--motion-slow). */
+  reducedFade: number;
+  /** Reduced-motion breathe cycle (the Spinner's reduced pulse: 4 x --pulse-duration). */
+  breathePeriod: number;
+  /** Eased progress for the fade (--motion-ease-standard). */
+  ease: (t: number) => number;
+}
+
 /**
  * One spring M drives the morph; the motion clock th advances at speedOf(M), so motion runs
  * concurrently with the morph from frame one and decays to a stop exactly as M returns to 0.
@@ -60,10 +70,23 @@ export class MorphSim {
   th = 0;
   th0 = 0;
   idle = true;
-  /** Reduced-motion breathe level (0 = still logo). */
+  /** Reduced-motion breathe level (0 = still logo), eased from fade progress. */
   rm = 0;
-  /** Wall clock used by the reduced-motion breathe. */
+  /** Linear fade progress behind rm. */
+  fade = 0;
+  /** Breathe clock, restarted on each entry so the cycle begins at full opacity. */
   clock = 0;
+
+  readonly timing: MorphTiming;
+
+  constructor(timing: MorphTiming) {
+    this.timing = timing;
+  }
+
+  /** Breathe dip 0..1 (0 at full opacity) on the token cadence. */
+  breathe() {
+    return 0.5 - 0.5 * Math.cos((this.clock * TAU) / this.timing.breathePeriod);
+  }
 
   get T() {
     return this.th - this.th0;
@@ -85,13 +108,14 @@ export class MorphSim {
     this.M.x = 0;
     this.M.v = 0;
     this.idle = true;
-    const target = working ? 1 : 0;
-    this.rm += (target - this.rm) * (1 - Math.exp(-dt / REDUCED_MOTION.tau));
+    if (working && this.fade === 0) this.clock = 0;
+    const step = dt / this.timing.reducedFade;
+    this.fade = clamp(this.fade + (working ? step : -step), 0, 1);
+    this.rm = this.fade === 0 || this.fade === 1 ? this.fade : this.timing.ease(this.fade);
     this.clock += dt;
-    if (!working && this.rm < 0.002) this.rm = 0;
   }
 
   reducedSettled(working: boolean) {
-    return !working && this.rm === 0;
+    return !working && this.fade === 0;
   }
 }

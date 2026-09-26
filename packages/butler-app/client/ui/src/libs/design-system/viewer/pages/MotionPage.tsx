@@ -29,6 +29,7 @@ const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["blocks/QueuedMessage", "Send flight", "Send flight: the bubble flies from the composer"],
   ["components/Spinner", "Sizes and busy button", "Spinner: arc loop"],
   ["components/LoadingIndicator", "Spinner to check", "LoadingIndicator: spinner resolves into a drawn check"],
+  ["components/ButlerThinkingMark", "Idle to working", "ButlerThinkingMark: halftone morph and settle to the logo"],
   ["components/Toast", "Motion", "Toasts: drop in, stack, leave faster"],
 ];
 

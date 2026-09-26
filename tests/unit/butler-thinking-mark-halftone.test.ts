@@ -3,12 +3,12 @@ import {
   CENTER,
   DISC_R,
   HALFTONE_PRESETS,
-} from "../../packages/butler-app/client/ui/src/components/common/thinking-mark/constants.ts";
+} from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/constants.ts";
 import {
   sdRibbon,
   sizeClass,
   traceRibbon,
-} from "../../packages/butler-app/client/ui/src/components/common/thinking-mark/ribbon-geometry.ts";
+} from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/ribbon-geometry.ts";
 import {
   buildHalftone,
   createFrameParams,
@@ -16,8 +16,8 @@ import {
   latticeFor,
   renderMode,
   setFrameParams,
-} from "../../packages/butler-app/client/ui/src/components/common/thinking-mark/halftone-model.ts";
-import { MorphSim } from "../../packages/butler-app/client/ui/src/components/common/thinking-mark/motion.ts";
+} from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/halftone-model.ts";
+import { MorphSim } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/motion.ts";
 
 const DOT_BUDGET_PER_LAYER = [80, 200, 900];
 
@@ -74,7 +74,7 @@ test("halftone lattices are deterministic and cached per size class", () => {
 });
 
 test("the render path draws the rest logo at M = 0", () => {
-  const sim = new MorphSim();
+  const sim = new MorphSim({ reducedFade: 0.22, breathePeriod: 5, ease: (t: number) => t });
   expect(renderMode(sim, false)).toBe("rest");
   expect(renderMode(sim, true)).toBe("reduced");
   sim.update(1 / 60, true);
