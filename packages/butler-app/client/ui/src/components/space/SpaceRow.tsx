@@ -3,6 +3,7 @@ import { SpaceRowLabel } from "./SpaceRowLabel";
 import { SpaceRowMeta } from "./SpaceRowMeta";
 import { memo, useEffect, useRef, useState } from "react";
 import {
+  CollapsibleList,
   CollapsibleNavGroup,
   NavRow,
 } from "@/butler-ds";
@@ -29,7 +30,11 @@ export const SpaceRow = memo(function SpaceRow({
   depth?: number;
 }) {
   useAppLocale();
-  const row = useButlerStore(s => projectSpace(s.navigation).get(rowKey));
+  const liveRow = useButlerStore(s => projectSpace(s.navigation).get(rowKey));
+  // A removed row keeps its last content while it folds away (CollapsibleList).
+  const lastRow = useRef(liveRow);
+  if (liveRow) lastRow.current = liveRow;
+  const row = liveRow ?? lastRow.current;
   const active = useButlerStore(s => s.activeChatId === row?.node.entityId);
   const children = useButlerStore(s => spaceChildren(projectSpace(s.navigation), rowKey));
   const activeChild = useButlerStore(s => {
@@ -84,13 +89,15 @@ export const SpaceRow = memo(function SpaceRow({
             label={label}
             actions={actions}
           >
-            {children.slice(0, limit).map((child) => (
-              <SpaceRow
-                key={child.node.key}
-                rowKey={child.node.key}
-                depth={depth + 1}
-              />
-            ))}
+            <CollapsibleList scope={rowKey}>
+              {children.slice(0, limit).map((child) => (
+                <SpaceRow
+                  key={child.node.key}
+                  rowKey={child.node.key}
+                  depth={depth + 1}
+                />
+              ))}
+            </CollapsibleList>
             {children.length > limit && (
               <div onDragOver={(event) => {
                 if (!useSpaceDrag.getState().source) return;

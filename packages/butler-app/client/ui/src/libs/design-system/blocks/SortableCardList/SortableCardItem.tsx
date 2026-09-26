@@ -8,6 +8,7 @@ import { Separator } from "../../components/Separator";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { motionDuration, prefersReducedMotion } from "../../lib/motion";
 import styles from "./SortableCardList.module.css";
 
 export interface SortableCardItemData {
@@ -33,7 +34,14 @@ export function SortableCardItem({
   onRemove,
   overlay = false,
 }: SortableCardItemProps) {
-  const sortable = useSortable({ id: item.id, disabled: disabled || overlay });
+  // Neighbors slide aside on the DS motion tokens; reduced motion moves them at once.
+  const sortable = useSortable({
+    id: item.id,
+    disabled: disabled || overlay,
+    transition: prefersReducedMotion()
+      ? null
+      : { duration: motionDuration("base"), easing: "var(--motion-ease-standard)" },
+  });
   const transform = CSS.Transform.toString(sortable.transform);
   const label = item.label ?? (typeof item.title === "string" ? item.title : "card");
   const showDropIndicator = !overlay && sortable.isOver && !sortable.isDragging;

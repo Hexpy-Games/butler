@@ -4,6 +4,9 @@
   interpolate-size: allow-keywords;
   overflow: clip;
   height: auto;
+  /* A flex or grid item (a row in a Stack) would otherwise keep its content
+     height as its automatic minimum and never fold. */
+  min-height: 0;
   opacity: 1;
   transition:
     height var(--motion-base) var(--motion-ease-standard),

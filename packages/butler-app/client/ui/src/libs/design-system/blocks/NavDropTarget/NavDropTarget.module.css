@@ -1,5 +1,10 @@
+/* M4 drag motion (DS Motion Contract): rows slide apart around an insert
+   line, a drop-inside target lifts, indicators grow in. Only translate,
+   scale, opacity and shadow move; reduced motion zeroes distances and
+   scales, leaving fades. */
 .item {
   position: relative;
+  transition: translate var(--motion-fast) var(--motion-ease-standard);
 }
 
 .item[data-dragging="true"] {
@@ -21,6 +26,7 @@
   top: var(--drop-row-top);
   height: var(--border-width-strong);
   background: var(--accent);
+  animation: indicator-grow var(--motion-fast) var(--motion-ease-decelerate);
 }
 
 .item[data-drop="after"]::after {
@@ -29,14 +35,67 @@
   );
   height: var(--border-width-strong);
   background: var(--accent);
+  animation: indicator-grow var(--motion-fast) var(--motion-ease-decelerate);
 }
 
+/* Drop inside / group: the target's header lifts toward the dragged row. */
 .item[data-drop="inside"]::before,
 .item[data-drop="group"]::before {
   top: var(--drop-row-top);
   height: var(--drop-row-height);
   border: var(--border-width-strong) solid var(--accent);
   border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  box-shadow: var(--shadow-drag-lift);
+  scale: var(--motion-scale-lift);
+  animation: target-lift var(--motion-base) var(--motion-ease-spring);
+}
+
+/* Neighbors slide aside: the rows on both sides of an insert line move
+   apart. Rows are CollapsibleList items; their clip margin lets the moved
+   rows (and the lift shadow) paint outside the folded-height clip. */
+.item[data-drop="before"] {
+  translate: 0 var(--motion-distance-xs);
+}
+
+.item[data-drop="after"] {
+  translate: 0 calc(-1 * var(--motion-distance-xs));
+}
+
+[data-slot="collapsible-list-item"]:has(
+    + [data-slot="collapsible-list-item"] > .item[data-drop="before"]
+  )
+  > .item {
+  translate: 0 calc(-1 * var(--motion-distance-xs));
+}
+
+[data-slot="collapsible-list-item"]:has(> .item[data-drop="after"])
+  + [data-slot="collapsible-list-item"]
+  > .item {
+  translate: 0 var(--motion-distance-xs);
+}
+
+[data-slot="collapsible-list-item"]:has(> .item[data-drop]),
+[data-slot="collapsible-list-item"]:has(
+  + [data-slot="collapsible-list-item"] > .item[data-drop="before"]
+),
+[data-slot="collapsible-list-item"]:has(> .item[data-drop="after"])
+  + [data-slot="collapsible-list-item"] {
+  overflow-clip-margin: var(--motion-distance-md);
+}
+
+@keyframes indicator-grow {
+  from {
+    opacity: 0;
+    scale: 0.6 1;
+  }
+}
+
+@keyframes target-lift {
+  from {
+    box-shadow: none;
+    scale: 1;
+  }
 }
 
 .hint {
@@ -50,15 +109,33 @@
   color: var(--accent);
   pointer-events: none;
   transform: translateY(-50%);
+  animation: hint-in var(--motion-fast) var(--motion-ease-decelerate);
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .root {
   padding: var(--space-md);
   border: var(--border-hairline) dashed var(--line-strong);
   border-radius: var(--radius-control);
+  transition:
+    border-color var(--motion-fast) var(--motion-ease-standard),
+    background-color var(--motion-fast) var(--motion-ease-standard);
 }
 
 .root[data-active="true"] {
   border-color: var(--accent);
   background: var(--selection);
+}
+
+/* Reduced motion: no travel or scale (tokens), the indicator only fades. */
+@media (prefers-reduced-motion: reduce) {
+  .item[data-drop]::before,
+  .item[data-drop="after"]::after {
+    animation-name: hint-in;
+  }
 }

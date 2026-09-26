@@ -15,7 +15,6 @@ import {
 import { useButlerStore } from "@/app/store";
 import { useComposerStore } from "../conversation/composerStore";
 import { useOrganization } from "@/app/space/organization";
-import { spaceActivity } from "@/app/space/activity";
 import type { SpaceRowData } from "@/app/space/projection";
 
 export function SpaceRowMenu({
@@ -31,7 +30,6 @@ export function SpaceRowMenu({
   const app = useButlerStore;
   const mutate = useOrganization((s) => s.mutate);
   const setDialog = useOrganization((s) => s.setDialog);
-  const activity = spaceActivity(row.session);
   const items = [
     ...(row.session ? [{
       icon: <MessageSquarePlus />,

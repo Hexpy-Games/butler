@@ -105,9 +105,26 @@
   opacity: 0.42;
 }
 
+/* The dragged card lifts toward the pointer (scale + shadow, spring) and
+   stays lifted while it moves; reduced motion keeps only the shadow. */
 .overlay {
   width: 100%;
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-drag-lift);
+  scale: var(--motion-scale-lift);
+  animation: lift var(--motion-base) var(--motion-ease-spring) both;
+}
+
+@keyframes lift {
+  from {
+    box-shadow: none;
+    scale: 1;
+  }
+
+  to {
+    box-shadow: var(--shadow-drag-lift);
+    scale: var(--motion-scale-lift);
+  }
 }
 
 .srOnly {

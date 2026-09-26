@@ -28,6 +28,13 @@ import { Collapsible } from "@/butler-ds";
 </Collapsible>
 ```
 
+### CollapsibleList
+
+`CollapsibleList` wraps keyed rows: an inserted row reveals and a removed row
+folds away in place (the removed element is kept until its exit ends). Rows on
+the first render, the first rows after an empty list and rows after a `scope`
+change (another tab or folder) do not animate. The Space sidebar lists use it.
+
 ## Best practice
 - Enter uses `--motion-base`/standard; collapse uses `--motion-exit-base` with
   accelerate. Content that starts open does not replay the reveal.

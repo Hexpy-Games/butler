@@ -1,6 +1,7 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CollapsibleList,
   SidebarShell,
   SidebarTrafficSpace,
   Stack,
@@ -100,21 +101,24 @@ export function SpaceSidebar() {
         footer={<SidebarSettingsItem />}
       >
         <Stack gap="xs" as="nav" aria-label={appCopy.space.conversationList}>
-          {roots
-            .slice(
-              0,
-              Math.max(
-                visibleCount,
-                roots.findIndex((row) => revealPath.includes(row.node.key)) + 1,
-              ),
-            )
-            .map((row) => (
-              <SpaceRow
-                key={`${tab}:${row.node.key}`}
-                rowKey={row.node.key}
-                flat={tab !== "all"}
-              />
-            ))}
+          {/* Inserted rows reveal and removed rows fold away; tab switches do not animate. */}
+          <CollapsibleList scope={tab}>
+            {roots
+              .slice(
+                0,
+                Math.max(
+                  visibleCount,
+                  roots.findIndex((row) => revealPath.includes(row.node.key)) + 1,
+                ),
+              )
+              .map((row) => (
+                <SpaceRow
+                  key={`${tab}:${row.node.key}`}
+                  rowKey={row.node.key}
+                  flat={tab !== "all"}
+                />
+              ))}
+          </CollapsibleList>
           {roots.length > visibleCount && (
             <SidebarSessionLoadMore
               remainingCount={roots.length - visibleCount}

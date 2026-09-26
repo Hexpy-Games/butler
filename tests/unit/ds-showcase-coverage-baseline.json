@@ -44,7 +44,6 @@
     "blocks/SettingsHeader",
     "blocks/SettingsNav",
     "blocks/SettingsSecretRows",
-    "blocks/SortableCardList",
     "blocks/SurfacePanel",
     "blocks/TitlebarShell",
     "blocks/TodoProgressPanel",

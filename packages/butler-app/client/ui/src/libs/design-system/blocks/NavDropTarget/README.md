@@ -32,6 +32,15 @@ import { NavDropTarget, NavRow } from "@/butler-ds";
 </NavDropTarget>
 ```
 
+## Motion
+Rows on both sides of an insert line slide apart (`--motion-distance-xs`,
+`--motion-fast`), the line grows in, and a drop-inside or group target lifts
+(`--motion-scale-lift`, `--shadow-drag-lift`, `--motion-ease-spring`). Rows
+must be `CollapsibleList` items for the neighbor slide. The Space sidebar keeps
+native drag and drop (a dragged conversation can be dropped into the composer
+as a reference), so the dragged row itself stays in place, dimmed, while the
+browser's drag image follows the pointer.
+
 ## Accessibility
 Drop feedback is visual; pair pointer dragging with a keyboard path (a "Move
 to..." menu item) as the Space sidebar does.
