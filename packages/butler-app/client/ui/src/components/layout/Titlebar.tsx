@@ -23,7 +23,6 @@ import { selectRightAvailable, useButlerStore } from "@/app/store.ts";
 import {
   activeChatFromNavigation,
   activeTitleForView,
-  appThemeClasses,
   sessionFromNavigation,
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
@@ -41,7 +40,6 @@ export function Titlebar() {
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const rightOpen = useButlerStore((state) => state.rightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
-  const settings = useButlerStore((state) => state.settings);
   const runSessionAction = useButlerStore((state) => state.runSessionAction);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const { title, subtitle } = useMemo(
@@ -82,7 +80,7 @@ export function Titlebar() {
         ) : undefined
       }
       collapsed={!leftOpen}
-      className="drag-region"
+      dragRegion
       dataTestClass="custom-titlebar"
       windowControls={<WindowControls />}
       trailing={
@@ -101,7 +99,6 @@ export function Titlebar() {
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className={appThemeClasses(settings)}
                 align="end"
                 onInteractOutside={() => setSessionMenuOpen(false)}
                 sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}

@@ -1,7 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Fragment } from "react";
-import { MetaList, Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { MetaList, Stack, Typo } from "@/butler-ds";
 import { formatCount } from "./usageSettingsFormat";
 
 type UsageSectionRow = [
@@ -20,17 +19,9 @@ export function UsageSectionPanel({
 }) {
   useAppLocale();
   return (
-    <SurfacePanel elevation="none">
-      <Stack gap="md">
-        <Typo.Body as="div">{appCopy.interfaceDetails.contextEstimates}</Typo.Body>
-        {rows.length === 0 ? (
-          <Typo.Caption>{appCopy.settings.descriptions.usageMonitorEmpty}</Typo.Caption>
-        ) : (
-          <Stack gap="xs">
-            {rows.map(([name, bucket], index) => (
-              <Fragment key={name}>
-                {index > 0 ? <Separator space="md" /> : null}
-                <Stack align="row" justify="between" cross="start" gap="md" wrap>
+    <>
+            {rows.map(([name, bucket]) => (
+                <Stack key={name} align="row" justify="between" cross="start" gap="md" wrap>
                   <Stack gap="xs" grow basis="md" minWidth="0">
                     <Typo.Body as="div">{name}</Typo.Body>
                     <MetaList items={[
@@ -42,11 +33,7 @@ export function UsageSectionPanel({
                     {formatCount(bucket.estimatedTokens)}
                   </Typo.Body>
                 </Stack>
-              </Fragment>
             ))}
-          </Stack>
-        )}
-      </Stack>
-    </SurfacePanel>
+    </>
   );
 }

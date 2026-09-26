@@ -85,6 +85,7 @@ export function NativeNotificationStatusPanel() {
 
   return (
     <SettingsField
+      settingId="notification-permission"
       label={appCopy.interfaceStatus.notificationStatus}
       description={status ? nativeNotificationStatusDetails(status.details_code) : copy.status.checking}
       control={

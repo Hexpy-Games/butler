@@ -17,10 +17,9 @@ import {
   TabsTrigger,
 } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSection } from "./SettingsFormComponents";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SkillActions } from "./SkillActions";
 import { SkillGroup } from "./SkillGroup";
-import { SettingsListSkeleton } from "./SettingsListSkeleton";
 
 export function SkillsSettings() {
   useAppLocale();
@@ -34,6 +33,7 @@ export function SkillsSettings() {
   const [tab, setTab] = useState("default");
   const [projectId, setProjectId] = useState<string>("");
   const [importProjectId, setImportProjectId] = useState<string | undefined>();
+  const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     void refresh();
   }, []);
@@ -41,7 +41,12 @@ export function SkillsSettings() {
     if (!projectId && view?.projects[0]) setProjectId(view.projects[0].id);
   }, [view, projectId]);
   async function refresh() {
-    setView(await api<SkillSettingsView>("/skills"));
+    setLoadFailed(false);
+    try {
+      setView(await api<SkillSettingsView>("/skills"));
+    } catch {
+      setLoadFailed(true);
+    }
   }
   async function importSkill(project?: string) {
     setImportProjectId(project);
@@ -70,7 +75,13 @@ export function SkillsSettings() {
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
   return (
-    <SettingsSection>
+    <SettingsPage>
+      <SettingsSection
+        id="skills"
+        kind="list"
+        state={view === null ? (loadFailed ? "error" : "loading") : "ready"}
+        onRetry={() => void refresh()}
+      >
       <Stack gap="md">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
@@ -83,14 +94,12 @@ export function SkillsSettings() {
                 onImport={() => void importSkill()}
                 onCreate={() => void createSkillChat()}
               />
-              {view === null ? <SettingsListSkeleton /> : <>
-                <SkillGroup
-                  title={appCopy.interfaceDetails.coreSkills}
-                  skills={view.core}
-                  maxVisibleRows={4}
-                />
-                <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view.user} />
-              </>}
+              <SkillGroup
+                title={appCopy.interfaceDetails.coreSkills}
+                skills={view?.core ?? []}
+                maxVisibleRows={4}
+              />
+              <SkillGroup title={appCopy.interfaceDetails.userSkills} skills={view?.user ?? []} />
             </Stack>
           </TabsContent>
           <TabsContent value="project">
@@ -126,6 +135,7 @@ export function SkillsSettings() {
           onChange={(event) => void onFile(event.target.files?.[0])}
         />
       </Stack>
-    </SettingsSection>
+      </SettingsSection>
+    </SettingsPage>
   );
 }

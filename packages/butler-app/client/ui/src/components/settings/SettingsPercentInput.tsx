@@ -5,12 +5,14 @@ import { clampedPercent } from "./settingsUtils";
 
 export function SettingsPercentInput({
   label,
+  settingId,
   value,
   description,
   disabled,
   onCommit,
 }: {
   label: string;
+  settingId?: string;
   value: string;
   description: string;
   disabled?: boolean;
@@ -45,6 +47,7 @@ export function SettingsPercentInput({
 
   return (
     <SettingsField
+      settingId={settingId}
       id={inputId}
       data-test-class="settings-field"
       label={label}

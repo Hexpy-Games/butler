@@ -793,8 +793,6 @@ export interface AppCopy {
     };
     sections: {
       general: string;
-      notifications: string;
-      desktopShell: string;
       models: string;
       appearance: string;
       server: string;
@@ -841,17 +839,18 @@ export interface AppCopy {
       archives: string[];
       about: string[];
     };
+    sectionState: { loading: string; error: string; retry: string; empty: string };
+    pageSections: Record<"languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "fallbackConsolidation" | "permissions" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "usageOverview", string>;
+    pageSectionDescriptions: Record<"notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "learning" | "fallbackConsolidation", string>;
     panels: {
       butlerModel: string;
       workerProfiles: string;
       backupModels: string;
-      serverBridge: string;
       updates: string;
       mcpServers: string;
       skills: string;
       usageMonitor: string;
       developerLogs: string;
-      privacyDiagnostics: string;
       systemEvents: string;
       archives: string;
       about: string;

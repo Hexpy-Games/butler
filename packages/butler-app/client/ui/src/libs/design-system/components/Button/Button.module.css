@@ -82,6 +82,7 @@
 }
 
 .variantSecondary {
+  border: var(--border-hairline) solid var(--secondary-border);
   background: var(--secondary);
   color: var(--secondary-foreground);
 }

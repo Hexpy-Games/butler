@@ -3,6 +3,7 @@ import { Input, SettingsField, Slider, Stack, Typo } from "@/butler-ds";
 
 export function SettingsTokenInput({
   label,
+  settingId,
   value,
   min,
   max,
@@ -10,6 +11,7 @@ export function SettingsTokenInput({
   onCommit,
 }: {
   label: string;
+  settingId?: string;
   value: number;
   min: number;
   max: number;
@@ -49,6 +51,7 @@ export function SettingsTokenInput({
 
   return (
     <SettingsField
+      settingId={settingId}
       id={inputId}
       data-test-class="settings-field"
       label={label}

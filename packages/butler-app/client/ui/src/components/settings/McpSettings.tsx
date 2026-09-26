@@ -8,11 +8,10 @@ import type {
   McpServerMutationResult,
   McpServerView,
 } from "@/app/types.ts";
-import { Button, CardList, Stack, Typo } from "@/butler-ds";
-import { SettingsSection } from "./SettingsFormComponents";
+import { Button, CardList, Plus, Typo } from "@/butler-ds";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { McpServerForm } from "./McpServerForm";
 import { McpServerRow } from "./McpServerRow";
-import { SettingsListSkeleton } from "./SettingsListSkeleton";
 import {
   emptyMcpServerForm,
   formFromMcpServer,
@@ -28,12 +27,18 @@ export function McpSettings() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
   const [open, setOpen] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     void refresh();
   }, []);
   async function refresh() {
-    const result = await api<McpServerListView>("/mcp-servers");
-    setServers(result.servers);
+    setLoadFailed(false);
+    try {
+      const result = await api<McpServerListView>("/mcp-servers");
+      setServers(result.servers);
+    } catch {
+      setLoadFailed(true);
+    }
   }
   function update(patch: Partial<McpServerFormState>) {
     setForm((current) => ({ ...current, ...patch }));
@@ -89,9 +94,15 @@ export function McpSettings() {
     setOpen(true);
   }
   return (
-    <SettingsSection>
-      <Stack gap="md">
-        <Stack gap="xs" cross="start">
+    <SettingsPage>
+      <SettingsSection
+        id="mcp-servers"
+        kind="list"
+        description={status || undefined}
+        state={servers === null ? (loadFailed ? "error" : "loading") : servers.length === 0 ? "empty" : "ready"}
+        emptyMessage={appCopy.interfaceDetails.noMcp}
+        onRetry={() => void refresh()}
+        actions={
           <Button
             type="button"
             size="sm"
@@ -101,15 +112,12 @@ export function McpSettings() {
               setOpen(true);
             }}
           >
-            {copy.actions.addMcpServer}
+            <Plus size="md" /> {copy.actions.addMcpServer}
           </Button>
-          {status ? <Typo.Caption>{status}</Typo.Caption> : null}
-        </Stack>
-        {servers === null ? <SettingsListSkeleton /> : (
-        <CardList
-          empty={<Typo.Caption>{appCopy.interfaceDetails.noMcp}</Typo.Caption>}
-        >
-          {servers.map((server) => (
+        }
+      >
+        <CardList empty={<Typo.Caption>{appCopy.interfaceDetails.noMcp}</Typo.Caption>}>
+          {(servers ?? []).map((server) => (
             <McpServerRow
               key={server.id}
               server={server}
@@ -120,16 +128,17 @@ export function McpSettings() {
             />
           ))}
         </CardList>
-        )}
-        {open && (
+      </SettingsSection>
+      {open ? (
+        <SettingsSection id="mcp-server-form" kind="form" title={editingId ?? copy.actions.addMcpServer}>
           <McpServerForm
             form={form}
             onChange={update}
             onCancel={() => setOpen(false)}
             onSave={() => void save()}
           />
-        )}
-      </Stack>
-    </SettingsSection>
+        </SettingsSection>
+      ) : null}
+    </SettingsPage>
   );
 }

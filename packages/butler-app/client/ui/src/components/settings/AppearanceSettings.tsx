@@ -3,6 +3,7 @@ import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import {
+  SettingsPage,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
@@ -17,38 +18,56 @@ export function AppearanceSettings() {
   const setSettings = useButlerStore((state) => state.setSettings);
 
   const settingsCopy = appCopy.settings;
-  const settingsFields = settingsCopy.fields;
-  const settingsOptions = settingsCopy.options;
+  const fields = settingsCopy.fields;
+  const options = settingsCopy.options;
+  const sections = settingsCopy.pageSections;
 
   if (!draft) return null;
 
   return (
-    <SettingsSection>
-      <SettingsSelect
-        label={settingsFields.theme}
-        value={draft.appearance_theme}
-        onChange={(value) =>
-          update(
-            {
-              appearance_theme: value as SettingsData["appearance_theme"],
-            },
-            setSettings,
-          )
-        }
-        options={[
-          { value: "system", label: settingsOptions.system },
-          { value: "light", label: settingsOptions.light },
-          { value: "dark", label: settingsOptions.dark },
-        ]}
-      />
-      <MainScreenThemeSettings />
-      <SettingsSwitch
-        label={settingsFields.translucentSidebar}
-        checked={draft.translucent_sidebar}
-        onChange={(value) =>
-          update({ translucent_sidebar: value }, setSettings)
-        }
-      />
-    </SettingsSection>
+    <SettingsPage>
+      <SettingsSection id="theme" kind="form" title={sections.theme}>
+        <SettingsSelect
+          settingId="theme"
+          label={fields.theme}
+          value={draft.appearance_theme}
+          onChange={(value) =>
+            update({ appearance_theme: value as SettingsData["appearance_theme"] }, setSettings)}
+          options={[
+            { value: "system", label: options.system },
+            { value: "light", label: options.light },
+            { value: "dark", label: options.dark },
+          ]}
+        />
+        <SettingsSwitch
+          settingId="translucent-sidebar"
+          label={fields.translucentSidebar}
+          checked={draft.translucent_sidebar}
+          onChange={(value) => update({ translucent_sidebar: value }, setSettings)}
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="sidebar"
+        kind="form"
+        title={sections.sidebar}
+        description={settingsCopy.pageSectionDescriptions.sidebar}
+      >
+        <SettingsSwitch
+          settingId="smart-groups"
+          label={appCopy.interfaceDetails.smartGroups}
+          description={appCopy.interfaceDetails.smartGroupsDescription}
+          checked={draft.smart_grouping_enabled}
+          onChange={(value) => update({ smart_grouping_enabled: value }, setSettings)}
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="home-screen"
+        kind="form"
+        title={sections.homeScreen}
+        description={settingsCopy.pageSectionDescriptions.homeScreen}
+      >
+        <MainScreenThemeSettings />
+      </SettingsSection>
+    </SettingsPage>
   );
 }

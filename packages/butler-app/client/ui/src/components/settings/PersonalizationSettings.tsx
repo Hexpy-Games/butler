@@ -6,7 +6,7 @@ import {
   personalizationDraftHasChanges,
   useSettingsUIStore,
 } from "@/stores/settingsUIStore.ts";
-import { SettingsSection, SettingsSelect } from "./SettingsFormComponents";
+import { SettingsPage, SettingsSection, SettingsSelect } from "./SettingsFormComponents";
 import {
   personaPresetOptionsFrom,
   profileFieldOptions,
@@ -61,62 +61,83 @@ export function PersonalizationSettings() {
   const butlerModel = models.find((item) => item.model_ref === settings.model) ??
     models[0];
 
+  const sections = settingsCopy.pageSections;
+  const loaded = Boolean(personalization);
+
   return (
-    <SettingsSection>
-      <PersonalizationProfileFields
-        fields={profileFields}
-        profileDraft={profileDraft}
-        saving={saving}
-        personalizationLoaded={Boolean(personalization)}
-        setPersonalizationDraft={setPersonalizationDraft}
-      />
-      <SettingsSelect
-        label={settingsFields.responseLanguage}
-        description={settingsDescriptions.responseLanguage}
-        controlWidth="full"
-        value={personalizationDraft.responseLanguage}
-        onChange={(value) =>
-          setPersonalizationDraft((current) => ({
-            ...current,
-            responseLanguage: value === "ko" ? "ko" : "en",
-          }))}
-        options={responseLanguageOptions}
-        disabled={saving || !personalization}
-      />
-      <PersonalizationProfilingSettings
-        models={models}
-        butlerModel={butlerModel}
-        profilingDraft={profilingDraft}
-        saving={saving}
-        personalizationLoaded={Boolean(personalization)}
-        setPersonalizationDraft={setPersonalizationDraft}
-      />
-      <PersonalizationProfileMigration />
-      <SettingsSelect
-        label={settingsFields.personaPreset}
-        description={settingsDescriptions.personaPreset}
-        controlWidth="full"
-        value={personalizationDraft.personaPreset}
-        onChange={selectPersonaPreset}
-        options={personaPresetOptions}
-        disabled={saving || !personalization}
-      />
-      <PersonalizationTextFields
-        fields={settingsFields}
-        descriptions={settingsDescriptions}
-        placeholders={settingsPlaceholders}
-        personalizationDraft={personalizationDraft}
-        personalizationUpdatedAt={personalization?.updated_at}
-        setPersonalizationDraft={setPersonalizationDraft}
-      />
-      <PersonalizationActions
-        saving={saving}
-        personalizationLoaded={Boolean(personalization)}
-        clearProfileQueued={profilingDraft.clearProfile}
-        hasChanges={hasChanges}
-        setPersonalizationDraft={setPersonalizationDraft}
-        onSave={savePersonalization}
-      />
-    </SettingsSection>
+    <SettingsPage
+      footer={
+        <PersonalizationActions
+          saving={saving}
+          personalizationLoaded={loaded}
+          clearProfileQueued={profilingDraft.clearProfile}
+          hasChanges={hasChanges}
+          setPersonalizationDraft={setPersonalizationDraft}
+          onSave={savePersonalization}
+        />
+      }
+    >
+      <SettingsSection id="profile" kind="form" title={sections.profile}>
+        <PersonalizationProfileFields
+          fields={profileFields}
+          profileDraft={profileDraft}
+          saving={saving}
+          personalizationLoaded={loaded}
+          setPersonalizationDraft={setPersonalizationDraft}
+        />
+      </SettingsSection>
+      <SettingsSection id="response-style" kind="form" title={sections.responseStyle}>
+        <SettingsSelect
+          settingId="response-language"
+          label={settingsFields.responseLanguage}
+          description={settingsDescriptions.responseLanguage}
+          controlWidth="full"
+          value={personalizationDraft.responseLanguage}
+          onChange={(value) =>
+            setPersonalizationDraft((current) => ({
+              ...current,
+              responseLanguage: value === "ko" ? "ko" : "en",
+            }))}
+          options={responseLanguageOptions}
+          disabled={saving || !loaded}
+        />
+        <SettingsSelect
+          settingId="persona-preset"
+          label={settingsFields.personaPreset}
+          description={settingsDescriptions.personaPreset}
+          controlWidth="full"
+          value={personalizationDraft.personaPreset}
+          onChange={selectPersonaPreset}
+          options={personaPresetOptions}
+          disabled={saving || !loaded}
+        />
+        <PersonalizationTextFields
+          fields={settingsFields}
+          descriptions={settingsDescriptions}
+          placeholders={settingsPlaceholders}
+          personalizationDraft={personalizationDraft}
+          personalizationUpdatedAt={personalization?.updated_at}
+          setPersonalizationDraft={setPersonalizationDraft}
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="learning"
+        kind="form"
+        title={sections.learning}
+        description={settingsCopy.pageSectionDescriptions.learning}
+      >
+        <PersonalizationProfilingSettings
+          models={models}
+          butlerModel={butlerModel}
+          profilingDraft={profilingDraft}
+          saving={saving}
+          personalizationLoaded={loaded}
+          setPersonalizationDraft={setPersonalizationDraft}
+        />
+      </SettingsSection>
+      <SettingsSection id="import" kind="form" title={sections.import}>
+        <PersonalizationProfileMigration />
+      </SettingsSection>
+    </SettingsPage>
   );
 }

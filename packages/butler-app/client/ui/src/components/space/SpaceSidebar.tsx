@@ -19,6 +19,7 @@ import { SpaceRootDrop } from "./SpaceRootDrop";
 import { SpaceDropScope } from "./SpaceDropScope";
 import { SidebarSettingsItem } from "../layout/SidebarSettingsItem";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
+import { SpaceWorkStatus } from "./SpaceWorkStatus";
 
 export function SpaceSidebar() {
   const locale = useAppLocale();
@@ -126,6 +127,7 @@ export function SpaceSidebar() {
             />
           )}
           {tab === "all" && <SpaceRootDrop rows={rows} />}
+          {tab === "running" && <SpaceWorkStatus />}
         </SpaceDropScope>
       </SidebarShell>
       <SpaceDialogs rows={rows} />

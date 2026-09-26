@@ -30,7 +30,7 @@ import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
-import { appThemeClasses, isDraftChatId } from "@/app/utils.ts";
+import { appShellTheme, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
   selectIsSettingsView,
@@ -147,7 +147,7 @@ function AppWorkspaceShell() {
   return (
     <AdaptiveShell
       ref={shellRef}
-      className={`mac-window ${appThemeClasses(settings, systemPrefersDark)}`}
+      theme={appShellTheme(settings, systemPrefersDark)}
       chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
       leftOpen={leftOpen}
@@ -168,7 +168,6 @@ function AppWorkspaceShell() {
       ) : (
         <>
           <AdaptiveShellSidebar
-            className="sidebar-slot"
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
             open={leftOpen}
@@ -176,7 +175,6 @@ function AppWorkspaceShell() {
             <Sidebar />
           </AdaptiveShellSidebar>
           <AdaptiveShellWorkspace
-            className="workspace"
             data-test-class="workspace"
           >
             <Titlebar />
@@ -212,7 +210,6 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && rightAvailable && (
         <AdaptiveShellInspector
-          className="right-panel-slot"
           data-test-class="right-panel-slot"
           open={effectiveRightOpen}
         >

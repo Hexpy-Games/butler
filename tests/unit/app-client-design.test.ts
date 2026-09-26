@@ -980,9 +980,6 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   const generalSettings = read(
     "packages/butler-app/client/ui/src/components/settings/GeneralSettings.tsx",
   );
-  const desktopShellSettings = read(
-    "packages/butler-app/client/ui/src/components/settings/DesktopShellSettings.tsx",
-  );
   const nativeNotificationStatusPanel = read(
     "packages/butler-app/client/ui/src/components/settings/NativeNotificationStatusPanel.tsx",
   );
@@ -1132,13 +1129,12 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(windowControls).toContain("closeNativeWindow");
   expect(appShell).toContain("platform={nativePlatform()}");
   expect(appShell).toContain("useNativeShellPreferences");
-  expect(generalSettings).toContain("DesktopShellSettings");
-  expect(desktopShellSettings).toContain("settingsSections.notifications");
-  expect(desktopShellSettings).toContain("settingsSections.desktopShell");
-  expect(desktopShellSettings).toContain("desktop_notifications");
-  expect(desktopShellSettings).toContain("desktop_tray_enabled");
-  expect(desktopShellSettings).toContain("SettingsSwitch");
-  expect(desktopShellSettings).toContain("NativeNotificationStatusPanel");
+  expect(generalSettings).toContain('id="notifications"');
+  expect(generalSettings).toContain('id="app-behavior"');
+  expect(generalSettings).toContain("desktop_notifications");
+  expect(generalSettings).toContain("desktop_tray_enabled");
+  expect(generalSettings).toContain("SettingsSwitch");
+  expect(generalSettings).toContain("NativeNotificationStatusPanel");
   expect(nativeNotificationStatusPanel).toContain("getNativeNotificationStatus");
   expect(nativeNotificationStatusPanel).toContain("testDesktopNotification");
   expect(nativeNotificationStatusPanel).toContain("openNativeNotificationSettings");
@@ -4202,7 +4198,7 @@ describe("app-client design system foundation", () => {
     expect(cssContent).not.toContain("@media (prefers-color-scheme: dark)");
     expect(appUtils).toContain("export function resolveAppearanceTheme");
     expect(appUtils).toContain('return prefersDark ? "dark" : "light"');
-    expect(appUtils).toContain("theme-${resolveAppearanceTheme");
+    expect(appUtils).toContain("appearance: resolveAppearanceTheme(");
     expect(appApi).toContain("export async function setNativeAppearanceTheme");
     expect(nativeAppearanceHook).toContain("setNativeAppearanceTheme(theme)");
     expect(appShell).toContain(
@@ -4862,7 +4858,7 @@ describe("app-client design system foundation", () => {
       "utf8",
     );
     const settingsSectionContent = readFileSync(
-      join(appClientPath, "src/components/settings/SettingsSection.tsx"),
+      join(appClientPath, "src/libs/design-system/blocks/SettingsSection/SettingsSection.tsx"),
       "utf8",
     );
     expect(settingsHeaderContent).toContain(

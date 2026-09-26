@@ -33,7 +33,7 @@ export function HostedModelForm({
   const copy = appCopy.settings.modelManagement;
 
   return (
-    <SettingsSection title={editingModel ? copy.editTitle : copy.addTitle}>
+    <SettingsSection id="hosted-model" kind="form" title={editingModel ? copy.editTitle : copy.addTitle}>
       <Stack gap="md">
         <HostedModelSelectFields
           modelOptions={form.providerModelOptions}

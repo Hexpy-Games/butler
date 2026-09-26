@@ -32,3 +32,27 @@
     transform: translateX(100%);
   }
 }
+
+/* SkeletonRows: stacked placeholders shaped like list rows or form fields. */
+.rows {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.rows[data-shape="field"] {
+  gap: var(--settings-field-gap);
+}
+
+.row {
+  display: grid;
+  gap: var(--settings-field-control-gap);
+}
+
+.label {
+  width: 30%;
+  height: var(--font-size-2);
+}
+
+.bar {
+  height: var(--control-height-lg);
+}

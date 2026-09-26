@@ -19,6 +19,7 @@ interface SettingsOption {
 
 export function SettingsSelect({
   label,
+  settingId,
   description,
   id,
   disabled,
@@ -30,6 +31,7 @@ export function SettingsSelect({
   options,
 }: {
   label: string;
+  settingId?: string;
   description?: string;
   id?: string;
   disabled?: boolean;
@@ -105,6 +107,7 @@ export function SettingsSelect({
 
   return (
     <SettingsField
+      settingId={settingId}
       data-test-class="settings-field"
       id={controlId}
       label={label}

@@ -1,5 +1,7 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
+import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
+import { KeyValueRow } from "../KeyValueRow";
 import { Switch } from "../../components/Switch";
 import { SettingsField } from "../SettingsField";
 import { SettingsPageProvider } from "../SettingsShell/settingsPage";
@@ -111,5 +113,16 @@ export const stories: ShowcaseStory[] = [
     name: "Stacked sections (header belongs to the card below)",
     widths: ["375", "app", "wide"],
     render: (context) => <Stacked context={context} />,
+  },
+  {
+    name: "Header toolbar and list rows (kind list)",
+    widths: ["375", "app"],
+    render: (context) => (
+      <FormSection kind="list" title={text(context).model} actions={<Button size="sm" variant="outline">+</Button>}>
+        <KeyValueRow label="GPT-5.5" value="1.05M" />
+        <KeyValueRow label="Claude" value="200K" />
+        <KeyValueRow label="Local" value="32K" />
+      </FormSection>
+    ),
   },
 ];

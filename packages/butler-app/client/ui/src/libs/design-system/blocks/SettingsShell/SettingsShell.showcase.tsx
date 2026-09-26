@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import { Input } from "../../components/Input";
 import { Switch } from "../../components/Switch";
@@ -30,7 +31,7 @@ const copy = {
   },
 } as const;
 
-function Page({ locale, page }: ShowcaseRenderContext & { page: "general" | "mcp" }) {
+function Page({ locale, page, onPage }: ShowcaseRenderContext & { page: "general" | "mcp"; onPage?: (page: "general" | "mcp") => void }) {
   const text = copy[locale];
   const title = page === "general" ? text.general : text.mcp;
   const description = page === "general" ? text.generalDescription : text.mcpDescription;
@@ -39,9 +40,11 @@ function Page({ locale, page }: ShowcaseRenderContext & { page: "general" | "mcp
       <SettingsShell
         pageTitle={title}
         pageDescription={description}
+        pageKey={page}
+        pageOrder={page === "general" ? 0 : 1}
         sidebar={<SettingsNav items={[
-          { id: "general", label: text.general, active: page === "general" },
-          { id: "mcp", label: text.mcp, active: page === "mcp" },
+          { id: "general", label: text.general, active: page === "general", onSelect: onPage && (() => onPage("general")) },
+          { id: "mcp", label: text.mcp, active: page === "mcp", onSelect: onPage && (() => onPage("mcp")) },
         ]} />}
         detailHeader={<SettingsHeader title={title} description={description} />}
         detail={page === "general" ? (
@@ -68,4 +71,14 @@ function Page({ locale, page }: ShowcaseRenderContext & { page: "general" | "mcp
 export const stories: ShowcaseStory[] = [
   { name: "Start-aligned page (narrow PageContainer)", widths: ["app", "wide"], render: (context) => <Page {...context} page="general" /> },
   { name: "Single card whose header repeats the page", render: (context) => <Page {...context} page="mcp" /> },
+  {
+    name: "Page transition (select a page: down rises, up drops; reduced motion fades)",
+    widths: ["app", "wide"],
+    render: (context) => <Navigable {...context} />,
+  },
 ];
+
+function Navigable(context: ShowcaseRenderContext) {
+  const [page, setPage] = useState<"general" | "mcp">("general");
+  return <Page {...context} page={page} onPage={setPage} />;
+}

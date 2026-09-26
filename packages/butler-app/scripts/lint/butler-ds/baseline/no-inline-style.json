@@ -16,7 +16,6 @@
   "components/management/ProjectDocumentMarkdownContent.tsx": 2,
   "components/management/ProjectDocumentsPanel.tsx": 9,
   "components/settings/DeveloperLogRawBlock.tsx": 3,
-  "components/settings/SettingsListSkeleton.tsx": 1,
   "hooks/usePanelResize.ts": 1,
   "pages/AppShell.tsx": 1
 }

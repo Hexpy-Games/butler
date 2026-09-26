@@ -572,6 +572,8 @@
   --primary-foreground: var(--color-text-inverse);
   --secondary: rgba(32, 35, 39, 0.08);
   --secondary-foreground: var(--text-primary);
+  /* Secondary buttons need no outline on light surfaces (the fill reads). */
+  --secondary-border: transparent;
   --muted: rgba(32, 35, 39, 0.06);
   --muted-foreground: var(--text-secondary);
   --destructive: var(--danger);
@@ -845,6 +847,8 @@
   --primary: var(--send-bg);
   --primary-foreground: var(--color-text-inverse);
   --secondary: rgba(255, 255, 255, 0.08);
+  /* A 3:1 boundary on dark base, raised and composer surfaces (Deny). */
+  --secondary-border: rgba(255, 255, 255, 0.4);
   --muted: rgba(255, 255, 255, 0.06);
   --color-mix-light: var(--neutral-white);
 
@@ -975,6 +979,33 @@
   --syntax-meta: var(--grayscale-08);
   --syntax-addition: var(--green-08);
   --syntax-deletion: var(--red-07);
+}
+
+/* Aliases of theme tokens. A custom property that references another is
+   computed where it is declared, so an alias declared only on :root would
+   keep the light value inside .theme-dark (the dark Deny button's text).
+   Re-declaring them on each theme scope resolves them against that theme. */
+.theme-dark,
+.theme-light {
+  --menu-group-label-color: var(--text-tertiary);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --access-ask: var(--accent);
+  --access-read: var(--text-primary);
+  --access-read-icon: var(--text-tertiary);
+  --context-chart-1: var(--accent);
+  --context-chart-2: var(--ok);
+  --context-chart-3: var(--icon-muted);
+  --context-chart-4: var(--text-secondary);
+  --context-chart-5: var(--text-tertiary);
+  --context-chart-6: var(--line-strong);
+  --context-chart-free: var(--context-track-bg);
+  --secondary-foreground: var(--text-primary);
+  --muted-foreground: var(--text-secondary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
 }
 
 .sidebar-solid {

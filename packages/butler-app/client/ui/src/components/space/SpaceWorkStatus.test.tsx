@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { WorkStatusView } from "@/app/types.ts";
-import { WorkStatusPanel } from "./WorkStatusPanel";
+import { SpaceWorkStatusList } from "./SpaceWorkStatusList";
 
 let root: Root | null = null;
 
@@ -19,25 +19,26 @@ afterEach(async () => {
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown }).IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("work status panel renders empty state and navigates without showing session identity", async () => {
+test("sidebar work status renders nothing when empty and opens the conversation without showing its id", async () => {
   const window = installDom();
   const container = window.document.getElementById("root")!;
   root = createRoot(container);
   const opened: string[] = [];
   await act(async () => root?.render(
-    <WorkStatusPanel view={emptyView()} onOpenSession={(id) => opened.push(id)} />,
+    <SpaceWorkStatusList view={emptyView()} onOpenSession={(id) => opened.push(id)} />,
   ));
-  expect(container.querySelector('[data-testid="work-status-empty"]')).not.toBeNull();
+  expect(container.innerHTML).toBe("");
 
   await act(async () => root?.render(
-    <WorkStatusPanel view={populatedView()} onOpenSession={(id) => opened.push(id)} />,
+    <SpaceWorkStatusList view={populatedView()} onOpenSession={(id) => opened.push(id)} />,
   ));
   expect(container.textContent).toContain("Safe work title");
   expect(container.textContent).toContain("2/3");
   expect(container.textContent).toContain("Reviewed the delivered result.");
   expect(container.textContent).toContain("summary.pdf");
   expect(container.textContent).not.toContain("session-private-123");
-  (container.querySelector("button") as HTMLButtonElement).click();
+  expect(container.textContent).toContain("Work status");
+  (container.querySelector('[data-test-class~="sidebar-work-status-row"]') as HTMLElement).click();
   expect(opened).toEqual(["session-private-123"]);
 });
 

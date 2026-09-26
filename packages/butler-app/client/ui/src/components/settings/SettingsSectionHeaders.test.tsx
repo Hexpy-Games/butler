@@ -7,7 +7,7 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { getAppCopy, getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
 import { SettingsShell, repeatsSettingsCopy } from "@/butler-ds";
 import { SettingsDetailContent } from "./SettingsDetailContent";
-import { createSettingsSections } from "./settingsSections";
+import { createSettingsSections, settingsPageSchema } from "./settingsSections";
 
 const initialLocale = getAppLocale();
 const initialDraft = useSettingsUIStore.getState().draft;
@@ -101,12 +101,53 @@ for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
   });
 }
 
-test("MCP, Skills and Logs are a single card without a section header", async () => {
+test("single-list pages render one section without a title that restates the page", async () => {
   setAppCopyLanguage("en");
-  for (const id of ["mcp", "skills", "logs"] as const) {
+  for (const id of ["mcp", "skills", "logs", "updates", "system", "archives"] as const) {
     const markup = await renderMarkup(<SettingsDetailContent activeSection={id} developerModeEnabled />);
     const document = new JSDOM(markup).window.document;
     expect(document.querySelectorAll('[data-slot="form-section"]'), id).toHaveLength(1);
-    expect(document.querySelector('[data-slot="form-section-header"]'), id).toBeNull();
+    expect(document.querySelector('[data-slot="form-section-header"] h3'), id).toBeNull();
   }
 });
+
+/**
+ * The declarative schema is the page structure: every page renders its
+ * sections in order (optional ones may be absent), every settings field sits
+ * inside a section, and every field renders in the one section declaring it.
+ */
+for (const [locale, language] of [["en-US", "en"], ["ko-KR", "ko"]] as const) {
+  test(`settings pages match settingsPageSchema (${locale})`, async () => {
+    setAppCopyLanguage(language);
+    const declared = new Map<string, string>();
+    for (const [page, sections] of Object.entries(settingsPageSchema)) {
+      for (const section of sections) {
+        for (const field of section.fields) {
+          const key = `${page}:${field}`;
+          expect(declared.has(key), `${key} declared twice`).toBe(false);
+          declared.set(key, section.id);
+        }
+      }
+    }
+    for (const page of createSettingsSections(getAppCopy(locale).settings, true)) {
+      const schema = settingsPageSchema[page.id];
+      const markup = await renderMarkup(<SettingsDetailContent activeSection={page.id} developerModeEnabled />);
+      const document = new JSDOM(markup).window.document;
+      const rendered = Array.from(document.querySelectorAll("[data-settings-section-id]"))
+        .map((section) => section.getAttribute("data-settings-section-id"));
+      expect(rendered, page.id).toEqual(schema.map((section) => section.id).filter((id) => rendered.includes(id)));
+      expect(rendered, page.id).toEqual(expect.arrayContaining(schema.filter((section) => !section.optional).map((section) => section.id)));
+      for (const section of document.querySelectorAll("[data-settings-section-id]")) {
+        const declaredKind = schema.find((item) => item.id === section.getAttribute("data-settings-section-id"))?.kind;
+        expect(section.getAttribute("data-kind"), `${page.id} kind`).toBe(declaredKind ?? "missing");
+      }
+      for (const field of document.querySelectorAll("[data-settings-field], [data-setting-id]")) {
+        const owner = field.closest("[data-settings-section-id]");
+        expect(owner, `${page.id}: a settings field outside a section`).not.toBeNull();
+        const settingId = field.getAttribute("data-setting-id");
+        expect(settingId, `${page.id}: a settings field without a setting id`).toBeTruthy();
+        expect(declared.get(`${page.id}:${settingId}`), `${page.id}:${settingId}`).toBe(owner?.getAttribute("data-settings-section-id") ?? "none");
+      }
+    }
+  });
+}

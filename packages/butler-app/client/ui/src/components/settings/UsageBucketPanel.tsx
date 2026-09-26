@@ -1,34 +1,18 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Fragment } from "react";
-import { MetaList, Separator, Stack, SurfacePanel, Typo } from "@/butler-ds";
+import { MetaList, Stack, Typo } from "@/butler-ds";
 import {
   formatCount,
   type UsageNamedBucket,
 } from "./usageSettingsFormat";
 
-export function UsageBucketPanel({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: UsageNamedBucket[];
-}) {
+/** Token rows of a usage section (the section owns the title and empty state). */
+export function UsageBucketPanel({ rows }: { rows: UsageNamedBucket[] }) {
   useAppLocale();
   return (
-    <SurfacePanel elevation="none">
-      <Stack gap="md">
-        <Typo.Body as="div">{title}</Typo.Body>
-        {rows.length === 0 ? (
-          <Typo.Caption>
-            {appCopy.settings.descriptions.usageMonitorEmpty}
-          </Typo.Caption>
-        ) : (
-          <Stack gap="xs">
-            {rows.map(({ name, bucket }, index) => (
-              <Fragment key={name}>
-                {index > 0 ? <Separator space="md" /> : null}
-                <Stack align="row" justify="between" cross="start" gap="md" wrap>
+    <>
+            {rows.map(({ name, bucket }) => (
+                <Stack key={name} align="row" justify="between" cross="start" gap="md" wrap>
                   <Stack gap="xs" grow basis="md" minWidth="0">
                     <Typo.Body as="div">{name}</Typo.Body>
                     <MetaList items={[
@@ -41,11 +25,7 @@ export function UsageBucketPanel({
                     {formatCount(bucket.totalTokens)}
                   </Typo.Body>
                 </Stack>
-              </Fragment>
             ))}
-          </Stack>
-        )}
-      </Stack>
-    </SurfacePanel>
+    </>
   );
 }

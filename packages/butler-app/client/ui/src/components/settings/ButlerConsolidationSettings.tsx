@@ -33,6 +33,7 @@ export function ButlerConsolidationSettings({
   return (
     <>
       <SettingsSelect
+        settingId="consolidation-model"
         label={settingsFields.consolidationModel}
         value={draft.consolidation_model}
         description={settingsDescriptions.consolidationModel}
@@ -44,6 +45,7 @@ export function ButlerConsolidationSettings({
         )}
       />
       <SettingsSelect
+        settingId="consolidation-reasoning"
         label={settingsFields.reasoning}
         value={draft.consolidation_reasoning_effort}
         onChange={(value) =>

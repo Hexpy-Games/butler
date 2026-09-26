@@ -45,7 +45,7 @@ export function LocalModelInfoSection({
   const copy = appCopy.settings.localModels;
 
   return (
-    <SettingsSection title={copy.modelInfoTitle}>
+    <SettingsSection id="local-model-info" kind="form" title={copy.modelInfoTitle}>
       <Stack gap="md">
         {status ? <Typo.Caption role="status">{status}</Typo.Caption> : null}
         {hasUnsavedChanges ? (

@@ -16,11 +16,9 @@
   "components/layout/SidebarProjectActions.tsx": 1,
   "components/layout/SidebarProjectsMenu.tsx": 1,
   "components/layout/SidebarSessionActions.tsx": 1,
-  "components/layout/Titlebar.tsx": 2,
   "components/management/ProjectDescription.tsx": 1,
   "components/management/ProjectStatisticChart.tsx": 1,
   "components/settings/SettingsSidebar.tsx": 3,
   "components/space/SpaceIdentity.tsx": 1,
-  "components/space/SpaceRowMeta.tsx": 1,
-  "pages/AppShell.tsx": 4
+  "components/space/SpaceRowMeta.tsx": 1
 }

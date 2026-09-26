@@ -4,11 +4,10 @@ import { api } from "@/app/api.ts";
 import { confirmAction } from "@/app/confirmation.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ArchiveListView } from "@/app/types.ts";
-import { Button, Stack, Typo } from "@/butler-ds";
+import { Button } from "@/butler-ds";
 import { ArchiveItemRow } from "./ArchiveItemRow";
 import { archiveItems, type ArchiveItem } from "./archiveSettingsUtils";
-import { SettingsListSkeleton } from "./SettingsListSkeleton";
-import { SettingsSection } from "./SettingsSection";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
 const PAGE_SIZE = 20;
 
@@ -16,6 +15,7 @@ export function ArchivesSettings() {
   useAppLocale();
   const [archives, setArchives] = useState<ArchiveListView | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const loadPage = useCallback((offset = 0) => {
     return api<ArchiveListView>(
@@ -24,7 +24,12 @@ export function ArchivesSettings() {
   }, []);
 
   const refresh = useCallback(async () => {
-    setArchives(await loadPage());
+    setLoadFailed(false);
+    try {
+      setArchives(await loadPage());
+    } catch {
+      setLoadFailed(true);
+    }
   }, [loadPage]);
 
   const loadMore = async () => {
@@ -82,37 +87,29 @@ export function ArchivesSettings() {
   const items = archiveItems(archives);
 
   return (
-    <SettingsSection>
-      <Stack gap="md">
-        {archives === null ? (
-          <SettingsListSkeleton />
-        ) : items.length === 0 ? (
-          <Typo.Body>{appCopy.interfaceDetails.archivesEmpty}</Typo.Body>
-        ) : (
-          <Stack gap="md">
-            {items.map((item) => (
-              <ArchiveItemRow
-                key={`${item.kind}:${item.id}`}
-                item={item}
-                busy={busyId === item.id}
-                onRestore={() => void restore(item)}
-                onRemove={() => void remove(item)}
-              />
-            ))}
-            {archives?.pagination.has_more && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={Boolean(busyId)}
-                onClick={() => void loadMore()}
-              >
-                {appCopy.common.more}
-              </Button>
-            )}
-          </Stack>
+    <SettingsPage>
+      <SettingsSection
+        id="archives"
+        kind="list"
+        state={archives === null ? (loadFailed ? "error" : "loading") : items.length === 0 ? "empty" : "ready"}
+        emptyMessage={appCopy.interfaceDetails.archivesEmpty}
+        onRetry={() => void refresh()}
+      >
+        {items.map((item) => (
+          <ArchiveItemRow
+            key={`${item.kind}:${item.id}`}
+            item={item}
+            busy={busyId === item.id}
+            onRestore={() => void restore(item)}
+            onRemove={() => void remove(item)}
+          />
+        ))}
+        {archives?.pagination.has_more && (
+          <Button type="button" size="sm" variant="outline" disabled={Boolean(busyId)} onClick={() => void loadMore()}>
+            {appCopy.common.more}
+          </Button>
         )}
-      </Stack>
-    </SettingsSection>
+      </SettingsSection>
+    </SettingsPage>
   );
 }

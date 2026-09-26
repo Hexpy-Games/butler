@@ -36,7 +36,7 @@ export function LocalModelApiSection({
   const copy = appCopy.settings.localModels;
 
   return (
-    <SettingsSection title={copy.apiInfoTitle} description={copy.description}>
+    <SettingsSection id="local-model-api" kind="form" title={copy.apiInfoTitle} description={copy.description}>
       <Stack gap="md">
         <LocalModelConfigForm
           apiKey={apiKey}

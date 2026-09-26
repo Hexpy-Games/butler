@@ -3,6 +3,7 @@ import { Input } from "../../components/Input";
 import { Switch } from "../../components/Switch";
 import { FormSection } from "../FormSection";
 import { SettingsField } from "./SettingsField";
+import { SettingsFieldScopeProvider } from "./settingsFieldScope";
 
 export const meta: ShowcaseMeta = {
   title: "SettingsField",
@@ -40,15 +41,19 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Label, description, control, meta",
     render: (context) => (
-      <SettingsField id="field-name" label={text(context).name} description={text(context).nameDescription}
-        control={<Input id="field-name" defaultValue="Butler" />} meta={text(context).meta} />
+      <SettingsFieldScopeProvider>
+        <SettingsField id="field-name" label={text(context).name} description={text(context).nameDescription}
+          control={<Input id="field-name" defaultValue="Butler" />} meta={text(context).meta} />
+      </SettingsFieldScopeProvider>
     ),
   },
   {
     name: "Switch stacks under its copy",
     render: (context) => (
-      <SettingsField id="field-groups" label={text(context).smartGroups} description={text(context).smartGroupsDescription}
-        control={<Switch id="field-groups" />} />
+      <SettingsFieldScopeProvider>
+        <SettingsField id="field-groups" label={text(context).smartGroups} description={text(context).smartGroupsDescription}
+          control={<Switch id="field-groups" />} />
+      </SettingsFieldScopeProvider>
     ),
   },
   {

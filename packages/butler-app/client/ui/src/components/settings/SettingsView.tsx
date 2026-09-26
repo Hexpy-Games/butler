@@ -114,6 +114,8 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
       compactPane={compactPane}
       pageTitle={title}
       pageDescription={activeDescriptor?.description}
+      pageKey={activeSection}
+      pageOrder={sections.findIndex((item) => item.id === activeSection)}
       detailNavigation={
         <IconButton
           label={settingsCopy.back}

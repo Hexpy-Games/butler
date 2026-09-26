@@ -223,6 +223,45 @@ describe("dark placeholder contrast", () => {
   });
 });
 
+describe("secondary button contrast", () => {
+  test("dark secondary buttons keep a 3:1 boundary and 4.5:1 text on base, raised and composer surfaces", () => {
+    const dark = themeTokens(".theme-dark");
+    const base = resolveToken("--color-surface-base", dark);
+    const surfaces = [
+      base,
+      compositeOver(resolveToken("--color-surface-raised", dark), base),
+      compositeOver(resolveToken("--composer-glass-bg", dark), base),
+    ];
+    const border = resolveToken("--secondary-border", dark);
+    const text = resolveToken("--secondary-foreground", dark);
+    for (const surface of surfaces) {
+      const fill = compositeOver(resolveToken("--secondary", dark), surface);
+      expect(contrast(compositeOver(border, fill), surface)).toBeGreaterThanOrEqual(3);
+      expect(contrast(text, fill)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("root aliases of theme tokens are re-declared on the theme scopes", () => {
+    // A var() alias is computed where it is declared: one declared only on
+    // :root keeps its light value inside .theme-dark (the dark Deny text).
+    const root = rootTokens();
+    const dark = themeTokens(".theme-dark");
+    const aliases = parseTokens(tokenBlock(read(tokensPath), ".theme-dark,\n.theme-light"));
+    const varies = (name: string, depth = 0): boolean =>
+      depth < 8 && (dark.has(name) || [...(root.get(name) ?? "").matchAll(/var\((--[\w-]+)/gu)].some((match) => varies(match[1], depth + 1)));
+    const frozen = [...root].filter(([name, value]) =>
+      !dark.has(name) && !aliases.has(name) &&
+      [...value.matchAll(/var\((--[\w-]+)/gu)].some((match) => varies(match[1])));
+    expect(frozen.map(([name]) => name)).toEqual([]);
+    expect(aliases.get("--secondary-foreground")).toBe("var(--text-primary)");
+  });
+
+  test("the secondary variant draws its boundary from the token", () => {
+    const css = read(`${uiSrc}/libs/design-system/components/Button/Button.module.css`);
+    expect(tokenBlock(css, ".variantSecondary")).toContain("var(--secondary-border)");
+  });
+});
+
 describe("notice tones follow the theme", () => {
   const noticeCss = () => read(`${uiSrc}/libs/design-system/blocks/Notice/Notice.module.css`);
   const toneToken = (block: string, property: string) => {

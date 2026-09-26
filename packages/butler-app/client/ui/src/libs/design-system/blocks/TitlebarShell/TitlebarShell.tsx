@@ -12,6 +12,8 @@ export interface TitlebarShellProps {
   trailing?: ReactNode;
   windowControls?: ReactNode;
   collapsed?: boolean;
+  /** Makes the titlebar a window drag region (controls inside it stay clickable). */
+  dragRegion?: boolean;
   className?: string;
   dataTestClass?: string;
 }
@@ -24,12 +26,13 @@ export function TitlebarShell({
   trailing,
   windowControls,
   collapsed = false,
+  dragRegion = false,
   className,
   dataTestClass,
 }: TitlebarShellProps) {
   return (
     <header
-      className={cn(styles.titlebar, collapsed && styles.collapsed, className)}
+      className={cn(styles.titlebar, collapsed && styles.collapsed, dragRegion && "drag-region", className)}
       data-test-class={dataTestClass}
     >
       <Stack align="row" cross="center" gap="sm" className={styles.identity}>

@@ -4,7 +4,6 @@ import {
   ButtonContainer,
   Pencil,
   Stack,
-  SurfacePanel,
   Trash2,
   Typo,
 } from "@/butler-ds";
@@ -31,7 +30,6 @@ export function RegisteredModelRow({
   const name = modelDisplayName(model);
 
   return (
-    <SurfacePanel elevation="none">
       <Stack align="row" justify="between" cross="center" gap="md" wrap>
         <div>
           <Typo.PanelSectionTitle as="h3">
@@ -67,6 +65,5 @@ export function RegisteredModelRow({
           </Button>
         </ButtonContainer>
       </Stack>
-    </SurfacePanel>
   );
 }

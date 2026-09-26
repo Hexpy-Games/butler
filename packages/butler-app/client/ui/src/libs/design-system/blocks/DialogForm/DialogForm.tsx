@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
+import { SettingsFieldScopeProvider } from "../SettingsField/settingsFieldScope";
 import styles from "./DialogForm.module.css";
 
 export interface DialogFormProps {
@@ -30,7 +31,7 @@ export function DialogForm({
         <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>
         {description ? <Typo.Body className={styles.description}>{description}</Typo.Body> : null}
       </Stack>
-      <Stack gap="md">{children}</Stack>
+      <Stack gap="md"><SettingsFieldScopeProvider>{children}</SettingsFieldScopeProvider></Stack>
       {footer ? <div className={styles.footer}>{footer}</div> : null}
     </form>
   );

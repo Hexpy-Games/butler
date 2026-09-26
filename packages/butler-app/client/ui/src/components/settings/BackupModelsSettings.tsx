@@ -44,6 +44,7 @@ export function BackupModelsSettings({
   return (
     <>
       <SettingsField
+        settingId="backup-models-enabled"
         id="model-fallback-enabled"
         data-test-class="settings-backup-models settings-backup-models-toggle"
         label={copy.enabled}
@@ -65,6 +66,7 @@ export function BackupModelsSettings({
       />
       {fallback.enabled && (
         <SettingsField
+          settingId="backup-models"
           data-test-class="settings-backup-models-list-field"
           label={copy.title}
           description={copy.description}

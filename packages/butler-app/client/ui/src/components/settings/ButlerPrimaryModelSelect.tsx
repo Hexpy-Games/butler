@@ -34,6 +34,7 @@ export function ButlerPrimaryModelSelect({
 
   return (
     <SettingsSelect
+      settingId="primary-model"
       label={settingsFields.butlerModel}
       triggerTestClass="settings-primary-model-select"
       value={activeModel?.model_ref ?? EMPTY_MODEL_CATALOG.default_model_ref}

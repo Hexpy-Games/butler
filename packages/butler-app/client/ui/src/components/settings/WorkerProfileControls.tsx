@@ -1,6 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { useState } from "react";
-import { Button, Input, SettingsField, Stack, Typo } from "@/butler-ds";
+import { useId, useState } from "react";
+import { Button, Input, Label, Plus, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import {
@@ -16,6 +16,7 @@ interface WorkerProfileControlsProps {
   onMaxChange: (value: number) => void;
 }
 
+/** Worker profiles header toolbar: max simultaneous Workers and Add Worker profile. */
 export function WorkerProfileControls({
   canAdd,
   maxSimultaneousWorkers,
@@ -25,55 +26,47 @@ export function WorkerProfileControls({
   useAppLocale();
   const saving = useSettingsUIStore((state) => state.saving);
   const [maxTextDraft, setMaxTextDraft] = useState<string | null>(null);
+  const maxId = useId();
   const panelCopy = appCopy.settings.workerProfilesPanel;
   const maxText = maxTextDraft ?? String(maxSimultaneousWorkers);
 
   function commitMax() {
-    const committed = normalizeSimultaneousWorkers(
-      maxTextDraft ?? "",
-      maxSimultaneousWorkers,
-    );
+    const committed = normalizeSimultaneousWorkers(maxTextDraft ?? "", maxSimultaneousWorkers);
     setMaxTextDraft(null);
     if (committed !== null) onMaxChange(committed);
   }
 
   return (
     <>
-      <Stack gap="xs" cross="start">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={saving || !canAdd}
-          data-test-class="worker-profile-add"
-          onClick={onAdd}
-        >
-          {panelCopy.add}
-        </Button>
-        {!canAdd && <Typo.Caption>{panelCopy.addLimitReached}</Typo.Caption>}
+      <Stack align="row" cross="center" gap="sm" data-test-class="worker-max-simultaneous">
+        <Label htmlFor={maxId}>{panelCopy.maxSimultaneousWorkers}</Label>
+        <Input
+          id={maxId}
+          compact
+          type="number"
+          inputMode="numeric"
+          min={SIMULTANEOUS_WORKERS_MIN}
+          max={SIMULTANEOUS_WORKERS_MAX}
+          step={1}
+          value={maxText}
+          disabled={saving}
+          onChange={(event) => setMaxTextDraft(event.target.value)}
+          onBlur={() => commitMax()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+        />
       </Stack>
-      <SettingsField
-        id="worker-max-simultaneous"
-        data-test-class="settings-field"
-        label={panelCopy.maxSimultaneousWorkers}
-        control={
-          <Input
-            id="worker-max-simultaneous"
-            type="number"
-            inputMode="numeric"
-            min={SIMULTANEOUS_WORKERS_MIN}
-            max={SIMULTANEOUS_WORKERS_MAX}
-            step={1}
-            value={maxText}
-            disabled={saving}
-            onChange={(event) => setMaxTextDraft(event.target.value)}
-            onBlur={() => commitMax()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
-        }
-      />
+      <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={saving || !canAdd}
+      data-test-class="worker-profile-add"
+      onClick={onAdd}
+    >
+      <Plus size="md" /> {panelCopy.add}
+      </Button>
     </>
   );
 }

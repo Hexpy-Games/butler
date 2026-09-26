@@ -80,3 +80,32 @@ test("runtime-owned operation and progress keys localize without interpreting au
   expect(getInterfaceProgressLabel(undefined, "en-US")).toBeUndefined();
   expect(getInterfaceProgressLabel("작업 중", "en-US")).toBeUndefined();
 });
+
+function strings(value: unknown, into: string[] = []): string[] {
+  if (typeof value === "string") into.push(value);
+  else if (typeof value === "function" && value.length === 0) strings((value as () => unknown)(), into);
+  else if (value && typeof value === "object") Object.values(value).forEach((nested) => strings(nested, into));
+  return into;
+}
+
+test("Korean glossary: 시간대 not 타임존, 아카이브 not 보관함, 버틀러 not Butler App", () => {
+  const ko = strings(getAppCopy("ko-KR"));
+  expect(ko.filter((text) => /타임존|보관함|Butler App/u.test(text))).toEqual([]);
+  expect(getAppCopy("ko-KR").settings.fields.timezone).toBe("시간대");
+  expect(getAppCopy("ko-KR").space.archives).toBe("아카이브");
+  expect(getAppCopy("ko-KR").settings.sections.appearance).toBe("모양");
+});
+
+test("settings titles never use the A / B style in either locale", () => {
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    const copy = getAppCopy(locale);
+    const titles = strings([
+      copy.settings.sections,
+      copy.settings.panels,
+      copy.settings.pageSections,
+      copy.settings.fields,
+      copy.commandPalette.settingsSections,
+    ]);
+    expect(titles.filter((text) => /\S\s*\/\s*\S/u.test(text)), locale).toEqual([]);
+  }
+});

@@ -4,10 +4,13 @@ import { useComposedRefs } from "../../lib/composeRefs";
 import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
+import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
 
 export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
+  /** Applies the theme token classes to the shell root. */
+  theme?: AdaptiveShellTheme;
   ref?: Ref<HTMLDivElement>;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -27,6 +30,7 @@ export function AdaptiveShell({
   chromeEnvironment = "browser",
   platform = "browser",
   compactSidebarFullWidth = false,
+  theme,
   className,
   children,
   ref,
@@ -49,7 +53,8 @@ export function AdaptiveShell({
   return (
     <div
       ref={composedRef}
-      className={cn(styles.root, className)}
+      className={cn(styles.root, theme && adaptiveShellThemeClasses(theme), className)}
+      data-theme={theme?.appearance}
       data-left-open={leftOpen}
       data-left-track={leftTrack}
       data-track-switching={switching || rightSwitching || undefined}

@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { JSDOM } from "jsdom";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderRaw } from "react-dom/server";
+import { SettingsFieldScopeProvider } from "@/butler-ds";
+
+/** Settings fields render inside a section scope (SettingsField throws outside one). */
+const renderToStaticMarkup = (node: React.ReactNode) =>
+  renderRaw(<SettingsFieldScopeProvider>{node}</SettingsFieldScopeProvider>);
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
 import { appCopy, getAppCopy } from "@/app/copy.ts";
 import { AiChip, Blocks, ChevronDownIcon, MagicWand, McpServer, Sparkles } from "@/butler-ds";

@@ -21,7 +21,7 @@ for (const language of ["en", "ko"] as const) {
   test(`usage metadata keeps a space between each label and value (${language})`, () => {
     setAppCopyLanguage(language);
     const markup = [
-      renderToStaticMarkup(<UsageBucketPanel title="Tokens" rows={[{ name: "conversation", bucket } as never]} />),
+      renderToStaticMarkup(<UsageBucketPanel rows={[{ name: "conversation", bucket } as never]} />),
       renderToStaticMarkup(<UsageToolPanel rows={[["Bash", { calls: 21, results: 21, successes: 20, failures: 1 } as never]]} />),
       renderToStaticMarkup(<UsageSectionPanel rows={[["system", { requestCount: 30, chars: 48210, estimatedTokens: 12050 }]]} />),
       renderToStaticMarkup(<UsageProviderRow provider={{

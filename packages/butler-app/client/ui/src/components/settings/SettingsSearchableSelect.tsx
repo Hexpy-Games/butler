@@ -16,6 +16,7 @@ export interface SettingsSearchableSelectOption {
 
 export function SettingsSearchableSelect({
   label,
+  settingId,
   description,
   id,
   value,
@@ -28,6 +29,7 @@ export function SettingsSearchableSelect({
   onChange,
 }: {
   label: string;
+  settingId?: string;
   description?: string;
   id?: string;
   value: string;
@@ -57,6 +59,7 @@ export function SettingsSearchableSelect({
 
   return (
     <SettingsField
+      settingId={settingId}
       data-test-class="settings-searchable-select-field"
       id={controlId}
       label={label}

@@ -25,7 +25,6 @@ function provider(remaining: Provider["remaining"]): Provider {
 test("usage provider panel renders fresh, stale, unavailable, and partial states", () => {
   const markup = renderToStaticMarkup(
     <UsageProviderPanel
-      activeProviderId="openai"
       providers={[
         provider({
           available: true,

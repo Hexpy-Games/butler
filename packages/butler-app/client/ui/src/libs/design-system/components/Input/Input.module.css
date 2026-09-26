@@ -14,6 +14,12 @@
   outline: none;
 }
 
+.input[data-compact] {
+  width: 5.5rem;
+  min-height: var(--control-height-sm);
+  padding: var(--space-xs) var(--space-sm);
+}
+
 .input::placeholder {
   color: var(--placeholder);
   opacity: 1;
@@ -32,7 +38,8 @@
 }
 
 @media (width <= 640px), (pointer: coarse) {
-  .input {
+  .input,
+  .input[data-compact] {
     min-height: var(--control-hit-target);
   }
 }

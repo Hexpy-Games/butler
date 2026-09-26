@@ -95,7 +95,7 @@ test("settings blocks consume the ramp and the type hierarchy", () => {
   expect(settingsField).toMatch(/\.description\s*\{[^}]*color:\s*var\(--text-secondary\)/u);
   expect(formSection).toMatch(/\.card\s*\{[^}]*padding:\s*var\(--settings-section-padding\)/u);
   expect(formSection).toMatch(/\.section\s*\{[^}]*gap:\s*var\(--settings-section-header-gap\)/u);
-  expect(formSection).toMatch(/\.header\s*\{[^}]*gap:\s*var\(--settings-field-copy-gap\)/u);
+  expect(formSection).toMatch(/\.copy\s*\{[^}]*gap:\s*var\(--settings-field-copy-gap\)/u);
   expect(formSectionComponent).toContain('<Typo.H4 as="h3"');
   expect(formSectionComponent).toContain("<Typo.Body className={styles.description}");
   expect(formSection).toMatch(/\.description\s*\{[^}]*color:\s*var\(--text-secondary\)/u);

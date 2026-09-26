@@ -6,20 +6,15 @@ import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { SettingsView } from "@/app/types.ts";
 import { Button, Input, SettingsField, Stack } from "@/butler-ds";
-import {
-  SettingsSection,
-  SettingsSelect,
-  SettingsSwitch,
-} from "./SettingsFormComponents";
+import { SettingsSelect } from "./SettingsFormComponents";
+import { useSearchSettingUpdate } from "./hooks/useSearchSettingUpdate";
+
+export { SearchBehaviorFields } from "./SearchBehaviorFields";
 
 type WebSearchSettings = SettingsView["web_search"];
-type WebSearchWritableKey =
-  | "provider"
-  | "reader_backend"
-  | "planning_enabled"
-  | "planning_default_depth";
 
-export function SearchSettings({ draft }: { draft: SettingsView }) {
+/** Search provider section: the backend and its API key. */
+export function SearchProviderFields({ draft }: { draft: SettingsView }) {
   useAppLocale();
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -37,16 +32,7 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
     setApiKeyDraft("");
   }, [webSearch.provider]);
 
-  function updateSearchSetting<K extends WebSearchWritableKey>(
-    key: K,
-    value: WebSearchSettings[K],
-  ) {
-    update({
-      web_search: {
-        [key]: value,
-      },
-    }, setSettings);
-  }
+  const updateSearchSetting = useSearchSettingUpdate();
 
   async function saveApiKey() {
     const apiKey = apiKeyDraft.trim();
@@ -56,11 +42,9 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
   }
 
   return (
-    <SettingsSection
-      title={fields.searchSettings}
-      description={descriptions.searchSettings}
-    >
+    <>
       <SettingsSelect
+        settingId="search-provider"
         label={fields.searchProvider}
         description={descriptions.searchProvider}
         value={webSearch.provider}
@@ -83,6 +67,7 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
       {apiKeyEnvVar ? (
         <SettingsField
           id={apiKeyId}
+          settingId="search-api-key"
           data-test-class="settings-field search-provider-api-key-field"
           label={fields.searchProviderApiKey}
           description={descriptions.searchProviderApiKey(apiKeyEnvVar)}
@@ -113,47 +98,6 @@ export function SearchSettings({ draft }: { draft: SettingsView }) {
           )}
         />
       ) : null}
-      <SettingsSelect
-        label={fields.searchReaderBackend}
-        description={descriptions.searchReaderBackend}
-        value={webSearch.reader_backend}
-        onChange={(value) =>
-          updateSearchSetting(
-            "reader_backend",
-            value as WebSearchSettings["reader_backend"],
-          )
-        }
-        options={[
-          { value: "lightweight", label: options.searchReaderLightweight },
-          { value: "auto", label: options.searchReaderAuto },
-          { value: "lightpanda", label: options.searchReaderLightpanda },
-          { value: "jina-hosted", label: options.searchReaderJina },
-          { value: "disabled", label: options.searchReaderDisabled },
-        ]}
-      />
-      <SettingsSwitch
-        label={fields.searchPlanningEnabled}
-        description={descriptions.searchPlanning}
-        checked={webSearch.planning_enabled}
-        onChange={(checked) => updateSearchSetting("planning_enabled", checked)}
-      />
-      {webSearch.planning_enabled ? (
-        <SettingsSelect
-          label={fields.searchDefaultDepth}
-          value={webSearch.planning_default_depth}
-          onChange={(value) =>
-            updateSearchSetting(
-              "planning_default_depth",
-              value as WebSearchSettings["planning_default_depth"],
-            )
-          }
-          options={[
-            { value: "quick", label: options.searchDepthQuick },
-            { value: "balanced", label: options.searchDepthBalanced },
-            { value: "deep", label: options.searchDepthDeep },
-          ]}
-        />
-      ) : null}
-    </SettingsSection>
+    </>
   );
 }

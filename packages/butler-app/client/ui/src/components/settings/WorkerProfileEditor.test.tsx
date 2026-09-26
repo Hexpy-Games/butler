@@ -469,7 +469,7 @@ test("add, delete, and max-workers controls persist canonical patches through th
     (patches[1]!.worker_profiles as WorkerProfile[]).map((profile) => profile.id),
   ).toEqual(["default", "w1"]);
 
-  const maxInput = fieldInput(document.body, "Max simultaneous Workers");
+  const maxInput = document.querySelector('[data-test-class="worker-max-simultaneous"] input')!;
   expect((maxInput as HTMLInputElement).value).toBe("10");
   await typeAndBlur(maxInput, "6");
   expect(patches.length).toBe(3);
@@ -619,7 +619,7 @@ test("pending save disables worker controls until the bridge resolves", async ()
   const deleteButton = research.querySelector<HTMLElement>(
     '[data-test-class="worker-profile-delete"]',
   )!;
-  const maxInput = fieldInput(document.body, "Max simultaneous Workers");
+  const maxInput = document.querySelector('[data-test-class="worker-max-simultaneous"] input')!;
   const enabledSwitch = fieldByLabel(research, "Enabled")!.querySelector(
     '[data-slot="switch"]',
   )!;

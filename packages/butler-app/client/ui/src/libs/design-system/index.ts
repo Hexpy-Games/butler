@@ -104,6 +104,7 @@ export * from "./blocks/TodoProgressPanel";
 export * from "./blocks/WorkerActivityPanel";
 export * from "./blocks/WorkerActivityRow";
 export * from "./blocks/SettingsField";
+export * from "./blocks/SettingsSection";
 export * from "./blocks/SettingsHeader";
 export * from "./blocks/SettingsNav";
 export * from "./blocks/SettingsShell";

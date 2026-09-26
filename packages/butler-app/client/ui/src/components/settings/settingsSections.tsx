@@ -142,3 +142,6 @@ export function filterSettingsSectionGroups(
     })
     .filter((group) => group.sections.length > 0);
 }
+
+
+export { settingsPageSchema, type SettingsSectionSchema } from "./settingsPageSchema";

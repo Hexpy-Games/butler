@@ -6,12 +6,17 @@ import styles from "../../components/Input/Input.module.css";
 function Input({
   className,
   type,
+  compact = false,
   ...props
-}: React.ComponentPropsWithoutRef<"input">) {
+}: React.ComponentPropsWithoutRef<"input"> & {
+  /** A short inline field (numbers in a toolbar): content width, small control height. */
+  compact?: boolean;
+}) {
   return (
     <input
       type={type}
       data-slot="input"
+      data-compact={compact || undefined}
       className={cn(
         styles.input,
         className,
