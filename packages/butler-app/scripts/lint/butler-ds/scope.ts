@@ -9,6 +9,7 @@ export const DS_ESLINT_RULES = [
   "no-inline-style",
   "no-raw-interactive",
   "no-raw-typography",
+  "unsafe-style-allowlist",
 ] as const;
 
 export const DS_STYLELINT_RULES = [
@@ -27,6 +28,11 @@ export const DS_CONSTRAINT_RULES = [
 ] as const;
 
 export type DsConstraintRule = (typeof DS_CONSTRAINT_RULES)[number];
+
+/** Baseline file (without .json) of a rule; the UNSAFE_style allowlist is `unsafe-style.json`. */
+export function baselineFileName(rule: DsConstraintRule): string {
+  return rule === "unsafe-style-allowlist" ? "unsafe-style" : rule;
+}
 
 type Exclusion = { pattern: string; reason: string; matches: (path: string) => boolean };
 

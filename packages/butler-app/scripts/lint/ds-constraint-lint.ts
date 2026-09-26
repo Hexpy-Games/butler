@@ -11,6 +11,7 @@ import {
   DS_STYLELINT_RULES,
   DS_WARNING_RULES,
   UI_SOURCE_ROOT,
+  baselineFileName,
   listProductFiles,
   type DsConstraintRule,
 } from "./butler-ds/scope.ts";
@@ -95,7 +96,7 @@ async function collect(): Promise<{ counts: Counts; errors: string[]; warnings: 
 }
 
 function baselinePath(rule: DsConstraintRule): string {
-  return join(baselineDir, `${rule}.json`);
+  return join(baselineDir, `${baselineFileName(rule)}.json`);
 }
 
 function readBaseline(rule: DsConstraintRule): FileCounts {

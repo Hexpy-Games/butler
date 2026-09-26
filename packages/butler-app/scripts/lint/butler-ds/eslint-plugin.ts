@@ -144,6 +144,20 @@ const noRawTypography = rule(
   }),
 );
 
+const unsafeStyleAllowlist = rule(
+  "Every UNSAFE_style in product code is counted against a per-file allowlist (baseline/unsafe-style.json).",
+  {
+    unsafeStyle:
+      "UNSAFE_style on <{{name}}> is a geometry escape hatch; new uses need owner approval (the allowlist only shrinks).",
+  },
+  (context) => ({
+    JSXAttribute(node: any) {
+      if (node.name.type !== "JSXIdentifier" || node.name.name !== "UNSAFE_style") return;
+      context.report({ node, messageId: "unsafeStyle", data: { name: jsxName(node.parent.name) } });
+    },
+  }),
+);
+
 export const butlerDsEslintPlugin = {
   meta: { name: "butler-ds" },
   rules: {
@@ -151,5 +165,6 @@ export const butlerDsEslintPlugin = {
     "no-inline-style": noInlineStyle,
     "no-raw-interactive": noRawInteractive,
     "no-raw-typography": noRawTypography,
+    "unsafe-style-allowlist": unsafeStyleAllowlist,
   },
 };

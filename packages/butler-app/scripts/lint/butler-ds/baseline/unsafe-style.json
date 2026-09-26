@@ -1,0 +1,7 @@
+{
+  "components/conversation/TurnActivityMessage.tsx": 1,
+  "components/conversation/TurnActivityPending.tsx": 1,
+  "components/conversation/VirtualMessageRow.tsx": 1,
+  "components/inspector/ContextPanel.tsx": 1,
+  "pages/AppShell.tsx": 1
+}

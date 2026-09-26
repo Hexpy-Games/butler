@@ -9,6 +9,7 @@ import {
 import {
   DS_CONSTRAINT_RULES,
   PRODUCT_EXCLUSIONS,
+  baselineFileName,
   isProductSource,
 } from "../../packages/butler-app/scripts/lint/butler-ds/scope.ts";
 
@@ -79,9 +80,12 @@ describe("DS constraint ratchet", () => {
 
   test("every rule has a checked-in baseline and new CSS modules are outside the frozen allowlist", () => {
     for (const rule of DS_CONSTRAINT_RULES) {
-      const path = join(root, "packages/butler-app/scripts/lint/butler-ds/baseline", `${rule}.json`);
+      const path = join(root, "packages/butler-app/scripts/lint/butler-ds/baseline", `${baselineFileName(rule)}.json`);
       expect(existsSync(path)).toBe(true);
     }
+    // The UNSAFE_style allowlist is a per-file baseline named unsafe-style.json.
+    expect(DS_CONSTRAINT_RULES).toContain("unsafe-style-allowlist");
+    expect(baselineFileName("unsafe-style-allowlist")).toBe("unsafe-style");
     const allowlist = JSON.parse(readFileSync(join(root,
       "packages/butler-app/scripts/lint/butler-ds/baseline/no-new-css-module.json"), "utf8")) as Record<string, number>;
     const result = compareRatchet(allowlist, { ...allowlist, "components/new/New.module.css": 1 });

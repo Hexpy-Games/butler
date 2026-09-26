@@ -13,11 +13,22 @@ boundaries.
 `pages/*Harness` pages (`butler-ds/scope.ts`).
 
 - ESLint rules (`butler-ds/eslint-plugin.ts`): `no-classname-on-ds`,
-  `no-inline-style`, `no-raw-interactive`, `no-raw-typography`.
+  `no-inline-style`, `no-raw-interactive`, `no-raw-typography`,
+  `unsafe-style-allowlist` (every `UNSAFE_style` is counted per file against
+  `butler-ds/baseline/unsafe-style.json`; new uses need owner approval).
 - Stylelint rules (`butler-ds/stylelint-plugin.ts`): `token-only-values`,
   `no-ds-internal-selector`, `no-ds-custom-prop-override`.
 - `no-new-css-module`: product `*.module.css` files are frozen to the
   allowlist in `butler-ds/baseline/no-new-css-module.json`.
+
+Types come first: DS component props are `DsBaseProps` (no public
+`className`/`style`; DS code uses `dsClass()`/`dsStyle()` from
+`libs/design-system/lib/internal`, which the root `eslint.config.js` blocks
+outside the design system with `no-restricted-imports`), so `bun run
+typecheck` rejects product styling of DS components before these rules run.
+`packages/butler-app/scripts/codemods/ds-unsafe-style.ts` (ts-morph) renames
+geometry-only `style` on DS components to `UNSAFE_style` (`--write`) and
+fails while any `className`/`style` is left on a DS component.
 
 Existing violations live in `butler-ds/baseline/<rule>.json` as per-file
 counts. The check fails when a file's count grows or a new file appears, and

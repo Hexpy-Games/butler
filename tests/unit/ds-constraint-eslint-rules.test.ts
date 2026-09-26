@@ -123,3 +123,22 @@ describe("butler-ds/no-raw-typography", () => {
     ],
   });
 });
+
+describe("butler-ds/unsafe-style-allowlist", () => {
+  tester.run("unsafe-style-allowlist", rules["unsafe-style-allowlist"], {
+    valid: [
+      "const a = <div />;",
+      'import { Stack } from "@/butler-ds"; const a = <Stack gap="sm" />;',
+    ],
+    invalid: [
+      {
+        code: 'import { MessageRow } from "@/butler-ds"; const a = <MessageRow UNSAFE_style={{ transform: t }} />;',
+        errors: [{ messageId: "unsafeStyle", data: { name: "MessageRow" } }],
+      },
+      {
+        code: "const a = <Anything UNSAFE_style={geometry} />;",
+        errors: [{ messageId: "unsafeStyle", data: { name: "Anything" } }],
+      },
+    ],
+  });
+});
