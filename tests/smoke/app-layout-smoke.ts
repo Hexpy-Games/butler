@@ -3,11 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
-import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
-import {
-  readFirstChatOnboardingState,
-  writeFirstChatOnboardingState,
-} from "../../packages/butler-agent/src/personalization/onboarding.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 import {
   clientTurnIdFromMessageId,
   mergeSessionSummaryForPendingTurn,
@@ -17,15 +13,10 @@ import {
   FIRST_RUN_STORAGE_KEY,
   firstRunCompleteState,
 } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
-import type { SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
+import type { ProjectSummary, SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const root = process.cwd();
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
-writeFirstChatOnboardingState(tempDir, {
-  ...readFirstChatOnboardingState(tempDir),
-  status: "complete",
-  completed_at: new Date().toISOString(),
-});
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
@@ -315,81 +306,43 @@ assert(
   "pending-turn-does-not-flash-stale-tool-history",
 );
 
-const server = createAppServer({
-  dbPath: join(tempDir, "layout-smoke.sqlite"),
-  butlerData: tempDir,
+// The native gateway runs the real agent loop; the retired in-process responder's
+// injected progress rows and artifact files are not available. The stub model
+// waits on the same gates and returns the same Markdown reply.
+const server = await createNativeAppServer({
+  butlerData: join(tempDir, "data"),
   uiRoot,
-  port: 0,
-  bridgeMode: "external",
-  responder: async (input) => {
+  stubReply: async (request) => {
     await smokeResponderProgressGate;
-    input.onProgress?.({
-      id: "smoke-progress-phase",
-      kind: "message",
-      safe_label: "검증 작업을 실행합니다.",
-      semantic_block_id: "implementation_validation",
-      work_decision_source: "model-authored",
-      work_decision_summary: "로컬 검증 실행",
-      work_decision_rationale: "변경 사항을 브라우저에서 확인합니다.",
-      work_decision_next_step: "검증 결과를 검토합니다.",
-      state: "running",
-    });
-    input.onProgress?.({
-      id: "smoke-progress-command",
-      kind: "ran_command",
-      safe_label: "Bash: bun test",
-      safe_tool_name: "Bash",
-      safe_input_label: "bun test",
-      bridge_phase: "btcc_operation",
-      semantic_block_id: "implementation_validation",
-      work_block_id: "smoke-work-command",
-      work_block_label: "로컬 테스트 명령을 실행합니다.",
-      state: "running",
-      safe_detail_rows: [
-        {
-          id: "smoke-progress-command-detail",
-          kind: "command",
-          safe_label: "Command",
-          safe_value: "bun test",
-          state: "running",
-        },
-      ],
-    });
     await smokeResponderReplyGate;
-    return {
-      texts: [
-        [
-          "## Butler reply",
-          "",
-          "- Markdown rendered",
-          `- Received ${input.text.length} chars`,
-          "",
-          "![Inline smoke](artifacts/inline-smoke.png)",
-          "",
-          "```ts",
-          "const ok = true;",
-          "```",
-        ].join("\n"),
-      ],
-      files: [
-        {
-          name: "artifacts/inline-smoke.png",
-          mimeType: "image/png",
-          bytes: inlineSmokeImageBytes,
-        },
-      ],
-    };
+    const received = JSON.stringify(request.messages.at(-1) ?? "").length;
+    return [
+      "## Butler reply",
+      "",
+      "- Markdown rendered",
+      `- Received ${received} chars`,
+      "",
+      "![Inline smoke](artifacts/inline-smoke.png)",
+      "",
+      "```ts",
+      "const ok = true;",
+      "```",
+    ].join("\n");
   },
 });
-const smokeProject = server.store.createProject({
-  source: "scratch",
-  display_name: "Desktop client polish",
-}).project;
-server.store.createSession({
-  kind: "project",
-  project_id: smokeProject.id,
-  session_hint: "butler-client",
-  title: "Desktop client polish",
+void inlineSmokeImageBytes;
+const smokeProject = (await server.api<{ project: ProjectSummary }>("/projects", {
+  method: "POST",
+  body: JSON.stringify({ source: "scratch", display_name: "Desktop client polish" }),
+})).project;
+await server.api("/sessions", {
+  method: "POST",
+  body: JSON.stringify({
+    kind: "project",
+    project_id: smokeProject.id,
+    session_hint: "butler-client",
+    title: "Desktop client polish",
+  }),
 });
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
@@ -4526,6 +4479,6 @@ try {
   );
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }

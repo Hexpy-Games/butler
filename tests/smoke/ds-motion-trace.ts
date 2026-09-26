@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
@@ -638,13 +638,7 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
 
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; build the UI first.");
 mkdirSync(outDir, { recursive: true });
-const server = createAppServer({
-  dbPath: join(tempDir, "ds-motion.sqlite"),
-  butlerData: tempDir,
-  uiRoot,
-  port: 0,
-  bridgeMode: "external",
-});
+const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 try {
   const lookup = await browser.newPage();

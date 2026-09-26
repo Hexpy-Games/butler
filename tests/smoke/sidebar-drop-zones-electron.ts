@@ -13,20 +13,17 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createTestAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
-import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
 const root = process.cwd();
 const dir = mkdtempSync(join(tmpdir(), "butler-drop-zones-"));
-writeFirstChatOnboardingState(dir, { ...readFirstChatOnboardingState(dir), status: "complete", completed_at: new Date().toISOString() });
-const server = createTestAppServer({
-  butlerData: dir, dbPath: join(dir, "app.sqlite"), port: 0, bridgeMode: "external",
-  uiRoot: resolve(root, "packages/butler-app/client/ui/dist"),
+const server = await createNativeAppServer({
+  butlerData: join(dir, "data"), uiRoot: resolve(root, "packages/butler-app/client/ui/dist"),
 });
-server.store.updateSettings({ language: "en" });
+await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "en" }) });
 for (const title of ["Release notes", "Reading list", "Travel plan", "Weekly review", "Budget draft"]) {
-  server.store.createSession({ kind: "chat", title });
+  await server.api("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title }) });
 }
 // Unpackaged Electron waits for the agent executor; the stub gateway is ready.
 const proxy = Bun.serve({
@@ -226,7 +223,7 @@ try {
   await wait(1500);
   if (electron.exitCode === null) electron.kill("SIGKILL");
   proxy.stop(true);
-  server.stop();
+  await server.stop();
   rmSync(dir, { recursive: true, force: true });
 }
 console.log("sidebar drop zones: ok");

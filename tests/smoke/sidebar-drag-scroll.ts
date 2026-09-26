@@ -3,24 +3,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
-import { createTestAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
+import type { NavigationView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
-import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "butler-drag-scroll-"));
-writeFirstChatOnboardingState(dir, {
-  ...readFirstChatOnboardingState(dir), status: "complete", completed_at: new Date().toISOString(),
+const server = await createNativeAppServer({
+  butlerData: join(dir, "data"), uiRoot: resolve("packages/butler-app/client/ui/dist"),
 });
-const server = createTestAppServer({
-  butlerData: dir, dbPath: join(dir, "app.sqlite"),
-  uiRoot: resolve("packages/butler-app/client/ui/dist"), port: 0,
-});
-server.store.updateSettings({ language: "ko" });
+const navigation = () => server.api<NavigationView>("/navigation");
+await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
 for (let index = 0; index < 45; index++) {
-  server.store.mutateSpace({
-    action: "create", title: `Folder ${index}`, parentKey: null,
-    expectedRevision: server.store.listNavigation().space.revision,
-  });
+  await server.api("/space/groups", { method: "POST", body: JSON.stringify({
+    title: `Folder ${index}`, parentKey: null,
+    expectedRevision: (await navigation()).space.revision,
+  }) });
 }
 const browser = await chromium.launch({ headless: true });
 try {
@@ -77,13 +74,13 @@ try {
   await page.waitForTimeout(100);
   await page.mouse.up();
   await page.waitForTimeout(500);
-  const order = server.store.listNavigation().space.nodes.filter(node => node.parentKey === null)
+  const order = (await navigation()).space.nodes.filter(node => node.parentKey === null)
     .sort((a, b) => a.position - b.position).map(node => node.key);
   assert.equal(order.indexOf(sourceKey), order.indexOf(targetKey) - 1);
   console.log(JSON.stringify({ downBefore, downAfter, upBefore, upAfter, loaded }));
   await page.close();
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(dir, { recursive: true, force: true });
 }

@@ -2,11 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
-import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
-import {
-  readFirstChatOnboardingState,
-  writeFirstChatOnboardingState,
-} from "../../packages/butler-agent/src/personalization/onboarding.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
   FIRST_RUN_STORAGE_KEY,
@@ -16,18 +12,7 @@ import {
 // Focused smoke for the Phase 2 screen contracts in
 // SPEC-BUTLER-DEDICATED-CLIENT-DESIGN-SYSTEM.
 const tempDir = mkdtempSync(join(tmpdir(), "butler-screen-contracts-smoke-"));
-writeFirstChatOnboardingState(tempDir, {
-  ...readFirstChatOnboardingState(tempDir),
-  status: "complete",
-  completed_at: new Date().toISOString(),
-});
-const server = createAppServer({
-  dbPath: join(tempDir, "screen-contracts.sqlite"),
-  butlerData: tempDir,
-  uiRoot: resolve("packages/butler-app/client/ui/dist"),
-  port: 0,
-  bridgeMode: "external",
-});
+const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -98,6 +83,6 @@ try {
   console.log("app screen contracts smoke passed");
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }

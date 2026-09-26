@@ -3,15 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { webkit, devices } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = mkdtempSync(join(tmpdir(), "butler-diff-mobile-"));
 const output = resolve(".tmp/changed-line-diff-mobile");
 mkdirSync(output, { recursive: true });
-const server = createAppServer({
-  dbPath: join(root, "app.sqlite"), butlerData: root, port: 0,
-  uiRoot: resolve("packages/butler-app/client/ui/dist"), bridgeMode: "external",
-});
+const server = await createNativeAppServer({ uiRoot: resolve("packages/butler-app/client/ui/dist") });
 const browser = await webkit.launch({ headless: true });
 try {
   for (const width of [375, 430]) {
@@ -52,6 +49,6 @@ try {
   }
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(root, { recursive: true, force: true });
 }

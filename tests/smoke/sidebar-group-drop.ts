@@ -3,21 +3,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright";
-import { createTestAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
+import type { NavigationView, SessionSummary } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { FIRST_RUN_STORAGE_KEY, firstRunCompleteState } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
-import { readFirstChatOnboardingState, writeFirstChatOnboardingState } from "../../packages/butler-agent/src/personalization/onboarding.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "butler-group-drop-"));
-writeFirstChatOnboardingState(dir, {
-  ...readFirstChatOnboardingState(dir), status: "complete", completed_at: new Date().toISOString(),
+const server = await createNativeAppServer({
+  butlerData: join(dir, "data"), uiRoot: resolve("packages/butler-app/client/ui/dist"),
 });
-const server = createTestAppServer({
-  butlerData: dir, dbPath: join(dir, "app.sqlite"),
-  uiRoot: resolve("packages/butler-app/client/ui/dist"), port: 0,
-});
-server.store.updateSettings({ language: "ko" });
-const source = server.store.createSession({ kind: "chat", title: "사죽이 이야기" }).session;
-const target = server.store.createSession({ kind: "chat", title: "죽랑이 이야기 이어가기" }).session;
+const navigation = () => server.api<NavigationView>("/navigation");
+await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko" }) });
+const source = (await server.api<{ session: SessionSummary }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "사죽이 이야기" }) })).session;
+const target = (await server.api<{ session: SessionSummary }>("/sessions", { method: "POST", body: JSON.stringify({ kind: "chat", title: "죽랑이 이야기 이어가기" }) })).session;
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
@@ -56,18 +53,18 @@ try {
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
   assert.equal(groupRequests, 0, "drop opens the form without waiting for the server");
-  assert.equal(server.store.listNavigation().space.groups.length, 0, "drop opens the form before creating a group");
+  assert.equal((await navigation()).space.groups.length, 0, "drop opens the form before creating a group");
   await dialog.locator("#space-group-title").fill("사슴벌레");
   await dialog.locator('button[type="submit"]').click();
   await dialog.locator('form[aria-busy="true"]').waitFor();
   assert.equal(groupRequests, 1);
   await dialog.waitFor({ state: "hidden" });
-  assert.equal(server.store.listNavigation().space.groups[0]?.title, "사슴벌레");
-  const groupKey = `g:${server.store.listNavigation().space.groups[0]?.id}`;
-  assert.equal(server.store.listNavigation().space.nodes.filter(node => node.parentKey === groupKey).length, 2);
+  assert.equal((await navigation()).space.groups[0]?.title, "사슴벌레");
+  const groupKey = `g:${(await navigation()).space.groups[0]?.id}`;
+  assert.equal((await navigation()).space.nodes.filter(node => node.parentKey === groupKey).length, 2);
   await page.close();
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(dir, { recursive: true, force: true });
 }

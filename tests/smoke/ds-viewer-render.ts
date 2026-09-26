@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
@@ -243,13 +243,7 @@ mkdirSync(outputRoot, { recursive: true });
 const { componentNames: requestedNames, viewports, themes } = parseRenderOptions(
   Bun.argv.slice(2),
 );
-const server = createAppServer({
-  dbPath: join(tempDir, "ds-viewer-render.sqlite"),
-  butlerData: tempDir,
-  uiRoot,
-  port: 0,
-  bridgeMode: "external",
-});
+const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 
 try {
@@ -282,6 +276,6 @@ try {
   );
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }

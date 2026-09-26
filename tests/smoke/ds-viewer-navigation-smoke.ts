@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createNativeAppServer } from "../support/native-app-server.ts";
 
 // DS Viewer deep links (page/theme/locale/width/motion, #anchors), toolbar URL writes, "/" filter and Cmd+K palette.
 
@@ -146,13 +146,7 @@ async function assertSearch(page: Page, baseUrl: string, label: string): Promise
 
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
 
-const server = createAppServer({
-  dbPath: join(tempDir, "ds-viewer-navigation.sqlite"),
-  butlerData: tempDir,
-  uiRoot,
-  port: 0,
-  bridgeMode: "external",
-});
+const server = await createNativeAppServer({ uiRoot });
 const browser = await chromium.launch({ headless: true });
 
 try {
@@ -168,6 +162,6 @@ try {
   console.log("ds-viewer-navigation-smoke: ok");
 } finally {
   await browser.close();
-  server.stop();
+  await server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }
