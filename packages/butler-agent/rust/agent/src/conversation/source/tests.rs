@@ -173,7 +173,7 @@ async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
     let Err(error) = ConversationSourceReader::open(&missing.path) else {
         panic!("missing canonical database must fail")
     };
-    assert_eq!(error.code, "conversation_source_unavailable");
+    assert_eq!(error.code(), "conversation_source_unavailable");
     assert!(!missing.path.exists());
 
     let incomplete = Fixture::new("schema");
@@ -182,7 +182,7 @@ async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
     let Err(error) = ConversationSourceReader::open(&incomplete.path) else {
         panic!("incomplete canonical schema must fail")
     };
-    assert_eq!(error.code, "conversation_source_schema_unavailable");
+    assert_eq!(error.code(), "conversation_source_schema_unavailable");
 
     let malformed = Fixture::new("malformed");
     let store = malformed.open_store().await;
@@ -198,7 +198,7 @@ async fn missing_schema_and_malformed_json_are_distinct_from_absent_message() {
     drop(raw);
     let reader = ConversationSourceReader::open(&malformed.path).unwrap();
     let error = reader.read_message("cm_source").unwrap_err();
-    assert_eq!(error.code, "conversation_json_error");
+    assert_eq!(error.code(), "conversation_json_error");
 }
 
 #[tokio::test]
@@ -278,7 +278,7 @@ async fn recall_pages_read_canonical_writer_rows_and_preserve_json_errors() {
         reader
             .read_recall_outcome_page(None, Some(1))
             .unwrap_err()
-            .code,
+            .code(),
         "conversation_json_error"
     );
     reader.close().unwrap();

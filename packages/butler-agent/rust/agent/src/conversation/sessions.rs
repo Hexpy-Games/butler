@@ -3,6 +3,7 @@ use rusqlite::{OptionalExtension, params};
 use super::codec::bump_public_revision;
 use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult};
+use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
     pub(crate) async fn sync_session_context(
@@ -32,7 +33,7 @@ impl AgentConversationStore {
                 .map_err(ConversationError::sqlite)?
                 .ok_or_else(|| {
                     ConversationError::new(
-                        "conversation_session_not_found",
+                        ConversationCode::ConversationSessionNotFound,
                         "conversation_session_not_found",
                     )
                 })?;

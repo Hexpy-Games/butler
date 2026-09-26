@@ -8,6 +8,7 @@ use super::super::{
 };
 use super::classifier::{Decision, Provenance, SourceKind};
 use super::identity::{recovered_id, recovery_source_ref, target_message_id, target_session};
+use crate::conversation::ConversationCode;
 
 #[derive(Clone)]
 pub(super) struct Mapping {
@@ -138,7 +139,7 @@ pub(super) fn import_one(
         decision.text.clone(),
     ) else {
         return Err(ConversationError::new(
-            "conversation_recovery_input_unavailable",
+            ConversationCode::ConversationRecoveryInputUnavailable,
             "Recovery decision is not admissible",
         ));
     };

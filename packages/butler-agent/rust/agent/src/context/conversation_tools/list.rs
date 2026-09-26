@@ -20,7 +20,7 @@ pub(super) fn run(
 ) -> ContextResult<Value> {
     let snapshot = match PublicMemorySnapshot::open(path, binding) {
         Ok(snapshot) => snapshot,
-        Err(error) if error.code == "invalid_scope" => return Ok(failure("invalid_scope", &[])),
+        Err(error) if error.code() == "invalid_scope" => return Ok(failure("invalid_scope", &[])),
         Err(_) => {
             return Ok(failure(
                 "backend_unavailable",

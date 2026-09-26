@@ -5,33 +5,34 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::{ConversationOriginEvidence, HistoricalOriginCandidate, SourceEvidence, sha256};
+use super::{
+    ConversationCode, ConversationOriginEvidence, ConversationResult, HistoricalOriginCandidate,
+    SourceEvidence, evidence_error, evidence_unavailable, sha256,
+};
 use crate::json::{CanonicalKeyOrder, canonical_json};
 
-fn open(data_root: &Path) -> Result<Option<Connection>, ()> {
+fn open(data_root: &Path) -> rusqlite::Result<Option<Connection>> {
     let path = data_root.join("agent-runtime/btcc.sqlite");
     if !path.exists() {
         return Ok(None);
     }
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map(Some)
-        .map_err(|_| ())
+    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map(Some)
 }
 
 pub(super) fn validate_outbox(
     data_root: &Path,
     started: Instant,
     cancellation: &CancellationToken,
-) -> Result<(), &'static str> {
-    let Some(db) = open(data_root).map_err(|()| "memory_origin_evidence_unavailable")? else {
+) -> ConversationResult<()> {
+    let Some(db) = open(data_root).map_err(evidence_unavailable)? else {
         return Ok(());
     };
-    if !has_outbox(&db).map_err(|_| "memory_origin_evidence_unavailable")? {
+    if !has_outbox(&db).map_err(evidence_unavailable)? {
         return Ok(());
     }
     let mut stmt = db
         .prepare("SELECT relation_id,result_id,message_id FROM btcc_subsession_outbox")
-        .map_err(|_| "memory_origin_evidence_unavailable")?;
+        .map_err(evidence_unavailable)?;
     let rows = stmt
         .query_map([], |row| {
             Ok((
@@ -40,14 +41,18 @@ pub(super) fn validate_outbox(
                 row.get::<_, String>(2)?,
             ))
         })
-        .map_err(|_| "memory_origin_evidence_unavailable")?;
+        .map_err(evidence_unavailable)?;
     for row in rows {
         if cancellation.is_cancelled() || started.elapsed() >= Duration::from_secs(60) {
-            return Err("memory_origin_evidence_unavailable");
+            return Err(evidence_error(
+                ConversationCode::MemoryOriginEvidenceUnavailable,
+            ));
         }
-        let (relation, result, message) = row.map_err(|_| "memory_origin_evidence_unavailable")?;
+        let (relation, result, message) = row.map_err(evidence_unavailable)?;
         if message != format!("subsession-result:{relation}:{result}") {
-            return Err("memory_origin_outbox_identity_invalid");
+            return Err(evidence_error(
+                ConversationCode::MemoryOriginOutboxIdentityInvalid,
+            ));
         }
     }
     Ok(())
@@ -56,18 +61,18 @@ pub(super) fn validate_outbox(
 pub(super) fn subsession_evidence(
     data_root: &Path,
     row: &HistoricalOriginCandidate,
-) -> Result<Option<ConversationOriginEvidence>, &'static str> {
+) -> ConversationResult<Option<ConversationOriginEvidence>> {
     let (Some(external), Some(source_ref)) = (&row.external_session_id, &row.source_ref) else {
         return Ok(None);
     };
-    let Some(db) = open(data_root).map_err(|()| "memory_origin_evidence_unavailable")? else {
+    let Some(db) = open(data_root).map_err(evidence_unavailable)? else {
         return Ok(None);
     };
-    if !has_outbox(&db).map_err(|_| "memory_origin_evidence_unavailable")? {
+    if !has_outbox(&db).map_err(evidence_unavailable)? {
         return Ok(None);
     }
     let mut stmt = db.prepare("SELECT outbox_id,relation_id,result_id,parent_session_id,message_id FROM btcc_subsession_outbox WHERE parent_session_id=?1")
-        .map_err(|_| "memory_origin_evidence_unavailable")?;
+        .map_err(evidence_unavailable)?;
     let rows = stmt
         .query_map([external], |r| {
             Ok((
@@ -78,20 +83,21 @@ pub(super) fn subsession_evidence(
                 r.get::<_, String>(4)?,
             ))
         })
-        .map_err(|_| "memory_origin_evidence_unavailable")?;
+        .map_err(evidence_unavailable)?;
     let mut found = None;
     for item in rows {
-        let (id, relation, result, parent, message) =
-            item.map_err(|_| "memory_origin_evidence_unavailable")?;
+        let (id, relation, result, parent, message) = item.map_err(evidence_unavailable)?;
         if message != format!("subsession-result:{relation}:{result}") {
-            return Err("memory_origin_outbox_identity_invalid");
+            return Err(evidence_error(
+                ConversationCode::MemoryOriginOutboxIdentityInvalid,
+            ));
         }
         let key = format!("app:{}", subsession_client_message_id(&relation, &result));
         if key == *source_ref {
             let value = json!({"outbox_id":id,"relation_id":relation,"result_id":result,
                 "parent_session_id":parent,"message_id":message});
             let bytes = canonical_json(&value, CanonicalKeyOrder::Utf16Lexical)
-                .map_err(|_| "memory_origin_evidence_unavailable")?;
+                .map_err(evidence_unavailable)?;
             found = Some(ConversationOriginEvidence {
                 kind: "subsession".into(),
                 reference: id,
@@ -131,10 +137,10 @@ pub(super) fn admission(data_root: &Path, candidate: &HistoricalOriginCandidate)
     let db = match open(data_root) {
         Ok(Some(db)) => db,
         Ok(None) => return SourceEvidence::absent(),
-        Err(()) => return SourceEvidence::unavailable(),
+        Err(_) => return SourceEvidence::unavailable(),
     };
     read_admission(&db, candidate, external, turn, source_ref)
-        .unwrap_or_else(|()| SourceEvidence::unavailable())
+        .unwrap_or_else(SourceEvidence::unavailable)
 }
 
 fn read_admission(
@@ -143,7 +149,7 @@ fn read_admission(
     external: &str,
     turn: &str,
     source_ref: &str,
-) -> Result<SourceEvidence, ()> {
+) -> Option<SourceEvidence> {
     type TurnRow = (
         String,
         String,
@@ -162,7 +168,7 @@ fn read_admission(
         "SELECT t.turn_id,t.session_id,t.trigger_key,t.original_message_id,t.inbox_id,t.admission_snapshot_ref,t.context_json,i.admission_input_hash,i.command_json,i.session_id,i.turn_id,i.trigger_key \
          FROM btcc_turns t JOIN btcc_inbound_inbox i ON i.inbox_id=t.inbox_id WHERE t.turn_id=?1", [turn],
         |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?,r.get(9)?,r.get(10)?,r.get(11)?)),
-    ).optional().map_err(|_| ())?;
+    ).optional().ok()?;
     let Some((
         turn_id,
         session,
@@ -178,27 +184,24 @@ fn read_admission(
         inbox_trigger,
     )) = row
     else {
-        return Ok(SourceEvidence::absent());
+        return Some(SourceEvidence::absent());
     };
     let record: Option<(String,String)> = db.query_row(
         "SELECT sha256,content_json FROM btcc_records WHERE record_id=?1 AND kind='admission_snapshot'", [&snapshot_ref],
         |r| Ok((r.get(0)?,r.get(1)?)),
-    ).optional().map_err(|_| ())?;
-    let Some((record_hash, record_json)) = record else {
-        return Err(());
-    };
+    ).optional().ok()?;
+    let (record_hash, record_json) = record?;
     if sha256(record_json.as_bytes()) != record_hash {
-        return Err(());
+        return None;
     }
-    let command: Value = serde_json::from_str(&command_json).map_err(|_| ())?;
-    let snapshot: Value = serde_json::from_str(&record_json).map_err(|_| ())?;
+    let command: Value = serde_json::from_str(&command_json).ok()?;
+    let snapshot: Value = serde_json::from_str(&record_json).ok()?;
     let context = &snapshot["context"];
     if !context.is_object()
-        || canonical_json(&json!({"context":context}), CanonicalKeyOrder::Utf16Lexical)
-            .map_err(|_| ())?
+        || canonical_json(&json!({"context":context}), CanonicalKeyOrder::Utf16Lexical).ok()?
             != record_json
     {
-        return Err(());
+        return None;
     }
     let kind = command["kind"].as_str().unwrap_or_default();
     let source_id = if kind == "run" {
@@ -221,7 +224,7 @@ fn read_admission(
         && source_ref == trigger
         && source_id == Some(&original);
     if !matched {
-        return Ok(SourceEvidence::absent());
+        return Some(SourceEvidence::absent());
     }
     let role = context["executionPolicy"]["role"]
         .as_str()
@@ -260,7 +263,7 @@ fn read_admission(
             sha256: None,
         });
     }
-    Ok(SourceEvidence {
+    Some(SourceEvidence {
         available: true,
         matched: true,
         public_ingress: false,

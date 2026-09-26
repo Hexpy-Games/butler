@@ -20,6 +20,7 @@ use tokio::sync::Mutex;
 
 use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult};
+use crate::conversation::ConversationCode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AdmissionEventVisibility {
@@ -125,7 +126,7 @@ impl ConversationAdmissionTurn {
             )
         {
             return Err(ConversationError::new(
-                "conversation_origin_invalid",
+                ConversationCode::ConversationOriginInvalid,
                 "prepared Conversation origin must be verified",
             ));
         }

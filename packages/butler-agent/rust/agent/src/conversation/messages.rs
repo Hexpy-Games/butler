@@ -15,6 +15,7 @@ use super::types::*;
 use super::{
     AgentConversationStore, ConversationError, ConversationIdentityClock, ConversationResult,
 };
+use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
     pub(crate) async fn append_user_message(
@@ -251,7 +252,7 @@ fn insert_tool_part(
         .map_err(ConversationError::sqlite)?
         .ok_or_else(|| {
             ConversationError::new(
-                "conversation_message_not_found",
+                ConversationCode::ConversationMessageNotFound,
                 format!("Conversation message not found: {}", input.message_id),
             )
         })?;

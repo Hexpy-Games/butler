@@ -184,7 +184,8 @@ fn prepare(
         .canonical_snapshot_path
         .clone()
         .unwrap_or_else(|| handle.source_root.join("runtime/conversation-store.sqlite"));
-    let canonical = ConversationSourceReader::open(&canonical_path).map_err(conversation_error)?;
+    let canonical =
+        ConversationSourceReader::open(&canonical_path).map_err(CognitionError::from)?;
     let graph = GraphRepository::open(&handle.graph_path)?;
     Ok(State {
         input,
@@ -441,7 +442,7 @@ impl Operation {
         tokio::task::spawn_blocking(move || {
             let state = shared.lock().take().ok_or_else(closed)?;
             let graph = state.graph.close();
-            let canonical = state.canonical.close().map_err(conversation_error);
+            let canonical = state.canonical.close().map_err(CognitionError::from);
             canonical.and(graph)
         })
         .await
@@ -463,9 +464,6 @@ fn write_aborted() -> CognitionError {
 )]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_projection_operation_failed", error.to_string())
-}
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }
 fn json_error(error: impl std::fmt::Display) -> CognitionError {
     CognitionError::new("memory_extract_invalid_json", error.to_string())

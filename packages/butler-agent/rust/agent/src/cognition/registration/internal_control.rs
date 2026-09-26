@@ -58,13 +58,9 @@ pub(super) async fn run(state: Input) -> CognitionResult<ConversationRegistratio
                         .source_root
                         .join("runtime/conversation-store.sqlite")
                 });
-            let canonical =
-                ConversationSourceReader::open(&path).map_err(super::conversation_error)?;
+            let canonical = ConversationSourceReader::open(&path).map_err(CognitionError::from)?;
             let result = supersede(&state, &canonical);
-            canonical
-                .close()
-                .map_err(super::conversation_error)
-                .and(result)
+            canonical.close().map_err(CognitionError::from).and(result)
         })();
         let release = lease.release(result.is_ok()).map_err(CognitionError::from);
         release.and(result)
@@ -84,12 +80,12 @@ fn supersede(
     }
     let outcome = canonical
         .read_turn_outcome(&state.turn_id)
-        .map_err(super::conversation_error)?
+        .map_err(CognitionError::from)?
         .ok_or_else(changed)?;
     let request_id = outcome.request_message_id.as_deref().ok_or_else(changed)?;
     let request = canonical
         .read_message(request_id)
-        .map_err(super::conversation_error)?
+        .map_err(CognitionError::from)?
         .ok_or_else(changed)?;
     if request.message.session_id != outcome.session_id
         || request.message.turn_id.as_deref() != Some(&state.turn_id)
@@ -101,7 +97,7 @@ fn supersede(
     if let Some(assistant_id) = outcome.public_assistant_message_id.as_deref() {
         let assistant = canonical
             .read_message(assistant_id)
-            .map_err(super::conversation_error)?;
+            .map_err(CognitionError::from)?;
         if assistant.is_some_and(|message| {
             message.message.origin_kind == ConversationOriginKind::InternalControl
         }) {

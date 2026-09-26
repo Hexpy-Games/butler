@@ -189,7 +189,7 @@ fn open_sources(
     let canonical = if canonical_path.exists() {
         match ConversationSourceReader::open(&canonical_path) {
             Ok(reader) => Some(reader),
-            Err(error) if error.code == "conversation_source_schema_unavailable" => None,
+            Err(error) if error.code() == "conversation_source_schema_unavailable" => None,
             Err(error) => {
                 return Err(CognitionError::new(
                     "canonical_source_unavailable",

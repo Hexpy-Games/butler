@@ -329,11 +329,12 @@ fn prepare(
         .canonical_snapshot_path
         .clone()
         .unwrap_or_else(|| handle.source_root.join("runtime/conversation-store.sqlite"));
-    let canonical = ConversationSourceReader::open(&canonical_path).map_err(conversation_error)?;
+    let canonical =
+        ConversationSourceReader::open(&canonical_path).map_err(CognitionError::from)?;
     let prepared = prepare_conversation_source(&canonical, input.notice.borrowed(), now)?;
     let plan = match prepared {
         PreparedConversationSource::SupersedeInternalControl { turn_id } => {
-            canonical.close().map_err(conversation_error)?;
+            canonical.close().map_err(CognitionError::from)?;
             return Ok(InitialPreparation::Handoff(Box::new(SupersessionHandoff {
                 input,
                 handle,
@@ -367,7 +368,7 @@ async fn close_after_failure(
 
 fn close_state(state: Box<OperationState>) -> CognitionResult<()> {
     let graph_close = state.graph.close();
-    let canonical_close = state.canonical.close().map_err(conversation_error);
+    let canonical_close = state.canonical.close().map_err(CognitionError::from);
     canonical_close.and(graph_close)
 }
 
@@ -467,9 +468,6 @@ fn closed() -> CognitionError {
 )]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_registration_operation_failed", error.to_string())
-}
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }
 
 #[cfg(test)]

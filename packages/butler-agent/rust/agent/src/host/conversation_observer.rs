@@ -9,7 +9,7 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 use crate::cognition::{CognitionPathEnvironment, CompletionNotice, CompletionPublisher};
 use crate::conversation::{
     AdmissionMetric, AdmissionSource, CompletionMetric, CompletionObservation,
-    ConversationAdmissionObserver, ConversationError, ConversationIdentityClock,
+    ConversationAdmissionObserver, ConversationCode, ConversationError, ConversationIdentityClock,
     ConversationObserverFuture,
 };
 use crate::operations::{AdmissionMeasure, ConversationMetrics, MetricFiles};
@@ -72,13 +72,9 @@ impl NativeConversationObserver {
                             let _ = result.send(Ok(()));
                         }
                         Job::Completion(input, result) => {
-                            let outcome =
-                                publisher
-                                    .publish(&input)
-                                    .map_err(|error| ConversationError {
-                                        code: error.code,
-                                        message: error.message,
-                                    });
+                            let outcome = publisher.publish(&input).map_err(|error| {
+                                ConversationError::port(error.code, error.message.clone(), error)
+                            });
                             let _ = result.send(outcome);
                         }
                         Job::Metric(input, result) => {
@@ -115,9 +111,12 @@ impl NativeConversationObserver {
         if let Some(worker) = state.worker.take() {
             tokio::task::spawn_blocking(move || worker.join())
                 .await
-                .map_err(|error| ConversationError {
-                    code: "conversation_observer_join_failed",
-                    message: error.to_string(),
+                .map_err(|error| {
+                    ConversationError::new(
+                        ConversationCode::ConversationObserverJoinFailed,
+                        error.to_string(),
+                    )
+                    .with_source(error)
                 })?
                 .map_err(|_| closed())?;
         }
@@ -153,10 +152,10 @@ impl ConversationAdmissionObserver for NativeConversationObserver {
 }
 
 fn closed() -> ConversationError {
-    ConversationError {
-        code: "conversation_observer_closed",
-        message: "conversation observer is closed".into(),
-    }
+    ConversationError::new(
+        ConversationCode::ConversationObserverClosed,
+        "conversation observer is closed",
+    )
 }
 
 #[cfg(test)]

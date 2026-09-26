@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 
 use super::types::*;
 use super::{ConversationError, ConversationIdentityClock, ConversationResult};
+use crate::conversation::ConversationCode;
 
 pub(super) fn stringify(value: &Value) -> ConversationResult<String> {
     crate::json::stringify(value).map_err(ConversationError::json)
@@ -27,7 +28,7 @@ pub(super) fn next_seq(
 ) -> ConversationResult<u64> {
     if !matches!(table, "conversation_turns" | "conversation_messages") {
         return Err(ConversationError::new(
-            "conversation_table_invalid",
+            ConversationCode::ConversationTableInvalid,
             "sequence table is invalid",
         ));
     }
@@ -422,7 +423,7 @@ pub(super) fn outcome(value: &str) -> ConversationResult<TurnOutcomeKind> {
 
 fn invalid(kind: &str, value: &str) -> ConversationError {
     ConversationError::new(
-        "conversation_value_invalid",
+        ConversationCode::ConversationValueInvalid,
         format!("invalid {kind}: {value}"),
     )
 }

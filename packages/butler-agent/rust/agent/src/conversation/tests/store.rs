@@ -168,7 +168,7 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
             })
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "conversation_outcome_generation_conflict"
     );
     assert_eq!(
@@ -309,7 +309,7 @@ async fn store_preserves_transactions_outcomes_and_summary_authority() {
             .read_message_by_id("cm_recovered")
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "conversation_json_error"
     );
     store.close().await.unwrap();

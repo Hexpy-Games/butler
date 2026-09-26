@@ -293,14 +293,14 @@ async fn classify_before_prepare(
         collation,
     })
     .await
-    .map_err(|error| CognitionError::new(error.code, error.message))?;
+    .map_err(|error| CognitionError::new(error.code(), error.message()))?;
     let result = classify_historical_origins(data_root.to_path_buf(), &store, cancellation)
         .await
-        .map_err(|error| CognitionError::new(error.code, error.message));
+        .map_err(|error| CognitionError::new(error.code(), error.message()));
     let closed = store
         .close()
         .await
-        .map_err(|error| CognitionError::new(error.code, error.message));
+        .map_err(|error| CognitionError::new(error.code(), error.message()));
     drop(lease);
     result?;
     closed?;

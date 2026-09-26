@@ -139,7 +139,7 @@ fn read_now(
     }
     let snapshot = match PublicMemorySnapshot::open(path, binding) {
         Ok(snapshot) => snapshot,
-        Err(error) if error.code == "invalid_scope" => {
+        Err(error) if error.code() == "invalid_scope" => {
             return Ok(args::failure("invalid_scope", &[]));
         }
         Err(_) => {

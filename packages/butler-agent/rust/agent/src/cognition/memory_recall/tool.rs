@@ -33,7 +33,7 @@ pub(super) fn prepare(
         Err(error) => {
             return Ok(PreparedRecall::BindingFailure(json!({
                 "ok": false,
-                "code": if error.code == "invalid_scope" { "invalid_scope" } else { "backend_unavailable" },
+                "code": if error.code() == "invalid_scope" { "invalid_scope" } else { "backend_unavailable" },
                 "diagnostics": [],
             })));
         }
@@ -102,7 +102,7 @@ pub(super) fn prepare(
     };
     if !snapshot
         .validate_scope(&public_scope)
-        .map_err(|e| CognitionError::new("backend_unavailable", e.code))?
+        .map_err(|e| CognitionError::new("backend_unavailable", e.code()))?
     {
         return Err(failure("invalid_scope"));
     }

@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 use super::classifier::{AdmissionOperation, ConversationAdmissionInput, classify};
 use super::{AdmissionMetric, ConversationAdmissionTurn, collect_evidence, stringify_optional};
+use crate::conversation::ConversationCode;
 use crate::conversation::types::*;
 use crate::conversation::{ConversationError, ConversationResult};
 
@@ -194,7 +195,7 @@ impl ConversationAdmissionTurn {
                 && stringify_optional(content_parts)? != stringify_optional(expected)?)
         {
             return Err(ConversationError::new(
-                "conversation_source_ref_conflict",
+                ConversationCode::ConversationSourceRefConflict,
                 "conversation_source_ref_conflict",
             ));
         }
@@ -209,7 +210,7 @@ impl ConversationAdmissionTurn {
             ConversationRole::User | ConversationRole::Assistant => {}
             _ => {
                 return Err(ConversationError::new(
-                    "conversation_source_ref_role_unsupported",
+                    ConversationCode::ConversationSourceRefRoleUnsupported,
                     "conversation_source_ref_role_unsupported",
                 ));
             }

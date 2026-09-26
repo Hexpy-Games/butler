@@ -8,7 +8,10 @@ use std::{
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use super::{HistoricalOriginCandidate, sha256};
+use super::{
+    ConversationCode, ConversationResult, HistoricalOriginCandidate, evidence_error,
+    evidence_unavailable, sha256,
+};
 
 pub(super) struct Match {
     pub matched: bool,
@@ -26,7 +29,7 @@ pub(super) fn read(
     locators: &[&HistoricalOriginCandidate],
     started: Instant,
     cancellation: &CancellationToken,
-) -> Result<QueueEvidence, &'static str> {
+) -> ConversationResult<QueueEvidence> {
     let mut matches = HashMap::new();
     if locators.is_empty() {
         return Ok(QueueEvidence {
@@ -44,7 +47,7 @@ fn scan(
     started: Instant,
     cancellation: &CancellationToken,
     matches: &mut HashMap<String, Match>,
-) -> Result<(), &'static str> {
+) -> ConversationResult<()> {
     let wanted = locators
         .iter()
         .filter_map(|row| row.source_ref.as_deref().map(|key| (key, *row)))
@@ -60,10 +63,10 @@ fn scan(
             continue;
         }
         let mut names = fs::read_dir(&directory)
-            .map_err(|_| "memory_origin_evidence_unavailable")?
+            .map_err(evidence_unavailable)?
             .map(|entry| entry.map(|entry| entry.path()))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| "memory_origin_evidence_unavailable")?;
+            .map_err(evidence_unavailable)?;
         names.retain(|path| {
             path.extension()
                 .is_some_and(|extension| extension == "json")
@@ -80,16 +83,19 @@ fn scan(
                 page_scanned = 0;
             }
             if cancellation.is_cancelled() || started.elapsed() >= Duration::from_secs(60) {
-                return Err("memory_origin_evidence_unavailable");
+                return Err(evidence_error(
+                    ConversationCode::MemoryOriginEvidenceUnavailable,
+                ));
             }
-            let bytes = fs::read(path).map_err(|_| "memory_origin_evidence_unavailable")?;
-            let record: Value =
-                serde_json::from_slice(&bytes).map_err(|_| "memory_origin_evidence_unavailable")?;
+            let bytes = fs::read(path).map_err(evidence_unavailable)?;
+            let record: Value = serde_json::from_slice(&bytes).map_err(evidence_unavailable)?;
             if record["version"].as_f64() != Some(1.0)
                 || !record["queueId"].is_string()
                 || !record["envelope"]["eventId"].is_string()
             {
-                return Err("memory_origin_evidence_unavailable");
+                return Err(evidence_error(
+                    ConversationCode::MemoryOriginEvidenceUnavailable,
+                ));
             }
             page_scanned += 1;
             let envelope = &record["envelope"];
@@ -112,8 +118,7 @@ fn scan(
                 || super::truthy(&envelope["appTurnContext"]["authorityRequestRef"])
                 || super::truthy(&envelope["routingHints"]["authorityRequestRef"])
                 || controls_internal;
-            let json = crate::json::stringify(envelope)
-                .map_err(|_| "memory_origin_evidence_unavailable")?;
+            let json = crate::json::stringify(envelope).map_err(evidence_unavailable)?;
             page_matches.insert(
                 event_id.to_owned(),
                 Match {
@@ -129,7 +134,7 @@ fn scan(
     Ok(())
 }
 
-pub(super) fn controls_valid(value: &Value) -> Result<bool, &'static str> {
+pub(super) fn controls_valid(value: &Value) -> ConversationResult<bool> {
     if value["schema_version"] != "butler.turn-execution-controls.v1"
         || !nonempty(&value["turn_id"])
         || !nonempty(&value["session_id"])
@@ -165,20 +170,23 @@ pub(super) fn controls_valid(value: &Value) -> Result<bool, &'static str> {
             .get("subsession_result")
             .is_some_and(|subsession| !subsession_valid(subsession))
     {
-        return Err("memory_origin_evidence_unavailable");
+        return Err(evidence_error(
+            ConversationCode::MemoryOriginEvidenceUnavailable,
+        ));
     }
     let hash = value["integrity_hash"]
         .as_str()
-        .ok_or("memory_origin_evidence_unavailable")?;
+        .ok_or_else(|| evidence_error(ConversationCode::MemoryOriginEvidenceUnavailable))?;
     let mut unsigned = value.clone();
     unsigned
         .as_object_mut()
-        .ok_or("memory_origin_evidence_unavailable")?
+        .ok_or_else(|| evidence_error(ConversationCode::MemoryOriginEvidenceUnavailable))?
         .shift_remove("integrity_hash");
-    let json =
-        crate::json::stringify(&unsigned).map_err(|_| "memory_origin_evidence_unavailable")?;
+    let json = crate::json::stringify(&unsigned).map_err(evidence_unavailable)?;
     if sha256(json) != hash {
-        return Err("memory_origin_evidence_unavailable");
+        return Err(evidence_error(
+            ConversationCode::MemoryOriginEvidenceUnavailable,
+        ));
     }
     Ok(true)
 }

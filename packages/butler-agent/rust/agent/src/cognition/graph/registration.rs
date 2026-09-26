@@ -51,7 +51,7 @@ pub(super) fn register(
     let project_id = input
         .canonical
         .read_session(&input.plan.session_id)
-        .map_err(conversation_error)?
+        .map_err(CognitionError::from)?
         .and_then(|session| session.project_id);
     upsert_chunk(&tx, &input, project_id.as_deref(), &now)?;
 
@@ -82,7 +82,7 @@ pub(super) fn register(
                 input
                     .canonical
                     .read_message(message_id)
-                    .map_err(conversation_error)?
+                    .map_err(CognitionError::from)?
                     .ok_or_else(source_changed)?,
             ),
         };
@@ -288,10 +288,6 @@ fn expand(connection: &Connection, source_id: &str) -> CognitionResult<Vec<Strin
 
 fn source_changed() -> CognitionError {
     CognitionError::new("memory_source_changed", "memory_source_changed")
-}
-
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }
 
 fn json_error(error: impl std::fmt::Display) -> CognitionError {

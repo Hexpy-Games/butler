@@ -9,14 +9,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::super::{ConversationOriginEvidence, HistoricalOriginCandidate};
+use super::super::{
+    ConversationCode, ConversationError, ConversationOriginEvidence, ConversationResult,
+    HistoricalOriginCandidate,
+};
 use tokio_util::sync::CancellationToken;
 
 pub(super) fn validate_outbox(
     data_root: &Path,
     started: Instant,
     cancellation: &CancellationToken,
-) -> Result<(), &'static str> {
+) -> ConversationResult<()> {
     btcc::validate_outbox(data_root, started, cancellation)
 }
 
@@ -33,7 +36,7 @@ pub(super) fn read_page(
     rows: &[HistoricalOriginCandidate],
     started: Instant,
     cancellation: &CancellationToken,
-) -> Result<Vec<UserEvidence>, &'static str> {
+) -> ConversationResult<Vec<UserEvidence>> {
     let locators = rows
         .iter()
         .filter(|row| {
@@ -46,7 +49,9 @@ pub(super) fn read_page(
     rows.iter()
         .map(|row| {
             if cancellation.is_cancelled() || started.elapsed() >= Duration::from_secs(60) {
-                return Err("memory_origin_evidence_unavailable");
+                return Err(evidence_error(
+                    ConversationCode::MemoryOriginEvidenceUnavailable,
+                ));
             }
             let admission = btcc::admission(data_root, row);
             let app = app::read(data_root, row);
@@ -111,6 +116,18 @@ impl SourceEvidence {
             ..Self::absent()
         }
     }
+}
+
+/// Evidence failures carry their code as the message, as the source did.
+fn evidence_error(code: ConversationCode) -> ConversationError {
+    ConversationError::new(code, code.as_str())
+}
+
+/// A read of historical evidence failed; the store error or I/O error is kept.
+fn evidence_unavailable(
+    source: impl std::error::Error + Send + Sync + 'static,
+) -> ConversationError {
+    evidence_error(ConversationCode::MemoryOriginEvidenceUnavailable).with_source(source)
 }
 
 fn sha256(bytes: impl AsRef<[u8]>) -> String {

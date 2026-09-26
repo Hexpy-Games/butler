@@ -8,6 +8,7 @@ pub(crate) use sessions::PublicSessionRow;
 use rusqlite::{OptionalExtension, params_from_iter, types::Value};
 
 use super::ConversationSourceReader;
+use crate::conversation::ConversationCode;
 use crate::conversation::{
     ConversationError, ConversationMessageWithParts, ConversationOriginKind, ConversationResult,
     ConversationRole, ConversationSession, ConversationSummary, ReadAroundInput,
@@ -65,13 +66,13 @@ impl PublicMemorySnapshot {
         });
         if !valid {
             return Err(ConversationError::new(
-                "invalid_scope",
+                ConversationCode::InvalidScope,
                 "Canonical Turn binding is invalid",
             ));
         }
         let Some(session) = session else {
             return Err(ConversationError::new(
-                "invalid_scope",
+                ConversationCode::InvalidScope,
                 "Canonical Turn binding is invalid",
             ));
         };
@@ -81,7 +82,7 @@ impl PublicMemorySnapshot {
         ).optional().map_err(ConversationError::sqlite)?;
         if external.as_deref() != Some(binding.runtime_session_id.trim()) {
             return Err(ConversationError::new(
-                "invalid_scope",
+                ConversationCode::InvalidScope,
                 "Runtime session binding is invalid",
             ));
         }
@@ -194,7 +195,7 @@ impl PublicMemorySnapshot {
             )?;
             if actual != summary.source_hash {
                 return Err(ConversationError::new(
-                    "conversation_stale_summary_requires_writer",
+                    ConversationCode::ConversationStaleSummaryRequiresWriter,
                     "Stale summary requires canonical writer reconciliation",
                 ));
             }

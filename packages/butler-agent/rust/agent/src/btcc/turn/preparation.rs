@@ -220,11 +220,11 @@ impl DefaultTurnPreparation {
             observer: Arc::clone(&self.observer),
         })
         .await
-        .map_err(|value| error(value.code, value.message))?;
+        .map_err(|value| error(value.code(), value.message()))?;
         admission
             .admit_inbound()
             .await
-            .map_err(|value| error(value.code, value.message))?;
+            .map_err(|value| error(value.code(), value.message()))?;
         let admission_input_hash = request::admission_hash(&command)?;
         let turn = PreparedTurn {
             preparation_id: request.turn_id.clone(),

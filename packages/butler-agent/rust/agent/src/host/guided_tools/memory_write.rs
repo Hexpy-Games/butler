@@ -149,7 +149,7 @@ fn canonical_authored_source(
         &binding,
     )
     .map_err(|error| {
-        if error.code == "invalid_scope" {
+        if error.code() == "invalid_scope" {
             "invalid_scope"
         } else {
             "backend_unavailable"

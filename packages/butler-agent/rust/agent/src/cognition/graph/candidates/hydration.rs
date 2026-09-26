@@ -151,7 +151,7 @@ pub(super) fn hydrate(
             };
             let message = canonical
                 .read_message(message_id)
-                .map_err(conversation_error)?
+                .map_err(crate::cognition::CognitionError::from)?
                 .ok_or_else(|| error("memory_source_changed"))?;
             crate::cognition::hydrate_conversation_source(&message, &row, f64::INFINITY)?
                 .text

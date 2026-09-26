@@ -4,6 +4,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Map, Value};
 
 use super::super::{ConversationError, ConversationResult};
+use crate::conversation::ConversationCode;
 
 #[derive(Clone, Debug)]
 pub(crate) struct HistoricalTranscriptRow {
@@ -85,7 +86,7 @@ pub(crate) fn read_historical_app_rows(
         return Ok(Vec::new());
     }
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| input_error("Unable to open app projection input"))?;
+        .map_err(|source| input_error("Unable to open app projection input").with_source(source))?;
     let rows = (|| {
         let table: bool = connection
             .query_row(
@@ -168,5 +169,8 @@ fn js_string(value: Option<&Value>) -> String {
 }
 
 fn input_error(message: &'static str) -> ConversationError {
-    ConversationError::new("conversation_recovery_input_unavailable", message)
+    ConversationError::new(
+        ConversationCode::ConversationRecoveryInputUnavailable,
+        message,
+    )
 }

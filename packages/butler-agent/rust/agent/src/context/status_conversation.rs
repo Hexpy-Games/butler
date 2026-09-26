@@ -293,7 +293,7 @@ fn read_conversation_summary(path: &Path, durable_session_id: &str) -> StatusCon
 
     let reader = match ConversationSourceReader::open(path) {
         Ok(reader) => reader,
-        Err(error) => return unavailable_conversation_summary(fallback, error.code),
+        Err(error) => return unavailable_conversation_summary(fallback, error.code()),
     };
     let summary: Result<StatusConversationSummary, crate::conversation::ConversationError> =
         (|| {
@@ -323,7 +323,7 @@ fn read_conversation_summary(path: &Path, durable_session_id: &str) -> StatusCon
     match (summary, reader.close()) {
         (Ok(summary), Ok(())) => summary,
         (Err(error), _) | (Ok(_), Err(error)) => {
-            unavailable_conversation_summary(fallback, error.code)
+            unavailable_conversation_summary(fallback, error.code())
         }
     }
 }

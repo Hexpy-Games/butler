@@ -80,7 +80,7 @@ impl RuntimeStores {
             Err(e) => {
                 let _ = bindings.close().await;
                 let _ = btcc.close().await;
-                return Err(error(e.code, &e.message));
+                return Err(error(e.code(), e.message()));
             }
         };
         Ok(Self {
@@ -96,7 +96,7 @@ impl RuntimeStores {
             .conversations
             .close()
             .await
-            .map_err(|e| error(e.code, e.message));
+            .map_err(|e| error(e.code(), e.message()));
         let bindings = self
             .bindings
             .close()

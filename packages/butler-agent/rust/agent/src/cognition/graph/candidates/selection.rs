@@ -241,7 +241,7 @@ fn context(
     };
     let messages = canonical
         .read_recent_public_message_ids(&session)
-        .map_err(super::conversation_error)?;
+        .map_err(crate::cognition::CognitionError::from)?;
     if messages.is_empty() {
         return Ok(Vec::new());
     }

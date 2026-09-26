@@ -2,6 +2,7 @@
 
 mod admission;
 mod codec;
+mod error;
 mod historical_origin;
 mod historical_recovery;
 mod messages;
@@ -21,6 +22,7 @@ pub(crate) use admission::{
     ConversationOriginFacts, DurableSessionBinding, RuntimeAdmissionEvent,
     classify_conversation_origin, conversation_session_id_for_durable_session,
 };
+pub(crate) use error::{ConversationCode, ConversationError};
 pub(crate) use historical_origin::classify_historical_origins;
 pub(crate) use historical_recovery::{
     HistoricalRecoveryInput, plan_historical_recovery, read_historical_app_rows,
@@ -35,7 +37,6 @@ pub(crate) use text_projection::{text_for_message, text_for_part};
 pub(crate) use types::*;
 
 use std::cmp::Ordering;
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -52,41 +53,6 @@ pub(crate) fn conversation_store_path(butler_data: &Path) -> PathBuf {
 
 type ConversationResult<T> = Result<T, ConversationError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ConversationError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl ConversationError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "map_err/iterator adapter taking owned values"
-    )]
-    fn sqlite(error: rusqlite::Error) -> Self {
-        Self::new("conversation_sqlite_error", error.to_string())
-    }
-
-    fn json(error: impl fmt::Display) -> Self {
-        Self::new("conversation_json_error", error.to_string())
-    }
-}
-
-impl fmt::Display for ConversationError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for ConversationError {}
 
 pub(crate) trait ConversationIdentityClock: Send + Sync {
     fn id(&self, prefix: &'static str) -> String;
@@ -137,7 +103,11 @@ impl AgentConversationStore {
             .name("butler-conversation-sqlite".to_owned())
             .spawn(move || run_connection_lane(path, &lane_clock, receiver, initialized_tx))
             .map_err(|error| {
-                ConversationError::new("conversation_thread_spawn_failed", error.to_string())
+                ConversationError::new(
+                    ConversationCode::ConversationThreadSpawnFailed,
+                    error.to_string(),
+                )
+                .with_source(error)
             })?;
         match initialized_rx.await {
             Ok(Ok(())) => Ok(Self {
@@ -159,7 +129,7 @@ impl AgentConversationStore {
             Err(_) => {
                 join_failed_initialization(thread).await;
                 Err(ConversationError::new(
-                    "conversation_initialization_lost",
+                    ConversationCode::ConversationInitializationLost,
                     "Conversation SQLite owner exited before initialization completed",
                 ))
             }
@@ -185,18 +155,26 @@ impl AgentConversationStore {
         });
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
-            ConversationError::new("conversation_closed", "Conversation store is closing")
+            ConversationError::new(
+                ConversationCode::ConversationClosed,
+                "Conversation store is closing",
+            )
         })?;
-        let permit = sender.reserve().await.map_err(|_| {
-            ConversationError::new("conversation_closed", "Conversation execution lane closed")
+        let permit = sender.reserve().await.map_err(|source| {
+            ConversationError::new(
+                ConversationCode::ConversationClosed,
+                "Conversation execution lane closed",
+            )
+            .with_source(source)
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|_| {
+        completion_rx.await.map_err(|source| {
             ConversationError::new(
-                "conversation_completion_lost",
+                ConversationCode::ConversationCompletionLost,
                 "Conversation operation ended without completion",
             )
+            .with_source(source)
         })?
     }
 
@@ -213,7 +191,7 @@ impl AgentConversationStore {
         };
         if lane.thread.is_none() && thread.is_none() && lane.close_waiters.is_empty() {
             let error = ConversationError::new(
-                "conversation_thread_missing",
+                ConversationCode::ConversationThreadMissing,
                 "Conversation SQLite owner thread is unavailable",
             );
             lane.close_result = Some(Err(error.clone()));
@@ -229,12 +207,17 @@ impl AgentConversationStore {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await
                     .map_err(|error| {
-                        ConversationError::new("conversation_join_failed", error.to_string())
+                        ConversationError::new(
+                            ConversationCode::ConversationJoinFailed,
+                            error.to_string(),
+                        )
+                        .with_source(error)
                     })
                     .and_then(|joined| {
-                        joined.map_err(|_| {
+                        // A panic payload is not an Error; the code records the panic.
+                        joined.map_err(|_panic_payload| {
                             ConversationError::new(
-                                "conversation_thread_panicked",
+                                ConversationCode::ConversationThreadPanicked,
                                 "Conversation SQLite owner thread panicked",
                             )
                         })?
@@ -248,11 +231,12 @@ impl AgentConversationStore {
                 }
             });
         }
-        waiter_rx.await.map_err(|_| {
+        waiter_rx.await.map_err(|source| {
             ConversationError::new(
-                "conversation_close_completion_lost",
+                ConversationCode::ConversationCloseCompletionLost,
                 "Conversation close ended without completion",
             )
+            .with_source(source)
         })?
     }
 }
@@ -275,7 +259,11 @@ fn run_connection_lane(
     let setup: ConversationResult<Connection> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
-                ConversationError::new("conversation_parent_create_failed", error.to_string())
+                ConversationError::new(
+                    ConversationCode::ConversationParentCreateFailed,
+                    error.to_string(),
+                )
+                .with_source(error)
             })?;
         }
         let connection = Connection::open(path).map_err(ConversationError::sqlite)?;
@@ -309,7 +297,7 @@ fn run_connection_lane(
     }
     if !connection.is_autocommit() {
         return Err(ConversationError::new(
-            "conversation_transaction_open_at_close",
+            ConversationCode::ConversationTransactionOpenAtClose,
             "Conversation transaction remained open at close",
         ));
     }

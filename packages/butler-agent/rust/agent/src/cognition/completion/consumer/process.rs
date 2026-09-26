@@ -259,14 +259,14 @@ pub(super) async fn project_next(input: &Input) -> CognitionResult<bool> {
     };
     let notice = if let Some(turn_id) = pending.source_key.strip_prefix("conversation_turn:") {
         let canonical = ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
-            .map_err(|e| CognitionError::new(e.code, e.message))?;
+            .map_err(|e| CognitionError::new(e.code(), e.message()))?;
         let outcome = canonical
             .read_turn_outcome(turn_id)
-            .map_err(|e| CognitionError::new(e.code, e.message))?
+            .map_err(|e| CognitionError::new(e.code(), e.message()))?
             .ok_or_else(|| error("memory_source_changed"))?;
         canonical
             .close()
-            .map_err(|e| CognitionError::new(e.code, e.message))?;
+            .map_err(|e| CognitionError::new(e.code(), e.message()))?;
         ProjectionSourceNotice::Conversation(CognitionConversationSourceNotice::Turn {
             session_id: pending
                 .session_id

@@ -33,3 +33,9 @@ impl From<crate::coordination::CoordinationError> for CognitionError {
         Self::new(error.code(), error.message())
     }
 }
+
+impl From<crate::conversation::ConversationError> for CognitionError {
+    fn from(error: crate::conversation::ConversationError) -> Self {
+        Self::new(error.code(), error.message())
+    }
+}

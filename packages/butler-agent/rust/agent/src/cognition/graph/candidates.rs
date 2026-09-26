@@ -195,6 +195,3 @@ fn error(code: &'static str) -> CognitionError {
 fn json_error(error: impl std::fmt::Display) -> CognitionError {
     CognitionError::new("memory_extract_invalid_json", error.to_string())
 }
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
-}

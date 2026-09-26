@@ -155,7 +155,7 @@ fn hydrate_row(
         std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
             canonical
                 .read_message(message_id)
-                .map_err(conversation_error)?
+                .map_err(CognitionError::from)?
                 .ok_or_else(source_changed)?,
         ),
     };
@@ -213,7 +213,4 @@ fn source_changed() -> CognitionError {
 }
 fn json_error(error: impl std::fmt::Display) -> CognitionError {
     CognitionError::new("memory_extract_invalid_json", error.to_string())
-}
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }

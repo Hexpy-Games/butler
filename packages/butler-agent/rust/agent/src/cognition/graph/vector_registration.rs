@@ -96,7 +96,7 @@ pub(super) fn read_episode_projection(
                 .ok_or_else(source_changed)?;
             let message = canonical
                 .read_message(message_id)
-                .map_err(conversation_error)?
+                .map_err(CognitionError::from)?
                 .ok_or_else(source_changed)?;
             let hydrated = hydrate_conversation_source(&message, &row, f64::INFINITY)?;
             let byte_start = integer_byte_offset(hydrated.byte_start)?;
@@ -219,10 +219,6 @@ fn stringify(value: &Value) -> CognitionResult<String> {
 
 fn option_value(value: Option<&str>) -> Value {
     value.map_or(Value::Null, |value| Value::String(value.to_owned()))
-}
-
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }
 
 fn json_error(error: impl std::fmt::Display) -> CognitionError {

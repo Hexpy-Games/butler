@@ -58,21 +58,21 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
     let canonical = match ConversationSourceReader::open(&canonical_path(&handle, &input.data_root))
     {
         Ok(reader) => reader,
-        Err(error) if error.code == "conversation_source_unavailable" => {
+        Err(error) if error.code() == "conversation_source_unavailable" => {
             return Ok(CatchupReport::default());
         }
-        Err(error) => return Err(CognitionError::new(error.code, error.message)),
+        Err(error) => return Err(CognitionError::new(error.code(), error.message())),
     };
     let mut outcomes = canonical
         .read_recall_outcome_page(cursors.outcome.as_deref(), Some(255))
-        .map_err(source_error)?;
+        .map_err(CognitionError::from)?;
     let mut wrapped = false;
     if outcomes.is_empty() && cursors.outcome.is_some() {
         cursors.outcome = None;
         wrapped = true;
         outcomes = canonical
             .read_recall_outcome_page(None, Some(255))
-            .map_err(source_error)?;
+            .map_err(CognitionError::from)?;
     }
     let remaining = 256 - outcomes.len();
     let mut work = Vec::with_capacity(256);
@@ -95,7 +95,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
         let batch_size = (remaining - scanned).min(16);
         let messages = canonical
             .read_recovered_source_page(cursors.message.as_deref(), Some(batch_size))
-            .map_err(source_error)?;
+            .map_err(CognitionError::from)?;
         if messages.is_empty() {
             if scanned == 0 && cursors.message.is_some() && !wrapped {
                 cursors.message = None;
@@ -123,7 +123,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
             break;
         }
     }
-    canonical.close().map_err(source_error)?;
+    canonical.close().map_err(CognitionError::from)?;
     let scanned_total = work.len();
     let mut ingested = 0;
     for (notice, observation_id) in work {
@@ -234,9 +234,6 @@ async fn save_cursors(
     result.and(released)
 }
 
-fn source_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
-}
 fn error(code: &'static str) -> CognitionError {
     CognitionError::new(code, code)
 }

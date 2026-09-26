@@ -6,6 +6,7 @@ use super::super::codec::{
 };
 use super::super::types::*;
 use super::super::{AgentConversationStore, ConversationError, ConversationResult};
+use crate::conversation::ConversationCode;
 
 type CandidateRow = (
     String,
@@ -61,7 +62,7 @@ impl AgentConversationStore {
                 let row = row.map_err(ConversationError::sqlite)?;
                 let message = read_message(connection, &row.0)?.ok_or_else(|| {
                     ConversationError::new(
-                        "conversation_source_changed",
+                        ConversationCode::ConversationSourceChanged,
                         "origin candidate disappeared",
                     )
                 })?;
@@ -294,7 +295,7 @@ fn parse_role(value: &str) -> ConversationResult<ConversationRole> {
         "user" => Ok(ConversationRole::User),
         "assistant" => Ok(ConversationRole::Assistant),
         _ => Err(ConversationError::new(
-            "conversation_role_invalid",
+            ConversationCode::ConversationRoleInvalid,
             format!("invalid role {value}"),
         )),
     }
@@ -307,7 +308,7 @@ fn parse_provenance(value: &str) -> ConversationResult<ConversationProvenance> {
         "imported" => Ok(ConversationProvenance::Imported),
         "synthetic_summary" => Ok(ConversationProvenance::SyntheticSummary),
         _ => Err(ConversationError::new(
-            "conversation_provenance_invalid",
+            ConversationCode::ConversationProvenanceInvalid,
             format!("invalid provenance {value}"),
         )),
     }
@@ -320,7 +321,7 @@ fn parse_origin(value: &str) -> ConversationResult<ConversationOriginKind> {
         "internal_control" => Ok(ConversationOriginKind::InternalControl),
         "unknown" => Ok(ConversationOriginKind::Unknown),
         _ => Err(ConversationError::new(
-            "conversation_origin_invalid",
+            ConversationCode::ConversationOriginInvalid,
             format!("invalid origin {value}"),
         )),
     }

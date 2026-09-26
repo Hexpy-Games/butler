@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use rusqlite::Connection;
 
+use crate::conversation::ConversationCode;
 use crate::conversation::{
     ConversationError, ConversationMessageStats, ConversationMessageWithParts, ConversationResult,
     codec::read_message,
@@ -61,7 +62,7 @@ pub(in crate::conversation) fn status_message_facts(
         .map(|id| {
             read_message(connection, id)?.ok_or_else(|| {
                 ConversationError::new(
-                    "conversation_message_missing",
+                    ConversationCode::ConversationMessageMissing,
                     "Message disappeared while reading status context",
                 )
             })

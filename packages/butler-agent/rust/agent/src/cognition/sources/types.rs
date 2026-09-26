@@ -101,7 +101,7 @@ impl CognitionSourceError {
 
 impl From<ConversationError> for CognitionSourceError {
     fn from(error: ConversationError) -> Self {
-        Self::new(error.code, error.message)
+        Self::new(error.code(), error.message())
     }
 }
 

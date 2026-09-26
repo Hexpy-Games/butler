@@ -6,6 +6,7 @@ use super::types::*;
 use super::{
     AgentConversationStore, ConversationError, ConversationIdentityClock, ConversationResult,
 };
+use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
     pub(crate) async fn begin_turn(
@@ -178,7 +179,7 @@ pub(super) fn finalize_in_transaction(
 ) -> ConversationResult<ConversationTurn> {
     get_turn(tx, &input.turn_id)?.ok_or_else(|| {
         ConversationError::new(
-            "conversation_turn_not_found",
+            ConversationCode::ConversationTurnNotFound,
             format!("Conversation turn not found: {}", input.turn_id),
         )
     })?;
@@ -196,7 +197,7 @@ pub(super) fn finalize_in_transaction(
     .map_err(ConversationError::sqlite)?;
     let turn = get_turn(tx, &input.turn_id)?.ok_or_else(|| {
         ConversationError::new(
-            "conversation_turn_not_found",
+            ConversationCode::ConversationTurnNotFound,
             "Conversation turn disappeared",
         )
     })?;

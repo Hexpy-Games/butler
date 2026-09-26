@@ -129,7 +129,7 @@ fn read_generation_hot_cache(
     );
     let canonical_closed = canonical
         .close()
-        .map_err(|error| CognitionError::new(error.code, error.message));
+        .map_err(|error| CognitionError::new(error.code(), error.message()));
     let graph_closed = graph.close();
     canonical_closed?;
     graph_closed?;

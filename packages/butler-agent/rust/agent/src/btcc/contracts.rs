@@ -360,3 +360,9 @@ impl std::fmt::Display for BtccError {
 }
 
 impl std::error::Error for BtccError {}
+
+impl From<crate::conversation::ConversationError> for BtccError {
+    fn from(error: crate::conversation::ConversationError) -> Self {
+        Self::new(error.code(), error.message())
+    }
+}

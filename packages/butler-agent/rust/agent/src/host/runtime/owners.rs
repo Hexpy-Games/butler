@@ -77,7 +77,7 @@ impl HostDependencies for RuntimeOwners {
                 .observer
                 .close()
                 .await
-                .map_err(|e| BtccError::new(e.code, e.message));
+                .map_err(|e| BtccError::new(e.code(), e.message()));
             let stores = self.stores.close().await;
             let result = image_files
                 .and(attachment_context)

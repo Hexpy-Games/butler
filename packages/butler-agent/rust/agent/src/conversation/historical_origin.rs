@@ -16,6 +16,7 @@ use super::{
     RecordOriginClassificationInput, RecordOriginClassificationResult,
     classify_conversation_origin,
 };
+use crate::conversation::ConversationCode;
 
 #[derive(Default)]
 pub(crate) struct HistoricalOriginReport {
@@ -37,8 +38,7 @@ pub(crate) async fn classify_historical_origins(
         evidence::validate_outbox(&root, started, &validation_cancel)
     })
     .await
-    .map_err(|_| unavailable())?
-    .map_err(|code| ConversationError::new(code, code))?;
+    .map_err(|source| unavailable().with_source(source))??;
     let mut report = HistoricalOriginReport::default();
     for role in [ConversationRole::User, ConversationRole::Assistant] {
         let mut after = None;
@@ -68,8 +68,7 @@ pub(crate) async fn classify_historical_origins(
                     evidence::read_page(&root, &user_rows, started, &page_cancellation)
                 })
                 .await
-                .map_err(|_| unavailable())?
-                .map_err(|code| ConversationError::new(code, code))?
+                .map_err(|source| unavailable().with_source(source))??
             };
             let mut user = 0;
             for row in rows.iter().filter(|row| row.role == role) {
@@ -218,13 +217,13 @@ async fn record(
         RecordOriginClassificationResult::Unchanged => report.unchanged += 1,
         RecordOriginClassificationResult::SourceChanged => {
             return Err(ConversationError::new(
-                "memory_source_changed",
+                ConversationCode::MemorySourceChanged,
                 "canonical candidate changed",
             ));
         }
         RecordOriginClassificationResult::ClassificationConflict => {
             return Err(ConversationError::new(
-                "memory_origin_classification_conflict",
+                ConversationCode::MemoryOriginClassificationConflict,
                 "origin classification conflicts",
             ));
         }
@@ -244,7 +243,7 @@ fn check(cancellation: &CancellationToken, started: Instant) -> ConversationResu
 }
 fn unavailable() -> ConversationError {
     ConversationError::new(
-        "memory_origin_evidence_unavailable",
+        ConversationCode::MemoryOriginEvidenceUnavailable,
         "historical origin evidence unavailable",
     )
 }

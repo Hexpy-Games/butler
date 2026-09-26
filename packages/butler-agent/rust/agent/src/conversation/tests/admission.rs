@@ -71,7 +71,7 @@ async fn admission_replays_exact_source_and_rejects_unsafe_tool_content() {
         .await
         .unwrap();
     assert_eq!(
-        conflict.admit_inbound().await.unwrap_err().code,
+        conflict.admit_inbound().await.unwrap_err().code(),
         "conversation_source_ref_conflict"
     );
 

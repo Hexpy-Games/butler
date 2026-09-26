@@ -9,6 +9,7 @@ use super::types::*;
 use super::{
     AgentConversationStore, ConversationError, ConversationIdentityClock, ConversationResult,
 };
+use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
     pub(crate) async fn read_turn_outcome(
@@ -29,13 +30,13 @@ pub(super) fn write_outcome(
     let requested_generation = input.generation;
     let turn = get_turn(connection, &input.turn_id)?.ok_or_else(|| {
         ConversationError::new(
-            "conversation_turn_not_found",
+            ConversationCode::ConversationTurnNotFound,
             format!("Conversation turn not found: {}", input.turn_id),
         )
     })?;
     if turn.session_id != input.session_id {
         return Err(ConversationError::new(
-            "conversation_outcome_session_mismatch",
+            ConversationCode::ConversationOutcomeSessionMismatch,
             "Turn outcome session mismatch",
         ));
     }
@@ -90,7 +91,7 @@ pub(super) fn write_outcome(
         if requested_generation == existing.generation {
             if capsule.source_hash != existing.source_hash {
                 return Err(ConversationError::new(
-                    "conversation_outcome_generation_conflict",
+                    ConversationCode::ConversationOutcomeGenerationConflict,
                     format!(
                         "Turn outcome generation conflict: {}:{}",
                         capsule.turn_id, capsule.generation

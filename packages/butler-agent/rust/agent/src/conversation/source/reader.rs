@@ -19,6 +19,7 @@ use super::super::{
     ConversationError, ConversationMessageWithParts, ConversationResult, ConversationSession,
     ConversationStatusStats, ConversationTurn, ReadCognitionMessagesInput, TurnOutcomeCapsule,
 };
+use crate::conversation::ConversationCode;
 
 const REQUIRED_TABLES: [&str; 8] = [
     "conversation_sessions",
@@ -179,7 +180,7 @@ impl ConversationSourceReader {
     fn connection(&self) -> ConversationResult<&Connection> {
         self.connection.as_ref().ok_or_else(|| {
             ConversationError::new(
-                "conversation_source_closed",
+                ConversationCode::ConversationSourceClosed,
                 "Conversation source reader is closed",
             )
         })
@@ -205,7 +206,7 @@ fn validate_schema(connection: &Connection) -> ConversationResult<()> {
             .map_err(ConversationError::sqlite)?;
         if !found {
             return Err(ConversationError::new(
-                "conversation_source_schema_unavailable",
+                ConversationCode::ConversationSourceSchemaUnavailable,
                 format!("Canonical Conversation schema is missing table {table}"),
             ));
         }
@@ -213,12 +214,12 @@ fn validate_schema(connection: &Connection) -> ConversationResult<()> {
     Ok(())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn source_open_error(error: rusqlite::Error) -> ConversationError {
-    ConversationError::new("conversation_source_unavailable", error.to_string())
+    ConversationError::new(
+        ConversationCode::ConversationSourceUnavailable,
+        error.to_string(),
+    )
+    .with_source(error)
 }
 
 fn read_by_source_ref(

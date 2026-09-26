@@ -122,7 +122,8 @@ struct CanonicalTurnInventory {
 fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalTurnInventory>> {
     let path = conversation_store_path(data_root);
     ensure_data_authority(data_root, &[&path])?;
-    let reader = ConversationSourceReader::open(&path).map_err(conversation_error)?;
+    let reader =
+        ConversationSourceReader::open(&path).map_err(|error| conversation_error(&error))?;
     let result = (|| {
         let mut messages = Vec::new();
         let mut offset = 0usize;
@@ -136,7 +137,7 @@ fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalT
                     order: Some(ConversationReadOrder::Asc),
                     ..Default::default()
                 })
-                .map_err(conversation_error)?;
+                .map_err(|error| conversation_error(&error))?;
             let count = page.len();
             messages.extend(page);
             if count < 1_000 {
@@ -152,7 +153,10 @@ fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalT
         }
         let mut turns = Vec::new();
         for (turn_id, messages) in grouped {
-            let Some(turn) = reader.read_turn(&turn_id).map_err(conversation_error)? else {
+            let Some(turn) = reader
+                .read_turn(&turn_id)
+                .map_err(|error| conversation_error(&error))?
+            else {
                 continue;
             };
             if turn.status != "complete" {
@@ -160,7 +164,7 @@ fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalT
             }
             let session = reader
                 .read_session(&turn.session_id)
-                .map_err(conversation_error)?;
+                .map_err(|error| conversation_error(&error))?;
             turns.push(CanonicalTurnInventory {
                 session_id: turn.session_id,
                 turn_id,
@@ -171,7 +175,7 @@ fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalT
         }
         Ok(turns)
     })();
-    let closed = reader.close().map_err(conversation_error);
+    let closed = reader.close().map_err(|error| conversation_error(&error));
     match (result, closed) {
         (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
         (Ok(turns), Ok(())) => Ok(turns),
@@ -315,8 +319,8 @@ fn sha256(value: &[u8]) -> String {
     format!("{:x}", Sha256::digest(value))
 }
 
-fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
-    CognitionError::new("continuity_recovery_inventory_read_failed", error.message)
+fn conversation_error(error: &crate::conversation::ConversationError) -> CognitionError {
+    CognitionError::new("continuity_recovery_inventory_read_failed", error.message())
 }
 
 fn error(code: &'static str) -> CognitionError {

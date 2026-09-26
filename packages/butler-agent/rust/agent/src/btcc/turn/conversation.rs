@@ -5,7 +5,7 @@ use crate::btcc::{
     TurnOutcome, TurnOutcomeKind,
 };
 use crate::conversation::{
-    AdmissionEventVisibility, AgentConversationStore, ConversationAdmissionTurn, ConversationError,
+    AdmissionEventVisibility, AgentConversationStore, ConversationAdmissionTurn,
     RuntimeAdmissionEvent, TurnOutcomeKind as ConversationOutcome,
 };
 
@@ -42,7 +42,7 @@ impl PreparedConversation for ConversationProjection {
                     }),
                 })
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -54,7 +54,7 @@ impl PreparedConversation for ConversationProjection {
                 .store
                 .read_turn_outcome(&self.turn_id)
                 .await
-                .map_err(btcc_error)?
+                .map_err(BtccError::from)?
                 .is_some_and(|outcome| outcome.outcome == ConversationOutcome::Delivered)
             {
                 return Ok(());
@@ -72,11 +72,11 @@ impl PreparedConversation for ConversationProjection {
             self.admission
                 .admit_final(&content, &format!("btcc-canonical-final:{message_id}"))
                 .await
-                .map_err(btcc_error)?;
+                .map_err(BtccError::from)?;
             self.admission
                 .finalize("complete", &self.store.identity_clock().now_iso())
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -86,7 +86,7 @@ impl PreparedConversation for ConversationProjection {
                 .store
                 .read_turn_outcome(&self.turn_id)
                 .await
-                .map_err(btcc_error)?
+                .map_err(BtccError::from)?
                 .is_some_and(|outcome| outcome.outcome == ConversationOutcome::Cancelled)
             {
                 return Ok(());
@@ -94,13 +94,9 @@ impl PreparedConversation for ConversationProjection {
             self.admission
                 .finalize("aborted", &self.store.identity_clock().now_iso())
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
-}
-
-fn btcc_error(error: ConversationError) -> BtccError {
-    BtccError::new(error.code, error.message)
 }
 
 #[cfg(test)]
