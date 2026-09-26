@@ -9,6 +9,20 @@ rust-version = "1.91"
 license = "MIT"
 publish = false
 
+# Debug info is limited to line tables because full DWARF made macOS target
+# directories exceed 50 GB: macOS defaults to split-debuginfo = "unpacked",
+# which keeps every object file's debug info in target/debug/deps, and
+# incremental rebuilds leave the superseded objects behind. Line tables keep
+# file:line in panic messages and backtraces (no test inspects variables or
+# frames beyond that); "packed" moves them into one .dSYM per binary.
+# Dependencies need no debug info. profile.test inherits these settings.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "packed"
+
+[profile.dev.package."*"]
+debug = false
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unreachable_pub = "deny"
