@@ -1,13 +1,14 @@
+import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import { useId, type HTMLAttributes, type ReactNode } from "react";
 import { Field } from "../../components/Field";
 import { Label } from "../../components/Label";
 import { Typo } from "../../components/Typo";
 import { isDevBuild } from "../../lib/devBuild";
-import { cn } from "../../lib/utils";
 import { useSettingsFieldScope } from "./settingsFieldScope";
 import styles from "./SettingsField.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface SettingsFieldProps extends HTMLAttributes<HTMLDivElement> {
+export interface SettingsFieldProps extends DsPrivateStyleProps, DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   id?: string;
   label: ReactNode;
   description?: ReactNode;
@@ -17,7 +18,6 @@ export interface SettingsFieldProps extends HTMLAttributes<HTMLDivElement> {
   controlWidth?: "default" | "full";
   /** Stable setting id (`data-setting-id`); settings pages declare it in their schema. */
   settingId?: string;
-  className?: string;
 }
 
 export function SettingsField({
@@ -41,7 +41,7 @@ export function SettingsField({
 
   return (
     <Field
-      className={cn(styles.field, className)}
+      className={dsClass(styles.field, className)}
       data-control-width={controlWidth}
       data-settings-field=""
       data-setting-id={settingId}
@@ -51,7 +51,7 @@ export function SettingsField({
         <Label htmlFor={id}>{label}</Label>
         {description ? (
           <Typo.Caption
-            className={styles.description}
+            className={dsClass(styles.description)}
             id={effectiveDescriptionId}
           >
             {description}
@@ -61,7 +61,7 @@ export function SettingsField({
       <div className={styles.control}>
         {control}
         {meta ? (
-          <Typo.Caption className={styles.meta}>{meta}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>
         ) : null}
       </div>
     </Field>

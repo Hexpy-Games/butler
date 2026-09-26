@@ -1,5 +1,4 @@
 import { appCopy } from "./copy.ts";
-import type { CSSProperties } from "react";
 import type {
   ProjectDashboardDocument,
   ProjectDashboardDocumentType,
@@ -11,59 +10,6 @@ export const planLanes = () => [
   { id: "done", label: appCopy.conversation.work.todoItemCompletedLabel },
   { id: "other", label: appCopy.projectDocumentMetadata.other },
 ] as const;
-
-export const projectDocumentLayout = {
-  planBoard: { alignItems: "stretch" },
-  lane: { minWidth: 0 },
-  laneInner: { height: "22rem", minHeight: 0 },
-  laneScroller: { flex: "1 1 auto", height: "100%", minHeight: 0 },
-  specBrowserPanel: {
-    display: "grid",
-    gridTemplateColumns: "minmax(12rem, 0.34fr) minmax(0, 1fr)",
-    minHeight: 0,
-    overflow: "hidden",
-  },
-  specCategoryPane: {
-    minWidth: 0,
-    borderRight: "1px solid var(--line)",
-    paddingRight: "var(--space-md)",
-  },
-  specDocumentPane: { minWidth: 0, paddingLeft: "var(--space-md)" },
-  specScroller: { height: "14.5rem", minHeight: 0 },
-} satisfies Record<string, CSSProperties>;
-
-export const projectDocumentDialogLayout = {
-  body: {
-    position: "relative",
-    minHeight: 0,
-  },
-  markdownPadding: {
-    paddingBottom: "72px",
-  },
-  metadataPanel: {
-    display: "grid",
-    gap: "var(--space-xs)",
-    padding: "var(--space-md)",
-  },
-  metadataRow: {
-    display: "grid",
-    gridTemplateColumns: "minmax(7rem, 0.28fr) minmax(0, 1fr)",
-    gap: "var(--space-sm)",
-    alignItems: "baseline",
-  },
-  scroller: {
-    height: "min(66vh, 680px)",
-    minHeight: "20rem",
-  },
-  startAction: {
-    position: "absolute",
-    left: "50%",
-    bottom: "var(--space-md)",
-    zIndex: 2,
-    transform: "translateX(-50%)",
-    boxShadow: "var(--shadow-card)",
-  },
-} satisfies Record<string, CSSProperties>;
 
 export const planBoardTabs = () => [
   { id: "plan", label: appCopy.composer.plan },

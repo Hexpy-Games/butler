@@ -53,4 +53,14 @@ export const stories: ShowcaseStory[] = [
       </Grid>
     ),
   },
+  {
+    // SpaceRowMeta: the status never takes more than three fifths of the meta line.
+    name: "Capped item width",
+    render: () => (
+      <Stack align="row" cross="baseline" justify="between" gap="sm">
+        <Typo.Caption tone="secondary" grow basis="0" minWidth="0" truncate>projects/butler-site/specs/design-system.md</Typo.Caption>
+        <Typo.Caption tone="secondary" maxWidth="3/5" truncate>Working on the settings hierarchy and every page</Typo.Caption>
+      </Stack>
+    ),
+  },
 ];

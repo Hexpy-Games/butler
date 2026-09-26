@@ -28,7 +28,7 @@ export const guidance: ShowcaseGuidance = {
   doDont: [
     {
       do: { caption: "PageContainer owns max-width and gutters.", render: () => <ReadingPage /> },
-      dont: { caption: "A Box with a hand-picked max-width drifts per page.", render: () => <Box padding="xl" style={{ maxWidth: 700 }}><Typo.Body>Custom width</Typo.Body></Box> },
+      dont: { caption: "A padded Box has no page max-width or gutters.", render: () => <Box padding="xl"><Typo.Body>Custom width</Typo.Body></Box> },
     },
   ],
   content: ["No copy of its own."],

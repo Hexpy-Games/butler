@@ -6,6 +6,12 @@
   max-width: 100%;
 }
 
+.chart[data-size="panel"] {
+  width: 100%;
+  height: var(--chart-height-panel);
+  min-width: 0;
+}
+
 .chart[data-density="compact"] {
   height: 36px;
   min-width: 0;

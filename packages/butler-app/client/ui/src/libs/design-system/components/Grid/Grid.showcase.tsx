@@ -59,4 +59,18 @@ export const stories: ShowcaseStory[] = [
       </PageContainer>
     ),
   },
+  {
+    // ProjectDocumentMarkdownContent frontmatter: label and value columns on one baseline.
+    name: "Label / value rows",
+    render: () => (
+      <Grid columns="1" gap="xs">
+        {[["status", "draft"], ["owner", "yeonwoo"], ["updated", "2026-09-26"]].map(([label, value]) => (
+          <Grid key={label} columns="label-value" gap="sm">
+            <Typo.Caption tone="tertiary">{label}</Typo.Caption>
+            <Typo.Caption tone="secondary" wrap="anywhere">{value}</Typo.Caption>
+          </Grid>
+        ))}
+      </Grid>
+    ),
+  },
 ];

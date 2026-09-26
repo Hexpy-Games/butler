@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { ActivityHeatmap, Button, ChevronRight, Grid, NavRow, Section, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
+import { ActivityHeatmap, ActivityStrip, Button, ChevronRight, Grid, NavRow, Section, Stack, Typo, Box, ProgressMeter } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
-import styles from "./ProjectStatisticsPanel.module.css";
 
 export function ProjectActivityStatistics() {
   const locale = useAppLocale();
@@ -48,9 +47,8 @@ export function ProjectActivityStatistics() {
           label={<Typo.Text lineClamp={2} wrap="anywhere">{data.sources[item.sourceKey]?.title}</Typo.Text>} actions={<ChevronRight />}
           meta={<Stack gap="xs"><Typo.Caption>{copy.changes(item.changes)}</Typo.Caption>
             <ProgressMeter bare ariaLabel={copy.changes(item.changes)} value={Math.round(item.changes / Math.max(1, activity[0]!.changes) * 100)} />
-            <span className={styles.activityDates} aria-label={item.dates.map(dayLabel).join(", ")}>
-              {data.days.map((day) => <span key={day.date} data-active={item.dates.includes(day.date)} title={dayLabel(day.date)} />)}
-            </span>
+            <ActivityStrip ariaLabel={item.dates.map(dayLabel).join(", ")}
+              days={data.days.map((day) => ({ key: day.date, label: dayLabel(day.date), active: item.dates.includes(day.date) }))} />
           </Stack>} />)}
         {activity.length > limit && <Button variant="inline" onClick={() => setLimit((value) => value + 10)}>{appCopy.projectSignpost.loadMore}</Button>}
       </Stack></Box>

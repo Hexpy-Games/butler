@@ -1,4 +1,5 @@
-import { type CSSProperties, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import { AspectFrame, type IconSize } from "@/butler-ds";
 import {
   type ButlerMarkTheme,
   type ButlerMarkThemeColors,
@@ -12,9 +13,9 @@ export type ButlerThinkingMarkState = "idle" | "working";
 
 interface ButlerThinkingMarkProps {
   active?: boolean;
-  className?: string;
+  /** Fixed icon size; omit to fill the container width. */
+  size?: IconSize;
   state?: ButlerThinkingMarkState;
-  style?: CSSProperties;
   theme?: ButlerMarkTheme;
   themeColors?: ButlerMarkThemeColors;
   variant?: ButlerThinkingMarkVariant;
@@ -22,9 +23,8 @@ interface ButlerThinkingMarkProps {
 
 export function ButlerThinkingMark({
   active = true,
-  className,
+  size,
   state,
-  style,
   theme,
   themeColors,
   variant = "dark",
@@ -139,21 +139,8 @@ export function ButlerThinkingMark({
   }, [resolvedTheme, themeColors?.dark, themeColors?.light]);
 
   return (
-    <span
-      className={className}
-      style={{
-        display: "block",
-        maxWidth: "100%",
-        aspectRatio: 1,
-        contain: "layout paint size",
-        ...style,
-      }}
-      aria-hidden="true"
-    >
-      <canvas
-        ref={canvasRef}
-        style={{ display: "block", width: "100%", height: "100%" }}
-      />
-    </span>
+    <AspectFrame size={size} aria-hidden="true">
+      <canvas ref={canvasRef} />
+    </AspectFrame>
   );
 }

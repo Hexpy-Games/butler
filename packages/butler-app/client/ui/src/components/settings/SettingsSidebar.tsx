@@ -64,12 +64,12 @@ export function SettingsSidebar({
         as="header"
         align="row"
         cross="center"
-        className="settings-header settings-titlebar drag-region"
+        windowDrag="drag"
         data-test-class="settings-header settings-titlebar"
       >
         <NavRow
           ariaLabel={backLabel}
-          className="settings-back-button no-drag"
+          windowDrag="no-drag"
           icon={<ArrowLeft size="lg" />}
           label={backLabel}
           onClick={onClose}
@@ -97,7 +97,7 @@ export function SettingsSidebar({
       ) : null}
       <ScrollArea
         fill
-        className="no-drag"
+        windowDrag="no-drag"
         dataTestClass="settings-navigation-scroll"
       >
         <Stack gap="lg">

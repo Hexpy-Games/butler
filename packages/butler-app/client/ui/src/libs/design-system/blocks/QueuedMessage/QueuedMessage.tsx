@@ -7,6 +7,7 @@ import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 import { useSendFlight } from "../../lib/sendFlight";
 import styles from "./QueuedMessage.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type QueuedMessageTone = "queued" | "sending" | "failed";
 
@@ -84,7 +85,7 @@ export function QueuedMessage({
       ref={(node) => assignRef(rowRef, node)}
       style={offsetY === undefined ? undefined : { transform: `translateY(${offsetY}px)` }}
     >
-      <Typo.Caption as="div" tone={tone === "failed" ? "danger" : "secondary"} className={styles.status}>
+      <Typo.Caption as="div" tone={tone === "failed" ? "danger" : "secondary"} className={dsClass(styles.status)}>
         {tone === "failed" ? <AlertCircle size="sm" /> : <Clock3 size="sm" />}
         <span>{status}</span>
       </Typo.Caption>

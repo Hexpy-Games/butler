@@ -4,6 +4,7 @@ import { Typo } from "../../components/Typo";
 import { DialogDescription, DialogTitle } from "../../components/Dialog";
 import { SettingsFieldScopeProvider } from "../SettingsField/settingsFieldScope";
 import styles from "./DialogForm.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface DialogFormProps {
   title: ReactNode;
@@ -29,8 +30,8 @@ export function DialogForm({
   dialog = false,
   busy,
 }: DialogFormProps) {
-  const heading = <Typo.PanelTitle className={styles.title}>{title}</Typo.PanelTitle>;
-  const body = description ? <Typo.Body className={styles.description}>{description}</Typo.Body> : null;
+  const heading = <Typo.PanelTitle className={dsClass(styles.title)}>{title}</Typo.PanelTitle>;
+  const body = description ? <Typo.Body className={dsClass(styles.description)}>{description}</Typo.Body> : null;
   return (
     <form
       aria-busy={busy || undefined}

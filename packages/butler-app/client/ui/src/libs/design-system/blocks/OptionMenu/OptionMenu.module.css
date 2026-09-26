@@ -178,3 +178,22 @@
     transition: none;
   }
 }
+
+/* Permission tones (access modes): label and icon colors. */
+.item[data-permission-tone="full"] {
+  --option-menu-icon-color: var(--access-full);
+
+  color: var(--access-full);
+}
+
+.item[data-permission-tone="ask"] {
+  --option-menu-icon-color: var(--access-ask);
+
+  color: var(--access-ask);
+}
+
+.item[data-permission-tone="read"] {
+  --option-menu-icon-color: var(--access-read-icon);
+
+  color: var(--access-read);
+}

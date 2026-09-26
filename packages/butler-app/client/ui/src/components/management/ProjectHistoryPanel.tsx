@@ -51,7 +51,7 @@ export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { pr
     {page.ledgerUnavailable && <Typo.Caption>{copy.historyLedgerUnavailable}</Typo.Caption>}
     {[...groups].map(([date, events]) => <Section key={date} title={date}>
       <div className={styles.timeline}>{events.map((event) => <div key={event.id} className={styles.event}>
-        <span className={styles.marker}>{event.action === "completed" ? <CheckCircle2 /> : event.session ? <MessageSquare /> : <FileText />}</span>
+        <div className={styles.marker}>{event.action === "completed" ? <CheckCircle2 /> : event.session ? <MessageSquare /> : <FileText />}</div>
         <Stack gap="xs">
           <NavRow label={<Typo.Text lineClamp={2} wrap="anywhere">{event.title}</Typo.Text>} multiline actions={<ChevronRight />}
       meta={<Typo.Caption tone="secondary">{[new Date(event.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" }), event.action === "completed" ? copy.recordedCompletion : copy[event.action],

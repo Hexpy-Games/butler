@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Typo.module.css";
@@ -14,6 +15,7 @@ type TypoElement =
   | "span"
   | "label"
   | "code"
+  | "pre"
   | "time";
 
 export type TypoTone =
@@ -28,7 +30,8 @@ export type TypoTone =
 export type TypoWeight = "regular" | "medium" | "semibold";
 export type TypoAlign = "start" | "center" | "end";
 export type TypoLineClamp = 2 | 3 | 4;
-export type TypoWrap = "normal" | "nowrap" | "anywhere";
+/** `pre`: keep line breaks and spaces, wrap long lines anywhere (logs, raw payloads). */
+export type TypoWrap = "normal" | "nowrap" | "anywhere" | "pre";
 export type TypoNumeric = "tabular";
 
 /** Text props shared by every Typo variant. None of them change the type scale. */
@@ -42,9 +45,11 @@ export interface TypoTextProps {
   lineClamp?: TypoLineClamp;
   wrap?: TypoWrap;
   numeric?: TypoNumeric;
+  /** `control`: pad the first line so it centers on a control row (text beside an IconButton). */
+  alignWith?: "control";
 }
 
-export interface TypoProps extends HTMLAttributes<HTMLElement>, TypoTextProps, Omit<LayoutItemProps, "span"> {
+export interface TypoProps extends TypoTextProps, Omit<LayoutItemProps, "span">, DsBaseProps<HTMLAttributes<HTMLElement>> {
   children: ReactNode;
   as?: TypoElement;
   htmlFor?: string;
@@ -68,6 +73,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
       lineClamp,
       wrap,
       numeric,
+      alignWith,
       ...props
     }] = splitLayoutItemProps(allProps);
     const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
@@ -81,6 +87,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
         data-line-clamp={lineClamp}
         data-wrap={wrap}
         data-numeric={numeric}
+        data-align-with={alignWith}
         {...itemAttributes}
         {...props}
       >

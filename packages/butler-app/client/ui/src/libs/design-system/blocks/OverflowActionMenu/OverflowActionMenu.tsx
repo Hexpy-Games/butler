@@ -1,3 +1,4 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useState, type ReactNode } from "react";
 import { MoreHorizontal } from "../../components/Icons";
 import { IconButton } from "../../components/IconButton";
@@ -7,8 +8,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../components/DropdownMenu";
-import { cn } from "../../lib/utils";
 import styles from "./OverflowActionMenu.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface OverflowActionMenuItem {
   /** Icon element */
@@ -21,7 +22,7 @@ export interface OverflowActionMenuItem {
   variant?: "default" | "destructive";
 }
 
-export interface OverflowActionMenuProps {
+export interface OverflowActionMenuProps extends DsPrivateStyleProps {
   /** Menu items */
   items: OverflowActionMenuItem[];
   /** Accessible label for trigger button */
@@ -30,8 +31,6 @@ export interface OverflowActionMenuProps {
   open?: boolean;
   /** Controlled open state change handler */
   onOpenChange?: (open: boolean) => void;
-  /** Additional CSS class */
-  className?: string;
 }
 
 export function OverflowActionMenu({
@@ -49,7 +48,7 @@ export function OverflowActionMenu({
     <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <IconButton
-          className={cn(styles.trigger, className)}
+          className={dsClass(styles.trigger, className)}
           label={label}
           selected={menuOpen}
         >

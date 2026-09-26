@@ -1,12 +1,13 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
-import { cn } from "../../lib/utils";
 import styles from "./TintedGlass.module.css";
+import { cn } from "../../lib/utils";
 
 export type TintedGlassRadius = "control" | "panel" | "popover" | "composer";
 export type TintedGlassPadding = "none" | "sm" | "md" | "lg";
 type TintedGlassElement = "div" | "section" | "aside";
 
-export interface TintedGlassProps extends HTMLAttributes<HTMLDivElement> {
+export interface TintedGlassProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children?: ReactNode;
   as?: TintedGlassElement;
   radius?: TintedGlassRadius;

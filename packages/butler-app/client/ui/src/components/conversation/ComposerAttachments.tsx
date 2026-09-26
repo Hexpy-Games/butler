@@ -20,7 +20,7 @@ export function ComposerAttachments() {
 
   return (
     <AttachmentList
-      className="no-drag"
+      windowDrag="no-drag"
       items={attachments.map((attachment) => ({
         id: attachment.id,
         name: attachment.file.safe_name,

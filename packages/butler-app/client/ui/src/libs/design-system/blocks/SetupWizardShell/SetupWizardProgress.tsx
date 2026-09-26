@@ -1,19 +1,19 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { cn } from "../../lib/utils";
 import styles from "./SetupWizardProgress.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface SetupWizardStep {
   id: string;
   label: ReactNode;
 }
 
-export interface SetupWizardProgressProps {
+export interface SetupWizardProgressProps extends DsPrivateStyleProps {
   steps: SetupWizardStep[];
   activeIndex: number;
   ariaLabel?: string;
-  className?: string;
 }
 
 export function SetupWizardProgress({
@@ -28,7 +28,7 @@ export function SetupWizardProgress({
       align="row"
       wrap
       gap="md"
-      className={cn(styles.root, className)}
+      className={dsClass(styles.root, className)}
       aria-label={ariaLabel}
     >
       {steps.map((step, index) => (
@@ -38,10 +38,10 @@ export function SetupWizardProgress({
           data-active={index === activeIndex ? "true" : undefined}
           key={step.id}
         >
-          <Typo.Caption as="span" className={styles.index}>
+          <Typo.Caption as="span" className={dsClass(styles.index)}>
             {index + 1}
           </Typo.Caption>
-          <Typo.Caption as="span" className={styles.label}>
+          <Typo.Caption as="span" className={dsClass(styles.label)}>
             {step.label}
           </Typo.Caption>
         </li>

@@ -3,6 +3,7 @@ import { PageContainer } from "../../components/PageContainer";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./SettingsShell.module.css";
 import { SettingsPageProvider } from "./settingsPage";
+import { dsClass } from "../../lib/internal";
 
 export interface SettingsShellProps {
   sidebar: ReactNode;
@@ -76,7 +77,7 @@ export function SettingsShell({
           .join(" ")}
       >
         {detailHeader ? (
-          <PageContainer key={pageKey} width="narrow" align="start" gutter="none" className={styles.detailHeader} data-page-motion={direction}>
+          <PageContainer key={pageKey} width="narrow" align="start" gutter="none" className={dsClass(styles.detailHeader)} data-page-motion={direction}>
             {detailNavigation ? (
               <div className={styles.detailNavigation}>{detailNavigation}</div>
             ) : null}
@@ -84,10 +85,10 @@ export function SettingsShell({
           </PageContainer>
         ) : null}
         <ScrollArea
-          className={styles.detailScroll}
+          className={dsClass(styles.detailScroll)}
           dataTestClass="settings-detail-scroll"
         >
-          <PageContainer key={pageKey} width="narrow" align="start" gutter="none" className={styles.detailContent} data-page-motion={direction}>
+          <PageContainer key={pageKey} width="narrow" align="start" gutter="none" className={dsClass(styles.detailContent)} data-page-motion={direction}>
             <SettingsPageProvider title={pageTitle} description={pageDescription}>
               {detail}
             </SettingsPageProvider>

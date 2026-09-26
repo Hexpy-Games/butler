@@ -1,3 +1,4 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { useScrollEdges } from "../../lib/useScrollEdges";
@@ -9,14 +10,13 @@ export interface InspectorShellTab {
   icon?: ReactNode;
 }
 
-export interface InspectorShellProps {
+export interface InspectorShellProps extends DsPrivateStyleProps {
   id?: string;
   open?: boolean;
   activeTab: string;
   tabs: InspectorShellTab[];
   onTabChange: (tabId: string) => void;
   children: ReactNode;
-  className?: string;
 }
 
 export function InspectorShell({

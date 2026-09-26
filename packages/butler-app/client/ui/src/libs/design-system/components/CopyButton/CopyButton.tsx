@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "../IconButton";
 import { CheckIcon, Copy } from "../Icons";
-import { cn } from "../../lib/utils";
 import styles from "./CopyButton.module.css";
+import { dsClass } from "../../lib/internal";
 
 /** How long the check stays before the copy icon returns. */
 export const COPY_FEEDBACK_MS = 1500;
@@ -56,15 +56,15 @@ export function CopyButton({
   return (
     <>
       <IconButton
-        className={styles.button}
+        className={dsClass(styles.button)}
         data-copied={copied ? "true" : "false"}
         label={copied ? copiedLabel : label}
         aria-label={copied ? copiedLabel : ariaLabel ?? label}
         onClick={() => void copy()}
       >
         <span className={styles.icons} aria-hidden="true">
-          <Copy size="sm" className={cn(styles.icon, styles.copyIcon)} />
-          <CheckIcon size="sm" className={cn(styles.icon, styles.checkIcon)} />
+          <Copy size="sm" className={dsClass(styles.icon, styles.copyIcon)} />
+          <CheckIcon size="sm" className={dsClass(styles.icon, styles.checkIcon)} />
         </span>
       </IconButton>
       <span className="sr-only" role="status" aria-live="polite">

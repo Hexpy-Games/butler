@@ -4,6 +4,17 @@
   min-width: 0;
 }
 
+.inline {
+  display: inline-flex;
+}
+
+/* Lists laid out as stacks carry no list chrome. */
+.stack:is(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .fill {
   flex: 1 1 auto;
   min-height: 0;

@@ -72,4 +72,13 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // PlanDocumentMessage: a document inside a message, flat and translucent.
+    name: "Subtle (document in a message)",
+    render: () => (
+      <SurfacePanel elevation="subtle">
+        <Typo.Body>elevation=&quot;subtle&quot;: no shadow, a translucent raised fill.</Typo.Body>
+      </SurfacePanel>
+    ),
+  },
 ];

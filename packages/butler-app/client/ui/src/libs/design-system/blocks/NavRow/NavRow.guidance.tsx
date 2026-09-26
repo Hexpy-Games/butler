@@ -33,7 +33,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Labels are titles as the user named them; truncate, never wrap, unless multiline is set."],
+  content: ["windowDrag=\"no-drag\" keeps a row clickable inside a titlebar drag region.", "Labels are titles as the user named them; truncate, never wrap, unless multiline is set."],
   accessibility: ["Active rows carry aria-current; actions stop propagation; iconInteractive exposes an icon control."],
   tokens: ["--sidebar-row-height", "--selection-strong", "--selection", "--sidebar-action-size", "--motion-fast"],
 };

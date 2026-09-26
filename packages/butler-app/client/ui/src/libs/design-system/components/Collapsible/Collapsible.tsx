@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import { useRef, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { usePresence } from "../Presence";
 import styles from "./Collapsible.module.css";
 
-export interface CollapsibleProps extends HTMLAttributes<HTMLDivElement> {
+export interface CollapsibleProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   open: boolean;
   children: ReactNode;
   /**

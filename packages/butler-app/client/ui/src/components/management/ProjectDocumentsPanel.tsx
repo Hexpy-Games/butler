@@ -8,24 +8,22 @@ import {
   planBoardType,
   planLane,
   projectDocumentBadgeLabel,
-  projectDocumentLayout,
 } from "@/app/projectDocuments.ts";
 import {
   BookOpenText,
   DocumentTile,
   FileText,
-  Grid,
+  KanbanBoard,
+  KanbanLane,
   ListChecks,
   NavRow,
   Section,
-  ScrollArea,
+  SplitBrowser,
   Stack,
-  SurfacePanel,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-  Typo,
 } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
@@ -64,45 +62,29 @@ export function ProjectDocumentsPanel({
               const tabPlans = plans.filter((plan) => planBoardType(plan) === tab.id);
               return (
                 <TabsContent key={tab.id} value={tab.id}>
-                  <Grid
-                    columns="4"
-                    gap="md"
-                    style={projectDocumentLayout.planBoard}
-                    data-test-class={`project-plan-kanban-${tab.id}`}
-                  >
+                  <KanbanBoard data-test-class={`project-plan-kanban-${tab.id}`}>
                     {planLanes().map((lane) => {
                       const lanePlans = tabPlans.filter((plan) => planLane(plan) === lane.id);
                       return (
-                        <SurfacePanel
-                          elevation="none"
-                          key={lane.id}
-                          style={projectDocumentLayout.lane}
-                        >
-                          <Stack gap="sm" style={projectDocumentLayout.laneInner}>
-                            <Typo.PanelSectionTitle>{lane.label}</Typo.PanelSectionTitle>
-                            <ScrollArea style={projectDocumentLayout.laneScroller}>
-                              <Stack gap="sm">
-                                {lanePlans.length > 0 ? (
-                                  lanePlans.map((document) => (
-                                    <DocumentTile
-                                      badge={projectDocumentBadgeLabel(document)}
-                                      icon={<FileText size="md" />}
-                                      key={document.id}
-                                      title={document.title}
-                                      meta={document.status ?? document.safe_path_label}
-                                      actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
-                                    />
-                                  ))
-                                ) : (
-                                  <EmptyPanelLine label={appCopy.interfaceTemplates.emptyLane(tab.label)} />
-                                )}
-                              </Stack>
-                            </ScrollArea>
-                          </Stack>
-                        </SurfacePanel>
+                        <KanbanLane key={lane.id} title={lane.label}>
+                          {lanePlans.length > 0 ? (
+                            lanePlans.map((document) => (
+                              <DocumentTile
+                                badge={projectDocumentBadgeLabel(document)}
+                                icon={<FileText size="md" />}
+                                key={document.id}
+                                title={document.title}
+                                meta={document.status ?? document.safe_path_label}
+                                actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
+                              />
+                            ))
+                          ) : (
+                            <EmptyPanelLine label={appCopy.interfaceTemplates.emptyLane(tab.label)} />
+                          )}
+                        </KanbanLane>
                       );
                     })}
-                  </Grid>
+                  </KanbanBoard>
                 </TabsContent>
               );
             })}
@@ -113,44 +95,30 @@ export function ProjectDocumentsPanel({
       </Section>
       <Section gap="lg" icon={<BookOpenText size="md" />} title={appCopy.interfacePanels.specs}>
         {specsByCategory.length > 0 ? (
-          <SurfacePanel
-            elevation="none"
-            style={projectDocumentLayout.specBrowserPanel}
+          <SplitBrowser
             data-test-class="project-spec-groups"
+            nav={specsByCategory.map(([category, categorySpecs]) => (
+              <NavRow
+                active={category === activeSpecCategory}
+                ariaLabel={category}
+                badge={categorySpecs.length}
+                dataTestClass="project-spec-category"
+                key={category}
+                label={category}
+                onClick={() => setSelectedSpecCategory(category)}
+              />
+            ))}
           >
-            <div style={projectDocumentLayout.specCategoryPane}>
-              <ScrollArea style={projectDocumentLayout.specScroller}>
-                <Stack gap="xs">
-                  {specsByCategory.map(([category, categorySpecs]) => (
-                    <NavRow
-                      active={category === activeSpecCategory}
-                      ariaLabel={category}
-                      badge={categorySpecs.length}
-                      dataTestClass="project-spec-category"
-                      key={category}
-                      label={category}
-                      onClick={() => setSelectedSpecCategory(category)}
-                    />
-                  ))}
-                </Stack>
-              </ScrollArea>
-            </div>
-            <div style={projectDocumentLayout.specDocumentPane}>
-              <ScrollArea style={projectDocumentLayout.specScroller}>
-                <Stack gap="sm">
-                  {activeSpecs.map((document) => (
-                    <DocumentTile
-                      icon={<FileText size="md" />}
-                      key={document.id}
-                      title={document.title}
-                      meta={document.safe_path_label}
-                      actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
-                    />
-                  ))}
-                </Stack>
-              </ScrollArea>
-            </div>
-          </SurfacePanel>
+            {activeSpecs.map((document) => (
+              <DocumentTile
+                icon={<FileText size="md" />}
+                key={document.id}
+                title={document.title}
+                meta={document.safe_path_label}
+                actionLabel={appCopy.common.open} onOpen={() => onSelectDocument(document)}
+              />
+            ))}
+          </SplitBrowser>
         ) : (
           <EmptyPanelLine label={appCopy.interfacePanels.noSpecs} />
         )}

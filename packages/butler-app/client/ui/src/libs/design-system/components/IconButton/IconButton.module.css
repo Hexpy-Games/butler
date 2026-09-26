@@ -56,3 +56,23 @@
     min-height: var(--control-hit-target);
   }
 }
+
+/* Optical alignment: the icon, not the hit area, meets the top-end corner. */
+.moduleScope[data-optical-align="top-end"] {
+  --icon-button-optical-hit: var(--icon-button-size, var(--control-height-md));
+  --icon-button-optical-offset: calc(
+    (var(--icon-button-optical-hit) - var(--icon-size-md)) / 2
+  );
+
+  translate: var(--icon-button-optical-offset)
+    calc(-1 * var(--icon-button-optical-offset));
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .moduleScope[data-optical-align="top-end"] {
+    --icon-button-optical-hit: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+  }
+}

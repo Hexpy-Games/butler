@@ -13,7 +13,7 @@ export function RightPanelOverlayTitlebar() {
 
   return (
     <AdaptivePanelTitlebar
-      className="right-panel-overlay-titlebar drag-region"
+      windowDrag="drag"
       data-test-class="right-panel-overlay-titlebar"
       open
     >

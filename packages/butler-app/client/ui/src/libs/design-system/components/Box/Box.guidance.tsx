@@ -28,7 +28,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Card when nothing is a card: it adds shadow and selection semantics.", render: () => <Card><Typo.Body>Not really a card</Typo.Body></Card> },
     },
   ],
-  content: ["No copy of its own."],
+  content: ["paddingStart indents one side (an indented row); windowDrag marks desktop drag regions.", "No copy of its own."],
   accessibility: ["Box is a div by default; pass as=\"section\" or \"aside\" for landmarks."],
   tokens: ["--space-sm", "--radius-panel", "--surface-raised", "--line"],
 };

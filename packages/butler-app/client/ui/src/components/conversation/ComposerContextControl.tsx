@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { ContextDonutButton, Popover, PopoverContent, PopoverTrigger } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ContextUsagePopover } from "./ContextUsagePopover";
 
@@ -33,7 +33,7 @@ export function ComposerContextControl() {
       <PopoverContent
         data-test-class="context-popover"
         align="center"
-        className={appThemeClasses(settings)}
+        theme={appShellTheme(settings)}
         side="top"
         sideOffset={10}
       >

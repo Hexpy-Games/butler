@@ -14,6 +14,28 @@
   overflow: hidden;
 }
 
+.frame[data-max-height="xs"] {
+  max-height: var(--scroll-area-max-height-xs);
+}
+
+.frame[data-max-height="sm"] {
+  max-height: var(--scroll-area-max-height-sm);
+}
+
+/* Bleed into the container's inline-end gutter (inspector padding). */
+.frame[data-bleed="inline-end"] {
+  --scroll-area-bleed: var(--inspector-inline-padding, 18px);
+  --scroll-area-frame-width: calc(100% + var(--scroll-area-bleed));
+  --scroll-area-content-width: 100%;
+  --scroll-area-scrollbar-offset: 18px;
+  --scroll-area-fade-size: 10px;
+  --scroll-area-edge-padding: var(--space-xs);
+}
+
+.frame[data-bleed="inline-end"] .content {
+  padding-inline-end: var(--scroll-area-bleed);
+}
+
 .fill {
   flex: 1 1 auto;
   min-height: 0;

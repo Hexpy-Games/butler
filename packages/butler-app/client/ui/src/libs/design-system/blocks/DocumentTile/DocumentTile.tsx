@@ -7,6 +7,7 @@ import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
 import { Typo } from "../../components/Typo";
 import styles from "./DocumentTile.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface DocumentTileAction {
   id: string;
@@ -64,12 +65,12 @@ export function DocumentTile({
           {icon}
         </span>
       ) : null}
-      <Stack gap="xs" className={styles.copy}>
+      <Stack gap="xs" className={dsClass(styles.copy)}>
         <Typo.Body weight="medium" lineClamp={2} wrap="anywhere" title={title}>
           {title}
         </Typo.Body>
         {badge || secondLine ? (
-          <Inline gap="xs" wrap={false} className={styles.meta}>
+          <Inline gap="xs" wrap={false} className={dsClass(styles.meta)}>
             {badge ? <Tag data-test-class="document-tile-badge">{badge}</Tag> : null}
             {secondLine ? <Typo.Caption tone="secondary" truncate>{secondLine}</Typo.Caption> : null}
           </Inline>
@@ -81,7 +82,7 @@ export function DocumentTile({
   return (
     <Card
       aria-label={isTileClickable ? (ariaLabel ?? actionLabel) : undefined}
-      className={styles.tile}
+      className={dsClass(styles.tile)}
       data-slot="document-tile"
       interactive={isTileClickable}
       role={isTileClickable ? "button" : undefined}
@@ -91,7 +92,7 @@ export function DocumentTile({
     >
       {content}
       {hasActions ? (
-        <ButtonContainer className={styles.actions} size="xs">
+        <ButtonContainer className={dsClass(styles.actions)} size="xs">
           {actions.map((action) => (
             <DocumentTileActionButton action={action} key={action.id} />
           ))}

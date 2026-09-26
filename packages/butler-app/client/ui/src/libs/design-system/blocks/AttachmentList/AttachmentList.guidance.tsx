@@ -28,7 +28,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "List rows for pending attachments take too much composer space.", render: () => <ListRow icon={<FileText size="md" />} title="project-notes.md" meta="4 KB" /> },
     },
   ],
-  content: ["Show the file name as uploaded and a human size (4 KB)."],
+  content: ["windowDrag=\"no-drag\" keeps chips removable inside a drag region.", "Show the file name as uploaded and a human size (4 KB)."],
   accessibility: ["Remove buttons are labelled with the file name; image thumbnails need alt text."],
   tokens: ["--radius-pill", "--line", "--icon-size-sm"],
 };

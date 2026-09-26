@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { getAppCopy, setAppCopyLanguage } from "@/app/copy.ts";
@@ -38,6 +38,6 @@ test("remaining-work rows put the stage label and count above the bar so long la
   // Label and count come before the bar (ProgressMeter label row), not in a fixed-width column beside it.
   expect(label!.compareDocumentPosition(bar) & 4).toBe(4);
   expect(count!.compareDocumentPosition(bar) & 4).toBe(4);
-  const css = readFileSync(new URL("./ProjectStatisticsPanel.module.css", import.meta.url), "utf8");
-  expect(css).not.toContain("4em");
+  // The statistics panels own no stylesheet: chart height and day strips are DS props.
+  expect(existsSync(new URL("./ProjectStatisticsPanel.module.css", import.meta.url))).toBe(false);
 });

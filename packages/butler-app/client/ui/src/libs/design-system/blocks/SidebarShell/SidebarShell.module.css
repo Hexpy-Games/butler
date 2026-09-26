@@ -36,6 +36,8 @@
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  /* Long press opens row menus, not the touch callout. */
+  -webkit-touch-callout: none;
 }
 
 /* Icons in the sidebar share the density icon size and optical offset. */

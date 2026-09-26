@@ -2,6 +2,7 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, Showcase
 import { ButtonContainer } from "../ButtonContainer";
 import {
   ArrowLeft,
+  Eye,
   FolderPlus,
   LayoutDashboard,
   MessageSquarePlus,
@@ -94,6 +95,16 @@ export const stories: ShowcaseStory[] = [
     name: "Disabled",
     states: ["disabled"],
     render: (context) => <IconButton disabled label={text(context).remove}><Trash2 size="md" /></IconButton>,
+  },
+  {
+    // StewardParentProgress: card header actions whose icons meet the card's top-end corner.
+    name: "Optical top-end alignment",
+    render: () => (
+      <Stack align="row" cross="start" justify="between" gap="sm">
+        <Typo.Label>Card title</Typo.Label>
+        <IconButton label="Open details" opticalAlign="top-end"><Eye size="md" /></IconButton>
+      </Stack>
+    ),
   },
 ];
 

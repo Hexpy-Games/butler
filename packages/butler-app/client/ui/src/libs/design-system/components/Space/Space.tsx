@@ -1,10 +1,11 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes } from "react";
 import styles from "./Space.module.css";
 
 type SpaceSize = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 type SpaceDirection = "horizontal" | "vertical";
 
-export interface SpaceProps extends HTMLAttributes<HTMLDivElement> {
+export interface SpaceProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   size?: SpaceSize;
   direction?: SpaceDirection;
 }

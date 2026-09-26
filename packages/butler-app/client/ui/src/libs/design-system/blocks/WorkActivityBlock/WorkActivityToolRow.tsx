@@ -5,6 +5,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import type { WorkActivityToolItem } from "./WorkActivityToolGroup";
 import styles from "./WorkActivityBlock.module.css";
+import { dsClass } from "../../lib/internal";
 
 export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivityToolItem; nested?: boolean }) {
   const [expanded, setExpanded] = useState(false);
@@ -15,7 +16,7 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
         <span className={styles.toolIcon} aria-hidden={!tool.icon}>{tool.icon}</span>
       ) : null}
       <span className={styles.toolCopy}>
-        <Typo.Body as="span" className={styles.toolTitle}>{tool.title}</Typo.Body>
+        <Typo.Body as="span" className={dsClass(styles.toolTitle)}>{tool.title}</Typo.Body>
       </span>
       {nested && hasDetails ? (
         <span className={styles.toolDetailChevron} aria-hidden="true">
@@ -39,7 +40,7 @@ export function WorkActivityToolRow({ tool, nested = false }: { tool: WorkActivi
         {hasDetails ? (
           <Collapsible open={expanded}>
             <Typo.Caption
-              className={`${styles.toolDetails} ${styles.toolDetailText}`}
+              className={dsClass(`${styles.toolDetails} ${styles.toolDetailText}`)}
               data-slot="work-activity-tool-details"
               data-test-class="turn-work-tool-detail-text"
             >

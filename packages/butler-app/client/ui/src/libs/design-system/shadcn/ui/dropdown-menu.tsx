@@ -1,19 +1,22 @@
 "use client";
 
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 
 import { cn } from "../../lib/utils";
+import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "../../lib/theme";
 import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { CheckIcon, ChevronRightIcon } from "../../components/Icons";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import styles from "../../components/DropdownMenu/DropdownMenu.module.css";
+import { dsClass } from "../../lib/internal";
 
 function DropdownMenu({
   modal = false,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>>) {
   return (
     <DropdownMenuPrimitive.Root
       data-slot="dropdown-menu"
@@ -25,7 +28,7 @@ function DropdownMenu({
 
 function DropdownMenuPortal({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Portal>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Portal>>) {
   return (
     <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
   );
@@ -33,7 +36,7 @@ function DropdownMenuPortal({
 
 function DropdownMenuTrigger({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>>) {
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
@@ -47,9 +50,12 @@ function DropdownMenuContent({
   ref,
   align = "start",
   sideOffset = 4,
+  theme,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
+  /** App theme for the portalled surface (it renders outside the themed shell). */
+  theme?: AdaptiveShellTheme;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
   return (
@@ -62,7 +68,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
         align={align}
         collisionPadding={floatingContentCollisionPadding}
-        className={cn(tintedGlassSurfaceClassName, styles.content, className)}
+        className={cn(tintedGlassSurfaceClassName, styles.content, theme && adaptiveShellThemeClasses(theme), className)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
@@ -71,7 +77,7 @@ function DropdownMenuContent({
 
 function DropdownMenuGroup({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Group>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Group>>) {
   return (
     <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
   );
@@ -82,7 +88,7 @@ function DropdownMenuItem({
   inset,
   variant = "default",
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>> & {
   inset?: boolean;
   variant?: "default" | "destructive";
 }) {
@@ -103,7 +109,7 @@ function DropdownMenuCheckboxItem({
   checked,
   inset,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>> & {
   inset?: boolean;
 }) {
   return (
@@ -129,7 +135,7 @@ function DropdownMenuCheckboxItem({
 
 function DropdownMenuRadioGroup({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioGroup>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioGroup>>) {
   return (
     <DropdownMenuPrimitive.RadioGroup
       data-slot="dropdown-menu-radio-group"
@@ -143,7 +149,7 @@ function DropdownMenuRadioItem({
   children,
   inset,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>> & {
   inset?: boolean;
 }) {
   return (
@@ -170,7 +176,7 @@ function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label>> & {
   inset?: boolean;
 }) {
   return (
@@ -186,7 +192,7 @@ function DropdownMenuLabel({
 function DropdownMenuSeparator({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>>) {
   return (
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
@@ -199,7 +205,7 @@ function DropdownMenuSeparator({
 function DropdownMenuShortcut({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"span">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"span">>) {
   return (
     <span
       data-slot="dropdown-menu-shortcut"
@@ -211,7 +217,7 @@ function DropdownMenuShortcut({
 
 function DropdownMenuSub({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Sub>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Sub>>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
 
@@ -220,7 +226,7 @@ function DropdownMenuSubTrigger({
   inset,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>> & {
   inset?: boolean;
 }) {
   return (
@@ -231,7 +237,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <ChevronRightIcon className={styles.shortcut} />
+      <ChevronRightIcon className={dsClass(styles.shortcut)} />
     </DropdownMenuPrimitive.SubTrigger>
   );
 }
@@ -239,7 +245,7 @@ function DropdownMenuSubTrigger({
 function DropdownMenuSubContent({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>>) {
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.SubContent

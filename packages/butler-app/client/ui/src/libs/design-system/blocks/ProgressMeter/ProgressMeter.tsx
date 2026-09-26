@@ -1,17 +1,18 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { CSSProperties, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./ProgressMeter.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface ProgressMeterProps {
+export interface ProgressMeterProps extends DsPrivateStyleProps {
   /** Visible label; omit only with `bare`. */
   label?: ReactNode;
   value: number;
   meta?: ReactNode;
   ariaLabel?: string;
   tone?: "default" | "success" | "warning" | "danger";
-  className?: string;
   /** Track only (4px), no label row; name it with `ariaLabel`. */
   bare?: boolean;
 }
@@ -47,10 +48,10 @@ export function ProgressMeter({
   }
 
   return (
-    <Stack gap="xs" className={cn(styles.root, className)}>
+    <Stack gap="xs" className={dsClass(styles.root, className)}>
       <Stack align="row" justify="between" cross="center" gap="sm">
-        <Typo.Caption className={styles.label}>{label}</Typo.Caption>
-        <Typo.Caption className={styles.meta}>{meta ?? `${normalized}%`}</Typo.Caption>
+        <Typo.Caption className={dsClass(styles.label)}>{label}</Typo.Caption>
+        <Typo.Caption className={dsClass(styles.meta)}>{meta ?? `${normalized}%`}</Typo.Caption>
       </Stack>
       {track}
     </Stack>

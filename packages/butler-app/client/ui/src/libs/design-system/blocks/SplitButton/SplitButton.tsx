@@ -10,6 +10,7 @@ import { ChevronDown } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import styles from "./SplitButton.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface SplitButtonItem {
   key: string;
@@ -52,16 +53,16 @@ export function SplitButton({
   const menuDisabled = disabled || items.every((item) => item.disabled);
   return (
     <span className={styles.split} role="group" data-slot="split-button">
-      <Button type="button" className={styles.action} variant={buttonVariant} size={size} disabled={disabled} onClick={onClick}>
+      <Button type="button" className={dsClass(styles.action)} variant={buttonVariant} size={size} disabled={disabled} onClick={onClick}>
         {text}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" className={styles.arrow} variant={buttonVariant} size={size} disabled={menuDisabled} aria-label={menuLabel}>
+          <Button type="button" className={dsClass(styles.arrow)} variant={buttonVariant} size={size} disabled={menuDisabled} aria-label={menuLabel}>
             <ChevronDown aria-hidden="true" size="md" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side={menuSide} align="end" className={styles.menu}>
+        <DropdownMenuContent side={menuSide} align="end" className={dsClass(styles.menu)}>
           {items.map((item) => {
             const lines = item.description === undefined ? [] : Array.isArray(item.description) ? item.description : [item.description];
             return (

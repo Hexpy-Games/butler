@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { useId, useState } from "react";
 import { Collapsible } from "../../components/Collapsible";
@@ -5,9 +6,10 @@ import { ChevronDown } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerAdjunctPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ComposerAdjunctPanelProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "title"
 > {
   heading?: ReactNode;
@@ -50,12 +52,12 @@ export function ComposerAdjunctPanel({
             </span>
           ) : null}
           {heading ? (
-            <Typo.Body as="span" className={styles.heading}>
+            <Typo.Body as="span" className={dsClass(styles.heading)}>
               {heading}
             </Typo.Body>
           ) : null}
           {collapsed && collapsedSummary ? (
-            <Typo.Caption as="span" className={styles.summary}>
+            <Typo.Caption as="span" className={dsClass(styles.summary)}>
               {collapsedSummary}
             </Typo.Caption>
           ) : null}
@@ -71,7 +73,7 @@ export function ComposerAdjunctPanel({
       <Collapsible
         open={!collapsed}
         keepMounted
-        className={styles.body}
+        className={dsClass(styles.body)}
         data-collapsed={collapsed ? "true" : "false"}
         aria-hidden={collapsed}
         id={bodyId}

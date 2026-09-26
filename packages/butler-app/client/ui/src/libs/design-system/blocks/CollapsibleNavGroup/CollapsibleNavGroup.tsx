@@ -1,10 +1,12 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { CSSProperties, ReactNode } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { NavRow } from "../NavRow";
 import { cn } from "../../lib/utils";
 import styles from "./CollapsibleNavGroup.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface CollapsibleNavGroupProps {
+export interface CollapsibleNavGroupProps extends DsPrivateStyleProps {
   /** Icon element to display */
   icon?: ReactNode;
   /** Group label */
@@ -17,8 +19,6 @@ export interface CollapsibleNavGroupProps {
   children: ReactNode;
   /** Actions to display on the group header */
   actions?: ReactNode;
-  /** Additional CSS class */
-  className?: string;
   /** Opt-in tree hierarchy; flat remains the default for existing navigation. */
   indented?: boolean;
   /** Opt-in stacked sticky header, relative to the outer list scroll container. */
@@ -61,13 +61,13 @@ export function CollapsibleNavGroup({
         actions={actions}
         actionsVisibility={indented ? "visible" : "hover"}
         onClick={onToggle}
-        className={styles.header}
+        className={dsClass(styles.header)}
         dataTestClass={dataTestClass}
         ariaExpanded={expanded}
       />
       <Collapsible
         open={expanded}
-        className={styles.content}
+        className={dsClass(styles.content)}
         data-test-class={contentDataTestClass}
         data-sticky-clip={stickyDepth !== undefined ? "branch" : undefined}
       >

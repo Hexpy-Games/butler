@@ -30,7 +30,7 @@ export function TurnActivityMessage({
       index={virtualRow.index}
       key="active-turn-activity"
       rowRef={rowVirtualizer.measureElement}
-      style={{
+      UNSAFE_style={{
         transform: `translateY(${virtualRow.start + topOffset}px)`,
       }}
     >

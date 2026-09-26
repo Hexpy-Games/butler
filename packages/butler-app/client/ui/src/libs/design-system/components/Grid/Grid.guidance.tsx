@@ -33,7 +33,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["No copy of its own."],
+  content: ["columns=\"label-value\" lays out metadata rows: a label column and a baseline-aligned value.", "No copy of its own."],
   accessibility: ["Keep DOM order equal to reading order; spans never reorder content."],
   tokens: ["--space-md", "--layout-basis-sm", "--page-max-width-wide"],
 };

@@ -1,8 +1,9 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, KeyboardEvent, ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./Card.module.css";
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+export interface CardProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children: ReactNode;
   padding?: "none" | "sm" | "md";
   interactive?: boolean;

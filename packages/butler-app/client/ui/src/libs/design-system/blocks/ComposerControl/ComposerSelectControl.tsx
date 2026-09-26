@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import type { ReactNode } from "react";
 import { ComposerControl } from "./ComposerControl";
 
 export interface ComposerSelectControlProps
-  extends Omit<SelectPrimitive.SelectTriggerProps, "asChild" | "children"> {
+  extends Omit<DsBaseProps<SelectPrimitive.SelectTriggerProps>, "asChild" | "children"> {
   icon?: ReactNode;
   /** Usually a `SelectValue`. */
   children: ReactNode;

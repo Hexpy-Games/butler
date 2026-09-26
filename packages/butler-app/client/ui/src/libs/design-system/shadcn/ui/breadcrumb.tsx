@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 
@@ -12,7 +13,7 @@ function Breadcrumb({
   className,
   label,
   ...props
-}: React.ComponentPropsWithoutRef<"nav"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"nav">> & {
   /** Localized accessible name of the trail (app copy `common.breadcrumb`). */
   label: string;
 }) {
@@ -29,7 +30,7 @@ function Breadcrumb({
 function BreadcrumbList({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"ol">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"ol">>) {
   return (
     <ol
       data-slot="breadcrumb-list"
@@ -42,7 +43,7 @@ function BreadcrumbList({
 function BreadcrumbItem({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"li">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"li">>) {
   return (
     <li
       data-slot="breadcrumb-item"
@@ -56,7 +57,7 @@ function BreadcrumbLink({
   asChild,
   className,
   ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+}: DsBaseProps<React.AnchorHTMLAttributes<HTMLAnchorElement>> & {
   asChild?: boolean;
 }) {
   const Comp = asChild ? Slot : "a";
@@ -75,7 +76,7 @@ function BreadcrumbButton({
   className,
   type = "button",
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>>) {
   return (
     <button
       data-slot="breadcrumb-link"
@@ -89,7 +90,7 @@ function BreadcrumbButton({
 function BreadcrumbPage({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"span">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"span">>) {
   return (
     <span
       data-slot="breadcrumb-page"
@@ -106,7 +107,7 @@ function BreadcrumbSeparator({
   children,
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"li">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"li">>) {
   return (
     <li
       data-slot="breadcrumb-separator"
@@ -124,7 +125,7 @@ function BreadcrumbEllipsis({
   className,
   label,
   ...props
-}: React.ComponentPropsWithoutRef<"span"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"span">> & {
   /** Localized name of the collapsed steps (app copy `common.more`). */
   label: string;
 }) {

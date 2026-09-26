@@ -1,31 +1,27 @@
-.capsule {
-  max-width: 100%;
-}
-
 .content {
   display: inline-flex;
-  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--space-1);
 }
 
-.taskTitle,
-.activityTitle {
+.title,
+.detail {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.taskTitle {
+.title {
+  max-width: var(--status-capsule-title-max);
   flex: 1 1 auto;
-  max-width: min(34vw, 240px);
 }
 
-.activityTitle {
+.detail {
+  max-width: var(--status-capsule-detail-max);
   flex: 0 0 auto;
-  max-width: min(30vw, 220px);
   color: var(--text-secondary);
 }

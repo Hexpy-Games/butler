@@ -28,7 +28,7 @@ export function TurnActivityPending({
         aria-live="polite"
         data-test-class="turn-activity-panel turn-activity-pending-skeleton"
         gap="sm"
-        style={{ width: SKELETON_WIDTH }}
+        UNSAFE_style={{ width: SKELETON_WIDTH }}
       >
         <AssistantStatusLabel
           label={pendingLabel}
@@ -39,11 +39,8 @@ export function TurnActivityPending({
             as="p"
             data-test-class="turn-activity-pending"
             data-turn-state={state}
-            style={{
-              margin: 0,
-              color: "var(--text-secondary)",
-              fontWeight: "var(--font-weight-regular)",
-            }}
+            tone="secondary"
+            weight="regular"
           >
             {pendingLabel}
           </Typo.Body>
@@ -63,11 +60,8 @@ export function TurnActivityPending({
         as="p"
         data-test-class="turn-activity-panel turn-activity-pending"
         data-turn-state={state ?? "unknown"}
-        style={{
-          margin: 0,
-          color: "var(--text-secondary)",
-          fontWeight: "var(--font-weight-regular)",
-        }}
+        tone="secondary"
+        weight="regular"
       >
         {pendingLabel}
       </Typo.Body>

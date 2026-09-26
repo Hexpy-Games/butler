@@ -1,6 +1,7 @@
 import { Button } from "../../components/Button";
 import { useScrollEdges } from "../../lib/useScrollEdges";
 import styles from "./ActivityHeatmap.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ActivityHeatmapDay {
   id: string;
@@ -51,7 +52,7 @@ export function ActivityHeatmap({ days, ariaLabel, startWeekday = 0, weekdayLabe
         const level = day.count === null ? "unknown" : day.count <= 0 ? 0
           : day.count === 1 ? 1 : day.count < 5 ? 2 : day.count < 10 ? 3 : 4;
         const label = day.count === null ? day.label : `${day.label}: ${day.countLabel ?? day.count}`;
-        return onSelect ? <Button key={day.id} variant="borderless" className={styles.day}
+        return onSelect ? <Button key={day.id} variant="borderless" className={dsClass(styles.day)}
           aria-label={label} title={label} data-level={level} aria-pressed={selectedId === day.id}
           onClick={() => onSelect(day.id)} />
           : <span key={day.id} className={styles.day} data-level={level} aria-label={label} title={label} />;

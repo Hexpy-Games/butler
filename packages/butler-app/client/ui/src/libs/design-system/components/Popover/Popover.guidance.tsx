@@ -37,7 +37,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A tooltip with buttons in it cannot be reached by keyboard.", render: () => <Tooltip label="Choose access"><Button variant="outline" text="Access" /></Tooltip> },
     },
   ],
-  content: ["Titles name the choice (Permission, Model); items are short."],
+  content: ["Portalled content takes theme={appShellTheme(settings)} so it renders in the app theme outside the shell.", "Titles name the choice (Permission, Model); items are short."],
   accessibility: ["Focus stays on the trigger unless content needs it; Escape and outside click close it."],
   tokens: ["--tinted-glass-bg", "--radius-popover", "--motion-fast", "--motion-scale-menu", "--z-popover"],
 };

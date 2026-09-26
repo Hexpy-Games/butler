@@ -1,10 +1,11 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Button } from "../Button";
-import { cn } from "../../lib/utils";
 import styles from "./PillButton.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface PillButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+ extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
   children: ReactNode;
   icon?: ReactNode;
   stretch?: boolean;
@@ -24,7 +25,7 @@ export function PillButton({
 
   return (
     <Button
-      className={cn(hasIconText && styles.withIconText, surface === "glass" && styles.glass, className)}
+      className={dsClass(hasIconText && styles.withIconText, surface === "glass" && styles.glass, className)}
       data-surface={surface === "glass" ? "glass-pill" : undefined}
       iconStart={icon}
       shape="pill"

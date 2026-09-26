@@ -3,7 +3,6 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Stack } from "../Stack";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "./Chart";
 import { CHART_COLORS, ChartLegend, chartColor, type ChartColor } from "./ChartLegend";
-import styles from "./Chart.module.css";
 
 export const meta: ShowcaseMeta = {
   title: "Chart",
@@ -32,7 +31,7 @@ function WorkChart({ locale }: ShowcaseRenderContext) {
   return (
     <Stack gap="md">
       <ChartLegend items={SERIES.map(({ key, color }) => ({ key, label: text[key], color }))} />
-      <ChartContainer className={styles.chart} config={config} aria-label={text.label}>
+      <ChartContainer size="panel" config={config} aria-label={text.label}>
         <BarChart accessibilityLayer data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--line)" />
           <XAxis dataKey="day" tickLine={false} axisLine={false} />

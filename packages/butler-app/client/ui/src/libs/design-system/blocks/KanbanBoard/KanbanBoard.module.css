@@ -1,0 +1,18 @@
+.board {
+  align-items: stretch;
+}
+
+.lane {
+  min-width: 0;
+}
+
+.laneInner {
+  height: var(--kanban-lane-height);
+  min-height: 0;
+}
+
+.laneScroller {
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}

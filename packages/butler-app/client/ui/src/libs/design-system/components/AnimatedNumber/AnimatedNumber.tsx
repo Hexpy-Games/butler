@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import { useEffect, useRef, useState, type HTMLAttributes } from "react";
 import { animateMotion, easeProgress, motionDuration, prefersReducedMotion } from "../../lib/motion";
 import { cn } from "../../lib/utils";
 import styles from "./AnimatedNumber.module.css";
 
-export interface AnimatedNumberProps extends Omit<HTMLAttributes<HTMLSpanElement>, "children"> {
+export interface AnimatedNumberProps extends Omit<DsBaseProps<HTMLAttributes<HTMLSpanElement>>, "children"> {
   value: number;
   /** Formats every shown value; defaults to Intl.NumberFormat in the document language. */
   format?: (value: number) => string;

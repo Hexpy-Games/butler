@@ -62,6 +62,19 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
+    // AccessModeMenu trigger: the access mode colors the control and its icon.
+    name: "Permission tones",
+    render: ({ locale }) => (
+      <div className={styles.fixture}>
+        <Stack align="row" gap="sm" wrap>
+          <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="full" />
+          <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="ask" />
+          <ComposerControl icon={<ShieldCheck size="md" />} label={copy[locale].access} permissionTone="read" />
+        </Stack>
+      </div>
+    ),
+  },
+  {
     name: "Select trigger (workspace chip)",
     states: ["open"],
     render: (context) => (

@@ -1,7 +1,9 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { cn } from "../../lib/utils";
+import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "../../lib/theme";
 import { usePopperExitFreezeRef } from "../../lib/popperExit";
 import { floatingContentCollisionPadding } from "../../lib/floatingConstraints";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
@@ -9,13 +11,13 @@ import styles from "../../components/Popover/Popover.module.css";
 
 function Popover({
   ...props
-}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Root>>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger({
   ...props
-}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>>) {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
@@ -26,9 +28,12 @@ function PopoverContent({
   sideOffset = 4,
   onCloseAutoFocus,
   onOpenAutoFocus,
+  theme,
   ...props
-}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
+  /** App theme for the portalled surface (it renders outside the themed shell). */
+  theme?: AdaptiveShellTheme;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
   return (
@@ -41,7 +46,7 @@ function PopoverContent({
         align={align}
         collisionPadding={floatingContentCollisionPadding}
         sideOffset={sideOffset}
-        className={cn(tintedGlassSurfaceClassName, styles.content, className)}
+        className={cn(tintedGlassSurfaceClassName, styles.content, theme && adaptiveShellThemeClasses(theme), className)}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
           if (!event.defaultPrevented) event.preventDefault();
@@ -58,14 +63,14 @@ function PopoverContent({
 
 function PopoverAnchor({
   ...props
-}: React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Anchor>>) {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
 }
 
 function PopoverHeader({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="popover-header"
@@ -78,7 +83,7 @@ function PopoverHeader({
 function PopoverTitle({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="popover-title"
@@ -91,7 +96,7 @@ function PopoverTitle({
 function PopoverDescription({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"p">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"p">>) {
   return (
     <p
       data-slot="popover-description"

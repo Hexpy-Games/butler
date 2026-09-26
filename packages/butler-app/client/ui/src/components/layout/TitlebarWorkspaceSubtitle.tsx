@@ -1,8 +1,7 @@
 import { useAppLocale } from "@/app/copy.ts";
-import { GitBranch, Typo } from "@/butler-ds";
+import { GitBranch, IconSlot, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { SessionSummaryView } from "@/app/types.ts";
-import styles from "./TitlebarWorkspaceSubtitle.module.css";
 
 interface TitlebarWorkspaceSubtitleProps {
   branchInfo?: SessionSummaryView["branch_info"];
@@ -21,24 +20,28 @@ export function TitlebarWorkspaceSubtitle({
       ? appCopy.titlebar.localWorkspace(branch)
       : undefined;
   return (
-    <span
-      className={styles.subtitleContent}
-      data-test-class="titlebar-subtitle"
-    >
+    <Stack as="span" inline align="row" cross="center" gap="sm" minWidth="0" data-test-class="titlebar-subtitle">
       {projectLabel ? (
-        <span className={styles.projectSubtitle}>{projectLabel}</span>
+        <Typo.Text grow minWidth="0" truncate>{projectLabel}</Typo.Text>
       ) : null}
       {workspaceLabel ? (
-        <span
+        <Stack
+          as="span"
+          inline
+          align="row"
+          cross="center"
+          gap="xs"
+          minWidth="0"
           aria-label={workspaceLabel}
-          className={styles.worktree}
           data-test-class="titlebar-workspace"
           title={workspaceLabel}
         >
-          <GitBranch size="xs" aria-hidden="true" />
-          <Typo.Text truncate>{workspaceLabel}</Typo.Text>
-        </span>
+          <IconSlot size="xs" tone="secondary">
+            <GitBranch size="xs" aria-hidden="true" />
+          </IconSlot>
+          <Typo.Text tone="secondary" truncate>{workspaceLabel}</Typo.Text>
+        </Stack>
       ) : null}
-    </span>
+    </Stack>
   );
 }

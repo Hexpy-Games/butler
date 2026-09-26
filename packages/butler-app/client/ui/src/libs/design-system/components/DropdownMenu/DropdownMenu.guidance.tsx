@@ -44,7 +44,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Items start with a verb; keep them to two or three words."],
+  content: ["DropdownMenuContent takes theme for the portalled surface (it renders outside the themed shell).", "Items start with a verb; keep them to two or three words."],
   accessibility: ["Triggers set aria-haspopup (IconButton then skips its tooltip); typeahead and arrows are instant."],
   tokens: ["--menu-item-height", "--radius-popover", "--motion-menu", "--motion-exit-menu", "--motion-scale-menu", "--z-popover"],
 };

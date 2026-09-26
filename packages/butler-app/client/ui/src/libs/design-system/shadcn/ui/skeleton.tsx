@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { CSSProperties, HTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 import styles from "../../components/Skeleton/Skeleton.module.css";
@@ -8,7 +9,7 @@ export type SkeletonWidth = "full" | "3/4" | "2/3" | "1/2" | "2/5" | "1/3" | "1/
 export type SkeletonHeight = "line" | "title" | "control" | "row";
 export type SkeletonShape = "rect" | "pill" | "circle";
 
-export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
+export interface SkeletonProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   /** Accessible loading label; unlabelled skeletons are hidden from assistive technology. */
   label?: string;
   width?: SkeletonWidth;

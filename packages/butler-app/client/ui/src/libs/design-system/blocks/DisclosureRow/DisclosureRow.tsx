@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Clickable } from "../../components/Clickable";
 import { Collapsible } from "../../components/Collapsible";
@@ -6,8 +7,9 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./DisclosureRow.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface DisclosureRowProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+export interface DisclosureRowProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
   title: ReactNode;
   description?: ReactNode;
   meta?: ReactNode;
@@ -45,7 +47,7 @@ export function DisclosureRow({
     >
       <Clickable
         aria-controls={controlsId}
-        className={styles.trigger}
+        className={dsClass(styles.trigger)}
         aria-expanded={open}
         stretch
         onClick={onToggle}
@@ -62,12 +64,12 @@ export function DisclosureRow({
               {icon}
             </span>
           ) : null}
-          <Stack gap="xs" className={styles.content}>
-            <Typo.Body className={styles.title} data-slot="disclosure-row-title">{title}</Typo.Body>
-            {description ? <Typo.Caption className={styles.description}>{description}</Typo.Caption> : null}
+          <Stack gap="xs" className={dsClass(styles.content)}>
+            <Typo.Body className={dsClass(styles.title)} data-slot="disclosure-row-title">{title}</Typo.Body>
+            {description ? <Typo.Caption className={dsClass(styles.description)}>{description}</Typo.Caption> : null}
           </Stack>
         </span>
-        {meta ? <Typo.Caption className={styles.meta}>{meta}</Typo.Caption> : null}
+        {meta ? <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption> : null}
       </Clickable>
       {children ? (
         <Collapsible open={open}>

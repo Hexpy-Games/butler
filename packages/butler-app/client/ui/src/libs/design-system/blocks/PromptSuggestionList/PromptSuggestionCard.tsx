@@ -3,6 +3,7 @@ import { TintedGlass } from "../../components/TintedGlass";
 import { Typo } from "../../components/Typo";
 import type { PromptSuggestionItem } from "./PromptSuggestionList";
 import styles from "./PromptSuggestionList.module.css";
+import { dsClass } from "../../lib/internal";
 
 interface PromptSuggestionCardProps {
   index: number;
@@ -15,7 +16,7 @@ export function PromptSuggestionCard({
 }: PromptSuggestionCardProps) {
   return (
     <TintedGlass
-      className={styles.itemFrame}
+      className={dsClass(styles.itemFrame)}
       data-test-class="new-chat-suggestion"
       data-disabled={suggestion.disabled ? "true" : undefined}
       padding="none"
@@ -23,13 +24,13 @@ export function PromptSuggestionCard({
     >
       <Clickable
         aria-label={suggestion.text}
-        className={styles.item}
+        className={dsClass(styles.item)}
         disabled={suggestion.disabled}
         onClick={suggestion.onSelect}
         stretch
       >
         <Typo.Caption
-          className={styles.itemMeta}
+          className={dsClass(styles.itemMeta)}
           data-slot="prompt-suggestion-meta"
         >
           {suggestion.meta ?? String(index + 1).padStart(2, "0")}
@@ -37,14 +38,14 @@ export function PromptSuggestionCard({
         <span className={styles.itemCopy}>
           <Typo.H5
             as="span"
-            className={styles.itemTitle}
+            className={dsClass(styles.itemTitle)}
             data-slot="prompt-suggestion-title"
           >
             {suggestion.title}
           </Typo.H5>
           <Typo.Body
             as="span"
-            className={styles.itemDescription}
+            className={dsClass(styles.itemDescription)}
             data-slot="prompt-suggestion-description"
           >
             {suggestion.description}

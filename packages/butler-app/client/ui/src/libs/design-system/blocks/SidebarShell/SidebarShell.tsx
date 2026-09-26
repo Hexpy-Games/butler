@@ -1,3 +1,4 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 import { cn } from "../../lib/utils";
 import { useComposedRefs } from "../../lib/composeRefs";
@@ -7,7 +8,7 @@ import { useStickyClipping } from "./hooks/useStickyClipping";
 
 export type SidebarDensity = "compact" | "comfortable" | "touch";
 
-export interface SidebarShellProps {
+export interface SidebarShellProps extends DsPrivateStyleProps {
   /**
    * Row height, inline padding, icon size, gaps and action targets of every
    * NavRow inside (tokens in tokens.css). Comfortable becomes touch on phones
@@ -22,7 +23,6 @@ export interface SidebarShellProps {
   footer?: ReactNode;
   collapsed?: boolean;
   ariaLabel?: string;
-  className?: string;
   scrollFade?: boolean;
   scrollRef?: Ref<HTMLDivElement>;
 }

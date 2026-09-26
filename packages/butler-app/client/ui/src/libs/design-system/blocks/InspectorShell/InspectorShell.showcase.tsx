@@ -7,6 +7,7 @@ import { KeyValueRow } from "../KeyValueRow";
 import { ListRow } from "../ListRow";
 import { InspectorInset, InspectorShell } from "./index";
 import styles from "./InspectorShell.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const meta: ShowcaseMeta = {
   title: "InspectorShell",
@@ -37,7 +38,7 @@ function InspectorDemo({ context }: { context: ShowcaseRenderContext }) {
   return (
     <InspectorShell
       activeTab={tab}
-      className={styles.fixture}
+      className={dsClass(styles.fixture)}
       onTabChange={setTab}
       tabs={[
         { id: "summary", label: copy.summary, icon: <ListFilter size="md" /> },

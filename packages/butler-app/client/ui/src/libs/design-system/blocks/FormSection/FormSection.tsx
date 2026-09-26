@@ -1,13 +1,15 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useId, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { SettingsFieldScopeProvider } from "../SettingsField/settingsFieldScope";
 import { repeatsSettingsCopy, useSettingsPage } from "../SettingsShell/settingsPage";
 import styles from "./FormSection.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type FormSectionKind = "form" | "list" | "status" | "info";
 
-export interface FormSectionProps {
+export interface FormSectionProps extends DsPrivateStyleProps {
   /**
    * Section title. Omit it when it would repeat the page title; inside a
    * `SettingsShell` page a title that repeats `pageTitle` is not rendered.
@@ -25,8 +27,6 @@ export interface FormSectionProps {
   busy?: boolean;
   /** Form rows or fields */
   children: ReactNode;
-  /** Additional CSS class */
-  className?: string;
 }
 
 /**
@@ -68,10 +68,10 @@ export function FormSection({
           {shownTitle || shownDescription ? (
             <div className={styles.copy}>
               {shownTitle ? (
-                <Typo.H4 as="h3" id={titleId} className={styles.title}>{shownTitle}</Typo.H4>
+                <Typo.H4 as="h3" id={titleId} className={dsClass(styles.title)}>{shownTitle}</Typo.H4>
               ) : null}
               {shownDescription ? (
-                <Typo.Body className={styles.description}>{shownDescription}</Typo.Body>
+                <Typo.Body className={dsClass(styles.description)}>{shownDescription}</Typo.Body>
               ) : null}
             </div>
           ) : null}

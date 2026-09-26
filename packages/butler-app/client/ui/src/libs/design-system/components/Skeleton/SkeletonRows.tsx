@@ -1,5 +1,6 @@
 import { Skeleton } from "../../shadcn/ui/skeleton";
 import styles from "./Skeleton.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface SkeletonRowsProps {
   /** Number of placeholder rows. */
@@ -16,8 +17,8 @@ export function SkeletonRows({ rows = 3, shape = "list", label }: SkeletonRowsPr
     <div className={styles.rows} data-slot="skeleton-rows" data-shape={shape} aria-busy="true" aria-label={label}>
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className={styles.row}>
-          {shape === "field" ? <Skeleton className={styles.label} /> : null}
-          <Skeleton className={styles.bar} />
+          {shape === "field" ? <Skeleton className={dsClass(styles.label)} /> : null}
+          <Skeleton className={dsClass(styles.bar)} />
         </div>
       ))}
     </div>

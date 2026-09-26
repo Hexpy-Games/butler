@@ -10,6 +10,7 @@ import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { motionDuration, prefersReducedMotion } from "../../lib/motion";
 import styles from "./SortableCardList.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface SortableCardItemData {
   id: string;
@@ -59,7 +60,7 @@ export function SortableCardItem({
     >
       {showDropIndicator && (
         <Separator
-          className={styles.dropIndicator}
+          className={dsClass(styles.dropIndicator)}
           data-drop-indicator="true"
           decorative
           aria-hidden="true"
@@ -67,10 +68,10 @@ export function SortableCardItem({
           tone="accent"
         />
       )}
-      <Card className={styles.card} padding="sm">
+      <Card className={dsClass(styles.card)} padding="sm">
         {!overlay && (
           <IconButton
-            className={styles.handle}
+            className={dsClass(styles.handle)}
             label={`Reorder ${label}`}
             disabled={disabled}
             data-sortable-handle="true"
@@ -82,12 +83,12 @@ export function SortableCardItem({
           </IconButton>
         )}
         {item.leading && <span className={styles.leading} aria-hidden="true">{item.leading}</span>}
-        <Stack gap="xs" className={styles.content}>
+        <Stack gap="xs" className={dsClass(styles.content)}>
           <div className={styles.titleRow}>
             <Typo.Body>{item.title}</Typo.Body>
-            {item.meta && <Typo.Caption className={styles.meta}>{item.meta}</Typo.Caption>}
+            {item.meta && <Typo.Caption className={dsClass(styles.meta)}>{item.meta}</Typo.Caption>}
           </div>
-          {item.description && <Typo.Caption className={styles.description}>{item.description}</Typo.Caption>}
+          {item.description && <Typo.Caption className={dsClass(styles.description)}>{item.description}</Typo.Caption>}
         </Stack>
         {item.actions && <div className={styles.actions}>{item.actions}</div>}
         {onRemove && !overlay && (

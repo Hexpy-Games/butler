@@ -1,10 +1,12 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Grid.module.css";
 
 /** Named spacing only; the numeric aliases "1".."6" were removed. */
 type GapToken = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
-export type GridColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill" | "main-aside";
+/** `label-value`: a label column (min 7rem, 28%) and a value column, baseline-aligned. */
+export type GridColumnPreset = "1" | "2" | "3" | "4" | "6" | "12" | "auto-fit" | "auto-fill" | "main-aside" | "label-value";
 /**
  * Responsive columns keyed to the enclosing PageContainer: `base` always
  * applies, `wide` from `@container page (min-width: 48rem)`.
@@ -15,7 +17,7 @@ export interface GridResponsiveColumns {
 }
 type LayoutElement = "div" | "section" | "main" | "ul" | "ol" | "li" | "article";
 
-export interface GridProps extends HTMLAttributes<HTMLElement> {
+export interface GridProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   children: ReactNode;
   as?: LayoutElement;
   columns?: GridColumnPreset | GridResponsiveColumns;
@@ -53,7 +55,7 @@ function GridRoot({
   );
 }
 
-export interface GridItemProps extends HTMLAttributes<HTMLElement>, LayoutItemProps {
+export interface GridItemProps extends LayoutItemProps, DsBaseProps<HTMLAttributes<HTMLElement>> {
   children?: ReactNode;
   as?: LayoutElement;
 }

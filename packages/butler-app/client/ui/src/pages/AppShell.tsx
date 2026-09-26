@@ -156,7 +156,7 @@ function AppWorkspaceShell() {
       resizing={Boolean(resizingPanel)}
       rightOpen={effectiveRightOpen}
       settingsActive={isSettingsView}
-      style={panelStyle}
+      UNSAFE_style={panelStyle}
       transparentWorkspace={
         newChatActive &&
         (settings.main_screen_theme === "bloom" ||

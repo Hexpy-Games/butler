@@ -40,6 +40,11 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
+.columns-label-value {
+  grid-template-columns: minmax(7rem, 0.28fr) minmax(0, 1fr);
+  align-items: baseline;
+}
+
 /* Responsive columns: base preset always, wide preset inside a wide page. */
 .responsive[data-columns="1"] {
   grid-template-columns: minmax(0, 1fr);

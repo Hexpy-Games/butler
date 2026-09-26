@@ -1,9 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { CSSProperties, InputHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 import styles from "./Slider.module.css";
 
 export interface SliderProps extends Omit<
-  InputHTMLAttributes<HTMLInputElement>,
+  DsBaseProps<InputHTMLAttributes<HTMLInputElement>>,
   "type" | "onChange"
 > {
   value: number;

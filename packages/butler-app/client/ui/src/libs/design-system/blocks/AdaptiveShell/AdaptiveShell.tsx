@@ -1,3 +1,4 @@
+import { withUnsafeStyle, type DsBaseProps, type UnsafeStyleProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { useRef } from "react";
 import { useComposedRefs } from "../../lib/composeRefs";
@@ -8,7 +9,7 @@ import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
 import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
 
-export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
+export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>>, UnsafeStyleProps {
   /** Applies the theme token classes to the shell root. */
   theme?: AdaptiveShellTheme;
   ref?: Ref<HTMLDivElement>;
@@ -32,6 +33,8 @@ export function AdaptiveShell({
   compactSidebarFullWidth = false,
   theme,
   className,
+  style,
+  UNSAFE_style,
   children,
   ref,
   ...props
@@ -67,6 +70,7 @@ export function AdaptiveShell({
       data-panel-layout={drawer ? "drawer" : "docked"}
       data-platform={platform}
       data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
+      style={withUnsafeStyle(style, UNSAFE_style)}
       {...props}
     >
       {children}
@@ -79,7 +83,7 @@ export function AdaptiveShellSidebar({
   className,
   open,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
+}: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
   return (
     <div
       className={cn(styles.sidebar, className)}
@@ -96,7 +100,7 @@ export function AdaptiveShellWorkspace({
   children,
   className,
   ...props
-}: HTMLAttributes<HTMLElement>) {
+}: DsBaseProps<HTMLAttributes<HTMLElement>>) {
   return (
     <main
       className={cn(styles.workspace, className)}
@@ -113,7 +117,7 @@ export function AdaptiveShellInspector({
   className,
   open,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
+}: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
   return (
     <div className={cn(styles.inspector, className)} data-open={open} data-slot="adaptive-shell-inspector" {...props}>
       {children}

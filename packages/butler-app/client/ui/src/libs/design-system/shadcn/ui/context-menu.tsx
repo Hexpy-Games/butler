@@ -1,5 +1,6 @@
 "use client";
 
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 
@@ -11,13 +12,13 @@ import styles from "../../components/ContextMenu/ContextMenu.module.css";
 
 function ContextMenu({
   ...props
-}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root>>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
 function ContextMenuTrigger({
   ...props
-}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>>) {
   return (
     <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
   );
@@ -27,7 +28,7 @@ function ContextMenuContent({
   className,
   ref,
   ...props
-}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
@@ -51,7 +52,7 @@ function ContextMenuItem({
   inset,
   variant = "default",
   ...props
-}: React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Item>> & {
   inset?: boolean;
   variant?: "default" | "destructive";
 }) {

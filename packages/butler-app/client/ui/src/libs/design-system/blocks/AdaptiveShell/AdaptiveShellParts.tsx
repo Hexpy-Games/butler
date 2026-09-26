@@ -1,15 +1,17 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type {
   HTMLAttributes,
   KeyboardEvent,
   PointerEvent,
 } from "react";
 import { cn } from "../../lib/utils";
+import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import styles from "./AdaptiveShell.module.css";
 
 export function AdaptivePanelResizeHandle({
   side,
   ...props
-}: Omit<HTMLAttributes<HTMLDivElement>, "onKeyDown" | "onPointerDown"> & {
+}: Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "onKeyDown" | "onPointerDown"> & {
   side: "left" | "right";
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
@@ -51,12 +53,13 @@ export function AdaptiveShellScrim({
 export function AdaptivePanelTitlebar({
   children,
   open,
+  windowDrag,
   className,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
+}: DsBaseProps<HTMLAttributes<HTMLDivElement>> & WindowDragProps & { open: boolean }) {
   return (
     <div
-      className={cn(styles.panelTitlebar, className)}
+      className={cn(styles.panelTitlebar, windowDragClassName(windowDrag), className)}
       data-open={open}
       {...props}
     >

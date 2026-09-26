@@ -1,10 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 import { Slot } from "@radix-ui/react-slot";
-
-import { cn } from "../../lib/utils";
 import styles from "../../components/Button/Button.module.css";
+import { cn } from "../../lib/utils";
 
 const buttonVariants = cva(
   styles.button,
@@ -44,8 +44,7 @@ const buttonVariants = cva(
 );
 
 interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends VariantProps<typeof buttonVariants>, DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>> {
   asChild?: boolean;
   iconStart?: React.ReactNode;
   iconEnd?: React.ReactNode;

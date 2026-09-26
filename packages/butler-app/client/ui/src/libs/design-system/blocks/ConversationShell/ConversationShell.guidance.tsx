@@ -36,7 +36,7 @@ export const guidance: ShowcaseGuidance = {
   doDont: [
     {
       do: { caption: "The shell owns scroll, width and the composer reserve.", render: () => <Framed /> },
-      dont: { caption: "Messages in a plain ScrollArea sit under the composer.", render: () => <ScrollArea style={{ height: 80 }}><MessageRow role="user">Hidden under the composer</MessageRow></ScrollArea> },
+      dont: { caption: "Messages in a plain ScrollArea sit under the composer.", render: () => <ScrollArea maxHeight="xs"><MessageRow role="user">Hidden under the composer</MessageRow></ScrollArea> },
     },
   ],
   content: ["The jump button says what is below (New messages) or where it goes (Jump to latest)."],

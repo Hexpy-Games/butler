@@ -51,7 +51,7 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
     // Paint containment keeps the shell's fixed drawers inside the preview.
     <div style={{ height: 420, contain: "layout paint" }}>
       <AdaptiveShell compactSidebarFullWidth leftOpen={panel === "left"} rightOpen={panel === "right"}
-        style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 220, rightWidth: 260 }) }}>
+        UNSAFE_style={{ height: "100%", ...adaptivePanelStyle({ leftWidth: 220, rightWidth: 260 }) }}>
         <AdaptiveShellChrome>
           <ChromeFloatingToggleLayer>
             <IconButton label={copy.openNav} onClick={() => setPanel(panel === "left" ? null : "left")}><PanelLeft size="md" /></IconButton>

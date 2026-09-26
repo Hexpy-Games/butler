@@ -1,17 +1,18 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy, interfaceProgressLabel } from "@/app/copy.ts";
-import { CircleAlert, Spinner } from "@/butler-ds";
+import { CircleAlert, IconSlot, Spinner } from "@/butler-ds";
 import { spaceActivity } from "@/app/space/activity";
 import type { SessionSummary } from "@/app/types";
-import styles from "./SpaceInteractions.module.css";
 
 export function SpaceActivity({ session }: { session?: SessionSummary }) {
   useAppLocale();
   const activity = spaceActivity(session);
   if (!activity) return null;
   return (
-    <span
-      className={styles.activity}
+    <IconSlot
+      size="sidebar"
+      minHeight="line"
+      passive
       role="status"
       aria-label={
         interfaceProgressLabel({ safe_label: session?.safe_status_label ?? "", interface_content: session?.safe_status_content, interface_label_key: session?.safe_status_label_key, interface_label_parameters: session?.safe_status_label_parameters }) ||
@@ -23,6 +24,6 @@ export function SpaceActivity({ session }: { session?: SessionSummary }) {
       ) : (
         <CircleAlert />
       )}
-    </span>
+    </IconSlot>
   );
 }

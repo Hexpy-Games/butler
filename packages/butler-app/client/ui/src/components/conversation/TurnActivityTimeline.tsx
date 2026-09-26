@@ -55,7 +55,7 @@ export function TurnActivityTimeline({
         </Stack>
         <Stack gap="sm">
           {expanded ? (
-            <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            <Stack as="ol" gap="sm">
               {activities.map((activity, index) => (
                 <li key={activity.id} data-turn-id={activity.turnId ?? turnId}>
                   <ActivityBlock

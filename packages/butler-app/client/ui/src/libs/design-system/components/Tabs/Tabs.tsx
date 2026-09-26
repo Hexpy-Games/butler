@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import type * as React from "react";
 import { cn } from "../../lib/utils";
@@ -14,7 +15,7 @@ function Tabs({
   orientation = "horizontal",
   gap,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>> & {
   /** Space between the tab list and its panels. */
   gap?: TabsGap;
 }) {
@@ -46,7 +47,7 @@ function TabsList({
   stretch = false,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.List> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>> & {
   variant?: TabsListVariant;
   stretch?: boolean;
 }) {
@@ -72,7 +73,7 @@ function TabsList({
 function TabsTrigger({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
@@ -85,7 +86,7 @@ function TabsTrigger({
 function TabsContent({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>>) {
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"

@@ -1,16 +1,16 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { ReactNode } from "react";
 import { Section } from "../../components/Section";
 import { Stack } from "../../components/Stack";
-import { cn } from "../../lib/utils";
 import styles from "./InspectorPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface InspectorPanelProps {
+export interface InspectorPanelProps extends DsPrivateStyleProps {
   title: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
-  className?: string;
 }
 
 export function InspectorPanel({
@@ -23,7 +23,7 @@ export function InspectorPanel({
 }: InspectorPanelProps) {
   return (
     <Section
-      className={cn(styles.panel, className)}
+      className={dsClass(styles.panel, className)}
       title={title}
       description={description}
       icon={icon}

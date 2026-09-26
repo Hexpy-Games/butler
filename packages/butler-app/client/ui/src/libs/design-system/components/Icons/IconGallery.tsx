@@ -6,6 +6,7 @@ import { Typo } from "../Typo";
 import * as Icons from "./Icons";
 import { ICON_SIZE, type IconProps, type IconSize } from "./Icons";
 import styles from "./IconGallery.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface IconCatalogEntry {
   name: string;
@@ -71,7 +72,7 @@ export function IconGallery() {
           }))}
         />
       </div>
-      <Typo.Caption className={styles.hint}>
+      <Typo.Caption className={dsClass(styles.hint)}>
         {`${visible.length} of ${iconCatalog.length} · click an icon to copy its name`}
       </Typo.Caption>
       <div className={styles.grid}>

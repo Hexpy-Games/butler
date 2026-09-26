@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { WorkActivityToolRow } from "./WorkActivityToolRow";
 import styles from "./WorkActivityBlock.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface WorkActivityToolItem {
   id: string;
@@ -20,7 +21,7 @@ export function WorkActivityToolGroup({ tools }: { tools: WorkActivityToolItem[]
   const [expanded, setExpanded] = useState(false);
   if (tools.length === 1 && !tools[0]!.after) return <WorkActivityToolRow tool={tools[0]!} />;
   return (
-    <Stack gap="xs" className={styles.toolRow} data-test-class="turn-work-tool-row turn-work-tool-group">
+    <Stack gap="xs" className={dsClass(styles.toolRow)} data-test-class="turn-work-tool-row turn-work-tool-group">
       <button
         aria-expanded={expanded}
         className={styles.toolGroup}

@@ -1,5 +1,6 @@
 import { useAppLocale } from "@/app/copy.ts";
 import {
+  IconSlot,
   Folder,
   Briefcase,
   MessageSquare,
@@ -7,7 +8,6 @@ import {
   GeneralChat,
 } from "@/butler-ds";
 import type { SpaceRowData } from "@/app/space/projection";
-import styles from "./SpaceInteractions.module.css";
 
 export function SpaceGlyph({ row }: { row: SpaceRowData }) {
   useAppLocale();
@@ -22,8 +22,8 @@ export function SpaceGlyph({ row }: { row: SpaceRowData }) {
             ? Notebook
             : MessageSquare;
   return (
-    <span className={styles.identityIcon}>
+    <IconSlot size="sidebar">
       <Glyph />
-    </span>
+    </IconSlot>
   );
 }

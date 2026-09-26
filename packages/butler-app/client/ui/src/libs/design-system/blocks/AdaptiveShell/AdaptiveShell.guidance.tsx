@@ -35,7 +35,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Media queries in product CSS fork the breakpoints the shell already owns.", render: () => <Typo.Code>@media (width &lt;= 768px) {"{ .sidebar { … } }"}</Typo.Code> },
     },
   ],
-  content: [
+  content: ["Resizable panel widths go through UNSAFE_style={adaptivePanelStyle(...)}; theme applies the app theme classes.", 
     "The scrim label is a verb: Close panel.",
     "Pass the app theme through the theme prop (appearance, sidebar, mainScreen); surfaces outside the shell (portals, first run) use adaptiveShellThemeClasses.",
   ],

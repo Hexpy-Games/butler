@@ -1,12 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy, interfaceProgressLabel } from "@/app/copy.ts";
-import { Typo } from "@/butler-ds";
+import { Stack, Typo } from "@/butler-ds";
 import { useOrganization } from "@/app/space/organization";
 import { spaceActivity } from "@/app/space/activity";
 import type { SpaceRowData } from "@/app/space/projection";
 import { relativeAge } from "@/app/utils";
 import { useMinuteClock } from "@/app/space/minute-clock";
-import interaction from "./SpaceInteractions.module.css";
 
 export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
   const locale = useAppLocale();
@@ -21,18 +20,18 @@ export function SpaceRowMeta({ row }: { row: SpaceRowData }) {
   const progress = row.session?.work_progress;
   const progressText = progress ? ` · ${Math.min(progress.total, progress.completed + 1)}/${progress.total}` : "";
   return (
-    <span className={interaction.rowMeta}>
-      <Typo.Caption title={row.location}>{row.location}</Typo.Caption>
+    <Stack as="span" align="row" cross="baseline" justify="between" gap="sm">
+      <Typo.Caption title={row.location} tone="secondary" grow basis="0" minWidth="0" truncate>{row.location}</Typo.Caption>
       {tab === "recent" ? (
-        <Typo.Text as="time" dateTime={row.updatedAt} numeric="tabular" title={new Date(row.updatedAt).toLocaleString(locale)} wrap="nowrap">
+        <Typo.Caption as="time" dateTime={row.updatedAt} numeric="tabular" tone="secondary" title={new Date(row.updatedAt).toLocaleString(locale)} wrap="nowrap">
           {relativeAge(row.updatedAt)}
-        </Typo.Text>
-      ) : (
-        <Typo.Caption className={interaction.statusText} title={`${status}${progressText}`}>
-          <Typo.Text truncate>{status}</Typo.Text>
-          {progressText && <span className={interaction.statusProgress}>{progressText}</span>}
         </Typo.Caption>
+      ) : (
+        <Stack as="span" inline align="row" gap="none" minWidth="0" maxWidth="3/5" title={`${status}${progressText}`}>
+          <Typo.Caption tone="secondary" truncate>{status}</Typo.Caption>
+          {progressText && <Typo.Caption tone="secondary" wrap="pre" shrink={false}>{progressText}</Typo.Caption>}
+        </Stack>
       )}
-    </span>
+    </Stack>
   );
 }

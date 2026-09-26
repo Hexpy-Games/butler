@@ -4,6 +4,7 @@ import { X } from "../Icons";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import styles from "./Tag.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type TagTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
@@ -34,15 +35,15 @@ export function Tag({
       align="row"
       cross="center"
       gap="xs"
-      className={styles.tag}
+      className={dsClass(styles.tag)}
       data-tone={tone}
       data-test-class={dataTestClass}
       aria-label={ariaLabel}
     >
       {icon ? <span className={styles.icon}>{icon}</span> : null}
-      <Typo.Caption className={styles.label} wrap="nowrap">{children}</Typo.Caption>
+      <Typo.Caption className={dsClass(styles.label)} wrap="nowrap">{children}</Typo.Caption>
       {onRemove ? (
-        <Button aria-label={removeLabel} className={styles.remove} type="button" variant="inline" onClick={onRemove}>
+        <Button aria-label={removeLabel} className={dsClass(styles.remove)} type="button" variant="inline" onClick={onRemove}>
           <X size="xs" />
         </Button>
       ) : null}

@@ -6,6 +6,7 @@ import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { TitlebarShell } from "./TitlebarShell";
 import styles from "./TitlebarShell.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const meta: ShowcaseMeta = {
   title: "TitlebarShell",
@@ -35,7 +36,7 @@ function Titlebar({ context, windows }: { context: ShowcaseRenderContext; window
   return (
     <div className={styles.fixture}>
       <TitlebarShell
-        className={styles.fixtureTitlebar}
+        className={dsClass(styles.fixtureTitlebar)}
         collapsed
         dragRegion
         leading={<IconButton label={copy.showLeft}><PanelLeft size="md" /></IconButton>}

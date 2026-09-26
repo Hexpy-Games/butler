@@ -34,7 +34,7 @@ export const stories: ShowcaseStory[] = [
     name: "Vertical with edge fades",
     render: (context) => (
       <Stack gap="xs">
-        <ScrollArea style={{ height: "180px" }}>
+        <ScrollArea maxHeight="xs">
           <Stack gap="sm">
             {Array.from({ length: 12 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
           </Stack>
@@ -52,6 +52,19 @@ export const stories: ShowcaseStory[] = [
           {text(context).tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
         </Stack>
       </ScrollArea>
+    ),
+  },
+  {
+    // ContextPanel legend: the scrollbar sits in the inspector gutter; content stays on the column.
+    name: "Bleed into the inspector gutter",
+    render: (context) => (
+      <Stack gap="xs">
+        <ScrollArea bleed="inline-end" maxHeight="xs">
+          <Stack gap="sm">
+            {Array.from({ length: 10 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
+          </Stack>
+        </ScrollArea>
+      </Stack>
     ),
   },
 ];

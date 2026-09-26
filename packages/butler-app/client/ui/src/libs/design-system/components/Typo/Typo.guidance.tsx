@@ -39,7 +39,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Display headings in app chrome shout.", render: () => <Typo.H1>Context usage</Typo.H1> },
     },
   ],
-  content: ["Body text is regular weight; bold is for titles, labels and metric values only."],
+  content: ["alignWith=\"control\" centers the first line on a control beside it; wrap=\"pre\" (with as=\"pre\") keeps line breaks of raw text.", "Body text is regular weight; bold is for titles, labels and metric values only."],
   accessibility: ["Headings (H1–H6) are real heading elements; pick them for the document outline, not for size."],
   tokens: ["--typo-body-size", "--typo-caption-size", "--typo-panel-title-size", "--font-weight-regular", "--font-weight-strong"],
 };

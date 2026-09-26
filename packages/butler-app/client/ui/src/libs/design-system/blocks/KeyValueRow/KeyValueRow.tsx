@@ -1,10 +1,12 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./KeyValueRow.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface KeyValueRowProps extends HTMLAttributes<HTMLDivElement> {
+export interface KeyValueRowProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   label: ReactNode;
   value: ReactNode;
   description?: ReactNode;
@@ -57,7 +59,7 @@ export function KeyValueRow({
         justify="between"
         cross="baseline"
         gap="sm"
-        className={styles.mainRow}
+        className={dsClass(styles.mainRow)}
         data-test-class="key-value-label-row"
       >
         <span
@@ -66,19 +68,14 @@ export function KeyValueRow({
         >
           {swatchElement}
           <Typo.Caption
-            className={styles.label}
+            className={dsClass(styles.label)}
             data-test-class="key-value-label"
           >
             {label}
           </Typo.Caption>
         </span>
         <ValueText
-          className={cn(
-            styles.value,
-            valueTextSize === "caption"
-              ? styles.valueCaption
-              : styles.valueBody,
-          )}
+          className={dsClass(styles.value, valueTextSize === "caption" ? styles.valueCaption : styles.valueBody)}
           data-test-class="key-value-value"
         >
           {value}
@@ -90,15 +87,12 @@ export function KeyValueRow({
           justify={isDetailStacked ? "start" : "between"}
           cross={isDetailStacked ? "start" : detailAlign}
           gap={isDetailStacked ? "xs" : "sm"}
-          className={cn(
-            styles.detailRow,
-            isDetailStacked && styles.detailStack,
-          )}
+          className={dsClass(styles.detailRow, isDetailStacked && styles.detailStack)}
           data-test-class="key-value-detail-row"
         >
           {description ? (
             <Typo.Caption
-              className={styles.description}
+              className={dsClass(styles.description)}
               data-test-class="key-value-description"
             >
               {description}
@@ -106,7 +100,7 @@ export function KeyValueRow({
           ) : null}
           {meta ? (
             <Typo.Caption
-              className={styles.meta}
+              className={dsClass(styles.meta)}
               data-test-class="key-value-meta"
             >
               {meta}

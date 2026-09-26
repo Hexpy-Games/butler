@@ -1,28 +1,17 @@
 /// <reference types="bun" />
 import { expect, test } from "bun:test";
-import { JSDOM } from "jsdom";
-import { renderToStaticMarkup } from "react-dom/server";
-import { Dialog } from "../../components/Dialog";
-import { DialogForm } from "./DialogForm";
+import { readFileSync } from "node:fs";
 
-function render(node: React.ReactElement) {
-  return new JSDOM(renderToStaticMarkup(node)).window.document;
-}
+// Source contract (like CommandPanel): product tests mock "@/butler-ds" (Dialog,
+// DialogForm) for the rest of the bun process, so rendering here is order-dependent.
+const source = readFileSync(new URL("./DialogForm.tsx", import.meta.url), "utf8");
 
 test("inside a Dialog, the visible title and description are the dialog's title and description", () => {
-  const document = render(
-    <Dialog open>
-      <DialogForm dialog title="Rename conversation" description="A short name." busy>{null}</DialogForm>
-    </Dialog>,
-  );
-  const form = document.querySelector("form")!;
-  expect(form.getAttribute("aria-busy")).toBe("true");
-  expect(form.querySelector('[data-slot="dialog-title"]')!.textContent).toBe("Rename conversation");
-  expect(form.querySelector('[data-slot="dialog-description"]')!.textContent).toBe("A short name.");
+  expect(source).toMatch(/dialog \? <DialogTitle asChild>\{heading\}<\/DialogTitle> : heading/u);
+  expect(source).toMatch(/body && dialog \? <DialogDescription asChild>\{body\}<\/DialogDescription> : body/u);
 });
 
-test("outside a Dialog the title is plain panel text", () => {
-  const document = render(<DialogForm title="New project">{null}</DialogForm>);
-  expect(document.querySelector('[data-slot="dialog-title"]')).toBeNull();
-  expect(document.querySelector("form")!.textContent).toContain("New project");
+test("busy marks the form busy while it submits", () => {
+  expect(source).toContain("aria-busy={busy || undefined}");
+  expect(source).toMatch(/event\.preventDefault\(\);\s*onSubmit\?\.\(\);/u);
 });

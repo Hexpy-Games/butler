@@ -896,13 +896,13 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   expect(contextPanel).toContain('data-test-class="context-legend"');
   expect(contextPanel).toContain("inspectorLayout.ts");
   expect(contextPanel).toContain("<InspectorInset fill>");
-  expect(contextPanel).toContain("style={contextLegendFrame}");
-  expect(contextPanel).toContain("contentStyle={contextLegendContent}");
-  expect(inspectorLayout).toContain("contextLegendFrame");
-  expect(inspectorLayout).toContain('"--scroll-area-frame-width"');
-  expect(inspectorLayout).toContain('"--scroll-area-content-width": "100%"');
-  expect(inspectorLayout).toContain("paddingInlineEnd");
-  expect(inspectorLayout).toContain('"--scroll-area-scrollbar-offset": "18px"');
+  expect(contextPanel).toContain('bleed="inline-end"');
+  expect(contextPanel).toContain("UNSAFE_style={contextLegendGeometry}");
+  expect(inspectorLayout).toContain("contextLegendGeometry");
+  expect(scrollAreaStyles).toContain("--scroll-area-frame-width: calc(100% + var(--scroll-area-bleed))");
+  expect(scrollAreaStyles).toContain("--scroll-area-content-width: 100%");
+  expect(scrollAreaStyles).toContain("padding-inline-end: var(--scroll-area-bleed)");
+  expect(scrollAreaStyles).toContain("--scroll-area-scrollbar-offset: 18px");
   expect(contextPanel).toContain("fill");
   expect(contextPanel).toContain('detailLayout="stack"');
   expect(contextPanel).toContain('valueTextSize="caption"');
@@ -948,9 +948,7 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   expect(rightPanelOverlayTitlebar).toContain(
     "appCopy.titlebar.hideRightPanel",
   );
-  expect(rightPanelOverlayTitlebar).toContain(
-    'className="right-panel-overlay-titlebar drag-region"',
-  );
+  expect(rightPanelOverlayTitlebar).toContain('windowDrag="drag"');
   expect(rightPanelOverlayTitlebar).not.toContain("no-drag");
   expect(rightPanelOverlayTitlebar).toContain("AdaptivePanelTitlebar");
   expect(chromeFrame).toContain(
@@ -2462,17 +2460,18 @@ test("settings, command palette, automations, right panel, and worker UI are app
     expect(conversation).not.toContain(forbidden);
   }
   expect(renderer).toContain("accessModeIcon(accessMode, 16)");
-  expect(renderer).toContain("accessModeStyle(accessMode)");
+  expect(renderer).toContain("permissionTone={accessPermissionTone(accessMode)}");
+  // Access colors are DS permission tones, not inline custom properties.
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/conversation/accessModeUtils.tsx",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/OptionMenu/OptionMenu.module.css",
     ),
-  ).toContain('"--option-menu-icon-color": iconColorToken');
+  ).toContain("--option-menu-icon-color: var(--access-read-icon)");
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/conversation/accessModeUtils.tsx",
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/ComposerControl/ComposerControl.module.css",
     ),
-  ).toContain('"--composer-control-icon-color": iconColorToken');
+  ).toContain("--composer-control-icon-color: var(--access-full)");
   expect(
     read(
       "packages/butler-app/client/ui/src/components/conversation/accessModeUtils.tsx",
@@ -4327,7 +4326,7 @@ describe("app-client design system foundation", () => {
     const settingsHeaderStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/SettingsHeader/SettingsHeader.module.css",
     );
-    expect(settingsHeader).toContain("className={styles.title}");
+    expect(settingsHeader).toContain("className={dsClass(styles.title)}");
     expect(settingsHeaderStyles).toContain("color: var(--color-text-primary)");
   });
 
@@ -4384,49 +4383,49 @@ describe("app-client design system foundation", () => {
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/DashboardHeader/DashboardHeader.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/DashboardHeader/DashboardHeader.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/PanelHeader/PanelHeader.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/PanelHeader/PanelHeader.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/FormSection/FormSection.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/FormSection/FormSection.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSectionHeading.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/NavSection/NavSection.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--text-tertiary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ActivityFeed/ActivityFeed.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/ActivityFeed/ActivityFeed.module.css",
-        "className={styles.feedTitle}",
+        "className={dsClass(styles.feedTitle)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/MetricCard/MetricCard.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/MetricCard/MetricCard.module.css",
-        "className={styles.value}",
+        "className={dsClass(styles.value)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/blocks/DialogForm/DialogForm.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/blocks/DialogForm/DialogForm.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--text-primary)",
       ],
       [
         "packages/butler-app/client/ui/src/libs/design-system/components/Section/Section.tsx",
         "packages/butler-app/client/ui/src/libs/design-system/components/Section/Section.module.css",
-        "className={styles.title}",
+        "className={dsClass(styles.title)}",
         "color: var(--color-text-primary)",
       ],
     ] as const;
@@ -4587,13 +4586,14 @@ describe("app-client design system foundation", () => {
       "utf8",
     );
     expect(documentsPanel).toContain("NavRow");
-    expect(documentsPanel).toContain("ScrollArea");
+    // Lanes and the spec browser are DS blocks (fixed-height scrollers inside).
+    expect(documentsPanel).toContain("<KanbanBoard");
+    expect(documentsPanel).toContain("<SplitBrowser");
     expect(documentsPanel).toContain("<Section");
-    expect(documentsPanel).toContain("<Grid");
     expect(documentsPanel).toContain("<DocumentTile");
     expect(documentsPanel).toContain("<NavRow");
     expect(documentsPanel).toContain("icon={<BookOpenText");
-    expect(documentsPanel).toContain('gap="md"');
+    expect(documentsPanel).not.toContain("style=");
     expect(documentsPanel).not.toContain("<button");
     expect(documentsPanel).not.toContain("categoryButton");
     expect(documentsPanel).not.toContain("<h3>");

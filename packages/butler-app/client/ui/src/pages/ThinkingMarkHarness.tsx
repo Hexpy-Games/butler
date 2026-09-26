@@ -52,13 +52,13 @@ export function ThinkingMarkHarness() {
         <div className={styles.grid}>
           <section className={styles.sample}>
             <div className={`${styles.surface} ${styles["surface-dark"]}`}>
-              <ButlerThinkingMark className={styles.mark} state={markState} style={markStyle} theme="dark" />
+              <div className={styles.mark} style={markStyle}><ButlerThinkingMark state={markState} theme="dark" /></div>
             </div>
             <div className={styles.label}>Dark mode canvas</div>
           </section>
           <section className={styles.sample}>
             <div className={`${styles.surface} ${styles["surface-light"]}`}>
-              <ButlerThinkingMark className={styles.mark} state={markState} style={markStyle} theme="light" />
+              <div className={styles.mark} style={markStyle}><ButlerThinkingMark state={markState} theme="light" /></div>
             </div>
             <div className={styles.label}>Light mode canvas</div>
           </section>

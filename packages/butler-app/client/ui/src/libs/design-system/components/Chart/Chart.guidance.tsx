@@ -38,7 +38,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Hex fills in Recharts bypass the theme and dark mode.", render: () => <Typo.Code>{'<Bar fill="#2a9f48" />'}</Typo.Code> },
     },
   ],
-  content: ["Series labels are short nouns; always label the chart (aria-label or a heading)."],
+  content: ["size=\"panel\" gives a full-width dashboard chart (--chart-height-panel).", "Series labels are short nouns; always label the chart (aria-label or a heading)."],
   accessibility: ["Use accessibilityLayer on Recharts charts; never rely on color alone (legend shapes help)."],
   tokens: ["--context-chart-1", "--context-chart-2", "--color-success", "--color-danger", "--line"],
   internalExports: { ChartStyle: "Injected by ChartContainer to map ChartConfig colors to --color-* variables." },

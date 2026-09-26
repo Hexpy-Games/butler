@@ -1,3 +1,9 @@
+// Prop contracts (DsBaseProps, UnsafeStyle); lib/internal stays DS-private.
+export type { DsBaseProps, DsPrivateStyleProps, UnsafeStyle, UnsafeStyleProps } from "./lib/dsProps";
+
+export type { PermissionTone } from "./lib/permissionTone";
+export type { WindowDrag } from "./lib/windowDrag";
+
 // Primitives
 export * from "./lib/floatingConstraints";
 export { useScrollEdges, type ScrollEdgeAxis } from "./lib/useScrollEdges";
@@ -56,6 +62,9 @@ export * from "./components/Typo";
 export * from "./components/Icons";
 export * from "./components/IconButton";
 export * from "./components/Kbd";
+export * from "./components/IconSlot";
+export * from "./components/AspectFrame";
+export * from "./components/GlyphToggle";
 
 // Blocks
 export * from "./blocks/AdaptiveShell";
@@ -122,4 +131,7 @@ export * from "./blocks/DialogForm";
 export * from "./blocks/ChromeFrame";
 export * from "./blocks/TitlebarShell";
 export * from "./blocks/SidebarShell";
-
+export * from "./blocks/ActivityStrip";
+export * from "./blocks/KanbanBoard";
+export * from "./blocks/SplitBrowser";
+export * from "./blocks/StatusCapsule";

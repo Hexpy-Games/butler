@@ -35,7 +35,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Cards in settings add shadows where the page is flat.", render: () => <Card><Typo.Body>Release checklist review</Typo.Body></Card> },
     },
   ],
-  content: ["Title and one caption line; the action verb says what happens."],
+  content: ["elevation=\"subtle\" is the flat translucent surface for a document inside a message.", "Title and one caption line; the action verb says what happens."],
   accessibility: ["A div by default; the content provides headings and names."],
   tokens: ["--surface-raised", "--line", "--radius-panel", "--shadow-card"],
 };

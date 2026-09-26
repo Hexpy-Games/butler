@@ -42,7 +42,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["Title names the choice; descriptions explain consequences in one line."],
+  content: ["permissionTone (full, ask, read) colors access-mode items and their icons.", "Title names the choice; descriptions explain consequences in one line."],
   accessibility: ["Items are buttons; selected items expose aria-pressed; tones never carry meaning alone."],
   tokens: ["--menu-item-height", "--menu-group-label-size", "--access-full", "--access-ask", "--access-read-icon"],
 };

@@ -88,7 +88,7 @@ export function WorkersPanel({
     if (detailAction) actions.unshift(detailAction);
     return {
       id: worker.worker_id,
-      icon: <span className={`worker-dot ${worker.phase}`} />,
+      icon: <span aria-hidden="true" data-worker-phase={worker.phase} />,
       title: workerActivityDisplayName(worker),
       description: workerActivityDescription(worker),
       meta: workerActivityMeta(worker),

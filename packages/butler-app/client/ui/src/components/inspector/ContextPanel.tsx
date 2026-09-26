@@ -8,8 +8,7 @@ import type { ContextDetailsView } from "@/app/types.ts";
 import { ContextCategoryRow } from "./ContextCategoryRow.tsx";
 import { buildContextChart, formatTokenCount } from "./contextPanelUtils.ts";
 import {
-  contextLegendContent,
-  contextLegendFrame,
+  contextLegendGeometry,
 } from "./inspectorLayout.ts";
 
 export function ContextPanel({ context }: { context?: ContextDetailsView }) {
@@ -93,11 +92,11 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
               </ChartContainer>
             </Stack>
             <ScrollArea
-              contentStyle={contextLegendContent}
+              bleed="inline-end"
               dataSlot="context-legend-scroll"
               dataTestClass="context-legend-scroll"
               fill
-              style={contextLegendFrame}
+              UNSAFE_style={contextLegendGeometry}
             >
               <Stack gap="sm" data-test-class="context-legend">
                 {sortedCategories.map((category) => (

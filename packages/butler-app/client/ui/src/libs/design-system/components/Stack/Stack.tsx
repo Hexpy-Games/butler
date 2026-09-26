@@ -1,3 +1,5 @@
+import { withUnsafeStyle, type DsBaseProps, type UnsafeStyleProps } from "../../lib/dsProps";
+import { windowDragClassName, type WindowDragProps } from "../../lib/windowDrag";
 import type { HTMLAttributes, ReactNode } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Stack.module.css";
@@ -26,7 +28,8 @@ export type LayoutElement =
   | "ol"
   | "li";
 
-export interface StackProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItemProps, "span"> {
+export interface StackProps
+  extends Omit<LayoutItemProps, "span">, DsBaseProps<HTMLAttributes<HTMLElement>>, WindowDragProps, UnsafeStyleProps {
   children: ReactNode;
   as?: LayoutElement;
   align?: "row" | "column";
@@ -39,6 +42,8 @@ export interface StackProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItem
   cross?: CrossAlign;
   fill?: boolean;
   wrap?: boolean;
+  /** Lay out inline (`inline-flex`), e.g. a run of text and icons inside a line. */
+  inline?: boolean;
 }
 
 function join(...values: Array<string | false | undefined>): string {
@@ -57,7 +62,11 @@ function StackRoot(allProps: StackProps) {
     cross = "stretch",
     fill = false,
     wrap = false,
+    inline = false,
+    windowDrag,
     className,
+    style,
+    UNSAFE_style,
     ...props
   }] = splitLayoutItemProps(allProps);
   const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
@@ -69,18 +78,21 @@ function StackRoot(allProps: StackProps) {
     styles[`cross-${cross}`],
     fill && styles.fill,
     wrap && styles.wrap,
+    inline && styles.inline,
+    windowDragClassName(windowDrag),
     itemClassName,
     className,
   );
 
   return (
-    <Component className={classes} data-row-gap={rowGap} data-compact-gap={compactGap} {...itemAttributes} {...props}>
+    <Component className={classes} data-row-gap={rowGap} data-compact-gap={compactGap} style={withUnsafeStyle(style, UNSAFE_style)}
+      {...itemAttributes} {...props}>
       {children}
     </Component>
   );
 }
 
-export interface StackItemProps extends HTMLAttributes<HTMLElement>, Omit<LayoutItemProps, "span"> {
+export interface StackItemProps extends Omit<LayoutItemProps, "span">, DsBaseProps<HTMLAttributes<HTMLElement>> {
   children?: ReactNode;
   as?: LayoutElement;
 }

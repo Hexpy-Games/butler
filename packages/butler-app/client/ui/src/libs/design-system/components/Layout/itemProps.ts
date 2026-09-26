@@ -14,6 +14,8 @@ export interface LayoutItemProps {
   basis?: LayoutBasis;
   /** `"0"` lets a flex item shrink below its content (needed for truncation). */
   minWidth?: "0" | "auto";
+  /** Cap the item's width to a share of its container (`full`, `3/5`, `1/2`). */
+  maxWidth?: "full" | "3/5" | "1/2";
   alignSelf?: LayoutAlignSelf;
   /** Grid children only: columns to span; `full` spans the whole row. */
   span?: LayoutSpan;
@@ -21,7 +23,7 @@ export interface LayoutItemProps {
   invisible?: boolean;
 }
 
-const ITEM_KEYS = ["grow", "shrink", "basis", "minWidth", "alignSelf", "span", "invisible"] as const;
+const ITEM_KEYS = ["grow", "shrink", "basis", "minWidth", "maxWidth", "alignSelf", "span", "invisible"] as const;
 
 /** Splits layout item props from the rest so they never reach the DOM as-is. */
 export function splitLayoutItemProps<T extends LayoutItemProps>(
@@ -49,6 +51,7 @@ export function layoutItemAttributes(item: LayoutItemProps): {
   "data-shrink"?: "true" | "false";
   "data-basis"?: LayoutBasis;
   "data-min-width"?: "0" | "auto";
+  "data-max-width"?: "full" | "3/5" | "1/2";
   "data-align-self"?: LayoutAlignSelf;
   "data-span"?: LayoutSpan;
   "data-invisible"?: "true";
@@ -60,6 +63,7 @@ export function layoutItemAttributes(item: LayoutItemProps): {
     "data-shrink": item.shrink === undefined ? undefined : item.shrink ? "true" : "false",
     "data-basis": item.basis,
     "data-min-width": item.minWidth,
+    "data-max-width": item.maxWidth,
     "data-align-self": item.alignSelf,
     "data-span": item.span,
     "data-invisible": item.invisible ? "true" : undefined,

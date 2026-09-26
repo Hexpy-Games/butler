@@ -2,7 +2,7 @@ import { useAppLocale } from "@/app/copy.ts";
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import {
   IconButton,
   ListChecks,
@@ -35,7 +35,7 @@ export function ComposerAttachmentMenu() {
     (store) => store.openAttachmentPicker,
   );
   const [open, setOpen] = useState(false);
-  const themeClass = appThemeClasses(settings);
+  const theme = appShellTheme(settings);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -50,7 +50,7 @@ export function ComposerAttachmentMenu() {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={themeClass}
+        theme={theme}
         data-menu-size="content"
         onOpenAutoFocus={(event) => {
           const menu = event.currentTarget as HTMLElement;
@@ -67,7 +67,7 @@ export function ComposerAttachmentMenu() {
           <OptionMenuSection title={appCopy.composer.attachments}>
             {projectId ? (
               <ComposerProjectDocumentMenu
-                className={themeClass}
+                theme={theme}
                 onClose={() => setOpen(false)}
                 projectId={projectId}
               />

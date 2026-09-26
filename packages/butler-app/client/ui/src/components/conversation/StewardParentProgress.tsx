@@ -16,7 +16,6 @@ import {
   stewardProgressStatus,
   stewardToolRows,
 } from "./stewardProgressPresentation.ts";
-import styles from "./StewardParentProgress.module.css";
 
 export function StewardParentProgress({
   progress,
@@ -51,7 +50,7 @@ export function StewardParentProgress({
           <Stack align="row" gap="xs">
             {turn?.retryable && !child.active_turn && !child.result ? (
               <IconButton
-                className={styles.observerAction}
+                opticalAlign="top-end"
                 data-test-class="steward-resume-action"
                 disabled={resuming}
                 label={appCopy.conversation.work.resumeInterrupted}
@@ -65,7 +64,7 @@ export function StewardParentProgress({
               </IconButton>
             ) : null}
             <IconButton
-              className={styles.observerAction}
+              opticalAlign="top-end"
               data-test-class="steward-observer-action"
               label={appCopy.interfaceDetails.progressDetails}
               onClick={() => openSessionObserver(child.session_id)}

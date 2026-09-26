@@ -4,7 +4,6 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, Inline, Section, Stack, Typo, Box, chartColor, type ChartColor } from "@/butler-ds";
 import type { DashboardStatisticSeries } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
-import styles from "./ProjectStatisticsPanel.module.css";
 
 /** Series colors: bars and the legend share these DS chart tokens. */
 const TONES: Record<string, ChartColor> = {
@@ -32,7 +31,7 @@ export function ProjectStatisticChart({ title, description, series, stacked = fa
     <Box border="hairline" radius="control" paddingX="lg" paddingY="md"><Stack gap="md">
       {!hasData ? <Typo.Caption>{keys.length ? copy.empty : copy.unavailable}</Typo.Caption> : <>
         <ChartLegend items={keys.map((key) => ({ key, label: copy.labels[key] ?? key, color: tone(key) }))} />
-        <ChartContainer className={styles.chart} config={config} aria-label={title}
+        <ChartContainer size="panel" config={config} aria-label={title}
           onKeyDownCapture={(event) => {
             if (event.key === "ArrowRight") select(Math.min(rows.length - 1, (selected ?? -1) + 1));
             if (event.key === "ArrowLeft") select(Math.max(0, (selected ?? rows.length) - 1));

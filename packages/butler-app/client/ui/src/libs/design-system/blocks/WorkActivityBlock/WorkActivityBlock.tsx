@@ -1,18 +1,19 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { cn } from "../../lib/utils";
 import { SurfacePanel } from "../SurfacePanel";
 import {
   WorkActivityToolGroup,
   type WorkActivityToolItem,
 } from "./WorkActivityToolGroup";
 import styles from "./WorkActivityBlock.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type { WorkActivityToolItem };
 
 export interface WorkActivityBlockProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+  extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
   title: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
@@ -20,7 +21,6 @@ export interface WorkActivityBlockProps
   connected?: boolean;
   density?: "normal" | "compact";
   tools?: WorkActivityToolItem[];
-  className?: string;
 }
 
 export function WorkActivityBlock({
@@ -36,13 +36,7 @@ export function WorkActivityBlock({
 }: WorkActivityBlockProps) {
   return (
     <SurfacePanel
-      className={cn(
-        styles.block,
-        density === "compact" && styles.compact,
-        running && styles.running,
-        connected && styles.connected,
-        className,
-      )}
+      className={dsClass(styles.block, density === "compact" && styles.compact, running && styles.running, connected && styles.connected, className)}
       elevation="none"
       data-connected={connected || undefined}
       data-test-class={`turn-work-block${running ? " turn-work-block-running" : ""}`}
@@ -63,7 +57,7 @@ export function WorkActivityBlock({
           )}
           <Typo.Body
             as="span"
-            className={styles.title}
+            className={dsClass(styles.title)}
             data-test-class="turn-work-block-header"
           >
             {title}
@@ -72,7 +66,7 @@ export function WorkActivityBlock({
         {description ? (
           <Typo.Body
             as="div"
-            className={styles.description}
+            className={dsClass(styles.description)}
             data-slot="work-activity-description"
           >
             {description}

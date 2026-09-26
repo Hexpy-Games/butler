@@ -126,6 +126,17 @@
   --dialog-width-md: 520px;
   --dialog-width-lg: 720px;
   --dialog-width-xl: 880px;
+  /* ScrollArea maxHeight caps (raw log blocks). */
+  --scroll-area-max-height-xs: 180px;
+  --scroll-area-max-height-sm: 320px;
+  /* Chart height for dashboard panel charts (ChartContainer size="panel"). */
+  --chart-height-panel: 13rem;
+  /* Fixed pane heights of the document board and the spec browser. */
+  --kanban-lane-height: 22rem;
+  --split-browser-height: 14.5rem;
+  /* StatusCapsule part caps (composer work capsules). */
+  --status-capsule-title-max: min(34vw, 240px);
+  --status-capsule-detail-max: min(30vw, 220px);
   --spinner-easing: linear(
     0,
     0.0363,

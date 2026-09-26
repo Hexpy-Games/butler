@@ -1,5 +1,6 @@
 "use client";
 
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
@@ -11,35 +12,36 @@ import {
   type TintedGlassRadius,
 } from "../../components/TintedGlass";
 import styles from "../../components/Dialog/Dialog.module.css";
+import { dsClass } from "../../lib/internal";
 
 function Dialog({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
 function DialogTrigger({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>>) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
 function DialogPortal({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>>) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
 function DialogClose({
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Close>>) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 function DialogOverlay({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>) {
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
@@ -85,7 +87,7 @@ function DialogContent({
   layout = "flow",
   maxHeight = "full",
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>> & {
   glassRadius?: TintedGlassRadius;
   showCloseButton?: boolean;
   /** `palette`: the command palette's quicker scale-in and backdrop fade. */
@@ -119,7 +121,7 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className={styles.close}
+              className={dsClass(styles.close)}
               size="icon-sm"
             >
               <XIcon />
@@ -135,7 +137,7 @@ function DialogContent({
 function DialogHeader({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">>) {
   return (
     <div
       data-slot="dialog-header"
@@ -151,7 +153,7 @@ function DialogFooter({
   closeLabel,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<"div"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"div">> & {
   showCloseButton?: boolean;
   /** Localized close button text; callers pass app copy. */
   closeLabel?: string;
@@ -179,7 +181,7 @@ function DialogTitle({
   className,
   visuallyHidden = false,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>> & {
   /** Keep the accessible name but hide the title (the dialog shows its own heading). */
   visuallyHidden?: boolean;
 }) {
@@ -195,7 +197,7 @@ function DialogTitle({
 function DialogDescription({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>>) {
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

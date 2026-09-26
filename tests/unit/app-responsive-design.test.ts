@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   classifyAdaptiveMode,
   adaptiveDrawerQuery,
@@ -322,7 +322,13 @@ describe("responsive adaptive design contracts", () => {
     expect(gesture).toContain("event.stopPropagation()");
     expect(navStyles).toContain(".compactHiddenActions");
     expect(navStyles).toContain("visibility: hidden");
-    expect(item).toContain('WebkitTouchCallout: "none"');
-    expect(item).toContain('userSelect: "none"');
+    // The sidebar shell suppresses the touch callout and text selection for every row.
+    const sidebarShellStyles = readFileSync(
+      join(root, "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css"),
+      "utf8",
+    );
+    expect(sidebarShellStyles).toContain("-webkit-touch-callout: none");
+    expect(sidebarShellStyles).toContain("user-select: none");
+    expect(item).not.toContain("style=");
   });
 });

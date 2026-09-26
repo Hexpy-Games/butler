@@ -40,6 +40,25 @@
   color: var(--danger);
 }
 
+/* Permission tones (access modes): control and icon colors. */
+.control[data-permission-tone="full"] {
+  --composer-control-icon-color: var(--access-full);
+
+  color: var(--access-full);
+}
+
+.control[data-permission-tone="ask"] {
+  --composer-control-icon-color: var(--access-ask);
+
+  color: var(--access-ask);
+}
+
+.control[data-permission-tone="read"] {
+  --composer-control-icon-color: var(--access-read-icon);
+
+  color: var(--access-read);
+}
+
 .active {
   background: var(--selection-strong);
 }

@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type {
   HTMLAttributes,
   KeyboardEvent,
@@ -9,6 +10,7 @@ import { FileText } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./ArtifactList.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ArtifactListAction {
   id: string;
@@ -30,7 +32,7 @@ export interface ArtifactListItem {
   onOpen?: () => void;
 }
 
-export interface ArtifactListProps extends HTMLAttributes<HTMLDivElement> {
+export interface ArtifactListProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   items: ArtifactListItem[];
 }
 
@@ -65,11 +67,11 @@ function ArtifactListRow({ item }: { item: ArtifactListItem }) {
         {item.icon ?? <FileText size="lg" />}
       </span>
       <span className={styles.text}>
-        <Typo.Body as="span" className={styles.title}>
+        <Typo.Body as="span" className={dsClass(styles.title)}>
           {item.title}
         </Typo.Body>
         {item.description ? (
-          <Typo.Caption className={styles.description}>
+          <Typo.Caption className={dsClass(styles.description)}>
             {item.description}
           </Typo.Caption>
         ) : null}

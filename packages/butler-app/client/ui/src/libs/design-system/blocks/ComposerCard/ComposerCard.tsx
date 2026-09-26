@@ -1,10 +1,5 @@
-import type {
-  ButtonHTMLAttributes,
-  FormHTMLAttributes,
-  ReactNode,
-  Ref,
-  TextareaHTMLAttributes,
-} from "react";
+import type { DsBaseProps } from "../../lib/dsProps";
+import type { ButtonHTMLAttributes, FormHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from "react";
 import { createContext, forwardRef, useContext } from "react";
 import { Collapsible } from "../../components/Collapsible";
 import { SendHorizontal, Square } from "../../components/Icons";
@@ -12,8 +7,9 @@ import { Spinner } from "../../components/Spinner";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
 import { cn } from "../../lib/utils";
 import styles from "./ComposerCard.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
+export interface ComposerCardProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   large?: boolean;
   floating?: boolean;
   dropActive?: boolean;
@@ -70,7 +66,7 @@ export function ComposerCard({
 
 export const ComposerCardTextarea = forwardRef<
   HTMLTextAreaElement,
-  TextareaHTMLAttributes<HTMLTextAreaElement>
+  DsBaseProps<TextareaHTMLAttributes<HTMLTextAreaElement>>
 >(function ComposerCardTextarea({ className, ...props }, ref) {
   return (
     <textarea
@@ -93,7 +89,7 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
 export function ComposerCardExpandedBody({ children }: { children: ReactNode }) {
   const expanded = useContext(ComposerExpandedContext);
   return (
-    <Collapsible open={expanded} keepMounted="focusable" className={styles.expandedBody} data-slot="composer-expanded-body">
+    <Collapsible open={expanded} keepMounted="focusable" className={dsClass(styles.expandedBody)} data-slot="composer-expanded-body">
       {children}
     </Collapsible>
   );
@@ -107,7 +103,7 @@ export function ComposerCardCompactPreview({
   children,
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>) {
   return (
     <button
       className={cn(styles.compactPreview, className)}
@@ -131,7 +127,7 @@ export function ComposerCardToolbarSpacer() {
 }
 
 export interface ComposerSendButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+ extends DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>> {
   mode?: "send" | "stop";
   busy?: boolean;
 }

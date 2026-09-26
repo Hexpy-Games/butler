@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 
 import { cn } from "../../lib/utils";
@@ -8,7 +9,7 @@ function Input({
   type,
   compact = false,
   ...props
-}: React.ComponentPropsWithoutRef<"input"> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<"input">> & {
   /** A short inline field (numbers in a toolbar): content width, small control height. */
   compact?: boolean;
 }) {

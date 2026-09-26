@@ -5,6 +5,7 @@ import { useScrollEdges } from "../../lib/useScrollEdges";
 import { ChevronDownIcon } from "../../components/Icons";
 import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface ConversationShellProps {
   children: ReactNode;
@@ -109,7 +110,7 @@ export function ConversationScrollToBottomButton({
   return (
     <PillButton
       aria-label={ariaLabel}
-      className={styles.scrollToBottomButton}
+      className={dsClass(styles.scrollToBottomButton)}
       surface="glass"
       data-test-class="scroll-to-bottom-button"
       data-unread-messages={hasUnreadMessages ? "true" : "false"}

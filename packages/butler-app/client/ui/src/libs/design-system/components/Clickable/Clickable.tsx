@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type {
   HTMLAttributes,
   KeyboardEvent,
@@ -6,7 +7,7 @@ import type {
 } from "react";
 import styles from "./Clickable.module.css";
 
-export interface ClickableProps extends HTMLAttributes<HTMLDivElement> {
+export interface ClickableProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   children: ReactNode;
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLDivElement>) => void;

@@ -4,6 +4,7 @@ import { Plus, Search } from "../Icons";
 import { Stack } from "../Stack";
 import { ButtonContainer } from "./ButtonContainer";
 import styles from "./ButtonContainer.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const meta: ShowcaseMeta = {
   title: "ButtonContainer",
@@ -30,7 +31,7 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Default",
     render: ({ locale }) => (
-      <Stack className={styles.fixture} gap="md">
+      <Stack className={dsClass(styles.fixture)} gap="md">
         <ButtonContainer size="default">
           <Button iconStart={<Search size="md" />} text={copy[locale].search} />
           <Button iconStart={<Plus size="md" />} text={copy[locale].new} />

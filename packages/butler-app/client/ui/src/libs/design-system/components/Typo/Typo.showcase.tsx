@@ -148,4 +148,11 @@ export const stories: ShowcaseStory[] = [
       </Typo.Label>
     ),
   },
+  { // ProjectDescription (alignWith) and DeveloperLogRawBlock (as pre, wrap pre).
+    name: "Beside a control and preformatted",
+    render: () => (<Stack gap="md">
+      <Typo.Body tone="secondary" wrap="anywhere" alignWith="control">alignWith=&quot;control&quot; centers the first line on a control.</Typo.Body>
+      <Typo.Code as="pre" tone="primary" wrap="pre">{'{\n  "event": "turn.completed"\n}'}</Typo.Code>
+    </Stack>),
+  },
 ];

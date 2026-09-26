@@ -26,7 +26,11 @@ export function MarkdownCodeFrame({ language, actions, children }: MarkdownCodeF
   );
 }
 
-/** Markdown table with horizontal scroll edge fades. */
+/**
+ * Markdown table with horizontal scroll edge fades. A react-markdown element
+ * renderer: it receives the table attributes react-markdown produces, so it
+ * keeps the plain table props (the one DS export exempt from DsBaseProps).
+ */
 export function MarkdownTable({
   node: _node,
   ...props

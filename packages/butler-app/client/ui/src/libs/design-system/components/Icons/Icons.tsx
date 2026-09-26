@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 /**
  * Icon wrapper for Butler UI
  * Maps Butler UI icon names to Hugeicons alternatives.
@@ -28,7 +29,7 @@ export const ICON_SIZE = { xs: 12, sm: 14, md: 16, lg: 20, xl: 24, "2xl": 32 } a
 export type IconSize = keyof typeof ICON_SIZE;
 
 // Icon component props extending Hugeicons with simplified API
-export interface IconProps extends Omit<HugeiconsIconProps, "icon" | "size"> {
+export interface IconProps extends Omit<DsBaseProps<HugeiconsIconProps>, "icon" | "size"> {
   size?: IconSize | number;
 }
 
@@ -130,6 +131,6 @@ export const X = createIcon(Cancel01Icon);
 export const XIcon = X;
 
 // Generic Icon component for custom usage
-export function Icon({ size = 24, ...props }: HugeiconsIconProps) {
+export function Icon({ size = 24, ...props }: DsBaseProps<HugeiconsIconProps>) {
   return <HugeiconsIcon size={size} {...props} />;
 }

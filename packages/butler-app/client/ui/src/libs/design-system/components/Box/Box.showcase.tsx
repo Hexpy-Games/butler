@@ -65,4 +65,13 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // TurnDecisionRow: an indented decision under the activity rail.
+    name: "Inline-start padding (indented row)",
+    render: () => (
+      <Box as="article" paddingStart="2xl" border="hairline" radius="control" paddingY="sm">
+        <Typo.Body>paddingStart indents one side only; the row keeps its full width.</Typo.Body>
+      </Box>
+    ),
+  },
 ];

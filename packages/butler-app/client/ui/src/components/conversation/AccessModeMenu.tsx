@@ -11,13 +11,13 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import type { AccessMode } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerControlButton } from "./ComposerControlButton";
 import {
   accessDescription,
   accessLabel,
-  accessModeStyle,
+  accessPermissionTone,
   accessModeTone,
   accessModeIcon,
 } from "./accessModeUtils";
@@ -48,7 +48,7 @@ export function AccessModeMenu() {
           compact={permissions.length ? "label" : "icon"}
           data-test-class="access-button"
           icon={accessModeIcon(accessMode)}
-          style={accessModeStyle(accessMode)}
+          permissionTone={accessPermissionTone(accessMode)}
         >
           <span data-test-class="composer-control-label">
             {accessLabel(accessMode)}
@@ -58,7 +58,7 @@ export function AccessModeMenu() {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className={appThemeClasses(settings)}
+        theme={appShellTheme(settings)}
         data-menu-size="compact"
         side="top"
         sideOffset={10}
@@ -73,7 +73,7 @@ export function AccessModeMenu() {
                 key={item}
                 label={accessLabel(item)}
                 selected={item === accessMode}
-                style={accessModeStyle(item)}
+                permissionTone={accessPermissionTone(item)}
                 tone={accessModeTone(item)}
                 onClick={() => {
                   handleAccessModeChange(item);

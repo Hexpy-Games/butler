@@ -36,7 +36,7 @@ export const guidance: ShowcaseGuidance = {
       },
     },
   ],
-  content: ["No copy of its own."],
+  content: ["inline lays out an inline-flex run; as=\"ul\"/\"ol\" drops list chrome; windowDrag=\"drag\" | \"no-drag\" marks desktop titlebar regions; UNSAFE_style takes data-driven geometry only (allowlisted per file).", "No copy of its own."],
   accessibility: ["as=\"ul\" / \"nav\" / \"section\" gives lists and regions their semantics."],
   tokens: ["--space-xs", "--space-sm", "--space-md", "--space-lg", "--layout-basis-md"],
 };

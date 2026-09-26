@@ -3,6 +3,7 @@ import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import styles from "./WorkerActivityRow.module.css";
+import { dsClass } from "../../lib/internal";
 
 const PUBLIC_PHASES = ["orienting", "planning", "executing", "verifying", "reporting"] as const;
 
@@ -51,13 +52,13 @@ export function WorkerActivityRow({
   const hasIcon = Boolean(icon);
   const heading = (
     <span className={styles.primaryLine}>
-      <Typo.Body as="span" className={styles.title} data-slot="activity-feed-title">{title}</Typo.Body>
+      <Typo.Body as="span" className={dsClass(styles.title)} data-slot="activity-feed-title">{title}</Typo.Body>
       {meta ? (
-        <Typo.Caption className={styles.meta} data-slot="activity-feed-meta">
+        <Typo.Caption className={dsClass(styles.meta)} data-slot="activity-feed-meta">
           {meta}{description ? ":" : null}
         </Typo.Caption>
       ) : null}
-      {description ? <Typo.Caption className={styles.description} data-slot="activity-feed-description">{description}</Typo.Caption> : null}
+      {description ? <Typo.Caption className={dsClass(styles.description)} data-slot="activity-feed-description">{description}</Typo.Caption> : null}
     </span>
   );
   return (

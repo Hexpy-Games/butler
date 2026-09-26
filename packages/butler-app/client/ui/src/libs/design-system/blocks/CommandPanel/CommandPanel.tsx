@@ -14,6 +14,7 @@ import { Stack } from "../../components/Stack";
 import { SurfacePanel } from "../SurfacePanel";
 import { Dialog, DialogContent, DialogTitle } from "../../components/Dialog";
 import styles from "./CommandPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface CommandPanelProps {
   query: string;
@@ -29,7 +30,7 @@ export function CommandPanel({
   onQueryChange,
 }: CommandPanelProps) {
   return (
-    <SurfacePanel elevation="high" className={styles.panel}>
+    <SurfacePanel elevation="high" className={dsClass(styles.panel)}>
       <Stack gap="sm">
         <label className={styles.search}>
           <Search size="md" aria-hidden="true" />
@@ -104,12 +105,12 @@ export function CommandPalettePanel({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
         motion="palette"
-        className={styles.palette}
+        className={dsClass(styles.palette)}
         aria-label={label}
         aria-describedby={undefined}
         showCloseButton={false}
       >
-        <DialogTitle className="sr-only">{label}</DialogTitle>
+        <DialogTitle className={dsClass("sr-only")}>{label}</DialogTitle>
         <div className={styles.inputRow}>
           <Search size="lg" aria-hidden="true" />
           <input

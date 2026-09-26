@@ -30,7 +30,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A text Button with only an icon loses the tooltip and the square hit target.", render: () => <Button variant="ghost" iconStart={<Trash2 size="md" />} aria-label="Delete row" /> },
     },
   ],
-  content: ["Labels are imperative and specific: Hide left panel, Delete row, not Toggle or Action."],
+  content: ["opticalAlign=\"top-end\" lines the icon, not the hit area, up with a card corner.", "Labels are imperative and specific: Hide left panel, Delete row, not Toggle or Action."],
   accessibility: [
     "label becomes aria-label; the Tooltip is skipped for menu triggers (aria-haspopup) so it never covers the menu.",
     "selected marks an open menu trigger; hit targets grow to 44px on touch.",

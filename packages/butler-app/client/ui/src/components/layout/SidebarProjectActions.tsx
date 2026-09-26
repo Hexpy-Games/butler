@@ -32,7 +32,7 @@ export function SidebarProjectActions({ project }: SidebarProjectActionsProps) {
 
   return (
     <ButtonContainer
-      className="no-drag"
+      windowDrag="no-drag"
       size="icon-sm"
       onClick={(event) => event.stopPropagation()}
     >

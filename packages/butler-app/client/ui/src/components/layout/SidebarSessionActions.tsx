@@ -26,7 +26,7 @@ export function SidebarSessionActions({
   useAppLocale();
   return (
     <ButtonContainer
-      className="no-drag"
+      windowDrag="no-drag"
       size="icon-sm"
       onClick={(event) => event.stopPropagation()}
     >

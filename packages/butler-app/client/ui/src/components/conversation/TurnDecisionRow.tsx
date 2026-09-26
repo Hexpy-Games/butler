@@ -1,16 +1,9 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
 import type { ActivityReadModel } from "@/app/conversation-progress";
-import { Stack, Typo } from "@/butler-ds";
+import { Box, Stack, Typo } from "@/butler-ds";
 
 type DecisionReadModel = Extract<ActivityReadModel, { type: "decision" }>;
-
-const rowStyle = {
-  boxSizing: "border-box",
-  maxWidth: "100%",
-  minWidth: 0,
-  padding: "0 0 0 var(--space-6)",
-} as const;
 
 export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
   useAppLocale();
@@ -19,13 +12,13 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
   );
 
   return (
-    <Stack
+    <Box
       as="article"
-      gap="xs"
-      style={rowStyle}
+      paddingStart="2xl"
       data-test-class="turn-decision-row"
       aria-label={appCopy.interfacePanels.assistantDecision}
     >
+      <Stack gap="xs">
       <Typo.Body
         as="p"
         tone="primary"
@@ -47,6 +40,7 @@ export function TurnDecisionRow({ decision }: { decision: DecisionReadModel }) {
           {line}
         </Typo.Body>
       ))}
-    </Stack>
+      </Stack>
+    </Box>
   );
 }

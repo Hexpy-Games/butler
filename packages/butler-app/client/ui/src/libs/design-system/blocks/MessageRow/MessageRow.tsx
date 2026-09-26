@@ -1,11 +1,6 @@
+import { withUnsafeStyle, type DsBaseProps, type UnsafeStyleProps } from "../../lib/dsProps";
 import { forwardRef, useRef } from "react";
-import type {
-  CSSProperties,
-  HTMLAttributes,
-  MutableRefObject,
-  ReactNode,
-  Ref,
-} from "react";
+import type { HTMLAttributes, MutableRefObject, ReactNode, Ref } from "react";
 import { useSendFlight } from "../../lib/sendFlight";
 import { cn } from "../../lib/utils";
 import styles from "./MessageRow.module.css";
@@ -20,9 +15,9 @@ export type MessageRowRole =
 export type MessageRowTone = "pending" | "failed" | "complete";
 
 export interface MessageRowProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "role"
-> {
+>, UnsafeStyleProps {
   role: MessageRowRole;
   children: ReactNode;
   avatar?: ReactNode;
@@ -34,7 +29,6 @@ export interface MessageRowProps extends Omit<
    * in from the composer); "delivered" resolves a QueuedMessage bubble in place. */
   entering?: boolean | "delivered";
   index?: number;
-  style?: CSSProperties;
   rowRef?: Ref<HTMLElement>;
   dataTestClass?: string;
 }
@@ -64,6 +58,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       entering = false,
       index,
       style,
+      UNSAFE_style,
       rowRef,
       dataTestClass,
       className,
@@ -93,7 +88,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
           assignRef(rowRef, node);
           assignRef(forwardedRef, node);
         }}
-        style={style}
+        style={withUnsafeStyle(style, UNSAFE_style)}
       >
         {avatar}
         <div className={styles.body} data-test-class="message-body" ref={bodyRef}>

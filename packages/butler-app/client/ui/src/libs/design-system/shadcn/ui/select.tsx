@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 
@@ -15,14 +16,14 @@ import styles from "../../components/Select/Select.module.css";
 
 function Select({
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
 function SelectGroup({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Group>>) {
   return (
     <SelectPrimitive.Group
       data-slot="select-group"
@@ -34,7 +35,7 @@ function SelectGroup({
 
 function SelectValue({
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
@@ -43,7 +44,7 @@ function SelectTrigger({
   size = "default",
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>> & {
   size?: "default" | "sm";
 }) {
   return (
@@ -68,7 +69,7 @@ function SelectTrigger({
  */
 const SelectButton = React.forwardRef<
   HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement>
+  DsBaseProps<React.ButtonHTMLAttributes<HTMLButtonElement>>
 >(function SelectButton({ className, children, type = "button", ...props }, ref) {
   return (
     <button
@@ -88,7 +89,7 @@ function SelectPillTrigger({
   children,
   icon,
   ...props
-}: Omit<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>, "asChild"> & {
+}: Omit<DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>>, "asChild"> & {
   icon?: React.ReactNode;
 }) {
   return (
@@ -105,7 +106,7 @@ function SelectContent({
   position = "item-aligned",
   align = "center",
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>> & {
   ref?: React.Ref<HTMLDivElement>;
 }) {
   const contentRef = usePopperExitFreezeRef(ref);
@@ -139,7 +140,7 @@ function SelectContent({
 function SelectLabel({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>>) {
   return (
     <SelectPrimitive.Label
       data-slot="select-label"
@@ -153,7 +154,7 @@ function SelectItem({
   className,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>>) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -173,7 +174,7 @@ function SelectItem({
 function SelectSeparator({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>>) {
   return (
     <SelectPrimitive.Separator
       data-slot="select-separator"
@@ -186,7 +187,7 @@ function SelectSeparator({
 function SelectScrollUpButton({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollUpButton>>) {
   return (
     <SelectPrimitive.ScrollUpButton
       data-slot="select-scroll-up-button"
@@ -201,7 +202,7 @@ function SelectScrollUpButton({
 function SelectScrollDownButton({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>) {
+}: DsBaseProps<React.ComponentPropsWithoutRef<typeof SelectPrimitive.ScrollDownButton>>) {
   return (
     <SelectPrimitive.ScrollDownButton
       data-slot="select-scroll-down-button"

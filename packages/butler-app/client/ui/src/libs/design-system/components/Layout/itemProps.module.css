@@ -47,6 +47,18 @@
   min-width: auto;
 }
 
+.item[data-max-width="full"] {
+  max-width: 100%;
+}
+
+.item[data-max-width="3/5"] {
+  max-width: 60%;
+}
+
+.item[data-max-width="1/2"] {
+  max-width: 50%;
+}
+
 .item[data-align-self="start"] {
   align-self: flex-start;
 }

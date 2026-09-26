@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { ChevronRight, Eye, FileText, ListChecks, MessageSquarePlus, Paperclip, ShieldCheck, ShieldQuestion, X } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
@@ -34,20 +33,17 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-// accessModeStyle(): the access colors reach the item icon through its custom property.
-const accessStyle = (token: string) => ({ "--option-menu-icon-color": `var(${token})`, color: `var(${token})` }) as CSSProperties;
-
 /** AccessModeMenu: block descriptions, tones per mode. */
 function PermissionMenu({ context }: { context: ShowcaseRenderContext }) {
   const copy = text(context);
   return (
     <OptionMenu title={copy.permission}>
       <OptionMenuItem selected icon={<ShieldCheck size="md" />} tone="warning" label={copy.full} description={copy.fullHint}
-        descriptionPlacement="block" style={accessStyle("--access-full")} />
+        descriptionPlacement="block" permissionTone="full" />
       <OptionMenuItem icon={<ShieldQuestion size="md" />} tone="accent" label={copy.ask} description={copy.askHint}
-        descriptionPlacement="block" style={accessStyle("--access-ask")} />
+        descriptionPlacement="block" permissionTone="ask" />
       <OptionMenuItem icon={<Eye size="md" />} label={copy.read} description={copy.readHint} descriptionPlacement="block"
-        style={{ "--option-menu-icon-color": "var(--access-read-icon)" } as CSSProperties} />
+        permissionTone="read" />
     </OptionMenu>
   );
 }

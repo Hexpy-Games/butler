@@ -13,6 +13,7 @@ import type {
   TodoProgressPanelItemState,
 } from "./TodoProgressPanel";
 import styles from "./TodoProgressPanel.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const TodoProgressItemRow = memo(function TodoProgressItemRow({
   item,
@@ -28,13 +29,13 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
         <Typo.Body
           as="span"
           aria-label={item.fullTitle ?? item.title}
-          className={styles.title}
+          className={dsClass(styles.title)}
           title={item.fullTitle ?? item.title}
         >
           {item.title}
         </Typo.Body>
       </span>
-      <Typo.Caption as="span" className={styles.status}>
+      <Typo.Caption as="span" className={dsClass(styles.status)}>
         {item.statusLabel}
       </Typo.Caption>
     </li>

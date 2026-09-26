@@ -1,12 +1,14 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { Stack, type LayoutElement } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./NavDropTarget.module.css";
+import { dsClass } from "../../lib/internal";
 
 export type NavDropPosition = "before" | "after" | "inside" | "group";
 
-export interface NavDropTargetProps extends Omit<HTMLAttributes<HTMLDivElement>, "style"> {
+export interface NavDropTargetProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "style"> {
   /** Where a dragged row would land relative to this row, while it hovers. */
   drop?: NavDropPosition;
   /** This row is the one being dragged. */
@@ -48,7 +50,7 @@ export function NavDropTarget({ drop, dragging = false, indicator, hint, classNa
   );
 }
 
-export interface NavRootDropZoneProps extends Omit<HTMLAttributes<HTMLDivElement>, "style"> {
+export interface NavRootDropZoneProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "style"> {
   /** A dragged row is over the zone. */
   active?: boolean;
   children: ReactNode;
@@ -63,7 +65,7 @@ export function NavRootDropZone({ active = false, className, children, ...props 
   );
 }
 
-export interface NavDropScopeProps extends Omit<HTMLAttributes<HTMLElement>, "style"> {
+export interface NavDropScopeProps extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "style"> {
   /** A drag is in progress over this tree: rows may move to open a slot. */
   active?: boolean;
   as?: LayoutElement;
@@ -82,7 +84,7 @@ export function NavDropScope({ active = false, as = "div", className, children, 
       {...props}
       as={as}
       gap="xs"
-      className={cn(styles.scope, className)}
+      className={dsClass(styles.scope, className)}
       data-slot="nav-drop-scope"
       data-active={active ? "true" : undefined}
     >

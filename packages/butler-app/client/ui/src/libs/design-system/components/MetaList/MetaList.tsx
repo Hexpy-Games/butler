@@ -1,3 +1,4 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import styles from "./MetaList.module.css";
 
@@ -7,7 +8,7 @@ export interface MetaListItem {
   value: ReactNode;
 }
 
-export interface MetaListProps extends Omit<HTMLAttributes<HTMLDListElement>, "children"> {
+export interface MetaListProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDListElement>>, "children"> {
   items: MetaListItem[];
 }
 

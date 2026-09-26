@@ -1,3 +1,4 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import type { CSSProperties, ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { cn } from "../../lib/utils";
@@ -8,6 +9,7 @@ import { FilteredSelectItemButton } from "./FilteredSelectItemButton";
 import { FilteredSelectSearch } from "./FilteredSelectSearch";
 import styles from "./FilteredSelectPopover.module.css";
 import { useSelectedRowIntoView } from "./useSelectedRowIntoView";
+import { dsClass, dsStyle } from "../../lib/internal";
 
 export interface FilteredSelectFilter {
   id: string;
@@ -37,7 +39,7 @@ export interface FilteredSelectFooterOption {
   onSelect?: () => void;
 }
 
-export interface FilteredSelectPopoverProps {
+export interface FilteredSelectPopoverProps extends DsPrivateStyleProps {
   title: ReactNode;
   searchLabel: string;
   searchPlaceholder: string;
@@ -51,7 +53,6 @@ export interface FilteredSelectPopoverProps {
   emptyLabel: ReactNode;
   footerTitle?: ReactNode;
   footerOptions?: FilteredSelectFooterOption[];
-  className?: string;
   width?: "default" | "fixed";
   resultsMaxRows?: number;
 }
@@ -118,12 +119,12 @@ export function FilteredSelectPopover({
         ))}
       </div>
       <ScrollArea
-        className={styles.results}
-        contentClassName={styles.resultsContent}
+        className={dsClass(styles.results)}
+        contentClassName={dsClass(styles.resultsContent)}
         dataSlot="filtered-select-results"
         dataTestClass="filtered-select-results"
         scrollRef={resultsRef}
-        style={resultsStyle}
+        style={dsStyle(resultsStyle)}
       >
         {visibleGroups.length > 0 ? (
           visibleGroups.map((group) => (

@@ -1,5 +1,3 @@
 {
-  "components/conversation/ComposerDecisionSurface.module.css": 2,
-  "components/layout/TitlebarWorkspaceSubtitle.module.css": 1,
-  "components/management/ProjectStatisticsPanel.module.css": 2
+  "components/conversation/ComposerDecisionSurface.module.css": 2
 }

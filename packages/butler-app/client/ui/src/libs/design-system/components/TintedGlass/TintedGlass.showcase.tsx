@@ -4,6 +4,7 @@ import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import { TintedGlass } from "./TintedGlass";
 import styles from "./TintedGlass.showcase.module.css";
+import { dsClass } from "../../lib/internal";
 
 export const meta: ShowcaseMeta = {
   title: "TintedGlass",
@@ -62,7 +63,7 @@ export const stories: ShowcaseStory[] = [
     name: "Composer surface",
     render: ({ locale }) => (
       <Stage locale={locale}>
-        <TintedGlass className={styles.demo} padding="lg" radius="composer">
+        <TintedGlass className={dsClass(styles.demo)} padding="lg" radius="composer">
           <Typo.PanelSectionTitle>{copy[locale].composerTitle}</Typo.PanelSectionTitle>
           <Typo.Body>{copy[locale].composerBody}</Typo.Body>
         </TintedGlass>
@@ -73,8 +74,8 @@ export const stories: ShowcaseStory[] = [
     name: "Popover surface",
     render: ({ locale }) => (
       <Stage locale={locale}>
-        <Stack className={styles.stack} gap="sm">
-          <TintedGlass className={styles.compact} padding="sm" radius="popover">
+        <Stack className={dsClass(styles.stack)} gap="sm">
+          <TintedGlass className={dsClass(styles.compact)} padding="sm" radius="popover">
             <Typo.Caption>{copy[locale].popover}</Typo.Caption>
           </TintedGlass>
         </Stack>

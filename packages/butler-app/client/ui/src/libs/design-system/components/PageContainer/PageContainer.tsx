@@ -1,12 +1,13 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
-import { cn } from "../../lib/utils";
 import styles from "./PageContainer.module.css";
+import { cn } from "../../lib/utils";
 
 export type PageContainerWidth = "narrow" | "default" | "full";
 export type PageContainerAlign = "center" | "start";
 export type PageContainerGutter = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 
-export interface PageContainerProps extends HTMLAttributes<HTMLElement> {
+export interface PageContainerProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   children?: ReactNode;
   /** narrow: reading width (760px), default: wide page (72rem), full: no cap. */
   width?: PageContainerWidth;

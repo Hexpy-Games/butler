@@ -81,4 +81,24 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // TitlebarWorkspaceSubtitle: an inline run of text and a glyph; SettingsSidebar: a drag-region header.
+    name: "Inline runs, lists and window drag",
+    render: () => (
+      <Stack gap="md">
+        <Stack as="span" inline align="row" cross="center" gap="sm" minWidth="0">
+          <Typo.Text truncate>Butler site</Typo.Text>
+          <Typo.Text tone="secondary" truncate>worktree · main</Typo.Text>
+        </Stack>
+        <Stack as="ol" gap="xs">
+          <li><Typo.Body>Lists laid out as stacks carry no bullets or indent.</Typo.Body></li>
+          <li><Typo.Body>Use as=&quot;ol&quot; or as=&quot;ul&quot; for the semantics.</Typo.Body></li>
+        </Stack>
+        <Stack align="row" cross="center" windowDrag="drag">
+          <Typo.Caption tone="secondary">windowDrag=&quot;drag&quot; makes a titlebar region draggable; buttons inside stay clickable.</Typo.Caption>
+          <Button size="sm" variant="outline" text="Back" />
+        </Stack>
+      </Stack>
+    ),
+  },
 ];
