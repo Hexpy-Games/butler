@@ -25,7 +25,7 @@ Use `line={false}` when the interface only needs tokenized whitespace. Use
 color, and `space="none" | "xs" | "sm" | "md" | "lg"` to control the occupied
 spacing around the center line.
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

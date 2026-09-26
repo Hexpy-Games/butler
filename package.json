@@ -64,6 +64,7 @@
     "app:sidebar-drop:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/sidebar-drop-zones-electron.ts",
     "app:motion:trace": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-motion-trace.ts",
     "render": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-render.ts",
+    "ds:skill-catalog": "${BUTLER_BUN:-bun} run packages/butler-app/client/ui/src/libs/design-system/scripts/generate-skill-catalog.ts",
     "app:ui:hmr:smoke": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-ui-hmr-smoke.ts",
     "maintenance:context": "${BUTLER_BUN:-bun} run packages/butler-agent/scripts/prune-context-maintenance.ts",
     "install:docker": "bash tools/install-in-docker.sh",

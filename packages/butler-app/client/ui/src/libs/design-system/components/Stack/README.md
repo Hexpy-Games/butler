@@ -24,7 +24,7 @@ Import from the public design-system alias:
 import { Stack } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
 ### Item props and Stack.Item
 
