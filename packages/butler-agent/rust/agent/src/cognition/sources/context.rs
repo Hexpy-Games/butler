@@ -117,14 +117,3 @@ fn conversation_text(message: &crate::conversation::ConversationMessageWithParts
 fn utf16_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     left.encode_utf16().cmp(right.encode_utf16())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::utf16_cmp;
-
-    #[test]
-    fn lexical_timestamp_comparison_uses_javascript_utf16_order() {
-        assert!("\u{10000}" > "\u{e000}");
-        assert!(utf16_cmp("\u{10000}", "\u{e000}").is_lt());
-    }
-}

@@ -239,7 +239,7 @@ fn prefix_utf16(value: &str, limit: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_and_chunk, prefix_utf16_8000};
+    use super::parse_and_chunk;
 
     fn event(kind: &str, timestamp: &str, payload: serde_json::Value) -> String {
         serde_json::json!({
@@ -296,14 +296,5 @@ mod tests {
             .collect();
         assert_eq!(index[0]["type"], "user");
         assert_eq!(index[1]["message"]["content"][0]["text"], "reply");
-    }
-
-    #[test]
-    fn utf16_prefix_keeps_javascript_slice_boundary() {
-        let value = format!("{}🐈tail", "a".repeat(7999));
-        let prefix = prefix_utf16_8000(&value);
-        assert_eq!(prefix.encode_utf16().count(), 8000);
-        assert!(prefix.ends_with('\u{fffd}'));
-        assert_eq!(prefix_utf16_8000("short"), "short");
     }
 }

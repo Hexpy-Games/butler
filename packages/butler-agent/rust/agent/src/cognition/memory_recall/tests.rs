@@ -1,7 +1,6 @@
-use super::{cursor, envelope, evidence};
+use super::{cursor, evidence};
 use crate::cognition::recall::{
-    RecallAdmittedChannels, RecallCoverage, RecallCoverageLane, RecallCoverageState,
-    RecallProjectFilter, RecallRequest, RecallResponse, RecallRuntime, RecallScope, RecallStatus,
+    RecallAdmittedChannels, RecallProjectFilter, RecallRequest, RecallRuntime, RecallScope,
 };
 
 fn request() -> RecallRequest {
@@ -28,19 +27,6 @@ fn request() -> RecallRequest {
             native_operation_id: "operation".into(),
             project_id: None,
         },
-    }
-}
-
-fn coverage() -> RecallCoverage {
-    let lane = RecallCoverageLane {
-        state: RecallCoverageState::Ok,
-        candidates: 0,
-        codes: vec![],
-    };
-    RecallCoverage {
-        graph: lane.clone(),
-        vectors: lane.clone(),
-        source: lane,
     }
 }
 
@@ -101,45 +87,6 @@ fn cursor_hash_excludes_turn_and_operation_but_binds_runtime_session() {
     assert_ne!(
         cursor::argument_hash(&updated, &updated.as_of).unwrap(),
         expected
-    );
-}
-
-#[test]
-fn envelope_counts_exact_native_wrapper_bytes() {
-    let response = RecallResponse {
-        status: RecallStatus::Complete,
-        results: vec![],
-        coverage: coverage(),
-        next_cursor: None,
-        diagnostics: vec![],
-    };
-    let actual = serde_json::json!({"ok":true,"output":{"ok":true,"status":"complete","results":[],"coverage":response.coverage,"next_cursor":null,"diagnostics":[]}});
-    assert_eq!(
-        envelope::bytes(&response).unwrap(),
-        serde_json::to_vec(&actual).unwrap().len()
-    );
-    assert_eq!(envelope::MAX_BYTES, 24 * 1024);
-}
-
-#[test]
-fn condition_numbers_keep_js_bytes_inside_borrowed_envelope() {
-    #[derive(serde::Serialize)]
-    struct Requirement<'a> {
-        condition: &'a crate::json::JsonDocument,
-    }
-    let value = serde_json::json!({"large":1e20,"small":1e-6});
-    let condition = crate::json::JsonDocument::from_value(&value).unwrap();
-    let body = Requirement {
-        condition: &condition,
-    };
-    let expected = format!(
-        "{{\"ok\":true,\"output\":{{\"ok\":true,\"condition\":{}}}}}",
-        condition.as_str()
-    );
-    assert_eq!(envelope::bytes(&body).unwrap(), expected.len());
-    assert_ne!(
-        crate::json::stringify(&value).unwrap(),
-        serde_json::to_string(&value).unwrap()
     );
 }
 

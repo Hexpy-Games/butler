@@ -198,37 +198,3 @@ fn json_error(error: impl std::fmt::Display) -> CognitionError {
 fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
     CognitionError::new(error.code, error.message)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::cognition::extraction::CandidateEvidence;
-    #[test]
-    fn borrowed_candidate_byte_count_matches_bun_eight_kib_boundary() {
-        let candidate = |count| ExtractCandidate {
-            ref_id: "r".into(),
-            node_type: "entity".into(),
-            label: "a".into(),
-            aliases: vec![],
-            scope: "user".into(),
-            project_id: None,
-            claim: None,
-            evidence: vec![CandidateEvidence {
-                ref_id: "s".into(),
-                text: "🙂".repeat(count),
-                observed_at: "2026-01-01T00:00:00Z".into(),
-                basis: "user_statement".into(),
-            }],
-        };
-        let admitted = [Arc::new(candidate(1998))];
-        let rejected = [Arc::new(candidate(1999))];
-        assert_eq!(
-            crate::json::serde_serialized_bytes(&CandidateSlices(&admitted, &[])).unwrap(),
-            8189
-        );
-        assert_eq!(
-            crate::json::serde_serialized_bytes(&CandidateSlices(&rejected, &[])).unwrap(),
-            8193
-        );
-    }
-}

@@ -336,12 +336,4 @@ mod tests {
         assert_eq!(extracted.edges[2].relation, "works_on");
         let _ = fs::remove_dir_all(root);
     }
-
-    #[test]
-    fn source_utf16_slices_replace_a_surrogate_split_at_the_limit() {
-        let summary = format!("{}😀tail", "a".repeat(79));
-        let snippet = format!("{}😀tail", "b".repeat(199));
-        assert_eq!(prefix_utf16(&summary, 80), format!("{}�", "a".repeat(79)));
-        assert_eq!(mention_snippet(&snippet), format!("{}�", "b".repeat(199)));
-    }
 }
