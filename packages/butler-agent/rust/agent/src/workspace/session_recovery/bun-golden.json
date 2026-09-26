@@ -1,0 +1,411 @@
+{
+  "cases": [
+    {
+      "input": {
+        "binding": null,
+        "project": null
+      },
+      "authority": {
+        "kind": "project"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored"
+        },
+        "project": null
+      },
+      "authority": {
+        "kind": "project",
+        "workspacePath": "/stored"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored"
+        },
+        "project": ""
+      },
+      "authority": {
+        "kind": "project",
+        "workspacePath": ""
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored"
+        },
+        "project": "/project"
+      },
+      "authority": {
+        "kind": "project",
+        "workspacePath": "/project"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": null
+          }
+        },
+        "project": "/project"
+      },
+      "marker": "invalid",
+      "authority": {
+        "kind": "unavailable",
+        "workspacePath": "/stored",
+        "workspaceLabel": "Session worktree",
+        "safeErrorCode": "session_workspace_marker_invalid"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": []
+          }
+        },
+        "project": ""
+      },
+      "marker": "invalid",
+      "authority": {
+        "kind": "unavailable",
+        "workspacePath": "/stored",
+        "workspaceLabel": "Session worktree",
+        "safeErrorCode": "session_workspace_marker_invalid"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "/tmp/source-anchor",
+              "branch": "feature/linked",
+              "boundAt": "2026-09-19T00:00:00Z"
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": {
+        "schema": "butler.session-workspace-binding.v1",
+        "ownership": "session",
+        "repositoryAnchorPath": "/tmp/source-anchor",
+        "branch": "feature/linked",
+        "boundAt": "2026-09-19T00:00:00Z"
+      },
+      "authority": {
+        "kind": "session_worktree",
+        "workspacePath": "/stored",
+        "branch": "feature/linked",
+        "workspaceLabel": "session-worktree/feature/linked",
+        "marker": {
+          "schema": "butler.session-workspace-binding.v1",
+          "ownership": "session",
+          "repositoryAnchorPath": "/tmp/source-anchor",
+          "branch": "feature/linked",
+          "boundAt": "2026-09-19T00:00:00Z"
+        }
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "/tmp/source-anchor",
+              "branch": "feature/linked",
+              "boundAt": "2026-09-19T00:00:00Z"
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": {
+        "schema": "butler.session-workspace-binding.v1",
+        "ownership": "session",
+        "repositoryAnchorPath": "/tmp/source-anchor",
+        "branch": "feature/linked",
+        "boundAt": "2026-09-19T00:00:00Z"
+      },
+      "authority": {
+        "kind": "session_worktree",
+        "workspacePath": "",
+        "branch": "feature/linked",
+        "workspaceLabel": "session-worktree/feature/linked",
+        "marker": {
+          "schema": "butler.session-workspace-binding.v1",
+          "ownership": "session",
+          "repositoryAnchorPath": "/tmp/source-anchor",
+          "branch": "feature/linked",
+          "boundAt": "2026-09-19T00:00:00Z"
+        }
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "/tmp/source-anchor",
+              "branch": " feature/linked ",
+              "boundAt": "2026-09-19T00:00:00Z"
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": {
+        "schema": "butler.session-workspace-binding.v1",
+        "ownership": "session",
+        "repositoryAnchorPath": "/tmp/source-anchor",
+        "branch": " feature/linked ",
+        "boundAt": "2026-09-19T00:00:00Z"
+      },
+      "authority": {
+        "kind": "session_worktree",
+        "workspacePath": "/stored",
+        "branch": " feature/linked ",
+        "workspaceLabel": "session-worktree/ feature/linked ",
+        "marker": {
+          "schema": "butler.session-workspace-binding.v1",
+          "ownership": "session",
+          "repositoryAnchorPath": "/tmp/source-anchor",
+          "branch": " feature/linked ",
+          "boundAt": "2026-09-19T00:00:00Z"
+        }
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "/tmp/source-anchor",
+              "branch": "a..b",
+              "boundAt": "2026-09-19T00:00:00Z"
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": "invalid",
+      "authority": {
+        "kind": "unavailable",
+        "workspacePath": "/stored",
+        "workspaceLabel": "Session worktree",
+        "safeErrorCode": "session_workspace_marker_invalid"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "relative",
+              "branch": "feature/linked",
+              "boundAt": "2026-09-19T00:00:00Z"
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": "invalid",
+      "authority": {
+        "kind": "unavailable",
+        "workspacePath": "/stored",
+        "workspaceLabel": "Session worktree",
+        "safeErrorCode": "session_workspace_marker_invalid"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "sessionWorkspace": {
+              "schema": "butler.session-workspace-binding.v1",
+              "ownership": "session",
+              "repositoryAnchorPath": "/tmp/source-anchor",
+              "branch": "feature/linked",
+              "boundAt": " "
+            }
+          }
+        },
+        "project": "/project"
+      },
+      "marker": "invalid",
+      "authority": {
+        "kind": "unavailable",
+        "workspacePath": "/stored",
+        "workspaceLabel": "Session worktree",
+        "safeErrorCode": "session_workspace_marker_invalid"
+      }
+    },
+    {
+      "input": {
+        "binding": {
+          "workspacePath": "/stored",
+          "metadata": {
+            "unrelated": true
+          }
+        },
+        "project": null
+      },
+      "authority": {
+        "kind": "project",
+        "workspacePath": "/stored"
+      }
+    }
+  ],
+  "worktrees": [
+    {
+      "stdout": "worktree /tmp/a\u0000HEAD 123\u0000branch refs/heads/main\u0000\u0000worktree /tmp/b\u0000HEAD 456\u0000branch refs/heads/feature/linked\u0000\u0000",
+      "result": {
+        "ok": true,
+        "entries": [
+          {
+            "path": "/tmp/a",
+            "head": "123",
+            "branch": "main"
+          },
+          {
+            "path": "/tmp/b",
+            "head": "456",
+            "branch": "feature/linked"
+          }
+        ]
+      }
+    },
+    {
+      "stdout": "worktree /tmp/a\r\nHEAD 123\r\nbranch refs/heads/main\u0000\u0000",
+      "result": {
+        "ok": true,
+        "entries": [
+          {
+            "path": "/tmp/a",
+            "head": "123",
+            "branch": "main"
+          }
+        ]
+      }
+    },
+    {
+      "stdout": "worktree /tmp/a\nHEAD 123\nbranch refs/heads/main\u0000\u0000",
+      "result": {
+        "ok": true,
+        "entries": [
+          {
+            "path": "/tmp/a",
+            "head": "123",
+            "branch": "main"
+          }
+        ]
+      }
+    },
+    {
+      "stdout": "HEAD 123\u0000branch refs/heads/main\u0000\u0000",
+      "result": {
+        "ok": true,
+        "entries": []
+      }
+    },
+    {
+      "stdout": "worktree /tmp/a\u0000detached\u0000\u0000",
+      "result": {
+        "ok": true,
+        "entries": [
+          {
+            "path": "/tmp/a"
+          }
+        ]
+      }
+    }
+  ],
+  "labels": [
+    {
+      "branch": "feature/linked",
+      "label": "session-worktree/feature/linked"
+    },
+    {
+      "branch": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "label": "session-worktree/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "branch": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "label": "session-worktree/😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    }
+  ],
+  "basenames": [
+    {
+      "path": null,
+      "basename": "Project"
+    },
+    {
+      "path": "",
+      "basename": "Project"
+    },
+    {
+      "path": ".",
+      "basename": "."
+    },
+    {
+      "path": "..",
+      "basename": ".."
+    },
+    {
+      "path": "/a/..",
+      "basename": ".."
+    },
+    {
+      "path": "/a/./",
+      "basename": "."
+    },
+    {
+      "path": "/a//",
+      "basename": "a"
+    },
+    {
+      "path": "/",
+      "basename": "Project"
+    },
+    {
+      "path": "/a//..",
+      "basename": ".."
+    },
+    {
+      "path": "/tmp/Project\u0001 X",
+      "basename": "Project X"
+    },
+    {
+      "path": "/tmp/😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "basename": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    }
+  ],
+  "missingGit": {
+    "ok": false,
+    "code": "session_workspace_unavailable"
+  }
+}

@@ -1,0 +1,66 @@
+[package]
+name = "butler-agent"
+version = "0.0.21"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+arrow-array = "=57.3.1"
+arrow-schema = "=57.3.1"
+axum = { version = "0.8.4", features = ["http1", "json", "multipart", "tokio"] }
+base64 = "0.22.1"
+bytes = "=1.12.1"
+chrono = { version = "0.4.42", default-features = false, features = ["std"] }
+dom_smoothie = "=0.18.2"
+uuid = { version = "1.18.1", default-features = false, features = ["std", "v4"] }
+regex = "1.13.1"
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls-native-roots", "stream", "gzip", "brotli", "deflate", "http2"] }
+futures-core = "0.3.31"
+futures-util = { version = "0.3.31", default-features = false, features = ["async-await", "std"] }
+http-body-util = "0.1.3"
+http = "=1.5.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+lance = { version = "=4.0.0", default-features = false }
+lancedb = { version = "=0.27.2", default-features = false }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-21"] }
+tokenizers = { version = "=0.22.2", default-features = false, features = ["onig"] }
+webp = { version = "=0.3.1", default-features = false }
+# Compiled ICU4X 1.4 / CLDR 44 data; bounded Bun collation fixtures verify usage.
+icu_collator = "=1.4.0"
+icu_locid = "~1.4.0"
+icu_provider = { version = "~1.4.0", features = ["sync"], default-features = false }
+notify = "8.2.0"
+lopdf = { version = "=0.45.0", default-features = false }
+serde = { version = "1.0.219", features = ["derive", "rc"] }
+serde_json = { version = "1.0.143", features = ["preserve_order", "raw_value"] }
+ryu-js = "1.0.3"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+sha2 = "0.10.9"
+sha1 = "0.10.6"
+subtle = "2.6.1"
+tokio = { version = "1.47.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = { version = "0.7.16", features = ["rt"] }
+tz-rs = { version = "=0.7.3", default-features = false, features = ["alloc"] }
+tiktoken-rs = { version = "0.12.0", default-features = false }
+unicode-normalization = "0.1.24"
+unicode-segmentation = "=1.13.3"
+url = "2.5.8"
+regress = { version = "=0.12.0", features = ["utf16", "prohibit-unsafe"] }
+rmcp = { version = "=3.4.0", default-features = false, features = ["client", "server", "macros", "transport-io", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
+zip = { version = "4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.5", features = ["fs"] }
+nix = { version = "=0.31.3", default-features = false, features = ["feature", "fs", "hostname", "signal"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libproc = "=0.14.11"
+
+[dev-dependencies]
+tokio = { version = "1.47.1", features = ["test-util"] }
+
+[lints]
+workspace = true

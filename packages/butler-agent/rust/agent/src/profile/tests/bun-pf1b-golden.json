@@ -1,0 +1,12 @@
+{
+  "sourceHash": "a0c96d43d6c60bce6084e8c308ab0a1c219abe969ceb8b82a748ab38c8cf3e11",
+  "coverageKey": "ee0ca136f03ec3768bf21f4a05d940d27581cdbbc32748bd9f902e1ace23947c",
+  "evidenceRef": "profile_window:ee0ca136f03ec3768bf21f4a",
+  "windowText": "🙂abc",
+  "extractorPrompt": "{\"task\":\"extract_profile_candidates\",\"mode\":\"basic\",\"rules\":[\"Evidence refs must be non-empty and come only from delivered observations.\",\"For an explicit correction, contradiction_refs may contain only a delivered correction target_ref and must preserve its category, facet, and applies_when exactly.\"],\"correction_targets\":[],\"observations\":[{\"ref\":\"profile_window:ee0ca136f03ec3768bf21f4a\",\"observed_at\":\"2026-09-14T01:02:03.004Z\",\"text\":\"🙂abc\"}]}",
+  "source": "other-assistant",
+  "normalized": "First\nsecond\t🙂",
+  "importHash": "8f1f569ebbf99105",
+  "importId": "third_party_profile_import:other-assistant:8f1f569ebbf99105",
+  "importPrompt": "Profiling mode: basic\nImport source: other-assistant\nImport ref: third_party_profile_import:other-assistant:8f1f569ebbf99105\nImported at: 2026-09-14T01:02:03.004Z\n\nAnalyze this third-party assistant export and return profile candidates as JSON.\nEvery evidence_refs item must be exactly the Import ref above.\nDo not preserve or quote raw import text.\n\nImported export:\n\"First second 🙂\""
+}

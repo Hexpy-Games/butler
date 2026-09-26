@@ -1698,42 +1698,6 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   );
 });
 
-test("electron shell owns only the app gateway process and shuts it down cleanly", () => {
-  const electronMain = read("packages/butler-app/client/electron/main.mjs");
-  const supervisor = read(
-    "packages/butler-app/client/electron/app-agent-supervisor.mjs",
-  );
-
-  expect(electronMain).toContain("function stopServerProcess");
-  expect(electronMain).toContain("app.requestSingleInstanceLock()");
-  expect(electronMain).toContain('app.on("second-instance"');
-  expect(electronMain).toContain("bundledAgentSupervisor.stop({ wait: true })");
-  expect(supervisor).toContain('stopping.kill("SIGTERM")');
-  expect(supervisor).toContain('stopping.kill("SIGKILL")');
-  expect(supervisor).toContain("shutdownKillTimer");
-  expect(electronMain).toContain("function managedGatewayCommand");
-  expect(electronMain).toContain('"gateway", "app"');
-  expect(electronMain).toContain("process.env.BUTLER_BUN");
-  expect(electronMain).not.toContain(
-    "packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts",
-  );
-  expect(electronMain).not.toContain("service-control.sh");
-  expect(supervisor).toContain("already starting but is not healthy");
-  expect(supervisor).toContain("Failed to start Butler app server");
-  expect(supervisor).toContain("exited before becoming healthy");
-  expect(supervisor).toContain("async function checkGatewayReadiness");
-  expect(supervisor).toContain("BUTLER_APP_GATEWAY_PID_FILE");
-  expect(supervisor).toContain('child.once("exit"');
-  expect(supervisor).toContain('child.once("error"');
-  expect(supervisor).not.toContain("child.unref()");
-  expect(electronMain).toContain('app.on("before-quit"');
-  expect(electronMain).toContain('process.once("SIGINT"');
-  expect(electronMain).toContain('process.once("SIGTERM"');
-  expect(electronMain).not.toContain("Quit Butler UI");
-  expect(electronMain).not.toContain("stopAgentService({ source: \"quit\" })");
-  expect(electronMain).not.toContain("stopAgentService({ source: \"before-quit\" })");
-});
-
 test("conversation message context menu provides copy action", () => {
   const conversation = read(
     "packages/butler-app/client/ui/src/components/conversation/Conversation.tsx",

@@ -1,0 +1,161 @@
+{
+  "result": {
+    "profiling_enabled": true,
+    "mode": "basic",
+    "candidate_count": 4,
+    "promoted_count": 2,
+    "skipped_count": 2,
+    "rejected_count": 2,
+    "stable_entry_count": 2,
+    "projection_written": false,
+    "raw_text_included": false
+  },
+  "stored": [
+    {
+      "id": "bad",
+      "category": "communication",
+      "payload_json": {
+        "summary": "  "
+      },
+      "source_type": "explicit",
+      "confidence": "high",
+      "sensitive_domain": 0,
+      "created_at": "2000-01-01T00:00:00.000Z",
+      "updated_at": "2000-01-01T00:00:00.000Z",
+      "last_seen_at": "2000-01-01T00:00:00.000Z",
+      "expires_or_decay": null,
+      "status": "candidate",
+      "promoted_at": null
+    },
+    {
+      "id": "disallowed",
+      "category": "identity",
+      "payload_json": {
+        "layer": "stable_disposition",
+        "facet": null,
+        "summary": "Identity",
+        "applies_when": [],
+        "butler_should": [],
+        "butler_should_not": [],
+        "temporal_scope": "durable",
+        "decay_policy": "reinforce_or_decay",
+        "contradiction_refs": [],
+        "sensitivity": "normal",
+        "evidence_refs": [],
+        "evidence_observed_at": {},
+        "evidence_count": 0
+      },
+      "source_type": "inference",
+      "confidence": "low",
+      "sensitive_domain": 0,
+      "created_at": "2000-01-01T00:00:00.000Z",
+      "updated_at": "<operation-now>",
+      "last_seen_at": "2000-01-01T00:00:00.000Z",
+      "expires_or_decay": "decay",
+      "status": "expired",
+      "promoted_at": null
+    },
+    {
+      "id": "fractional",
+      "category": "epistemic_style",
+      "payload_json": {
+        "layer": "contextual_adaptation",
+        "facet": null,
+        "summary": "Show evidence",
+        "applies_when": [
+          "analysis",
+          "recommendation",
+          "implementation_report"
+        ],
+        "butler_should": [
+          "Preserve exactly"
+        ],
+        "butler_should_not": [
+          "claim completion without verification"
+        ],
+        "temporal_scope": "active",
+        "decay_policy": "reinforce_or_decay",
+        "contradiction_refs": [],
+        "sensitivity": "normal",
+        "evidence_refs": [],
+        "evidence_observed_at": {},
+        "evidence_count": 2.5
+      },
+      "source_type": "inference",
+      "confidence": "medium",
+      "sensitive_domain": 0,
+      "created_at": "2023-11-14T22:13:20.000Z",
+      "updated_at": "<operation-now>",
+      "last_seen_at": "2023-11-14T22:13:20.000Z",
+      "expires_or_decay": null,
+      "status": "promoted",
+      "promoted_at": "<operation-now>"
+    },
+    {
+      "id": "invalid-time",
+      "category": "boundaries",
+      "payload_json": {
+        "layer": "contextual_adaptation",
+        "facet": null,
+        "summary": "Ask first",
+        "applies_when": [
+          "all_interactions"
+        ],
+        "butler_should": [
+          "respect this boundary before optimizing for convenience"
+        ],
+        "butler_should_not": [
+          "expose private internals without explicit request"
+        ],
+        "temporal_scope": "active",
+        "decay_policy": "reinforce_or_decay",
+        "contradiction_refs": [],
+        "sensitivity": "normal",
+        "evidence_refs": [],
+        "evidence_observed_at": {},
+        "evidence_count": 0
+      },
+      "source_type": "inference",
+      "confidence": "low",
+      "sensitive_domain": 0,
+      "created_at": "invalid",
+      "updated_at": "<operation-now>",
+      "last_seen_at": "invalid",
+      "expires_or_decay": "decay",
+      "status": "expired",
+      "promoted_at": null
+    },
+    {
+      "id": "normalized",
+      "category": "communication",
+      "payload_json": {
+        "layer": "contextual_adaptation",
+        "facet": null,
+        "summary": "Concise",
+        "applies_when": [
+          "answering"
+        ],
+        "butler_should": [
+          "Keep this"
+        ],
+        "butler_should_not": [],
+        "temporal_scope": "active",
+        "decay_policy": "never_without_consent",
+        "contradiction_refs": [],
+        "sensitivity": "normal",
+        "evidence_refs": [],
+        "evidence_observed_at": {},
+        "evidence_count": 0
+      },
+      "source_type": "explicit",
+      "confidence": "high",
+      "sensitive_domain": 0,
+      "created_at": "2000-01-01T00:00:00.000Z",
+      "updated_at": "<operation-now>",
+      "last_seen_at": "2000-01-01T00:00:00.000Z",
+      "expires_or_decay": null,
+      "status": "promoted",
+      "promoted_at": "<operation-now>"
+    }
+  ]
+}

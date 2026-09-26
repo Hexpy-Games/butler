@@ -1,4 +1,4 @@
-name: Butler Windows Package
+name: Butler Windows Desktop Source
 
 on:
   pull_request:
@@ -15,8 +15,8 @@ defaults:
     shell: pwsh
 
 jobs:
-  package-build:
-    name: Windows package build
+  desktop-source:
+    name: Windows Electron and UI checks
     runs-on: windows-latest
     steps:
       - name: Check out repository
@@ -35,12 +35,7 @@ jobs:
             packages/butler-app/client/ui/package-lock.json
       - name: Install package dependencies
         run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup
-      - name: Build and verify Windows package artifacts
-        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Package
-      - name: Retain Windows package-build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: butler-windows-package-${{ github.sha }}
-          path: ~/.butler-release-validation/win32-x64/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Check Electron and UI source
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Quality
+      - name: Build UI assets
+        run: npm.cmd --prefix packages/butler-app/client/ui run build

@@ -1,0 +1,8 @@
+{
+  "utf8_bytes": 10001,
+  "span": {
+    "start": 0,
+    "end": 10001
+  },
+  "error": "memory_extract_source_window_exceeds_budget"
+}

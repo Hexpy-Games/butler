@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { ChevronRight, DisclosureRow, FileText, NavRow, Stack, Typo } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardBriefingView } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardBriefingView } from "../../../../shared/app-contracts.ts";
 import styles from "./ProjectInformation.module.css";
 
 export function ProjectSourceLinks({ ids, briefing, projectId, onSelect, coverage = false }: {

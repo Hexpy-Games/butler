@@ -1,0 +1,203 @@
+// Source-compatible SQLite schema; additive `IF NOT EXISTS` statements preserve deployed data.
+pub(in crate::btcc::storage) const WORK_SCHEMA: &str = r###"
+CREATE TABLE IF NOT EXISTS btcc_guided_works (
+  work_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
+  scope_ref TEXT NOT NULL,
+  ledger_project_id TEXT,
+  canonical_head_sha256 TEXT,
+  origin_turn_id TEXT NOT NULL,
+  origin_message_id TEXT NOT NULL,
+  objective TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('open', 'blocked', 'completed', 'abandoned')),
+  current_plan_revision_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_works_session
+ON btcc_guided_works(session_id, status, updated_at);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_session_heads (
+  session_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL UNIQUE,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_turn_work_bindings (
+  binding_revision_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  is_current INTEGER NOT NULL CHECK (is_current IN (0, 1)),
+  bound_at TEXT NOT NULL,
+  UNIQUE(turn_id, revision)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_btcc_guided_turn_current_work
+ON btcc_guided_turn_work_bindings(turn_id) WHERE is_current = 1;
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_turn_work_history
+ON btcc_guided_turn_work_bindings(work_id, turn_id, revision);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_relation_commands (
+  mutation_call_id TEXT PRIMARY KEY,
+  operation TEXT NOT NULL CHECK (operation IN ('start_work', 'continue_work')),
+  request_sha256 TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
+  plan_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  objective TEXT NOT NULL,
+  governing_refs_json TEXT NOT NULL,
+  execution_mode TEXT CHECK (execution_mode IN ('direct', 'steward', 'workers')),
+  actions_json TEXT NOT NULL,
+  checks_json TEXT NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_results (
+  result_ref TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  tool_call_id TEXT NOT NULL UNIQUE,
+  origin_turn_id TEXT NOT NULL,
+  source_turn_rowid INTEGER,
+  source_turn_sequence INTEGER,
+  attached_at TEXT NOT NULL,
+  UNIQUE(work_id, sequence)
+);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_checkpoint_revisions (
+  checkpoint_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  plan_revision_id TEXT NOT NULL,
+  stage TEXT NOT NULL CHECK (
+    stage IN ('conception', 'planning', 'execution', 'review', 'validation', 'reporting')
+  ),
+  public_summary TEXT NOT NULL,
+  next_step TEXT NOT NULL,
+  action_states_json TEXT NOT NULL,
+  result_sequence INTEGER NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_review_revisions (
+  review_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  subject TEXT NOT NULL CHECK (subject IN ('plan', 'result', 'completion')),
+  verdict TEXT NOT NULL CHECK (verdict IN ('accept', 'revise', 'partial')),
+  summary TEXT NOT NULL,
+  corrections_json TEXT NOT NULL,
+  bound_plan_revision_id TEXT,
+  bound_result_sequence INTEGER,
+  bound_result_review_revision_id TEXT,
+  bound_action_states_json TEXT,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision),
+  CHECK (
+    (subject = 'plan' AND bound_plan_revision_id IS NOT NULL
+      AND bound_result_sequence IS NULL
+      AND bound_result_review_revision_id IS NULL
+      AND bound_action_states_json IS NULL)
+    OR
+    (subject = 'result' AND bound_plan_revision_id IS NULL
+      AND bound_result_sequence IS NOT NULL
+      AND bound_result_review_revision_id IS NULL
+      AND bound_action_states_json IS NULL)
+    OR
+    (subject = 'completion' AND bound_plan_revision_id IS NOT NULL
+      AND bound_result_sequence IS NOT NULL
+      AND bound_result_review_revision_id IS NOT NULL
+      AND bound_action_states_json IS NOT NULL)
+  )
+);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_disposition_revisions (
+  disposition_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  result_sequence INTEGER NOT NULL DEFAULT 0,
+  material_fingerprint TEXT NOT NULL DEFAULT '',
+  runtime_owned_open INTEGER NOT NULL DEFAULT 0 CHECK (runtime_owned_open IN (0, 1)),
+  disposition TEXT NOT NULL CHECK (disposition IN ('completed', 'open', 'blocked')),
+  summary TEXT NOT NULL,
+  action_updates_json TEXT NOT NULL,
+  remaining_actions_json TEXT NOT NULL,
+  next_condition TEXT,
+  evidence_refs_json TEXT NOT NULL,
+  evidence_snapshot_json TEXT NOT NULL,
+  followups_json TEXT NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_dispositions_work
+ON btcc_guided_work_disposition_revisions(work_id, revision);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_disposition_commands (
+  mutation_call_id TEXT PRIMARY KEY,
+  request_sha256 TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  disposition_revision_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_closeout_diagnostics (
+  diagnostic_id TEXT PRIMARY KEY,
+  diagnostic_key TEXT NOT NULL UNIQUE,
+  code TEXT NOT NULL CHECK (code = 'closeout_missing'),
+  turn_id TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_closeout_diagnostics_turn
+ON btcc_guided_work_closeout_diagnostics(turn_id, work_id);
+
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_mutations (
+  mutation_call_id TEXT PRIMARY KEY,
+  operation TEXT NOT NULL CHECK (
+    operation IN ('replace_plan', 'record_checkpoint', 'record_review', 'attach_tool_result')
+  ),
+  request_sha256 TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_legacy_imports (
+  import_id TEXT PRIMARY KEY,
+  legacy_program_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
+  scope_ref TEXT NOT NULL,
+  source_authority TEXT NOT NULL CHECK (
+    source_authority IN ('session_sqlite', 'project_ledger')
+  ),
+  source_revision TEXT NOT NULL,
+  work_id TEXT NOT NULL UNIQUE,
+  imported_at TEXT NOT NULL,
+  UNIQUE(legacy_program_id, session_id, scope_kind, scope_ref)
+);
+"###;

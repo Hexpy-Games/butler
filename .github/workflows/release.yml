@@ -9,12 +9,17 @@ permissions:
   contents: write
 
 jobs:
-  agent-artifact:
-    name: Build and publish Butler Agent artifact
-    runs-on: ubuntu-latest
+  native-release:
+    name: Build and publish native macOS arm64 artifacts
+    runs-on: macos-15
+    env:
+      BUTLER_NATIVE_AGENT_PAYLOAD: ${{ runner.temp }}/butler-native-agent-payload
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Verify the native runner
+        run: test "$(uname -m)" = arm64
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -26,27 +31,51 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: packages/butler-app/client/ui/package-lock.json
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
 
-      - name: Install service dependencies
-        run: bun install --frozen-lockfile
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Install app web client dependencies
-        run: npm --prefix packages/butler-app/client/ui ci
+      - name: Install pinned Rust toolchain
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.91.0 --profile minimal --component rustfmt --component clippy --target aarch64-apple-darwin
+          rustup default 1.91.0
+          rustc --version --verbose | grep -E '^release: 1\.91\.0$'
+          rustc --version --verbose | grep -E '^host: aarch64-apple-darwin$'
 
-      - name: Run Butler Agent release gate
+      - name: Install app client dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+          npm --prefix packages/butler-app/client/ui ci
+
+      - name: Prepare the native Agent payload
+        run: node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
+
+      - name: Select the versioned Agent archive path
+        run: |
+          set -euo pipefail
+          agent_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$BUTLER_NATIVE_AGENT_PAYLOAD/native-agent-manifest.json")"
+          echo "BUTLER_AGENT_ARCHIVE=dist/release/agent/butler-agent-${agent_version}-darwin-arm64.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Run the native Agent release gate
         run: bun run release:agent:gate
 
-      - name: Package Butler Agent release
+      - name: Package and smoke the native Agent release
         run: |
-          bun run release:agent:package \
-            --out dist/release/agent \
-            --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          set -euo pipefail
+          mkdir -p dist/release/agent
+          artifact_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$BUTLER_AGENT_ARCHIVE")"
+          bun run release:agent:package -- \
+            --artifact-url "$artifact_url"
+          bun run release:agent:smoke -- --artifact-url "$artifact_url"
 
-      - name: Smoke Butler Agent release artifact
-        run: bun run release:agent:smoke -- --out dist/release/agent
-
-      - name: Publish GitHub Release
+      - name: Publish Butler Agent GitHub Release files
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -59,12 +88,12 @@ jobs:
           fi
           shopt -s nullglob
           files=(
-            dist/release/agent/butler-agent-*-all.tar.gz
+            dist/release/agent/butler-agent-*-darwin-arm64.tar.gz
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           )
           if [ "${#files[@]}" -ne 3 ]; then
-            printf 'Expected 3 Butler Agent release files, got %s\n' "${#files[@]}" >&2
+            printf 'Expected 3 native Butler Agent release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -75,37 +104,7 @@ jobs:
             gh release create "$tag" "${files[@]}" --title "$tag" "${notes_args[@]}"
           fi
 
-  app-artifact:
-    name: Build and publish app artifacts
-    runs-on: macos-latest
-    needs: agent-artifact
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: packages/butler-app/client/electron/package-lock.json
-
-      - name: Install app client dependencies
-        run: |
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-
-      - name: Install Linux package toolchain
-        run: |
-          brew install dpkg
-          command -v dpkg-deb
-
-      - name: Fetch previous app release manifest
+      - name: Fetch the previous App release manifest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -132,44 +131,22 @@ jobs:
             --clobber
           echo "BUTLER_APP_PREVIOUS_RELEASE_MANIFEST=$PWD/dist/release/baseline/app-release-manifest.json" >> "$GITHUB_ENV"
 
-      - name: Run app release gate
-        run: bun run release:app:gate
+      - name: Run the native App release gate
+        run: bun run release:app:gate -- --platform=darwin-arm64
 
-      - name: Prepare Linux app-managed Bun payload
+      - name: Package the native App release
         run: |
-          set -euo pipefail
-          bun_version="$(bun --version)"
-          archive="${RUNNER_TEMP}/bun-linux-x64.zip"
-          curl -fsSL \
-            "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-x64.zip" \
-            -o "$archive"
-          ditto -x -k "$archive" "${RUNNER_TEMP}"
-          linux_bun="${RUNNER_TEMP}/bun-linux-x64/bun"
-          test -x "$linux_bun"
-          file "$linux_bun" | grep -E 'ELF 64-bit.*x86-64'
-          echo "BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun" >> "$GITHUB_ENV"
-          arm_archive="${RUNNER_TEMP}/bun-linux-aarch64.zip"
-          curl -fsSL \
-            "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-aarch64.zip" \
-            -o "$arm_archive"
-          ditto -x -k "$arm_archive" "${RUNNER_TEMP}"
-          arm_linux_bun="${RUNNER_TEMP}/bun-linux-aarch64/bun"
-          test -x "$arm_linux_bun"
-          file "$arm_linux_bun" | grep -E 'ELF 64-bit.*aarch64|ELF 64-bit.*ARM aarch64'
-          echo "BUTLER_APP_MANAGED_BUN_LINUX_ARM64=$arm_linux_bun" >> "$GITHUB_ENV"
-
-      - name: Package app release
-        run: |
-          bun run release:app:package \
+          bun run release:app:package -- \
+            --platform=darwin-arm64 \
             --out dist/release/app \
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
-      - name: Verify packaged app artifacts
+      - name: Verify the native App release artifacts
         env:
           BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
-        run: bun run release:app:smoke -- --out dist/release/app
+        run: bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
-      - name: Publish app GitHub Release files
+      - name: Publish native App GitHub Release files
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -178,99 +155,14 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/app/butler-app-*-darwin-arm64.dmg
+            dist/release/app/butler-app-*-darwin-arm64.dmg.sha256
             dist/release/app/butler-app-*-darwin-arm64.zip
-            dist/release/app/butler-app-*-linux-x64.deb
-            dist/release/app/butler-app-*-linux-arm64.deb
+            dist/release/app/butler-app-*-darwin-arm64.zip.sha256
             dist/release/app/app-release-manifest.json
             dist/release/app/app-update-manifest.json
           )
           if [ "${#files[@]}" -ne 6 ]; then
-            printf 'Expected 6 app release files, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
-            exit 1
-          fi
-          gh release upload "$tag" "${files[@]}" --clobber
-
-  app-arch-artifact:
-    name: Build and publish Arch app artifact
-    runs-on: ubuntu-latest
-    needs: agent-artifact
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: packages/butler-app/client/electron/package-lock.json
-
-      - name: Install release toolchain
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager zstd
-          command -v makepkg
-          command -v bsdtar
-
-      - name: Install app client dependencies
-        run: |
-          bun install --frozen-lockfile
-          npm --prefix packages/butler-app/client/electron ci
-          npm --prefix packages/butler-app/client/ui ci
-
-      - name: Package Arch app release
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/bun-tmp"
-          export BUN_TMPDIR="$RUNNER_TEMP/bun-tmp"
-          export TMPDIR="$RUNNER_TEMP/bun-tmp"
-          bun run release:app:package \
-            --platform=linux-x64 \
-            --linux-package-format=pacman \
-            --out dist/release/app-arch \
-            --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-
-      - name: Verify Arch app artifact
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst)
-          checksums=(dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst.sha256)
-          if [ "${#files[@]}" -ne 1 ] || [ "${#checksums[@]}" -ne 1 ]; then
-            printf 'Expected one Arch App package and checksum, got %s and %s\n' "${#files[@]}" "${#checksums[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
-            printf '%s\n' "${checksums[@]}" >&2
-            exit 1
-          fi
-          (cd dist/release/app-arch && sha256sum -c "$(basename "${checksums[0]}")")
-          zstd -t "${files[0]}"
-          bsdtar -tf "${files[0]}" | tee dist/release/app-arch/package-contents.txt
-          grep -qx '.PKGINFO' dist/release/app-arch/package-contents.txt
-          grep -qx 'usr/bin/butler-app' dist/release/app-arch/package-contents.txt
-          if grep -qx 'usr/lib/systemd/user/butler.service' dist/release/app-arch/package-contents.txt; then
-            echo 'Arch App must not contain an App-owned systemd service' >&2
-            exit 1
-          fi
-
-      - name: Publish Arch app artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          shopt -s nullglob
-          files=(
-            dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst
-          )
-          if [ "${#files[@]}" -ne 1 ]; then
-            printf 'Expected 1 Arch app release file, got %s\n' "${#files[@]}" >&2
+            printf 'Expected 6 native App release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -279,12 +171,9 @@ jobs:
   release-checksums:
     name: Publish consolidated release checksums
     runs-on: ubuntu-latest
-    needs:
-      - agent-artifact
-      - app-artifact
-      - app-arch-artifact
+    needs: native-release
     steps:
-      - name: Build consolidated checksum asset
+      - name: Build consolidated checksum asset from published outputs
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -296,16 +185,33 @@ jobs:
           gh release download "$tag" \
             --dir dist/release/checksums/assets \
             --clobber
+          shopt -s nullglob
+          files=(
+            dist/release/checksums/assets/butler-agent-*-darwin-arm64.tar.gz
+            dist/release/checksums/assets/agent-release-manifest.json
+            dist/release/checksums/assets/agent-update-manifest.json
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.dmg.sha256
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip
+            dist/release/checksums/assets/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/checksums/assets/app-release-manifest.json
+            dist/release/checksums/assets/app-update-manifest.json
+          )
+          if [ "${#files[@]}" -ne 9 ]; then
+            printf 'Expected 9 current native release outputs, got %s\n' "${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
           checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
           (
             cd dist/release/checksums/assets
-            find . -type f ! -name '*SHA256SUMS' -print | sort | while IFS= read -r file; do
-              sha256sum "$file" | sed 's#  \./#  #'
+            for file in "${files[@]}"; do
+              sha256sum "$(basename "$file")"
             done
           ) > "$checksum_file"
           checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 10 ]; then
-            printf 'Expected 10 checksummed release files, got %s\n' "$checksum_count" >&2
+          if [ "$checksum_count" -ne 9 ]; then
+            printf 'Expected 9 checksummed native release outputs, got %s\n' "$checksum_count" >&2
             cat "$checksum_file" >&2
             exit 1
           fi

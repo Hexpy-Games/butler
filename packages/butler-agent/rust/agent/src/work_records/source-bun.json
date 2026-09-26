@@ -1,0 +1,806 @@
+{
+  "source": "actual PlannedTaskStore writer and readPlannedTaskMemoryReport",
+  "cases": [
+    {
+      "name": "actual_original_writer_report",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "reported",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "REPORTED\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "wrong_status",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "REVIEWING\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "report_changed",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\nchanged",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "result_changed",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\nchanged",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "missing_binding",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "invalid_binding_json",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "error": "memory_source_unavailable"
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "missing_report",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "invalid_review_json",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{"
+      },
+      "strict": {
+        "error": "memory_source_unavailable"
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "null_goal_review_and_stale_hash",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":null,\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "error": "null is not an object (evaluating 'current.review.goal_review.verdict')"
+      },
+      "best_effort": {
+        "error": "null is not an object (evaluating 'current.review.goal_review.verdict')"
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "invalid_decision_json",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n",
+        "decision.json": "{"
+      },
+      "strict": {
+        "error": "memory_source_unavailable"
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "missing_current_plan",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": false
+      }
+    },
+    {
+      "name": "latest_lexical_attempt",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n",
+        "attempts/002/result.md": "new attempt"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "nonnumeric_latest_attempt",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\n  \"schema\": \"butler.planned-task-memory-report.v1\",\n  \"task_id\": \"planned-한글-😀\",\n  \"record_id\": \"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\n  \"attempt\": 1,\n  \"result_hash\": \"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\n  \"review_hash\": \"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\n  \"plan_hash\": \"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\n  \"report_hash\": \"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\n  \"disposition\": \"succeeded\",\n  \"project_id\": \"benchmark-synthetic\",\n  \"observed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"source_revision\": \"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"\n}\n",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n",
+        "attempts/zzz/result.md": "new attempt"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "verified_missing",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"dbf297a2520e2bf731be34b82aacd8f01af6f6865e34f32b4abff392f653c467\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"db7263f17b53095a654e356d9ba8f4d00ce1902230b26bc12886650efe9d8417\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "review_attempt_changed",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"2853bf79c1669140ae045e57960abca2e044abe05c9b67973b7bd63e3014023b\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"e4a35dced38d68267c2e10b41cf9d3d4cde21ed86ff029bf7d56938b2e57f199\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":2,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "wrong_goal",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"75e90abf84e1f026fb38c92106eba754427e77c918548bcc463dcd3402cfa4cf\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"d628c48425c79a241cf8a1794a9583abda8a174b6fb70a0187b5726e319b0092\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"different\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "missing_evidence",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"881491be651e51108194d7db85d4ca9366e4fe9ba51261d0b406ba45161eb987\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"4c14a04715ad3c6a58c1a4da884e2775294d0998bf000b020ee7accc955279ea\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[\"missing\"],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "blank_pass_evidence",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"0cd94e035b1bc29e7c114aa4eed9f96707820f1be5cc5fa4ac6adca2350b0607\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"992eef31e23f9109ac46bc0753006eeba975786de7410550f0ec6298d489db66\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"﻿ \"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "missing_criterion",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"718374b15484653e5c1c9c0e6e759d8e7f94546efea818daf5b98ef5b853fbaa\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"bcb7237e1e1273e81340900bbd5d3f4a3f8b620c5ae0ac367d665d6dd7b31b71\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "out_of_range_index",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"d022cd79cfce7a5ce38e510366b9d50577f871a46b4d6effba7e93512e92e3c5\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"4661b83a388f2788087f5daf26c164c8af1a72e92405567c52b003d8f1d22397\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":4,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "fractional_index",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"7edd596a426f9a1f9209be045fa7880cc326be7087121ed4ac8f38d3ff581caa\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"536b0e000f9dbd3b219c0f6ed4a9f75ff15bde8371ba54d954adf7a6ca48d20a\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1.5,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "failed_report",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "FAILED_PUBLIC_REPORT_READY",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"def1759f239e9f5bf99bb689d5a01beabb35f3b99c7d34fe3210dfac87329ec3\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"failed\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"b4178ca3f5dcdbaadb220f124d1b38bd95ec7b997dddf32dce598d6229ce62be\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"FAIL\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "def1759f239e9f5bf99bb689d5a01beabb35f3b99c7d34fe3210dfac87329ec3",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "failed",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "b4178ca3f5dcdbaadb220f124d1b38bd95ec7b997dddf32dce598d6229ce62be",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "def1759f239e9f5bf99bb689d5a01beabb35f3b99c7d34fe3210dfac87329ec3",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "failed",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "b4178ca3f5dcdbaadb220f124d1b38bd95ec7b997dddf32dce598d6229ce62be",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "partial_report",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "FAILED_PUBLIC_REPORT_READY",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"a014dc585e947ec02583b153b5c98ee1f76c8f30652d0d0a598150ffb0e75728\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"partial\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"f00c9c3c1c27a21af04717531031854bf73a6472a7a002d8160e379007874b26\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"내부 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"INCONCLUSIVE\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "a014dc585e947ec02583b153b5c98ee1f76c8f30652d0d0a598150ffb0e75728",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "partial",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "f00c9c3c1c27a21af04717531031854bf73a6472a7a002d8160e379007874b26",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "a014dc585e947ec02583b153b5c98ee1f76c8f30652d0d0a598150ffb0e75728",
+          "plan_hash": "6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "partial",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "f00c9c3c1c27a21af04717531031854bf73a6472a7a002d8160e379007874b26",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "revision_changed",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"wrong\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "wrong_record_id",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"type\": \"planned\",\n  \"goal\": \"사용자 목표\",\n  \"internal_goal\": \"﻿내부 목표 \",\n  \"project\": \"benchmark-synthetic\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"decision_policy\": \"review\",\n  \"acceptance_criteria\": [\n    \"첫 기준\",\n    \"SECOND\",\n    \"ΟΣ\"\n  ],\n  \"verification_commands\": [],\n  \"review_policy\": \"evidence\",\n  \"repair_policy\": {\n    \"max_attempts\": 2,\n    \"allow_autonomous_repair\": true\n  },\n  \"public_report_policy\": \"reviewed\"\n}\n",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.wrong\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"06d2d7e2ca0b1ad4b8a422e7d88b68a244bfa87c1ce853c87233de9ad9774ca8\",\"plan_hash\":\"6e7e373a8ae79164fa542a6e540a3a31672e71f981c569c26ee08464dedeb502\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"822f8a7b5b6a205664ae557913c4bdd184d2805c077932b42c78875ed34ed93b\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\n  \"task_id\": \"planned-한글-😀\",\n  \"attempt\": 1,\n  \"verdict\": \"PASS\",\n  \"reviewed_at\": \"2026-09-19T00:00:01.000Z\",\n  \"goal_review\": {\n    \"goal\": \"내부 목표\",\n    \"verdict\": \"PASS\",\n    \"evidence\": \"원본 확인\"\n  },\n  \"criteria\": [\n    {\n      \"criterion_index\": 1,\n      \"criterion\": \"renamed\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \" second \",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    },\n    {\n      \"criterion\": \"ος\",\n      \"verdict\": \"PASS\",\n      \"evidence\": \"검증\"\n    }\n  ],\n  \"missing_evidence\": [],\n  \"repair_recommendation\": null,\n  \"memory_source_verified\": true\n}\n"
+      },
+      "strict": {
+        "value": null
+      },
+      "best_effort": {
+        "value": null
+      },
+      "planned": {
+        "value": true
+      }
+    },
+    {
+      "name": "blank_internal_goal_fallback",
+      "task_id": "planned-한글-😀",
+      "files": {
+        "plan.json": "{\"task_id\":\"planned-한글-😀\",\"type\":\"planned\",\"goal\":\"内部 목표\",\"internal_goal\":\"﻿\",\"project\":\"benchmark-synthetic\",\"created_at\":\"2026-09-19T00:00:00.000Z\",\"decision_policy\":\"review\",\"acceptance_criteria\":[\"첫 기준\",\"SECOND\",\"ΟΣ\"],\"verification_commands\":[],\"review_policy\":\"evidence\",\"repair_policy\":{\"max_attempts\":2,\"allow_autonomous_repair\":true},\"public_report_policy\":\"reviewed\"}",
+        "public-report.md": "원본 보고서\n한글 😀\n",
+        "status": "PUBLIC_REPORT_READY\n",
+        "memory-report-binding.json": "{\"schema\":\"butler.planned-task-memory-report.v1\",\"task_id\":\"planned-한글-😀\",\"record_id\":\"task-report.cGxhbm5lZC3tlZzquIAt8J-YgA\",\"attempt\":1,\"result_hash\":\"251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c\",\"review_hash\":\"1772bd1e701c7666e5123468f873c442b1fa4ea1771e0b0137bb3ef615af4da3\",\"plan_hash\":\"913de8d799f5d2bfdb5853154c24f969ca5c4aec96bcba99a012934e6540d9c7\",\"report_hash\":\"78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e\",\"disposition\":\"succeeded\",\"project_id\":\"benchmark-synthetic\",\"observed_at\":\"2026-09-19T00:00:01.000Z\",\"source_revision\":\"33b410e061fadebf508edefcd9d66d72aeb2cc9746de30609b037fe24b8a1eb4\"}",
+        "plan.md": "---\ntask_id: planned-한글-😀\ntype: planned\ngoal: 사용자 목표\ninternal_goal: 내부 목표\nproject: benchmark-synthetic\ncreated_at: 2026-09-19T00:00:00.000Z\n---\n\n# 사용자 목표\n\n## Internal Goal\n내부 목표\n\n## Acceptance Criteria\n- 첫 기준\n- SECOND\n- ΟΣ\n\n## Verification Commands\n- Evidence review only; no command is required by this plan.\n\n## Review Policy\nevidence\n\n## Repair Policy\nAutonomous repair: yes\nMax attempts: 2\n",
+        "attempts/001/result.md": "실제 원본 결과 😀\n",
+        "review.md": "---\ntask_id: planned-한글-😀\nattempt: 1\nverdict: PASS\nreviewed_at: 2026-09-19T00:00:01.000Z\n---\n\n# Planned Task Review\n\n## Internal Goal Review\n- PASS: 내부 목표\n  Evidence: 원본 확인\n\n## Acceptance Criteria Review\n- PASS: AC1: renamed\n  Evidence: 검증\n- PASS:  second \n  Evidence: 검증\n- PASS: ος\n  Evidence: 검증\n\n## Missing Evidence\n- None\n\n## Repair Recommendation\nNone\n",
+        "review.json": "{\"task_id\":\"planned-한글-😀\",\"attempt\":1,\"verdict\":\"PASS\",\"reviewed_at\":\"2026-09-19T00:00:01.000Z\",\"goal_review\":{\"goal\":\"内部 목표\",\"verdict\":\"PASS\",\"evidence\":\"원본 확인\"},\"criteria\":[{\"criterion_index\":1,\"criterion\":\"renamed\",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\" second \",\"verdict\":\"PASS\",\"evidence\":\"검증\"},{\"criterion\":\"ος\",\"verdict\":\"PASS\",\"evidence\":\"검증\"}],\"missing_evidence\":[],\"repair_recommendation\":null,\"memory_source_verified\":true}"
+      },
+      "strict": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "1772bd1e701c7666e5123468f873c442b1fa4ea1771e0b0137bb3ef615af4da3",
+          "plan_hash": "913de8d799f5d2bfdb5853154c24f969ca5c4aec96bcba99a012934e6540d9c7",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "33b410e061fadebf508edefcd9d66d72aeb2cc9746de30609b037fe24b8a1eb4",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "best_effort": {
+        "value": {
+          "schema": "butler.planned-task-memory-report.v1",
+          "task_id": "planned-한글-😀",
+          "record_id": "task-report.cGxhbm5lZC3tlZzquIAt8J-YgA",
+          "attempt": 1,
+          "result_hash": "251698487ce877505375c75b1388f6a5203e58ffb184dec55d626bcea704663c",
+          "review_hash": "1772bd1e701c7666e5123468f873c442b1fa4ea1771e0b0137bb3ef615af4da3",
+          "plan_hash": "913de8d799f5d2bfdb5853154c24f969ca5c4aec96bcba99a012934e6540d9c7",
+          "report_hash": "78ef0cbbdb98565c08060ad7980960fab4a0af4b737b0c7ea68b829190ab494e",
+          "disposition": "succeeded",
+          "project_id": "benchmark-synthetic",
+          "observed_at": "2026-09-19T00:00:01.000Z",
+          "source_revision": "33b410e061fadebf508edefcd9d66d72aeb2cc9746de30609b037fe24b8a1eb4",
+          "text": "원본 보고서\n한글 😀\n"
+        }
+      },
+      "planned": {
+        "value": true
+      }
+    }
+  ],
+  "ids": [
+    {
+      "record_id": "task-report.",
+      "task_id": null
+    },
+    {
+      "record_id": "task-report.YQ",
+      "task_id": "a"
+    },
+    {
+      "record_id": "task-report.YQ==",
+      "task_id": null
+    },
+    {
+      "record_id": "task-report._w",
+      "task_id": null
+    },
+    {
+      "record_id": "other",
+      "task_id": null
+    },
+    {
+      "record_id": "task-report.Li4vYQ",
+      "task_id": "../a"
+    }
+  ]
+}

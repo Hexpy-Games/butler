@@ -40,9 +40,9 @@ import {
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
 import {
-  createAgentTurnEvent,
-  progressRowFromTurnEvent as sharedProgressRowFromTurnEvent,
-} from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+  progressRowFromSharedTurnEvent as sharedProgressRowFromTurnEvent,
+  type SharedTurnEvent,
+} from "../../packages/butler-progress-projection/src/index.ts";
 import type {
   MessageFileRef,
   MessageRecord,
@@ -53,6 +53,28 @@ import type {
 } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const originalCrypto = globalThis.crypto;
+
+function createAgentTurnEvent(input: {
+  id?: string;
+  sessionId: string;
+  turnId: string;
+  sessionSequence: number;
+  turnSequence: number;
+  kind: string;
+  visibility?: "public" | "internal";
+  payload?: Record<string, unknown>;
+}): SharedTurnEvent & { sessionId: string; turnId: string; sessionSequence: number } {
+  return {
+    id: input.id ?? `test-${input.turnId}-${input.turnSequence}`,
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    sessionSequence: input.sessionSequence,
+    turnSequence: input.turnSequence,
+    kind: input.kind,
+    visibility: input.visibility ?? "public",
+    payload: input.payload ?? {},
+  };
+}
 
 test("approval waiting and resuming replace the same Turn state without losing its activities", () => {
   const rows = [{ id: "operation", state: "running", kind: "tool", safe_label: "파일 작성" }];
@@ -108,17 +130,17 @@ test("browser random ids still exist when Web Crypto is unavailable", () => {
   );
 });
 
-test("work summary copy keeps public progress suffix language-stable", () => {
+test("work summary copy follows the selected locale without changing the public title", () => {
   const copy = getAppCopy("en-US").conversation.work;
 
   expect(copy.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역",
+    "공개 출처를 확인하는 중 and 1 more activities",
   );
   expect(copy.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역 열기",
+    "Expand 공개 출처를 확인하는 중 and 1 more activities",
   );
   expect(copy.collapseHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
-    "공개 출처를 확인하는 중 외 1개 진행 내역 닫기",
+    "Collapse 공개 출처를 확인하는 중 and 1 more activities",
   );
 });
 

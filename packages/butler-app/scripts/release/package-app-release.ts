@@ -10,49 +10,43 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import {
-  APP_RELEASE_BUILD_PLATFORMS,
-  APP_RELEASE_PLATFORMS,
-  createAppBackgroundServiceReleaseCapability,
-  createAppDependencyClosureManifest,
-  createAppDesktopHelperMetadata,
-  createAppReleaseManifest,
-  validateAppDependencyClosureManifest,
-  validateAppReleaseManifest,
-  type AppReleaseManifest,
   type AppReleasePlatform,
+  readAppComponentVersions,
 } from "./manifest.ts";
+import {
+  closureFromNativeMacBundle,
+  createNativeMacReleaseManifest,
+  validateNativeMacReleaseManifest,
+  verifyNativeMacBundle,
+  type NativeMacReleaseManifest,
+  type NativeMacDependencyClosure,
+} from "./native-mac-manifest.ts";
 
 export interface AppReleasePackageOptions {
   root: string;
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
-  linuxPackageFormat?: LinuxAppPackageFormat;
 }
 
 export interface AppReleasePackageArtifact {
-  platform: AppReleasePlatform;
+  platform: "darwin-arm64";
   artifactName: string;
   artifactPath: string;
   sha256Path: string;
   sha256: string;
-  updaterArtifactName?: string;
-  updaterArtifactPath?: string;
-  updaterSha256Path?: string;
-  updaterSha256?: string;
-  updaterIndexName?: string;
-  updaterIndexPath?: string;
-  updaterIndexSha256Path?: string;
-  updaterIndexSha256?: string;
+  updaterArtifactName: string;
+  updaterArtifactPath: string;
+  updaterSha256Path: string;
+  updaterSha256: string;
+  nativeClosure: NativeMacDependencyClosure;
 }
 
 export interface AppReleasePackageResult {
@@ -64,27 +58,7 @@ export interface AppReleasePackageResult {
 
 export interface BundledAgentResource {
   resourceDir: string;
-  artifactName: string;
-  sha256: string;
-  version: string;
-  platform: AppReleasePlatform;
 }
-
-export interface BundledAgentPackage {
-  artifactPath: string;
-  releaseManifestPath: string;
-  updateManifestPath: string;
-  artifactName: string;
-  sha256: string;
-  version: string;
-}
-
-type LinuxAppPackageFormat = "deb" | "pacman";
-type AppEmbeddedAgentCliLauncherPlatform =
-  | "darwin-arm64"
-  | "linux-arm64"
-  | "linux-x64"
-  | "windows-x64";
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
@@ -98,10 +72,6 @@ export function appReleaseIconPath(root: string): string {
   return join(resolve(root), ELECTRON_ROOT, "assets", "butler.icns");
 }
 
-export function appReleaseWindowsIconPath(root: string): string {
-  return join(resolve(root), ELECTRON_ROOT, "assets", "butler.ico");
-}
-
 export function appReleasePackagerIconPath(outDir: string): string {
   return join(resolve(outDir), "butler-release-icon.icns");
 }
@@ -111,68 +81,74 @@ export function createAppReleasePackage(
 ): AppReleasePackageResult {
   const root = resolve(options.root);
   const outDir = resolve(options.outDir);
-  const platforms = options.platforms ?? [...APP_RELEASE_PLATFORMS];
-  assertSupportedPlatforms(platforms);
+  const platforms = options.platforms ?? ["darwin-arm64"];
   if (platforms.length === 0) {
     throw new Error("at least one app release platform is required");
   }
-  const manifest = createAppReleaseManifest(root, platforms);
-  const issues = validateAppReleaseManifest(root, manifest, {
-    expectedPlatforms: platforms,
-  });
-  if (issues.length > 0) {
-    throw new Error(`app release manifest is invalid: ${issues.join("; ")}`);
+  assertSupportedPlatforms(platforms);
+  if (platforms.length !== 1) {
+    throw new Error("native darwin-arm64 App releases require exactly one platform");
   }
+  if (process.platform !== "darwin") {
+    throw new Error("darwin-arm64 App releases must be packaged on macOS for signing");
+  }
+  return createNativeMacReleasePackage({ ...options, root, outDir });
+}
+
+function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppReleasePackageResult {
+  const root = resolve(options.root);
+  const outDir = resolve(options.outDir);
+  const manifest = createNativeMacReleaseManifest(root);
+  const issues = validateNativeMacReleaseManifest(root, manifest);
+  if (issues.length) throw new Error(`native mac release manifest is invalid: ${issues.join("; ")}`);
   mkdirSync(outDir, { recursive: true });
-
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-release-"));
+  const workDir = mkdtempSync(join(tmpdir(), "butler-native-mac-release-"));
   try {
-    const bundledAgents = new Map(platforms.map((platform) => [
-      platform,
-      prepareBundledAgentResourceFromPackage(
-        root,
-        workDir,
-        platform,
-        createAppEmbeddedAgentReleasePackage({
-          root,
-          outDir: join(workDir, "agent-release", platform),
-          artifactBaseUrl: "bundled-agent",
-          platform,
-          appVersion: manifest.version,
-        }),
-        manifest.version,
-      ),
-    ]));
-    const artifacts = platforms.map((platform) =>
-      packagePlatform({
-        root,
-        outDir,
-        workDir,
-        platform,
-        manifest,
-        linuxPackageFormat: options.linuxPackageFormat ?? "deb",
-        bundledAgentResourceDir: mustGetBundledAgentResource(bundledAgents, platform).resourceDir,
-      }),
-    );
-    const releaseManifest = withArtifactMetadata(
-      withBundledAgentMetadata(manifest, bundledAgents),
-      artifacts,
-      options.artifactBaseUrl,
-    );
+    const bundledAgent = prepareBundledAgentResource(root, workDir, "darwin-arm64");
+    const artifact = packagePlatform({
+      root, outDir, workDir, platform: "darwin-arm64", manifest,
+      bundledAgentResourceDir: bundledAgent.resourceDir,
+    });
+    const item = manifest.artifacts[0]!;
+    item.downloadUrl = artifactDownloadUrl(options.artifactBaseUrl, artifact.artifactPath, artifact.artifactName);
+    item.sha256 = artifact.sha256;
+    item.updaterArtifactName = artifact.updaterArtifactName;
+    item.updaterSha256 = artifact.updaterSha256;
+    item.dependencyClosure = artifact.nativeClosure;
+    if (!item.dependencyClosure) throw new Error("signed native mac App closure is missing");
     const releaseManifestPath = join(outDir, "app-release-manifest.json");
-    writeJson(releaseManifestPath, releaseManifest);
-
+    writeJson(releaseManifestPath, manifest);
     const updateManifestPath = join(outDir, "app-update-manifest.json");
-    writeJson(updateManifestPath, createAppUpdateManifest(releaseManifest));
-
-    return {
-      artifacts,
-      releaseManifestPath,
-      updateManifestPath,
-      version: manifest.version,
-    };
+    writeJson(updateManifestPath, {
+      schema: "butler.update-manifest.v1", product: "butler-app", app_version: manifest.version,
+      bundled_agent_version: manifest.bundledAgentVersion, updater_owner: "butler-app",
+      artifacts: [{
+        component: "app", product: "butler-app", platform: "darwin-arm64", version: manifest.version,
+        app_version: manifest.version, channel: "stable", artifact_url: item.downloadUrl,
+        sha256: item.sha256, payload_format: "platform-app-package", update_policy: "app-user-action",
+        restart_policy: "restart-app", updater_owner: "butler-app",
+        bundled_agent_version: manifest.bundledAgentVersion,
+        staging_policy: item.stagingPolicy,
+        activation_policy: item.activationPolicy,
+        rollback_policy: item.rollbackPolicy,
+      }],
+    });
+    return { artifacts: [artifact], releaseManifestPath, updateManifestPath, version: manifest.version };
   } finally {
+    makeTreeRemovable(workDir);
     rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+function makeTreeRemovable(root: string): void {
+  if (!existsSync(root)) return;
+  try {
+    chmodSync(root, 0o755);
+  } catch {
+    return;
+  }
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) makeTreeRemovable(join(root, entry.name));
   }
 }
 
@@ -180,21 +156,12 @@ function packagePlatform(input: {
   root: string;
   outDir: string;
   workDir: string;
-  platform: AppReleasePlatform;
-  manifest: AppReleaseManifest;
-  linuxPackageFormat: LinuxAppPackageFormat;
+  platform: "darwin-arm64";
+  manifest: NativeMacReleaseManifest;
   bundledAgentResourceDir: string;
 }): AppReleasePackageArtifact {
-  if (input.platform === "darwin-arm64" && process.platform !== "darwin") {
-    throw new Error("darwin-arm64 app releases must be packaged on macOS for signing");
-  }
-  if (input.platform === "win32-x64" && process.platform !== "win32") {
-    throw new Error("win32-x64 app releases must be packaged on Windows");
-  }
-  const artifact = input.manifest.artifacts.find(
-    (item) => item.platform === input.platform,
-  );
-  if (!artifact) throw new Error(`missing app artifact definition: ${input.platform}`);
+  const artifact = input.manifest.artifacts[0];
+  if (!artifact) throw new Error("missing native mac App artifact definition");
 
   const packageOut = join(input.workDir, input.platform);
   mkdirSync(packageOut, { recursive: true });
@@ -204,80 +171,33 @@ function packagePlatform(input: {
     input.platform,
     input.bundledAgentResourceDir,
   );
-  const packagedDir = join(packageOut, packageDirectoryName(input.platform));
+  const packagedDir = join(packageOut, packageDirectoryName());
   if (!existsSync(packagedDir)) {
     throw new Error(`electron package directory was not created: ${packagedDir}`);
   }
 
-  const artifactName = appPackageArtifactName({
-    defaultArtifactName: artifact.artifactName,
-    platform: input.platform,
-    version: input.manifest.version,
-    linuxPackageFormat: input.linuxPackageFormat,
-  });
+  const artifactName = artifact.artifactName;
   const artifactPath = join(input.outDir, artifactName);
-  let updaterArtifact: {
-    name: string;
-    path: string;
-    sha256: string;
-    sha256Path: string;
-    indexName?: string;
-    indexPath?: string;
-    indexSha256?: string;
-    indexSha256Path?: string;
-  } | null = null;
-  if (input.platform === "darwin-arm64") {
-    const appBundle = join(packagedDir, "Butler.app");
-    if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
-    normalizeMacBundle(input.root, appBundle);
-    verifyMacBundleIcon(input.root, appBundle);
-    signMacBundle(input.root, appBundle);
-    notarizeMacAppIfConfigured(appBundle);
-    createMacDmg({ appBundle, artifactPath });
-    signAndNotarizeMacContainerIfConfigured(artifactPath);
-    const updaterArtifactName = `butler-app-${input.manifest.version}-darwin-arm64.zip`;
-    const updaterArtifactPath = join(input.outDir, updaterArtifactName);
-    createMacZip(appBundle, updaterArtifactPath);
-    const updaterSha256 = sha256File(updaterArtifactPath);
-    const updaterSha256Path = `${updaterArtifactPath}.sha256`;
-    writeFileSync(
-      updaterSha256Path,
-      `${updaterSha256}  ${updaterArtifactName}\n`,
-      "utf8",
-    );
-    updaterArtifact = {
-      name: updaterArtifactName,
-      path: updaterArtifactPath,
-      sha256: updaterSha256,
-      sha256Path: updaterSha256Path,
-    };
-  } else if (input.platform === "win32-x64") {
-    updaterArtifact = createWindowsSquirrelInstaller({
-      artifactPath,
-      root: input.root,
-      outDir: input.outDir,
-      packagedDir,
-      version: input.manifest.version,
-      workDir: input.workDir,
-    });
-  } else if (input.linuxPackageFormat === "deb") {
-    createLinuxAppDeb({
-      artifactPath,
-      root: input.root,
-      packagedDir,
-      platform: input.platform,
-      version: input.manifest.version,
-    });
-  } else {
-    createLinuxAppPacman({
-      artifactPath,
-      root: input.root,
-      packagedDir,
-      platform: input.platform,
-      version: input.manifest.version,
-    });
-  }
-
+  const appBundle = join(packagedDir, "Butler.app");
+  if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
+  normalizeMacBundle(input.root, appBundle);
+  verifyMacBundleIcon(input.root, appBundle);
+  signMacBundle(input.root, appBundle);
+  const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
+  verifyNativeMacBundle(appBundle, nativeClosure);
+  notarizeMacAppIfConfigured(appBundle);
+  createMacDmg({ appBundle, artifactPath });
+  signAndNotarizeMacContainerIfConfigured(artifactPath);
+  const updaterArtifactName = `butler-app-${input.manifest.version}-darwin-arm64.zip`;
+  const updaterArtifactPath = join(input.outDir, updaterArtifactName);
+  createMacZip(appBundle, updaterArtifactPath);
+  const updaterSha256 = sha256File(updaterArtifactPath);
+  const updaterSha256Path = `${updaterArtifactPath}.sha256`;
+  writeFileSync(
+    updaterSha256Path,
+    `${updaterSha256}  ${updaterArtifactName}\n`,
+    "utf8",
+  );
   const sha256 = sha256File(artifactPath);
   const sha256Path = `${artifactPath}.sha256`;
   writeFileSync(sha256Path, `${sha256}  ${basename(artifactPath)}\n`, "utf8");
@@ -287,44 +207,18 @@ function packagePlatform(input: {
     artifactPath,
     sha256Path,
     sha256,
-    ...(updaterArtifact
-      ? {
-          updaterArtifactName: updaterArtifact.name,
-          updaterArtifactPath: updaterArtifact.path,
-          updaterSha256: updaterArtifact.sha256,
-          updaterSha256Path: updaterArtifact.sha256Path,
-          ...(updaterArtifact.indexName
-            ? {
-                updaterIndexName: updaterArtifact.indexName,
-                updaterIndexPath: updaterArtifact.indexPath,
-                updaterIndexSha256: updaterArtifact.indexSha256,
-                updaterIndexSha256Path: updaterArtifact.indexSha256Path,
-              }
-            : {}),
-        }
-      : {}),
+    nativeClosure,
+    updaterArtifactName,
+    updaterArtifactPath,
+    updaterSha256,
+    updaterSha256Path,
   };
-}
-
-function appPackageArtifactName(input: {
-  defaultArtifactName: string;
-  platform: AppReleasePlatform;
-  version: string;
-  linuxPackageFormat: LinuxAppPackageFormat;
-}): string {
-  if (!input.platform.startsWith("linux-") || input.linuxPackageFormat === "deb") {
-    return input.defaultArtifactName;
-  }
-  if (input.platform !== "linux-x64") {
-    throw new Error("pacman App packages currently support linux-x64 only");
-  }
-  return `butler-app-${input.version}-archlinux-x64.pkg.tar.zst`;
 }
 
 function runElectronPackager(
   root: string,
   outDir: string,
-  platform: AppReleasePlatform,
+  platform: "darwin-arm64",
   bundledAgentResourceDir: string,
 ): void {
   const packagerOverride = process.env.BUTLER_APP_PACKAGER?.trim();
@@ -342,9 +236,7 @@ function runElectronPackager(
       "Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci",
     );
   }
-  const iconPath = platform === "win32-x64"
-    ? appReleaseWindowsIconPath(root)
-    : appReleaseIconPath(root);
+  const iconPath = appReleaseIconPath(root);
   if (!existsSync(iconPath)) {
     throw new Error(`Butler app icon is missing: ${iconPath}`);
   }
@@ -360,16 +252,13 @@ function runElectronPackager(
     force: true,
     recursive: true,
   });
-  const packagerIconPath = platform === "win32-x64"
-    ? join(resolve(outDir), "butler-release-icon.ico")
-    : appReleasePackagerIconPath(outDir);
+  const packagerIconPath = appReleasePackagerIconPath(outDir);
   copyFileSync(iconPath, packagerIconPath);
-  const [electronPlatform, electronArch] = platform.split("-");
   const packagerArguments = [
     join(root, ELECTRON_ROOT),
     "Butler",
-    `--platform=${electronPlatform}`,
-    `--arch=${electronArch}`,
+    "--platform=darwin",
+    "--arch=arm64",
     "--overwrite",
     `--out=${outDir}`,
     `--icon=${packagerIconPath}`,
@@ -401,641 +290,48 @@ function runElectronPackager(
 export function prepareBundledAgentResource(
   root: string,
   workDir: string,
-  platform: AppReleasePlatform = currentHostAppReleasePlatform(),
+  platform: AppReleasePlatform = "darwin-arm64",
 ): BundledAgentResource {
-  const manifest = createAppReleaseManifest(root);
-  const agent = createAppEmbeddedAgentReleasePackage({
-    root,
-    outDir: join(workDir, "agent-release", platform),
-    artifactBaseUrl: "bundled-agent",
-    platform,
-    appVersion: manifest.version,
-  });
-  return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent, manifest.version);
-}
-
-export function prepareBundledAgentResourceFromPackage(
-  root: string,
-  workDir: string,
-  platform: AppReleasePlatform,
-  agent: BundledAgentPackage,
-  appVersion: string,
-): BundledAgentResource {
+  assertSupportedPlatforms([platform]);
+  const versions = readAppComponentVersions(root);
+  const version = versions.bundledAgent;
+  const appVersion = versions.app;
   const resourceDir = join(workDir, platform, "bundled-agent");
-  mkdirSync(resourceDir, { recursive: true });
-  copyFileSync(agent.artifactPath, join(resourceDir, agent.artifactName));
-  copyFileSync(agent.releaseManifestPath, join(resourceDir, "agent-release-manifest.json"));
-  copyFileSync(agent.updateManifestPath, join(resourceDir, "agent-update-manifest.json"));
-  cpSync(
-    join(root, "packages", "butler-agent", "resources", "runtime"),
-    join(resourceDir, "runtime"),
-    { recursive: true },
+  const [requestedPlatform, requestedArch] = platform.split("-");
+  const preparer = join(
+    root,
+    ELECTRON_ROOT,
+    "scripts",
+    "prepare-native-agent.mjs",
   );
-  copyManagedRuntimeExecutable(join(resourceDir, "runtime"), platform);
-  writeJson(
-    join(resourceDir, "background-service-capability.json"),
-    createAppBackgroundServiceReleaseCapability([platform]),
-  );
-  writeJson(
-    join(resourceDir, "background-service-registration.json"),
-    createAppBackgroundServiceRegistrationMetadata(platform),
-  );
-  writeAppServiceInstallerPayloads({
-    resourceDir,
-    platform,
-    appVersion,
-  });
-  const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
-  const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
-  const backgroundServiceCapabilitySha256 = sha256File(
-    join(resourceDir, "background-service-capability.json"),
-  );
-  const backgroundServiceRegistrationSha256 = sha256File(join(
-    resourceDir,
-    "background-service-registration.json",
-  ));
-  const backgroundServiceInstallerPayloadSha256 = sha256Directory(
-    join(resourceDir, "service-installer"),
-  );
-  const backgroundServiceRegistrationMetadataSha256 = sha256Values([
-    backgroundServiceCapabilitySha256,
-    backgroundServiceRegistrationSha256,
-    backgroundServiceInstallerPayloadSha256,
-  ]);
-  const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
-  const dependencyClosure = createAppDependencyClosureManifest({
-    bundledAgentVersion: agent.version,
-    bundledAgentArtifactName: agent.artifactName,
-    bundledAgentSha256: agent.sha256,
-    releaseManifestSha256,
-    updateManifestSha256,
-    managedRuntimeSha256,
-    backgroundServiceRegistrationMetadataSha256,
-    releaseManifestsSha256: sha256Values([releaseManifestSha256, updateManifestSha256]),
-    runtimePackageDependenciesSha256: sha256Values([agent.sha256, managedRuntimeSha256]),
-    repairSourceSha256: sha256Values([
-      agent.sha256,
-      releaseManifestSha256,
-      updateManifestSha256,
-      managedRuntimeSha256,
-      backgroundServiceRegistrationMetadataSha256,
-    ]),
-  });
-  const dependencyClosureIssues = validateAppDependencyClosureManifest(dependencyClosure);
-  if (dependencyClosureIssues.length > 0) {
-    throw new Error(
-      `app dependency closure manifest is invalid: ${dependencyClosureIssues.join("; ")}`,
-    );
-  }
-  writeJson(join(resourceDir, "dependency-closure.json"), dependencyClosure);
-  return {
-    resourceDir,
-    artifactName: agent.artifactName,
-    sha256: agent.sha256,
-    version: agent.version,
-    platform,
-  };
-}
-
-function writeAppServiceInstallerPayloads(input: {
-  resourceDir: string;
-  platform: AppReleasePlatform;
-  appVersion: string;
-}): void {
-  const capability = createAppBackgroundServiceReleaseCapability([input.platform]);
-  const requirement = capability.installerRequirements[0];
-  if (!requirement) {
-    throw new Error(`missing background service installer requirement for ${input.platform}`);
-  }
-  if (requirement.platform === "darwin" || requirement.platform === "linux") {
-    writeServiceInstallerManifest({
-      resourceDir: input.resourceDir,
-      releasePlatform: input.platform,
-      servicePlatform: requirement.platform,
-      packageArtifacts: [],
-    });
-    return;
-  }
-  if (requirement.platform === "win32") {
-    writeServiceInstallerManifest({
-      resourceDir: input.resourceDir,
-      releasePlatform: input.platform,
-      servicePlatform: requirement.platform,
-      packageArtifacts: [],
-    });
-    return;
-  }
-  throw new Error(`unsupported background service installer payload platform: ${requirement.platform}`);
-}
-
-function writeServiceInstallerManifest(input: {
-  resourceDir: string;
-  releasePlatform: AppReleasePlatform;
-  servicePlatform: "darwin" | "linux" | "win32";
-  packageArtifacts: Array<Record<string, string>>;
-}): void {
-  writeJson(
-    join(input.resourceDir, "service-installer", "installer-manifest.json"),
+  const result = spawnSync(
+    process.env.BUTLER_NODE || "node",
+    [preparer, requestedPlatform, requestedArch, resourceDir],
     {
-      schema: "butler.app-service-installer-bundle.v1",
-      product: "butler-app",
-      releasePlatform: input.releasePlatform,
-      servicePlatform: input.servicePlatform,
-      gatewayProfile: "electron",
-      renderer: "butler-app-native-service-bridge",
-      hostToolsRequiredForFirstLaunch: [],
-      packageArtifacts: input.packageArtifacts,
-      rawTemplateIncluded: false,
-      rawTextIncluded: false,
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, BUTLER_NATIVE_PAYLOAD_WRITABLE: "1", BUTLER_PACKAGED_APP_VERSION: appVersion },
+      windowsHide: true,
     },
   );
-}
-
-function createAppBackgroundServiceRegistrationMetadata(
-  platform: AppReleasePlatform,
-): Record<string, unknown> {
-  const capability = createAppBackgroundServiceReleaseCapability([platform]);
-  const requirement = capability.installerRequirements[0];
-  if (!requirement) {
-    throw new Error(`missing background service installer requirement for ${platform}`);
-  }
-  return {
-    schema: "butler.app-background-service-registration.v1",
-    product: "butler-app",
-    releasePlatform: platform,
-    servicePlatform: requirement.platform,
-    gatewayProfile: "electron",
-    installerRequired: requirement.installerRequired,
-    packageFormats: requirement.packageFormats,
-    packageInstallerTargets: requirement.registersUserService
-      ? packageInstallerTargets(requirement.platform)
-      : [],
-    registersUserService: requirement.registersUserService,
-    runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
-    runtimeHomeEnv: "BUTLER_APP_MANAGED_RUNTIME_HOME",
-    localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
-    serviceDefinition: requirement.registersUserService
-      ? serviceDefinitionMetadata(requirement.platform)
-      : null,
-    desktopHelper: createAppDesktopHelperMetadata([platform]),
-    requiredEnvironment: [
-      "BUTLER_HOME",
-      "BUTLER_DATA",
-      "BUTLER_BUN",
-      "BUTLER_APP_MANAGED_RUNTIME_POINTER",
-      "BUTLER_APP_MANAGED_RUNTIME_HOME",
-      "BUTLER_APP_SERVER_HOST",
-      "BUTLER_APP_SERVER_PORT",
-      "BUTLER_APP_GATEWAY_PID_FILE",
-      "BUTLER_APP_LOCAL_AUTH_REQUIRED",
-      "BUTLER_APP_LOCAL_AUTH_FILE",
-    ],
-    rawTextIncluded: false,
-  };
-}
-
-function packageInstallerTargets(servicePlatform: string): Array<Record<string, string>> {
-  if (servicePlatform === "darwin") {
-    return [];
-  }
-  if (servicePlatform === "linux") {
-    return [
-      { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
-      { packageFormat: "pacman", selectedV1Path: "linux-pacman-owned-user-unit" },
-      { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
-    ];
-  }
-  throw new Error(`unsupported background service installer target platform: ${servicePlatform}`);
-}
-
-function serviceDefinitionMetadata(servicePlatform: string): Record<string, unknown> {
-  if (servicePlatform === "darwin") {
-    return {
-      manager: "launchd",
-      label: "com.hexpy.butler",
-      serviceFile: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
-      userDomain: "gui/$UID",
-      installAction: "pkg-install-or-first-run-bootstrap",
-      startAction: "launchctl kickstart -k gui/$UID/com.hexpy.butler",
-      stopAction: "launchctl bootout gui/$UID/com.hexpy.butler",
-    };
-  }
-  if (servicePlatform === "linux") {
-    return {
-      manager: "systemd-user",
-      unit: "butler.service",
-      serviceFile: "/usr/lib/systemd/user/butler.service",
-      installAction: "package-owned-user-unit-or-first-run-enable",
-      startAction: "systemctl --user start butler.service",
-      stopAction: "systemctl --user stop butler.service",
-    };
-  }
-  throw new Error(`unsupported background service registration platform: ${servicePlatform}`);
-}
-
-function copyManagedRuntimeExecutable(runtimeDir: string, platform: AppReleasePlatform): void {
-  const source = managedRuntimeExecutableForPlatform(platform);
-  if (!existsSync(source)) {
-    throw new Error(`managed App runtime executable is missing: ${source}`);
-  }
-  assertManagedRuntimeExecutablePlatform(source, platform);
-  const target = join(runtimeDir, "bin", platform === "win32-x64" ? "bun.exe" : "bun");
-  mkdirSync(dirname(target), { recursive: true });
-  copyFileSync(source, target);
-  if (platform === "win32-x64") {
-    const processHostSource = managedWindowsProcessHostExecutable();
-    if (!existsSync(processHostSource)) {
-      throw new Error(`managed Windows process host is missing: ${processHostSource}`);
-    }
-    assertWindowsX64Pe(processHostSource, "managed Windows process host");
-    const processHostTarget = join(runtimeDir, "bin", "butler-process-host.exe");
-    copyFileSync(processHostSource, processHostTarget);
-    writeWindowsRuntimeSignatureManifest(runtimeDir, [
-      { relativePath: "bin/bun.exe", path: target },
-      { relativePath: "bin/butler-process-host.exe", path: processHostTarget },
-    ]);
-  }
-  try {
-    chmodSync(target, 0o755);
-  } catch {
-    // Preserve copy success on filesystems where chmod is not supported.
-  }
-}
-
-function managedRuntimeExecutableForPlatform(platform: AppReleasePlatform): string {
-  const platformEnv = `BUTLER_APP_MANAGED_BUN_${platformEnvSuffix(platform)}`;
-  const explicit = process.env[platformEnv];
-  if (explicit?.trim()) return explicit;
-  if (platform === currentHostAppReleasePlatform()) {
-    return process.env.BUTLER_APP_MANAGED_BUN || process.env.BUTLER_BUN || process.execPath;
-  }
-  throw new Error(`managed App runtime executable for ${platform} is missing; set ${platformEnv}`);
-}
-
-function managedWindowsProcessHostExecutable(): string {
-  const explicit = process.env.BUTLER_APP_WINDOWS_PROCESS_HOST?.trim();
-  if (explicit) return explicit;
-  throw new Error(
-    "managed Windows process host is missing; set BUTLER_APP_WINDOWS_PROCESS_HOST",
-  );
-}
-
-export function assertManagedRuntimeExecutablePlatform(
-  path: string,
-  platform: AppReleasePlatform,
-): void {
-  const bytes = readFileSync(path);
-  if (platform === "linux-x64" && isElfX64(bytes)) return;
-  if (platform === "linux-arm64" && isElfArm64(bytes)) return;
-  if (platform === "darwin-arm64" && isMachOArm64(bytes)) return;
-  if (platform === "win32-x64" && isWindowsX64Pe(bytes)) return;
-  throw new Error(`managed App runtime executable does not match ${platform}: ${path}`);
-}
-
-export function isWindowsX64Pe(bytes: Buffer): boolean {
-  if (bytes.length < 0x40 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) {
-    return false;
-  }
-  const peOffset = bytes.readUInt32LE(0x3c);
-  if (peOffset > bytes.length - 6) return false;
-  return (
-    bytes[peOffset] === 0x50 &&
-    bytes[peOffset + 1] === 0x45 &&
-    bytes[peOffset + 2] === 0 &&
-    bytes[peOffset + 3] === 0 &&
-    bytes.readUInt16LE(peOffset + 4) === 0x8664
-  );
-}
-
-export function isWindowsGuiSubsystemPe(bytes: Buffer): boolean {
-  if (!isWindowsX64Pe(bytes)) return false;
-  const peOffset = bytes.readUInt32LE(0x3c);
-  const optionalHeaderOffset = peOffset + 24;
-  const subsystemOffset = optionalHeaderOffset + 0x44;
-  if (subsystemOffset > bytes.length - 2) return false;
-  const optionalHeaderMagic = bytes.readUInt16LE(optionalHeaderOffset);
-  if (optionalHeaderMagic !== 0x10b && optionalHeaderMagic !== 0x20b) {
-    return false;
-  }
-  return bytes.readUInt16LE(subsystemOffset) === 2;
-}
-
-function assertWindowsX64Pe(path: string, label: string): void {
-  if (!isWindowsX64Pe(readFileSync(path))) {
-    throw new Error(`${label} is not a Windows x64 PE executable: ${path}`);
-  }
-}
-
-interface WindowsRuntimeSignedFile {
-  relativePath: string;
-  path: string;
-}
-
-interface WindowsAuthenticodeResult {
-  status: string;
-  signerThumbprint: string;
-  signerSubject: string;
-}
-
-function writeWindowsRuntimeSignatureManifest(
-  runtimeDir: string,
-  files: WindowsRuntimeSignedFile[],
-): void {
-  const signatures = verifyWindowsAuthenticodeFiles(files.map((file) => file.path));
-  writeJson(join(runtimeDir, "windows-signatures.json"), {
-    schema: "butler.windows-runtime-signatures.v1",
-    verification: "authenticode-powershell-5.1",
-    files: files.map((file, index) => ({
-      path: file.relativePath,
-      sha256: sha256File(file.path),
-      status: signatures[index]?.status,
-      signerThumbprint: signatures[index]?.signerThumbprint,
-      signerSubject: signatures[index]?.signerSubject,
-    })),
-    rawTextIncluded: false,
-  });
-}
-
-export function verifyWindowsAuthenticodeFiles(paths: string[]): WindowsAuthenticodeResult[] {
-  if (process.platform !== "win32") {
-    throw new Error("Windows Authenticode verification must run on Windows");
-  }
-  if (paths.length === 0) throw new Error("Windows Authenticode verification requires files");
-  const script = [
-    "$ErrorActionPreference = 'Stop'",
-    "$decodedPaths = ConvertFrom-Json $env:BUTLER_WINDOWS_SIGNATURE_PATHS_JSON",
-    "$paths = @()",
-    "for ($index = 0; $index -lt $decodedPaths.Count; $index += 1) { $paths += [string]$decodedPaths[$index] }",
-    "$results = @()",
-    "foreach ($path in $paths) {",
-    "  $signature = Get-AuthenticodeSignature -LiteralPath ([string]$path)",
-    "  $certificate = $signature.SignerCertificate",
-    "  $thumbprint = if ($null -ne $certificate) { [string]$certificate.Thumbprint } else { '' }",
-    "  $subject = if ($null -ne $certificate) { [string]$certificate.Subject } else { '' }",
-    "  $results += [pscustomobject]@{ status = [string]$signature.Status; signerThumbprint = $thumbprint; signerSubject = $subject }",
-    "}",
-    "ConvertTo-Json -Compress -InputObject @($results)",
-  ].join("; ");
-  const result = spawnSync(process.env.BUTLER_POWERSHELL || "powershell.exe", [
-    "-NoLogo",
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    script,
-  ], {
-    encoding: "utf8",
-    windowsHide: true,
-    env: windowsPowerShellEnvironment(process.env, {
-      BUTLER_WINDOWS_SIGNATURE_PATHS_JSON: JSON.stringify(paths),
-    }),
-  });
   if (result.status !== 0) {
     throw new Error(
-      `Windows Authenticode verification failed: ${summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"}`,
-    );
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.stdout.trim());
-  } catch {
-    throw new Error("Windows Authenticode verification returned invalid JSON");
-  }
-  const values = Array.isArray(parsed) ? parsed : [parsed];
-  if (values.length !== paths.length) {
-    throw new Error("Windows Authenticode verification returned an incomplete result");
-  }
-  return values.map((value, index) => {
-    const signature = value as Partial<WindowsAuthenticodeResult>;
-    const status = String(signature.status ?? "");
-    const signerThumbprint = String(signature.signerThumbprint ?? "").toUpperCase();
-    const signerSubject = String(signature.signerSubject ?? "");
-    if (status !== "Valid" || !/^[A-F0-9]{40}$/u.test(signerThumbprint)) {
-      throw new Error(`Windows Authenticode signature is not valid for input ${index + 1}`);
-    }
-    return { status, signerThumbprint, signerSubject };
-  });
-}
-
-function isElfX64(bytes: Buffer): boolean {
-  if (
-    bytes.length < 20 ||
-    bytes[0] !== 0x7f ||
-    bytes[1] !== 0x45 ||
-    bytes[2] !== 0x4c ||
-    bytes[3] !== 0x46 ||
-    bytes[4] !== 2
-  ) {
-    return false;
-  }
-  const machine = bytes[5] === 2
-    ? bytes.readUInt16BE(18)
-    : bytes.readUInt16LE(18);
-  return machine === 0x3e;
-}
-
-function isElfArm64(bytes: Buffer): boolean {
-  if (
-    bytes.length < 20 ||
-    bytes[0] !== 0x7f ||
-    bytes[1] !== 0x45 ||
-    bytes[2] !== 0x4c ||
-    bytes[3] !== 0x46 ||
-    bytes[4] !== 2
-  ) {
-    return false;
-  }
-  const machine = bytes[5] === 2
-    ? bytes.readUInt16BE(18)
-    : bytes.readUInt16LE(18);
-  return machine === 0xb7;
-}
-
-function isMachOArm64(bytes: Buffer): boolean {
-  if (bytes.length < 8) return false;
-  const arm64 = 0x0100000c;
-  const magicLe = bytes.readUInt32LE(0);
-  const magicBe = bytes.readUInt32BE(0);
-  if (magicLe === 0xfeedfacf || magicLe === 0xfeedface) {
-    return bytes.readInt32LE(4) === arm64;
-  }
-  if (magicBe === 0xfeedfacf || magicBe === 0xfeedface) {
-    return bytes.readInt32BE(4) === arm64;
-  }
-  if (magicBe === 0xcafebabe || magicBe === 0xcafebabf) {
-    const entrySize = magicBe === 0xcafebabf ? 32 : 20;
-    const count = bytes.readUInt32BE(4);
-    for (let index = 0; index < count; index += 1) {
-      const offset = 8 + index * entrySize;
-      if (offset + 4 <= bytes.length && bytes.readInt32BE(offset) === arm64) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function platformEnvSuffix(platform: AppReleasePlatform): string {
-  return platform.toUpperCase().replace(/[^A-Z0-9]+/gu, "_");
-}
-
-function currentHostAppReleasePlatform(): AppReleasePlatform {
-  if (process.platform === "darwin" && process.arch === "arm64") return "darwin-arm64";
-  if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
-  if (process.platform === "linux" && process.arch === "arm64") return "linux-arm64";
-  if (process.platform === "win32" && process.arch === "x64") return "win32-x64";
-  throw new Error(
-    "current host platform is not a supported App release runtime; set BUTLER_APP_MANAGED_BUN_<PLATFORM>",
-  );
-}
-
-function createAgentReleasePackage(input: {
-  root: string;
-  outDir: string;
-  artifactBaseUrl: string;
-  artifactName?: string;
-  cliLauncherPlatforms?: AppEmbeddedAgentCliLauncherPlatform[];
-  dependencyTarget?: { os?: string; cpu?: string } | null;
-}): BundledAgentPackage {
-  const bun = process.env.BUTLER_BUN || "bun";
-  const env = {
-    ...process.env,
-    ...(input.dependencyTarget?.os
-      ? { BUTLER_AGENT_DEPENDENCY_OS: input.dependencyTarget.os }
-      : {}),
-    ...(input.dependencyTarget?.cpu
-      ? { BUTLER_AGENT_DEPENDENCY_CPU: input.dependencyTarget.cpu }
-      : {}),
-  };
-  const result = spawnSync(bun, [
-    "run",
-    "--silent",
-    join("deploy", "agent", "package-agent.ts"),
-    "--json",
-    "--out",
-    input.outDir,
-    "--artifact-base-url",
-    input.artifactBaseUrl,
-    ...(input.artifactName ? ["--artifact-name", input.artifactName] : []),
-    ...(input.cliLauncherPlatforms ?? []).flatMap((platform) => [
-      "--cli-launcher-platform",
-      platform,
-    ]),
-  ], {
-    cwd: input.root,
-    encoding: "utf8",
-    env,
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `bundled Agent package failed: ${
-        summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"
+      `native bundled Agent preparation failed for ${platform}: ${
+        result.stderr.trim() || result.stdout.trim() || result.error?.message || "unknown error"
       }`,
     );
   }
-  try {
-    const parsed = JSON.parse(result.stdout);
-    if (
-      typeof parsed?.artifactPath === "string" &&
-      typeof parsed?.releaseManifestPath === "string" &&
-      typeof parsed?.updateManifestPath === "string" &&
-      typeof parsed?.artifactName === "string" &&
-      typeof parsed?.sha256 === "string" &&
-      typeof parsed?.version === "string"
-    ) {
-      return parsed;
-    }
-  } catch {
-    // Report a stable packaging error below without leaking full command output.
+  const nativeManifestPath = join(resourceDir, "native-agent-manifest.json");
+  const nativeManifest = JSON.parse(readFileSync(nativeManifestPath, "utf8"));
+  if (nativeManifest.version !== version) {
+    throw new Error("native bundled Agent version does not match the App release");
   }
-  throw new Error("bundled Agent package did not return a valid JSON manifest");
-}
-
-function createAppEmbeddedAgentReleasePackage(input: {
-  root: string;
-  outDir: string;
-  artifactBaseUrl: string;
-  platform: AppReleasePlatform;
-  appVersion: string;
-}): BundledAgentPackage {
-  return createAgentReleasePackage({
-    root: input.root,
-    outDir: input.outDir,
-    artifactBaseUrl: input.artifactBaseUrl,
-    artifactName: appEmbeddedAgentArtifactName(input.appVersion, input.platform),
-    cliLauncherPlatforms: serviceCliLauncherPlatformsForAppPlatform(input.platform),
-    dependencyTarget: dependencyTargetForAppPlatforms([input.platform]),
-  });
-}
-
-function appEmbeddedAgentArtifactName(version: string, platform: AppReleasePlatform): string {
-  return `butler-agent-${version}-${platform}.tar.gz`;
-}
-
-function serviceCliLauncherPlatformsForAppPlatform(
-  platform: AppReleasePlatform,
-): AppEmbeddedAgentCliLauncherPlatform[] {
-  if (platform === "darwin-arm64") return ["darwin-arm64"];
-  if (platform === "linux-arm64") return ["linux-arm64"];
-  if (platform === "win32-x64") return ["windows-x64"];
-  return ["linux-x64"];
-}
-
-function dependencyTargetForAppPlatforms(
-  platforms: AppReleasePlatform[],
-): { os?: string; cpu?: string } | null {
-  const targets = platforms.map((platform) => {
-    const [os, cpu] = platform.split("-");
-    return { os, cpu };
-  });
-  const osValues = [...new Set(targets.map((target) => target.os))];
-  const cpuValues = [...new Set(targets.map((target) => target.cpu))];
-  return {
-    ...(osValues.length === 1 ? { os: osValues[0] } : {}),
-    ...(cpuValues.length === 1 ? { cpu: cpuValues[0] } : {}),
-  };
-}
-
-function mustGetBundledAgentResource(
-  resources: Map<AppReleasePlatform, BundledAgentResource>,
-  platform: AppReleasePlatform,
-): BundledAgentResource {
-  const resource = resources.get(platform);
-  if (!resource) {
-    throw new Error(`missing bundled Agent resource for ${platform}`);
+  if (nativeManifest.appVersion !== appVersion) {
+    throw new Error("native bundled Agent App version does not match the App release");
   }
-  return resource;
-}
-
-function withBundledAgentMetadata(
-  manifest: AppReleaseManifest,
-  bundledAgents: Map<AppReleasePlatform, BundledAgentResource>,
-): AppReleaseManifest {
-  const payloadFor = (bundledAgent: BundledAgentResource) => ({
-    ...manifest.bundledAgentPayload,
-    version: bundledAgent.version,
-    artifactName: bundledAgent.artifactName,
-    resourcePath: `bundled-agent/${bundledAgent.artifactName}`,
-    integrity: {
-      ...manifest.bundledAgentPayload.integrity,
-      digest: bundledAgent.sha256,
-    },
-  });
-  return {
-    ...manifest,
-    artifacts: manifest.artifacts.map((artifact) => {
-      const bundledAgent = bundledAgents.get(artifact.platform);
-      if (!bundledAgent) {
-        return artifact;
-      }
-      return {
-        ...artifact,
-        bundledAgentVersion: bundledAgent.version,
-        bundledAgentPayload: payloadFor(bundledAgent),
-      };
-    }),
-  };
+  const artifactPath = join(resourceDir, "bin", "butler-agent");
+  if (!existsSync(artifactPath)) throw new Error("native bundled Agent executable was not created");
+  return { resourceDir };
 }
 
 function verifyMacBundleIcon(root: string, appBundle: string): void {
@@ -1164,6 +460,7 @@ function createMacDmg(input: { appBundle: string; artifactPath: string }): void 
       throw new Error(`mac app DMG creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
     }
   } finally {
+    makeTreeRemovable(workDir);
     rmSync(workDir, { recursive: true, force: true });
   }
 }
@@ -1181,121 +478,6 @@ function createMacZip(appBundle: string, artifactPath: string): void {
   if (result.status !== 0) {
     throw new Error(`mac app updater ZIP creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
   }
-}
-
-function createWindowsSquirrelInstaller(input: {
-  artifactPath: string;
-  root: string;
-  outDir: string;
-  packagedDir: string;
-  version: string;
-  workDir: string;
-}): {
-  name: string;
-  path: string;
-  sha256: string;
-  sha256Path: string;
-  indexName: string;
-  indexPath: string;
-  indexSha256: string;
-  indexSha256Path: string;
-} {
-  const installerOut = join(input.workDir, "squirrel", "win32-x64");
-  rmSync(installerOut, { recursive: true, force: true });
-  mkdirSync(installerOut, { recursive: true });
-  const script = join(
-    input.root,
-    ELECTRON_ROOT,
-    "scripts",
-    "create-windows-installer.mjs",
-  );
-  if (!existsSync(script)) {
-    throw new Error(`Windows Squirrel packager is missing: ${script}`);
-  }
-  const setupName = basename(input.artifactPath);
-  const result = spawnSync(process.env.BUTLER_NODE || "node.exe", [
-    script,
-    "--app-directory",
-    input.packagedDir,
-    "--output-directory",
-    installerOut,
-    "--setup-exe",
-    setupName,
-    "--setup-icon",
-    appReleaseWindowsIconPath(input.root),
-    "--version",
-    input.version,
-  ], {
-    cwd: input.root,
-    encoding: "utf8",
-    env: process.env,
-    windowsHide: true,
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `Windows Squirrel packaging failed: ${
-        summarizeCommandOutput(result.stderr || result.stdout) ||
-        result.error?.message ||
-        "unknown error"
-      }`,
-    );
-  }
-  const setupSource = join(installerOut, setupName);
-  if (!existsSync(setupSource)) {
-    throw new Error(`Windows Squirrel Setup.exe was not created: ${setupSource}`);
-  }
-  const packageSource = findExactlyOneFile(
-    installerOut,
-    (name) => name.toLocaleLowerCase("en-US").endsWith(".nupkg"),
-    "Squirrel update package",
-  );
-  const indexSource = join(installerOut, "RELEASES");
-  if (!existsSync(indexSource)) {
-    throw new Error(`Windows Squirrel RELEASES index was not created: ${indexSource}`);
-  }
-  copyFileSync(setupSource, input.artifactPath);
-  const packagePath = join(input.outDir, basename(packageSource));
-  copyFileSync(packageSource, packagePath);
-  const indexPath = join(input.outDir, "RELEASES");
-  copyFileSync(indexSource, indexPath);
-  const packageSha256 = sha256File(packagePath);
-  const packageSha256Path = `${packagePath}.sha256`;
-  writeFileSync(
-    packageSha256Path,
-    `${packageSha256}  ${basename(packagePath)}\n`,
-    "utf8",
-  );
-  const indexSha256 = sha256File(indexPath);
-  const indexSha256Path = `${indexPath}.sha256`;
-  writeFileSync(
-    indexSha256Path,
-    `${indexSha256}  ${basename(indexPath)}\n`,
-    "utf8",
-  );
-  return {
-    name: basename(packagePath),
-    path: packagePath,
-    sha256: packageSha256,
-    sha256Path: packageSha256Path,
-    indexName: basename(indexPath),
-    indexPath,
-    indexSha256,
-    indexSha256Path,
-  };
-}
-
-function findExactlyOneFile(
-  directory: string,
-  matches: (name: string) => boolean,
-  label: string,
-): string {
-  const names = readdirSync(directory).filter(matches).sort();
-  if (names.length !== 1) {
-    throw new Error(
-      `expected exactly one ${label} in ${directory}, found ${names.length}`,
-    );
-  }
-  return join(directory, names[0]);
 }
 
 function notarizeMacAppIfConfigured(appBundle: string): void {
@@ -1350,336 +532,6 @@ function stapleMacArtifact(artifactPath: string): void {
   }
 }
 
-function stageLinuxAppPackageRoot(input: {
-  packageRoot: string;
-  root: string;
-  packagedDir: string;
-  platform: AppReleasePlatform;
-}): { finalInstallDir: string; installDir: string } {
-  const finalInstallDir = join("/opt", "butler", packageDirectoryName(input.platform));
-  const installDir = join(input.packageRoot, finalInstallDir.slice(1));
-  const binDir = join(input.packageRoot, "usr", "bin");
-  const appDir = join(input.packageRoot, "usr", "share", "applications");
-  const iconDir = join(input.packageRoot, "usr", "share", "icons", "hicolor", "512x512", "apps");
-  const licenseDir = join(input.packageRoot, "usr", "share", "licenses", "butler-app");
-  mkdirSync(dirname(installDir), { recursive: true });
-  mkdirSync(binDir, { recursive: true });
-  mkdirSync(appDir, { recursive: true });
-  mkdirSync(iconDir, { recursive: true });
-  mkdirSync(licenseDir, { recursive: true });
-  cpSync(input.packagedDir, installDir, {
-    dereference: false,
-    errorOnExist: false,
-    force: true,
-    recursive: true,
-  });
-  chmodPackageDirectories(installDir);
-  writeExecutableText(join(binDir, "butler-app"), linuxAppLauncher(finalInstallDir));
-  copyFileSync(join(input.root, ELECTRON_ROOT, "assets", "icon.png"), join(iconDir, "butler.png"));
-  copyFileSync(join(input.root, "LICENSE"), join(licenseDir, "LICENSE"));
-  writeFileSync(join(appDir, "butler.desktop"), linuxDesktopEntry(), "utf8");
-  return { finalInstallDir, installDir };
-}
-
-function createLinuxAppDeb(input: {
-  artifactPath: string;
-  root: string;
-  packagedDir: string;
-  platform: AppReleasePlatform;
-  version: string;
-}): void {
-  const architecture = linuxDebArchitecture(input.platform);
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-deb-"));
-  try {
-    const debRoot = join(workDir, "root");
-    const controlDir = join(debRoot, "DEBIAN");
-    mkdirSync(controlDir, { recursive: true });
-    const { finalInstallDir } = stageLinuxAppPackageRoot({
-      packageRoot: debRoot,
-      root: input.root,
-      packagedDir: input.packagedDir,
-      platform: input.platform,
-    });
-    writeFileSync(
-      join(controlDir, "control"),
-      linuxDebControl({ architecture, version: input.version }),
-      "utf8",
-    );
-    writeExecutableText(join(controlDir, "postinst"), linuxAppDebPostinst(finalInstallDir));
-    rmSync(input.artifactPath, { force: true });
-    const result = spawnSync(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", [
-      "--build",
-      "--root-owner-group",
-      debRoot,
-      input.artifactPath,
-    ], {
-      encoding: "utf8",
-    });
-    if (result.status !== 0) {
-      throw new Error(
-        `linux app deb package failed: ${
-          summarizeCommandOutput(result.stderr || result.stdout) ||
-          result.error?.message ||
-          "unknown error"
-        }`,
-      );
-    }
-  } finally {
-    rmSync(workDir, { recursive: true, force: true });
-  }
-}
-
-function createLinuxAppPacman(input: {
-  artifactPath: string;
-  root: string;
-  packagedDir: string;
-  platform: AppReleasePlatform;
-  version: string;
-}): void {
-  if (input.platform !== "linux-x64") {
-    throw new Error("pacman App packages currently support linux-x64 only");
-  }
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-pacman-"));
-  try {
-    const buildDir = join(workDir, "build");
-    const packageRoot = join(buildDir, "pkgroot");
-    mkdirSync(buildDir, { recursive: true });
-    const { finalInstallDir } = stageLinuxAppPackageRoot({
-      packageRoot,
-      root: input.root,
-      packagedDir: input.packagedDir,
-      platform: input.platform,
-    });
-    writeFileSync(
-      join(buildDir, "PKGBUILD"),
-      linuxPacmanPkgbuild({
-        version: input.version,
-        installDir: finalInstallDir,
-      }),
-      "utf8",
-    );
-    rmSync(input.artifactPath, { force: true });
-    const result = spawnSync(process.env.BUTLER_APP_MAKEPKG || "makepkg", [
-      "--force",
-      "--nodeps",
-    ], {
-      cwd: buildDir,
-      encoding: "utf8",
-      env: { ...process.env, PKGEXT: ".pkg.tar.zst" },
-    });
-    if (result.status !== 0) {
-      throw new Error(
-        `linux app pacman package failed: ${
-          result.stderr.trim() || result.stdout.trim() || result.error?.message || "unknown error"
-        }`,
-      );
-    }
-    const builtPackage = join(buildDir, `butler-app-${input.version}-1-x86_64.pkg.tar.zst`);
-    if (!existsSync(builtPackage)) {
-      throw new Error(`linux app pacman package was not created: ${builtPackage}`);
-    }
-    copyFileSync(builtPackage, input.artifactPath);
-  } finally {
-    rmSync(workDir, { recursive: true, force: true });
-  }
-}
-
-function chmodPackageDirectories(path: string): void {
-  chmodSync(path, 0o755);
-  for (const entry of readdirSync(path)) {
-    const child = join(path, entry);
-    if (statSync(child).isDirectory()) chmodPackageDirectories(child);
-  }
-}
-
-function linuxDebArchitecture(platform: AppReleasePlatform): "amd64" | "arm64" {
-  if (platform === "linux-x64") return "amd64";
-  if (platform === "linux-arm64") return "arm64";
-  throw new Error(`unsupported Linux deb platform: ${platform}`);
-}
-
-function linuxAppLauncher(installDir: string): string {
-  return `#!/usr/bin/env bash
-set -euo pipefail
-chromium_flags=()
-if [ "\${BUTLER_APP_ENABLE_GPU:-0}" != "1" ]; then
-  chromium_flags+=(--disable-gpu --disable-gpu-compositing)
-fi
-exec "${installDir}/Butler" "\${chromium_flags[@]}" "$@"
-`;
-}
-
-function linuxDesktopEntry(): string {
-  return `[Desktop Entry]
-Type=Application
-Name=Butler
-Comment=Butler desktop app
-Exec=butler-app %U
-Icon=butler
-Terminal=false
-Categories=Utility;Development;
-StartupWMClass=Butler
-`;
-}
-
-function linuxDebControl(input: { architecture: "amd64" | "arm64"; version: string }): string {
-  return `Package: butler-app
-Version: ${input.version}
-Section: utils
-Priority: optional
-Architecture: ${input.architecture}
-Maintainer: Hexpy Games <support@hexpy.games>
-Depends: libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1
-Description: Butler App
- Butler desktop app with bundled Butler Agent runtime.
-`;
-}
-
-function linuxPacmanPkgbuild(input: { version: string; installDir: string }): string {
-  return `pkgname=butler-app
-pkgver=${input.version}
-pkgrel=1
-pkgdesc='Butler desktop app with bundled Butler Agent runtime'
-arch=('x86_64')
-url='https://github.com/Hexpy-Games/butler'
-license=('MIT')
-depends=('gtk3' 'nss' 'libxss' 'alsa-lib' 'mesa')
-options=('!strip' '!debug')
-
-package() {
-  cp -a "$srcdir/../pkgroot/." "$pkgdir/"
-  find "$pkgdir${input.installDir}" -type d -exec chmod 755 {} +
-  chmod 755 "$pkgdir/usr/bin/butler-app"
-  if [ -f "$pkgdir${input.installDir}/Butler" ] && [ ! -L "$pkgdir${input.installDir}/Butler" ]; then
-    chmod 755 "$pkgdir${input.installDir}/Butler" 2>/dev/null || true
-  fi
-  if [ -f "$pkgdir${input.installDir}/chrome-sandbox" ] && [ ! -L "$pkgdir${input.installDir}/chrome-sandbox" ]; then
-    chmod 4755 "$pkgdir${input.installDir}/chrome-sandbox" 2>/dev/null || true
-  fi
-}
-`;
-}
-
-function linuxAppDebPostinst(installDir: string): string {
-  return `#!/bin/sh
-set -eu
-
-if [ -d "${installDir}" ]; then
-  find "${installDir}" -type d -exec chmod 755 {} +
-  if [ -f "${installDir}/Butler" ] && [ ! -L "${installDir}/Butler" ]; then
-    chmod 755 "${installDir}/Butler" 2>/dev/null || true
-  fi
-  if [ -f "${installDir}/chrome-sandbox" ] && [ ! -L "${installDir}/chrome-sandbox" ]; then
-    chmod 4755 "${installDir}/chrome-sandbox" 2>/dev/null || true
-  fi
-fi
-
-chmod 755 /usr/bin/butler-app 2>/dev/null || true
-echo "Butler App installed. The bundled Agent runs only while Butler App is open."
-exit 0
-`;
-}
-
-function withArtifactMetadata(
-  manifest: AppReleaseManifest,
-  artifacts: AppReleasePackageArtifact[],
-  artifactBaseUrl?: string | null,
-): AppReleaseManifest {
-  const byName = new Map(artifacts.map((artifact) => [artifact.artifactName, artifact]));
-  const byPlatform = new Map(artifacts.map((artifact) => [artifact.platform, artifact]));
-  return {
-    ...manifest,
-    artifacts: manifest.artifacts.map((artifact) => {
-      const packaged = byName.get(artifact.artifactName) ?? byPlatform.get(artifact.platform);
-      if (!packaged) return artifact;
-      return {
-        ...artifact,
-        artifactName: packaged.artifactName,
-        downloadUrl: artifactDownloadUrl(
-          artifactBaseUrl,
-          packaged.artifactPath,
-          packaged.artifactName,
-        ),
-        sha256: packaged.sha256,
-        integrity: {
-          ...artifact.integrity,
-          digest: packaged.sha256,
-          signature: artifact.signature,
-        },
-        updateFeed:
-          artifact.platform === "win32-x64" &&
-            packaged.updaterArtifactName &&
-            packaged.updaterArtifactPath &&
-            packaged.updaterSha256 &&
-            packaged.updaterIndexName === "RELEASES" &&
-            packaged.updaterIndexPath &&
-            packaged.updaterIndexSha256
-            ? {
-                kind: "squirrel-windows" as const,
-                packageName: packaged.updaterArtifactName,
-                packageUrl: artifactDownloadUrl(
-                  artifactBaseUrl,
-                  packaged.updaterArtifactPath,
-                  packaged.updaterArtifactName,
-                ),
-                packageSha256: packaged.updaterSha256,
-                indexName: "RELEASES" as const,
-                indexUrl: artifactDownloadUrl(
-                  artifactBaseUrl,
-                  packaged.updaterIndexPath,
-                  packaged.updaterIndexName,
-                ),
-                indexSha256: packaged.updaterIndexSha256,
-              }
-            : artifact.updateFeed,
-      };
-    }),
-  };
-}
-
-function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, unknown> {
-  return {
-    schema: "butler.update-manifest.v1",
-    generated_at: new Date().toISOString(),
-    product: manifest.product,
-    app_version: manifest.version,
-    bundled_agent_version: manifest.bundledAgentVersion,
-    background_service_capability: manifest.backgroundServiceCapability,
-    service_installer_bundle: manifest.serviceInstallerBundle,
-    gateway_profile: manifest.gatewayProfile,
-    protocol_compatibility: manifest.protocolCompatibility,
-    updater_owner: manifest.updaterOwner,
-    artifacts: manifest.artifacts.map((artifact) => ({
-      component: artifact.component,
-      app_version: artifact.version,
-      version: artifact.version,
-      channel: artifact.channel,
-      platform: artifact.platform,
-      artifact_url: artifact.downloadUrl,
-      sha256: artifact.sha256,
-      signature: artifact.signature,
-      bundled_components: artifact.bundledComponents,
-      product: artifact.product,
-      gateway_profile: artifact.gatewayProfile,
-      bundled_agent_version: artifact.bundledAgentVersion,
-      bundled_agent_payload: artifact.bundledAgentPayload,
-      background_service_capability: artifact.backgroundServiceCapability,
-      service_installer_bundle: artifact.serviceInstallerBundle,
-      protocol_compatibility: artifact.protocolCompatibility,
-      integrity: artifact.integrity,
-      update_policy: artifact.updatePolicy,
-      restart_policy: artifact.restartPolicy,
-      updater_owner: artifact.updaterOwner,
-      payload_format: artifact.payloadFormat,
-      staging_policy: artifact.stagingPolicy,
-      activation_policy: artifact.activationPolicy,
-      rollback_policy: artifact.rollbackPolicy,
-      distribution_status: artifact.distributionStatus,
-      update_feed: artifact.updateFeed,
-    })),
-  };
-}
-
 function artifactDownloadUrl(
   artifactBaseUrl: string | null | undefined,
   artifactPath: string,
@@ -1690,45 +542,12 @@ function artifactDownloadUrl(
   return `${trimmedBaseUrl.replace(/\/+$/, "")}/${artifactName}`;
 }
 
-function packageDirectoryName(platform: AppReleasePlatform): string {
-  const [electronPlatform, electronArch] = platform.split("-");
-  return `Butler-${electronPlatform}-${electronArch}`;
+function packageDirectoryName(): string {
+  return "Butler-darwin-arm64";
 }
 
 function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-function sha256Directory(path: string): string {
-  const hash = createHash("sha256");
-  for (const file of listFiles(path)) {
-    const label = file.slice(path.length + 1).replace(/\\/g, "/");
-    hash.update(label);
-    hash.update("\0");
-    hash.update(sha256File(file));
-    hash.update("\0");
-  }
-  return hash.digest("hex");
-}
-
-function listFiles(path: string): string[] {
-  const result: string[] = [];
-  for (const entry of readdirSync(path).sort()) {
-    const fullPath = join(path, entry);
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) result.push(...listFiles(fullPath));
-    else if (stat.isFile()) result.push(fullPath);
-  }
-  return result;
-}
-
-function sha256Values(values: string[]): string {
-  const hash = createHash("sha256");
-  for (const value of values) {
-    hash.update(value);
-    hash.update("\0");
-  }
-  return hash.digest("hex");
 }
 
 function writeJson(path: string, value: unknown): void {
@@ -1736,24 +555,10 @@ function writeJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function writeExecutableText(path: string, value: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, value, { encoding: "utf8", mode: 0o755 });
-  try {
-    chmodSync(path, 0o755);
-  } catch {
-    // Preserve file creation on filesystems that ignore chmod.
-  }
-}
-
-function summarizeCommandOutput(output: unknown): string {
-  return String(output ?? "").trim().split(/\r?\n/u).slice(-8).join("\n").slice(0, 4000);
-}
-
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
   for (const platform of platforms) {
-    if (!(APP_RELEASE_BUILD_PLATFORMS as readonly string[]).includes(platform)) {
-      throw new Error(`unsupported app release platform: ${platform}`);
+    if (platform !== "darwin-arm64") {
+      throw new Error(`native agent-bundled App release is supported only on darwin-arm64; ${platform} is unverified`);
     }
   }
 }
@@ -1762,13 +567,11 @@ function parseCliArgs(args: string[]): {
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
-  linuxPackageFormat?: LinuxAppPackageFormat;
   json: boolean;
 } {
   let outDir = join(process.cwd(), "dist", "release", "app");
   let artifactBaseUrl: string | null | undefined;
   let platforms: AppReleasePlatform[] | undefined;
-  let linuxPackageFormat: LinuxAppPackageFormat | undefined;
   let json = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -1803,31 +606,14 @@ function parseCliArgs(args: string[]): {
       platforms = [...(platforms ?? []), parsePlatform(arg.slice("--platform=".length))];
       continue;
     }
-    if (arg === "--linux-package-format") {
-      linuxPackageFormat = parseLinuxPackageFormat(args[index + 1] ?? "");
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith("--linux-package-format=")) {
-      linuxPackageFormat = parseLinuxPackageFormat(arg.slice("--linux-package-format=".length));
-      continue;
-    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!outDir.trim()) throw new Error("--out requires a path");
-  return { outDir, artifactBaseUrl, platforms, linuxPackageFormat, json };
+  return { outDir, artifactBaseUrl, platforms, json };
 }
 
 function parsePlatform(value: string): AppReleasePlatform {
-  if ((APP_RELEASE_BUILD_PLATFORMS as readonly string[]).includes(value)) {
-    return value as AppReleasePlatform;
-  }
-  throw new Error(`unsupported app release platform: ${value}`);
-}
-
-function parseLinuxPackageFormat(value: string): LinuxAppPackageFormat {
-  if (value === "deb" || value === "pacman") return value;
-  throw new Error(`unsupported Linux package format: ${value}`);
+  return value as AppReleasePlatform;
 }
 
 if (import.meta.main) {
@@ -1838,7 +624,6 @@ if (import.meta.main) {
       outDir: args.outDir,
       artifactBaseUrl: args.artifactBaseUrl,
       platforms: args.platforms,
-      linuxPackageFormat: args.linuxPackageFormat,
     });
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

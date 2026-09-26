@@ -1,24 +1,31 @@
 export interface OpenAIOAuthLoginHelper {
-  source: "app-managed" | "bundled-resource" | "repo";
-  scriptPath: string;
-  runtime: string;
-  butlerHome: string;
+  command: string;
+  args: string[];
+  env: { BUTLER_DATA: string };
 }
 
 export interface ResolveOpenAIOAuthLoginHelperOptions {
   butlerData?: string;
-  repoRoot?: string;
   resourcesPath?: string;
-  fallbackRuntime?: string;
+  execPath?: string;
   platform?: NodeJS.Platform;
-  allowBundledResourceFallback?: boolean;
-  allowDevelopmentFallback?: boolean;
-  fileExists?: (path: string) => boolean;
-  readFile?: (path: string, encoding: "utf8") => string;
+  isPackaged?: boolean;
+  env?: Record<string, string | undefined>;
+  resolveInstallation?: (options: {
+    butlerData?: string;
+    resourcesPath?: string;
+    execPath?: string;
+    platform?: NodeJS.Platform;
+    isPackaged?: boolean;
+    env?: Record<string, string | undefined>;
+  }) => { command: string; args: string[]; env: { BUTLER_DATA: string } } | null;
 }
 
 export function resolveOpenAIOAuthLoginHelper(
   options?: ResolveOpenAIOAuthLoginHelperOptions,
 ): OpenAIOAuthLoginHelper | null;
 
-export function oauthScriptButlerHome(scriptPath: string): string;
+export function resolveOpenAIAuthProfilePath(options: {
+  butlerData: string;
+  env?: Record<string, string | undefined>;
+}): string;

@@ -1,0 +1,183 @@
+{
+  "files": {
+    "en/butler.md": "---\nname: kind-butler\ndescription: \"English\"\npreview: \"Hello\"\n---\n\n Body \n",
+    "ko/butler.md": "---\nname: 친절한-버틀러\nname: \"한국-버틀러\"\npreview: \"\"\n---\n 한국어 \n",
+    "en/guardian.md": "﻿  Guardian body ",
+    "en/z.md": "---\nname: 𐐨-ßeta\ndescription: bad\r\npreview:\rallowed\n---tail",
+    "en/a.md": "---\r\nname: untouched\r\n---\r\nCRLF",
+    "en/ignored name.md": "Ignored"
+  },
+  "names": [
+    {
+      "input": "",
+      "expected": null
+    },
+    {
+      "input": "..",
+      "expected": null
+    },
+    {
+      "input": "../butler",
+      "expected": null
+    },
+    {
+      "input": " /butler ",
+      "expected": null
+    },
+    {
+      "input": "﻿butler ",
+      "expected": "butler"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expected": null
+    },
+    {
+      "input": "é",
+      "expected": null
+    },
+    {
+      "input": "a.b_-",
+      "expected": "a.b_-"
+    }
+  ],
+  "reads": [
+    {
+      "name": "butler",
+      "locale": "en",
+      "expected": {
+        "name": "butler",
+        "label": "Kind Butler",
+        "description": "English",
+        "preview": "Hello",
+        "locale": "en",
+        "content": "---\nname: active\nbase: butler\nbase_locale: en\n---\n\nBody\n"
+      }
+    },
+    {
+      "name": "butler",
+      "locale": "ko",
+      "expected": {
+        "name": "butler",
+        "label": "한국 버틀러",
+        "description": "",
+        "preview": "",
+        "locale": "ko",
+        "content": "---\nname: active\nbase: butler\nbase_locale: ko\n---\n\n한국어\n"
+      }
+    },
+    {
+      "name": "guardian",
+      "locale": "en",
+      "expected": {
+        "name": "guardian",
+        "label": "Guardian",
+        "description": "",
+        "preview": "",
+        "locale": "en",
+        "content": "---\nname: active\nbase: guardian\nbase_locale: en\n---\n\nGuardian body \n"
+      }
+    },
+    {
+      "name": "z",
+      "locale": "en",
+      "expected": {
+        "name": "z",
+        "label": "𐐨 SSeta",
+        "description": "",
+        "preview": "allowed",
+        "locale": "en",
+        "content": "---\nname: active\nbase: z\nbase_locale: en\n---\n\ntail\n"
+      }
+    },
+    {
+      "name": "a",
+      "locale": "en",
+      "expected": {
+        "name": "a",
+        "label": "A",
+        "description": "",
+        "preview": "",
+        "locale": "en",
+        "content": "---\nname: active\nbase: a\nbase_locale: en\n---\n\n---\r\nname: untouched\r\n---\r\nCRLF\n"
+      }
+    },
+    {
+      "name": "ignored name",
+      "locale": "en",
+      "expected": null
+    }
+  ],
+  "koList": [
+    {
+      "name": "butler",
+      "label": "한국 버틀러",
+      "description": "",
+      "preview": "",
+      "locale": "ko",
+      "content": "---\nname: active\nbase: butler\nbase_locale: ko\n---\n\n한국어\n"
+    },
+    {
+      "name": "guardian",
+      "label": "Guardian",
+      "description": "",
+      "preview": "",
+      "locale": "en",
+      "content": "---\nname: active\nbase: guardian\nbase_locale: en\n---\n\nGuardian body \n"
+    },
+    {
+      "name": "a",
+      "label": "A",
+      "description": "",
+      "preview": "",
+      "locale": "en",
+      "content": "---\nname: active\nbase: a\nbase_locale: en\n---\n\n---\r\nname: untouched\r\n---\r\nCRLF\n"
+    },
+    {
+      "name": "z",
+      "label": "𐐨 SSeta",
+      "description": "",
+      "preview": "allowed",
+      "locale": "en",
+      "content": "---\nname: active\nbase: z\nbase_locale: en\n---\n\ntail\n"
+    }
+  ],
+  "enList": [
+    {
+      "name": "butler",
+      "label": "Kind Butler",
+      "description": "English",
+      "preview": "Hello",
+      "locale": "en",
+      "content": "---\nname: active\nbase: butler\nbase_locale: en\n---\n\nBody\n"
+    },
+    {
+      "name": "guardian",
+      "label": "Guardian",
+      "description": "",
+      "preview": "",
+      "locale": "en",
+      "content": "---\nname: active\nbase: guardian\nbase_locale: en\n---\n\nGuardian body \n"
+    },
+    {
+      "name": "a",
+      "label": "A",
+      "description": "",
+      "preview": "",
+      "locale": "en",
+      "content": "---\nname: active\nbase: a\nbase_locale: en\n---\n\n---\r\nname: untouched\r\n---\r\nCRLF\n"
+    },
+    {
+      "name": "z",
+      "label": "𐐨 SSeta",
+      "description": "",
+      "preview": "allowed",
+      "locale": "en",
+      "content": "---\nname: active\nbase: z\nbase_locale: en\n---\n\ntail\n"
+    }
+  ]
+}

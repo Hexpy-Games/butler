@@ -1,0 +1,104 @@
+{
+  "hash": "5442d3d06114f741e178f9dcf9bf20dfae50e5b46a521a57b6ae9f488336c1c7",
+  "discovery": {
+    "page1": {
+      "entries": [
+        {
+          "callId": "call",
+          "originTurnId": "turn",
+          "ordinal": 1,
+          "toolName": "read_file",
+          "status": "completed",
+          "startedAt": "call",
+          "requestPreview": "{\"query\":\"Needle\"}",
+          "resultSha256": "5442d3d06114f741e178f9dcf9bf20dfae50e5b46a521a57b6ae9f488336c1c7"
+        }
+      ],
+      "through": 3,
+      "nextCursor": 1
+    },
+    "page2": {
+      "entries": [
+        {
+          "callId": "failed",
+          "originTurnId": "turn",
+          "ordinal": 2,
+          "toolName": "shell",
+          "status": "failed",
+          "startedAt": "failed",
+          "requestPreview": "{\"query\":\"needle\"}",
+          "resultSha256": "38667e60226bf99701916900a2a265233dcc014e1206c173ade921d608824b53"
+        }
+      ],
+      "through": 3,
+      "nextCursor": null
+    },
+    "failed": {
+      "entries": [
+        {
+          "callId": "failed",
+          "originTurnId": "turn",
+          "ordinal": 2,
+          "toolName": "shell",
+          "status": "failed",
+          "startedAt": "failed",
+          "requestPreview": "{\"query\":\"needle\"}",
+          "resultSha256": "38667e60226bf99701916900a2a265233dcc014e1206c173ade921d608824b53"
+        }
+      ],
+      "through": 4,
+      "nextCursor": null
+    }
+  },
+  "directReference": {
+    "kind": "direct",
+    "resultRef": "call",
+    "revision": null
+  },
+  "sessionReference": {
+    "kind": "work",
+    "resultRef": "session-ref",
+    "revision": 2,
+    "workId": "session-work",
+    "sessionId": "session",
+    "scopeKind": "session",
+    "scopeRef": "session"
+  },
+  "managedReference": {
+    "kind": "work",
+    "resultRef": "managed-ref",
+    "revision": 3,
+    "workId": "managed-work",
+    "sessionId": "managed-session",
+    "scopeKind": "project",
+    "scopeRef": "project"
+  },
+  "requestRange": {
+    "encoding": "base64",
+    "data": "cmF3Le2VnA==",
+    "offset": 0,
+    "length": 7,
+    "totalBytes": 10,
+    "nextOffset": 7,
+    "resultSha256": "5442d3d06114f741e178f9dcf9bf20dfae50e5b46a521a57b6ae9f488336c1c7",
+    "complete": false
+  },
+  "managedRange": {
+    "encoding": "base64",
+    "data": "eyJvayI6dHJ1ZSwidmFsdWUiOiJtYW5hZ2VkIn0=",
+    "offset": 0,
+    "length": 29,
+    "totalBytes": 29,
+    "nextOffset": null,
+    "resultSha256": "5959396d15018a2d45003e66c0430e9a23fcaf87120c0bc9bb8745368ab280eb",
+    "complete": true
+  },
+  "errors": {
+    "revision": "operation_result_revision_mismatch",
+    "integrity": "operation_result_integrity_mismatch",
+    "bounds": "operation_result_range_out_of_bounds",
+    "authorityMissing": "operation_result_project_authority_missing",
+    "projection": "operation_result_project_projection_mismatch",
+    "emptyBody": "operation_result_body_hash_mismatch"
+  }
+}

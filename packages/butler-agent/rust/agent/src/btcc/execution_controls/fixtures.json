@@ -1,0 +1,87 @@
+{
+  "created": {
+    "schema_version": "butler.turn-execution-controls.v1",
+    "turn_id": "turn-golden",
+    "session_id": "session-golden",
+    "model_ref": "openai/gpt",
+    "reasoning_effort": "high",
+    "access_mode": "read_only",
+    "plan_mode": false,
+    "source": "message_override",
+    "session_control_revision": 3,
+    "catalog_generation": "catalog",
+    "resolved_at": "2026-09-14T00:00:00.000Z",
+    "model_fallback": {
+      "enabled": true,
+      "models": [
+        "anthropic/model"
+      ]
+    },
+    "subsession_result": {
+      "relation_id": "relation",
+      "result_id": "result",
+      "safe_title": "Atlas 보고"
+    },
+    "integrity_hash": "faf179c869ec2721b3cdb3fe537c18785c4ec8c2917a21e0661c3a57e0d32936"
+  },
+  "createdUnsigned": "{\"schema_version\":\"butler.turn-execution-controls.v1\",\"turn_id\":\"turn-golden\",\"session_id\":\"session-golden\",\"model_ref\":\"openai/gpt\",\"reasoning_effort\":\"high\",\"access_mode\":\"read_only\",\"plan_mode\":false,\"source\":\"message_override\",\"session_control_revision\":3,\"catalog_generation\":\"catalog\",\"resolved_at\":\"2026-09-14T00:00:00.000Z\",\"model_fallback\":{\"enabled\":true,\"models\":[\"anthropic/model\"]},\"subsession_result\":{\"relation_id\":\"relation\",\"result_id\":\"result\",\"safe_title\":\"Atlas 보고\"}}",
+  "extended": {
+    "2": "two",
+    "10": "ten",
+    "unknown": "é",
+    "subsession_result": {
+      "relation_id": "relation",
+      "result_id": "result",
+      "safe_title": "Atlas 보고"
+    },
+    "model_fallback": {
+      "enabled": true,
+      "models": [
+        "anthropic/model"
+      ]
+    },
+    "resolved_at": "2026-09-14T00:00:00.000Z",
+    "catalog_generation": "catalog",
+    "session_control_revision": 3,
+    "source": "message_override",
+    "plan_mode": false,
+    "access_mode": "read_only",
+    "reasoning_effort": "high",
+    "model_ref": "openai/gpt",
+    "session_id": "session-golden",
+    "turn_id": "turn-golden",
+    "schema_version": "butler.turn-execution-controls.v1",
+    "fraction": 1e-7,
+    "integrity_hash": "d1351dca3874fc87d88031be5592d7006750f56f4c6583e94c3483e4661504df"
+  },
+  "extendedUnsigned": "{\"2\":\"two\",\"10\":\"ten\",\"unknown\":\"é\",\"subsession_result\":{\"relation_id\":\"relation\",\"result_id\":\"result\",\"safe_title\":\"Atlas 보고\"},\"model_fallback\":{\"enabled\":true,\"models\":[\"anthropic/model\"]},\"resolved_at\":\"2026-09-14T00:00:00.000Z\",\"catalog_generation\":\"catalog\",\"session_control_revision\":3,\"source\":\"message_override\",\"plan_mode\":false,\"access_mode\":\"read_only\",\"reasoning_effort\":\"high\",\"model_ref\":\"openai/gpt\",\"session_id\":\"session-golden\",\"turn_id\":\"turn-golden\",\"schema_version\":\"butler.turn-execution-controls.v1\",\"fraction\":1e-7}",
+  "verified": {
+    "2": "two",
+    "10": "ten",
+    "unknown": "é",
+    "subsession_result": {
+      "relation_id": "relation",
+      "result_id": "result",
+      "safe_title": "Atlas 보고"
+    },
+    "model_fallback": {
+      "enabled": true,
+      "models": [
+        "anthropic/model"
+      ]
+    },
+    "resolved_at": "2026-09-14T00:00:00.000Z",
+    "catalog_generation": "catalog",
+    "session_control_revision": 3,
+    "source": "message_override",
+    "plan_mode": false,
+    "access_mode": "read_only",
+    "reasoning_effort": "high",
+    "model_ref": "openai/gpt",
+    "session_id": "session-golden",
+    "turn_id": "turn-golden",
+    "schema_version": "butler.turn-execution-controls.v1",
+    "fraction": 1e-7,
+    "integrity_hash": "d1351dca3874fc87d88031be5592d7006750f56f4c6583e94c3483e4661504df"
+  }
+}
