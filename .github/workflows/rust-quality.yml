@@ -85,6 +85,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/butler-agent/rust
+          cache-on-failure: true
 
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings

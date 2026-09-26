@@ -92,6 +92,9 @@ fn group_has_only_zombies(group: u32) -> bool {
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
 
+    // An empty group lists as 0 bytes, which libproc reads as failure when
+    // errno still holds the EPERM from `killpg`; clear it first.
+    Errno::clear();
     let Ok(members) = pids_by_type(ProcFilter::ByProgramGroup { pgrpid: group }) else {
         return false;
     };
