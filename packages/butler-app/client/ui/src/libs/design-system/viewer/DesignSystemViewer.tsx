@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Toaster } from "../components/Toast";
 import { useHotkey } from "../lib/useHotkey";
 import { showcaseEntries } from "../showcase/loader";
 import { DS_VIEWER_BUNDLE_MARKER } from "./bundleMarker";
@@ -95,6 +96,8 @@ export function DesignSystemViewer() {
           </div>
         </div>
       </main>
+      {/* One toast region for every page (the app mounts AppToaster the same way); stories only call toast.*. */}
+      <Toaster />
       <ViewerCommandPalette entries={showcaseEntries} open={paletteOpen} onClose={() => setPaletteOpen(false)} onOpen={open} onChange={update} />
     </div>
   );

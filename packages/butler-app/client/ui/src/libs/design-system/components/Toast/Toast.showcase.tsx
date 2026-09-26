@@ -3,7 +3,6 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Button } from "../Button";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
-import { Toaster } from "./Toaster";
 
 export const meta: ShowcaseMeta = {
   title: "Toast",
@@ -45,11 +44,11 @@ function MotionDemo({ locale }: ShowcaseRenderContext) {
         window.setTimeout(() => toast.message(text.queued), 180);
         window.setTimeout(() => toast.error(text.failed), 360);
       }} />
-      {/* Shows in the Tones story's Toaster: one toast region per page. */}
     </Stack>
   );
 }
 
+// The DS Viewer mounts the one DS Toaster at its root, as the app mounts AppToaster.
 function ToastDemo({ locale }: ShowcaseRenderContext) {
   const text = copy[locale];
   return (
@@ -76,8 +75,6 @@ function ToastDemo({ locale }: ShowcaseRenderContext) {
           onClick={() => toast.message(text.archived, { action: { label: text.undo, onClick: () => undefined } })}
         />
       </Stack>
-      {/* The same DS Toaster the app mounts (AppToaster). */}
-      <Toaster />
     </Stack>
   );
 }

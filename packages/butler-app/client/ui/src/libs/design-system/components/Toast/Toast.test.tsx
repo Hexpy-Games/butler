@@ -33,3 +33,12 @@ test("the DS Toaster owns the shared sonner configuration", () => {
   expect(toaster).toContain("richColors={false}");
   expect(toaster).toContain("classNames: toastClassNames");
 });
+
+test("the DS Viewer mounts one Toaster at its root so every toast demo (Motion page included) shows", () => {
+  const viewer = read("../../viewer/DesignSystemViewer.tsx");
+  const showcase = read("./Toast.showcase.tsx");
+  expect(viewer).toMatch(/import \{ Toaster \} from "\.\.\/components\/Toast"/u);
+  expect(viewer.match(/<Toaster\b/gu)?.length).toBe(1);
+  // Stories only raise toasts; a story-owned Toaster is absent on the Motion page and doubles toasts in two-theme frames.
+  expect(showcase).not.toMatch(/<Toaster\b/u);
+});
