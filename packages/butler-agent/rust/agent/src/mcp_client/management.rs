@@ -292,7 +292,7 @@ fn write_registry(
     guard(data_root, data_root)?;
     guard(data_root, parent)?;
     guard(data_root, &target)?;
-    crate::configuration::write_json_atomic(&target, &canonical)
+    crate::configuration::write_json_atomic(&target, &canonical).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

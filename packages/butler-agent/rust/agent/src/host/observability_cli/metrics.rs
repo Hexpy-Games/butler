@@ -31,12 +31,12 @@ pub(super) async fn set_enabled(
     let _guard = writes.acquire().await;
     let mut config = match crate::configuration::read_json_object(&path) {
         Ok(config) => config,
-        Err(message) => {
+        Err(error) => {
             return report_error(
                 command.name(),
                 options.json,
                 "config_read_failed",
-                &message,
+                &error.to_string(),
                 1,
             );
         }
@@ -45,12 +45,12 @@ pub(super) async fn set_enabled(
         config["metrics"] = json!({});
     }
     config["metrics"]["enabled"] = Value::Bool(enabled);
-    if let Err(message) = crate::configuration::write_json_atomic(&path, &config) {
+    if let Err(error) = crate::configuration::write_json_atomic(&path, &config) {
         return report_error(
             command.name(),
             options.json,
             "config_write_failed",
-            &message,
+            &error.to_string(),
             1,
         );
     }

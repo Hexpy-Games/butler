@@ -35,8 +35,12 @@ pub(super) fn config_get(
     };
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
-        Err(message) => {
-            return report_error(command.name(), options.json, &CliError::health(message));
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::health(error.to_string()),
+            );
         }
     };
     let value = config::value_at_path(&current, path);
@@ -97,8 +101,12 @@ pub(super) fn config_set(
     };
     let mut current = match configuration::read_json_object(&file) {
         Ok(value) => value,
-        Err(message) => {
-            return report_error(command.name(), options.json, &CliError::health(message));
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::health(error.to_string()),
+            );
         }
     };
     let previous = config::value_at_path(&current, dotted_path).cloned();
@@ -112,11 +120,11 @@ pub(super) fn config_set(
             &CliError::health(validation.errors.join("; ")),
         );
     }
-    if let Err(message) = configuration::write_json_atomic(&file, &current) {
+    if let Err(error) = configuration::write_json_atomic(&file, &current) {
         return report_error(
             command.name(),
             options.json,
-            &CliError::failed("config_write_failed", message),
+            &CliError::failed("config_write_failed", error.to_string()),
         );
     }
     let data = json!({
@@ -146,8 +154,12 @@ pub(super) fn config_validate(
     };
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
-        Err(message) => {
-            return report_error(command.name(), options.json, &CliError::health(message));
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::health(error.to_string()),
+            );
         }
     };
     let validation = config::validate(&current);
@@ -230,8 +242,12 @@ pub(super) fn config_edit(
     }
     let current = match configuration::read_json_object(&file) {
         Ok(value) => value,
-        Err(message) => {
-            return report_error(command.name(), options.json, &CliError::health(message));
+        Err(error) => {
+            return report_error(
+                command.name(),
+                options.json,
+                &CliError::health(error.to_string()),
+            );
         }
     };
     let validation = config::validate(&current);
@@ -257,7 +273,7 @@ fn ensure_config_exists(path: &Path) -> Result<(), String> {
     match std::fs::symlink_metadata(path) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            configuration::write_json_atomic(path, &json!({}))
+            configuration::write_json_atomic(path, &json!({})).map_err(|error| error.to_string())
         }
         Err(_) => Err("Config file could not be inspected.".into()),
     }

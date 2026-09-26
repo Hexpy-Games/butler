@@ -65,6 +65,7 @@ pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, St
 
 pub(super) fn read_registry_value(data_root: &Path) -> Result<Value, String> {
     crate::configuration::read_json_object(&registry_path(data_root))
+        .map_err(|error| error.to_string())
 }
 
 pub(super) fn registry_path(data_root: &Path) -> std::path::PathBuf {

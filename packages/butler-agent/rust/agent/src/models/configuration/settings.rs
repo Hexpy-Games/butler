@@ -28,7 +28,8 @@ impl ModelConfiguration {
     /// Read the current `user` object without initializing DATA or exposing
     /// provider credentials.
     pub(crate) fn read_user_settings(&self) -> Result<ConfigUserSettings, String> {
-        let config = configuration::read_json_object(&self.data_root.join("butler.config.json"))?;
+        let config = configuration::read_json_object(&self.data_root.join("butler.config.json"))
+            .map_err(|error| error.to_string())?;
         Ok(ConfigUserSettings {
             value: config
                 .get("user")
@@ -51,14 +52,15 @@ impl ModelConfiguration {
         let _write = self.configuration_writes.acquire().await;
         let root = root.unwrap_or(&self.data_root);
         let path = root.join("butler.config.json");
-        let mut config = configuration::read_json_object(&path)?;
+        let mut config =
+            configuration::read_json_object(&path).map_err(|error| error.to_string())?;
         let object = crate::json::object_mut(&mut config);
         let user = crate::json::object_field_mut(object, "user");
         for (key, value) in patch {
             user.insert(key.clone(), value.clone());
         }
         let value = Value::Object(user.clone());
-        configuration::write_json_atomic(&path, &config)?;
+        configuration::write_json_atomic(&path, &config).map_err(|error| error.to_string())?;
         Ok(ConfigUserSettings { value })
     }
 
@@ -74,7 +76,8 @@ impl ModelConfiguration {
         };
         let _write = self.configuration_writes.acquire().await;
         let path = root.join("butler.config.json");
-        let mut config = configuration::read_json_object(&path)?;
+        let mut config =
+            configuration::read_json_object(&path).map_err(|error| error.to_string())?;
         let object = crate::json::object_mut(&mut config);
         let web_search = crate::json::object_field_mut(object, "webSearch");
         if let Some(value) = patch.get("provider") {
@@ -92,7 +95,7 @@ impl ModelConfiguration {
             planning.remove("allowParallelSearch");
             planning.remove("disableSmartForWeakModel");
         }
-        configuration::write_json_atomic(&path, &config)
+        configuration::write_json_atomic(&path, &config).map_err(|error| error.to_string())
     }
 
     /// Persist one approved search-provider secret without exposing it through
@@ -128,7 +131,8 @@ impl ModelConfiguration {
 
         let _write = self.configuration_writes.acquire().await;
         let path = self.data_root.join("butler.config.json");
-        let mut config = configuration::read_json_object(&path)?;
+        let mut config =
+            configuration::read_json_object(&path).map_err(|error| error.to_string())?;
         let previous = config
             .pointer("/system/defaultModel")
             .cloned()
@@ -142,7 +146,7 @@ impl ModelConfiguration {
         if model.provider_id == "openai" {
             system.insert("openaiModel".into(), Value::String(model.model_id.clone()));
         }
-        configuration::write_json_atomic(&path, &config)?;
+        configuration::write_json_atomic(&path, &config).map_err(|error| error.to_string())?;
         Ok(ModelDefaultChange { previous, model })
     }
 

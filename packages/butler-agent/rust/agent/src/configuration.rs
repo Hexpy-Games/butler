@@ -16,17 +16,45 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 use tokio::sync::{Mutex, MutexGuard, OwnedMutexGuard};
 
+/// Failures reading or writing the shared user configuration files.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ConfigError {
+    /// The private environment file exists but could not be read.
+    #[error("Private environment file could not be read.")]
+    EnvironmentUnreadable(#[source] std::io::Error),
+    /// The configuration file exists but could not be read.
+    #[error("Config file could not be read.")]
+    Unreadable(#[source] std::io::Error),
+    /// The configuration file is not valid JSON.
+    #[error("config JSON parse failed: {0}")]
+    Parse(#[source] serde_json::Error),
+    /// The configuration file's root is not a JSON object.
+    #[error("config root must be an object")]
+    NotAnObject,
+    /// The configuration path has no parent directory.
+    #[error("Configuration path is invalid.")]
+    InvalidPath,
+    /// The configuration directory could not be created.
+    #[error("Config directory could not be created.")]
+    DirectoryUnavailable(#[source] std::io::Error),
+    /// Writing, syncing or renaming the temporary configuration file failed.
+    #[error("Config write failed.")]
+    WriteFailed(#[source] std::io::Error),
+}
+
 pub(crate) struct ConfigurationWrites {
     gate: Arc<Mutex<()>>,
 }
 
 /// Read the private DATA-scoped environment file without mutating the process.
 /// A nonempty process variable remains authoritative at the composition edge.
-pub(crate) fn read_private_environment(path: &Path) -> Result<HashMap<String, String>, String> {
+pub(crate) fn read_private_environment(
+    path: &Path,
+) -> Result<HashMap<String, String>, ConfigError> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
-        Err(_) => return Err("Private environment file could not be read.".into()),
+        Err(error) => return Err(ConfigError::EnvironmentUnreadable(error)),
     };
     let mut values = HashMap::new();
     for line in text.lines() {
@@ -75,27 +103,24 @@ impl ConfigurationWrites {
 
 /// Read the shared user configuration without initializing its parent DATA directory.
 /// Missing files have the same empty-object default as the operator CLI.
-pub(crate) fn read_json_object(path: &Path) -> Result<serde_json::Value, String> {
+pub(crate) fn read_json_object(path: &Path) -> Result<serde_json::Value, ConfigError> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(serde_json::Value::Object(serde_json::Map::new()));
         }
-        Err(_) => return Err("Config file could not be read.".into()),
+        Err(error) => return Err(ConfigError::Unreadable(error)),
     };
-    let value: serde_json::Value = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("config JSON parse failed: {error}"))?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(ConfigError::Parse)?;
     if !value.is_object() {
-        return Err("config root must be an object".into());
+        return Err(ConfigError::NotAnObject);
     }
     Ok(value)
 }
 
 /// Atomically replace a user-owned JSON file with a private temporary file.
-pub(crate) fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Configuration path is invalid.".to_owned())?;
+pub(crate) fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Result<(), ConfigError> {
+    let parent = path.parent().ok_or(ConfigError::InvalidPath)?;
     create_private_directories(parent)?;
     let temporary = parent.join(format!(".butler-config-{}.tmp", uuid::Uuid::new_v4()));
     let result = (|| {
@@ -103,22 +128,20 @@ pub(crate) fn write_json_atomic(path: &Path, value: &serde_json::Value) -> Resul
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o600);
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| "Config write failed.")?;
-        serde_json::to_writer_pretty(&mut file, value).map_err(|_| "Config write failed.")?;
-        file.write_all(b"\n").map_err(|_| "Config write failed.")?;
-        file.sync_all().map_err(|_| "Config write failed.")?;
+        let mut file = options.open(&temporary)?;
+        serde_json::to_writer_pretty(&mut file, value)?;
+        file.write_all(b"\n")?;
+        file.sync_all()?;
         drop(file);
-        fs::rename(&temporary, path).map_err(|_| "Config write failed.")
+        fs::rename(&temporary, path)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    result.map_err(str::to_owned)
+    result.map_err(ConfigError::WriteFailed)
 }
 
-fn create_private_directories(path: &Path) -> Result<(), String> {
+fn create_private_directories(path: &Path) -> Result<(), ConfigError> {
     #[cfg(unix)]
     {
         let mut builder = fs::DirBuilder::new();
@@ -132,10 +155,10 @@ fn create_private_directories(path: &Path) -> Result<(), String> {
                     Err(error)
                 }
             })
-            .map_err(|_| "Config directory could not be created.".to_owned())
+            .map_err(ConfigError::DirectoryUnavailable)
     }
     #[cfg(not(unix))]
     {
-        fs::create_dir_all(path).map_err(|_| "Config directory could not be created.".to_owned())
+        fs::create_dir_all(path).map_err(ConfigError::DirectoryUnavailable)
     }
 }
