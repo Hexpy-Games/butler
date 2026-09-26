@@ -83,36 +83,21 @@
   transform: rotate(-90deg);
 }
 
+/* Height and opacity reveal come from the DS Collapsible (kept mounted);
+   the padding lives inside so it folds with the height. */
 .body {
-  display: grid;
   min-width: 0;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  padding: var(--space-2) var(--composer-inner-padding-inline)
-    var(--composer-inner-padding-block);
-  transition:
-    grid-template-rows var(--motion-base) var(--motion-ease-emphasized),
-    opacity var(--motion-fast) var(--motion-ease-standard),
-    padding-block var(--motion-base) var(--motion-ease-emphasized);
-}
-
-.body[data-collapsed="true"] {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  pointer-events: none;
 }
 
 .bodyInner {
-  overflow: hidden;
-  min-height: 0;
+  min-width: 0;
+  padding: var(--space-2) var(--composer-inner-padding-inline)
+    var(--composer-inner-padding-block);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .header,
-  .chevron,
-  .body {
+  .chevron {
     transition: none;
   }
 }

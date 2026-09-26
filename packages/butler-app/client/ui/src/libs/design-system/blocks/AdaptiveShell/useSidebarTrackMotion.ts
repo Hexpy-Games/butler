@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { animateMotion, prefersReducedMotion } from "../../lib/motion";
+import { animateMotion, motionDuration, prefersReducedMotion } from "../../lib/motion";
 
 /**
  * Docked sidebar open/close as compositor motion (DS Motion Contract).
@@ -14,22 +14,27 @@ import { animateMotion, prefersReducedMotion } from "../../lib/motion";
  * - opening keeps the 0px track, slides the workspace aside with the
  *   sidebar, and commits the track when the motion finishes, so the
  *   workspace reflows once, already in place.
- * Reduced motion, drawer layout and live resizing commit immediately; the
- * sidebar then only fades.
+ * Reduced motion and live resizing commit immediately; the sidebar then only
+ * fades. In the drawer layout CSS slides the drawer and pushes the
+ * workspace (transform); opening holds the full workspace width until the
+ * push ends so the medium-width workspace narrows once, in place.
  */
 export function useSidebarTrackMotion({
   rootRef,
   leftOpen,
   animate,
+  drawer = false,
 }: {
   rootRef: RefObject<HTMLDivElement | null>;
   leftOpen: boolean;
   animate: boolean;
+  drawer?: boolean;
 }): { leftTrack: boolean; switching: boolean } {
   const [openedTrack, setOpenedTrack] = useState(leftOpen);
   const [switching, setSwitching] = useState(false);
   const previousOpen = useRef(leftOpen);
   const motion = useRef<Animation | null>(null);
+  const drawerTimer = useRef(0);
   // Closing leads: the track is 0px in the same render that closes.
   const leftTrack = leftOpen && openedTrack;
   // Mark the render that switches the track so the grid does not interpolate it.
@@ -50,6 +55,15 @@ export function useSidebarTrackMotion({
     const currentOffset = workspace ? translateXOf(getComputedStyle(workspace).transform) : 0;
     motion.current?.cancel();
     motion.current = null;
+    window.clearTimeout(drawerTimer.current);
+    if (drawer) {
+      if (!leftOpen || !animate || prefersReducedMotion()) {
+        setOpenedTrack(leftOpen);
+        return;
+      }
+      drawerTimer.current = window.setTimeout(() => setOpenedTrack(true), motionDuration("slow"));
+      return;
+    }
     const width = sidebar?.getBoundingClientRect().width ?? 0;
     const canAnimate = animate && !prefersReducedMotion() && workspace && width > 0;
     if (!leftOpen) {
@@ -78,7 +92,9 @@ export function useSidebarTrackMotion({
     animation.finished.then(() => {
       if (motion.current === animation) setOpenedTrack(true);
     }, () => undefined);
-  }, [leftOpen, animate, rootRef]);
+  }, [leftOpen, animate, drawer, rootRef]);
+
+  useLayoutEffect(() => () => window.clearTimeout(drawerTimer.current), []);
 
   // The committed track now places the workspace where the motion left it:
   // drop the held transform before paint.

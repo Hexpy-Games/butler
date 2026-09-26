@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
 import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
+import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
 
 export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
   ref?: Ref<HTMLDivElement>;
@@ -37,6 +38,12 @@ export function AdaptiveShell({
   const { leftTrack, switching } = useSidebarTrackMotion({
     rootRef,
     leftOpen,
+    animate: !resizing && !settingsActive,
+    drawer,
+  });
+  const { rightTrack, switching: rightSwitching } = useInspectorTrackMotion({
+    rootRef,
+    rightOpen,
     animate: !drawer && !resizing && !settingsActive,
   });
   return (
@@ -45,8 +52,9 @@ export function AdaptiveShell({
       className={cn(styles.root, className)}
       data-left-open={leftOpen}
       data-left-track={leftTrack}
-      data-track-switching={switching || undefined}
+      data-track-switching={switching || rightSwitching || undefined}
       data-right-open={rightOpen}
+      data-right-track={rightTrack}
       data-settings-active={settingsActive}
       data-resizing={resizing}
       data-transparent-workspace={transparentWorkspace}
@@ -102,7 +110,7 @@ export function AdaptiveShellInspector({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
   return (
-    <div className={cn(styles.inspector, className)} data-open={open} {...props}>
+    <div className={cn(styles.inspector, className)} data-open={open} data-slot="adaptive-shell-inspector" {...props}>
       {children}
     </div>
   );

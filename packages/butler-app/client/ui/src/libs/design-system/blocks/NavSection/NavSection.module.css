@@ -20,30 +20,7 @@
   margin-inline-end: var(--nav-section-actions-edge-offset, 0);
 }
 
+/* Height and opacity reveal come from the DS Collapsible (kept mounted). */
 .content {
-  display: grid;
-  grid-template-rows: 1fr;
   min-width: 0;
-  overflow: hidden;
-  opacity: 1;
-  transition:
-    grid-template-rows var(--motion-base) var(--motion-ease-emphasized),
-    opacity var(--motion-fast) var(--motion-ease-standard);
-}
-
-.contentCollapsed {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-.contentInner {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .content {
-    transition: none;
-  }
 }

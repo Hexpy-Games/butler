@@ -5,7 +5,8 @@ import type {
   Ref,
   TextareaHTMLAttributes,
 } from "react";
-import { forwardRef } from "react";
+import { createContext, forwardRef, useContext } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { SendHorizontal, Square } from "../../components/Icons";
 import { Spinner } from "../../components/Spinner";
 import { tintedGlassSurfaceClassName } from "../../components/TintedGlass";
@@ -22,6 +23,8 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
 }
+
+const ComposerExpandedContext = createContext(true);
 
 export function ComposerCard({
   large = false,
@@ -59,7 +62,7 @@ export function ComposerCard({
             {adjunct}
           </div>
         ) : null}
-        {children}
+        <ComposerExpandedContext.Provider value={expanded}>{children}</ComposerExpandedContext.Provider>
       </form>
     </div>
   );
@@ -86,11 +89,13 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
   );
 }
 
+/** Editor region: Collapsible reveal, kept mounted and focusable while folded. */
 export function ComposerCardExpandedBody({ children }: { children: ReactNode }) {
+  const expanded = useContext(ComposerExpandedContext);
   return (
-    <div className={styles.expandedBody} data-slot="composer-expanded-body">
-      <div className={styles.expandedBodyInner}>{children}</div>
-    </div>
+    <Collapsible open={expanded} keepMounted="focusable" className={styles.expandedBody} data-slot="composer-expanded-body">
+      {children}
+    </Collapsible>
   );
 }
 

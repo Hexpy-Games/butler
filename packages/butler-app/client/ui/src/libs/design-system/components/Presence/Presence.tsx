@@ -31,13 +31,15 @@ function cssTimeMs(value: string | undefined): number {
  * exit animation (or, without one, its exit transition) ends, immediately
  * when it has neither.
  */
-export function usePresence(present: boolean): {
+export function usePresence(present: boolean, options: { onExitComplete?: () => void } = {}): {
   mounted: boolean;
   state: PresenceState;
   ref: (node: HTMLElement | null) => void;
 } {
   const [mounted, setMounted] = useState(present);
   const nodeRef = useRef<HTMLElement | null>(null);
+  const onExitComplete = useRef(options.onExitComplete);
+  onExitComplete.current = options.onExitComplete;
   if (present && !mounted) setMounted(true);
 
   useLayoutEffect(() => {
@@ -49,12 +51,17 @@ export function usePresence(present: boolean): {
     const transitionMs = cssTimeMs(style?.transitionDuration) + cssTimeMs(style?.transitionDelay);
     if (!node || (!animated && transitionMs <= 0)) {
       setMounted(false);
+      onExitComplete.current?.();
       return undefined;
     }
     const endEvents = animated ? ["animationend", "animationcancel"] : ["transitionend", "transitioncancel"];
+    let done = false;
     const finish = (event?: Event) => {
       if (event && event.target !== node) return;
+      if (done) return;
+      done = true;
       setMounted(false);
+      onExitComplete.current?.();
     };
     const waitMs = animated
       ? cssTimeMs(style?.animationDuration) + cssTimeMs(style?.animationDelay)

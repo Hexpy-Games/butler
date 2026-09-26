@@ -25,8 +25,6 @@
   border-radius: var(--app-window-radius, 18px);
   background: var(--sidebar-bg);
   color: var(--text-primary);
-  transition: grid-template-columns var(--adaptive-panel-duration)
-    var(--adaptive-panel-easing);
 }
 
 .root[data-chrome-environment="browser"] {
@@ -59,7 +57,9 @@
   --adaptive-left-track: 0px;
 }
 
-.root[data-right-open="true"] {
+/* Like the left track, the right track follows the committed state (see
+   useInspectorTrackMotion) and never interpolates. */
+.root[data-right-track="true"] {
   --adaptive-right-track: var(--right-panel-width);
 }
 
@@ -107,6 +107,30 @@
   transition: none;
 }
 
+/* Docked inspector: always its full width at the right edge, over the
+   right track; it slides in and out on the compositor. */
+.root[data-panel-layout="docked"] .inspector {
+  position: absolute;
+  inset-block: var(--app-window-frame-inset, 0);
+  right: var(--app-window-frame-inset, 0);
+  width: var(--right-panel-width);
+  transition:
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
+    visibility 0s var(--motion-ease-linear);
+}
+
+.root[data-panel-layout="docked"] .inspector[data-open="false"] {
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
+    visibility 0s var(--motion-ease-linear) var(--adaptive-panel-duration);
+}
+
+.root[data-panel-layout="docked"][data-resizing="true"] .inspector {
+  transition: none;
+}
+
 .workspace {
   container-name: workspace;
   container-type: inline-size;
@@ -123,8 +147,7 @@
   background: var(--workspace-bg);
   transition:
     background var(--motion-base) var(--motion-ease-standard),
-    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing),
-    width var(--adaptive-panel-duration) var(--adaptive-panel-easing);
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
 
 .workspace > :not([data-test-class~="custom-titlebar"]) {
@@ -140,7 +163,7 @@
   background: transparent;
 }
 
-.root[data-right-open="true"] .workspace {
+.root[data-right-track="true"] .workspace {
   border-right-width: 0;
 }
 
@@ -313,9 +336,11 @@
 
 /* Medium widths keep the workspace beside the open drawer: it narrows to the
    remaining width so content reflows instead of being pushed off-screen.
-   Compact widths keep the full push. */
+   The width follows the committed track (after the push slide, see
+   useSidebarTrackMotion) and never interpolates. Compact widths keep the
+   full push. */
 @media (width > 640px) {
-  .root[data-panel-layout="drawer"][data-left-open="true"] .workspace {
+  .root[data-panel-layout="drawer"][data-left-track="true"] .workspace {
     width: calc(100% - var(--adaptive-drawer-width));
   }
 }
@@ -382,6 +407,21 @@
   .workspace,
   .chrome {
     transition: none;
+  }
+
+  /* Reduced motion: the docked panels only fade. */
+  .root[data-panel-layout="docked"] .inspector {
+    transition:
+      opacity var(--motion-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear);
+  }
+
+  .root[data-panel-layout="docked"] .inspector[data-open="false"] {
+    opacity: 0;
+    transform: none;
+    transition:
+      opacity var(--motion-exit-fast) var(--motion-ease-standard),
+      visibility 0s var(--motion-ease-linear) var(--motion-exit-fast);
   }
 
   /* Reduced motion: the docked sidebar only fades. */

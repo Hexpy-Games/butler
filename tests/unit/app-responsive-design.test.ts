@@ -164,7 +164,8 @@ describe("responsive adaptive design contracts", () => {
     const mediumStart = shell.indexOf("@media (width > 640px)");
     expect(mediumStart).toBeGreaterThan(-1);
     const medium = shell.slice(mediumStart, shell.indexOf("\n}\n", mediumStart));
-    expect(medium).toContain('.root[data-panel-layout="drawer"][data-left-open="true"] .workspace');
+    // The width follows the committed track (after the push), never interpolated.
+    expect(medium).toContain('.root[data-panel-layout="drawer"][data-left-track="true"] .workspace');
     expect(medium).toContain("width: calc(100% - var(--adaptive-drawer-width));");
   });
 
@@ -223,12 +224,11 @@ describe("responsive adaptive design contracts", () => {
     expect(card).toContain("ComposerCardExpandedBody");
     expect(styles).toContain('.card[data-expanded="false"]');
     expect(styles).toContain("text-overflow: ellipsis");
-    expect(styles).toContain("grid-template-rows: 0fr");
+    // The editor folds through the DS Collapsible (kept mounted, focusable).
+    expect(card).toContain('keepMounted="focusable"');
+    expect(styles).not.toContain("grid-template-rows: 0fr");
     const compactMediaStart = styles.indexOf("@media (width <= 640px)");
     expect(compactMediaStart).toBeGreaterThan(-1);
-    expect(
-      styles.indexOf('.card[data-expanded="false"] .expandedBody'),
-    ).toBeLessThan(compactMediaStart);
     expect(
       styles.indexOf('.card[data-expanded="false"] .compactPreview'),
     ).toBeLessThan(compactMediaStart);

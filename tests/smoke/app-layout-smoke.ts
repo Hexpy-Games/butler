@@ -1237,11 +1237,16 @@ try {
       transform: getComputedStyle(element).transform,
       width: element.getBoundingClientRect().width,
     }));
+  // The docked inspector keeps its width and slides out on the compositor
+  // (useInspectorTrackMotion): mid-close it is partly off the right edge.
+  const rightEdge = page.viewportSize()?.width ?? 0;
+  const closingVisibleWidth = closingSlotBox ? Math.max(0, rightEdge - closingSlotBox.x) : 0;
   assert(
     closingSlotBox &&
-      closingSlotBox.width > 8 &&
-      closingSlotBox.width < inspectorWidthAfterResize - 8,
-    `right panel slot should animate while closing: start=${inspectorWidthAfterResize} mid=${JSON.stringify(closingSlotBox)}`,
+      Math.abs(closingSlotBox.width - inspectorWidthAfterResize) <= 2 &&
+      closingVisibleWidth > 8 &&
+      closingVisibleWidth < inspectorWidthAfterResize - 8,
+    `right panel slot should slide out while closing: start=${inspectorWidthAfterResize} mid=${JSON.stringify(closingSlotBox)} visible=${closingVisibleWidth}`,
   );
   assert(
     closingInspectorBox &&
@@ -1256,8 +1261,8 @@ try {
     .count();
   const closedSlotBox = await rightPanelSlot.boundingBox();
   assert(
-    closedInspectorCount === 1 && (!closedSlotBox || closedSlotBox.width <= 2),
-    `right panel should stay mounted in a 0px clipped slot: count=${closedInspectorCount} slotWidth=${closedSlotBox?.width}`,
+    closedInspectorCount === 1 && (!closedSlotBox || closedSlotBox.x >= rightEdge - 2),
+    `right panel should stay mounted, slid off the right edge: count=${closedInspectorCount} slot=${JSON.stringify(closedSlotBox)}`,
   );
   const closedRightPanelToggle = page.getByRole("button", {
     name: appCopy.titlebar.showRightPanel,

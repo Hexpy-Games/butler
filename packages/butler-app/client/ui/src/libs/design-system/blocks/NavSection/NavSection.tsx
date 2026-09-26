@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { NavSectionHeading } from "./NavSectionHeading";
+import { Collapsible } from "../../components/Collapsible";
 import { cn } from "../../lib/utils";
 import styles from "./NavSection.module.css";
 
@@ -32,16 +33,11 @@ export function NavSection({
       className={cn(styles.section, className)}
     >
       <NavSectionHeading title={title} actions={actions} />
-      <div
-        className={cn(styles.content, collapsed && styles.contentCollapsed)}
-        aria-hidden={collapsed}
-      >
-        <div className={styles.contentInner}>
-          <Stack align="column" gap="xs">
-            {children}
-          </Stack>
-        </div>
-      </div>
+      <Collapsible open={!collapsed} keepMounted className={styles.content} aria-hidden={collapsed}>
+        <Stack align="column" gap="xs">
+          {children}
+        </Stack>
+      </Collapsible>
     </Stack>
   );
 }

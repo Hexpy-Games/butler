@@ -3169,9 +3169,10 @@ test("conversation progress and composer workers use design-system blocks", () =
   expect(composerAdjunctPanelStyles).toContain(
     '.chevron[data-collapsed="true"]',
   );
-  expect(composerAdjunctPanelStyles).toContain("grid-template-rows: 1fr");
-  expect(composerAdjunctPanelStyles).toContain('.body[data-collapsed="true"]');
-  expect(composerAdjunctPanelStyles).toContain("grid-template-rows: 0fr");
+  // The body folds through the DS Collapsible (height reveal, kept mounted),
+  // never a grid-template-rows transition.
+  expect(composerAdjunctPanel).toContain("<Collapsible");
+  expect(composerAdjunctPanelStyles).not.toContain("grid-template-rows");
   expect(composerAdjunctPanelStyles).toContain(".bodyInner");
   expect(composerAdjunctPanelStyles).toContain("prefers-reduced-motion");
   expect(composerAdjunctPanelStyles).not.toContain(".body[hidden]");

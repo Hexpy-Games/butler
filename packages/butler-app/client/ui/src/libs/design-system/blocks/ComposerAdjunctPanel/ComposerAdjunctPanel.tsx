@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { useId, useState } from "react";
+import { Collapsible } from "../../components/Collapsible";
 import { ChevronDown } from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -67,14 +68,16 @@ export function ComposerAdjunctPanel({
           </span>
         </button>
       ) : null}
-      <div
+      <Collapsible
+        open={!collapsed}
+        keepMounted
         className={styles.body}
         data-collapsed={collapsed ? "true" : "false"}
         aria-hidden={collapsed}
         id={bodyId}
       >
         <div className={styles.bodyInner}>{children}</div>
-      </div>
+      </Collapsible>
     </section>
   );
 }

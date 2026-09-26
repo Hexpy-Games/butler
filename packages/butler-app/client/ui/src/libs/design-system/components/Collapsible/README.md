@@ -13,6 +13,9 @@ and activity details expand the same way everywhere.
 | --- | --- |
 | `open` | `boolean` |
 | `children` | disclosure content |
+| `keepMounted` | `true` keeps closed content mounted but hidden (inert, visibility hidden) so it keeps its state; `"focusable"` only folds it (height 0, no pointer events) so its owner can reopen it on focus (the composer editor) |
+| `appear` | reveal on the first mount too, for a row inserted into a rendered list |
+| `onExitComplete` | called once closed content has finished its exit |
 | other `div` attributes | `id`, `role`, `aria-*`, `data-test-class` |
 
 ## How to use this component

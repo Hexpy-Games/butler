@@ -83,3 +83,55 @@ test("Collapsible reveals height with interpolate-size and fades only under redu
   expect(reduced).toMatch(/\.collapsible \{\s*transition:\s*height 0s,\s*opacity var\(--motion-fast\)/u);
   expect(reduced).toMatch(/\.collapsible\[data-state="closed"\] \{\s*transition:\s*opacity var\(--motion-exit-base\) var\(--motion-ease-accelerate\),\s*height 0s var\(--motion-exit-base\);/u);
 });
+
+test("keepMounted keeps closed content in the DOM (hidden) so editors keep their state", async () => {
+  const document = setup("0.11s");
+  await act(async () => root!.render(
+    <Collapsible open={false} keepMounted data-test-class="kept"><span>Draft</span></Collapsible>,
+  ));
+  const kept = document.querySelector('[data-test-class="kept"]');
+  expect(kept?.getAttribute("data-state")).toBe("closed");
+  expect(kept?.textContent).toBe("Draft");
+  expect(kept?.hasAttribute("inert")).toBe(true);
+  await act(async () => root!.render(
+    <Collapsible open keepMounted data-test-class="kept"><span>Draft</span></Collapsible>,
+  ));
+  expect(kept?.getAttribute("data-state")).toBe("open");
+  expect(kept?.getAttribute("data-enter")).toBe("true");
+  expect(kept?.hasAttribute("inert")).toBe(false);
+  expect(css).toMatch(/\.collapsible\[data-state="closed"\]\[data-keep-mounted="hidden"\] \{[^}]*visibility: hidden/u);
+});
+
+test("appear reveals content that mounts open (a list row inserted later)", async () => {
+  const document = setup("0.16s");
+  await act(async () => root!.render(<Collapsible open appear data-test-class="row"><span>New</span></Collapsible>));
+  expect(document.querySelector('[data-test-class="row"]')?.getAttribute("data-enter")).toBe("true");
+});
+
+test("onExitComplete fires once the closed content unmounts", async () => {
+  const document = setup("0.11s");
+  let exited = 0;
+  const node = (open: boolean) => (
+    <Collapsible open={open} onExitComplete={() => { exited += 1; }} data-test-class="row"><span>Row</span></Collapsible>
+  );
+  await act(async () => root!.render(node(true)));
+  await act(async () => root!.render(node(false)));
+  expect(exited).toBe(0);
+  await act(async () => {
+    document.querySelector('[data-test-class="row"]')!
+      .dispatchEvent(new document.defaultView!.Event("transitionend", { bubbles: true }));
+  });
+  expect(document.querySelector('[data-test-class="row"]')).toBeNull();
+  expect(exited).toBe(1);
+});
+
+test("keepMounted focusable collapses without inert so its owner can reopen it on focus", async () => {
+  const document = setup("0.11s");
+  await act(async () => root!.render(
+    <Collapsible open={false} keepMounted="focusable" data-test-class="editor"><span>Editor</span></Collapsible>,
+  ));
+  const editor = document.querySelector('[data-test-class="editor"]');
+  expect(editor?.getAttribute("data-keep-mounted")).toBe("focusable");
+  expect(editor?.hasAttribute("inert")).toBe(false);
+  expect(css).toMatch(/\.collapsible\[data-state="closed"\]\[data-keep-mounted="focusable"\] \{\s*pointer-events: none;/u);
+});

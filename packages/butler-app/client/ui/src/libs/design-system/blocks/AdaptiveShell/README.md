@@ -20,8 +20,13 @@ exclusive open-panel state.
   FLIP-translated (and clipped) in step. Closing collapses the track at once;
   opening keeps the collapsed track until the slide ends, so the workspace
   reflows once. Reduced motion commits at once and the sidebar only fades.
-  The right inspector still interpolates its grid track (S5: move it to the
-  same transform model).
+  The docked right inspector uses the same model
+  (`useInspectorTrackMotion`): it keeps its full width at the right edge and
+  slides with a transform; opening keeps the 0px right track while the panel
+  slides in over the workspace (clipped in step) and commits the track when
+  the slide ends; closing commits the 0px track at once and the panel slides
+  out. In the medium drawer layout the workspace width follows the committed
+  track after the push, never a width transition.
 - The workspace is an inline-size query container. Product resize geometry may
   retain a 320px workspace and give the inspector all remaining width; the shell
   accepts the measured widths and a standard root ref without owning preferences.

@@ -160,9 +160,7 @@
   font-weight: var(--font-weight-regular);
   opacity: 1;
   text-align: right;
-  transition:
-    max-width var(--motion-fast) var(--motion-ease-standard),
-    opacity var(--motion-fast) var(--motion-ease-standard);
+  transition: opacity var(--motion-fast) var(--motion-ease-standard);
 }
 
 .actions {
@@ -193,9 +191,9 @@
   transform: translate(0, -50%);
 }
 
+/* The hover actions overlay the badge's place; the badge only fades. */
 .row[data-has-hover-actions="true"]:hover .badge,
 .row[data-has-hover-actions="true"]:focus-within .badge {
-  max-width: 0;
   opacity: 0;
 }
 
