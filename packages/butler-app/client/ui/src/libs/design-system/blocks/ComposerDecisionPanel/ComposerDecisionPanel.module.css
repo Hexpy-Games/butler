@@ -1,29 +1,37 @@
+/* ComposerDecisionPanel: the composer's decision state (a plan to accept, an
+   authority request). The subject row carries the icon in the secondary tone
+   and the actions take the composer radius so they echo the composer shape. */
 .surface {
   display: grid;
   min-width: 0;
 }
+
 .subject {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--space-sm);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-md) var(--space-lg);
   color: var(--text-primary);
 }
+
 .subject > svg {
   flex: none;
   color: var(--text-secondary);
 }
+
 .actions {
   display: flex;
   min-width: 0;
   justify-content: flex-end;
-  padding: var(--space-2);
+  padding: var(--space-sm);
 }
+
 .actions button {
   flex-shrink: 0;
   border-radius: var(--adaptive-composer-radius);
 }
+
 .error {
-  padding-inline: var(--space-4);
+  padding-inline: var(--space-lg);
 }

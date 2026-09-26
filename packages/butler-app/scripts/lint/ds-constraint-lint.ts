@@ -69,7 +69,9 @@ async function collect(): Promise<{ counts: Counts; errors: string[]; warnings: 
 
   for (const file of styles.filter((path) => path.endsWith(".module.css"))) bump(counts["no-new-css-module"], file);
 
-  const lint = await stylelint.lint({
+  // Product code may own no stylesheet at all; stylelint with an empty file
+  // list would fall back to linting every file under the working directory.
+  const lint = styles.length === 0 ? { results: [] } : await stylelint.lint({
     files: styles.map((file) => join(sourceRoot, file)),
     ignoreDisables: true,
     config: {

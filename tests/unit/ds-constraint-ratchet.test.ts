@@ -92,3 +92,14 @@ describe("DS constraint ratchet", () => {
     expect(ratchetFailures("no-new-css-module", result)[0]).toContain("components/new/New.module.css");
   });
 });
+
+describe("DS constraint lint run", () => {
+  test("product code owns no stylesheet and the lint still checks cleanly without one", () => {
+    const { listProductFiles } = require("../../packages/butler-app/scripts/lint/butler-ds/scope.ts") as typeof import("../../packages/butler-app/scripts/lint/butler-ds/scope.ts");
+    expect(listProductFiles(root).styles).toEqual([]);
+    const run = Bun.spawnSync(["bun", "run", "packages/butler-app/scripts/lint/ds-constraint-lint.ts"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const output = `${run.stdout.toString()}${run.stderr.toString()}`;
+    expect(output).not.toContain("could not check");
+    expect(run.exitCode).toBe(0);
+  }, 60_000);
+});

@@ -1,12 +1,11 @@
 import { useAppLocale } from "@/app/copy.ts";
 import { appCopy } from "@/app/copy.ts";
-import { Button, ButtonContainer, ChevronDown, ShieldCheck, SplitButton, Typo } from "@/butler-ds";
-import { ComposerDecisionSurface } from "./ComposerDecisionSurface";
+import { Button, ButtonContainer, ChevronDown, ComposerDecisionPanel, ShieldCheck, SplitButton, Typo } from "@/butler-ds";
 import type { ComposerAuthorityDecision } from "./useComposerAuthorityDecision";
 
 export function ComposerAuthorityDecisionSurface({ decision }: { decision: ComposerAuthorityDecision }) {
   useAppLocale();
-  return <ComposerDecisionSurface
+  return <ComposerDecisionPanel
     icon={<ShieldCheck aria-hidden="true" size="lg" />}
     title={decision.title}
     onOpen={decision.onOpenSource}
@@ -17,7 +16,7 @@ export function ComposerAuthorityDecisionSurface({ decision }: { decision: Compo
         <ChevronDown aria-hidden="true" size="md" />
       </Button>
     </>}
-    testClass="composer-authority-decision"
+    data-test-class="composer-authority-decision"
     actions={<ButtonContainer size="sm" justify="end">
       <Button type="button" size="sm" variant="secondary" disabled={decision.pending} onClick={decision.onDeny}>{appCopy.interfaceDetails.deny}</Button>
       <SplitButton size="sm" text={appCopy.interfaceDetails.allowOnce} disabled={decision.pending} onClick={decision.onAllow}
