@@ -59,7 +59,7 @@ impl MonitoringReaders {
             .profile
             .read_coverage_health()
             .await
-            .map_err(|error| BtccError::relayed(error.code, error.message))?;
+            .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
         let report = self
             .memory_health
             .read_tool(profile)

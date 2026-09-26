@@ -3,6 +3,7 @@
 mod candidates;
 mod contracts;
 mod coverage_health;
+mod error;
 mod extraction;
 mod extractor_config;
 mod migration_prompt;
@@ -21,6 +22,7 @@ pub(crate) use contracts::{
     ProfileThirdPartyImportOptions, ProfilingConsentSnapshot, ProfilingExtractorModelSnapshot,
     ProfilingMode, RuntimeProfileProjection,
 };
+pub(crate) use error::ProfileCode;
 pub(crate) use extractor_config::read as read_profiling_extractor_model;
 pub(crate) use migration_prompt::third_party_migration_prompt;
 pub(crate) use presets::{PersonaLocale, PersonaPreset, PersonaPresets};

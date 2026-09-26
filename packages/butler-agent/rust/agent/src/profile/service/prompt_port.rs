@@ -38,5 +38,5 @@ impl crate::context::ProfilePromptPort for ProfileService {
 }
 
 fn context_error(error: ProfileError) -> crate::context::ContextError {
-    crate::context::ContextError::port(error.code, error.message.clone(), error)
+    crate::context::ContextError::port(error.code(), error.message(), error)
 }

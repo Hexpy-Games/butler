@@ -117,7 +117,7 @@ async fn actual_canonical_writer_to_profile_facts_preserves_source_identity() {
     drop(source.open().unwrap());
     let missing = ProfileConversationSources::new(directory.0.join("missing.sqlite"));
     match missing.open() {
-        Err(error) => assert_eq!(error.code, "conversation_source_unavailable"),
+        Err(error) => assert_eq!(error.code(), "conversation_source_unavailable"),
         Ok(_) => panic!("missing source must not become empty profile facts"),
     }
 }

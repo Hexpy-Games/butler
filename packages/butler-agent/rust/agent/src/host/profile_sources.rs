@@ -24,8 +24,7 @@ impl ProfileConversationSources {
 
 impl CanonicalProfileSourceFactory for ProfileConversationSources {
     fn open(&self) -> ProfileResult<Box<dyn CanonicalProfileSourceReader>> {
-        let reader =
-            ConversationSourceReader::open(&self.path).map_err(|error| source_error(&error))?;
+        let reader = ConversationSourceReader::open(&self.path).map_err(source_error)?;
         Ok(Box::new(ProfileSourceRead { reader }))
     }
 }
@@ -50,18 +49,18 @@ impl CanonicalProfileSourceReader for ProfileSourceRead {
                 order: Some(ConversationReadOrder::Asc),
             })
             .map(|messages| messages.into_iter().map(project_message).collect())
-            .map_err(|error| source_error(&error))
+            .map_err(source_error)
     }
 
     fn read_message(&mut self, id: &str) -> ProfileResult<Option<CanonicalProfileMessage>> {
         self.reader
             .read_message(id)
             .map(|message| message.map(project_message))
-            .map_err(|error| source_error(&error))
+            .map_err(source_error)
     }
 
     fn close(self: Box<Self>) -> ProfileResult<()> {
-        self.reader.close().map_err(|error| source_error(&error))
+        self.reader.close().map_err(source_error)
     }
 }
 
@@ -113,9 +112,10 @@ fn origin_name(origin: ConversationOriginKind) -> &'static str {
     }
 }
 
-/// Profile cannot name Conversation errors, so the wire code and message cross the port.
-fn source_error(error: &ConversationError) -> ProfileError {
-    ProfileError::new(error.code(), error.message())
+/// Profile cannot name Conversation errors; they cross the port with their
+/// own code and message and stay the source.
+fn source_error(error: ConversationError) -> ProfileError {
+    ProfileError::port(error.code(), error.message(), error)
 }
 
 #[cfg(test)]

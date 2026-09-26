@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use super::ProfileService;
+use crate::profile::ProfileCode;
 use crate::{
     profile::{PersonaLocale, PersonaPreset},
     public_text::trim_js_whitespace,
@@ -108,14 +109,14 @@ fn write_private_text(
     now: &str,
 ) -> super::super::contracts::ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
-    fs::create_dir_all(parent).map_err(|_| write_error())?;
+    fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
     backup_private_text(data_root, path, prefix, text, now)?;
-    fs::write(path, text.as_bytes()).map_err(|_| write_error())
+    fs::write(path, text.as_bytes()).map_err(|source| write_error().with_source(source))
 }
 
 fn backup_private_text(
@@ -136,7 +137,7 @@ fn backup_private_text(
         return Ok(());
     }
     let directory = data_root.join("personalization/backups");
-    fs::create_dir_all(&directory).map_err(|_| write_error())?;
+    fs::create_dir_all(&directory).map_err(|source| write_error().with_source(source))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -144,13 +145,13 @@ fn backup_private_text(
     }
     let stamp = now.replace([':', '.'], "-");
     let target = directory.join(format!("{prefix}-{stamp}.md"));
-    fs::copy(source, target).map_err(|_| write_error())?;
+    fs::copy(source, target).map_err(|source| write_error().with_source(source))?;
     prune_backups(&directory, prefix)?;
     Ok(())
 }
 
 fn prune_backups(directory: &Path, prefix: &str) -> super::super::contracts::ProfileResult<()> {
-    let entries = fs::read_dir(directory).map_err(|_| write_error())?;
+    let entries = fs::read_dir(directory).map_err(|source| write_error().with_source(source))?;
     let mut backups = entries
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -168,14 +169,14 @@ fn prune_backups(directory: &Path, prefix: &str) -> super::super::contracts::Pro
         .collect::<Vec<_>>();
     backups.sort_by(|left, right| right.0.cmp(&left.0));
     for (_, path) in backups.into_iter().skip(20) {
-        fs::remove_file(path).map_err(|_| write_error())?;
+        fs::remove_file(path).map_err(|source| write_error().with_source(source))?;
     }
     Ok(())
 }
 
 fn write_error() -> super::super::contracts::ProfileError {
     super::super::contracts::ProfileError::new(
-        "personalization_write_failed",
+        ProfileCode::PersonalizationWriteFailed,
         "Personalization could not be written.",
     )
 }

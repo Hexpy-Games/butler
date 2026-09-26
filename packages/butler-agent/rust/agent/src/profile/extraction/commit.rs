@@ -13,6 +13,7 @@ use super::discovery;
 use super::targets::{normalized_conditions, revision};
 use super::types::{CorrectionTarget, ExtractedCandidate, SourceWindow};
 use crate::models::PromptUsageReport;
+use crate::profile::ProfileCode;
 
 pub(super) struct CommitInput<'a> {
     pub(super) root: &'a Path,
@@ -221,5 +222,5 @@ pub(super) fn usage_value(usage: Option<&PromptUsageReport>) -> Value {
     usage.map(|value|json!({"model":value.model,"promptTokens":value.prompt_tokens,"cachedTokens":value.cached_tokens,"totalTokens":value.total_tokens})).unwrap_or(Value::Null)
 }
 fn interruption(message: &str) -> ProfileError {
-    ProfileError::new("profile_commit_interrupted", message)
+    ProfileError::new(ProfileCode::ProfileCommitInterrupted, message)
 }

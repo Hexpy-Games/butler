@@ -364,7 +364,7 @@ async fn dropped_caller_keeps_registered_blocking_operation_owned_until_close_dr
             .read_personalization_profile()
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "profile_closed"
     );
 }

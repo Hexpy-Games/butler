@@ -12,6 +12,7 @@ use super::contracts::{
 };
 use super::naming;
 use super::presets::{PersonaLocale, PersonaPresets, safe_persona_preset_name};
+use crate::profile::ProfileCode;
 
 pub(super) const STORAGE_LABEL: &str = "personalization/onboarding.json";
 
@@ -31,7 +32,7 @@ pub(super) fn write(
     pid: u32,
     now_ms: i64,
 ) -> ProfileResult<FirstChatOnboardingState> {
-    let value = serde_json::to_value(state).map_err(|_| error())?;
+    let value = serde_json::to_value(state).map_err(|source| error().with_source(source))?;
     let normalized = normalize_state(&value, &state.updated_at);
     naming::atomic_json(&data_root.join(STORAGE_LABEL), &normalized, pid, now_ms)?;
     Ok(normalized)
@@ -178,7 +179,7 @@ pub(super) fn apply_persona(
         )
     };
     let path = data_root.join("personas/active.md");
-    fs::create_dir_all(data_root.join("personas")).map_err(|_| error())?;
+    fs::create_dir_all(data_root.join("personas")).map_err(|source| error().with_source(source))?;
     fs::write(
         &path,
         if output.ends_with('\n') {
@@ -187,7 +188,7 @@ pub(super) fn apply_persona(
             format!("{output}\n")
         },
     )
-    .map_err(|_| error())?;
+    .map_err(|source| error().with_source(source))?;
     let config_path = data_root.join("butler.config.json");
     let mut config = fs::read(&config_path)
         .ok()
@@ -201,9 +202,10 @@ pub(super) fn apply_persona(
         "activePersonaLocale".into(),
         Value::String(applied_locale.into()),
     );
-    let mut bytes = serde_json::to_vec_pretty(&config).map_err(|_| error())?;
+    let mut bytes =
+        serde_json::to_vec_pretty(&config).map_err(|source| error().with_source(source))?;
     bytes.push(b'\n');
-    fs::write(config_path, bytes).map_err(|_| error())?;
+    fs::write(config_path, bytes).map_err(|source| error().with_source(source))?;
     Ok(true)
 }
 
@@ -323,5 +325,8 @@ fn object<'a>(root: &'a mut Value, key: &str) -> &'a mut Map<String, Value> {
     crate::json::object_field_mut(crate::json::object_mut(root), key)
 }
 fn error() -> ProfileError {
-    ProfileError::new("profile_write_failed", "Profile could not be written.")
+    ProfileError::new(
+        ProfileCode::ProfileWriteFailed,
+        "Profile could not be written.",
+    )
 }

@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 
 use super::super::contracts::{ProfileError, ProfileResult, ProfilingMode};
 use super::types::{CorrectionTarget, ExtractedCandidate};
+use crate::profile::ProfileCode;
 use values::{valid_category, valid_facet};
 
 mod values;
@@ -239,8 +240,9 @@ fn normalize(
 
 fn strict_object(raw: &str) -> ProfileResult<Map<String, Value>> {
     let text = fences(raw);
-    let value: Value = serde_json::from_str(text)
-        .map_err(|_| validation("profile extractor response is invalid JSON"))?;
+    let value: Value = serde_json::from_str(text).map_err(|source| {
+        validation("profile extractor response is invalid JSON").with_source(source)
+    })?;
     value
         .as_object()
         .cloned()
@@ -361,7 +363,7 @@ fn normalized_conditions(mut value: Vec<String>) -> Vec<String> {
     value
 }
 fn validation(message: &str) -> ProfileError {
-    ProfileError::new("profile_extractor_invalid", message)
+    ProfileError::new(ProfileCode::ProfileExtractorInvalid, message)
 }
 
 #[cfg(test)]

@@ -12,6 +12,7 @@ use super::super::{candidates, extractor_config, storage};
 use super::{Dependencies, parser, prompt, runtime};
 use crate::json::Utf16Prefix;
 use crate::models::{ProviderPromptLifecycle, ProviderPromptRequest};
+use crate::profile::ProfileCode;
 
 pub(super) async fn run(
     dependencies: Dependencies,
@@ -59,7 +60,10 @@ pub(super) async fn run(
     model_config.effective_model = model.clone();
     let imported_at = match options.now_epoch_millis {
         Some(value) => crate::js_date::format_date_value(value).ok_or_else(|| {
-            ProfileError::new("profile_data_invalid", "Profile import time is invalid.")
+            ProfileError::new(
+                ProfileCode::ProfileDataInvalid,
+                "Profile import time is invalid.",
+            )
         })?,
         None => dependencies.host.now_iso(),
     };
@@ -87,11 +91,12 @@ pub(super) async fn run(
         .provider
         .run_prompt(request, ProviderPromptLifecycle::none())
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             ProfileError::new(
-                "profile_model_failed",
+                ProfileCode::ProfileModelFailed,
                 "Profile extractor model runner failed",
             )
+            .with_source(source)
         })?;
     let allowed = HashSet::from([import_id.clone()]);
     let extracted = parser::forgiving(&response.text, &allowed, consent.mode);
@@ -213,7 +218,10 @@ fn import_prompt(
         .collapse_whitespace(crate::public_text::is_js_whitespace)
         .prefix(18_000)
         .json_literal()
-        .map_err(|_| ProfileError::new("profile_data_invalid", "Profile data is invalid."))?;
+        .map_err(|source| {
+            ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
+                .with_source(source)
+        })?;
     Ok(format!(
         "Profiling mode: {}\nImport source: {source}\nImport ref: {id}\nImported at: {now}\n\nAnalyze this third-party assistant export and return profile candidates as JSON.\nEvery evidence_refs item must be exactly the Import ref above.\nDo not preserve or quote raw import text.\n\nImported export:\n{literal}",
         mode.as_str()
@@ -221,18 +229,32 @@ fn import_prompt(
 }
 fn write_manifest(root: &Path, hash: &str, value: &Value) -> ProfileResult<()> {
     let directory = root.join("personalization/profile-imports");
-    create_private_directory(&directory).map_err(|_| {
-        ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    create_private_directory(&directory).map_err(|source| {
+        ProfileError::new(
+            ProfileCode::ProfileStoreUnavailable,
+            "Profile store is unavailable.",
+        )
+        .with_source(source)
     })?;
-    let mut bytes = serde_json::to_string_pretty(value)
-        .map_err(|_| ProfileError::new("profile_data_invalid", "Profile data is invalid."))?;
+    let mut bytes = serde_json::to_string_pretty(value).map_err(|source| {
+        ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
+            .with_source(source)
+    })?;
     bytes.push('\n');
     let path = directory.join(format!("{hash}.json"));
-    let mut file = private_manifest_file(&path).map_err(|_| {
-        ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    let mut file = private_manifest_file(&path).map_err(|source| {
+        ProfileError::new(
+            ProfileCode::ProfileStoreUnavailable,
+            "Profile store is unavailable.",
+        )
+        .with_source(source)
     })?;
-    file.write_all(bytes.as_bytes()).map_err(|_| {
-        ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    file.write_all(bytes.as_bytes()).map_err(|source| {
+        ProfileError::new(
+            ProfileCode::ProfileStoreUnavailable,
+            "Profile store is unavailable.",
+        )
+        .with_source(source)
     })
 }
 

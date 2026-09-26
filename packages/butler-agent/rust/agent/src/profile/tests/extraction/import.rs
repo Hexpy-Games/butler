@@ -110,6 +110,6 @@ async fn invalid_date_override_fails_only_after_nonempty_import_admission() {
         .import_profile_candidates_from_third_party_dump_with_model(options("content"))
         .await
         .unwrap_err();
-    assert_eq!(error.code, "profile_data_invalid");
+    assert_eq!(error.code(), "profile_data_invalid");
     service.close().await;
 }

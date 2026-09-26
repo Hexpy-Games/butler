@@ -7,7 +7,7 @@ use crate::gateway::GatewayApplicationError;
 pub(super) fn profile_error(error: crate::profile::ProfileError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 500,
-        code: error.code.into(),
+        code: error.code().into(),
         message: "Personalization operation failed.".into(),
     }
 }

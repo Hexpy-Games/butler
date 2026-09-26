@@ -115,8 +115,8 @@ fn now_ms() -> i64 {
 )]
 fn profile_error(error: crate::profile::ProfileError) -> PhaseError {
     PhaseError {
-        code: error.code,
-        message: error.code.into(),
+        code: error.code(),
+        message: error.code().into(),
         metrics: Map::new(),
     }
 }

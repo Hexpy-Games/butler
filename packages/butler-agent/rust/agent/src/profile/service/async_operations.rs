@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::super::contracts::{ProfileError, ProfileResult};
 use super::ProfileService;
+use crate::profile::ProfileCode;
 
 impl ProfileService {
     pub(super) async fn run_async<T, F, Fut>(
@@ -22,12 +23,15 @@ impl ProfileService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
+            .map_err(|source| {
+                ProfileError::new(ProfileCode::ProfileClosed, "Profile service is closed.")
+                    .with_source(source)
+            })?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
-                    "profile_closed",
+                    ProfileCode::ProfileClosed,
                     "Profile service is closed.",
                 ));
             }
@@ -60,8 +64,12 @@ impl ProfileService {
             };
             let _ = sender.send(result);
         });
-        receiver.await.map_err(|_| {
-            ProfileError::new("profile_operation_failed", "Profile operation failed.")
+        receiver.await.map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileOperationFailed,
+                "Profile operation failed.",
+            )
+            .with_source(source)
         })?
     }
 }

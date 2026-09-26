@@ -8,6 +8,7 @@ use super::contracts::{
     ClearProfilingResult, ProfileError, ProfileResult, ProfilingConsentSnapshot, ProfilingMode,
     RuntimeProfileProjection,
 };
+use crate::profile::ProfileCode;
 
 pub(super) const CONSENT_VERSION: &str = "2026-05-16";
 
@@ -317,11 +318,17 @@ pub(super) fn stable_entries_in_db(db: &Connection) -> ProfileResult<Vec<StoredE
 }
 
 pub(super) fn db_error(_: rusqlite::Error) -> ProfileError {
-    ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    ProfileError::new(
+        ProfileCode::ProfileStoreUnavailable,
+        "Profile store is unavailable.",
+    )
 }
 fn io_error(_: std::io::Error) -> ProfileError {
-    ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    ProfileError::new(
+        ProfileCode::ProfileStoreUnavailable,
+        "Profile store is unavailable.",
+    )
 }
 fn json_error(_: serde_json::Error) -> ProfileError {
-    ProfileError::new("profile_data_invalid", "Profile data is invalid.")
+    ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
 }

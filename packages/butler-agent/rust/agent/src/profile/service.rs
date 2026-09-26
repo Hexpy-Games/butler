@@ -16,6 +16,7 @@ use super::{candidates, extractor_config, naming, onboarding, projection, storag
 use crate::configuration::ConfigurationWrites;
 use crate::coordination::{CognitionWriteAcquire, CognitionWriteCoordinator};
 use crate::models::ProviderPromptPort;
+use crate::profile::ProfileCode;
 use crate::profile::presets::{PersonaLocale, PersonaPresets};
 
 const LOCAL_OPERATION_LIMIT: usize = 4;
@@ -339,7 +340,7 @@ impl ProfileService {
             .await
         {
             Ok(value) => Ok(value),
-            Err(error) if error.code != "profile_closed" => Ok(None),
+            Err(error) if error.code() != "profile_closed" => Ok(None),
             Err(error) => Err(error),
         }
     }
@@ -387,12 +388,15 @@ impl ProfileService {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
+            .map_err(|source| {
+                ProfileError::new(ProfileCode::ProfileClosed, "Profile service is closed.")
+                    .with_source(source)
+            })?;
         let token = {
             let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
-                    "profile_closed",
+                    ProfileCode::ProfileClosed,
                     "Profile service is closed.",
                 ));
             }
@@ -404,7 +408,13 @@ impl ProfileService {
             operation()
         })
         .await
-        .map_err(|_| ProfileError::new("profile_operation_failed", "Profile operation failed."))?
+        .map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileOperationFailed,
+                "Profile operation failed.",
+            )
+            .with_source(source)
+        })?
     }
 }
 
@@ -419,13 +429,21 @@ where
 {
     let lease = coordinator
         .try_acquire(&CognitionWriteAcquire::immediate(lock, purpose))
-        .map_err(|_| {
-            ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+        .map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileStoreUnavailable,
+                "Profile store is unavailable.",
+            )
+            .with_source(source)
         })?
-        .ok_or_else(|| ProfileError::new("memory_write_busy", "Memory writer is busy."))?;
+        .ok_or_else(|| ProfileError::new(ProfileCode::MemoryWriteBusy, "Memory writer is busy."))?;
     let result = operation();
-    let release = lease.release(result.is_ok()).map_err(|_| {
-        ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+    let release = lease.release(result.is_ok()).map_err(|source| {
+        ProfileError::new(
+            ProfileCode::ProfileStoreUnavailable,
+            "Profile store is unavailable.",
+        )
+        .with_source(source)
     });
     match (result, release) {
         (Err(error), _) | (Ok(_), Err(error)) => Err(error),

@@ -38,15 +38,15 @@ impl CanonicalProfileSourceReader for Reader {
         &mut self,
         _scan: CanonicalProfileScan,
     ) -> ProfileResult<Vec<CanonicalProfileMessage>> {
-        Err(ProfileError::new("read_failed", "read failed"))
+        Err(ProfileError::relayed("read_failed", "read failed"))
     }
 
     fn read_message(&mut self, _id: &str) -> ProfileResult<Option<CanonicalProfileMessage>> {
-        Err(ProfileError::new("read_failed", "read failed"))
+        Err(ProfileError::relayed("read_failed", "read failed"))
     }
 
     fn close(self: Box<Self>) -> ProfileResult<()> {
-        Err(ProfileError::new("close_failed", "close failed"))
+        Err(ProfileError::relayed("close_failed", "close failed"))
     }
 }
 
@@ -79,7 +79,7 @@ fn source_finally_close_error_replaces_read_error() {
     let Err(error) = read(&root.0, &Factory, &Default::default()) else {
         panic!("read unexpectedly succeeded");
     };
-    assert_eq!(error.code, "close_failed");
+    assert_eq!(error.code(), "close_failed");
 }
 
 #[test]

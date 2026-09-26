@@ -1,5 +1,3 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -11,28 +9,7 @@ pub(crate) use extraction::{
     ProfileTranscriptCaptureOptions,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ProfileError {
-    pub code: &'static str,
-    pub message: String,
-}
-
-impl ProfileError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for ProfileError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for ProfileError {}
+pub(crate) use super::error::ProfileError;
 pub(crate) type ProfileResult<T> = Result<T, ProfileError>;
 
 pub(crate) trait ProfileHostFacts: Send + Sync {

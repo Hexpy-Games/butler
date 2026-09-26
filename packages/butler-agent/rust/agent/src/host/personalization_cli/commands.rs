@@ -19,15 +19,15 @@ pub(super) async fn show(profile: &ProfileService) -> Result<(Value, String), Cl
     let profile_value = profile
         .read_personalization_profile()
         .await
-        .map_err(profile_error)?;
+        .map_err(|error| profile_error(&error))?;
     let consent = profile
         .read_profiling_consent()
         .await
-        .map_err(profile_error)?;
+        .map_err(|error| profile_error(&error))?;
     let model = profile
         .read_extractor_model()
         .await
-        .map_err(profile_error)?;
+        .map_err(|error| profile_error(&error))?;
     let data = show_data(&profile_value, &consent, &model);
     let human = format!(
         "Personalization profile\nButler nickname: {}\nPrincipal name: {}\nPreferred address: {}\nStorage: {PROFILE_STORAGE_LABEL}\nProfiling: {}\nProfile extractor model: {} ({})\nProfile black box: {PROFILE_BLACK_BOX_STORAGE_LABEL}",
@@ -96,39 +96,39 @@ pub(super) async fn set(
         profile
             .update_personalization_profile(update.clone())
             .await
-            .map_err(profile_error)?
+            .map_err(|error| profile_error(&error))?
     } else {
         profile
             .read_personalization_profile()
             .await
-            .map_err(profile_error)?
+            .map_err(|error| profile_error(&error))?
     };
     let consent = match mode.as_deref() {
         Some(value) => profile
             .set_profiling_mode(ProfilingMode::parse(value))
             .await
-            .map_err(profile_error)?,
+            .map_err(|error| profile_error(&error))?,
         None => profile
             .read_profiling_consent()
             .await
-            .map_err(profile_error)?,
+            .map_err(|error| profile_error(&error))?,
     };
     let model = match extractor {
         Some(value) => profile
             .set_extractor_model(Some(value))
             .await
-            .map_err(profile_error)?,
+            .map_err(|error| profile_error(&error))?,
         None => profile
             .read_extractor_model()
             .await
-            .map_err(profile_error)?,
+            .map_err(|error| profile_error(&error))?,
     };
     let cleared: Option<ClearProfilingResult> = if clear {
         Some(
             profile
                 .clear_profiling_data()
                 .await
-                .map_err(profile_error)?,
+                .map_err(|error| profile_error(&error))?,
         )
     } else {
         None
@@ -207,7 +207,7 @@ async fn import_text(
             },
         )
         .await
-        .map_err(profile_error)?;
+        .map_err(|error| profile_error(&error))?;
     let human = format!(
         "{}\nSource: {}\nModel called: {}\nImported candidates: {}\nPromoted entries: {}\nStable profile entries: {}\nRaw import text stored: no",
         if result.profiling_enabled {
@@ -333,6 +333,6 @@ fn display_value(value: &str) -> &str {
     if value.is_empty() { "(unset)" } else { value }
 }
 
-fn profile_error(error: crate::profile::ProfileError) -> CliError {
-    CliError::failed(error.code, error.message)
+fn profile_error(error: &crate::profile::ProfileError) -> CliError {
+    CliError::failed(error.code(), error.message())
 }

@@ -11,6 +11,7 @@ use crate::{
 };
 
 use super::NativeGuidedTools;
+use crate::profile::ProfileCode;
 
 pub(super) fn supports(name: &str) -> bool {
     matches!(name, "update_onboarding_profile" | "summarize_user_profile")
@@ -49,22 +50,22 @@ pub(super) async fn execute(
         }
         // Dispatch routes only supported names here.
         _ => Err(ProfileError::new(
-            "unknown_tool",
+            ProfileCode::UnknownTool,
             "This tool is not a profile tool.",
         )),
     };
     match result {
         Ok(value) => encoded(&value),
         Err(error) => encoded(&json!({"ok":false,"error":{
-            "code":error.code,
-            "message":error.message
+            "code":error.code(),
+            "message":error.message()
         }})),
     }
 }
 
 fn profile_value(value: impl serde::Serialize) -> Result<Value, ProfileError> {
     serde_json::to_value(value)
-        .map_err(|error| ProfileError::new("profile_result_invalid", error.to_string()))
+        .map_err(|error| ProfileError::new(ProfileCode::ProfileResultInvalid, error.to_string()))
 }
 
 fn onboarding_input(args: &Map<String, Value>) -> FirstChatOnboardingUpdate {

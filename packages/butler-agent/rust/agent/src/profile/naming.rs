@@ -6,6 +6,7 @@ use serde_json::Value;
 use super::contracts::{
     PersonalizationProfile, PersonalizationProfileUpdate, ProfileError, ProfileResult,
 };
+use crate::profile::ProfileCode;
 
 const TEXT_LIMIT: usize = 256;
 
@@ -118,15 +119,20 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     now_ms: i64,
 ) -> ProfileResult<()> {
     let parent = path.parent().ok_or_else(write_error)?;
-    fs::create_dir_all(parent).map_err(|_| write_error())?;
+    fs::create_dir_all(parent).map_err(|source| write_error().with_source(source))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
     let temporary = PathBuf::from(format!("{}.{}.{}.tmp", path.display(), pid, now_ms));
-    let mut bytes = serde_json::to_vec_pretty(value)
-        .map_err(|_| ProfileError::new("profile_write_failed", "Profile could not be written."))?;
+    let mut bytes = serde_json::to_vec_pretty(value).map_err(|source| {
+        ProfileError::new(
+            ProfileCode::ProfileWriteFailed,
+            "Profile could not be written.",
+        )
+        .with_source(source)
+    })?;
     bytes.push(b'\n');
     let result = (|| {
         #[cfg(unix)]
@@ -148,7 +154,7 @@ pub(super) fn atomic_json<T: serde::Serialize>(
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
-    result.map_err(|_| write_error())
+    result.map_err(|source| write_error().with_source(source))
 }
 
 fn field(value: &Value, key: &str) -> String {
@@ -159,5 +165,8 @@ fn field(value: &Value, key: &str) -> String {
         .unwrap_or_default()
 }
 fn write_error() -> ProfileError {
-    ProfileError::new("profile_write_failed", "Profile could not be written.")
+    ProfileError::new(
+        ProfileCode::ProfileWriteFailed,
+        "Profile could not be written.",
+    )
 }

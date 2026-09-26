@@ -202,7 +202,7 @@ impl BriefingInputSource for NativeBriefingSource {
                 .map_err(|failure| {
                     BriefingGenerationError::new(
                         "new_chat_briefing_profile_failed",
-                        failure.message,
+                        failure.message(),
                     )
                 })?;
             let app_path = self.app_database_path.clone();

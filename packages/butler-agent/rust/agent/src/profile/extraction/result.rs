@@ -3,7 +3,7 @@ use super::types::{CoverageCounts, SourceRead};
 
 pub(super) fn interruption(error: &ProfileError) -> bool {
     matches!(
-        error.message.as_str(),
+        error.message().as_str(),
         "memory_write_busy"
             | "profile source changed"
             | "profile correction target changed"
@@ -11,8 +11,8 @@ pub(super) fn interruption(error: &ProfileError) -> bool {
     )
 }
 pub(super) fn safe_error(error: &ProfileError) -> String {
-    if error.message.starts_with("profile ") {
-        super::super::naming::bounded(&error.message, 120)
+    if error.message().starts_with("profile ") {
+        super::super::naming::bounded(&error.message(), 120)
     } else {
         "profile extractor response failed validation".into()
     }

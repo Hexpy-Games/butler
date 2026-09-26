@@ -6,6 +6,7 @@ use super::types::{self, CorrectionTargets, SourceWindow, add_usage};
 use super::{Dependencies, coverage, parser, prompt};
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
 use crate::models::{ProviderPromptLifecycle, ProviderPromptRequest, ReasoningEffort};
+use crate::profile::ProfileCode;
 
 pub(super) struct BatchInput<'a> {
     pub(super) windows: &'a [SourceWindow],
@@ -61,11 +62,12 @@ pub(super) async fn run_batch(
         .provider
         .run_prompt(request, ProviderPromptLifecycle::none())
         .await
-        .map_err(|_| {
+        .map_err(|source| {
             ProfileError::new(
-                "profile_model_failed",
+                ProfileCode::ProfileModelFailed,
                 "Profile extractor model runner failed",
             )
+            .with_source(source)
         })?;
     add_usage(usage, model, response.usage.as_ref());
     let allowed = windows
@@ -94,7 +96,11 @@ pub(super) async fn mark_batch_failed(
         return Ok(());
     }
     let usage = serde_json::to_string(usage).map_err(|error| {
-        ProfileError::new("profile_data_invalid", format!("usage summary: {error}"))
+        ProfileError::new(
+            ProfileCode::ProfileDataInvalid,
+            format!("usage summary: {error}"),
+        )
+        .with_source(error)
     })?;
     with_gate(dependencies, Some(cancellation.clone()), {
         let root = dependencies.root.clone();
@@ -122,14 +128,22 @@ where
         .coordinator
         .acquire(request, CognitionWaitClass::Background)
         .await
-        .map_err(|_| {
-            ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+        .map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileStoreUnavailable,
+                "Profile store is unavailable.",
+            )
+            .with_source(source)
         })?
-        .ok_or_else(|| ProfileError::new("memory_write_busy", "Memory writer is busy."))?;
+        .ok_or_else(|| ProfileError::new(ProfileCode::MemoryWriteBusy, "Memory writer is busy."))?;
     blocking(move || {
         let result = operation();
-        let released = lease.release(result.is_ok()).map_err(|_| {
-            ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
+        let released = lease.release(result.is_ok()).map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileStoreUnavailable,
+                "Profile store is unavailable.",
+            )
+            .with_source(source)
         });
         match (result, released) {
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
@@ -146,7 +160,13 @@ where
 {
     tokio::task::spawn_blocking(operation)
         .await
-        .map_err(|_| ProfileError::new("profile_operation_failed", "Profile operation failed."))?
+        .map_err(|source| {
+            ProfileError::new(
+                ProfileCode::ProfileOperationFailed,
+                "Profile operation failed.",
+            )
+            .with_source(source)
+        })?
 }
 pub(super) fn reasoning(value: &str) -> ReasoningEffort {
     match value {
