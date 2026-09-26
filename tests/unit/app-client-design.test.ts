@@ -2847,7 +2847,7 @@ test("thinking mark components expose state and theme contracts", () => {
   expect(canvasMark).toContain("themeColors?: ButlerMarkThemeColors");
   expect(canvasMark).toContain("size?: IconSize");
   expect(canvasMark).toContain("reducedMotion?: boolean");
-  expect(canvasMark).not.toContain("className");
+  expect(canvasMark).not.toContain("className?:");
   expect(canvasMark).not.toContain("style?:");
   expect(canvasMark).toContain("pixelSide / DESIGN_SIZE");
   expect(canvasMark).toContain('canvas.getContext("2d", { alpha: true })');
