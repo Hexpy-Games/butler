@@ -26,3 +26,13 @@ test("DialogTitle visuallyHidden keeps the accessible name without the title sty
   // Source contract: product tests mock "@/butler-ds" Dialog parts for the rest of the process.
   expect(source).toContain('className={cn(visuallyHidden ? "sr-only" : styles.title, className)}');
 });
+
+test("dialog and palette enters stay visible: a standard curve over a longer token than the exit", () => {
+  const flat = css.replace(/\s+/gu, " ");
+  // cubic-bezier(0,0,0,1) put ~55% of a 120ms enter into the first frame, so the dialog read as appearing instantly.
+  expect(flat).toContain('.content[data-state="open"] { animation: dialog-enter var(--motion-base) var(--motion-ease-standard); }');
+  expect(flat).toContain('.overlay[data-state="open"] { animation: dialog-overlay-enter var(--motion-base) var(--motion-ease-standard); }');
+  expect(flat).toContain('.content[data-motion="palette"][data-state="open"] { animation: palette-enter var(--motion-palette) var(--motion-ease-standard); }');
+  expect(flat).toContain('.content[data-state="closed"] { animation: dialog-exit var(--motion-exit-fast) var(--motion-ease-accelerate) forwards; }');
+  expect(flat).not.toMatch(/data-state="open"\] \{ animation: [\w-]+ var\(--motion-[\w-]+\) var\(--motion-ease-decelerate\)/u);
+});

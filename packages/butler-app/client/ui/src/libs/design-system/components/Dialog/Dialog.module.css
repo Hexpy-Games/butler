@@ -5,9 +5,11 @@
   background: var(--dialog-overlay-bg);
 }
 
+/* Enters run on the standard curve: the decelerate curve front-loads over
+   half the change into the first frame, so a dialog read as appearing
+   instantly while its accelerating exit stayed visible. */
 .overlay[data-state="open"] {
-  animation: dialog-overlay-enter var(--motion-fast)
-    var(--motion-ease-decelerate);
+  animation: dialog-overlay-enter var(--motion-base) var(--motion-ease-standard);
 }
 
 .overlay[data-state="closed"] {
@@ -49,7 +51,7 @@
 }
 
 .content[data-state="open"] {
-  animation: dialog-enter var(--motion-fast) var(--motion-ease-decelerate);
+  animation: dialog-enter var(--motion-base) var(--motion-ease-standard);
 }
 
 .content[data-state="closed"] {
@@ -60,11 +62,11 @@
 /* Command palette (Cmd+K): a crisper open than a dialog, a faster exit. */
 .overlay[data-motion="palette"][data-state="open"] {
   animation: dialog-overlay-enter var(--motion-palette)
-    var(--motion-ease-decelerate);
+    var(--motion-ease-standard);
 }
 
 .content[data-motion="palette"][data-state="open"] {
-  animation: palette-enter var(--motion-palette) var(--motion-ease-decelerate);
+  animation: palette-enter var(--motion-palette) var(--motion-ease-standard);
 }
 
 .content[data-motion="palette"][data-state="closed"] {
