@@ -1,13 +1,17 @@
+/* EventTimeline: a marker column (one --space-2xl icon slot) beside the
+   event content; a hairline joins each marker to the next event. */
 .timeline {
   display: grid;
   gap: var(--space-md);
 }
+
 .event {
   position: relative;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: var(--space-2xl) minmax(0, 1fr);
   gap: var(--space-sm);
 }
+
 .event:not(:last-child)::before {
   content: "";
   position: absolute;
@@ -17,20 +21,10 @@
   width: var(--border-hairline);
   background: var(--line);
 }
+
 .marker {
   display: flex;
   justify-content: center;
   padding-top: var(--space-md);
   color: var(--text-tertiary);
-}
-
-/* Session link under a history event: indented one step from the event row. */
-.session {
-  min-width: 0;
-  max-width: 100%;
-  padding-inline-start: var(--space-sm);
-}
-
-.session > * {
-  max-width: 100%;
 }

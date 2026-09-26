@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Button, ChevronRight, CheckCircle2, FileText, MessageSquare, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
-import styles from "./ProjectHistoryPanel.module.css";
+import { Box, Button, ChevronRight, CheckCircle2, EventTimeline, EventTimelineItem, FileText, MessageSquare, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import type { DashboardHistoryPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
 
@@ -50,8 +49,8 @@ export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { pr
   return <Stack gap="xl">
     {page.ledgerUnavailable && <Typo.Caption>{copy.historyLedgerUnavailable}</Typo.Caption>}
     {[...groups].map(([date, events]) => <Section key={date} title={date}>
-      <div className={styles.timeline}>{events.map((event) => <div key={event.id} className={styles.event}>
-        <div className={styles.marker}>{event.action === "completed" ? <CheckCircle2 /> : event.session ? <MessageSquare /> : <FileText />}</div>
+      <EventTimeline>{events.map((event) => <EventTimelineItem key={event.id}
+        marker={event.action === "completed" ? <CheckCircle2 /> : event.session ? <MessageSquare /> : <FileText />}>
         <Stack gap="xs">
           <NavRow label={<Typo.Text lineClamp={2} wrap="anywhere">{event.title}</Typo.Text>} multiline actions={<ChevronRight />}
       meta={<Typo.Caption tone="secondary">{[new Date(event.at).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" }), event.action === "completed" ? copy.recordedCompletion : copy[event.action],
@@ -60,11 +59,11 @@ export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { pr
         kind: event.source.kind === "spec" ? "spec" : event.source.kind === "report" ? "report" : "plan",
         document_type: event.source.kind as ProjectDashboardDocument["document_type"], title: event.title,
         markdown: "", safe_path_label: event.source.id, updated_at: event.at })} />
-          {event.session && <div className={styles.session}><Button variant="borderless" size="xs" onClick={() => onOpenSession(event.session!.id)}>
+          {event.session && <Box paddingStart="sm"><Button variant="borderless" size="xs" onClick={() => onOpenSession(event.session!.id)}>
             <MessageSquare /><Typo.Text truncate>{event.session.title}</Typo.Text><ChevronRight />
-          </Button></div>}
+          </Button></Box>}
         </Stack>
-      </div>)}</div>
+      </EventTimelineItem>)}</EventTimeline>
     </Section>)}
     {page.events.length === 0 && !page.nextCursor && <Typo.Body>{copy.noHistory}</Typo.Body>}
     {page.nextCursor && <Button variant="borderless" onClick={() => setCursor(page.nextCursor!)}>{copy.loadMore}</Button>}

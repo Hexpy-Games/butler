@@ -100,6 +100,7 @@ export * from "./blocks/MessageRow";
 export * from "./blocks/QueuedMessage";
 export * from "./blocks/MessageAvatarBlock";
 export * from "./blocks/ActivityFeed";
+export * from "./blocks/EventTimeline";
 export * from "./blocks/WorkActivityBlock";
 export * from "./blocks/DisclosureRow";
 export * from "./blocks/ChangedLineDiff";
