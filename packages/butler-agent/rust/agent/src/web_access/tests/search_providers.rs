@@ -121,7 +121,7 @@ async fn tavily_uses_exact_data_key_and_rereads_private_environment() {
             },
         ],
     );
-    let access = WebAccess::for_test(root.clone(), &format!("{base}/search"));
+    let access = super::access(root.clone(), &format!("{base}/search"));
     let session = access.session_for_turn(String::new());
     let first = session
         .web_search(&json!({"query":"first query"}), &CancellationToken::new())
@@ -179,7 +179,7 @@ async fn brave_provider_failure_falls_back_to_duckduckgo() {
             },
         ],
     );
-    let access = WebAccess::for_test(root.clone(), &format!("{base}/search"));
+    let access = super::access(root.clone(), &format!("{base}/search"));
     let result = access
         .session_for_turn(String::new())
         .web_search(&json!({"query":"fallback test"}), &CancellationToken::new())
@@ -311,7 +311,7 @@ async fn planner_uses_turn_context_executes_plan_then_uses_direct_follow_up() {
     .to_string();
     let prompt = Arc::new(PlannerFixture::new([plan]));
     let access =
-        WebAccess::for_test_with_prompt(root.clone(), "http://127.0.0.1:9/search", prompt.clone());
+        super::access_with_prompt(root.clone(), "http://127.0.0.1:9/search", prompt.clone());
     let session = access.session_for_turn("Compare Alpha and Beta with evidence sources.".into());
     let planned = session
         .web_search(&json!({"query":"alpha beta"}), &CancellationToken::new())

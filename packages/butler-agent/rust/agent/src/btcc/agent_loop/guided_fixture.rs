@@ -210,9 +210,10 @@ impl JournalPort for Fixture {
         _: u32,
     ) -> PortFuture<'a, TextCallDisposition> {
         Box::pin(async {
-            Ok(TextCallDisposition::Continue(
-                "structured calls required".into(),
-            ))
+            Ok(TextCallDisposition::Fail(BtccError::new(
+                "btcc_text_tool_calls_unsupported",
+                "structured calls required",
+            )))
         })
     }
     fn synthesize_final<'a>(

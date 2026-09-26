@@ -89,22 +89,12 @@ pub(crate) use ports::{
 };
 
 use driver::run;
-#[cfg(test)]
-use ports::GuidedPolicyPort;
 
 pub(crate) struct ProductionAgentLoop {
-    binding: LoopBinding,
-}
-
-enum LoopBinding {
-    Native {
-        model: Arc<dyn ModelRoundPort>,
-        execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,
-        factory: Arc<dyn GuidedTurnFactory>,
-        observer: Option<Arc<dyn AgentLoopObserver>>,
-    },
-    #[cfg(test)]
-    Fixture(fixture_binding::FixtureAgentLoop),
+    model: Arc<dyn ModelRoundPort>,
+    execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,
+    factory: Arc<dyn GuidedTurnFactory>,
+    observer: Option<Arc<dyn AgentLoopObserver>>,
 }
 
 impl ProductionAgentLoop {
@@ -115,41 +105,10 @@ impl ProductionAgentLoop {
         observer: Option<Arc<dyn AgentLoopObserver>>,
     ) -> Self {
         Self {
-            binding: LoopBinding::Native {
-                model,
-                execution_factory,
-                factory,
-                observer,
-            },
-        }
-    }
-
-    #[cfg(test)]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "This test-only composition constructor preserves the production loop fixture's explicit collaborator wiring."
-    )]
-    pub(crate) fn guided(
-        model: Arc<dyn ModelRoundPort>,
-        execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,
-        dependencies: GuidedPolicyDependencies,
-        authority_decision: Option<AuthorityDecision>,
-        operation_result_factory: Arc<dyn OperationResultRuntimeFactory>,
-        work_scope: Arc<dyn TurnWorkScopePort>,
-        budget_factory: Arc<crate::btcc::GuidedContinuationBudgetFactory>,
-        observer: Option<Arc<dyn AgentLoopObserver>>,
-    ) -> Self {
-        Self {
-            binding: LoopBinding::Fixture(fixture_binding::FixtureAgentLoop::guided(
-                model,
-                execution_factory,
-                dependencies,
-                authority_decision,
-                operation_result_factory,
-                work_scope,
-                budget_factory,
-                observer,
-            )),
+            model,
+            execution_factory,
+            factory,
+            observer,
         }
     }
 }
@@ -165,27 +124,12 @@ impl AgentLoop for ProductionAgentLoop {
         cancellation: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<AgentLoopResult, AgentLoopError>> + Send + 'a>> {
         Box::pin(async move {
-            let (model, execution_factory, factory, observer) = match &self.binding {
-                LoopBinding::Native {
-                    model,
-                    execution_factory,
-                    factory,
-                    observer,
-                } => (model, execution_factory, factory, observer),
-                #[cfg(test)]
-                LoopBinding::Fixture(fixture) => {
-                    return fixture
-                        .run(
-                            turn,
-                            claim,
-                            recovery_attempt,
-                            progress,
-                            model_round_observer,
-                            cancellation,
-                        )
-                        .await;
-                }
-            };
+            let Self {
+                model,
+                execution_factory,
+                factory,
+                observer,
+            } = self;
             let mut owner = factory
                 .bind_pre_model(GuidedTurnStart {
                     turn,

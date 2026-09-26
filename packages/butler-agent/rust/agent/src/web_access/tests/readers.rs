@@ -12,8 +12,6 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::web_access::WebAccess;
-
 type Reply = (&'static str, Vec<u8>);
 
 async fn serve(replies: Vec<Reply>) -> (String, JoinHandle<()>, Arc<Mutex<Vec<String>>>) {
@@ -53,11 +51,7 @@ async fn github_blob_retries_raw_and_returns_source_text() {
     ];
     let (endpoint, server, paths) = serve(replies).await;
     let root = super::data_root();
-    let access = WebAccess::for_test_with_page_endpoint(
-        root.clone(),
-        "http://127.0.0.1:9/search",
-        &endpoint,
-    );
+    let access = super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint);
     let result = access
         .session_for_turn(String::new())
         .web_read(
@@ -86,11 +80,7 @@ async fn pdf_uses_shared_extractor_and_jina_backend_falls_back_locally() {
     let pdf = include_bytes!("../../context/pdf/two-pages.pdf").to_vec();
     let (endpoint, server, _) = serve(vec![("application/pdf", pdf)]).await;
     let root = super::data_root();
-    let access = WebAccess::for_test_with_page_endpoint(
-        root.clone(),
-        "http://127.0.0.1:9/search",
-        &endpoint,
-    );
+    let access = super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint);
     let result = access
         .session_for_turn(String::new())
         .web_read(
@@ -111,11 +101,7 @@ async fn pdf_uses_shared_extractor_and_jina_backend_falls_back_locally() {
     );
     let (endpoint, server, _) = serve(vec![("text/html", html.into_bytes())]).await;
     let root = super::data_root();
-    let access = WebAccess::for_test_with_page_endpoint(
-        root.clone(),
-        "http://127.0.0.1:9/search",
-        &endpoint,
-    );
+    let access = super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint);
     let result = access
         .session_for_turn(String::new())
         .web_read(
@@ -143,12 +129,10 @@ async fn auto_reader_keeps_lightweight_after_missing_lightpanda() {
         "<html><body>enable javascript please".to_owned() + &"<script>void 0;</script>".repeat(10);
     let (endpoint, server, _) = serve(vec![("text/html", challenge.into_bytes())]).await;
     let root = super::data_root();
-    let access = WebAccess::for_test_with_page_endpoint_and_lightpanda(
-        root.clone(),
-        "http://127.0.0.1:9/search",
-        &endpoint,
-        PathBuf::from("/missing/lightpanda"),
-    );
+    let access = {
+        super::configure_lightpanda(&root, &PathBuf::from("/missing/lightpanda"));
+        super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint)
+    };
     let result = access
         .session_for_turn(String::new())
         .web_read(
@@ -194,12 +178,10 @@ async fn lightpanda_fallback_runs_and_reaps_configured_child() {
     let mut permissions = fs::metadata(&binary).unwrap().permissions();
     permissions.set_mode(0o700);
     fs::set_permissions(&binary, permissions).unwrap();
-    let access = WebAccess::for_test_with_page_endpoint_and_lightpanda(
-        root.clone(),
-        "http://127.0.0.1:9/search",
-        &endpoint,
-        binary,
-    );
+    let access = {
+        super::configure_lightpanda(&root, &binary);
+        super::access_with_pages(root.clone(), "http://127.0.0.1:9/search", &endpoint)
+    };
     let result = access
         .session_for_turn(String::new())
         .web_read(

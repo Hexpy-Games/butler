@@ -62,8 +62,6 @@ pub(super) fn prune(
         remaining_bytes: total,
         max_age_ms,
         max_bytes,
-        #[cfg(test)]
-        raw_text_stored: false,
     };
     if input.record_telemetry {
         metrics.observe_prune(now_ms, &result, protected.len())?;

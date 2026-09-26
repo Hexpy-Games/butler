@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 mod arguments;
-mod lifecycle;
 mod list_files;
 mod mutations;
 mod registry_read;

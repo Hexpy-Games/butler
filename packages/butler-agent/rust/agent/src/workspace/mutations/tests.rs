@@ -1,13 +1,42 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
-    WorkspaceMutations,
+    CommitObserver, WorkspaceMutations,
     contracts::{EditMutation, ExactEdit, MutationCommand, MutationContext, MutationOutcome},
 };
 use super::{contracts::GuardedPath, io};
+
+/// Runs `action` at one commit point of the lane.
+struct At<F>(F);
+
+struct BeforeTarget<F: Fn(usize, &Path) + Send + Sync>(F);
+impl<F: Fn(usize, &Path) + Send + Sync> CommitObserver for BeforeTarget<F> {
+    fn before_target(&self, index: usize, target: &Path) {
+        (self.0)(index, target);
+    }
+}
+
+impl<F: Fn(&Path) + Send + Sync> CommitObserver for At<(Point, F)> {
+    fn before_replace(&self, target: &Path) {
+        if matches!(self.0.0, Point::BeforeReplace) {
+            (self.0.1)(target);
+        }
+    }
+    fn after_link(&self, temporary: &Path) {
+        if matches!(self.0.0, Point::AfterLink) {
+            (self.0.1)(temporary);
+        }
+    }
+}
+
+enum Point {
+    BeforeReplace,
+    AfterLink,
+}
 
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -19,7 +48,11 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
     std::fs::create_dir(&root).unwrap();
     std::fs::write(root.join("first.txt"), b"before-one").unwrap();
     std::fs::write(root.join("second.txt"), b"before-two").unwrap();
-    let owner = WorkspaceMutations::new();
+    let owner = WorkspaceMutations::observed(Arc::new(BeforeTarget(|index, path: &Path| {
+        if index == 1 {
+            std::fs::write(path, b"outside-change").unwrap();
+        }
+    })));
     let commands = [
         ("first.txt", "before-one", "after-one"),
         ("second.txt", "before-two", "after-two"),
@@ -44,11 +77,6 @@ async fn batch_retains_first_commit_and_reports_second_external_change() {
         },
         edits: commands,
         batch: true,
-        before_commit: Some(Arc::new(|index, path| {
-            if index == 1 {
-                std::fs::write(path, b"outside-change").unwrap();
-            }
-        })),
     });
     let (outcome, _) = owner.submit(command).unwrap().await.unwrap().unwrap();
     let MutationOutcome::Batch(result) = outcome else {
@@ -82,9 +110,11 @@ fn exclusive_create_race_keeps_external_bytes_and_cleans_temp() {
         false,
     )
     .unwrap();
-    let mut prepared = io::prepare(snapshot, b"ours".to_vec(), None, true).unwrap();
-    prepared.before_atomic = Some(Box::new(|path| std::fs::write(path, b"external").unwrap()));
-    let failure = io::commit(prepared).unwrap_err();
+    let prepared = io::prepare(snapshot, b"ours".to_vec(), None, true).unwrap();
+    let external = At((Point::BeforeReplace, |path: &Path| {
+        std::fs::write(path, b"external").unwrap()
+    }));
+    let failure = io::commit(prepared, &external).unwrap_err();
     assert_eq!(failure.error, "external_change_conflict");
     assert_eq!(std::fs::read(&absolute).unwrap(), b"external");
     assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
@@ -107,12 +137,12 @@ fn committed_hardlink_cleanup_failure_remains_applied_success() {
         false,
     )
     .unwrap();
-    let mut prepared = io::prepare(snapshot, b"committed".to_vec(), None, true).unwrap();
+    let prepared = io::prepare(snapshot, b"committed".to_vec(), None, true).unwrap();
     let locked = root.clone();
-    prepared.after_link = Some(Box::new(move |_| {
+    let lock_directory = At((Point::AfterLink, move |_: &Path| {
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
     }));
-    let result = io::commit(prepared).unwrap();
+    let result = io::commit(prepared, &lock_directory).unwrap();
     std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(result.cleanup_failed);
     assert_eq!(std::fs::read(&absolute).unwrap(), b"committed");
@@ -150,14 +180,14 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
                 expected_sha256: Some(sha(old.as_bytes())),
             })
             .collect(),
-        before_commit: Some(Arc::new(move |index, _| {
-            if index == 0 {
-                started_tx.send(()).unwrap();
-                release_rx.lock().unwrap().recv().unwrap();
-            }
-        })),
     });
-    let owner = WorkspaceMutations::new();
+    let started_tx = std::sync::Mutex::new(started_tx);
+    let owner = WorkspaceMutations::observed(Arc::new(BeforeTarget(move |index, _: &Path| {
+        if index == 0 {
+            started_tx.lock().unwrap().send(()).unwrap();
+            release_rx.lock().unwrap().recv().unwrap();
+        }
+    })));
     drop(owner.submit(first).unwrap());
     tokio::task::spawn_blocking(move || started_rx.recv().unwrap())
         .await

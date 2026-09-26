@@ -29,8 +29,8 @@ use crate::models::{
     ProviderRoundPolicy,
 };
 
-use super::ProductionAgentLoop;
 use super::contracts::SteeringObservation;
+use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::{ContextPort, GuidedInvocation, GuidedPolicyDependencies};
 use super::operation_result_replay::{
     ExactResultReplaySelection, OperationResultReplayFactory, ReplayMode,
@@ -259,7 +259,7 @@ async fn native_provider_context_and_replay_share_one_turn_owner() {
         Arc::new(Steering(policy_fixture.clone())),
         Some(ContextCompactionRepository::new(storage.clone())),
     ));
-    let agent = ProductionAgentLoop::guided(
+    let agent = FixtureAgentLoop::guided(
         model,
         Arc::new(TurnModelExecutionFactory::new(
             repositories.clone(),

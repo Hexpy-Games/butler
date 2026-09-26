@@ -13,16 +13,21 @@ impl NativeEffectService {
         journal: Arc<dyn EffectJournal>,
         clock: Arc<dyn Fn() -> String + Send + Sync>,
     ) -> Self {
+        Self::with_fault_points(journal, clock, Arc::new(NoEffectFault))
+    }
+
+    /// `fault` is consulted at each durable crash point (before/after intent,
+    /// dispatch and receipt); production never interrupts.
+    pub(crate) fn with_fault_points(
+        journal: Arc<dyn EffectJournal>,
+        clock: Arc<dyn Fn() -> String + Send + Sync>,
+        fault: Arc<dyn EffectFaultHook>,
+    ) -> Self {
         Self {
             journal,
             clock,
-            fault: Arc::new(NoEffectFault),
+            fault,
         }
-    }
-    #[cfg(test)]
-    pub(crate) fn with_fault(mut self, fault: Arc<dyn EffectFaultHook>) -> Self {
-        self.fault = fault;
-        self
     }
     pub(crate) async fn execute(&self, input: ExecuteEffect) -> EffectResult<EffectOutcome> {
         if let Some(denied) = outcomes::permission(&input) {

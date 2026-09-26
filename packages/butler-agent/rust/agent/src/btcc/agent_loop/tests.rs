@@ -6,9 +6,9 @@ use crate::btcc::{
     AgentLoop, AgentLoopError, ExecutionRoute, RuntimeFailure, SuspensionReason, TerminalOutcome,
 };
 
-use super::ProductionAgentLoop;
 use super::continuation::AuthorityLoopContinuation;
-use super::contracts::{AuthorityDecision, CandidateDisposition, ToolOutcome};
+use super::contracts::{AuthorityDecision, ToolOutcome};
+use super::fixture_binding::FixtureAgentLoop;
 use super::guided_ports::GuidedPolicyDependencies;
 use super::ports::ModelRoundError;
 use super::test_data::{call, result, run, turn};
@@ -34,7 +34,7 @@ async fn guided_constructor_runs_real_policy_and_scoped_progress() {
         stream_observer: None,
         identity_observer: None,
     };
-    let agent = ProductionAgentLoop::guided(
+    let agent = FixtureAgentLoop::guided(
         fixture.clone(),
         fixture.clone(),
         dependencies,
@@ -383,18 +383,7 @@ async fn authority_snapshot_roundtrips_and_resumes_allow_deny_and_modify() {
 }
 
 #[tokio::test]
-async fn waiting_no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
-    let waiting = Fixture::new([result("candidate", vec![], 0)]);
-    waiting
-        .candidates
-        .lock()
-        .unwrap()
-        .push_back(CandidateDisposition::Wait);
-    let outcome = run(&waiting.agent(), &turn(None, "safe_fallback"))
-        .await
-        .unwrap();
-    assert_eq!(outcome.suspension, Some(SuspensionReason::WaitingForWorker));
-
+async fn no_visible_empty_recovery_and_first_effective_outcome_are_preserved() {
     let empty = Fixture::new([result("", vec![], 0), result("", vec![], 1)]);
     let no_visible = run(&empty.agent(), &turn(None, "typed_terminal"))
         .await
@@ -419,20 +408,18 @@ async fn waiting_no_visible_empty_recovery_and_first_effective_outcome_are_prese
         vec![call("one", "web_search"), call("two", "start_work")],
         0,
     )]);
-    first
-        .outcomes
-        .lock()
-        .unwrap()
-        .insert("one".into(), ToolOutcome::Reply("first reply".into()));
-    first
-        .outcomes
-        .lock()
-        .unwrap()
-        .insert("two".into(), ToolOutcome::Reply("second reply".into()));
+    first.outcomes.lock().unwrap().insert(
+        "one".into(),
+        ToolOutcome::Suspend(SuspensionReason::WaitingForWorker),
+    );
+    first.outcomes.lock().unwrap().insert(
+        "two".into(),
+        ToolOutcome::Suspend(SuspensionReason::AuthorityPending),
+    );
     let outcome = run(&first.agent(), &turn(None, "safe_fallback"))
         .await
         .unwrap();
-    assert_eq!(outcome.content, "first reply");
+    assert_eq!(outcome.suspension, Some(SuspensionReason::WaitingForWorker));
     assert!(
         !first
             .events

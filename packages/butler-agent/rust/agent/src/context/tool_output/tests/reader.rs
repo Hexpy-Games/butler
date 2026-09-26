@@ -134,7 +134,6 @@ async fn early_return_retained_original_reopen_utf16_and_explicit_prune() {
         .unwrap()
         .unwrap();
     assert_eq!(protected.deleted, 0);
-    assert!(!protected.raw_text_stored);
     assert!(artifact.path.exists());
     let metric: serde_json::Value = serde_json::from_str(
         std::fs::read_to_string(fixture.root.join("metrics/tool-output-prune.jsonl"))

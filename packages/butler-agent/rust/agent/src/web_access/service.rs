@@ -17,6 +17,8 @@ const SEARCH_ENDPOINT: &str = "https://html.duckduckgo.com/html/";
 mod fetch;
 mod session;
 
+pub(crate) use fetch::{DirectPageRoute, PageRoute};
+
 #[derive(Clone)]
 pub(crate) struct WebAccess {
     inner: Arc<WebAccessInner>,
@@ -29,11 +31,9 @@ struct WebAccessInner {
     configuration: Option<Arc<crate::models::ModelConfiguration>>,
     prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
     metrics: Arc<crate::operations::WebSearchMetrics>,
-    test_planning_disabled: bool,
-    #[cfg(test)]
-    page_test_endpoint: Option<Url>,
-    #[cfg(test)]
-    lightpanda_test_binary: Option<PathBuf>,
+    /// Search-test commands run searches without the prompt planner.
+    planning_disabled: bool,
+    page_route: Arc<dyn PageRoute>,
 }
 
 #[derive(Clone)]
@@ -71,59 +71,20 @@ impl WebAccessError {
 }
 
 impl WebAccess {
-    #[cfg(test)]
-    pub(crate) fn for_test_with_prompt(
-        data_root: PathBuf,
-        endpoint: &str,
-        prompt: Arc<dyn crate::models::ProviderPromptPort>,
-    ) -> Self {
-        let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));
-        Self::with_endpoint(data_root, endpoint, None, Some(prompt), metrics, false)
-            .expect("test web access with planner")
-    }
-
-    #[cfg(test)]
-    pub(crate) fn for_test_with_page_endpoint(
-        data_root: PathBuf,
-        search_endpoint: &str,
-        page_endpoint: &str,
-    ) -> Self {
-        let mut access = Self::for_test(data_root, search_endpoint);
-        let endpoint = Url::parse(page_endpoint).expect("test page endpoint is a URL");
-        Arc::get_mut(&mut access.inner)
-            .expect("test web access is uniquely owned")
-            .page_test_endpoint = Some(endpoint);
-        access
-    }
-
-    #[cfg(test)]
-    pub(crate) fn for_test_with_page_endpoint_and_lightpanda(
-        data_root: PathBuf,
-        search_endpoint: &str,
-        page_endpoint: &str,
-        binary: PathBuf,
-    ) -> Self {
-        let mut access =
-            Self::for_test_with_page_endpoint(data_root, search_endpoint, page_endpoint);
-        Arc::get_mut(&mut access.inner)
-            .expect("test web access is uniquely owned")
-            .lightpanda_test_binary = Some(binary);
-        access
-    }
-
     pub(crate) fn new(
         data_root: PathBuf,
         configuration: Arc<crate::models::ModelConfiguration>,
         prompt: Arc<dyn crate::models::ProviderPromptPort>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
     ) -> Result<Self, WebAccessError> {
-        Self::with_endpoint(
+        Self::configured(
             data_root,
             SEARCH_ENDPOINT,
             Some(configuration),
             Some(prompt),
             metrics,
             false,
+            Arc::new(DirectPageRoute),
         )
     }
 
@@ -132,7 +93,15 @@ impl WebAccess {
         data_root: PathBuf,
         metrics: Arc<crate::operations::WebSearchMetrics>,
     ) -> Result<Self, WebAccessError> {
-        Self::with_endpoint(data_root, SEARCH_ENDPOINT, None, None, metrics, false)
+        Self::configured(
+            data_root,
+            SEARCH_ENDPOINT,
+            None,
+            None,
+            metrics,
+            false,
+            Arc::new(DirectPageRoute),
+        )
     }
 
     /// Search-test commands compose provider auth without a prompt planner.
@@ -141,23 +110,25 @@ impl WebAccess {
         configuration: Arc<crate::models::ModelConfiguration>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
     ) -> Result<Self, WebAccessError> {
-        Self::with_endpoint(
+        Self::configured(
             data_root,
             SEARCH_ENDPOINT,
             Some(configuration),
             None,
             metrics,
             true,
+            Arc::new(DirectPageRoute),
         )
     }
 
-    fn with_endpoint(
+    pub(crate) fn configured(
         data_root: PathBuf,
         endpoint: &str,
         configuration: Option<Arc<crate::models::ModelConfiguration>>,
         prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
-        test_planning_disabled: bool,
+        planning_disabled: bool,
+        page_route: Arc<dyn PageRoute>,
     ) -> Result<Self, WebAccessError> {
         let search_endpoint = Url::parse(endpoint).map_err(|_| {
             WebAccessError::new(
@@ -192,11 +163,8 @@ impl WebAccess {
                 configuration,
                 prompt,
                 metrics,
-                test_planning_disabled,
-                #[cfg(test)]
-                page_test_endpoint: None,
-                #[cfg(test)]
-                lightpanda_test_binary: None,
+                planning_disabled,
+                page_route,
             }),
         })
     }
@@ -256,8 +224,8 @@ impl WebAccess {
         self.inner.metrics.as_ref()
     }
 
-    pub(super) fn test_planning_disabled(&self) -> bool {
-        self.inner.test_planning_disabled
+    pub(super) fn planning_disabled(&self) -> bool {
+        self.inner.planning_disabled
     }
 
     pub(super) fn client(&self) -> &Client {
@@ -266,11 +234,6 @@ impl WebAccess {
 
     pub(super) fn data_root(&self) -> &std::path::Path {
         &self.inner.data_root
-    }
-
-    #[cfg(test)]
-    pub(super) fn lightpanda_test_binary(&self) -> Option<&std::path::Path> {
-        self.inner.lightpanda_test_binary.as_deref()
     }
 
     pub(super) fn configured_provider(&self) -> Result<String, WebAccessError> {
@@ -332,31 +295,10 @@ fn nonempty_env(name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-#[cfg(test)]
-impl WebAccess {
-    pub(crate) fn for_test(data_root: PathBuf, endpoint: &str) -> Self {
-        let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));
-        Self::with_endpoint(data_root, endpoint, None, None, metrics, true)
-            .expect("test web access")
-    }
-}
-
 fn normalize_reader_backend(value: &str) -> String {
     let normalized = value.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "auto" | "lightpanda" | "lightweight" | "jina-hosted" | "disabled" => normalized,
         _ => "lightweight".into(),
     }
-}
-
-#[cfg(test)]
-fn test_page_url(base: &Url, logical: &Url) -> Url {
-    let mut url = base.clone();
-    url.set_path(&format!(
-        "/{}{}",
-        logical.host_str().unwrap_or_default(),
-        logical.path()
-    ));
-    url.set_query(logical.query());
-    url
 }

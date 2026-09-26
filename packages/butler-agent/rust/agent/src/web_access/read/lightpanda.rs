@@ -97,10 +97,6 @@ pub(super) async fn render(
 }
 
 fn resolve_binary(access: &WebAccess) -> Result<Option<PathBuf>, WebAccessError> {
-    #[cfg(test)]
-    if let Some(binary) = access.lightpanda_test_binary() {
-        return Ok(executable_path(binary).then(|| binary.to_path_buf()));
-    }
     for name in ["BUTLER_LIGHTPANDA_BIN", "LIGHTPANDA_BIN"] {
         if let Some(value) = access.environment_value(name)? {
             let path = PathBuf::from(value);

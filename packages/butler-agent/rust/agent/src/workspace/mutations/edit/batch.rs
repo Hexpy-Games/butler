@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::super::contracts::{BatchResult, EditFailure, EditMutation, EditedFile, GuardedEdit};
+use super::super::contracts::{BatchResult, CommitObserver, EditFailure, EditedFile, GuardedEdit};
 use super::super::io::{self, Prepared, Snapshot};
 use super::{decode, edit_failure, locator};
 
@@ -17,9 +17,7 @@ struct Ready {
     prepared: Prepared,
 }
 
-pub(super) fn execute(input: EditMutation, edits: Vec<GuardedEdit>) -> BatchResult {
-    #[cfg(not(test))]
-    let _ = &input;
+pub(super) fn execute(edits: Vec<GuardedEdit>, observer: &dyn CommitObserver) -> BatchResult {
     let mut outcome = BatchResult {
         applied: Vec::new(),
         unchanged: Vec::new(),
@@ -143,14 +141,11 @@ pub(super) fn execute(input: EditMutation, edits: Vec<GuardedEdit>) -> BatchResu
     }
     let mut remaining = ready.into_iter();
     while let Some(ready_target) = remaining.next() {
-        #[cfg(test)]
-        if let Some(hook) = &input.before_commit {
-            hook(
-                ready_target.target.first_index,
-                &ready_target.prepared.before.path.absolute,
-            );
-        }
-        match io::commit(ready_target.prepared) {
+        observer.before_target(
+            ready_target.target.first_index,
+            &ready_target.prepared.before.path.absolute,
+        );
+        match io::commit(ready_target.prepared, observer) {
             Ok(committed) => outcome.applied.push(EditedFile {
                 index: ready_target.target.first_index,
                 edit_indexes: ready_target.target.edit_indexes,

@@ -106,7 +106,6 @@ fn prune_observer_appends_the_existing_metric_shape() {
         remaining_bytes: 60,
         max_age_ms: 30.0,
         max_bytes: 100.0,
-        raw_text_stored: false,
     };
 
     files.observe_prune(1_234.5, &result, 2).unwrap();

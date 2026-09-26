@@ -74,10 +74,6 @@ pub(super) async fn finish_outcome(
     outcome: Option<ToolOutcome>,
 ) -> Result<Option<AgentLoopResult>, AgentLoopError> {
     match outcome {
-        #[cfg(test)]
-        Some(ToolOutcome::Reply(text)) => finish(input, state, text.trim(), None, None)
-            .await
-            .map(Some),
         Some(ToolOutcome::Suspend(reason)) => {
             finish(input, state, "", Some(reason), None).await.map(Some)
         }

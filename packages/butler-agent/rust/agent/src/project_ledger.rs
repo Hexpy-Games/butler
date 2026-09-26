@@ -75,8 +75,6 @@ struct ReadOwner {
     publication_permits: Arc<Semaphore>,
     state: Mutex<OwnerState>,
     idle: Notify,
-    #[cfg(test)]
-    barrier: Mutex<Option<Arc<TestReadBarrier>>>,
 }
 
 struct OwnerState {
@@ -93,12 +91,6 @@ impl Drop for ActiveRead {
         drop(state);
         self.0.idle.notify_waiters();
     }
-}
-
-#[cfg(test)]
-pub(crate) struct TestReadBarrier {
-    pub entered: std::sync::Barrier,
-    pub release: std::sync::Barrier,
 }
 
 impl NativeProjectLedger {
@@ -137,19 +129,8 @@ impl NativeProjectLedger {
                     active: 0,
                 }),
                 idle: Notify::new(),
-                #[cfg(test)]
-                barrier: Mutex::new(None),
             }),
         }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_test_barrier(&self, barrier: Arc<TestReadBarrier>) {
-        *self
-            .owner
-            .barrier
-            .lock()
-            .expect("project ledger owner poisoned") = Some(barrier);
     }
 
     pub(crate) async fn show_plan_record(
@@ -440,21 +421,9 @@ impl NativeProjectLedger {
         let active = ActiveRead(Arc::clone(&self.owner));
         let root = self.data_root.clone();
         let collation = Arc::clone(&self.collation);
-        #[cfg(test)]
-        let barrier = self
-            .owner
-            .barrier
-            .lock()
-            .expect("project ledger owner poisoned")
-            .clone();
         let task = tokio::task::spawn_blocking(move || {
             let _active = active;
             let _permit = permit;
-            #[cfg(test)]
-            if let Some(barrier) = barrier {
-                barrier.entered.wait();
-                barrier.release.wait();
-            }
             work(&root, &collation)
         });
         task.await

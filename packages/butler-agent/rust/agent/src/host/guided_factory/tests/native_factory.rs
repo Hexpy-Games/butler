@@ -276,7 +276,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             scratch.0.clone(),
             Arc::new(SystemIdentity),
         ),
-        web_access: Arc::new(crate::web_access::WebAccess::for_test(
+        web_access: Arc::new(crate::web_access::tests::access(
             scratch.0.clone(),
             &web_endpoint,
         )),

@@ -17,7 +17,7 @@ use super::types::{
 
 #[derive(Clone)]
 pub(crate) struct CognitionWriteCoordinator {
-    inner: Arc<CoordinatorInner>,
+    pub(super) inner: Arc<CoordinatorInner>,
 }
 
 pub(super) struct CoordinatorInner {
@@ -125,37 +125,6 @@ impl CognitionWriteCoordinator {
         lock_path: &Path,
     ) -> CoordinationResult<ConsolidationLockInspection> {
         self.inner.inspect(lock_path)
-    }
-
-    #[cfg(test)]
-    pub(super) fn replace_registration_for_test(
-        &self,
-        path: PathBuf,
-        registration_id: String,
-        owner: LockInfo,
-    ) {
-        self.inner.local.lock().unwrap().insert(
-            path,
-            LocalRegistration {
-                registration_id,
-                owner,
-            },
-        );
-    }
-
-    #[cfg(test)]
-    pub(super) fn registration_for_test(&self, path: &Path) -> Option<String> {
-        self.inner
-            .local
-            .lock()
-            .unwrap()
-            .get(path)
-            .map(|value| value.registration_id.clone())
-    }
-
-    #[cfg(test)]
-    pub(super) fn clear_registration_for_test(&self, path: &Path) {
-        self.inner.local.lock().unwrap().remove(path);
     }
 }
 
