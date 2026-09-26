@@ -13,11 +13,12 @@
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
     color var(--motion-fast) var(--motion-ease-standard),
-    transform var(--motion-fast) var(--motion-ease-standard);
+    scale var(--motion-fast) var(--motion-ease-standard);
 }
 
+/* `scale`, not transform: GlyphToggle centres the button with translate. */
 .moduleScope:active:not(:disabled) {
-  transform: scale(var(--motion-scale-press));
+  scale: var(--motion-scale-press);
   transition-duration: var(--motion-instant);
 }
 .moduleScope:hover:not(:disabled) {

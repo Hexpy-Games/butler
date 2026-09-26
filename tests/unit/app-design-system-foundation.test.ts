@@ -718,12 +718,12 @@ describe("motion tokens", () => {
 
   test("buttons, icon buttons and clickables press to the press scale unless disabled", () => {
     const button = dsComponent("Button/Button");
-    expect(button).toMatch(/\.button:active:not\(:disabled\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\);[^}]*transition-duration: var\(--motion-instant\)/u);
+    expect(button).toMatch(/\.button:active:not\(:disabled\) \{[^}]*scale: var\(--motion-scale-press\);[^}]*transition-duration: var\(--motion-instant\)/u);
     const iconButton = dsComponent("IconButton/IconButton");
-    expect(iconButton).toMatch(/\.moduleScope:active:not\(:disabled\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\)/u);
-    expect(iconButton).toMatch(/transition:[^;]*transform var\(--motion-fast\)/u);
+    expect(iconButton).toMatch(/\.moduleScope:active:not\(:disabled\) \{[^}]*scale: var\(--motion-scale-press\)/u);
+    expect(iconButton).toMatch(/transition:[^;]*scale var\(--motion-fast\)/u);
     const clickable = dsComponent("Clickable/Clickable");
-    expect(clickable).toMatch(/\.clickable:active:not\(\[data-disabled="true"\], \[data-stretch="true"\]\) \{[^}]*transform: scale\(var\(--motion-scale-press\)\)/u);
+    expect(clickable).toMatch(/\.clickable:active:not\(\[data-disabled="true"\], \[data-stretch="true"\]\) \{[^}]*scale: var\(--motion-scale-press\)/u);
   });
 
   test("the switch thumb moves on the spring easing and stops under reduced motion", () => {

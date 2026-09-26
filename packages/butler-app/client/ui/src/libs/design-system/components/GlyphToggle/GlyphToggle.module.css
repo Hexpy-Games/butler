@@ -14,7 +14,8 @@
   flex: none;
   color: inherit;
   inset-inline-start: 50%;
-  transform: translate(-50%, -50%);
+  /* translate (not transform) so the IconButton press scale composes with it. */
+  translate: -50% -50%;
 }
 
 .glyph,

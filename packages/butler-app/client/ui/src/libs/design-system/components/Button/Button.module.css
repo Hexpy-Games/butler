@@ -23,7 +23,7 @@
   transition:
     background-color var(--motion-fast) var(--motion-ease-standard),
     color var(--motion-fast) var(--motion-ease-standard),
-    transform var(--motion-fast) var(--motion-ease-standard);
+    scale var(--motion-fast) var(--motion-ease-standard);
 }
 
 .button[data-stretch="true"] {
@@ -40,9 +40,10 @@
 }
 
 /* Press feedback: a quick press-in, released on --motion-fast. The scale
-   token is 1 under reduced motion. */
+   token is 1 under reduced motion. The `scale` property composes with any
+   transform a caller positions the button with (transform would replace it). */
 .button:active:not(:disabled) {
-  transform: scale(var(--motion-scale-press));
+  scale: var(--motion-scale-press);
   transition-duration: var(--motion-instant);
 }
 
