@@ -129,10 +129,9 @@ impl TurnExecutionSupervisor {
             return;
         }
         match outcome {
-            StopPersistenceOutcome::Cancelled | StopPersistenceOutcome::AlreadyCancelled => {
-                registration.durable_terminal = true;
-            }
-            StopPersistenceOutcome::AlreadyDelivered(_) => {
+            StopPersistenceOutcome::Cancelled
+            | StopPersistenceOutcome::AlreadyCancelled
+            | StopPersistenceOutcome::AlreadyDelivered(_) => {
                 registration.durable_terminal = true;
             }
             StopPersistenceOutcome::AlreadyFinalizing => {

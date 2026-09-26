@@ -157,8 +157,7 @@ impl NativeLegacyHot {
                 .release(result.is_ok())
                 .map_err(|failure| failure.code.to_owned());
             match (result, release) {
-                (Err(code), _) => Err(code),
-                (Ok(()), Err(code)) => Err(code),
+                (Err(code), _) | (Ok(()), Err(code)) => Err(code),
                 _ => Ok(entry),
             }
         })

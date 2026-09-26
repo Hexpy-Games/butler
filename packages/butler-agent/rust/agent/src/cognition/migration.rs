@@ -112,8 +112,7 @@ impl CognitionNamespaceMigrationService {
                 .release(result.is_ok())
                 .map_err(|error| CognitionError::new(error.code, error.message));
             match (result, released) {
-                (Err(error), _) => Err(error),
-                (Ok(_), Err(error)) => Err(error),
+                (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(value), Ok(())) => Ok(value),
             }
         })

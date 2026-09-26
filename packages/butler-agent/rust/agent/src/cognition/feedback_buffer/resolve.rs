@@ -60,8 +60,7 @@ impl FeedbackBufferService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(error), _) => Err(error),
-                (Ok(()), Err(error)) => Err(error),
+                (Err(error), _) | (Ok(()), Err(error)) => Err(error),
                 (Ok(()), Ok(())) => Ok(()),
             }
         })

@@ -43,9 +43,8 @@ pub(super) fn requested_output_tokens(
     }
     match carrier {
         Carrier::Responses => body.get("max_output_tokens"),
-        Carrier::Anthropic => body.get("max_tokens"),
+        Carrier::Anthropic | Carrier::Chat { .. } => body.get("max_tokens"),
         Carrier::Gemini => body.pointer("/generationConfig/maxOutputTokens"),
-        Carrier::Chat { .. } => body.get("max_tokens"),
     }
     .and_then(Value::as_f64)
 }

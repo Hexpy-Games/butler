@@ -67,7 +67,7 @@ impl GraphConsolidationService {
                 Ok(serde_json::json!({"candidates_considered":metrics.candidates_considered,"merges_applied":metrics.merges_applied,"edges_boosted":metrics.edges_boosted,"conflicts_archived":metrics.conflicts_archived,"activations_written":metrics.activations_written}))
             })();
             let released = lease.release(result.is_ok()).map_err(|error| CognitionError::new(error.code,error.message));
-            match (result,released) { (Err(error),_) => Err(error), (Ok(_),Err(error)) => Err(error), (Ok(value),Ok(())) => Ok(value) }
+            match (result,released) { (Err(error),_) | (Ok(_),Err(error)) => Err(error), (Ok(value),Ok(())) => Ok(value) }
         }).await.map_err(|_| error("memory_consolidation_operation_failed"))?
     }
 }

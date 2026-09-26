@@ -35,9 +35,8 @@ pub(super) fn read_selected(
         })();
         match attempt {
             Ok(Some(raw)) => return Ok(raw),
-            Ok(None) => {}
             Err(error) if version == publication_version(root)? => return Err(error),
-            Err(_) => {}
+            Ok(None) | Err(_) => {}
         }
     }
     Err(ProjectLedgerReadError::RecordShow(
@@ -105,9 +104,8 @@ pub(super) fn read_all_with_hook(
         })();
         match attempt {
             Ok(Some(records)) => return Ok(records),
-            Ok(None) => {}
             Err(error) if version == publication_version(root)? => return Err(error),
-            Err(_) => {}
+            Ok(None) | Err(_) => {}
         }
     }
     Err(ProjectLedgerReadError::RecordShow(

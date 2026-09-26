@@ -18,9 +18,8 @@ pub(super) fn create_private_dir(path: &Path) -> CognitionResult<()> {
         use std::os::unix::fs::DirBuilderExt;
         match fs::symlink_metadata(path) {
             Ok(metadata) if metadata.file_type().is_dir() => return Ok(()),
-            Ok(_) => return Err(error("memory_box_index_write_failed")),
             Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err(error("memory_box_index_write_failed")),
+            _ => return Err(error("memory_box_index_write_failed")),
         }
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);

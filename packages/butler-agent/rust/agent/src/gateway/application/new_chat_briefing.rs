@@ -8,6 +8,10 @@ use crate::gateway::GatewayApplicationError;
 use crate::{cognition, profile};
 
 impl AppApplication {
+    #[expect(
+        clippy::match_same_arms,
+        reason = "explicit arms document the known values beside the default"
+    )]
     pub(super) async fn new_chat_briefing_view(
         &self,
         date: Option<String>,

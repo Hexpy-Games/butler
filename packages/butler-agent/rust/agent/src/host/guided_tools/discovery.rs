@@ -99,8 +99,7 @@ async fn search(
     };
     let provider = text(args, "provider").map(str::to_lowercase);
     match provider.as_deref() {
-        None => (),
-        Some("native") => (),
+        None | Some("native") => (),
         Some("mcp") => {
             return mcp::search(owner, args, category, signal).await;
         }

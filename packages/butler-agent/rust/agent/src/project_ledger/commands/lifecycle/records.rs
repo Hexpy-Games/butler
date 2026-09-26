@@ -27,6 +27,10 @@ const ALL_METADATA: &[&str] = &[
     "supersedesSpecId",
 ];
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) fn create_top_level(root: &Path, args: &Value) -> Result<Value, CliFailure> {
     let kind = options::required(args, "kind")?;
     let directory = match kind.as_str() {

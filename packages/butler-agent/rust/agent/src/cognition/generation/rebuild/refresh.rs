@@ -171,8 +171,7 @@ pub(crate) async fn refresh_if_changed(
         .release(result.is_ok())
         .map_err(|_| error("memory_write_busy"));
     match (result, released) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(Some(value)),
     }
 }

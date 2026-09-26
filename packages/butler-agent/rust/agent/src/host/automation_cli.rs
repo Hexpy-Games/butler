@@ -56,14 +56,10 @@ impl Command {
     fn name(&self) -> &'static str {
         match self {
             Self::List => "butler automation list",
-            Self::Show(_) => "butler automation show",
-            Self::Run(_) => "butler automation run",
-            Self::Delete(_) => "butler automation delete",
-            Self::MissingId("show") => "butler automation show",
-            Self::MissingId("run") => "butler automation run",
-            Self::MissingId("delete") => "butler automation delete",
-            Self::MissingId(_) => "butler automation",
-            Self::Unknown => "butler automation",
+            Self::Show(_) | Self::MissingId("show") => "butler automation show",
+            Self::Run(_) | Self::MissingId("run") => "butler automation run",
+            Self::Delete(_) | Self::MissingId("delete") => "butler automation delete",
+            Self::MissingId(_) | Self::Unknown => "butler automation",
         }
     }
 }

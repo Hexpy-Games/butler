@@ -322,8 +322,9 @@ fn read_conversation_summary(path: &Path, durable_session_id: &str) -> StatusCon
         })();
     match (summary, reader.close()) {
         (Ok(summary), Ok(())) => summary,
-        (Err(error), _) => unavailable_conversation_summary(fallback, error.code),
-        (Ok(_), Err(error)) => unavailable_conversation_summary(fallback, error.code),
+        (Err(error), _) | (Ok(_), Err(error)) => {
+            unavailable_conversation_summary(fallback, error.code)
+        }
     }
 }
 

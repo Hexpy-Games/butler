@@ -195,10 +195,9 @@ fn reconcile_error(error: Option<&EffectAdapterError>) -> EffectError {
 }
 fn rank(value: BlockerRelation) -> u8 {
     match value {
-        BlockerRelation::Equivalent => 0,
         BlockerRelation::Overlapping => 1,
         BlockerRelation::Ambiguous => 2,
-        BlockerRelation::Unrelated => 0,
+        BlockerRelation::Equivalent | BlockerRelation::Unrelated => 0,
     }
 }
 async fn classify(

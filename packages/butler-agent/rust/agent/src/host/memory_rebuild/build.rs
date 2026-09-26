@@ -113,8 +113,7 @@ pub(super) async fn run(
         .await
         .map_err(|e| CognitionError::new(e.code, e.message));
     match (result, closed) {
-        (Err(error), _) => Err(error),
-        (Ok(_), Err(error)) => Err(error),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         (Ok(value), Ok(())) => Ok(value),
     }
 }

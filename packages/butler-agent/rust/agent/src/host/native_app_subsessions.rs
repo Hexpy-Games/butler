@@ -244,8 +244,9 @@ fn turn_state(status: &str) -> &'static str {
 fn map_error(error: crate::btcc::BtccError) -> GatewayApplicationError {
     let status = match error.code.as_str() {
         "active_steward_relation_not_found" | "steward_relation_not_found" => 404,
-        "active_steward_relation_ambiguous" => 409,
-        "steward_relation_not_active" | "steward_relation_not_recoverable" => 409,
+        "active_steward_relation_ambiguous"
+        | "steward_relation_not_active"
+        | "steward_relation_not_recoverable" => 409,
         _ => 500,
     };
     if status == 500 {

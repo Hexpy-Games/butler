@@ -84,6 +84,10 @@ pub(super) fn main_theme(value: Option<&Value>) -> &'static str {
         _ => "bloom",
     }
 }
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) fn main_preset(value: Option<&Value>, colors: &[String; 6]) -> &'static str {
     match value.and_then(Value::as_str) {
         Some("aurora") => "aurora",

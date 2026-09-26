@@ -254,9 +254,9 @@ fn process_alive(pid: u32) -> bool {
         return true;
     }
     match kill(Pid::from_raw(pid), None) {
-        Ok(()) | Err(Errno::EPERM) => true,
         Err(Errno::ESRCH) => false,
-        Err(_) => true,
+        // EPERM and any other failure mean the process may exist.
+        _ => true,
     }
 }
 

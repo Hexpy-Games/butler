@@ -8,10 +8,7 @@ use std::{
 use arrow_array::{Array, FixedSizeListArray, Float32Array};
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
-use lancedb::{
-    Error as LanceError,
-    query::{ExecutableQuery, QueryBase, Select},
-};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -82,7 +79,6 @@ pub(crate) async fn prepare_representatives(
     };
     let table = match lance_store::open(&connection, TABLE).await {
         Ok(table) => table,
-        Err(LanceError::TableNotFound { .. }) => return Ok(Vec::new()),
         Err(_) => return Ok(Vec::new()),
     };
     let mut prepared = Vec::new();

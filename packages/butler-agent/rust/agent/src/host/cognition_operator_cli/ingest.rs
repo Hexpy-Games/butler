@@ -226,8 +226,7 @@ async fn bound_project(
         .map(|binding| binding.and_then(|binding| binding.project_id));
     let closed = store.close().await;
     match (result, closed) {
-        (Err(error), _) => Err(CliError::failed(error.code, error.message)),
-        (Ok(_), Err(error)) => Err(CliError::failed(error.code, error.message)),
+        (Err(error), _) | (Ok(_), Err(error)) => Err(CliError::failed(error.code, error.message)),
         (Ok(project), Ok(())) => Ok(project),
     }
 }

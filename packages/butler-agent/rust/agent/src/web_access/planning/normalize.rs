@@ -60,6 +60,10 @@ pub(super) fn parse_and_normalize(text: &str, default_depth: &str) -> Result<Sea
     })
 }
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 fn normalize_queries(value: Option<&Value>, depth: &str) -> Vec<SearchQuery> {
     let limit = match depth {
         "quick" => 4,

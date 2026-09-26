@@ -134,15 +134,13 @@ fn progress_state(value: &str) -> Result<ProgressState, AppStorageError> {
 fn delivery_state(value: &str) -> DeliveryState {
     match value {
         "running" => DeliveryState::Running,
-        "waiting_user" => DeliveryState::WaitingUser,
+        "waiting_user" | "waiting_for_form" => DeliveryState::WaitingUser,
         "system_error" => DeliveryState::SystemError,
         "delivered" => DeliveryState::Delivered,
         "delivered_with_limitations" => DeliveryState::DeliveredWithLimitations,
         "delivered_with_continuation" => DeliveryState::DeliveredWithContinuation,
-        "failed_system" => DeliveryState::FailedSystem,
-        "failed" | "runtime_fault" => DeliveryState::FailedSystem,
+        "failed_system" | "failed" | "runtime_fault" => DeliveryState::FailedSystem,
         "cancelled" => DeliveryState::Cancelled,
-        "waiting_for_form" => DeliveryState::WaitingUser,
         value if is_internal_delivery(value) => DeliveryState::Running,
         _ => DeliveryState::Running,
     }

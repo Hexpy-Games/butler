@@ -23,8 +23,7 @@ impl CycleService {
             .release(outcome.is_ok())
             .map_err(|e| CognitionError::new(e.code, e.message));
         match (outcome, released) {
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
             (Ok(value), Ok(())) => Ok(value),
         }
     }

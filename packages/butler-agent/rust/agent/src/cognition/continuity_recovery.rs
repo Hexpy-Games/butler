@@ -147,8 +147,7 @@ impl ContinuityRecoveryService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(failure), _) => Err(failure),
-                (Ok(_), Err(failure)) => Err(failure),
+                (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                 (Ok(view), Ok(())) => Ok(view),
             }
         })
@@ -229,8 +228,7 @@ impl ContinuityRecoveryService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(failure), _) => Err(failure),
-                (Ok(_), Err(failure)) => Err(failure),
+                (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                 (Ok(action), Ok(())) => Ok(action),
             }
         })

@@ -176,11 +176,7 @@ impl BtccStorage {
         });
         let (_owner_id, _owner_generation) = match initialized {
             Ok(Ok(owner)) => owner,
-            Ok(Err(error)) => {
-                join_failed_initialization(thread).await;
-                return Err(error);
-            }
-            Err(error) => {
+            Ok(Err(error)) | Err(error) => {
                 join_failed_initialization(thread).await;
                 return Err(error);
             }

@@ -132,8 +132,7 @@ where
             ProfileError::new("profile_store_unavailable", "Profile store is unavailable.")
         });
         match (result, released) {
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
             (Ok(value), Ok(())) => Ok(value),
         }
     })

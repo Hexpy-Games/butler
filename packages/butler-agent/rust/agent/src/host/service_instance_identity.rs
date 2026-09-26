@@ -15,9 +15,8 @@ pub(crate) fn executable_matches(expected: &str, observed: &str) -> bool {
 
 pub(crate) fn process_is_alive(pid: i32) -> Result<bool, String> {
     match kill(Pid::from_raw(pid), None) {
-        Ok(()) => Ok(true),
         Err(Errno::ESRCH) => Ok(false),
-        Err(Errno::EPERM) => Ok(true),
+        Ok(()) | Err(Errno::EPERM) => Ok(true),
         Err(error) => Err(format!("native_service_process_probe_failed: {error}")),
     }
 }

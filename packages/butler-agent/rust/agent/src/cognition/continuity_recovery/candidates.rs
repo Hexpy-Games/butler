@@ -173,8 +173,7 @@ fn inventory_canonical_turns(data_root: &Path) -> CognitionResult<Vec<CanonicalT
     })();
     let closed = reader.close().map_err(conversation_error);
     match (result, closed) {
-        (Err(failure), _) => Err(failure),
-        (Ok(_), Err(failure)) => Err(failure),
+        (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
         (Ok(turns), Ok(())) => Ok(turns),
     }
 }

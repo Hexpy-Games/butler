@@ -176,8 +176,9 @@ fn create_status<'a>(
 ) -> Result<&'a str, ProjectWorkPublicationError> {
     match kind {
         ProjectLedgerRecordKind::Work => status.ok_or_else(invalid),
-        ProjectLedgerRecordKind::Plan => Ok(status.unwrap_or("active")),
-        ProjectLedgerRecordKind::Reference => Ok(status.unwrap_or("active")),
+        ProjectLedgerRecordKind::Plan | ProjectLedgerRecordKind::Reference => {
+            Ok(status.unwrap_or("active"))
+        }
         _ => Err(invalid()),
     }
 }

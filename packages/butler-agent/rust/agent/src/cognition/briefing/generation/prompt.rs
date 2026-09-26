@@ -118,6 +118,10 @@ pub(super) fn locale(input: &BriefingInputSnapshot) -> &str {
     }
 }
 
+#[expect(
+    clippy::match_same_arms,
+    reason = "explicit arms document the known values beside the default"
+)]
 pub(super) fn time_of_day(local_minute: u16) -> &'static str {
     match local_minute / 60 {
         0..=5 => "night",

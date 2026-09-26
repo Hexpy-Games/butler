@@ -158,8 +158,7 @@ impl ProjectCapsuleService {
                 .release(result.is_ok())
                 .map_err(|failure| CognitionError::new(failure.code, failure.message));
             match (result, released) {
-                (Err(error), _) => Err(error),
-                (Ok(_), Err(error)) => Err(error),
+                (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(path), Ok(())) => Ok(path),
             }
         })

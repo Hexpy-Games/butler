@@ -38,8 +38,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             // Shared pure timestamp parsing for canonical conversation filters.
             "js_date",
         ],
-        "conversation" => &["json", "locale", "public_text"],
-        "coordination" => &["public_text"],
+        "conversation" | "work_records" => &["json", "locale", "public_text"],
+        "coordination" | "json" => &["public_text"],
         "gateway" => &[
             "btcc",
             "conversation",
@@ -86,7 +86,6 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "skills",
             "json_lines",
         ],
-        "json" => &["public_text"],
         "models" => &["btcc", "configuration", "json", "locale", "public_text"],
         "mcp_client" => &["configuration", "json"],
         "operations" => &[
@@ -122,7 +121,6 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
             "operations",
             "public_text",
         ],
-        "work_records" => &["json", "locale", "public_text"],
         // Ledger implements the declared BTCC Project Work port. SQLite ownership
         // remains behind that port; canonical files remain owned by Ledger.
         // Managed-record hashes also use the host's pure locale ordering.

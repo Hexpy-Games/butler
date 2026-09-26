@@ -7,10 +7,7 @@ use std::{
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures_util::TryStreamExt;
-use lancedb::{
-    Error as LanceError,
-    query::{ExecutableQuery, QueryBase, Select},
-};
+use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use serde_json::Value;
 
 use super::rows::{COLUMNS, GenerationVectorRow, optional_text, text};
@@ -108,7 +105,6 @@ pub(crate) async fn invalid_persisted_rebuild_vectors(
     };
     let table = match lance_store::open(&connection, "butler_memory").await {
         Ok(value) => value,
-        Err(LanceError::TableNotFound { .. }) => return Ok(units.len()),
         Err(_) => return Ok(units.len()),
     };
     let keys = groups.keys().cloned().collect::<Vec<_>>();

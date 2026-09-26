@@ -29,8 +29,9 @@ pub(super) async fn run(
         StatusFact::Available(Some(session)) if !session.model_ref.trim().is_empty() => {
             Some(session.model_ref.as_str())
         }
-        StatusFact::Available(None) | StatusFact::Unavailable(_) => None,
-        StatusFact::Available(Some(_)) => None,
+        StatusFact::Available(None)
+        | StatusFact::Unavailable(_)
+        | StatusFact::Available(Some(_)) => None,
     };
     let model_ref = active_model.unwrap_or(&models.model_ref);
     let budget_owner = context_budget_owner(&models);
