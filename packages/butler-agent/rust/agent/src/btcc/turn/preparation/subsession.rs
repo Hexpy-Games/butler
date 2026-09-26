@@ -1,4 +1,5 @@
 use super::ContextAssembly;
+use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
 use crate::btcc::subsessions::{SubsessionMetadata, read_subsession_metadata};
 use crate::public_text::trim_js_whitespace;
@@ -37,13 +38,13 @@ pub(super) fn validate_assembly(
     if valid {
         Ok(())
     } else if steward {
-        Err(BtccError::new(
-            "subsession_context_assembly_invalid",
+        Err(BtccError::detected(
+            BtccCode::SubsessionContextAssemblyInvalid,
             "subsession_context_assembly_invalid",
         ))
     } else {
-        Err(BtccError::new(
-            "butler_eol_context_assembly_invalid",
+        Err(BtccError::detected(
+            BtccCode::ButlerEolContextAssemblyInvalid,
             "butler_eol_context_assembly_invalid",
         ))
     }

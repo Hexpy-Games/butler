@@ -62,7 +62,7 @@ fn actual_bun_recovery_path_boundaries_match() {
             assert_eq!(actual.unwrap()[0].path, expected, "path={path:?}");
         } else {
             assert_eq!(
-                actual.unwrap_err().message,
+                actual.unwrap_err().message(),
                 case["error"].as_str().unwrap(),
                 "path={path:?}"
             );

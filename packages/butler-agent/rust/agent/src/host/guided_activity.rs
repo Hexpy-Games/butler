@@ -268,7 +268,7 @@ impl NativeGuidedActivity {
         if self.turn_id == turn_id {
             Ok(())
         } else {
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "guided_activity_turn_mismatch",
                 "Activity owner belongs to a different Turn",
             ))

@@ -59,7 +59,7 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
         .load_or_admit(&conflict)
         .await
         .expect_err("conflicting replay must fail");
-    assert_eq!(error.code, "turn_replay_conflict");
+    assert_eq!(error.code(), "turn_replay_conflict");
 
     // JSON.stringify(undefined) differs from JSON.stringify(null) in the
     // legacy replay authority. An absent field must not become explicit null.
@@ -76,7 +76,7 @@ async fn repository_admission_replay_claim_and_pre_admission_stop_are_durable() 
             .load_or_admit(&absent_content)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "turn_replay_conflict"
     );
     assert!(!repositories.load_or_admit(&null_content).await.unwrap().1);
@@ -197,7 +197,7 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
             .load_model_round_acceptance(stale)
             .await
             .expect_err("stale checkpoint rejected")
-            .code,
+            .code(),
         "model_checkpoint_stale"
     );
 
@@ -212,7 +212,7 @@ async fn model_journal_abandons_restarted_attempt_and_budget_terminal_commits() 
         })
         .await
         .expect_err("output limit must exhaust");
-    assert_eq!(error.code, "turn_continuation_budget_exhausted");
+    assert_eq!(error.code(), "turn_continuation_budget_exhausted");
     let persisted = repositories
         .find_turn("turn-model")
         .await

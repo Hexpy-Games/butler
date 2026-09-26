@@ -35,7 +35,7 @@ const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
 pub async fn run_native_service(installation: ResolvedInstallation) -> Result<String, String> {
     run(installation, None, None, ServiceLogMode::desktop())
         .await
-        .map_err(|error| format!("{}: {}", error.code, error.message))
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))
 }
 
 pub(crate) async fn run_native_service_with_options(
@@ -52,7 +52,7 @@ pub(crate) async fn run_native_service_with_options(
         ServiceLogMode::cli(quiet),
     )
     .await
-    .map_err(|error| format!("{}: {}", error.code, error.message))
+    .map_err(|error| format!("{}: {}", error.code(), error.message()))
 }
 
 #[derive(Clone, Copy)]
@@ -244,7 +244,7 @@ async fn serve(
         instance.nonce().to_owned(),
     ));
     if let Err(error) = gateway.start_initial(&config.app).await {
-        logs.write(&format!("[native-app] unavailable code={}", error.code));
+        logs.write(&format!("[native-app] unavailable code={}", error.code()));
     } else if let Some(active) = app_endpoint.snapshot() {
         logs.write(&format!("[native-app] ready address={}", active.base_url));
     }

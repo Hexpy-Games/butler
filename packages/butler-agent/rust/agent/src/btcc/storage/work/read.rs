@@ -8,11 +8,12 @@ use rusqlite::Connection;
 use crate::btcc::work::{WorkContext, WorkTurnScope, WorkView};
 
 use super::{StorageResult, common};
+use crate::btcc::StorageCode;
 
 pub(in crate::btcc::storage) fn view(db: &Connection, work_id: &str) -> StorageResult<WorkView> {
     let row = common::work(db, work_id)?.ok_or_else(|| {
         common::error(
-            "durable_work_record_missing",
+            StorageCode::DurableWorkRecordMissing,
             format!("Durable Work record is missing: {work_id}"),
         )
     })?;

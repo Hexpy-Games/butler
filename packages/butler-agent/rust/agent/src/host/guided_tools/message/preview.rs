@@ -231,7 +231,7 @@ fn string_raw(raw: &str) -> bool {
     raw.trim_start().starts_with('"')
 }
 fn failure() -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "guided_tool_provider_serialization_failed",
         "Provider result JSON unavailable",
     )

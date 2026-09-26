@@ -4,6 +4,7 @@ use serde_json::Value;
 use super::common::{error, json, stringify};
 use super::model::events::assert_claim;
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::continuation_budget::{
     TurnContinuationBudgetError, TurnContinuationBudgetEvent, parse_turn_continuation_budget_state,
     transition_turn_continuation_budget,
@@ -38,23 +39,25 @@ pub(super) fn transition(
         .flatten();
     let raw = raw.ok_or_else(|| {
         error(
-            "turn_continuation_dependency_missing",
+            StorageCode::TurnContinuationDependencyMissing,
             "turn_continuation_dependency_missing",
         )
     })?;
     let current = parse_turn_continuation_budget_state(
-        json(&raw, "invalid_continuation_budget")?,
+        json(&raw, StorageCode::InvalidContinuationBudget)?,
         &write.binding.turn_id,
     )
-    .map_err(|e| error("invalid_continuation_budget", e.message))?;
-    let event: TurnContinuationBudgetEvent = serde_json::from_value(write.event.clone())
-        .map_err(|e| error("invalid_continuation_budget_event", e.to_string()))?;
+    .map_err(|e| error(StorageCode::InvalidContinuationBudget, e.message()))?;
+    let event: TurnContinuationBudgetEvent =
+        serde_json::from_value(write.event.clone()).map_err(|e| {
+            error(StorageCode::InvalidContinuationBudgetEvent, e.to_string()).with_source(e)
+        })?;
     let (next, terminal) = match transition_turn_continuation_budget(current, event, write.now_ms) {
         Ok(next) => (next, None),
         Err(error @ TurnContinuationBudgetError::Exhausted(_)) => (
             error.exhausted_state().cloned().ok_or_else(|| {
                 super::common::error(
-                    "continuation_terminal_missing",
+                    StorageCode::ContinuationTerminalMissing,
                     "continuation terminal state missing",
                 )
             })?,
@@ -62,13 +65,13 @@ pub(super) fn transition(
         ),
         Err(TurnContinuationBudgetError::Invalid(error)) => {
             return Err(super::common::error(
-                "invalid_continuation_budget",
-                error.message,
+                StorageCode::InvalidContinuationBudget,
+                error.message(),
             ));
         }
     };
-    let value =
-        serde_json::to_value(&next).map_err(|e| error("continuation_serialize", e.to_string()))?;
+    let value = serde_json::to_value(&next)
+        .map_err(|e| error(StorageCode::ContinuationSerialize, e.to_string()).with_source(e))?;
     let next_json = stringify(&value)?;
     if next_json != raw {
         let changed = tx
@@ -86,7 +89,7 @@ pub(super) fn transition(
             .map_err(StorageError::sqlite)?;
         if changed != 1 {
             return Err(error(
-                "turn_continuation_atomic_update_failed",
+                StorageCode::TurnContinuationAtomicUpdateFailed,
                 "turn_continuation_atomic_update_failed",
             ));
         }

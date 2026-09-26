@@ -172,7 +172,7 @@ async fn store_for_scope_routes_local_worker_to_session_and_ledger_steward_to_pr
     else {
         panic!("ledger binding without an app project must not use session Work")
     };
-    assert_eq!(missing_app.code, "work_scope_project_binding_missing");
+    assert_eq!(missing_app.code(), "work_scope_project_binding_missing");
     assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
 
     routed

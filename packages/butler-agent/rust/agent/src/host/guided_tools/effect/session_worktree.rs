@@ -25,20 +25,19 @@ pub(super) fn prepare(
     owner: &NativeGuidedTools,
     args: &Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), BtccError> {
-    let input = normalize(&Value::Object(args.clone()))
-        .map_err(|error| BtccError::new(error.code, error.message))?;
+    let input = normalize(&Value::Object(args.clone())).map_err(crate::btcc::BtccError::from)?;
     let (Some(action), Some(branch)) = (
         input.get("action").and_then(Value::as_str),
         input.get("branch").and_then(Value::as_str),
     ) else {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "invalid_arguments",
             "Session worktree input requires action and branch.",
         ));
     };
     let target = format!("session-worktree/{action}/{branch}");
     let reference = owner.binding.workspace_reference.clone().ok_or_else(|| {
-        BtccError::new(
+        BtccError::relayed(
             "session_workspace_unavailable",
             "Session workspace unavailable",
         )
@@ -225,7 +224,7 @@ fn action_name(action: SessionWorktreeAction) -> &'static str {
 }
 
 fn policy(code: &str) -> EffectFailure {
-    EffectFailure::policy(code, "Session workspace input is invalid")
+    EffectFailure::policy(code.to_owned(), "Session workspace input is invalid")
 }
 
 fn adapter(code: &str) -> EffectAdapterError {

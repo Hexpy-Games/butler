@@ -50,7 +50,7 @@ impl AppSubsessionPort for NativeAppSubsessions {
             let mut projection = service
                 .app_projection(&session_id)
                 .await
-                .map_err(map_error)?;
+                .map_err(|error| map_error(&error))?;
             if projection
                 .get("relation")
                 .is_none_or(serde_json::Value::is_null)
@@ -133,7 +133,7 @@ impl AppSubsessionPort for NativeAppSubsessions {
                     child_role: SessionRole::Steward,
                 })
                 .await
-                .map_err(map_error)
+                .map_err(|error| map_error(&error))
         })
     }
 
@@ -150,7 +150,7 @@ impl AppSubsessionPort for NativeAppSubsessions {
                     relation_id,
                 })
                 .await
-                .map_err(map_error)
+                .map_err(|error| map_error(&error))
         })
     }
 
@@ -241,8 +241,8 @@ fn turn_state(status: &str) -> &'static str {
     }
 }
 
-fn map_error(error: crate::btcc::BtccError) -> GatewayApplicationError {
-    let status = match error.code.as_str() {
+fn map_error(error: &crate::btcc::BtccError) -> GatewayApplicationError {
+    let status = match error.code() {
         "active_steward_relation_not_found" | "steward_relation_not_found" => 404,
         "active_steward_relation_ambiguous"
         | "steward_relation_not_active"
@@ -252,14 +252,14 @@ fn map_error(error: crate::btcc::BtccError) -> GatewayApplicationError {
     if status == 500 {
         GatewayApplicationError::Internal
     } else {
-        let message = match error.code.as_str() {
+        let message = match error.code() {
             "steward_relation_not_active" => "Steward relation is not active.",
             "steward_relation_not_recoverable" => "Steward relation is not recoverable.",
             _ => "Active Steward relation was not found.",
         };
         GatewayApplicationError::Public {
             status,
-            code: error.code,
+            code: error.code().to_owned(),
             message: message.into(),
         }
     }

@@ -7,6 +7,7 @@ use crate::btcc::work::ClaimCloseoutCorrectionInput;
 
 use super::{StorageError, StorageResult, common, relation};
 
+use crate::btcc::StorageCode;
 pub(super) use record::record;
 
 pub(super) fn claim_correction(
@@ -17,7 +18,7 @@ pub(super) fn claim_correction(
     let work = relation::require_bound(db, &input.scope, true)?;
     if work.id != input.work_id {
         return Err(common::error(
-            "durable_work_closeout_not_bound",
+            StorageCode::DurableWorkCloseoutNotBound,
             "Durable Work closeout diagnostic target is not bound to this Turn",
         ));
     }
@@ -42,7 +43,7 @@ fn replay(
     };
     if stored_hash != fingerprint || stored_work != work_id {
         return Err(common::error(
-            "durable_work_disposition_identity_conflict",
+            StorageCode::DurableWorkDispositionIdentityConflict,
             format!("Durable Work disposition identity conflict: {call_id}"),
         ));
     }

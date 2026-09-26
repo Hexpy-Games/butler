@@ -4,6 +4,7 @@ use crate::btcc::work::{ActionStatus, CheckpointCommand, WorkView};
 
 use super::super::{StorageError, StorageResult, common, read, relation};
 use super::{ProgressInput, assert_progress_revision, insert_progress, record, replay};
+use crate::btcc::StorageCode;
 
 pub(in crate::btcc::storage::work) fn record_checkpoint(
     db: &Connection,
@@ -22,7 +23,7 @@ pub(in crate::btcc::storage::work) fn record_checkpoint(
     let work = relation::require_bound(db, &input.scope, false)?;
     if work.current_plan_revision_id.as_deref() != Some(&command.expected_plan_revision_id) {
         return Err(common::error(
-            "durable_work_plan_changed",
+            StorageCode::DurableWorkPlanChanged,
             "Durable Work Plan changed before its progress update",
         ));
     }

@@ -8,6 +8,7 @@ use crate::btcc::work::{
 
 use super::super::{StorageError, StorageResult, common, mutation, read, relation, tool_result};
 use super::{evidence, replay};
+use crate::btcc::StorageCode;
 use mutation::{ProgressInput, insert_progress};
 
 pub(in crate::btcc::storage::work) fn record(
@@ -31,7 +32,7 @@ pub(in crate::btcc::storage::work) fn record(
     let work = relation::require_bound(db, &input.scope, runtime_owned_open)?;
     if work.id != input.work_id {
         return Err(common::error(
-            "durable_work_disposition_not_bound",
+            StorageCode::DurableWorkDispositionNotBound,
             "Durable Work disposition target is not bound to this Turn",
         ));
     }
@@ -54,8 +55,9 @@ pub(in crate::btcc::storage::work) fn record(
                 note: update.note.clone(),
             })
             .collect::<Vec<_>>();
-        crate::btcc::work::policy::apply_work_action_updates(&current, &updates)
-            .map_err(|error| common::error("durable_work_progress_invalid", error.message))?
+        crate::btcc::work::policy::apply_work_action_updates(&current, &updates).map_err(
+            |error| common::error(StorageCode::DurableWorkProgressInvalid, error.message()),
+        )?
     };
     let remaining = evidence::normalize_list(&command.remaining_actions);
     let next_condition = evidence::normalize_optional(input.next_condition.as_deref());
@@ -144,7 +146,7 @@ fn attach_current_turn(
             .map_err(StorageError::sqlite)?;
         if existing.as_ref().is_some_and(|other| other != work_id) {
             return Err(common::error(
-                "durable_work_result_other",
+                StorageCode::DurableWorkResultOther,
                 "Durable Work tool result is already bound to another Work",
             ));
         }
@@ -199,7 +201,7 @@ fn validate_expected_material(
         && material_fingerprint(current)? != *expected
     {
         return Err(common::error(
-            "durable_work_material_changed",
+            StorageCode::DurableWorkMaterialChanged,
             "Durable Work changed before its disposition was persisted",
         ));
     }
@@ -207,8 +209,9 @@ fn validate_expected_material(
 }
 
 fn material_fingerprint(work: &WorkView) -> StorageResult<String> {
-    crate::btcc::work::policy::disposition_material_fingerprint(work)
-        .map_err(|error| common::error("durable_work_material_fingerprint", error.message))
+    crate::btcc::work::policy::disposition_material_fingerprint(work).map_err(|error| {
+        common::error(StorageCode::DurableWorkMaterialFingerprint, error.message())
+    })
 }
 
 fn validate_disposition(
@@ -223,7 +226,7 @@ fn validate_disposition(
         DispositionStatus::Completed => {
             if !remaining.is_empty() {
                 return Err(common::error(
-                    "durable_work_remaining_actions",
+                    StorageCode::DurableWorkRemainingActions,
                     "Completed Work cannot have remaining actions",
                 ));
             }
@@ -232,20 +235,20 @@ fn validate_disposition(
                 .any(|action| !matches!(action.status, ActionStatus::Done | ActionStatus::Skipped))
             {
                 return Err(common::error(
-                    "durable_work_nonterminal_actions",
+                    StorageCode::DurableWorkNonterminalActions,
                     format!("Completed Work has nonterminal actions: {work_id}"),
                 ));
             }
             if common::effect_blocked(db, work_id)? {
                 return Err(common::error(
-                    "durable_work_effect_blocker",
+                    StorageCode::DurableWorkEffectBlocker,
                     "Completed Work has an unresolved effect blocker",
                 ));
             }
             let pending: Option<i64> = db.query_row("SELECT 1 FROM btcc_guided_effects WHERE work_id = ?1 AND status IN ('pending', 'prepared', 'dispatching', 'uncertain') LIMIT 1", [work_id], |row| row.get(0)).optional().map_err(StorageError::sqlite)?;
             if pending.is_some() {
                 return Err(common::error(
-                    "durable_work_pending_effect",
+                    StorageCode::DurableWorkPendingEffect,
                     "Completed Work has a pending effect",
                 ));
             }
@@ -253,7 +256,7 @@ fn validate_disposition(
         DispositionStatus::Open | DispositionStatus::Blocked => {
             if remaining.is_empty() && next.is_none() {
                 return Err(common::error(
-                    "durable_work_next_missing",
+                    StorageCode::DurableWorkNextMissing,
                     format!(
                         "{} Work requires remaining actions or a next condition",
                         common::enum_text(command.input.disposition)?
@@ -262,7 +265,7 @@ fn validate_disposition(
             }
             if command.input.disposition == DispositionStatus::Blocked && next.is_none() {
                 return Err(common::error(
-                    "durable_work_blocked_next_missing",
+                    StorageCode::DurableWorkBlockedNextMissing,
                     "Blocked Work requires a concrete next condition",
                 ));
             }

@@ -3,6 +3,7 @@ mod tests;
 mod types;
 mod validation;
 
+use crate::btcc::BtccCode;
 use serde_json::Map;
 
 use crate::btcc::BtccError;
@@ -25,8 +26,8 @@ impl TurnContinuationBudgetError {
     pub(crate) fn into_btcc_error(self) -> BtccError {
         match self {
             Self::Invalid(error) => error,
-            Self::Exhausted(state) => BtccError::new(
-                TURN_CONTINUATION_EXHAUSTED_CODE,
+            Self::Exhausted(state) => BtccError::detected(
+                BtccCode::TurnContinuationBudgetExhausted,
                 format!(
                     "Turn continuation budget exhausted: {}",
                     state

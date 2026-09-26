@@ -51,7 +51,7 @@ impl NativeGuidedFileEffects {
         match name {
             "write_file" => self.prepare_write(args),
             "edit_file" => edit::prepare(self, args, work, occurrence, journal).await,
-            _ => Err(BtccError::new(
+            _ => Err(BtccError::relayed(
                 "guided_file_effect_unbound",
                 "Unsupported workspace file effect",
             )),
@@ -68,9 +68,9 @@ impl NativeGuidedFileEffects {
         ));
         let input = adapter
             .normalize_input(args)
-            .map_err(|error| BtccError::new(error.code, error.message))?;
+            .map_err(crate::btcc::BtccError::from)?;
         let path = input.get("path").and_then(Value::as_str).ok_or_else(|| {
-            BtccError::new(
+            BtccError::relayed(
                 "write_file_effect_invalid",
                 "Normalized write_file path unavailable",
             )

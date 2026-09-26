@@ -40,7 +40,7 @@ impl crate::btcc::WorkerProfileReader for EmptyProfiles {
     }
     fn read(&self, _: Option<String>) -> PortFuture<'_, crate::btcc::WorkerProfile> {
         Box::pin(async {
-            Err(crate::btcc::BtccError::new(
+            Err(crate::btcc::BtccError::relayed(
                 "worker_profile_missing",
                 "missing",
             ))

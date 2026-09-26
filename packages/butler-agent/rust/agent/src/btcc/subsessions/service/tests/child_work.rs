@@ -8,7 +8,7 @@ struct CaptureRootWork {
 }
 
 fn unused<T: Send + 'static>() -> PortFuture<'static, T> {
-    Box::pin(async { Err(BtccError::new("unused_test_operation", "unused")) })
+    Box::pin(async { Err(BtccError::relayed("unused_test_operation", "unused")) })
 }
 
 impl DurableWorkRepository for CaptureRootWork {

@@ -6,6 +6,7 @@ use crate::btcc::work::{ProjectWorkObserveWorks, ToolResultRef, WorkScope};
 
 use super::super::super::{StorageError, StorageResult};
 use super::invalid;
+use crate::btcc::StorageCode;
 
 pub(super) fn assert_result_ownership(
     db: &Connection,
@@ -45,7 +46,7 @@ pub(super) fn assert_result_ownership(
                     && r.origin_turn_id == turn
                     && r.attached_at == attached
             }) {
-                return Err(invalid("project_work_runtime_ownership_conflict"));
+                return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
             }
         }
         let _ = (owner, sequence);
@@ -66,7 +67,7 @@ pub(super) fn assert_projection_ownership(
     for item in &input.works {
         let work = &item.work;
         let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid("project_work_runtime_projection_mismatch"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         };
         let row = db.query_row(
             "SELECT session_id,scope_kind,scope_ref,ledger_project_id FROM btcc_guided_works WHERE work_id=?1",
@@ -81,7 +82,7 @@ pub(super) fn assert_projection_ownership(
                     && input.legacy_import_claim_work_id.as_deref() != Some(work.work_id.as_str()))
                 || ledger.is_some_and(|id| id != input.ledger_project_id)
         }) {
-            return Err(invalid("project_work_runtime_ownership_conflict"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
         }
         let expected = work
             .result_refs
@@ -99,7 +100,7 @@ pub(super) fn assert_projection_ownership(
                 .optional()
                 .map_err(StorageError::sqlite)?;
             if extra.is_some() {
-                return Err(invalid("project_work_runtime_ownership_conflict"));
+                return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
             }
         } else {
             assert_result_ownership(db, &expected, &work.work_id)?;
@@ -110,7 +111,7 @@ pub(super) fn assert_projection_ownership(
         .iter()
         .find(|item| item.work.work_id == input.session_head_work_id)
     else {
-        return Err(invalid("project_work_runtime_head_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
     };
     let mut heads = db.prepare(
         "SELECT head.session_id,head.work_id,work.session_id,work.scope_kind,work.scope_ref,work.ledger_project_id \
@@ -137,16 +138,16 @@ pub(super) fn assert_projection_ownership(
             .works
             .iter()
             .find(|item| item.work.session_id == session)
-            .ok_or_else(|| invalid("project_work_runtime_ownership_conflict"))?;
+            .ok_or_else(|| invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict))?;
         let WorkScope::Project { project_ref } = &expected.work.scope else {
-            return Err(invalid("project_work_runtime_projection_mismatch"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         };
         if work_session.as_deref() != Some(expected.work.session_id.as_str())
             || kind.as_deref() != Some("project")
             || scope.as_deref() != Some(project_ref.as_str())
             || ledger.as_deref() != Some(input.ledger_project_id.as_str())
         {
-            return Err(invalid("project_work_runtime_ownership_conflict"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
         }
     }
     let bindings = input
@@ -201,7 +202,7 @@ pub(super) fn assert_projection_ownership(
                 && binding.revision == revision
                 && binding.bound_at == at
         }) {
-            return Err(invalid("project_work_runtime_ownership_conflict"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeOwnershipConflict));
         }
     }
     Ok(())

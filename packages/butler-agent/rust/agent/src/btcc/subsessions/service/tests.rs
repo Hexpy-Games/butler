@@ -148,7 +148,7 @@ impl WorkerProfileReader for EmptyProfiles {
     }
 
     fn read(&self, _profile_id: Option<String>) -> PortFuture<'_, WorkerProfile> {
-        Box::pin(async { Err(BtccError::new("worker_profile_missing", "missing")) })
+        Box::pin(async { Err(BtccError::relayed("worker_profile_missing", "missing")) })
     }
 }
 

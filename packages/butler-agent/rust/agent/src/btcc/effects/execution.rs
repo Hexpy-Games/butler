@@ -61,7 +61,7 @@ pub(super) async fn reconcile(
     let observation = match observation {
         Ok(value) => value,
         Err(error) => {
-            let diagnostic = EffectError::new("effect_reconciliation_required", error.message);
+            let diagnostic = EffectError::new("effect_reconciliation_required", error.message());
             return record_uncertain(context, current, diagnostic).await;
         }
     };
@@ -120,7 +120,7 @@ async fn dispatch(context: &Context<'_>, current: &EffectRecord) -> EffectResult
             return record_uncertain(
                 context,
                 &claimed,
-                EffectError::new("effect_reconciliation_required", error.message),
+                EffectError::new("effect_reconciliation_required", error.message()),
             )
             .await;
         }

@@ -61,7 +61,7 @@ fn verification_preserves_unknown_fields_original_order_and_non_nfc_text() {
     fields.insert("unknown".into(), unknown);
     let changed: ExecutionControls = serde_json::from_value(reordered).unwrap();
     assert_eq!(
-        changed.verify().unwrap_err().code,
+        changed.verify().unwrap_err().code(),
         "turn_execution_controls_integrity_mismatch",
     );
 }
@@ -79,7 +79,7 @@ fn verification_rejects_invalid_contracts_before_integrity_check() {
     for value in invalid {
         let controls: ExecutionControls = serde_json::from_value(value).unwrap();
         assert_eq!(
-            controls.verify().unwrap_err().code,
+            controls.verify().unwrap_err().code(),
             "turn_execution_controls_invalid"
         );
     }

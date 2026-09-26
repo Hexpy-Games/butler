@@ -123,7 +123,7 @@ pub(crate) async fn record_helper_terminal(
     let result = journal
         .finish_restart_handoff(intent_id.to_owned(), state)
         .await
-        .map_err(|error| error.code.clone());
+        .map_err(|error| error.code().to_owned());
     let closed = storage
         .close()
         .await
@@ -167,7 +167,7 @@ impl NativeRestartHandoff {
             .tools
             .restart_requests(turn_id.to_owned())
             .await
-            .map_err(|error| error.code)?;
+            .map_err(|error| error.code().to_owned())?;
         for call in calls {
             if call.tool_name != "request_service_restart" || call.status != "completed" {
                 continue;
@@ -204,7 +204,7 @@ impl NativeRestartHandoff {
                 .effects
                 .claim_restart_handoff(key.to_owned(), receipt_id.to_owned())
                 .await
-                .map_err(|error| error.code)?
+                .map_err(|error| error.code().to_owned())?
             {
                 continue;
             }
@@ -223,7 +223,7 @@ impl NativeRestartHandoff {
             self.effects
                 .record_restart_handoff(key.to_owned(), state)
                 .await
-                .map_err(|error| error.code)?;
+                .map_err(|error| error.code().to_owned())?;
             if state == "spawn_failed" {
                 return Err("restart_handoff_spawn_failed".into());
             }

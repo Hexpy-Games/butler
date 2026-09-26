@@ -17,6 +17,7 @@ use helpers::*;
 use serde_json::{Map, Value, json};
 use std::sync::Arc;
 
+use crate::btcc::BtccCode;
 use crate::btcc::{
     ActionStatus, BtccError, DurableWorkService, ExecutionMode, ParentResultRoute, PortFuture,
     SqliteSubsessionRepository, StartWorkInput, SubsessionCreate, WorkTurnScope, WorkView,
@@ -129,16 +130,16 @@ impl NativeSubsessionService {
             .get_by_session_id(&request.parent_session_id)
             .await
             .map_err(BtccError::from)?
-            .ok_or_else(|| error("parent_butler_session_required"))?;
+            .ok_or_else(|| error(BtccCode::ParentButlerSessionRequired))?;
         if parent.role != SessionRole::Butler {
-            return Err(error("parent_butler_session_required"));
+            return Err(error(BtccCode::ParentButlerSessionRequired));
         }
         let plan = reviewed
             .current_plan
             .as_ref()
-            .ok_or_else(|| error("delegation_reviewed_plan_required"))?;
+            .ok_or_else(|| error(BtccCode::DelegationReviewedPlanRequired))?;
         if plan.execution_mode != Some(ExecutionMode::Steward) {
-            return Err(error("steward_delegation_plan_mode_required"));
+            return Err(error(BtccCode::StewardDelegationPlanModeRequired));
         }
         let review = reviewed
             .latest_plan_review
@@ -147,16 +148,16 @@ impl NativeSubsessionService {
                 r.verdict == crate::btcc::ReviewVerdict::Accept
                     && r.bound_plan_revision_id.as_deref() == Some(&plan.plan_revision_id)
             })
-            .ok_or_else(|| error("delegation_reviewed_plan_required"))?;
+            .ok_or_else(|| error(BtccCode::DelegationReviewedPlanRequired))?;
         let parent_chat_id = parent
             .transport_bindings
             .iter()
             .find(|binding| binding.transport == "app" && !binding.peer_id.trim().is_empty())
             .map(|binding| binding.peer_id.clone())
-            .ok_or_else(|| error("parent_app_binding_required"))?;
+            .ok_or_else(|| error(BtccCode::ParentAppBindingRequired))?;
         let identity = json!({"parent_session_id":request.parent_session_id,"parent_turn_id":request.parent_turn_id,"request":request.request,"work_id":reviewed.work_id,"plan_revision_id":plan.plan_revision_id,"review_revision_id":review.review_revision_id});
-        let encoded =
-            serde_json::to_string(&identity).map_err(|_| error("subsession_identity_invalid"))?;
+        let encoded = serde_json::to_string(&identity)
+            .map_err(|source| error(BtccCode::SubsessionIdentityInvalid).with_source(source))?;
         let delegation_id = format!(
             "delegation-{}",
             crate::btcc::digest_identity(&format!("btcc.subsession.delegation.v1\0{encoded}"))
@@ -165,7 +166,7 @@ impl NativeSubsessionService {
             .repository
             .by_delegation(delegation_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
         {
             self.ensure_child_binding(&existing).await?;
             self.replay(&existing).await?;
@@ -233,13 +234,13 @@ impl NativeSubsessionService {
                 created_at: now,
             })
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let stored = self
             .repository
             .by_delegation(delegation_id)
             .await
-            .map_err(storage)?
-            .ok_or_else(|| error("subsession_persist_failed"))?;
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
         self.ensure_child_binding(&stored).await?;
         self.replay(&stored).await?;
         Ok(delegation_output(&stored))
@@ -295,7 +296,7 @@ impl NativeSubsessionService {
         let (role, role_name) = match stored.packet["child_role"].as_str() {
             Some("steward") => (SessionRole::Steward, "steward"),
             Some("worker") => (SessionRole::Worker, "worker"),
-            _ => return Err(error("subsession_child_role_invalid")),
+            _ => return Err(error(BtccCode::SubsessionChildRoleInvalid)),
         };
         if let Some(existing) = self
             .bindings
@@ -304,7 +305,7 @@ impl NativeSubsessionService {
             .map_err(BtccError::from)?
         {
             if existing.role != role {
-                return Err(error("subsession_child_binding_mismatch"));
+                return Err(error(BtccCode::SubsessionChildBindingMismatch));
             }
             return Ok(());
         }
@@ -313,10 +314,10 @@ impl NativeSubsessionService {
             .get_by_session_id(&stored.parent_session_id)
             .await
             .map_err(BtccError::from)?
-            .ok_or_else(|| error("subsession_parent_binding_missing"))?;
+            .ok_or_else(|| error(BtccCode::SubsessionParentBindingMissing))?;
         let access = stored.packet["access_mode"]
             .as_str()
-            .ok_or_else(|| error("subsession_access_mode_invalid"))?;
+            .ok_or_else(|| error(BtccCode::SubsessionAccessModeInvalid))?;
         let metadata = child_metadata(role_name, &stored.packet, access, &parent);
         self.create_child_binding(stored, &parent, role, metadata)
             .await
@@ -329,7 +330,7 @@ impl NativeSubsessionService {
             .dispatch_intent
             .get("envelope")
             .cloned()
-            .ok_or_else(|| error("subsession_dispatch_intent_invalid"))?;
+            .ok_or_else(|| error(BtccCode::SubsessionDispatchIntentInvalid))?;
         self.queue.enqueue(SubsessionEnqueue {
             envelope,
             metadata: Map::new(),
@@ -337,7 +338,7 @@ impl NativeSubsessionService {
         self.repository
             .mark_enqueued(stored.relation_id.clone())
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
     pub(crate) async fn ensure_child_work(
         &self,
@@ -348,14 +349,14 @@ impl NativeSubsessionService {
             .repository
             .by_child(session.into())
             .await
-            .map_err(storage)?
-            .ok_or_else(|| error("subsession_relation_missing"))?;
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::SubsessionRelationMissing))?;
         let binding = self
             .bindings
             .get_by_session_id(session)
             .await
             .map_err(BtccError::from)?
-            .ok_or_else(|| error("subsession_child_binding_missing"))?;
+            .ok_or_else(|| error(BtccCode::SubsessionChildBindingMissing))?;
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;
         if let Some(existing) = existing {
@@ -363,7 +364,7 @@ impl NativeSubsessionService {
                 || existing.session_id != session
                 || !work_matches_scope(&existing, &scope)
             {
-                return Err(error("subsession_root_work_identity_mismatch"));
+                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
             }
             return Ok(());
         }
@@ -372,12 +373,12 @@ impl NativeSubsessionService {
                 .work
                 .bind_open_work(scope.clone(), Some(stored.root_work_id.clone()))
                 .await?
-                .ok_or_else(|| error("subsession_root_work_identity_mismatch"))?;
+                .ok_or_else(|| error(BtccCode::SubsessionRootWorkIdentityMismatch))?;
             if bound.work_id != stored.root_work_id
                 || bound.session_id != session
                 || !work_matches_scope(&bound, &scope)
             {
-                return Err(error("subsession_root_work_identity_mismatch"));
+                return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
             }
             return Ok(());
         }
@@ -401,7 +402,7 @@ impl NativeSubsessionService {
             || work.session_id != session
             || !work_matches_scope(&work, &child_work_scope(&stored, &binding, turn)?)
         {
-            return Err(error("subsession_root_work_identity_mismatch"));
+            return Err(error(BtccCode::SubsessionRootWorkIdentityMismatch));
         }
         Ok(())
     }
@@ -429,7 +430,7 @@ impl NativeSubsessionService {
             self.repository
                 .child_result_evidence(session.to_owned())
                 .await
-                .map_err(storage)?,
+                .map_err(BtccError::from)?,
         );
         evidence_refs.sort();
         evidence_refs.dedup();
@@ -443,7 +444,7 @@ impl NativeSubsessionService {
                 (self.now)(),
             )
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         self.deliver_worker_results().await
     }
     pub(crate) async fn recover_dispatches(&self) -> Result<(), BtccError> {
@@ -451,7 +452,7 @@ impl NativeSubsessionService {
             .repository
             .pending_dispatches()
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
         {
             self.ensure_child_binding(&stored).await?;
             self.replay(&stored).await?;
@@ -463,7 +464,7 @@ impl NativeSubsessionService {
         self.repository
             .has_active_child(parent.to_owned())
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
     pub(crate) async fn has_unfinished_execution(
         &self,
@@ -472,7 +473,7 @@ impl NativeSubsessionService {
         self.repository
             .has_unfinished_execution(session_id.to_owned())
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
     pub(crate) fn repository(&self) -> SqliteSubsessionRepository {
         self.repository.clone()

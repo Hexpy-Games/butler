@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 use super::*;
+use crate::btcc::StorageCode;
 use crate::btcc::TurnStore;
 use crate::btcc::storage::{
     BtccRepositories, StorageError, ToolJournalFinish, ToolJournalFinishStatus,
@@ -48,7 +49,7 @@ impl ExactProjectWorkResultAuthority for Authority {
             Ok(identity.clone())
         } else {
             Err(StorageError::new(
-                "operation_result_project_reference_mismatch",
+                StorageCode::OperationResultProjectReferenceMismatch,
                 "operation_result_project_reference_mismatch",
             ))
         }
@@ -262,7 +263,7 @@ async fn direct_empty_project_ref_and_utf8_request_range_match_bun() {
         })
         .await
         .unwrap_err();
-    assert_eq!(error.code, "operation_result_missing_or_scope_mismatch");
+    assert_eq!(error.code(), "operation_result_missing_or_scope_mismatch");
     storage.close().await.unwrap();
 }
 
@@ -314,7 +315,7 @@ async fn assert_code(
             .read_exact_result_range(input)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         expected
     );
 }
@@ -373,7 +374,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
             .resolve_result_reference(input.clone())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         golden()["errors"]["authorityMissing"]
     );
     let identity = ExactProjectWorkResultIdentity {
@@ -433,7 +434,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
         })
         .await
         .unwrap_err();
-    assert_eq!(error.code, golden()["errors"]["projection"]);
+    assert_eq!(error.code(), golden()["errors"]["projection"]);
 
     let mut mismatched = identity;
     mismatched.tool_name = "different_tool".into();
@@ -447,7 +448,7 @@ async fn managed_projection_requires_full_canonical_authority_match() {
             })
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "operation_result_project_reference_mismatch"
     );
     storage.close().await.unwrap();

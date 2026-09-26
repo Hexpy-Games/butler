@@ -62,7 +62,7 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
     .await;
     panic_harness.stop_permits.add_permits(1);
     assert_eq!(
-        panicking.await.unwrap().unwrap_err().code,
+        panicking.await.unwrap().unwrap_err().code(),
         "btcc_task_failed"
     );
     panic_assembly.host.close().await.unwrap();
@@ -95,7 +95,7 @@ async fn panicking_owned_turn_settles_duplicates_and_close_without_retention() {
     harness.permits.add_permits(1);
 
     for result in [first.await.unwrap(), duplicate.await.unwrap()] {
-        assert_eq!(result.unwrap_err().code, "btcc_task_failed");
+        assert_eq!(result.unwrap_err().code(), "btcc_task_failed");
     }
     closing.await.unwrap().unwrap();
     assert_eq!(assembly.btcc.inner.active_count(), 0);

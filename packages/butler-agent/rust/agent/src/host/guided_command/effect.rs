@@ -26,7 +26,7 @@ pub(super) async fn prepare(
         .jobs
         .run(move || NativeCommands::guarded_directory(&guarded_root, requested.as_deref()))
         .await?
-        .map_err(|e| BtccError::new(e.code(), e.message()))?;
+        .map_err(BtccError::from)?;
     let root_identity = canonical_root(&workspace);
     let cwd_identity = canonical_root(&cwd);
     let relative = cwd_identity
@@ -42,7 +42,7 @@ pub(super) async fn prepare(
     let mut proposed = args.clone();
     proposed.insert("cwd".into(), Value::String(relative.clone()));
     let input = normalize(&Value::Object(proposed))
-        .map_err(|e| BtccError::new("command_effect_invalid", e))?;
+        .map_err(|e| BtccError::relayed("command_effect_invalid", e))?;
     let Some(effect) = input.get("state_effect").and_then(Value::as_str) else {
         return Err(error("command_effect_invalid"));
     };
@@ -152,7 +152,7 @@ impl EffectAdapter for CommandEffectAdapter {
                 .jobs
                 .run(move || super::artifacts::snapshot(&data))
                 .await
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message))?;
+                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
             let started = std::time::SystemTime::now();
             let spooled = self
                 .commands
@@ -191,7 +191,7 @@ impl EffectAdapter for CommandEffectAdapter {
                 Some(effect),
             )
             .await
-            .map_err(|error| crate::btcc::EffectFailure::adapter(error.message))?;
+            .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
             Ok(AdapterOutcome::Applied(result))
         })
     }

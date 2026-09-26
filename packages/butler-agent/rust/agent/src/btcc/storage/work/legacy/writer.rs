@@ -4,6 +4,7 @@ use crate::btcc::work::{LegacyImport, WorkTurnScope};
 
 use super::super::{StorageError, StorageResult, common, read};
 use super::projection::Projection;
+use crate::btcc::StorageCode;
 
 pub(super) fn import(
     db: &Connection,
@@ -17,7 +18,7 @@ pub(super) fn import(
     common::relation_turn(db, scope)?;
     if origin.session_id != scope.session_id {
         return Err(common::error(
-            "durable_work_legacy_origin_session",
+            StorageCode::DurableWorkLegacyOriginSession,
             "Legacy Work origin belongs to another Session",
         ));
     }
@@ -80,7 +81,7 @@ fn replay(
         || scope_ref != scope.session_id
     {
         return Err(common::error(
-            "durable_work_legacy_identity_conflict",
+            StorageCode::DurableWorkLegacyIdentityConflict,
             "Legacy Work import identity conflict",
         ));
     }

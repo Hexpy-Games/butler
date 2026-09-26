@@ -3,6 +3,7 @@ use rusqlite::{Connection, params};
 use crate::btcc::work::{ActionProgress, WorkStage};
 
 use super::super::{StorageError, StorageResult, common};
+use crate::btcc::StorageCode;
 
 #[derive(Clone, Copy)]
 pub(in crate::btcc::storage::work) struct ProgressInput<'a> {
@@ -26,7 +27,7 @@ pub(in crate::btcc::storage::work) fn assert_progress_revision(
     let current: u64 = db.query_row("SELECT COALESCE(MAX(revision), 0) FROM btcc_guided_work_checkpoint_revisions WHERE work_id = ?1", [work_id], |row| row.get(0)).map_err(StorageError::sqlite)?;
     if current != expected {
         return Err(common::error(
-            "durable_work_progress_changed",
+            StorageCode::DurableWorkProgressChanged,
             "Durable Work progress changed; use the current Work view",
         ));
     }

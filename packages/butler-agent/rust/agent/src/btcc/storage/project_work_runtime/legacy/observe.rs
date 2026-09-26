@@ -8,6 +8,7 @@ use crate::btcc::work::{
 use super::super::super::{StorageError, StorageResult};
 use super::super::result;
 use super::{current, import_id, invalid, valid_hash};
+use crate::btcc::StorageCode;
 
 pub(super) fn apply(
     db: &Connection,
@@ -15,7 +16,7 @@ pub(super) fn apply(
     clock: &dyn Fn() -> String,
 ) -> StorageResult<()> {
     if !valid_hash(&input.canonical_head_sha256) {
-        return Err(invalid("project_work_legacy_observation_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyObservationInvalid));
     }
     match input.snapshot.source_kind {
         ProjectWorkLegacySourceKind::RawR2 => {
@@ -34,7 +35,7 @@ pub(super) fn apply(
                 .as_ref()
                 .is_none_or(|v| v.source_sha256 != input.snapshot.source_sha256)
             {
-                return Err(invalid("project_work_legacy_source_changed"));
+                return Err(invalid(StorageCode::ProjectWorkLegacySourceChanged));
             }
         }
     }
@@ -63,10 +64,10 @@ pub(super) fn apply(
                 || prior.source_authority != "project_ledger"
                 || prior.work_id != *work_id
             {
-                return Err(invalid("project_work_legacy_identity_conflict"));
+                return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
             }
         } else if import_id_exists(db, &id)? {
-            return Err(invalid("project_work_legacy_identity_conflict"));
+            return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
         }
     }
     let now = clock();
@@ -79,7 +80,7 @@ pub(super) fn apply(
                 input.scope.session_id, input.resolved_scope.app_project_id, work_id],
         ).map_err(StorageError::sqlite)?;
         if changed != 1 {
-            return Err(invalid("project_work_legacy_identity_conflict"));
+            return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
         }
     } else {
         db.execute(
@@ -108,7 +109,9 @@ pub(super) fn apply(
 
 fn verify_results(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> StorageResult<()> {
     if input.canonical_result_refs != input.snapshot.work.result_refs {
-        return Err(invalid("project_work_legacy_result_reference_mismatch"));
+        return Err(invalid(
+            StorageCode::ProjectWorkLegacyResultReferenceMismatch,
+        ));
     }
     for reference in &input.snapshot.work.result_refs {
         let evidence = result::read_committed(
@@ -123,7 +126,7 @@ fn verify_results(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> Sto
             || evidence.tool_name != reference.tool_name
             || reference.result_sha256.as_deref() != Some(evidence.result_sha256.as_str())
         {
-            return Err(invalid("project_work_legacy_result_invalid"));
+            return Err(invalid(StorageCode::ProjectWorkLegacyResultInvalid));
         }
     }
     Ok(())
@@ -132,7 +135,7 @@ fn verify_results(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> Sto
 fn validate_raw(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> StorageResult<()> {
     let work_id = &input.snapshot.work.work_id;
     if current::has_semantic_rows(db, work_id)? {
-        return Err(invalid("project_work_legacy_project_not_observed"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyProjectNotObserved));
     }
     for expected in &input.snapshot.bindings {
         let binding = db
@@ -159,7 +162,7 @@ fn validate_raw(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> Stora
                 || row.3 != expected.revision
                 || row.4 != 1
         }) {
-            return Err(invalid("project_work_legacy_binding_invalid"));
+            return Err(invalid(StorageCode::ProjectWorkLegacyBindingInvalid));
         }
     }
     let origin = input
@@ -180,7 +183,7 @@ fn validate_raw(db: &Connection, input: &ProjectWorkLegacyObserveInput) -> Stora
             || row.1 != origin.original_message_id
             || row.1 != input.snapshot.work.origin.message_id
     }) {
-        return Err(invalid("project_work_legacy_origin_message_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyOriginMessageInvalid));
     }
     Ok(())
 }
@@ -198,7 +201,7 @@ fn validate_observed_work(
                 != Some(input.resolved_scope.ledger_project_id.as_str())
             || row.canonical_head_sha256.as_deref() != Some(input.canonical_head_sha256.as_str())
     }) {
-        return Err(invalid("project_work_legacy_project_not_observed"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyProjectNotObserved));
     }
     Ok(())
 }

@@ -251,7 +251,7 @@ fn bounded_projection_shares_large_content_and_rejects_orphan_results() {
         message(ModelRoundRole::Tool, "result"),
     ];
     assert_eq!(
-        atomic_units::build(&orphan).unwrap_err().code,
+        atomic_units::build(&orphan).unwrap_err().code(),
         "turn_tool_protocol_orphan"
     );
 
@@ -271,7 +271,7 @@ fn bounded_projection_shares_large_content_and_rejects_orphan_results() {
         empty_result,
     ];
     assert_eq!(
-        atomic_units::build(&protocol).unwrap_err().code,
+        atomic_units::build(&protocol).unwrap_err().code(),
         "turn_tool_protocol_orphan"
     );
 }

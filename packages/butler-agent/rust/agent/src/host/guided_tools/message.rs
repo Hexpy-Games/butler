@@ -119,7 +119,7 @@ pub(super) fn result_message(
 }
 
 fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }
 
 fn append_value(output: &mut String, value: &serde_json::Value) -> Result<(), BtccError> {

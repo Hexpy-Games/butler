@@ -125,7 +125,7 @@ pub(super) fn batch_target(paths: &[String]) -> EffectResult<String> {
     let body = json!({"version":1,"paths":paths});
     let encoded =
         crate::json::stringify_sorted(&body, &|a, b| a.encode_utf16().cmp(b.encode_utf16()))
-            .map_err(|error| invalid(error.to_string()))?;
+            .map_err(|error| invalid(error.to_string()).with_source(error))?;
     Ok(format!(
         "workspace:batch:{}",
         crate::btcc::digest_identity(&encoded)

@@ -50,13 +50,13 @@ impl NativeGuidedWorkTools {
         expected_material_fingerprint: Option<&str>,
     ) -> Result<Value, BtccError> {
         if turn_id != self.scope.turn_id {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "guided_work_tool_turn_mismatch",
                 "Work tool owner belongs to a different Turn",
             ));
         }
         if !Self::is_work_tool(name) {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "guided_work_tool_unknown",
                 "This is not a durable Work tool",
             ));
@@ -78,7 +78,7 @@ impl NativeGuidedWorkTools {
         );
         let result = match command {
             Ok(command) => self.apply(command).await,
-            Err(message) => Err(BtccError::new("work_tool_decode_rejected", message)),
+            Err(message) => Err(BtccError::relayed("work_tool_decode_rejected", message)),
         };
         Ok(match result {
             Ok(work) => json!({"ok":true,"work":view::success(&work)}),
@@ -131,15 +131,15 @@ impl NativeGuidedWorkTools {
 }
 
 fn source_error(error: &BtccError) -> Value {
-    if error.code == "work_transition_guard_unmet"
-        && let Some(rest) = error.message.strip_prefix("Work cannot ")
+    if error.code() == "work_transition_guard_unmet"
+        && let Some(rest) = error.message().strip_prefix("Work cannot ")
         && let Some((requested, rest)) = rest.split_once(" from ")
         && let Some((stage, rest)) = rest.split_once("; ")
         && let Some((unmet, next)) = rest.split_once(". Next action: ")
     {
-        return json!({"code":error.code,"message":error.message,
+        return json!({"code":error.code(),"message":error.message(),
             "current_stage":stage,"requested_action":requested,
             "unmet_guard":unmet,"next_action":next});
     }
-    json!({"code":"work_update_rejected","message":error.message})
+    json!({"code":"work_update_rejected","message":error.message()})
 }

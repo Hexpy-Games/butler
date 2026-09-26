@@ -8,6 +8,7 @@ use super::types::{TurnContinuationBudgetLimits, TurnContinuationBudgetState};
 
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 use super::{TURN_CONTINUATION_BUDGET_SCHEMA, TURN_CONTINUATION_EXHAUSTED_CODE};
+use crate::btcc::BtccCode;
 
 pub(crate) fn select_turn_continuation_budget(
     read_env: impl Fn(&str) -> Option<String>,
@@ -25,15 +26,16 @@ pub(crate) fn select_turn_continuation_budget(
         if raw.trim().is_empty() {
             continue;
         }
-        let parsed = raw.trim().parse::<u64>().map_err(|_| {
-            BtccError::new(
-                "invalid_turn_continuation_limit",
+        let parsed = raw.trim().parse::<u64>().map_err(|source| {
+            BtccError::detected(
+                BtccCode::InvalidTurnContinuationLimit,
                 format!("invalid_turn_continuation_limit:{key}"),
             )
+            .with_source(source)
         })?;
         if parsed == 0 || parsed > MAX_SAFE_INTEGER {
-            return Err(BtccError::new(
-                "invalid_turn_continuation_limit",
+            return Err(BtccError::detected(
+                BtccCode::InvalidTurnContinuationLimit,
                 format!("invalid_turn_continuation_limit:{key}"),
             ));
         }
@@ -79,8 +81,8 @@ pub(crate) fn validate_turn_continuation_limits(
     for field in FIELDS {
         let value = field.get(&limits);
         if value == 0 || value > MAX_SAFE_INTEGER || value > field.get(&ceilings) {
-            return Err(BtccError::new(
-                "unsafe_turn_continuation_limit",
+            return Err(BtccError::detected(
+                BtccCode::UnsafeTurnContinuationLimit,
                 format!("unsafe_turn_continuation_limit:{}", field.name()),
             ));
         }
@@ -113,8 +115,12 @@ pub(crate) fn parse_turn_continuation_budget_state(
     value: Value,
     turn_id: &str,
 ) -> Result<TurnContinuationBudgetState, BtccError> {
-    let state: TurnContinuationBudgetState = serde_json::from_value(value).map_err(|_| {
-        BtccError::new("invalid_continuation_budget", "invalid_continuation_budget")
+    let state: TurnContinuationBudgetState = serde_json::from_value(value).map_err(|source| {
+        BtccError::detected(
+            BtccCode::InvalidContinuationBudget,
+            "invalid_continuation_budget",
+        )
+        .with_source(source)
     })?;
     validate_state(state, turn_id)
 }
@@ -123,8 +129,8 @@ pub(super) fn validate_state(
     turn_id: &str,
 ) -> Result<TurnContinuationBudgetState, BtccError> {
     if state.schema_version != TURN_CONTINUATION_BUDGET_SCHEMA || state.turn_id != turn_id {
-        return Err(BtccError::new(
-            "invalid_continuation_budget_identity",
+        return Err(BtccError::detected(
+            BtccCode::InvalidContinuationBudgetIdentity,
             "invalid_continuation_budget_identity",
         ));
     }
@@ -143,31 +149,31 @@ pub(super) fn validate_state(
     state.consumed_output_bytes = integer(state.consumed_output_bytes)?;
     state.consumed_model_facing_bytes = integer(state.consumed_model_facing_bytes)?;
     if state.terminal.is_none() && state.consumed_output_bytes > state.limits.max_output_bytes {
-        return Err(BtccError::new(
-            "invalid_continuation_budget_output_bound",
+        return Err(BtccError::detected(
+            BtccCode::InvalidContinuationBudgetOutputBound,
             "invalid_continuation_budget_output_bound",
         ));
     }
     if state.terminal.is_none()
         && state.consumed_model_facing_bytes > state.limits.max_cumulative_model_facing_bytes
     {
-        return Err(BtccError::new(
-            "invalid_continuation_budget_prompt_bound",
+        return Err(BtccError::detected(
+            BtccCode::InvalidContinuationBudgetPromptBound,
             "invalid_continuation_budget_prompt_bound",
         ));
     }
     state.started_at_ms = integer(state.started_at_ms)?;
     state.last_progress_at_ms = integer(state.last_progress_at_ms)?;
     if state.last_progress_at_ms < state.started_at_ms {
-        return Err(BtccError::new(
-            "invalid_continuation_budget_time",
+        return Err(BtccError::detected(
+            BtccCode::InvalidContinuationBudgetTime,
             "invalid_continuation_budget_time",
         ));
     }
     if let Some(terminal) = &mut state.terminal {
         if terminal.code != TURN_CONTINUATION_EXHAUSTED_CODE {
-            return Err(BtccError::new(
-                "invalid_continuation_budget_terminal",
+            return Err(BtccError::detected(
+                BtccCode::InvalidContinuationBudgetTerminal,
                 "invalid_continuation_budget_terminal",
             ));
         }
@@ -193,8 +199,8 @@ pub(super) fn safe_add(left: u64, right: u64) -> u64 {
 
 pub(super) fn integer(value: u64) -> Result<u64, BtccError> {
     (value <= MAX_SAFE_INTEGER).then_some(value).ok_or_else(|| {
-        BtccError::new(
-            "invalid_continuation_budget_integer",
+        BtccError::detected(
+            BtccCode::InvalidContinuationBudgetInteger,
             "invalid_continuation_budget_integer",
         )
     })
@@ -205,8 +211,8 @@ pub(super) fn required_text(value: String) -> Result<String, BtccError> {
     (length > 0 && length <= 200)
         .then_some(value)
         .ok_or_else(|| {
-            BtccError::new(
-                "invalid_continuation_budget_text",
+            BtccError::detected(
+                BtccCode::InvalidContinuationBudgetText,
                 "invalid_continuation_budget_text",
             )
         })
@@ -219,16 +225,16 @@ pub(super) fn required_digest(value: String) -> Result<String, BtccError> {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
     .then_some(value)
     .ok_or_else(|| {
-        BtccError::new(
-            "invalid_continuation_budget_digest",
+        BtccError::detected(
+            BtccCode::InvalidContinuationBudgetDigest,
             "invalid_continuation_budget_digest",
         )
     })
 }
 
 fn duplicate_round<T>() -> Result<T, BtccError> {
-    Err(BtccError::new(
-        "invalid_continuation_budget_duplicate_round",
+    Err(BtccError::detected(
+        BtccCode::InvalidContinuationBudgetDuplicateRound,
         "invalid_continuation_budget_duplicate_round",
     ))
 }

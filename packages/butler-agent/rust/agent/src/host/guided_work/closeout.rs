@@ -27,7 +27,7 @@ pub(super) async fn settle_open(
     let current = current
         .filter(|item| item.work_id == bound.work_id)
         .ok_or_else(|| {
-            BtccError::new(
+            BtccError::relayed(
                 "guided_work_binding_changed",
                 "Runtime-owned open Work binding changed before settlement",
             )
@@ -71,7 +71,7 @@ pub(super) async fn settle_open(
     if persisted.status != DurableWorkStatus::Open
         || !super::decision::fresh(Some(&persisted), &adapter.scope.turn_id)?
     {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "guided_work_disposition_not_current",
             "Runtime-owned open disposition was not current",
         ));
@@ -80,8 +80,8 @@ pub(super) async fn settle_open(
 }
 
 pub(super) fn publication_failure(error: &BtccError) -> bool {
-    error.code == "project_ledger_effect_not_applied"
-        || error.code == "project_ledger_effect_uncertain"
+    error.code() == "project_ledger_effect_not_applied"
+        || error.code() == "project_ledger_effect_uncertain"
 }
 
 pub(super) fn notice(adapter: &NativeGuidedWork, candidate: &str) -> String {

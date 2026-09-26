@@ -1,5 +1,6 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
+use crate::btcc::StorageCode;
 use crate::btcc::work::{
     ActionProgress, DispositionCommand, DispositionStatus, OriginalRequest,
     ProjectWorkCanonicalLocation, ProjectWorkDispositionPreparation, ProjectWorkLocateInput,
@@ -8,8 +9,8 @@ use crate::btcc::work::{
 
 use super::super::{StorageError, StorageResult};
 
-fn invalid(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+fn invalid(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }
 
 pub(super) fn locate(
@@ -76,10 +77,10 @@ pub(super) fn original_request(
         |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
     ).optional().map_err(StorageError::sqlite)?;
     let Some((session, message_id, content)) = row else {
-        return Err(invalid("project_work_runtime_origin_missing"));
+        return Err(invalid(StorageCode::ProjectWorkRuntimeOriginMissing));
     };
     if session != scope.session_id {
-        return Err(invalid("project_work_runtime_origin_missing"));
+        return Err(invalid(StorageCode::ProjectWorkRuntimeOriginMissing));
     }
     Ok(OriginalRequest {
         turn_id: scope.turn_id.clone(),
@@ -116,7 +117,9 @@ pub(super) fn result_facts(db: &Connection, work_id: &str) -> StorageResult<Vec<
                 .filter(|s| !s.is_empty())
                 .map(|s| serde_json::from_str(&s))
                 .transpose()
-                .map_err(|_| invalid("project_work_runtime_result_invalid"))?;
+                .map_err(|source| {
+                    invalid(StorageCode::ProjectWorkRuntimeResultInvalid).with_source(source)
+                })?;
             Ok(WorkResultFact {
                 result_ref: Some(result_ref),
                 tool_name,
@@ -183,7 +186,7 @@ pub(super) fn prepare_disposition(
             })
             .collect::<Vec<_>>();
         crate::btcc::work::policy::apply_work_action_updates(current, &updates)
-            .map_err(|e| StorageError::new("project_work_progress_invalid", e.message))?
+            .map_err(|e| StorageError::new(StorageCode::ProjectWorkProgressInvalid, e.message()))?
     };
     if command.input.disposition == DispositionStatus::Completed {
         let blocker = db.query_row(
@@ -191,7 +194,7 @@ pub(super) fn prepare_disposition(
             [&current.work_id], |row| row.get::<_, i64>(0),
         ).optional().map_err(StorageError::sqlite)?;
         if blocker.is_some() {
-            return Err(invalid("project_work_effect_unresolved"));
+            return Err(invalid(StorageCode::ProjectWorkEffectUnresolved));
         }
     }
     let evidence_snapshot = super::super::work::resolve_work_evidence(

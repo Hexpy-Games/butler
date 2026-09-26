@@ -1,11 +1,12 @@
 use super::super::StorageResult;
 use super::super::common::{error, stringify};
+use crate::btcc::StorageCode;
 use serde_json::{Map, Value};
 
 pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
     let source = value.as_object().ok_or_else(|| {
         error(
-            "model_response_invalid",
+            StorageCode::ModelResponseInvalid,
             "accepted response must be an object",
         )
     })?;
@@ -14,7 +15,7 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
         .and_then(Value::as_array)
         .ok_or_else(|| {
             error(
-                "model_response_invalid",
+                StorageCode::ModelResponseInvalid,
                 "accepted response has invalid normalized shape",
             )
         })?;
@@ -29,9 +30,12 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
     if let Some(names) = source.get("textToolCallNames") {
         let values = names
             .as_array()
-            .ok_or_else(|| error("model_response_invalid", "invalid text tool names"))?;
+            .ok_or_else(|| error(StorageCode::ModelResponseInvalid, "invalid text tool names"))?;
         if values.iter().any(|v| !v.is_string()) {
-            return Err(error("model_response_invalid", "invalid text tool name"));
+            return Err(error(
+                StorageCode::ModelResponseInvalid,
+                "invalid text tool name",
+            ));
         }
         out.insert("textToolCallNames".into(), names.clone());
     }
@@ -60,7 +64,7 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
         } else {
             let o = v
                 .as_object()
-                .ok_or_else(|| error("model_response_invalid", "invalid usage"))?;
+                .ok_or_else(|| error(StorageCode::ModelResponseInvalid, "invalid usage"))?;
             let mut usage = Map::new();
             for key in [
                 "model",
@@ -85,14 +89,20 @@ pub(super) fn normalize(value: &Value) -> StorageResult<Value> {
 fn tool_call(v: &Value) -> StorageResult<Value> {
     let o = v
         .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid tool call"))?;
+        .ok_or_else(|| error(StorageCode::ModelResponseInvalid, "invalid tool call"))?;
     for k in ["id", "name", "rawArguments"] {
         if !o.get(k).is_some_and(Value::is_string) {
-            return Err(error("model_response_invalid", "invalid tool call"));
+            return Err(error(
+                StorageCode::ModelResponseInvalid,
+                "invalid tool call",
+            ));
         }
     }
     if !o.get("arguments").is_some_and(Value::is_object) {
-        return Err(error("model_response_invalid", "invalid tool arguments"));
+        return Err(error(
+            StorageCode::ModelResponseInvalid,
+            "invalid tool arguments",
+        ));
     }
     let mut n = Map::new();
     for k in ["id", "name", "arguments", "rawArguments"] {
@@ -107,16 +117,22 @@ fn tool_call(v: &Value) -> StorageResult<Value> {
     Ok(Value::Object(n))
 }
 fn assistant(v: &Value, retain: bool) -> StorageResult<Value> {
-    let o = v
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid assistant message"))?;
+    let o = v.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid assistant message",
+        )
+    })?;
     if !o
         .get("role")
         .and_then(Value::as_str)
         .is_some_and(|v| matches!(v, "system" | "user" | "assistant" | "tool"))
         || !o.get("content").is_some_and(Value::is_string)
     {
-        return Err(error("model_response_invalid", "invalid assistant message"));
+        return Err(error(
+            StorageCode::ModelResponseInvalid,
+            "invalid assistant message",
+        ));
     }
     let mut n = Map::new();
     for k in ["role", "content"] {
@@ -128,9 +144,12 @@ fn assistant(v: &Value, retain: bool) -> StorageResult<Value> {
         }
     }
     if let Some(value) = o.get("toolCalls") {
-        let calls = value
-            .as_array()
-            .ok_or_else(|| error("model_response_invalid", "invalid assistant tool calls"))?;
+        let calls = value.as_array().ok_or_else(|| {
+            error(
+                StorageCode::ModelResponseInvalid,
+                "invalid assistant tool calls",
+            )
+        })?;
         n.insert(
             "toolCalls".into(),
             Value::Array(calls.iter().map(tool_call).collect::<StorageResult<_>>()?),
@@ -142,22 +161,31 @@ fn assistant(v: &Value, retain: bool) -> StorageResult<Value> {
     Ok(Value::Object(n))
 }
 fn provider_identity(v: &Value) -> StorageResult<Value> {
-    let o = v
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid provider identity"))?;
+    let o = v.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid provider identity",
+        )
+    })?;
     let mut n = Map::new();
     for k in ["provider", "configuredModel", "reportedModel"] {
         if !o.get(k).is_some_and(Value::is_string) {
-            return Err(error("model_response_invalid", "invalid provider identity"));
+            return Err(error(
+                StorageCode::ModelResponseInvalid,
+                "invalid provider identity",
+            ));
         }
         n.insert(k.into(), o[k].clone());
     }
     Ok(Value::Object(n))
 }
 fn bounded_continuation(v: &Value) -> StorageResult<Value> {
-    let o = v
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid bounded continuation"))?;
+    let o = v.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid bounded continuation",
+        )
+    })?;
     let allowed = [
         "provider",
         "responseId",
@@ -174,7 +202,7 @@ fn bounded_continuation(v: &Value) -> StorageResult<Value> {
             .is_some_and(|v| !v.is_empty() && utf16_len(v) <= 200)
     {
         return Err(error(
-            "model_response_invalid",
+            StorageCode::ModelResponseInvalid,
             "invalid bounded continuation",
         ));
     }
@@ -183,7 +211,7 @@ fn bounded_continuation(v: &Value) -> StorageResult<Value> {
         .is_none_or(|v| v > 1_000_000)
     {
         return Err(error(
-            "model_response_invalid",
+            StorageCode::ModelResponseInvalid,
             "invalid bounded continuation watermark",
         ));
     }
@@ -206,7 +234,7 @@ fn bounded_continuation(v: &Value) -> StorageResult<Value> {
     if let Some(value) = o.get("toolSurfaceDigest") {
         if !value.as_str().is_some_and(digest) {
             return Err(error(
-                "model_response_invalid",
+                StorageCode::ModelResponseInvalid,
                 "invalid tool surface digest",
             ));
         }
@@ -216,9 +244,12 @@ fn bounded_continuation(v: &Value) -> StorageResult<Value> {
 }
 
 fn provider_route_identity(value: &Value) -> StorageResult<Value> {
-    let o = value
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid provider route identity"))?;
+    let o = value.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid provider route identity",
+        )
+    })?;
     let valid = o.get("schemaVersion").and_then(Value::as_str)
         == Some("butler.provider-route-cache-identity.v1")
         && o.get("routeDigest")
@@ -263,7 +294,7 @@ fn provider_route_identity(value: &Value) -> StorageResult<Value> {
             .is_some_and(|v| (1..=1_000_000).contains(&v));
     if !valid {
         return Err(error(
-            "model_response_invalid",
+            StorageCode::ModelResponseInvalid,
             "invalid provider route identity",
         ));
     }
@@ -271,9 +302,12 @@ fn provider_route_identity(value: &Value) -> StorageResult<Value> {
 }
 
 fn context_projection(value: &Value) -> StorageResult<Value> {
-    let o = value
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid context projection"))?;
+    let o = value.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid context projection",
+        )
+    })?;
     let allowed = [
         "schemaVersion",
         "projectionRevision",
@@ -299,7 +333,7 @@ fn context_projection(value: &Value) -> StorageResult<Value> {
             .is_some_and(|v| v <= 1_000_000);
     if !valid {
         return Err(error(
-            "model_response_invalid",
+            StorageCode::ModelResponseInvalid,
             "invalid context projection",
         ));
     }
@@ -318,5 +352,6 @@ fn utf16_len(value: &str) -> usize {
 }
 fn json_clone(v: &Value) -> StorageResult<Value> {
     let bytes = stringify(v)?;
-    serde_json::from_str(&bytes).map_err(|e| error("model_response_invalid", e.to_string()))
+    serde_json::from_str(&bytes)
+        .map_err(|e| error(StorageCode::ModelResponseInvalid, e.to_string()).with_source(e))
 }

@@ -313,5 +313,5 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
 }
 
 fn error(code: &str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code.to_owned(), code)
 }

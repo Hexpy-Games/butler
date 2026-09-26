@@ -4,6 +4,7 @@ use serde_json::Value;
 
 use super::common::{canonical_json, error, route_text, state_text, stringify};
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::{
     DeliveryStatus, StateExecutionClaim, SuspensionReason, TurnCheckpoint, TurnSemanticState,
@@ -19,10 +20,12 @@ pub(super) fn commit(
     let transaction = connection.transaction().map_err(StorageError::sqlite)?;
     assert_current_claim(&transaction, turn, claim)?;
     consume_claim(&transaction, claim)?;
-    let next_revision = turn
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| error("turn_revision_overflow", "BTCC Turn revision overflow"))?;
+    let next_revision = turn.revision.checked_add(1).ok_or_else(|| {
+        error(
+            StorageCode::TurnRevisionOverflow,
+            "BTCC Turn revision overflow",
+        )
+    })?;
     match transition {
         TurnTransition::Suspend {
             reason,
@@ -70,14 +73,17 @@ pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> St
         transaction.commit().map_err(StorageError::sqlite)?;
         return Ok(());
     };
-    let revision = old_revision
-        .checked_add(1)
-        .ok_or_else(|| error("turn_revision_overflow", "BTCC Turn revision overflow"))?;
+    let revision = old_revision.checked_add(1).ok_or_else(|| {
+        error(
+            StorageCode::TurnRevisionOverflow,
+            "BTCC Turn revision overflow",
+        )
+    })?;
     let checkpoint = checkpoint_for(turn_id, revision, TurnSemanticState::Admitted);
-    let mut context = super::common::json(&context_json, "invalid_turn_context")?;
+    let mut context = super::common::json(&context_json, StorageCode::InvalidTurnContext)?;
     let object = context.as_object_mut().ok_or_else(|| {
         error(
-            "invalid_turn_context",
+            StorageCode::InvalidTurnContext,
             "BTCC Turn context must be an object",
         )
     })?;
@@ -102,7 +108,7 @@ pub(super) fn resume_authority(connection: &mut Connection, turn_id: &str) -> St
         .map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(error(
-            "transition_contention",
+            StorageCode::TransitionContention,
             "BTCC authority resume lost Turn CAS",
         ));
     }
@@ -119,14 +125,14 @@ fn suspend(
 ) -> StorageResult<()> {
     if turn.semantic_state != TurnSemanticState::Admitted {
         return Err(error(
-            "invalid_suspension_transition",
+            StorageCode::InvalidSuspensionTransition,
             "BTCC suspension can only commit from admitted",
         ));
     }
     if reason == SuspensionReason::AuthorityPending {
         let continuation = continuation.ok_or_else(|| {
             error(
-                "authority_continuation_missing",
+                StorageCode::AuthorityContinuationMissing,
                 "authority_continuation_missing",
             )
         })?;
@@ -135,14 +141,19 @@ fn suspend(
             .and_then(Value::as_str)
             .ok_or_else(|| {
                 error(
-                    "authority_continuation_invalid",
+                    StorageCode::AuthorityContinuationInvalid,
                     "authority requestRef missing",
                 )
             })?;
         let call_id = continuation
             .get("callId")
             .and_then(Value::as_str)
-            .ok_or_else(|| error("authority_continuation_invalid", "authority callId missing"))?;
+            .ok_or_else(|| {
+                error(
+                    StorageCode::AuthorityContinuationInvalid,
+                    "authority callId missing",
+                )
+            })?;
         let bound = connection
             .execute(
                 "UPDATE btcc_authority_requests SET source_call_id = ?1 WHERE request_ref = ?2 \
@@ -153,7 +164,7 @@ fn suspend(
             .map_err(StorageError::sqlite)?;
         if bound != 1 {
             return Err(error(
-                "authority_source_call_mismatch",
+                StorageCode::AuthoritySourceCallMismatch,
                 "authority_source_call_mismatch",
             ));
         }
@@ -164,7 +175,7 @@ fn suspend(
         ).map_err(StorageError::sqlite)?;
         if pending != 1 {
             return Err(error(
-                "authority_source_call_not_pending",
+                StorageCode::AuthoritySourceCallNotPending,
                 "authority_source_call_not_pending",
             ));
         }
@@ -194,7 +205,7 @@ fn suspend(
         .map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(error(
-            "transition_contention",
+            StorageCode::TransitionContention,
             "BTCC suspension commit lost Turn CAS",
         ));
     }
@@ -215,12 +226,13 @@ fn accept_final(
         || outbox.content != payload.content
     {
         return Err(error(
-            "invalid_final_transition",
+            StorageCode::InvalidFinalTransition,
             "BTCC R3 final does not match its immutable Outbox",
         ));
     }
-    let payload_value = serde_json::to_value(payload)
-        .map_err(|error| StorageError::new("invalid_final_payload", error.to_string()))?;
+    let payload_value = serde_json::to_value(payload).map_err(|error| {
+        StorageError::new(StorageCode::InvalidFinalPayload, error.to_string()).with_source(error)
+    })?;
     let payload_json = canonical_json(&payload_value)?;
     insert_immutable_record(
         connection,
@@ -252,7 +264,7 @@ fn accept_final(
     ).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(error(
-            "transition_contention",
+            StorageCode::TransitionContention,
             "BTCC R3 final commit lost Turn CAS",
         ));
     }
@@ -267,13 +279,13 @@ fn observe_delivery(
 ) -> StorageResult<()> {
     let Some(outbox) = turn.delivery_outbox.as_ref() else {
         return Err(error(
-            "invalid_delivery_observation",
+            StorageCode::InvalidDeliveryObservation,
             "BTCC R3 delivery observation lacks a committed Outbox",
         ));
     };
     if turn.semantic_state != TurnSemanticState::DeliveryCommitted {
         return Err(error(
-            "invalid_delivery_observation",
+            StorageCode::InvalidDeliveryObservation,
             "BTCC R3 delivery observation lacks a committed Outbox",
         ));
     }
@@ -288,7 +300,7 @@ fn observe_delivery(
         .map_err(StorageError::sqlite)?;
     if status.as_deref() != Some("inserted") {
         return Err(error(
-            "canonical_message_not_inserted",
+            StorageCode::CanonicalMessageNotInserted,
             "BTCC R3 delivery observation has no inserted canonical message",
         ));
     }
@@ -302,7 +314,7 @@ fn observe_delivery(
         != 1
     {
         return Err(error(
-            "transition_contention",
+            StorageCode::TransitionContention,
             "BTCC R3 delivery Outbox observation raced",
         ));
     }
@@ -316,7 +328,7 @@ fn observe_delivery(
     ).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(error(
-            "transition_contention",
+            StorageCode::TransitionContention,
             "BTCC R3 delivery commit lost Turn CAS",
         ));
     }
@@ -387,7 +399,7 @@ fn assert_current_claim(
     });
     if !valid {
         return Err(error(
-            "transition_claim_lost",
+            StorageCode::TransitionClaimLost,
             "BTCC R3 transition lost its exact Turn claim",
         ));
     }
@@ -405,7 +417,7 @@ fn consume_claim(connection: &Connection, claim: &StateExecutionClaim) -> Storag
         != 1
     {
         return Err(error(
-            "transition_claim_inactive",
+            StorageCode::TransitionClaimInactive,
             "BTCC R3 transition claim was not active",
         ));
     }
@@ -419,7 +431,7 @@ fn consume_claim(connection: &Connection, claim: &StateExecutionClaim) -> Storag
         != 1
     {
         return Err(error(
-            "transition_checkpoint_inactive",
+            StorageCode::TransitionCheckpointInactive,
             "BTCC R3 transition checkpoint was not actively claimed",
         ));
     }
@@ -479,7 +491,7 @@ fn insert_immutable_record(
         .map_err(StorageError::sqlite)?;
     if stored != (kind.to_owned(), sha.to_owned(), content.to_owned()) {
         return Err(error(
-            "immutable_record_conflict",
+            StorageCode::ImmutableRecordConflict,
             format!("Immutable BTCC record conflict: {id}"),
         ));
     }

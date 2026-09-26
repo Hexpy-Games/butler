@@ -19,7 +19,7 @@ pub(super) fn project(
     max_bytes: usize,
 ) -> Result<BoundedProjection, BtccError> {
     if max_bytes == 0 {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "invalid_model_facing_byte_limit",
             "invalid_model_facing_byte_limit",
         ));
@@ -177,7 +177,7 @@ fn compact(
             body.insert(
                 "operation_result".into(),
                 serde_json::to_value(reference).map_err(|error| {
-                    BtccError::new("context_serialization_failed", error.to_string())
+                    BtccError::relayed("context_serialization_failed", error.to_string())
                 })?,
             );
         }

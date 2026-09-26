@@ -1,8 +1,8 @@
 //! Exact persisted wake facts; validation never implies or creates authority.
 
+use crate::btcc::BtccError;
 use rusqlite::params;
 
-use super::common::btcc_error;
 use super::{BtccRepositories, StorageError};
 use crate::btcc::PortFuture;
 use crate::public_text::trim_js_whitespace;
@@ -43,7 +43,7 @@ impl BtccRepositories {
                     .map_err(StorageError::sqlite)
                 })
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 }

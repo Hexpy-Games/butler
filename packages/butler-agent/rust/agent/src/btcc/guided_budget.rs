@@ -11,6 +11,7 @@ use super::{
     BtccError, ContinuationBudgetTransition, ModelRouteWrite, PortFuture, StateExecutionClaim,
     TurnRecord, TurnStore,
 };
+use crate::btcc::BtccCode;
 
 pub(crate) trait TurnContinuationBudgetPort: Send + Sync {
     fn limits(&self) -> &TurnContinuationBudgetLimits;
@@ -49,8 +50,8 @@ impl GuidedContinuationBudgetFactory {
             return Ok(None);
         };
         let store = self.store.as_ref().ok_or_else(|| {
-            BtccError::new(
-                "turn_continuation_dependency_missing",
+            BtccError::detected(
+                BtccCode::TurnContinuationDependencyMissing,
                 "turn_continuation_dependency_missing",
             )
         })?;
@@ -81,7 +82,8 @@ struct GuidedContinuationBudget {
 impl GuidedContinuationBudget {
     async fn transition(&self, event: TurnContinuationBudgetEvent) -> Result<(), BtccError> {
         let event = serde_json::to_value(event).map_err(|error| {
-            BtccError::new("invalid_continuation_budget_event", error.to_string())
+            BtccError::detected(BtccCode::InvalidContinuationBudgetEvent, error.to_string())
+                .with_source(error)
         })?;
         let now_ms = (self.clock)();
         self.store

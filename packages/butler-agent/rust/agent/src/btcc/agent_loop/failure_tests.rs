@@ -33,7 +33,7 @@ impl TurnContextProjection for Context {
     ) -> ContextProjectionFuture<'a> {
         Box::pin(async move {
             if matches!(self.0, Failure::Context) {
-                Err(ContextProjectionError::Contract(BtccError::new(
+                Err(ContextProjectionError::Contract(BtccError::relayed(
                     "context_failed",
                     "context_failed",
                 )))
@@ -75,7 +75,7 @@ impl TurnContinuationBudgetPort for OutputBudget {
         Box::pin(async { Ok(()) })
     }
     fn record_output<'a>(&'a self, _: &'a str, _: u64) -> PortFuture<'a, ()> {
-        Box::pin(async { Err(BtccError::new("output_failed", "output_failed")) })
+        Box::pin(async { Err(BtccError::relayed("output_failed", "output_failed")) })
     }
     fn record_tool_round<'a>(&'a self, _: &'a str) -> PortFuture<'a, ()> {
         Box::pin(async { Ok(()) })
@@ -87,7 +87,7 @@ async fn failed_round(failure: Failure, cleanup_error: bool) -> (AgentLoopError,
     if matches!(failure, Failure::Provider) {
         let mut results = fixture.model_results.lock().unwrap();
         results.clear();
-        results.push_back(Err(ModelRoundError::Integrity(BtccError::new(
+        results.push_back(Err(ModelRoundError::Integrity(BtccError::relayed(
             "provider_failed",
             "provider_failed",
         ))));
@@ -172,7 +172,7 @@ async fn context_provider_and_output_failures_release_before_failure_progress() 
         (Failure::Output, "output_failed"),
     ] {
         let (error, events) = failed_round(failure, false).await;
-        assert!(matches!(error, AgentLoopError::Propagate(ref error) if error.code == code));
+        assert!(matches!(error, AgentLoopError::Propagate(ref error) if error.code() == code));
         let release = events
             .iter()
             .position(|value| value == "failed:btcc-model-round-0")
@@ -193,7 +193,7 @@ async fn context_provider_and_output_failures_release_before_failure_progress() 
 async fn replay_cleanup_error_replaces_original_and_prevents_failure_publication() {
     let (error, events) = failed_round(Failure::Context, true).await;
     assert!(
-        matches!(error, AgentLoopError::Propagate(ref error) if error.code == "cleanup_failed")
+        matches!(error, AgentLoopError::Propagate(ref error) if error.code() == "cleanup_failed")
     );
     assert!(
         events

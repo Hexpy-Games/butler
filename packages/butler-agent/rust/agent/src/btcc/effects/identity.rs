@@ -48,7 +48,9 @@ pub(super) fn stable(value: &Value) -> EffectResult<String> {
     crate::json::stringify_sorted(value, &|left, right| {
         left.encode_utf16().cmp(right.encode_utf16())
     })
-    .map_err(|error| EffectFailure::policy("effect_request_invalid", error.to_string()))
+    .map_err(|error| {
+        EffectFailure::policy("effect_request_invalid", error.to_string()).with_source(error)
+    })
 }
 
 fn required(value: &str, label: &str) -> EffectResult<()> {
@@ -62,7 +64,7 @@ fn required(value: &str, label: &str) -> EffectResult<()> {
     }
 }
 fn invalid(error: EffectFailure) -> EffectFailure {
-    EffectFailure::policy("effect_request_invalid", error.message)
+    EffectFailure::policy("effect_request_invalid", error.message().to_owned()).with_source(error)
 }
 
 /// Resolve the reviewed action using the same policy as durable Effects.

@@ -74,7 +74,7 @@ async fn persisted_document_is_immutable_reopens_and_detects_content_corruption(
             .read_context_document(reference.clone())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "btcc_context_document_identity_invalid"
     );
     assert_eq!(
@@ -82,7 +82,7 @@ async fn persisted_document_is_immutable_reopens_and_detects_content_corruption(
             .resolve_context_document(reference)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "context_document_unavailable"
     );
     storage.close().await.unwrap();
@@ -113,7 +113,7 @@ async fn legacy_resolve_and_strict_read_keep_distinct_source_contracts() {
             .read_context_document(reference)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "btcc_context_document_identity_invalid"
     );
     let valid = repository.persist_context_document(input()).await.unwrap();
@@ -130,7 +130,7 @@ async fn legacy_resolve_and_strict_read_keep_distinct_source_contracts() {
             .read_context_document(valid)
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "btcc_context_document_identity_invalid"
     );
     storage.close().await.unwrap();

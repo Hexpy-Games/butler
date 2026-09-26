@@ -32,7 +32,7 @@ fn parse_stage(value: &str) -> Result<WorkStage, BtccError> {
 }
 
 fn invalid() -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "guided_activity_snapshot_invalid",
         "Saved activity presentation is invalid",
     )

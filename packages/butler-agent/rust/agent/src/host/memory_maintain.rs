@@ -184,7 +184,7 @@ async fn run_active(
         collation,
     )
     .map_err(|error| {
-        crate::cognition::CognitionError::new("native_model_setup_failed", error.code)
+        crate::cognition::CognitionError::new("native_model_setup_failed", error.code())
     })?;
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(NativeGenerationVectorAdapter::new(

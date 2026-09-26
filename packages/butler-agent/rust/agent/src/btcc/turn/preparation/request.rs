@@ -1,6 +1,7 @@
 use serde_json::{Map, Value};
 
 use super::{js_truthy, object};
+use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::{
     BtccError, ProgressDestination, SessionRole as BtccRole, TurnRecord, TurnRequest, TurnTrigger,
@@ -54,8 +55,8 @@ pub(super) fn assert_replay_identity(
     if basic && wake_matches {
         Ok(())
     } else {
-        Err(BtccError::new(
-            "turn_replay_conflict",
+        Err(BtccError::detected(
+            BtccCode::TurnReplayConflict,
             format!(
                 "BTCC run replay does not match admitted Turn: {}",
                 turn.turn_id
@@ -77,8 +78,8 @@ pub(super) fn assert_binding_role(
     if matches {
         Ok(())
     } else {
-        Err(BtccError::new(
-            "session_binding_role_mismatch",
+        Err(BtccError::detected(
+            BtccCode::SessionBindingRoleMismatch,
             format!("Stored session {} has a different role", request.session_id),
         ))
     }
@@ -95,8 +96,8 @@ pub(super) fn replay_binding(
         _ => WorkspaceRole::Butler,
     };
     let selection = turn.model_selection.as_object().ok_or_else(|| {
-        BtccError::new(
-            "turn_replay_model_invalid",
+        BtccError::detected(
+            BtccCode::TurnReplayModelInvalid,
             "BTCC replay model selection is invalid",
         )
     })?;
@@ -215,7 +216,7 @@ pub(super) fn fresh_command(
 pub(super) fn admission_hash(command: &Value) -> Result<String, BtccError> {
     let command = command
         .as_object()
-        .ok_or_else(|| BtccError::new("command_invalid", "BTCC command is invalid"))?;
+        .ok_or_else(|| BtccError::detected(BtccCode::CommandInvalid, "BTCC command is invalid"))?;
     if command.get("kind").and_then(Value::as_str) == Some("resume") {
         return Ok(String::new());
     }
@@ -269,7 +270,7 @@ pub(super) fn conversation_envelope(request: &TurnRequest) -> ConversationEnvelo
 fn apply_request_context(request: &TurnRequest, context: &mut Value) -> Result<(), BtccError> {
     let fields = context
         .as_object_mut()
-        .ok_or_else(|| BtccError::new("context_invalid", "BTCC context is invalid"))?;
+        .ok_or_else(|| BtccError::detected(BtccCode::ContextInvalid, "BTCC context is invalid"))?;
     let app = request.app_turn_context.as_ref().and_then(Value::as_object);
     if let Some(app) = app {
         if let Some(id) = app
@@ -332,7 +333,10 @@ fn destination(request: &TurnRequest) -> Result<Value, BtccError> {
         .filter(|value| !value.is_empty())
     {
         let Some(object) = value.as_object_mut() else {
-            return Err(json_error("progress destination is not an object"));
+            return Err(BtccError::detected(
+                BtccCode::BtccJsonError,
+                "progress destination is not an object",
+            ));
         };
         object.insert("appQueueClaimId".into(), claim.clone().into());
     }
@@ -359,13 +363,16 @@ fn append_required_tool(fields: &mut Map<String, Value>, tool: &str) {
 fn append_unique(context: &mut Value, field: &str, value: &str) -> Result<(), BtccError> {
     let object = context
         .as_object_mut()
-        .ok_or_else(|| BtccError::new("context_invalid", "BTCC context is invalid"))?;
+        .ok_or_else(|| BtccError::detected(BtccCode::ContextInvalid, "BTCC context is invalid"))?;
     let values = object
         .entry(field)
         .or_insert_with(|| Value::Array(Vec::new()));
-    let values = values
-        .as_array_mut()
-        .ok_or_else(|| BtccError::new("context_invalid", "BTCC observation scope is invalid"))?;
+    let values = values.as_array_mut().ok_or_else(|| {
+        BtccError::detected(
+            BtccCode::ContextInvalid,
+            "BTCC observation scope is invalid",
+        )
+    })?;
     if !values.iter().any(|item| item.as_str() == Some(value)) {
         values.push(value.into());
     }
@@ -384,8 +391,8 @@ fn required_string(object: &Map<String, Value>, key: &str) -> Result<String, Btc
         .and_then(Value::as_str)
         .map(str::to_owned)
         .ok_or_else(|| {
-            BtccError::new(
-                "turn_replay_model_invalid",
+            BtccError::detected(
+                BtccCode::TurnReplayModelInvalid,
                 "BTCC replay model selection is invalid",
             )
         })
@@ -398,6 +405,6 @@ fn role_text(role: &WorkspaceRole) -> &str {
         WorkspaceRole::Unknown(value) => value,
     }
 }
-fn json_error(error: impl std::fmt::Display) -> BtccError {
-    BtccError::new("btcc_json_error", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
+    BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
 }

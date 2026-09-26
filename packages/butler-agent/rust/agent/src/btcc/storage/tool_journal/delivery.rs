@@ -1,12 +1,13 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::read;
+use crate::btcc::StorageCode;
 use crate::btcc::storage::common::error;
 use crate::btcc::storage::{StorageError, StorageResult};
 
 pub(super) fn admit(db: &Connection, turn: &str, call: &str) -> StorageResult<()> {
-    validate_id(turn, "operation_result_turn_id_invalid")?;
-    validate_id(call, "operation_result_call_id_invalid")?;
+    validate_id(turn, StorageCode::OperationResultTurnIdInvalid)?;
+    validate_id(call, StorageCode::OperationResultCallIdInvalid)?;
     let changed = db
         .execute(
             "UPDATE btcc_guided_tool_calls SET delivery_state='pending_delivery'
@@ -18,13 +19,13 @@ pub(super) fn admit(db: &Connection, turn: &str, call: &str) -> StorageResult<()
     if changed == 1 || read::find(db, turn, call)?.is_some_and(|row| row.delivery_state.is_some()) {
         return Ok(());
     }
-    fail("operation_result_delivery_admission_failed")
+    fail(StorageCode::OperationResultDeliveryAdmissionFailed)
 }
 
 pub(super) fn begin(db: &Connection, turn: &str, call: &str, round: &str) -> StorageResult<()> {
-    validate_id(turn, "operation_result_turn_id_invalid")?;
-    validate_id(call, "operation_result_call_id_invalid")?;
-    validate_id(round, "operation_result_round_id_invalid")?;
+    validate_id(turn, StorageCode::OperationResultTurnIdInvalid)?;
+    validate_id(call, StorageCode::OperationResultCallIdInvalid)?;
+    validate_id(round, StorageCode::OperationResultRoundIdInvalid)?;
     let changed = db
         .execute(
             "UPDATE btcc_guided_tool_calls SET delivery_state='in_flight',delivery_round_id=?1
@@ -40,14 +41,14 @@ pub(super) fn begin(db: &Connection, turn: &str, call: &str, round: &str) -> Sto
     {
         return Ok(());
     }
-    fail("operation_result_delivery_begin_conflict")
+    fail(StorageCode::OperationResultDeliveryBeginConflict)
 }
 
 pub(super) fn release(db: &Connection, turn: &str, round: &str) -> StorageResult<()> {
-    validate_id(turn, "operation_result_turn_id_invalid")?;
-    validate_id(round, "operation_result_round_id_invalid")?;
+    validate_id(turn, StorageCode::OperationResultTurnIdInvalid)?;
+    validate_id(round, StorageCode::OperationResultRoundIdInvalid)?;
     let rows = delivery_rows(db, turn, round)?;
-    let code = "operation_result_delivery_release_conflict";
+    let code = StorageCode::OperationResultDeliveryReleaseConflict;
     if (rows.is_empty() && has_in_flight(db, turn)?) || rows.iter().any(|row| row.0 != "in_flight")
     {
         return fail(code);
@@ -69,17 +70,17 @@ pub(super) fn acknowledge(
     round: &str,
     hash: &str,
 ) -> StorageResult<()> {
-    validate_id(turn, "operation_result_turn_id_invalid")?;
-    validate_id(round, "operation_result_round_id_invalid")?;
+    validate_id(turn, StorageCode::OperationResultTurnIdInvalid)?;
+    validate_id(round, StorageCode::OperationResultRoundIdInvalid)?;
     if hash.len() != 64
         || !hash
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
-        return fail("operation_result_response_hash_invalid");
+        return fail(StorageCode::OperationResultResponseHashInvalid);
     }
     let rows = delivery_rows(db, turn, round)?;
-    let code = "operation_result_delivery_acknowledgement_conflict";
+    let code = StorageCode::OperationResultDeliveryAcknowledgementConflict;
     if rows.is_empty() && has_in_flight(db, turn)? {
         return fail(code);
     }
@@ -118,7 +119,7 @@ pub(super) fn promote(db: &Connection, turn: &str, call: &str) -> StorageResult<
     {
         return Ok(());
     }
-    fail("operation_result_delivery_promotion_conflict")
+    fail(StorageCode::OperationResultDeliveryPromotionConflict)
 }
 
 fn delivery_rows(
@@ -144,7 +145,7 @@ fn has_in_flight(db: &Connection, turn: &str) -> StorageResult<bool> {
         [turn], |_| Ok(())).optional().map(|row| row.is_some()).map_err(StorageError::sqlite)
 }
 
-fn validate_id(value: &str, code: &'static str) -> StorageResult<()> {
+fn validate_id(value: &str, code: StorageCode) -> StorageResult<()> {
     if crate::public_text::trim_js_whitespace(value).is_empty() || value.len() > 256 {
         fail(code)
     } else {
@@ -152,6 +153,6 @@ fn validate_id(value: &str, code: &'static str) -> StorageResult<()> {
     }
 }
 
-fn fail<T>(code: &'static str) -> StorageResult<T> {
-    Err(error(code, code))
+fn fail<T>(code: StorageCode) -> StorageResult<T> {
+    Err(error(code, code.as_str()))
 }

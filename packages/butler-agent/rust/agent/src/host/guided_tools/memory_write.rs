@@ -208,7 +208,7 @@ fn cognition_failure(code: &'static str, message: &str) -> Value {
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(crate::btcc::BtccError::new(
+        ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(
             "guided_memory_write_result_json",
             error.to_string(),
         ))

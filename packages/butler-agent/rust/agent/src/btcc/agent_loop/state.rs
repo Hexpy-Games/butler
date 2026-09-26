@@ -8,6 +8,7 @@ use super::contracts::{
     AgentLoopEvent, AuthorityDecision, ModelRoundMessage, ModelRoundRole, SteeringObservation,
 };
 use super::ports::{AgentLoopObserver, propagated};
+use crate::btcc::BtccCode;
 
 pub(super) struct State {
     pub messages: Vec<ModelRoundMessage>,
@@ -102,7 +103,7 @@ pub(super) fn emit(observer: Option<&dyn AgentLoopObserver>, event: &AgentLoopEv
 
 pub(super) fn cancelled(cancellation: &CancellationToken) -> Result<(), AgentLoopError> {
     if cancellation.is_cancelled() {
-        Err(propagated(super::invalid_contract("turn_cancelled")))
+        Err(propagated(super::invalid_contract(BtccCode::TurnCancelled)))
     } else {
         Ok(())
     }
@@ -114,12 +115,12 @@ pub(super) fn validate_decision(
 ) -> Result<(), AgentLoopError> {
     if matches!(decision, AuthorityDecision::Modify { input } if input.trim().is_empty()) {
         return Err(propagated(super::invalid_contract(
-            "authority_modify_input_missing",
+            BtccCode::AuthorityModifyInputMissing,
         )));
     }
     if continuation.batch.next_call_index >= continuation.batch.calls.len() {
         return Err(propagated(super::invalid_contract(
-            "authority_continuation_cursor_invalid",
+            BtccCode::AuthorityContinuationCursorInvalid,
         )));
     }
     Ok(())

@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::super::manifest::{TABLES, manifest_id};
 use super::{StorageError, StorageResult, canonical_schema, error, integrity, references};
+use crate::btcc::StorageCode;
 
 pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
@@ -16,13 +17,13 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         &db,
         "agent_storage_migration_receipt",
         "receipt_json",
-        "agent_btcc_storage_unreceipted_target",
+        StorageCode::AgentBtccStorageUnreceiptedTarget,
     )?;
     if receipt_id != expected {
-        return Err(error("agent_btcc_storage_manifest_mismatch"));
+        return Err(error(StorageCode::AgentBtccStorageManifestMismatch));
     }
     let receipt: Value = serde_json::from_str(&receipt_raw)
-        .map_err(|_| error("agent_btcc_storage_receipt_invalid"))?;
+        .map_err(|source| error(StorageCode::AgentBtccStorageReceiptInvalid).with_source(source))?;
     validate_receipt(&receipt, &expected)?;
     canonical_schema(&db)?;
     integrity(&db)?;
@@ -31,10 +32,11 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         &db,
         "agent_storage_activation_marker",
         "marker_json",
-        "agent_btcc_storage_activation_missing",
+        StorageCode::AgentBtccStorageActivationMissing,
     )?;
-    let marker: Value = serde_json::from_str(&marker_raw)
-        .map_err(|_| error("agent_btcc_storage_activation_invalid"))?;
+    let marker: Value = serde_json::from_str(&marker_raw).map_err(|source| {
+        error(StorageCode::AgentBtccStorageActivationInvalid).with_source(source)
+    })?;
     if marker_id != expected
         || marker["schema"] != "butler.agent-btcc-storage-activation.v1"
         || marker["manifestId"] != expected
@@ -42,7 +44,7 @@ pub(crate) fn read_activated(path: &Path) -> StorageResult<String> {
         || !nonempty(&marker["firstActivatedAt"])
         || !nonempty(&marker["activatedAt"])
     {
-        return Err(error("agent_btcc_storage_activation_invalid"));
+        return Err(error(StorageCode::AgentBtccStorageActivationInvalid));
     }
     Ok(expected)
 }
@@ -51,7 +53,7 @@ fn marker_row(
     db: &Connection,
     table: &str,
     column: &str,
-    missing: &'static str,
+    missing: StorageCode,
 ) -> StorageResult<(String, String)> {
     let present = db
         .query_row(
@@ -79,7 +81,7 @@ fn validate_receipt(value: &Value, expected: &str) -> StorageResult<()> {
     let fence = &value["fence"];
     let tables = value["tables"]
         .as_array()
-        .ok_or_else(|| error("agent_btcc_storage_receipt_invalid"))?;
+        .ok_or_else(|| error(StorageCode::AgentBtccStorageReceiptInvalid))?;
     let source_kind = value["sourceKind"].as_str();
     let completed_at = value["completedAt"]
         .as_str()
@@ -102,7 +104,7 @@ fn validate_receipt(value: &Value, expected: &str) -> StorageResult<()> {
                 && digest(&table["contentSha256"])
         });
     if !valid {
-        return Err(error("agent_btcc_storage_receipt_invalid"));
+        return Err(error(StorageCode::AgentBtccStorageReceiptInvalid));
     }
     Ok(())
 }

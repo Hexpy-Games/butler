@@ -40,8 +40,10 @@ pub(super) fn execution(
     {
         return Err(AuthorityError::policy("authority_request_corrupt"));
     }
-    let normalized_input: Value = serde_json::from_str(&record.normalized_input_json)
-        .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    let normalized_input: Value =
+        serde_json::from_str(&record.normalized_input_json).map_err(|source| {
+            AuthorityError::policy("authority_request_corrupt").with_source(source)
+        })?;
     let outcome_receipt = record
         .outcome_receipt_json
         .as_deref()

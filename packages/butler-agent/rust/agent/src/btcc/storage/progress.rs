@@ -5,6 +5,7 @@ use super::common::{canonical_json, error, json as parse_json};
 use super::{StorageError, StorageResult};
 use crate::btcc::EventVisibility;
 use crate::btcc::ProgressDestination;
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::ProgressWrite;
 
@@ -24,13 +25,13 @@ pub(super) fn append(connection: &mut Connection, write: ProgressWrite) -> Stora
     if event.visibility.is_none() {
         event.visibility = Some(EventVisibility::Public);
     }
-    let event =
-        serde_json::to_value(event).map_err(|cause| error("progress_event", cause.to_string()))?;
+    let event = serde_json::to_value(event)
+        .map_err(|cause| error(StorageCode::ProgressEvent, cause.to_string()).with_source(cause))?;
     let fingerprint = digest(&canonical_json(
         &json!({"kind":event["kind"],"visibility":event["visibility"],"payload":event.get("payload").cloned().unwrap_or_else(||json!({}))}),
     )?);
     let destination = serde_json::to_value(&write.destination)
-        .map_err(|e| error("progress_destination", e.to_string()))?;
+        .map_err(|e| error(StorageCode::ProgressDestination, e.to_string()).with_source(e))?;
     let destination_json = canonical_json(&destination)?;
     let event_id = format!(
         "btcc-progress-event:{}",
@@ -81,8 +82,9 @@ pub(super) fn first_destination(
         .map_err(StorageError::sqlite)?;
     raw.map(|raw| {
         let destination: ProgressDestination =
-            serde_json::from_value(parse_json(&raw, "progress_destination")?)
-                .map_err(|e| error("progress_destination", e.to_string()))?;
+            serde_json::from_value(parse_json(&raw, StorageCode::ProgressDestination)?).map_err(
+                |e| error(StorageCode::ProgressDestination, e.to_string()).with_source(e),
+            )?;
         Ok(destination)
     })
     .transpose()

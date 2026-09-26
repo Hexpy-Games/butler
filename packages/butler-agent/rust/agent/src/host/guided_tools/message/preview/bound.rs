@@ -426,7 +426,7 @@ fn encode_value(value: &Value) -> Result<String, BtccError> {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn json_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "guided_tool_provider_serialization_failed",
         error.to_string(),
     )

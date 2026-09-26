@@ -82,7 +82,7 @@ async fn cancelled_admission_stops_before_async_prompt_producers() {
         AdmissionContextPort::build_butler(&assembler, &request, &binding(WorkspaceRole::Butler))
             .await
             .unwrap_err();
-    assert_eq!(error.code, "prompt_assembly_cancelled");
+    assert_eq!(error.code(), "prompt_assembly_cancelled");
     assert!(profile_calls.lock().unwrap().is_empty());
     assert!(cognition_calls.lock().unwrap().is_empty());
     conversation.close().await.unwrap();

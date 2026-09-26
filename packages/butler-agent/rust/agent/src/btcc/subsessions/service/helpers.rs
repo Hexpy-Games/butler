@@ -1,6 +1,7 @@
 //! Deterministic subsession packets and host envelopes.
 
 use super::*;
+use crate::btcc::BtccCode;
 
 pub(super) fn render_input(packet: &Value, profile_prompt: Option<&str>) -> String {
     let base = format!(
@@ -127,16 +128,16 @@ pub(super) fn child_work_scope(
     turn_id: &str,
 ) -> Result<WorkTurnScope, BtccError> {
     if binding.session_id != stored.child_session_id {
-        return Err(error("subsession_child_binding_mismatch"));
+        return Err(error(BtccCode::SubsessionChildBindingMismatch));
     }
     let role = stored.packet["child_role"].as_str();
     let expected_role = match role {
         Some("steward") => crate::workspace::SessionRole::Steward,
         Some("worker") => crate::workspace::SessionRole::Worker,
-        _ => return Err(error("subsession_child_role_invalid")),
+        _ => return Err(error(BtccCode::SubsessionChildRoleInvalid)),
     };
     if binding.role != expected_role {
-        return Err(error("subsession_child_binding_mismatch"));
+        return Err(error(BtccCode::SubsessionChildBindingMismatch));
     }
     let project_ref = if role == Some("steward") {
         let policy = binding
@@ -171,7 +172,7 @@ pub(super) fn child_work_scope(
                     .as_deref()
                     .is_none_or(|id| id.trim().is_empty())
                 {
-                    return Err(error("steward_project_binding_missing"));
+                    return Err(error(BtccCode::StewardProjectBindingMissing));
                 }
                 Some(
                     binding
@@ -179,7 +180,7 @@ pub(super) fn child_work_scope(
                         .as_deref()
                         .or(binding.project_id.as_deref())
                         .filter(|id| !id.trim().is_empty())
-                        .ok_or_else(|| error("steward_project_binding_missing"))?
+                        .ok_or_else(|| error(BtccCode::StewardProjectBindingMissing))?
                         .to_owned(),
                 )
             }
@@ -254,9 +255,6 @@ pub(super) fn child_envelope(input: ChildEnvelopeInput<'_>) -> Value {
 pub(super) fn delegation_output(stored: &crate::btcc::StoredSubsessionDelegation) -> Value {
     json!({"ok":true,"status":"queued","relation_id":stored.relation_id,"child_session_id":stored.child_session_id})
 }
-pub(super) fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
-}
-pub(super) fn storage(e: crate::btcc::StorageError) -> BtccError {
-    BtccError::new(e.code, e.message)
+pub(super) fn error(code: BtccCode) -> BtccError {
+    BtccError::detected(code, code.as_str())
 }

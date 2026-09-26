@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use rusqlite::{Connection, params};
 
-use super::common::btcc_error;
 use super::{BtccStorage, StorageError, StorageResult};
 use crate::btcc::BtccError;
+use crate::btcc::StorageCode;
 
 const LOAD: &str = "SELECT source_digest, covered_units, summary \
     FROM btcc_context_compactions WHERE turn_id=?1 ORDER BY covered_units DESC";
@@ -39,7 +39,7 @@ impl ContextCompactionRepository {
             .execute(move |connection| load(connection, &turn_id))
             .await
             .map(Arc::from)
-            .map_err(btcc_error)
+            .map_err(BtccError::from)
     }
 
     pub(crate) async fn save(
@@ -52,7 +52,7 @@ impl ContextCompactionRepository {
         self.storage
             .execute(move |connection| save(connection, &turn_id, &record))
             .await
-            .map_err(btcc_error)
+            .map_err(BtccError::from)
     }
 }
 
@@ -72,7 +72,8 @@ fn load(
         .map_err(StorageError::sqlite)?;
     rows.map(|row| {
         let (source_digest, covered_units, summary) = row.map_err(StorageError::sqlite)?;
-        let covered_units = usize::try_from(covered_units).map_err(|_| invalid_record())?;
+        let covered_units = usize::try_from(covered_units)
+            .map_err(|source| invalid_record().with_source(source))?;
         Ok(Arc::new(ContextCompactionRecord {
             source_digest,
             covered_units,
@@ -87,7 +88,8 @@ fn save(
     turn_id: &str,
     record: &ContextCompactionRecord,
 ) -> StorageResult<()> {
-    let covered_units = i64::try_from(record.covered_units).map_err(|_| invalid_record())?;
+    let covered_units = i64::try_from(record.covered_units)
+        .map_err(|source| invalid_record().with_source(source))?;
     connection
         .execute(
             SAVE,
@@ -104,7 +106,7 @@ fn save(
 
 fn invalid_record() -> StorageError {
     StorageError::new(
-        "context_compaction_record_invalid",
+        StorageCode::ContextCompactionRecordInvalid,
         "BTCC context compaction has an invalid covered unit count",
     )
 }

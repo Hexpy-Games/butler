@@ -51,7 +51,7 @@ pub(super) fn prepare(
                 .unwrap_or("now")
         ),
         _ => {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "automation_tool_unknown",
                 "Automation tool unavailable",
             ));
@@ -165,7 +165,7 @@ impl EffectAdapter for AutomationEffect {
 }
 
 fn policy(code: &str) -> EffectFailure {
-    EffectFailure::policy(code, "Automation effect identity changed")
+    EffectFailure::policy(code.to_owned(), "Automation effect identity changed")
 }
 
 fn adapter(code: &str) -> EffectAdapterError {

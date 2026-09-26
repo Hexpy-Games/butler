@@ -80,7 +80,7 @@ fn page(payload: &str, output: &str, data: &str, offset: u64) -> Result<String, 
     let visible = base64::engine::general_purpose::STANDARD
         .decode(data)
         .map_err(|_| {
-            BtccError::new(
+            BtccError::relayed(
                 "guided_tool_result_base64_invalid",
                 "Exact result page is invalid",
             )
@@ -142,7 +142,7 @@ fn number_raw(raw: &str) -> bool {
         .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'-')
 }
 fn failure() -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "guided_tool_provider_serialization_failed",
         "Provider result JSON unavailable",
     )

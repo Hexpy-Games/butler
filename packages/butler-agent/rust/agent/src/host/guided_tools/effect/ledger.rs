@@ -25,13 +25,13 @@ pub(super) async fn prepare(
     args: &serde_json::Map<String, Value>,
 ) -> Result<(String, Value, std::sync::Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
     if !owner.binding.enable_project_ledger_effects {
-        return Err(crate::btcc::BtccError::new(
+        return Err(crate::btcc::BtccError::relayed(
             "project_ledger_active_context_required",
             "Project Ledger effects require a bounded project Turn.",
         ));
     }
     let project_id = owner.binding.memory.project_id.as_deref().ok_or_else(|| {
-        crate::btcc::BtccError::new(
+        crate::btcc::BtccError::relayed(
             "project_ledger_active_context_required",
             "Project Ledger effects require a bounded project Turn.",
         )
@@ -44,7 +44,7 @@ pub(super) async fn prepare(
         .map(WorkspaceReference::get)
         .transpose()
         .map_err(|_| {
-            crate::btcc::BtccError::new(
+            crate::btcc::BtccError::relayed(
                 "project_ledger_active_context_required",
                 "The active workspace is unavailable.",
             )
@@ -59,7 +59,7 @@ pub(super) async fn prepare(
         })
         .await
         .map_err(|_| {
-            crate::btcc::BtccError::new(
+            crate::btcc::BtccError::relayed(
                 "project_ledger_active_context_required",
                 "Project Ledger changes require the exact bounded project and workspace context.",
             )
@@ -75,7 +75,7 @@ pub(super) async fn prepare(
     };
     adapter
         .normalize_target(&target)
-        .map_err(|error| crate::btcc::BtccError::new(error.code, error.message))?;
+        .map_err(crate::btcc::BtccError::from)?;
     Ok((target, input, std::sync::Arc::new(adapter)))
 }
 

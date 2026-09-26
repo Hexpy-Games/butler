@@ -11,7 +11,7 @@ pub(super) fn supports(name: &str) -> bool {
 pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
     let mut preview = String::from("{\"tool_name\":");
     crate::json::write_string(name, &mut preview).map_err(|_| {
-        BtccError::new(
+        BtccError::relayed(
             "guided_tool_provider_serialization_failed",
             "Provider result JSON unavailable",
         )
@@ -52,7 +52,7 @@ pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
                     public.push(',');
                 }
                 crate::json::write_string(key, &mut public).map_err(|_| {
-                    BtccError::new(
+                    BtccError::relayed(
                         "guided_tool_provider_serialization_failed",
                         "Provider result JSON unavailable",
                     )
@@ -86,7 +86,7 @@ pub(super) fn project_raw(name: &str, raw: &str) -> Result<String, BtccError> {
                 Ok(())
             })
             .map_err(|error| {
-                BtccError::new(
+                BtccError::relayed(
                     "guided_tool_provider_serialization_failed",
                     error.to_string(),
                 )

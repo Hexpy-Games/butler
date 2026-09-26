@@ -40,7 +40,7 @@ impl NativeServiceConfiguration {
             source_path(explicit_data, "BUTLER_DATA").unwrap_or_else(|| user_home.join(".butler"));
         let data_root = installation
             .validate_data_root(&requested_data)
-            .map_err(|message| BtccError::new("native_path_configuration_invalid", message))?;
+            .map_err(|message| BtccError::relayed("native_path_configuration_invalid", message))?;
         let config = read_butler_config(&data_root);
         let configured = source_model(&config).unwrap_or("");
         let provider_model = if crate::public_text::trim_js_whitespace(configured).is_empty() {
@@ -62,7 +62,7 @@ impl NativeServiceConfiguration {
                 | "opencode-go"
                 | "local"
         ) {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "provider_adapter_not_registered",
                 format!("provider_adapter_not_registered:{provider_id}"),
             ));
@@ -100,7 +100,9 @@ impl NativeServiceConfiguration {
     pub(super) fn validate_workspace(&self, workspace: &Path) -> Result<(), BtccError> {
         self.installation
             .validate_workspace_root(workspace)
-            .map_err(|message| BtccError::new("native_workspace_configuration_invalid", message))
+            .map_err(|message| {
+                BtccError::relayed("native_workspace_configuration_invalid", message)
+            })
     }
 }
 
@@ -109,13 +111,13 @@ impl NativeServiceConfiguration {
 pub(crate) fn require_model_ref(binding: &StoredSessionBinding) -> Result<&str, BtccError> {
     let value = binding.model_ref.as_str();
     if crate::public_text::trim_js_whitespace(value).is_empty() {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "butler_model_binding_missing",
             "Stored Butler session has no model binding",
         ));
     }
     if !value.contains('/') {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "butler_model_binding_not_canonical",
             "Stored Butler model binding is not canonical",
         ));

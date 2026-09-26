@@ -7,7 +7,7 @@ fn eol_validation_rejects_missing_or_duplicate_exact_profile_section() {
     assert_eq!(
         subsession::validate_assembly(&missing, false)
             .unwrap_err()
-            .code,
+            .code(),
         "butler_eol_context_assembly_invalid"
     );
     let section = ContextSection {
@@ -26,7 +26,7 @@ fn eol_validation_rejects_missing_or_duplicate_exact_profile_section() {
     assert_eq!(
         subsession::validate_assembly(&duplicate, false)
             .unwrap_err()
-            .code,
+            .code(),
         "butler_eol_context_assembly_invalid"
     );
 }

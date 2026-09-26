@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 
 use super::super::common::{error, json as parse_json, stringify};
 use super::super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::turn::{ModelRoundKey, ModelRouteEventWrite};
 
 pub(in crate::btcc::storage) fn record_event(
@@ -17,10 +18,12 @@ pub(in crate::btcc::storage) fn record_event(
         write.binding.execution_fence,
         &write.binding.claim_id,
     )?;
-    let event = write
-        .event
-        .as_object()
-        .ok_or_else(|| error("model_event_invalid", "model route event must be an object"))?;
+    let event = write.event.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelEventInvalid,
+            "model route event must be an object",
+        )
+    })?;
     let event_type = string(event, "type")?;
     let round_id = string(event, "roundId")?;
     let model_ref = string(event, "modelRef")?;
@@ -43,7 +46,7 @@ pub(in crate::btcc::storage) fn record_event(
         .map(str::to_owned)
         .or_else(|| {
             route_raw.as_deref().and_then(|raw| {
-                parse_json(raw, "model_route_invalid")
+                parse_json(raw, StorageCode::ModelRouteInvalid)
                     .ok()?
                     .get("routeDigest")?
                     .as_str()
@@ -133,7 +136,7 @@ pub(in crate::btcc::storage) fn record_event(
                 .map_err(StorageError::sqlite)?;
             if changed != 1 {
                 return Err(error(
-                    "model_route_cas",
+                    StorageCode::ModelRouteCas,
                     "BTCC model route persistence lost Turn CAS",
                 ));
             }
@@ -234,7 +237,7 @@ pub(in crate::btcc::storage) fn assert_claim(
         })
     {
         return Err(error(
-            "model_claim_lost",
+            StorageCode::ModelClaimLost,
             "BTCC model route event lost exact Turn claim",
         ));
     }
@@ -244,18 +247,18 @@ pub(in crate::btcc::storage) fn assert_claim(
 fn string<'a>(o: &'a Map<String, Value>, key: &str) -> StorageResult<&'a str> {
     o.get(key)
         .and_then(Value::as_str)
-        .ok_or_else(|| error("model_event_invalid", format!("missing {key}")))
+        .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("missing {key}")))
 }
 fn unsigned(o: &Map<String, Value>, key: &str) -> StorageResult<u64> {
     o.get(key)
         .and_then(Value::as_u64)
-        .ok_or_else(|| error("model_event_invalid", format!("invalid {key}")))
+        .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("invalid {key}")))
 }
 fn optional_unsigned(o: &Map<String, Value>, key: &str) -> StorageResult<Option<u64>> {
     o.get(key)
         .map(|v| {
             v.as_u64()
-                .ok_or_else(|| error("model_event_invalid", format!("invalid {key}")))
+                .ok_or_else(|| error(StorageCode::ModelEventInvalid, format!("invalid {key}")))
         })
         .transpose()
 }

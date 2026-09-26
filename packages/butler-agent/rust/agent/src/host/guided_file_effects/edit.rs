@@ -31,7 +31,7 @@ struct State {
 }
 
 fn rejected(code: &str, message: impl Into<String>) -> BtccError {
-    BtccError::new(code, message)
+    BtccError::relayed(code.to_owned(), message)
 }
 fn observed<'a>(states: &'a HashMap<String, State>, path: &str) -> Result<&'a State, BtccError> {
     states.get(path).ok_or_else(|| {
@@ -86,11 +86,11 @@ pub(super) async fn prepare(
             "edit_file",
             occurrence,
         )
-        .map_err(|error| rejected(&error.code, error.message))?;
+        .map_err(|error| rejected(error.code(), error.message()))?;
         journal
             .find(id)
             .await
-            .map_err(|error| rejected(&error.code, error.message))?
+            .map_err(|error| rejected(error.code(), error.message()))?
     } else {
         None
     };
@@ -132,7 +132,7 @@ pub(super) async fn prepare(
                 .map(|edit| edit.path.clone())
                 .collect::<Vec<_>>(),
         )
-        .map_err(|error| rejected(&error.code, error.message))?
+        .map_err(|error| rejected(error.code(), error.message()))?
     } else {
         let Some(first) = edits.first() else {
             return Err(rejected(
@@ -202,7 +202,7 @@ fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, b
             .and_then(Value::as_str)
             .ok_or_else(|| rejected("edit_file_invalid_path", "edit_file requires path."))?;
         let path = normalized_workspace_effect_path(&owner.scope, path)
-            .map_err(|error| rejected(&error.code, error.message))?;
+            .map_err(|error| rejected(error.code(), error.message()))?;
         let old_text = row
             .get("old_text")
             .and_then(Value::as_str)
@@ -326,7 +326,7 @@ fn fresh(
         .collect::<Result<Vec<_>, BtccError>>()?;
     adapter
         .normalize_input(&candidate(batch, entries)?)
-        .map_err(|error| rejected(&error.code, error.message))
+        .map_err(|error| rejected(error.code(), error.message()))
 }
 
 fn recover(
@@ -403,9 +403,9 @@ fn recover(
     };
     let normalized = adapter
         .normalize_input(&candidate(batch, entries)?)
-        .map_err(|error| rejected(&error.code, error.message))?;
-    let hash =
-        effect_input_sha256(&normalized).map_err(|error| rejected(&error.code, error.message))?;
+        .map_err(|error| rejected(error.code(), error.message()))?;
+    let hash = effect_input_sha256(&normalized)
+        .map_err(|error| rejected(error.code(), error.message()))?;
     if hash != prior.identity.input_sha256 {
         return Err(rejected(
             "edit_file_reconciliation_mismatch",

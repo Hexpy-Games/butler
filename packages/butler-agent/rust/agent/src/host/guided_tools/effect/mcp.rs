@@ -30,7 +30,7 @@ pub(super) fn prepare(
     let (server_id, tool_name, arguments) = owner
         .mcp_client
         .prepare_tool_call(server_id, tool_name, arguments)
-        .map_err(|error| crate::btcc::BtccError::new(error.code, error.message))?;
+        .map_err(|error| crate::btcc::BtccError::relayed(error.code, error.message))?;
     let target = format!("mcp:{server_id}/{tool_name}");
     let input = json!({
         "server_id": server_id,
@@ -164,12 +164,15 @@ fn required_text<'a>(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            crate::btcc::BtccError::new("mcp_tool_input_invalid", "MCP tool inputs are invalid.")
+            crate::btcc::BtccError::relayed(
+                "mcp_tool_input_invalid",
+                "MCP tool inputs are invalid.",
+            )
         })
 }
 
 fn policy(code: &str) -> EffectFailure {
-    EffectFailure::policy(code, "MCP effect identity is invalid.")
+    EffectFailure::policy(code.to_owned(), "MCP effect identity is invalid.")
 }
 
 fn adapter(code: &str) -> EffectAdapterError {

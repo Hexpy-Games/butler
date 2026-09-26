@@ -58,7 +58,7 @@ pub(super) async fn execute(
             .map(crate::public_text::trim_js_whitespace)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "steward_delegation_input_invalid",
                     "request is required",
                 ))
@@ -69,7 +69,7 @@ pub(super) async fn execute(
             .await
             .map_err(ToolExecutionError::Integrity)?
             .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "delegation_reviewed_plan_required",
                     "Reviewed parent Work is required",
                 ))
@@ -142,7 +142,7 @@ pub(super) async fn execute(
                 .filter(|v| !v.is_empty())
                 .map(str::to_owned)
                 .ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::new(
+                    ToolExecutionError::Integrity(BtccError::relayed(
                         "worker_delegation_input_invalid",
                         format!("{key} is required"),
                     ))
@@ -153,7 +153,7 @@ pub(super) async fn execute(
             .get("acceptance_criteria")
             .and_then(Value::as_array)
             .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "worker_delegation_input_invalid",
                     "acceptance_criteria is required",
                 ))
@@ -161,7 +161,7 @@ pub(super) async fn execute(
             .iter()
             .map(|v| {
                 v.as_str().map(str::to_owned).ok_or_else(|| {
-                    ToolExecutionError::Integrity(BtccError::new(
+                    ToolExecutionError::Integrity(BtccError::relayed(
                         "worker_delegation_input_invalid",
                         "acceptance_criteria is invalid",
                     ))
@@ -169,7 +169,7 @@ pub(super) async fn execute(
             })
             .collect::<Result<Vec<_>, _>>()?;
         if acceptance.len() > 8 {
-            return Err(ToolExecutionError::Integrity(BtccError::new(
+            return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "worker_delegation_input_invalid",
                 "acceptance_criteria is too large",
             )));
@@ -180,7 +180,7 @@ pub(super) async fn execute(
             .await
             .map_err(ToolExecutionError::Integrity)?
             .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "delegation_reviewed_plan_required",
                     "Reviewed parent Work is required",
                 ))
@@ -241,7 +241,7 @@ pub(super) async fn execute(
             .get("instruction")
             .and_then(Value::as_str)
             .ok_or_else(|| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "steward_direction_instruction_required",
                     "instruction is required",
                 ))
@@ -361,7 +361,7 @@ pub(super) async fn execute(
             .map(crate::workspace::WorkspaceReference::get)
             .transpose()
             .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "project_workspace_unavailable",
                     error.code(),
                 ))
@@ -373,7 +373,7 @@ pub(super) async fn execute(
                 workspace_path: workspace,
                 installation_root: owner.binding.installation_root.clone(),
             }).await.unwrap_or_else(|error| json!({"ok":false,"error":{
-                "code":"tool_error", "message":format!("{} could not complete: {}", call.name, error.code)
+                "code":"tool_error", "message":format!("{} could not complete: {}", call.name, error.code())
             }}));
         return encoded(&result);
     }
@@ -388,7 +388,7 @@ pub(super) async fn execute(
             owner.tool_artifacts.read_evidence(args).await
         };
         return result.map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
+            ToolExecutionError::Integrity(BtccError::relayed(error.code, error.message))
         });
     }
     let result = match call.name.as_str() {
@@ -396,12 +396,12 @@ pub(super) async fn execute(
             .conversation_tools
             .list(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code, error.message)),
         "read_conversation_context" => owner
             .conversation_tools
             .read_context(owner.binding.memory.runtime_session_id.clone(), args)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code, error.message)),
         "recall_memory" => owner
             .recall
             .recall_tool(
@@ -411,17 +411,17 @@ pub(super) async fn execute(
                 args,
             )
             .await
-            .map_err(|error| BtccError::new(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code, error.message)),
         "query_memory" => owner
             .query
             .query(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code, error.message)),
         "read_conversation_session" => owner
             .conversations
             .read(owner.binding.memory.clone(), args)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message)),
+            .map_err(|error| BtccError::relayed(error.code, error.message)),
         "read_file" | "list_files" | "grep_files" | "list_skills" => owner
             .capabilities
             .invoke(
@@ -438,9 +438,9 @@ pub(super) async fn execute(
                 },
             )
             .await
-            .map_err(|error| BtccError::new(error.code.clone(), error.code)),
+            .map_err(|error| BtccError::relayed(error.code.clone(), error.code)),
         _ => {
-            return Err(ToolExecutionError::Integrity(BtccError::new(
+            return Err(ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_tool_executor_missing",
                 "Tool has no native executor",
             )));
@@ -448,14 +448,17 @@ pub(super) async fn execute(
     };
     encoded(&result.unwrap_or_else(|error| {
         json!({"ok":false,"error":{
-            "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code)
+            "code":"tool_error", "message":format!("{} could not complete: {}",call.name,error.code())
         }})
     }))
 }
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new("guided_tool_result_json", error.to_string()))
+        ToolExecutionError::Integrity(BtccError::relayed(
+            "guided_tool_result_json",
+            error.to_string(),
+        ))
     })
 }
 
@@ -469,9 +472,7 @@ pub(super) async fn execute_work(
             .journal
             .completed_call_identities(owner.binding.turn_id.clone())
             .await
-            .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
-            })?
+            .map_err(|error| ToolExecutionError::Integrity(error.into()))?
             .into_iter()
             .filter(|(_, name)| !NativeGuidedWorkTools::is_work_tool(name))
             .map(|(id, _)| id)

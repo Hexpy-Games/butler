@@ -48,7 +48,7 @@ pub(super) async fn run(
         return encoded(&error);
     };
     let description = describe_native(projection(owner, tool)).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_catalog_json",
             error.to_string(),
         ))
@@ -102,7 +102,7 @@ pub(super) async fn run(
         return encoded(&error);
     }
     let raw_arguments = crate::json::stringify(&Value::Object(args.clone())).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_arguments_json",
             error.to_string(),
         ))
@@ -122,10 +122,10 @@ pub(super) async fn run(
         };
         let value = match runtime.read_tool(&inner.arguments).await {
             Ok(value) => value,
-            Err(error) => return encoded(&underlying(id, &error.code)),
+            Err(error) => return encoded(&underlying(id, error.code())),
         };
         JsonDocument::from_value(&value).map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::new(
+            ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_bridge_result_json",
                 error.to_string(),
             ))
@@ -142,7 +142,7 @@ pub(super) async fn run(
             Ok(value) => value,
             Err(error) => {
                 let ToolExecutionError::Integrity(ref error) = error;
-                let code = error.code.as_str();
+                let code = error.code();
                 return encoded(&underlying(id, code));
             }
         }
@@ -229,14 +229,14 @@ async fn run_mcp(
         "arguments":args,
     }))
     .map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_arguments_json",
             error.to_string(),
         ))
     })?;
     let raw_arguments =
         crate::json::stringify(&Value::Object(inner_arguments.clone())).map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::new(
+            ToolExecutionError::Integrity(BtccError::relayed(
                 "guided_bridge_arguments_json",
                 error.to_string(),
             ))
@@ -259,7 +259,7 @@ async fn run_mcp(
         Ok(value) => value,
         Err(error) => {
             let ToolExecutionError::Integrity(ref error) = error;
-            let code = error.code.as_str();
+            let code = error.code();
             return encoded(&underlying(id, code));
         }
     };
@@ -287,14 +287,14 @@ fn attach_bridge_invocation(
     }
     body.push_str("\"bridge_invocation\":");
     crate::json::append_json(meta, &mut body).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),
         ))
     })?;
     body.push('}');
     JsonDocument::from_encoded(body).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),
         ))

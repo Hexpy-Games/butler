@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::super::{StorageError, StorageResult, common};
+use crate::btcc::StorageCode;
 
 pub(super) fn normalize_list(values: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
@@ -77,7 +78,7 @@ pub(in crate::btcc::storage) fn resolve(
             .map_err(StorageError::sqlite)?;
         if effects.len() > 1 {
             return Err(common::error(
-                "durable_work_evidence_ambiguous",
+                StorageCode::DurableWorkEvidenceAmbiguous,
                 format!("Durable Work evidence reference is ambiguous: {reference}"),
             ));
         }
@@ -89,7 +90,7 @@ pub(in crate::btcc::storage) fn resolve(
             continue;
         }
         return Err(common::error(
-            "durable_work_evidence_ineligible",
+            StorageCode::DurableWorkEvidenceIneligible,
             format!("Durable Work evidence reference is not eligible: {reference}"),
         ));
     }

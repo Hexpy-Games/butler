@@ -8,6 +8,7 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use super::TurnFacade;
 use super::ports::HostDependencies;
+use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, TurnOutcome, TurnRequest};
 
 pub(crate) struct Coordinator {
@@ -110,8 +111,8 @@ impl Coordinator {
             }
             let generation = state.next_stop_generation;
             state.next_stop_generation = generation.checked_add(1).ok_or_else(|| {
-                BtccError::new(
-                    "btcc_stop_generation_exhausted",
+                BtccError::detected(
+                    BtccCode::BtccStopGenerationExhausted,
                     "BTCC Stop operation generation exhausted",
                 )
             })?;
@@ -255,7 +256,7 @@ impl<T: Clone> Flight<T> {
             let mut task = self.task.lock().await;
             if let Some(handle) = task.as_mut() {
                 if let Err(error) = handle.await {
-                    let failure = BtccError::new("btcc_task_failed", error.to_string());
+                    let failure = BtccError::detected(BtccCode::BtccTaskFailed, error.to_string());
                     *self.result.lock().await = Some(Err(failure.clone()));
                     task.take();
                     self.ready.notify_waiters();
@@ -271,9 +272,9 @@ impl<T: Clone> Flight<T> {
 }
 
 fn closing_error() -> BtccError {
-    BtccError::new("btcc_closing", "BTCC is closing")
+    BtccError::detected(BtccCode::BtccClosing, "BTCC is closing")
 }
 
 fn panicked_task_error() -> BtccError {
-    BtccError::new("btcc_task_failed", "BTCC owned task panicked")
+    BtccError::detected(BtccCode::BtccTaskFailed, "BTCC owned task panicked")
 }

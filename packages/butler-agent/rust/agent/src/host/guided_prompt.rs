@@ -64,7 +64,7 @@ fn js_truthy(value: &Value) -> bool {
 
 fn json(value: &Value) -> Result<String, BtccError> {
     crate::json::stringify(value)
-        .map_err(|error| BtccError::new("guided_prompt_json_invalid", error.to_string()))
+        .map_err(|error| BtccError::relayed("guided_prompt_json_invalid", error.to_string()))
 }
 
 fn nonempty_array(turn: &TurnRecord, field: &str) -> bool {
@@ -235,13 +235,13 @@ fn request_bytes(
         .base()
         .initial_request_bytes(prompt, instructions, Some(butler_data))
         .map_err(|_| {
-            BtccError::new(
+            BtccError::relayed(
                 "phase_scoped_memory_serializer_failed",
                 "phase_scoped_memory_serializer_failed",
             )
         })?
         .ok_or_else(|| {
-            BtccError::new(
+            BtccError::relayed(
                 "phase_scoped_memory_dependency_missing",
                 "phase_scoped_memory_dependency_missing",
             )
@@ -267,14 +267,14 @@ impl PromptPort for NativeGuidedPrompt {
                 .journal
                 .recent_for_prompt(turn.turn_id.clone())
                 .await
-                .map_err(|error| BtccError::new(error.code, error.message))?;
+                .map_err(BtccError::from)?;
             let prior_tools = prior_tool::render(prior)?;
             let effects = match state.work.context.as_ref() {
                 Some(work) => state
                     .effects
                     .list_for_work(work.work.work_id.clone(), None)
                     .await
-                    .map_err(|error| BtccError::new(error.code, error.message))?,
+                    .map_err(crate::btcc::BtccError::from)?,
                 None => Vec::new(),
             };
             let effect_context = effect_context(&effects);
@@ -283,7 +283,7 @@ impl PromptPort for NativeGuidedPrompt {
                 .attachment_context
                 .render(&attachment_refs, "User attachments")
                 .await
-                .map_err(|error| BtccError::new(error.code, error.message))?;
+                .map_err(|error| BtccError::relayed(error.code, error.message))?;
             let image_attachments = attachments::provider_images(turn);
             let work_stream = if state.phase.execution_policy.tracking_mode == "none" {
                 String::new()
@@ -340,7 +340,7 @@ impl PromptPort for NativeGuidedPrompt {
                     memory_bytes(&empty_documents)
                 };
                 if fixed > 12 * 1024 {
-                    return Err(BtccError::new(
+                    return Err(BtccError::relayed(
                         "phase_scoped_memory_projection_too_large",
                         "phase_scoped_memory_projection_too_large",
                     ));
@@ -354,7 +354,7 @@ impl PromptPort for NativeGuidedPrompt {
                 )
                 .await?;
                 if memory_bytes(&candidate_documents) > 12 * 1024 {
-                    return Err(BtccError::new(
+                    return Err(BtccError::relayed(
                         "phase_scoped_memory_projection_too_large",
                         "phase_scoped_memory_projection_too_large",
                     ));
@@ -396,7 +396,7 @@ impl PromptPort for NativeGuidedPrompt {
                 .iter()
                 .map(|tool| {
                     serde_json::from_value::<ModelRoundTool>(tool.clone()).map_err(|error| {
-                        BtccError::new("guided_provider_tool_invalid", error.to_string())
+                        BtccError::relayed("guided_provider_tool_invalid", error.to_string())
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;

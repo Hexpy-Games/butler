@@ -118,7 +118,7 @@ pub(super) async fn apply(
         let bytes = payload
             .read(manifest)
             .await
-            .map_err(|error| image_error("image_payload_invalid", &error.code))?;
+            .map_err(|error| image_error("image_payload_invalid", error.code()))?;
         let expected_size = manifest.get("derivativeSizeBytes").and_then(Value::as_u64);
         let mime = manifest
             .get("derivativeMimeType")

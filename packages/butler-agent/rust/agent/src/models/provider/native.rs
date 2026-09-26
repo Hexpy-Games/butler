@@ -280,7 +280,7 @@ impl ModelRoundPort for NativeModelProvider {
             .unwrap_or(0.0);
         let fixed_value = serde_json::json!({"instructions":request.instructions,"tools":request.tools,"tool_choice":"auto","model":request.model});
         let fixed_json = crate::json::stringify(&fixed_value).map_err(|error| {
-            ModelRoundError::Integrity(crate::btcc::BtccError::new(
+            ModelRoundError::Integrity(crate::btcc::BtccError::relayed(
                 "context_serialization_failed",
                 error.to_string(),
             ))
@@ -293,7 +293,7 @@ impl ModelRoundPort for NativeModelProvider {
                 Some(request.model),
             )
             .map_err(|error| {
-                ModelRoundError::Integrity(crate::btcc::BtccError::new(
+                ModelRoundError::Integrity(crate::btcc::BtccError::relayed(
                     "context_tokenization_failed",
                     error.to_string(),
                 ))
@@ -318,14 +318,14 @@ impl ModelRoundPort for NativeModelProvider {
                     serde_json::Value::Array(serialize::bounded_items(messages))
                 } else {
                     serde_json::to_value(messages).map_err(|_| {
-                        crate::btcc::BtccError::new(
+                        crate::btcc::BtccError::relayed(
                             "context_serialization_failed",
                             "Context serialization failed.",
                         )
                     })?
                 };
                 let bytes = crate::json::stringify(&value).map_err(|_| {
-                    crate::btcc::BtccError::new(
+                    crate::btcc::BtccError::relayed(
                         "context_serialization_failed",
                         "Context serialization failed.",
                     )
@@ -333,7 +333,7 @@ impl ModelRoundPort for NativeModelProvider {
                 let tokens = catalog
                     .estimate_tokens(&snapshot, TokenEstimateInput::Text(&bytes), Some(&model))
                     .map_err(|_| {
-                        crate::btcc::BtccError::new(
+                        crate::btcc::BtccError::relayed(
                             "context_tokenization_failed",
                             "Context tokenization failed.",
                         )

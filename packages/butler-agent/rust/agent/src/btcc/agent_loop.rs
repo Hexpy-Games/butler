@@ -18,6 +18,7 @@ mod turn_binding;
 #[cfg(test)]
 mod fixture_binding;
 
+use crate::btcc::BtccCode;
 pub(crate) use contracts::SemanticTurn;
 pub(crate) use turn_binding::{
     BoundGuidedTurn, GuidedTurnFactory, GuidedTurnInputs, GuidedTurnStart,
@@ -176,6 +177,6 @@ impl AgentLoop for ProductionAgentLoop {
     }
 }
 
-fn invalid_contract(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+fn invalid_contract(code: BtccCode) -> BtccError {
+    BtccError::detected(code, code.as_str())
 }

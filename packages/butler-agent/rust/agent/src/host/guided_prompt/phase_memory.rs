@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::btcc::{BtccError, BtccRepositories, ContextDocumentRead, TurnRecord};
 
 fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }
 
 fn refs<'a>(turn: &'a TurnRecord, field: &str) -> impl Iterator<Item = &'a str> {

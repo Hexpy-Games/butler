@@ -55,7 +55,7 @@ impl RuntimeStores {
             process_liveness: Arc::new(NativeProcessLiveness { host_id }),
         })
         .await
-        .map_err(|e| error(e.code, &e.message))?;
+        .map_err(|e| error(e.code(), e.message()))?;
         let bindings = match SessionBindingStore::open(SessionBindingStoreConfig {
             path: session_store_path(data_root),
             storage_profile: WorkspaceStorageProfile::Durable,
@@ -106,7 +106,7 @@ impl RuntimeStores {
             .btcc
             .close()
             .await
-            .map_err(|e| error(e.code, e.message));
+            .map_err(|e| error(e.code(), e.message()));
         conversations.and(bindings).and(btcc)
     }
 }
@@ -126,5 +126,5 @@ impl ProcessLiveness for NativeProcessLiveness {
 }
 
 fn error(code: impl Into<String>, message: impl std::fmt::Display) -> BtccError {
-    BtccError::new(code, message.to_string())
+    BtccError::relayed(code.into(), message.to_string())
 }

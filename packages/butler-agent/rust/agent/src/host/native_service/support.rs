@@ -14,7 +14,7 @@ pub(super) async fn deliver_parent_results(
     for pending in repository
         .pending_parent_inputs()
         .await
-        .map_err(|error| failure(error.code, error.message))?
+        .map_err(|error| failure(error.code(), error.message()))?
     {
         if pending.route != crate::btcc::ParentResultRoute::ButlerApp {
             continue;
@@ -46,7 +46,7 @@ pub(super) async fn deliver_parent_results(
                 ModelConfigurationClock::now_iso(&SystemIdentity),
             )
             .await
-            .map_err(|error| failure(error.code, error.message))?;
+            .map_err(|error| failure(error.code(), error.message()))?;
     }
     Ok(())
 }
@@ -69,7 +69,7 @@ pub(super) fn io(error: impl std::fmt::Display) -> BtccError {
 }
 
 pub(super) fn failure(code: impl Into<String>, message: impl Into<String>) -> BtccError {
-    BtccError::new(code, message)
+    BtccError::relayed(code.into(), message)
 }
 
 pub(super) async fn close_runtime(runtime: Arc<NativeAgentRuntime>) -> Result<(), BtccError> {

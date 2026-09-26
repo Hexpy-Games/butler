@@ -340,7 +340,7 @@ fn scrub_text(value: &str, temp_root: &Path, temp_path: &Path) -> String {
 }
 
 fn integrity(code: &'static str, message: &'static str) -> ToolExecutionError {
-    ToolExecutionError::Integrity(crate::btcc::BtccError::new(code, message))
+    ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(code, message))
 }
 
 struct TempImageFile {

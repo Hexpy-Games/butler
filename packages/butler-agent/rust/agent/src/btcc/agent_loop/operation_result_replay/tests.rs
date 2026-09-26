@@ -171,7 +171,7 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
         results.clone(),
     );
     assert_eq!(
-        missing_exact.bind(scope).err().unwrap().code,
+        missing_exact.bind(scope).err().unwrap().code(),
         "operation_result_exact_read_dependency_missing"
     );
     let stored = journal

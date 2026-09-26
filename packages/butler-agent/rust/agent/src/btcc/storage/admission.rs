@@ -11,6 +11,7 @@ use super::{BtccStorage, StorageResult};
 use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::turn::TurnRecord;
 
+use crate::btcc::StorageCode;
 use claim::acquire_claim;
 use construct::construct_turn;
 use inbound::record_inbound;
@@ -37,7 +38,7 @@ pub(super) async fn load_or_admit(
     }
     if kind(&command)? == "resume" {
         return Err(error(
-            "turn_not_admitted",
+            StorageCode::TurnNotAdmitted,
             format!("BTCC Turn is not admitted: {turn_id}"),
         ));
     }
@@ -52,7 +53,7 @@ pub(super) async fn load_or_admit(
             .await?
             .ok_or_else(|| {
                 error(
-                    "constructed_turn_missing",
+                    StorageCode::ConstructedTurnMissing,
                     "Constructed BTCC Inbox has no Turn",
                 )
             })?;
@@ -74,7 +75,7 @@ pub(super) async fn load_or_admit(
         .await?
         .ok_or_else(|| {
             error(
-                "constructed_turn_missing",
+                StorageCode::ConstructedTurnMissing,
                 "BTCC Turn construction did not persist a Turn",
             )
         })?;
@@ -88,7 +89,7 @@ fn assert_replay_identity(turn: &TurnRecord, command: &Value) -> StorageResult<(
         "wake" => object(command, "trigger")?,
         _ => {
             return Err(error(
-                "invalid_turn_command",
+                StorageCode::InvalidTurnCommand,
                 "BTCC replay command is invalid",
             ));
         }
@@ -125,7 +126,7 @@ fn assert_replay_identity(turn: &TurnRecord, command: &Value) -> StorageResult<(
         Ok(())
     } else {
         Err(error(
-            "turn_replay_conflict",
+            StorageCode::TurnReplayConflict,
             format!(
                 "BTCC run replay does not match admitted Turn: {}",
                 turn.turn_id

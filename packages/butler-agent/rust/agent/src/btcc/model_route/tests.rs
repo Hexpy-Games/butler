@@ -282,7 +282,7 @@ async fn restart_abandons_open_slot_before_dispatch() {
 #[tokio::test]
 async fn durability_failure_prevents_provider_dispatch() {
     let store = Arc::new(Store::default());
-    *store.fail_read.lock().unwrap() = Some(BtccError::new("model_checkpoint_stale", "stale"));
+    *store.fail_read.lock().unwrap() = Some(BtccError::relayed("model_checkpoint_stale", "stale"));
     let base = Base::new([Ok(result("must-not-run"))]);
     let turn = turn(route(0, 1));
     let claim = claim();
@@ -298,7 +298,7 @@ async fn durability_failure_prevents_provider_dispatch() {
     .await;
     let error = run(&*execution, "round-stale").await.unwrap_err();
     assert!(
-        matches!(error, ModelRoundError::Integrity(ref value) if value.code == "model_route_durability_failure")
+        matches!(error, ModelRoundError::Integrity(ref value) if value.code() == "model_route_durability_failure")
     );
     assert!(base.models.lock().unwrap().is_empty());
 }

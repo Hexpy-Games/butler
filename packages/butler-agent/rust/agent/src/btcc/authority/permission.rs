@@ -25,8 +25,9 @@ pub(super) fn for_record(
     record: &AuthorityRecord,
     collation: &crate::locale::LocaleCollation,
 ) -> AuthorityResult<ConversationPermission> {
-    let input: Value = serde_json::from_str(&record.normalized_input_json)
-        .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?;
+    let input: Value = serde_json::from_str(&record.normalized_input_json).map_err(|source| {
+        AuthorityError::policy("authority_request_corrupt").with_source(source)
+    })?;
     let title = if matches!(
         record.reason.as_str(),
         "Run one reviewed command" | "Apply one reviewed effect"

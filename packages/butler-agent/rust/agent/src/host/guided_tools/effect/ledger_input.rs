@@ -143,5 +143,5 @@ fn nonempty(text: &str) -> Option<&str> {
 }
 
 fn invalid(message: &str) -> BtccError {
-    BtccError::new("project_ledger_effect_input_invalid", message)
+    BtccError::relayed("project_ledger_effect_input_invalid", message)
 }

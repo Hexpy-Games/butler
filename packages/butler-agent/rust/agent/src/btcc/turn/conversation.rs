@@ -1,5 +1,6 @@
 //! BTCC's adapter owns one canonical Conversation admission for this execution.
 
+use crate::btcc::BtccCode;
 use crate::btcc::{
     BtccError, EventVisibility, PortFuture, PreparedConversation, RuntimeTurnEventInput,
     TurnOutcome, TurnOutcomeKind,
@@ -63,8 +64,8 @@ impl PreparedConversation for ConversationProjection {
                 TurnOutcomeKind::Delivered(value) => (value.message_id, value.content),
                 TurnOutcomeKind::AlreadyDelivered(value) => (value.message_id, value.content),
                 _ => {
-                    return Err(BtccError::new(
-                        "conversation_outcome_invalid",
+                    return Err(BtccError::detected(
+                        BtccCode::ConversationOutcomeInvalid,
                         "Conversation completion requires delivered outcome",
                     ));
                 }

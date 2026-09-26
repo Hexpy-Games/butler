@@ -42,7 +42,7 @@ impl NativeProgressPublisher {
                 .repository
                 .pending_page(after.clone(), PAGE_SIZE)
                 .await
-                .map_err(storage)?;
+                .map_err(BtccError::from)?;
             if page.is_empty() {
                 break;
             }
@@ -70,7 +70,7 @@ impl NativeProgressPublisher {
     async fn publish(&self, event: &CommittedProgressEvent) -> Result<(), BtccError> {
         let destination = &event.destination;
         if destination.transport != "app" {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "progress_transport_unavailable",
                 "No enabled progress publisher for this transport",
             ));
@@ -85,7 +85,7 @@ impl NativeProgressPublisher {
             event.event.payload.as_ref(),
         )
         .map_err(|_| {
-            BtccError::new(
+            BtccError::relayed(
                 "progress_event_projection_failed",
                 "Progress event is invalid",
             )
@@ -150,10 +150,6 @@ impl NativeProgressPublisher {
         self.writer
             .append_outbound(event.session_id.clone(), action, delivery, metadata)
             .await
-            .map_err(|_| BtccError::new("progress_delivery_failed", "Progress delivery failed"))
+            .map_err(|_| BtccError::relayed("progress_delivery_failed", "Progress delivery failed"))
     }
-}
-
-fn storage(error: crate::btcc::StorageError) -> BtccError {
-    BtccError::new(error.code, error.message)
 }

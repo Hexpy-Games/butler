@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::btcc::work::WorkTurnScope;
 
 use super::{StorageError, StorageResult, common};
+use crate::btcc::StorageCode;
 
 pub(in crate::btcc::storage) const CONTROL_TOOLS: &[&str] = &[
     "start_work",
@@ -43,25 +44,25 @@ pub(super) fn attach(
     let Some((source_turn, tool_name, status, source_turn_rowid, source_turn_sequence)) = call
     else {
         return Err(common::error(
-            "durable_work_tool_not_committed",
+            StorageCode::DurableWorkToolNotCommitted,
             format!("Durable Work tool result is not committed: {call_id}"),
         ));
     };
     if source_turn != turn_id || status == "started" {
         return Err(common::error(
-            "durable_work_tool_not_committed",
+            StorageCode::DurableWorkToolNotCommitted,
             format!("Durable Work tool result is not committed: {call_id}"),
         ));
     }
     if status != "completed" {
         return Err(common::error(
-            "durable_work_tool_ineligible",
+            StorageCode::DurableWorkToolIneligible,
             format!("Durable Work tool result is not eligible for attachment: {call_id}"),
         ));
     }
     if CONTROL_TOOLS.contains(&tool_name.as_str()) {
         return Err(common::error(
-            "durable_work_control_result",
+            StorageCode::DurableWorkControlResult,
             format!("Durable Work control result cannot be attached: {tool_name}"),
         ));
     }
@@ -78,7 +79,7 @@ pub(super) fn attach(
         .is_some_and(|(_, existing_work)| existing_work != work_id)
     {
         return Err(common::error(
-            "durable_work_result_other",
+            StorageCode::DurableWorkResultOther,
             "Durable Work tool result is already bound to another Work",
         ));
     }

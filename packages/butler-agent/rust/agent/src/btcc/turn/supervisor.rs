@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use super::contracts::{StopPersistenceOutcome, TurnSemanticState};
+use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
 
 #[derive(Clone, Default)]
@@ -62,7 +63,10 @@ impl TurnExecutionSupervisor {
                 || (registration.fence == FenceState::FinalizingOnly
                     && semantic_state == TurnSemanticState::DeliveryCommitted);
             if !allowed || registration.permit_generation.is_some() {
-                return Err(BtccError::new("turn_fenced", "Turn execution is fenced"));
+                return Err(BtccError::detected(
+                    BtccCode::TurnFenced,
+                    "Turn execution is fenced",
+                ));
             }
             registration.permit_generation = Some(permit_generation);
             registration.generation
@@ -192,8 +196,8 @@ impl ExecutionPermit {
 
     pub(super) fn assert_active(&self) -> Result<(), BtccError> {
         if self.token.is_cancelled() {
-            Err(BtccError::new(
-                "turn_cancelled",
+            Err(BtccError::detected(
+                BtccCode::TurnCancelled,
                 "Turn execution was cancelled",
             ))
         } else {

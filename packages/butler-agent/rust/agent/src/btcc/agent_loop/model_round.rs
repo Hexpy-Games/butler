@@ -12,6 +12,7 @@ use super::progress::{Status, model_waiting};
 use super::state::{
     State, append_observations, emit, identify_messages, identify_response, next_item_id,
 };
+use crate::btcc::BtccCode;
 
 enum AttemptError {
     Model(ModelRoundError),
@@ -156,8 +157,8 @@ pub(super) async fn run_model_round(
             .map(serde_json::to_value)
             .transpose()
             .map_err(|error| {
-                AttemptError::Contract(BtccError::new(
-                    "bounded_continuation_serialization_failed",
+                AttemptError::Contract(BtccError::detected(
+                    BtccCode::BoundedContinuationSerializationFailed,
                     error.to_string(),
                 ))
             })?;
@@ -282,19 +283,27 @@ fn model_round_output_bytes(result: &ModelRoundResult) -> Result<u64, AttemptErr
     crate::json::append_json(&calls, &mut encoded).map_err(output_serialization_error)?;
     encoded.push('}');
     let bytes = encoded.len();
-    u64::try_from(bytes).map_err(|_| {
-        AttemptError::Contract(BtccError::new(
-            "model_round_output_too_large",
-            "model_round_output_too_large",
-        ))
+    u64::try_from(bytes).map_err(|source| {
+        AttemptError::Contract(
+            BtccError::detected(
+                BtccCode::ModelRoundOutputTooLarge,
+                "model_round_output_too_large",
+            )
+            .with_source(source),
+        )
     })
 }
 
-fn output_serialization_error(error: impl std::fmt::Display) -> AttemptError {
-    AttemptError::Contract(BtccError::new(
-        "model_round_output_serialization_failed",
-        error.to_string(),
-    ))
+fn output_serialization_error(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> AttemptError {
+    AttemptError::Contract(
+        BtccError::detected(
+            BtccCode::ModelRoundOutputSerializationFailed,
+            error.to_string(),
+        )
+        .with_source(error),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -359,7 +368,7 @@ fn map_attempt(error: AttemptError, input: &Invocation<'_>, iteration: u32) -> A
             let mapped = reduced(error);
             let code = match &mapped {
                 AgentLoopError::Runtime(failure) => failure.code.clone(),
-                AgentLoopError::Propagate(error) => error.code.clone(),
+                AgentLoopError::Propagate(error) => error.code().to_owned(),
             };
             emit(
                 input.observer,

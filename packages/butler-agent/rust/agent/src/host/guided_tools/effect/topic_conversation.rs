@@ -26,7 +26,7 @@ pub(super) fn prepare(
     _occurrence: &str,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
     if owner.binding.app_session_id.is_none() {
-        return Err(crate::btcc::BtccError::new(
+        return Err(crate::btcc::BtccError::relayed(
             "branch_source_required",
             "This Turn is not bound to an App conversation.",
         ));
@@ -125,7 +125,7 @@ impl EffectAdapter for TopicConversationEffect {
 
 fn normalize(input: &Map<String, Value>) -> Result<Map<String, Value>, crate::btcc::BtccError> {
     let invalid = || {
-        crate::btcc::BtccError::new(
+        crate::btcc::BtccError::relayed(
             "branch_input_invalid",
             "Topic conversation inputs are invalid.",
         )
@@ -186,7 +186,10 @@ fn normalize(input: &Map<String, Value>) -> Result<Map<String, Value>, crate::bt
 }
 
 fn policy(code: &str) -> EffectFailure {
-    EffectFailure::policy(code, "Topic conversation effect identity is invalid.")
+    EffectFailure::policy(
+        code.to_owned(),
+        "Topic conversation effect identity is invalid.",
+    )
 }
 
 fn adapter(code: &str) -> EffectAdapterError {

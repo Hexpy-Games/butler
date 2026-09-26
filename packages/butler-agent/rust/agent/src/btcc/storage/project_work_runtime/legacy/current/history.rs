@@ -8,13 +8,15 @@ use crate::btcc::work::{
 
 use super::super::super::super::{StorageError, StorageResult};
 use super::super::invalid;
+use crate::btcc::StorageCode;
 
 fn parse<T: serde::de::DeserializeOwned>(raw: &str) -> StorageResult<T> {
-    serde_json::from_str(raw).map_err(|_| invalid("project_work_legacy_history_invalid"))
+    serde_json::from_str(raw)
+        .map_err(|source| invalid(StorageCode::ProjectWorkLegacyHistoryInvalid).with_source(source))
 }
 fn enum_parse<T: serde::de::DeserializeOwned>(raw: &str) -> StorageResult<T> {
     serde_json::from_value(serde_json::Value::String(raw.into()))
-        .map_err(|_| invalid("project_work_legacy_history_invalid"))
+        .map_err(|source| invalid(StorageCode::ProjectWorkLegacyHistoryInvalid).with_source(source))
 }
 fn refs(db: &Connection, work_id: &str, through: u64) -> StorageResult<Vec<String>> {
     db.prepare("SELECT result_ref FROM btcc_guided_work_results WHERE work_id=?1 AND sequence<=?2 ORDER BY sequence")
@@ -97,7 +99,7 @@ pub(super) fn checkpoints(
             let plan = plans
                 .iter()
                 .find(|plan| plan.plan_revision_id == plan_id)
-                .ok_or_else(|| invalid("project_work_legacy_plan_missing"))?;
+                .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyPlanMissing))?;
             let mut action_progress: Vec<ActionProgress> = parse(&states)?;
             if action_progress.is_empty() {
                 action_progress = plan
@@ -256,7 +258,7 @@ pub(super) fn dispositions(
             .is_some()
         {
             return Err(invalid(
-                "project_work_legacy_disposition_effect_history_unavailable",
+                StorageCode::ProjectWorkLegacyDispositionEffectHistoryUnavailable,
             ));
         }
     }
@@ -330,7 +332,7 @@ pub(super) fn dispositions(
                 .result_refs
                 .get(..usize::try_from(result_sequence).unwrap_or(usize::MAX))
                 .filter(|refs| refs.len() == usize::try_from(result_sequence).unwrap_or(usize::MAX))
-                .ok_or_else(|| invalid("project_work_legacy_disposition_result_missing"))?
+                .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyDispositionResultMissing))?
                 .to_vec();
             let review = |subject| {
                 reviews
@@ -375,11 +377,15 @@ pub(super) fn dispositions(
             historical.effect_watermark = Some(watermark.clone());
             historical.effect_blockers = Some(Vec::new());
             historical.updated_at = at;
-            let actual =
-                crate::btcc::work::policy::disposition_material_fingerprint(&historical)
-                    .map_err(|_| invalid("project_work_legacy_disposition_material_mismatch"))?;
+            let actual = crate::btcc::work::policy::disposition_material_fingerprint(&historical)
+                .map_err(|source| {
+                invalid(StorageCode::ProjectWorkLegacyDispositionMaterialMismatch)
+                    .with_source(source)
+            })?;
             if actual != disposition.material_fingerprint {
-                return Err(invalid("project_work_legacy_disposition_material_mismatch"));
+                return Err(invalid(
+                    StorageCode::ProjectWorkLegacyDispositionMaterialMismatch,
+                ));
             }
             Ok(ProjectWorkLegacyDisposition {
                 disposition,

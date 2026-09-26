@@ -4,6 +4,7 @@ use crate::btcc::agent_loop::{ModelRoundError, ModelRoundRequest, ModelRoundResu
 use crate::btcc::{BtccError, ModelIdentity, ReasoningEffort};
 
 use super::contracts::{AttemptHistory, FailureDisposition, FailureRecord, RouteState};
+use crate::btcc::BtccCode;
 
 pub(super) fn event(
     kind: &str,
@@ -60,22 +61,24 @@ pub(super) fn selected(value: &Value) -> Result<(String, ReasoningEffort), BtccE
     let provider = value
         .get("provider")
         .and_then(Value::as_str)
-        .ok_or_else(|| BtccError::new("invalid_admitted_model_selection", "missing provider"))?;
-    let model = value
-        .get("model")
-        .and_then(Value::as_str)
-        .ok_or_else(|| BtccError::new("invalid_admitted_model_selection", "missing model"))?;
+        .ok_or_else(|| {
+            BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing provider")
+        })?;
+    let model = value.get("model").and_then(Value::as_str).ok_or_else(|| {
+        BtccError::detected(BtccCode::InvalidAdmittedModelSelection, "missing model")
+    })?;
     let reasoning = serde_json::from_value(
         value
             .get("reasoningEffort")
             .cloned()
             .unwrap_or(Value::String("medium".into())),
     )
-    .map_err(|_| {
-        BtccError::new(
-            "invalid_admitted_model_selection",
+    .map_err(|source| {
+        BtccError::detected(
+            BtccCode::InvalidAdmittedModelSelection,
             "invalid reasoning effort",
         )
+        .with_source(source)
     })?;
     Ok((format!("{provider}/{model}"), reasoning))
 }
@@ -86,8 +89,8 @@ pub(super) fn validate(route: &RouteState) -> Result<(), BtccError> {
         || !(1..=5).contains(&route.retry_ceiling)
         || route.active_cursor as usize >= route.candidates.len()
     {
-        return Err(BtccError::new(
-            "model_route_invalid",
+        return Err(BtccError::detected(
+            BtccCode::ModelRouteInvalid,
             "invalid admitted model route",
         ));
     }
@@ -124,21 +127,21 @@ pub(super) fn rebase_continuation<'a>(
         .and_then(|v| v.as_object())
         .and_then(|v| v.get("contextProjection"));
     if accepted.is_some_and(|value| !projection_identity(value)) {
-        return Err(ModelRoundError::Integrity(BtccError::new(
-            "phase_continuity_projection_rebase_identity_invalid",
+        return Err(ModelRoundError::Integrity(BtccError::detected(
+            BtccCode::PhaseContinuityProjectionRebaseIdentityInvalid,
             "invalid accepted context projection identity",
         )));
     }
     let current_json = crate::json::stringify(current).map_err(|error| {
-        ModelRoundError::Integrity(BtccError::new(
-            "phase_continuity_projection_rebase_identity_invalid",
+        ModelRoundError::Integrity(BtccError::detected(
+            BtccCode::PhaseContinuityProjectionRebaseIdentityInvalid,
             error.to_string(),
         ))
     })?;
     let accepted_json =
         crate::json::stringify(accepted.unwrap_or(&Value::Null)).map_err(|error| {
-            ModelRoundError::Integrity(BtccError::new(
-                "phase_continuity_projection_rebase_identity_invalid",
+            ModelRoundError::Integrity(BtccError::detected(
+                BtccCode::PhaseContinuityProjectionRebaseIdentityInvalid,
                 error.to_string(),
             ))
         })?;
@@ -158,8 +161,8 @@ pub(super) fn attach_surface(
             .bytes()
             .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
     {
-        return Err(ModelRoundError::Integrity(BtccError::new(
-            "round_tool_surface_continuation_invalid",
+        return Err(ModelRoundError::Integrity(BtccError::detected(
+            BtccCode::RoundToolSurfaceContinuationInvalid,
             "invalid round tool surface digest",
         )));
     }
@@ -167,8 +170,8 @@ pub(super) fn attach_surface(
         value
             .as_object_mut()
             .ok_or_else(|| {
-                ModelRoundError::Integrity(BtccError::new(
-                    "round_tool_surface_continuation_invalid",
+                ModelRoundError::Integrity(BtccError::detected(
+                    BtccCode::RoundToolSurfaceContinuationInvalid,
                     "invalid provider continuation",
                 ))
             })?

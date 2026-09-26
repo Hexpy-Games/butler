@@ -1,5 +1,6 @@
 //! Source durable-reference rules for activated BTCC databases.
 use super::{StorageError, StorageResult, error};
+use crate::btcc::StorageCode;
 use rusqlite::{Connection, OptionalExtension};
 
 struct Rule {
@@ -462,14 +463,14 @@ pub(super) fn validate(db: &Connection) -> StorageResult<()> {
             .is_some();
         if orphan {
             return Err(StorageError::new(
-                "agent_btcc_migration_reference_check_failed",
+                StorageCode::AgentBtccMigrationReferenceCheckFailed,
                 format!("agent_btcc_migration_reference_check_failed:{}", rule.name),
             ));
         }
     }
     let invalid_stop = db.query_row("SELECT 1 FROM btcc_stop_requests AS stop LEFT JOIN btcc_turns AS turn ON turn.turn_id = stop.turn_id WHERE turn.turn_id IS NULL AND stop.status != 'cancelled_before_admission' LIMIT 1", [], |_| Ok(())).optional().map_err(StorageError::sqlite)?.is_some();
     if invalid_stop {
-        return Err(error("agent_btcc_migration_reference_check_failed"));
+        return Err(error(StorageCode::AgentBtccMigrationReferenceCheckFailed));
     }
     Ok(())
 }

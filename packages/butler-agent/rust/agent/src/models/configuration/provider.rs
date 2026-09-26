@@ -70,7 +70,7 @@ impl ProviderRequestConfigPort for ModelConfiguration {
     ) -> Result<Arc<ModelCatalogSnapshot>, ModelRoundError> {
         let root = self.selected_root(butler_data);
         self.sizing_catalog(&root).map(Arc::new).map_err(|error| {
-            ModelRoundError::Integrity(BtccError::new(
+            ModelRoundError::Integrity(BtccError::relayed(
                 "model_configuration_read_failed",
                 error.to_string(),
             ))

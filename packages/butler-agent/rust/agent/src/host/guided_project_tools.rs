@@ -270,7 +270,7 @@ fn ledger_error(failure: ProjectLedgerReadError) -> BtccError {
     error(code)
 }
 fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }
 
 /// Bound each former CLI response before presentation and mutation closeout.

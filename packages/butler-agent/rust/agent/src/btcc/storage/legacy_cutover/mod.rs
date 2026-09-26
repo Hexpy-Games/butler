@@ -9,6 +9,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::{Value, json};
 
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::identity::{digest, sqlite_stable_json as btcc_stable_json};
 
 const R2_STATES: &[&str] = &[
@@ -30,7 +31,8 @@ const R2_STATES: &[&str] = &[
 const R3_STATES: &[&str] = &["admitted", "delivery_committed", "delivered", "cancelled"];
 
 fn stable_json(value: &Value) -> StorageResult<String> {
-    btcc_stable_json(value).map_err(|error| StorageError::new("canonical_json", error.message))
+    btcc_stable_json(value)
+        .map_err(|error| StorageError::new(StorageCode::CanonicalJson, error.message()))
 }
 
 pub(super) struct LegacyTurn {
@@ -56,10 +58,10 @@ pub(super) fn apply(connection: &mut Connection) -> StorageResult<()> {
     let first = connection.transaction().map_err(StorageError::sqlite)?;
     match cutover(&first) {
         Ok(()) => first.commit().map_err(StorageError::sqlite),
-        Err(error) if error.code == "legacy_turn_cutover_cas_conflict" => {
+        Err(error) if error.code() == "legacy_turn_cutover_cas_conflict" => {
             drop(first);
             let quarantine = connection.transaction().map_err(StorageError::sqlite)?;
-            quarantine_after_conflict(&quarantine, &error.message)?;
+            quarantine_after_conflict(&quarantine, &error.message())?;
             quarantine.commit().map_err(StorageError::sqlite)
         }
         Err(error) => Err(error),
@@ -281,7 +283,7 @@ fn convert(db: &Connection, turn: &LegacyTurn, at: &str) -> StorageResult<()> {
     ).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(StorageError::new(
-            "legacy_turn_cutover_cas_conflict",
+            StorageCode::LegacyTurnCutoverCasConflict,
             turn.turn_id.clone(),
         ));
     }
@@ -388,7 +390,7 @@ fn settle_quarantined(db: &Connection, turn: &LegacyTurn) -> StorageResult<()> {
         turn.state, turn.revision, turn.fence, turn.checkpoint_id]).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(StorageError::new(
-            "legacy_turn_quarantine_cas_conflict",
+            StorageCode::LegacyTurnQuarantineCasConflict,
             &turn.turn_id,
         ));
     }

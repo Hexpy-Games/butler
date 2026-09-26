@@ -4,6 +4,7 @@ use crate::btcc::work::{ReplacePlanCommand, WorkStage, WorkView};
 
 use super::super::{StorageError, StorageResult, common, read, relation, tool_result};
 use super::{ProgressInput, assert_progress_revision, insert_progress, record, replay};
+use crate::btcc::StorageCode;
 
 pub(in crate::btcc::storage::work) fn replace_plan(
     db: &Connection,
@@ -42,7 +43,7 @@ pub(in crate::btcc::storage::work) fn replace_plan(
         .is_some_and(|id| id != &work.id)
     {
         return Err(common::error(
-            "durable_work_plan_changed",
+            StorageCode::DurableWorkPlanChanged,
             "Durable Work changed before its Plan update",
         ));
     }
@@ -102,7 +103,7 @@ pub(in crate::btcc::storage::work) fn replace_plan(
     let changed = db.execute("UPDATE btcc_guided_works SET current_plan_revision_id = ?1, status = ?2, updated_at = ?3 WHERE work_id = ?4", params![plan_id, status, now, work.id]).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(common::error(
-            "durable_work_plan_lost",
+            StorageCode::DurableWorkPlanLost,
             "Durable Work Plan lost its Work",
         ));
     }

@@ -135,10 +135,7 @@ async fn real_turn_work_journal_authority_resume_outcome_and_reopen() {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|error| StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(StorageError::sqlite)
         })
         .await
         .unwrap();

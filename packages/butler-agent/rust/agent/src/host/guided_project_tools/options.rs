@@ -186,5 +186,5 @@ fn flag(out: &mut Map<String, Value>, args: &Map<String, Value>, input: &str, ou
     }
 }
 fn error(message: &str) -> BtccError {
-    BtccError::new("project_ledger_tool_arguments", message)
+    BtccError::relayed("project_ledger_tool_arguments", message)
 }

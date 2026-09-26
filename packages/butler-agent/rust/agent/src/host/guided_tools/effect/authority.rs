@@ -50,15 +50,15 @@ pub(super) async fn gate(
 ) -> Result<Gate, ToolExecutionError> {
     let normalized_target = match adapter.normalize_target(target) {
         Ok(value) => value,
-        Err(failure) => return error(&failure.code, &failure.message),
+        Err(failure) => return error(failure.code(), failure.message()),
     };
     let normalized_input = match adapter.normalize_input(input) {
         Ok(value) => value,
-        Err(failure) => return error(&failure.code, &failure.message),
+        Err(failure) => return error(failure.code(), failure.message()),
     };
     let action_key = match reviewed_effect_action_key(work, adapter, &normalized_target) {
         Ok(value) => value,
-        Err(failure) => return error(&failure.code, &failure.message),
+        Err(failure) => return error(failure.code(), failure.message()),
     };
     let Some(plan) = &work.current_plan else {
         return error(
@@ -85,7 +85,7 @@ pub(super) async fn gate(
             Ok(value) => value,
             Err(failure) => {
                 return error(
-                    &failure.code,
+                    failure.code(),
                     "The permission does not belong to this operation.",
                 );
             }
@@ -135,7 +135,7 @@ pub(super) async fn gate(
         Ok(value) => value,
         Err(failure) => {
             return error(
-                &failure.code,
+                failure.code(),
                 "The command authority identity could not be admitted.",
             );
         }
@@ -236,12 +236,7 @@ pub(super) async fn settle(
             receipt,
         })
         .await
-        .map_err(|failure| {
-            ToolExecutionError::Integrity(crate::btcc::BtccError::new(
-                failure.code,
-                failure.message,
-            ))
-        })?;
+        .map_err(|failure| ToolExecutionError::Integrity(failure.into()))?;
     *owner.authority_consumed.lock() = true;
     Ok(None)
 }

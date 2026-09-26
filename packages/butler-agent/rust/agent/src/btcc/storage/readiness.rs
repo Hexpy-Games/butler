@@ -3,8 +3,8 @@ use std::time::Duration;
 use rusqlite::{Connection, ErrorCode};
 use tokio_util::sync::CancellationToken;
 
-use super::common::btcc_error;
 use super::{BtccStorage, StorageError, StorageResult};
+use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
 
 const PROBE_TIMEOUT: Duration = Duration::from_millis(250);
@@ -16,7 +16,7 @@ pub(super) async fn wait(
 ) -> Result<(), BtccError> {
     loop {
         cancelled(&cancellation)?;
-        let writable = storage.execute(probe).await.map_err(btcc_error)?;
+        let writable = storage.execute(probe).await.map_err(BtccError::from)?;
         cancelled(&cancellation)?;
         if writable {
             return Ok(());
@@ -73,7 +73,10 @@ fn contention(error: &rusqlite::Error) -> bool {
 
 fn cancelled(cancellation: &CancellationToken) -> Result<(), BtccError> {
     if cancellation.is_cancelled() {
-        Err(BtccError::new("cancelled", "storage readiness cancelled"))
+        Err(BtccError::detected(
+            BtccCode::Cancelled,
+            "storage readiness cancelled",
+        ))
     } else {
         Ok(())
     }

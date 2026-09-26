@@ -2,7 +2,8 @@
 
 use serde_json::{Value, json};
 
-use super::{NativeSubsessionService, storage};
+use super::NativeSubsessionService;
+use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation};
 
 impl NativeSubsessionService {
@@ -21,7 +22,7 @@ impl NativeSubsessionService {
             .repository
             .relations_for_parent(parent_session_id)
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let mut lines = Vec::new();
         for relation in relations
             .into_iter()
@@ -59,12 +60,12 @@ impl NativeSubsessionService {
             .repository
             .relations_for_parent(session_id.into())
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let relation = self
             .repository
             .by_child(session_id.into())
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let mut summaries = Vec::new();
         for child in children {
             summaries.push(self.project_child(&child).await?);
@@ -79,9 +80,9 @@ impl NativeSubsessionService {
         };
         let mut projection =
             own.unwrap_or_else(|| json!({"session_id":session_id,"relation":null,"status":"idle"}));
-        let object = projection
-            .as_object_mut()
-            .ok_or_else(|| BtccError::new("subsession_projection_invalid", "projection invalid"))?;
+        let object = projection.as_object_mut().ok_or_else(|| {
+            BtccError::detected(BtccCode::SubsessionProjectionInvalid, "projection invalid")
+        })?;
         object.insert("steward_children".into(), json!(stewards));
         object.insert("workers".into(), json!(workers));
         Ok(projection)
@@ -95,12 +96,12 @@ impl NativeSubsessionService {
             .repository
             .latest_turn(relation.child_session_id.clone())
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let result = self
             .repository
             .result_for_relation(relation.relation_id.clone())
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let role = relation
             .packet
             .get("child_role")

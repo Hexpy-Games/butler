@@ -8,6 +8,7 @@ use super::contracts::{
     ActionProgress, ActionStatus, CorrectionScope, PlanAction, ReviewSubject, ReviewVerdict,
     WorkReview, WorkStage, WorkStatus, WorkView,
 };
+use crate::btcc::BtccCode;
 
 pub(crate) fn progress_for_replacement_plan(
     actions: &[PlanAction],
@@ -276,8 +277,8 @@ fn assert_stage_transition(current: WorkStage, attempted: WorkStage) -> Result<(
     if current == attempted || allowed_next_work_stages(Some(current)).contains(&attempted) {
         return Ok(());
     }
-    Err(BtccError::new(
-        "invalid_work_stage_transition",
+    Err(BtccError::detected(
+        BtccCode::InvalidWorkStageTransition,
         format!(
             "Work cannot move from {} to {}; allowed next stages: {}",
             stage_name(current),
@@ -311,8 +312,8 @@ fn review_next_action(stage: WorkStage) -> &'static str {
 }
 
 fn guard_error(current: WorkStage, requested: &str, unmet: &str, next: &str) -> BtccError {
-    BtccError::new(
-        "work_transition_guard_unmet",
+    BtccError::detected(
+        BtccCode::WorkTransitionGuardUnmet,
         format!(
             "Work cannot {requested} from {}; {unmet}. Next action: {next}",
             stage_name(current)
@@ -367,7 +368,7 @@ fn work_status_name(status: WorkStatus) -> &'static str {
 }
 
 fn error(message: impl Into<String>) -> BtccError {
-    BtccError::new("durable_work_policy", message)
+    BtccError::detected(BtccCode::DurableWorkPolicy, message)
 }
 
 #[cfg(test)]

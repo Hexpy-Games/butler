@@ -11,15 +11,11 @@ const SELECT: &str = "SELECT e.effect_id,e.receipt_id,e.idempotency_key,e.identi
  LEFT JOIN btcc_guided_effect_recovery_hints recovery ON recovery.effect_id=e.effect_id
  LEFT JOIN btcc_guided_effect_recovery_payloads payload ON payload.effect_id=e.effect_id";
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
-    EffectFailure::storage("sqlite_error", error.to_string())
+    EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
-fn json(error: impl std::fmt::Display) -> EffectFailure {
-    EffectFailure::storage("effect_journal_corrupt", error.to_string())
+fn json(error: impl std::error::Error + Send + Sync + 'static) -> EffectFailure {
+    EffectFailure::storage("effect_journal_corrupt", error.to_string()).with_source(error)
 }
 
 struct Raw {
@@ -90,16 +86,20 @@ fn hydrate(raw: Raw) -> EffectResult<EffectRecord> {
         .map(|text| serde_json::from_str(text).map_err(json))
         .transpose()?;
     let recovery_hint = if let Some(payload) = raw.payload {
-        let value: serde_json::Value = serde_json::from_str(&payload).map_err(|_| {
-            json(format!(
-                "Guided edit batch recovery payload is invalid: {}",
-                raw.identity.effect_id
-            ))
+        let value: serde_json::Value = serde_json::from_str(&payload).map_err(|source| {
+            EffectFailure::storage(
+                "effect_journal_corrupt",
+                format!(
+                    "Guided edit batch recovery payload is invalid: {}",
+                    raw.identity.effect_id
+                ),
+            )
+            .with_source(source)
         })?;
         Some(RecoveryHint::Batch {
             capability: "edit_file".into(),
             entries: crate::btcc::effects::recovery::normalize_entries(&value).map_err(
-                |error| EffectFailure::storage("effect_recovery_corrupt", error.message),
+                |error| EffectFailure::storage("effect_recovery_corrupt", error.message()),
             )?,
         })
     } else if let (Some(capability), Some(start_line), Some(before_sha256), Some(after_sha256)) = (

@@ -6,6 +6,7 @@ use crate::btcc::storage::common::{canonical_json, error};
 use crate::btcc::storage::{StorageError, StorageResult};
 
 use super::types::{Inbox, kind, object, optional_text_object, text, text_object};
+use crate::btcc::StorageCode;
 
 pub(super) fn record_inbound(
     connection: &mut Connection,
@@ -18,7 +19,7 @@ pub(super) fn record_inbound(
     if let Some(existing) = find_inbox(&transaction, session_id, trigger_key)? {
         if existing.admission_input_hash != hash {
             return Err(error(
-                "admission_key_conflict",
+                StorageCode::AdmissionKeyConflict,
                 "BTCC admission key conflict",
             ));
         }
@@ -82,7 +83,7 @@ fn insert_canonical_trigger(connection: &Connection, command: &Value) -> Storage
         "run" => insert_user_message(connection, command),
         "wake" => insert_wake(connection, command),
         _ => Err(error(
-            "invalid_turn_command",
+            StorageCode::InvalidTurnCommand,
             "Fresh BTCC command must be run or wake",
         )),
     }
@@ -103,7 +104,7 @@ fn insert_user_message(connection: &Connection, command: &Value) -> StorageResul
     if let Some(existing) = existing {
         return (existing == content).then_some(()).ok_or_else(|| {
             error(
-                "canonical_user_conflict",
+                StorageCode::CanonicalUserConflict,
                 "BTCC canonical user message identity conflict",
             )
         });
@@ -131,7 +132,7 @@ fn insert_wake(connection: &Connection, command: &Value) -> StorageResult<()> {
         .map_err(StorageError::sqlite)?;
     if existing.as_deref().is_some_and(|value| value != content) {
         return Err(error(
-            "continuation_trigger_conflict",
+            StorageCode::ContinuationTriggerConflict,
             "BTCC continuation trigger identity conflict",
         ));
     }
@@ -186,7 +187,7 @@ fn insert_wake_fact(
             || existing.4 != identity.4
         {
             return Err(error(
-                "wake_request_conflict",
+                StorageCode::WakeRequestConflict,
                 "BTCC wake request identity conflict",
             ));
         }
@@ -202,7 +203,7 @@ fn insert_wake_fact(
         .map_err(StorageError::sqlite)?;
     if owner.as_deref().is_some_and(|owner| owner != turn_id) {
         return Err(error(
-            "wake_trigger_conflict",
+            StorageCode::WakeTriggerConflict,
             "BTCC wake trigger identity conflict",
         ));
     }

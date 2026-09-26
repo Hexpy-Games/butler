@@ -1,5 +1,6 @@
 mod ownership;
 
+use crate::btcc::StorageCode;
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -12,8 +13,8 @@ use crate::btcc::work::{
 use super::super::{StorageError, StorageResult};
 use ownership::assert_projection_ownership;
 
-fn invalid(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+fn invalid(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }
 
 pub(super) fn read_committed(
@@ -52,23 +53,23 @@ pub(super) fn read_committed(
         source_turn_sequence,
     )) = row
     else {
-        return Err(invalid("project_work_result_not_committed"));
+        return Err(invalid(StorageCode::ProjectWorkResultNotCommitted));
     };
     if turn != input.turn_id || session != input.session_id {
-        return Err(invalid("project_work_result_not_committed"));
+        return Err(invalid(StorageCode::ProjectWorkResultNotCommitted));
     }
     if status != "completed" || super::super::work::WORK_CONTROL_TOOLS.contains(&tool_name.as_str())
     {
-        return Err(invalid("project_work_result_not_attachable"));
+        return Err(invalid(StorageCode::ProjectWorkResultNotAttachable));
     }
     let (Some(body), Some(hash)) = (
         body.filter(|v| !v.is_empty()),
         hash.filter(|v| !v.is_empty()),
     ) else {
-        return Err(invalid("project_work_result_body_hash_mismatch"));
+        return Err(invalid(StorageCode::ProjectWorkResultBodyHashMismatch));
     };
     if crate::btcc::identity::digest(&body) != hash {
-        return Err(invalid("project_work_result_body_hash_mismatch"));
+        return Err(invalid(StorageCode::ProjectWorkResultBodyHashMismatch));
     }
     Ok(ProjectWorkToolResultEvidence {
         tool_call_id: input.tool_call_id.clone(),
@@ -83,7 +84,7 @@ pub(super) fn read_committed(
 
 pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) -> StorageResult<()> {
     if !valid_hash(&input.canonical_head_sha256) {
-        return Err(invalid("project_work_runtime_head_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
     }
     let work_ids: HashSet<&str> = input
         .works
@@ -94,10 +95,10 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
     for item in &input.works {
         let work = &item.work;
         let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid("project_work_runtime_projection_mismatch"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         };
         if project_ref.is_empty() {
-            return Err(invalid("project_work_runtime_projection_mismatch"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         }
         for reference in &work.result_refs {
             let committed = read_committed(
@@ -111,7 +112,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
             if committed.tool_name != reference.tool_name
                 || reference.result_sha256.as_deref() != Some(committed.result_sha256.as_str())
             {
-                return Err(invalid("project_work_result_reference_mismatch"));
+                return Err(invalid(StorageCode::ProjectWorkResultReferenceMismatch));
             }
             evidence.insert(reference.result_ref.as_str(), committed);
         }
@@ -120,7 +121,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
     for item in &input.works {
         let work = &item.work;
         let WorkScope::Project { project_ref } = &work.scope else {
-            return Err(invalid("project_work_runtime_projection_mismatch"));
+            return Err(invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch));
         };
         db.execute(
             "INSERT INTO btcc_guided_works(work_id,session_id,scope_kind,scope_ref,ledger_project_id, \
@@ -156,7 +157,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
                 reference,
                 evidence
                     .get(reference.result_ref.as_str())
-                    .ok_or_else(|| invalid("project_work_result_reference_mismatch"))?,
+                    .ok_or_else(|| invalid(StorageCode::ProjectWorkResultReferenceMismatch))?,
             )?;
         }
     }
@@ -165,7 +166,7 @@ pub(super) fn observe_works(db: &Connection, input: &ProjectWorkObserveWorks) ->
         .iter()
         .find(|item| item.work.work_id == input.session_head_work_id)
     else {
-        return Err(invalid("project_work_runtime_head_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkRuntimeHeadInvalid));
     };
     db.execute(
         "INSERT INTO btcc_guided_work_session_heads(session_id,work_id,updated_at) VALUES(?1,?2,?3) \
@@ -215,5 +216,5 @@ fn enum_text<T: serde::Serialize>(value: T) -> StorageResult<String> {
     serde_json::to_value(value)
         .ok()
         .and_then(|value| value.as_str().map(str::to_owned))
-        .ok_or_else(|| invalid("project_work_runtime_projection_mismatch"))
+        .ok_or_else(|| invalid(StorageCode::ProjectWorkRuntimeProjectionMismatch))
 }

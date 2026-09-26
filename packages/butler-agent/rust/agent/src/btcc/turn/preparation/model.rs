@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use serde_json::{Map, Number, Value};
 
 use super::{AdmissionModelCatalogSnapshot, AdmissionModelMetadata, js_truthy, object};
+use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::{BtccError, ReasoningEffort, VerifiedExecutionControls};
 use crate::json::stringify;
@@ -42,8 +43,8 @@ pub(super) fn admit(
 ) -> Result<Value, BtccError> {
     let refs = requested_refs(binding, controls)?;
     let Some(primary) = refs.first() else {
-        return Err(BtccError::new(
-            "admitted_model_invalid",
+        return Err(BtccError::detected(
+            BtccCode::AdmittedModelInvalid,
             "BTCC admitted model is missing",
         ));
     };
@@ -51,8 +52,8 @@ pub(super) fn admit(
         .find('/')
         .filter(|value| *value > 0 && *value < primary.len() - 1)
         .ok_or_else(|| {
-            BtccError::new(
-                "admitted_model_invalid",
+            BtccError::detected(
+                BtccCode::AdmittedModelInvalid,
                 format!("BTCC admitted model is not canonical: {primary}"),
             )
         })?;
@@ -136,8 +137,8 @@ fn build_route(
         .filter(|v| !v.is_empty())
     {
         let metadata = metadata(catalog, reference).ok_or_else(|| {
-            BtccError::new(
-                "model_metadata_missing",
+            BtccError::detected(
+                BtccCode::ModelMetadataMissing,
                 format!("Model metadata is missing: {reference}"),
             )
         })?;
@@ -215,8 +216,8 @@ fn binding_reasoning(binding: &StoredSessionBinding) -> Result<ReasoningEffort, 
         "high" => Ok(ReasoningEffort::High),
         "xhigh" => Ok(ReasoningEffort::Xhigh),
         "max" => Ok(ReasoningEffort::Max),
-        _ => Err(BtccError::new(
-            "admitted_reasoning_invalid",
+        _ => Err(BtccError::detected(
+            BtccCode::AdmittedReasoningInvalid,
             format!("BTCC admitted reasoning effort is invalid: {value}"),
         )),
     }
@@ -237,8 +238,8 @@ fn binding_access_mode(binding: &StoredSessionBinding) -> &'static str {
 }
 fn required_text<'a>(value: &'a str, label: &str) -> Result<&'a str, BtccError> {
     if trim_js_whitespace(value).is_empty() {
-        Err(BtccError::new(
-            "admitted_model_missing",
+        Err(BtccError::detected(
+            BtccCode::AdmittedModelMissing,
             format!("{label} is missing"),
         ))
     } else {
@@ -246,12 +247,12 @@ fn required_text<'a>(value: &'a str, label: &str) -> Result<&'a str, BtccError> 
     }
 }
 fn number(value: f64) -> Result<Value, BtccError> {
-    Number::from_f64(value)
-        .map(Value::Number)
-        .ok_or_else(|| BtccError::new("model_number_invalid", "BTCC model number is invalid"))
+    Number::from_f64(value).map(Value::Number).ok_or_else(|| {
+        BtccError::detected(BtccCode::ModelNumberInvalid, "BTCC model number is invalid")
+    })
 }
-fn json_error(error: impl std::fmt::Display) -> BtccError {
-    BtccError::new("btcc_json_error", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
+    BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
 }
 fn js_string(value: &Value) -> String {
     match value {

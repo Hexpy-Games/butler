@@ -14,7 +14,7 @@ impl AdmissionModelCatalogPort for ModelConfiguration {
             let facts = self
                 .read_metadata()
                 .await
-                .map_err(|error| BtccError::new("model_catalog_failed", error.to_string()))?;
+                .map_err(|error| BtccError::relayed("model_catalog_failed", error.to_string()))?;
             let snapshot = facts.catalog;
             let metadata = requested_model_refs
                 .into_iter()

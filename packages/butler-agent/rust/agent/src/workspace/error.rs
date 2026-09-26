@@ -82,7 +82,7 @@ pub(crate) enum WorkspaceError {
         code: &'static str,
         message: String,
         #[source]
-        source: WorkspaceSource,
+        source: Option<WorkspaceSource>,
     },
     /// A lower-level operation (filesystem, thread, task join) failed; `code`
     /// names what the store was doing and `source` is the cause.
@@ -124,7 +124,7 @@ impl WorkspaceError {
         Self::Port {
             code,
             message: message.into(),
-            source: Arc::new(source),
+            source: Some(Arc::new(source)),
         }
     }
 

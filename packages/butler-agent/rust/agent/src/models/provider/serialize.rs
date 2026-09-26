@@ -270,7 +270,7 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
 }
 
 fn continuation_error(code: &'static str) -> crate::btcc::ModelRoundError {
-    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::new(code, code))
+    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::relayed(code, code))
 }
 
 fn cache_scope(value: Option<&str>) -> String {

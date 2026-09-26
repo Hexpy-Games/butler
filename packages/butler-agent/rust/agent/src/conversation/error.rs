@@ -83,7 +83,7 @@ pub(crate) enum ConversationError {
         code: &'static str,
         message: String,
         #[source]
-        source: ConversationSource,
+        source: Option<ConversationSource>,
     },
     /// A lower-level operation (thread, task join, channel, filesystem) failed;
     /// `code` names what the store was doing.
@@ -113,7 +113,7 @@ impl ConversationError {
         Self::Port {
             code,
             message: message.into(),
-            source: Arc::new(source),
+            source: Some(Arc::new(source)),
         }
     }
 

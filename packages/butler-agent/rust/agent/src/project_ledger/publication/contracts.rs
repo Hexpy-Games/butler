@@ -165,7 +165,7 @@ impl ProjectWorkPublicationError {
     pub(crate) fn code(&self) -> &str {
         match self {
             Self::Adapter(code) | Self::Io(code) | Self::Owner(code) => code,
-            Self::Work(error) => &error.code,
+            Self::Work(error) => error.code(),
             Self::NotApplied => "project_work_publication_not_applied",
             Self::Uncertain => "project_work_publication_uncertain",
         }

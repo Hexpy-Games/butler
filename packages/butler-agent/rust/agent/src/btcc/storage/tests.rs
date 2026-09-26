@@ -151,7 +151,7 @@ async fn close_drains_admitted_operations_and_rejects_later_work() {
         .execute(|_connection| Ok(()))
         .await
         .expect_err("closed owner rejects work");
-    assert_eq!(error.code, "sqlite_owner_closed");
+    assert_eq!(error.code(), "sqlite_owner_closed");
 }
 
 #[tokio::test]
@@ -381,7 +381,7 @@ async fn failed_activation_releases_the_connection_thread() {
         .await
         .err()
         .expect("activation must fail");
-    assert_eq!(error.code, "agent_btcc_storage_receipt_missing");
+    assert_eq!(error.code(), "agent_btcc_storage_receipt_missing");
     let connection = Connection::open(&fixture.path).expect("connection released");
     connection
         .execute_batch("CREATE TABLE released_after_failed_open (id INTEGER)")

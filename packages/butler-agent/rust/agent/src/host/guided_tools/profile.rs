@@ -116,7 +116,7 @@ fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(crate::btcc::BtccError::new(
+        ToolExecutionError::Integrity(crate::btcc::BtccError::relayed(
             "guided_profile_result_json",
             error.to_string(),
         ))

@@ -16,6 +16,7 @@ use super::contracts::{
 use super::execution::ViewState;
 use super::support::*;
 use super::{failure, hooks::RouteHooks, projection};
+use crate::btcc::BtccCode;
 
 pub(super) struct RoutedRound<'a> {
     pub(super) base: &'a dyn ModelRoundPort,
@@ -102,12 +103,17 @@ impl RoutedRound<'_> {
                 .accepted(&round_id, route.active_cursor, &candidate.model_ref)
                 .await?
             {
-                let mut result: ModelRoundResult = serde_json::from_value(value).map_err(|_| {
-                    failure::durability(
-                        "response_acceptance_read",
-                        &BtccError::new("model_response_invalid", "invalid accepted response"),
-                    )
-                })?;
+                let mut result: ModelRoundResult =
+                    serde_json::from_value(value).map_err(|source| {
+                        failure::durability(
+                            "response_acceptance_read",
+                            &BtccError::detected(
+                                BtccCode::ModelResponseInvalid,
+                                "invalid accepted response",
+                            )
+                            .with_source(source),
+                        )
+                    })?;
                 result.accepted_checkpoint.get_or_insert(
                     crate::btcc::agent_loop::AcceptedCheckpoint {
                         round_id: round_id.clone(),
@@ -125,10 +131,14 @@ impl RoutedRound<'_> {
                         .history(&round_id, route.active_cursor, &candidate.model_ref)
                         .await?,
                 )
-                .map_err(|_| {
+                .map_err(|source| {
                     failure::durability(
                         "attempt_history_read",
-                        &BtccError::new("model_history_invalid", "invalid model route history"),
+                        &BtccError::detected(
+                            BtccCode::ModelHistoryInvalid,
+                            "invalid model route history",
+                        )
+                        .with_source(source),
                     )
                 })?;
                 self.abandon_open(
@@ -304,10 +314,14 @@ impl RoutedRound<'_> {
             self.clear_recovery(&mut recovery_active, attempt, route.retry_ceiling)
                 .await;
             let result = attach_surface(result, request.tool_surface_digest)?;
-            let value = serde_json::to_value(&result).map_err(|_| {
+            let value = serde_json::to_value(&result).map_err(|source| {
                 failure::durability(
                     "response_acceptance_write",
-                    &BtccError::new("model_response_invalid", "cannot encode accepted response"),
+                    &BtccError::detected(
+                        BtccCode::ModelResponseInvalid,
+                        "cannot encode accepted response",
+                    )
+                    .with_source(source),
                 )
             })?;
             self.hooks
@@ -382,11 +396,11 @@ impl RoutedRound<'_> {
             .candidates
             .get(route.active_cursor as usize)
             .ok_or_else(gateway_failed)?;
-        let route_value = serde_json::to_value(&*route).map_err(|_| {
-            ModelRoundError::Integrity(BtccError::new(
-                "model_route_invalid",
-                "cannot encode model route",
-            ))
+        let route_value = serde_json::to_value(&*route).map_err(|source| {
+            ModelRoundError::Integrity(
+                BtccError::detected(BtccCode::ModelRouteInvalid, "cannot encode model route")
+                    .with_source(source),
+            )
         })?;
         self.hooks
             .event(

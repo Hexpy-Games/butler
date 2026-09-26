@@ -55,7 +55,7 @@ impl NativeGuidedWork {
         {
             Ok(())
         } else {
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "guided_work_scope_mismatch",
                 "Guided Work scope changed",
             ))

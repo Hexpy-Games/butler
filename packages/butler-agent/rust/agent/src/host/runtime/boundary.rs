@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::btcc::BtccError;
 
 pub(super) fn setup(error: impl std::fmt::Display) -> BtccError {
-    BtccError::new("native_runtime_initialization_failed", error.to_string())
+    BtccError::relayed("native_runtime_initialization_failed", error.to_string())
 }
 
 pub(super) fn validate_data_installation_boundary(
@@ -13,7 +13,7 @@ pub(super) fn validate_data_installation_boundary(
     let data_root = data_root.canonicalize().map_err(setup)?;
     let installation_root = installation_root.canonicalize().map_err(setup)?;
     if data_root.starts_with(&installation_root) || installation_root.starts_with(&data_root) {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "native_path_configuration_invalid",
             "DATA overlaps the native installation.",
         ));

@@ -432,7 +432,7 @@ pub(super) fn error(code: &'static str) -> BtccError {
     failure(code, code)
 }
 pub(super) fn failure(code: &'static str, message: impl std::fmt::Display) -> BtccError {
-    BtccError::new(code, message.to_string())
+    BtccError::relayed(code, message.to_string())
 }
 pub(super) fn io_error(e: std::io::Error) -> BtccError {
     failure("work_stream_io_failed", e)

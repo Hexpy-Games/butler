@@ -40,12 +40,12 @@ impl HostDependencies for RuntimeOwners {
                 .automations
                 .close()
                 .await
-                .map_err(|error| BtccError::new(error.code, error.message));
+                .map_err(|error| BtccError::relayed(error.code, error.message));
             self.project_tools.close().await;
             self.project_work.close().await;
             self.session_worktrees.close().await;
             let image_files = self.image_files.close().await.map_err(|_| {
-                BtccError::new("image_files_close_failed", "Image file owner did not close")
+                BtccError::relayed("image_files_close_failed", "Image file owner did not close")
             });
             let attachment_context = self.attachment_context.close().await.map_err(setup);
             let memory_sync = self.memory_sync.close().await;
@@ -59,12 +59,12 @@ impl HostDependencies for RuntimeOwners {
                 .memory_query
                 .close()
                 .await
-                .map_err(|e| BtccError::new(e.code, e.message));
+                .map_err(|e| BtccError::relayed(e.code, e.message));
             let conversation_reference = self
                 .conversation_reference
                 .close()
                 .await
-                .map_err(|e| BtccError::new(e.code, e.message));
+                .map_err(|e| BtccError::relayed(e.code, e.message));
             self.plans.close().await;
             self.command.close().await;
             self.commands.close().await;
@@ -73,11 +73,7 @@ impl HostDependencies for RuntimeOwners {
             self.mutations.close().await;
             self.skills.close().await;
             let work_streams = self.work_streams.close().await;
-            let observer = self
-                .observer
-                .close()
-                .await
-                .map_err(|e| BtccError::new(e.code(), e.message()));
+            let observer = self.observer.close().await.map_err(BtccError::from);
             let stores = self.stores.close().await;
             let result = image_files
                 .and(attachment_context)

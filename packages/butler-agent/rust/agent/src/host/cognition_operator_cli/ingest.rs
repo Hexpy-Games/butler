@@ -304,7 +304,7 @@ fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProc
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|error| error.code)
+    .map_err(|error| error.code().to_owned())
 }
 
 fn ensure_index_owner<'a>(

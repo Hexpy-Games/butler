@@ -1,44 +1,104 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use serde_json::Value;
 
+use crate::btcc::BtccSource;
 use crate::btcc::storage::BtccStorage;
 use crate::locale::LocaleCollation;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum AuthorityErrorKind {
-    Policy,
-    Storage,
+/// Failures of authority requests (permission, schedule and modify decisions).
+///
+/// `Display` renders `code: message`; for policy refusals the message is the code.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum AuthorityError {
+    /// A policy check refused or could not match the request (not found,
+    /// corrupt record, identity mismatch, conflicting decision).
+    #[error("{code}: {code}")]
+    Policy {
+        code: Cow<'static, str>,
+        #[source]
+        source: Option<BtccSource>,
+    },
+    /// Reading or writing authority records failed in storage.
+    #[error("{code}: {message}")]
+    Storage {
+        code: Cow<'static, str>,
+        message: String,
+        #[source]
+        source: Option<BtccSource>,
+    },
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AuthorityError {
-    pub(crate) kind: AuthorityErrorKind,
-    pub(crate) code: String,
-    pub(crate) message: String,
-}
+
 impl AuthorityError {
-    pub(crate) fn policy(code: impl Into<String>) -> Self {
-        let code = code.into();
-        Self {
-            kind: AuthorityErrorKind::Policy,
-            message: code.clone(),
-            code,
+    pub(crate) fn policy(code: impl Into<Cow<'static, str>>) -> Self {
+        Self::Policy {
+            code: code.into(),
+            source: None,
         }
     }
-    pub(crate) fn storage(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            kind: AuthorityErrorKind::Storage,
+
+    pub(crate) fn storage(code: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+        Self::Storage {
             code: code.into(),
             message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Records `source` as the cause when none is recorded yet.
+    #[must_use]
+    pub(crate) fn with_source(self, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
+        match self {
+            Self::Policy { code, source: None } => Self::Policy {
+                code,
+                source: Some(Arc::new(cause)),
+            },
+            Self::Storage {
+                code,
+                message,
+                source: None,
+            } => Self::Storage {
+                code,
+                message,
+                source: Some(Arc::new(cause)),
+            },
+            other => other,
+        }
+    }
+
+    pub(crate) fn code(&self) -> &str {
+        match self {
+            Self::Policy { code, .. } | Self::Storage { code, .. } => code,
+        }
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        match self {
+            Self::Policy { code, .. } => code,
+            Self::Storage { message, .. } => message,
         }
     }
 }
-impl std::fmt::Display for AuthorityError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
+
+/// Wire equality: the same code and message (causes are diagnostic only).
+impl PartialEq for AuthorityError {
+    fn eq(&self, other: &Self) -> bool {
+        self.code() == other.code() && self.message() == other.message()
     }
 }
-impl std::error::Error for AuthorityError {}
+
+impl Eq for AuthorityError {}
+
+impl From<crate::btcc::StorageError> for AuthorityError {
+    fn from(error: crate::btcc::StorageError) -> Self {
+        Self::Storage {
+            code: error.code().into(),
+            message: error.message(),
+            source: Some(Arc::new(error)),
+        }
+    }
+}
 pub(crate) type AuthorityResult<T> = Result<T, AuthorityError>;
 
 #[derive(Clone, Debug)]

@@ -184,7 +184,7 @@ impl NativeServiceConfiguration {
 }
 
 fn io(code: &'static str, error: &std::io::Error) -> BtccError {
-    BtccError::new(code, error.to_string())
+    BtccError::relayed(code, error.to_string())
 }
 
 fn expand_home(path: &std::path::Path, home: &std::path::Path) -> String {

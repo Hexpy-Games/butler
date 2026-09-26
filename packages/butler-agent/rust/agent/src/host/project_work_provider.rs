@@ -32,7 +32,7 @@ impl ProjectWorkRepositoryProvider for NativeProjectWorkProvider {
                 .or(binding.project_id)
                 .filter(|id| !id.is_empty())
                 .ok_or_else(|| {
-                    BtccError::new(
+                    BtccError::relayed(
                         "work_scope_project_binding_missing",
                         "work_scope_project_binding_missing",
                     )
@@ -44,7 +44,7 @@ impl ProjectWorkRepositoryProvider for NativeProjectWorkProvider {
                     ledger_project_id: binding.ledger_project_id,
                 })
                 .await
-                .map_err(|error| BtccError::new(error.code(), error.code()))
+                .map_err(|error| BtccError::relayed(error.code().to_owned(), error.code()))
         })
     }
 

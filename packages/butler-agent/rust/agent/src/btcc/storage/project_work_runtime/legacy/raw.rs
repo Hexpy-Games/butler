@@ -14,6 +14,8 @@ use crate::btcc::work::{
 use super::super::super::{StorageError, StorageResult, work::project_external_legacy_work};
 use super::super::SqliteProjectWorkRuntime;
 use super::{import_id, invalid, record_id, require_turn, source_hash, valid_hash};
+use crate::btcc::BtccCode;
+use crate::btcc::StorageCode;
 
 pub(super) async fn capture(
     runtime: &SqliteProjectWorkRuntime,
@@ -46,7 +48,7 @@ pub(super) async fn capture(
     runtime
         .write(move |db, _| {
             if stable_ids(&program_ids(db, &input)?) != stable_ids(&ids) {
-                return Err(invalid("project_work_legacy_source_changed"));
+                return Err(invalid(StorageCode::ProjectWorkLegacySourceChanged));
             }
             project(db, &input, &source, &ids).map(Some)
         })
@@ -70,8 +72,8 @@ pub(super) async fn revalidate(
     if stable_ids(&ids) != stable_ids(&snapshot.source_program_ids)
         || !ids.contains(&snapshot.source_program_id)
     {
-        return Err(BtccError::new(
-            "project_work_legacy_source_changed",
+        return Err(BtccError::detected(
+            BtccCode::ProjectWorkLegacySourceChanged,
             "project_work_legacy_source_changed",
         ));
     }
@@ -87,8 +89,8 @@ pub(super) async fn revalidate(
         )
         .await?;
     let Some(source) = source.filter(|v| v.source_program_id == snapshot.source_program_id) else {
-        return Err(BtccError::new(
-            "project_work_legacy_source_changed",
+        return Err(BtccError::detected(
+            BtccCode::ProjectWorkLegacySourceChanged,
             "project_work_legacy_source_changed",
         ));
     };
@@ -98,8 +100,8 @@ pub(super) async fn revalidate(
     if recreated.source_sha256 != snapshot.source_sha256
         || recreated.work.work_id != snapshot.work.work_id
     {
-        return Err(BtccError::new(
-            "project_work_legacy_source_changed",
+        return Err(BtccError::detected(
+            BtccCode::ProjectWorkLegacySourceChanged,
             "project_work_legacy_source_changed",
         ));
     }
@@ -165,7 +167,7 @@ fn project(
     program_ids: &[String],
 ) -> StorageResult<ProjectWorkLegacySnapshot> {
     if !valid_hash(&source.source_revision) {
-        return Err(invalid("project_work_legacy_source_revision_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacySourceRevisionInvalid));
     }
     let projection = project_external_legacy_work(source)?;
     let origin = origin_turn(
@@ -174,13 +176,13 @@ fn project(
         &source.source_program_id,
         projection.original_message_id.as_deref(),
     )?
-    .ok_or_else(|| invalid("project_work_legacy_turn_ownership_invalid"))?;
+    .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyTurnOwnershipInvalid))?;
     if projection
         .original_message_id
         .as_ref()
         .is_some_and(|id| id != &origin.original_message_id)
     {
-        return Err(invalid("project_work_legacy_origin_message_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyOriginMessageInvalid));
     }
     let import_id = import_id(
         &source.source_program_id,
@@ -195,7 +197,7 @@ fn project(
         |row| row.get::<_, i64>(0),
     ).optional().map_err(StorageError::sqlite)?;
     if exists.is_some() {
-        return Err(invalid("project_work_legacy_identity_conflict"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict));
     }
     let plan_id = (!projection.actions.is_empty()).then(|| record_id("plan", &import_id));
     let checkpoint_id = projection

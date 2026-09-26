@@ -1,6 +1,8 @@
 //! Reviewed Steward Plan action to durable Worker dispatch.
 
 use super::*;
+use crate::btcc::BtccCode;
+use crate::btcc::BtccError;
 
 impl NativeSubsessionService {
     pub(crate) async fn delegate_worker(
@@ -13,16 +15,16 @@ impl NativeSubsessionService {
             .get_by_session_id(&request.parent_session_id)
             .await
             .map_err(BtccError::from)?
-            .ok_or_else(|| error("parent_steward_session_required"))?;
+            .ok_or_else(|| error(BtccCode::ParentStewardSessionRequired))?;
         if parent.role != SessionRole::Steward {
-            return Err(error("parent_steward_session_required"));
+            return Err(error(BtccCode::ParentStewardSessionRequired));
         }
         let plan = reviewed
             .current_plan
             .as_ref()
-            .ok_or_else(|| error("delegation_reviewed_plan_required"))?;
+            .ok_or_else(|| error(BtccCode::DelegationReviewedPlanRequired))?;
         if plan.execution_mode != Some(ExecutionMode::Workers) {
-            return Err(error("worker_delegation_plan_mode_required"));
+            return Err(error(BtccCode::WorkerDelegationPlanModeRequired));
         }
         let review = reviewed
             .latest_plan_review
@@ -31,12 +33,12 @@ impl NativeSubsessionService {
                 r.verdict == crate::btcc::ReviewVerdict::Accept
                     && r.bound_plan_revision_id.as_deref() == Some(&plan.plan_revision_id)
             })
-            .ok_or_else(|| error("delegation_reviewed_plan_required"))?;
+            .ok_or_else(|| error(BtccCode::DelegationReviewedPlanRequired))?;
         let action = plan
             .actions
             .iter()
             .find(|a| a.action_key == request.action_key)
-            .ok_or_else(|| error("worker_plan_action_missing"))?;
+            .ok_or_else(|| error(BtccCode::WorkerPlanActionMissing))?;
         let progress = reviewed
             .action_progress
             .iter()
@@ -47,7 +49,7 @@ impl NativeSubsessionService {
             progress,
             ActionStatus::Done | ActionStatus::Skipped | ActionStatus::Blocked
         ) {
-            return Err(error("worker_plan_action_not_executable"));
+            return Err(error(BtccCode::WorkerPlanActionNotExecutable));
         }
         for dependency in &action.dependency_keys {
             let status = reviewed
@@ -56,13 +58,13 @@ impl NativeSubsessionService {
                 .find(|p| &p.action_key == dependency)
                 .map(|p| p.status);
             if !matches!(status, Some(ActionStatus::Done | ActionStatus::Skipped)) {
-                return Err(error("worker_plan_action_dependency_incomplete"));
+                return Err(error(BtccCode::WorkerPlanActionDependencyIncomplete));
             }
         }
         let profile = self.profiles.read(request.profile_id.clone()).await?;
         let identity = json!({"parent_session_id":request.parent_session_id,"parent_turn_id":request.parent_turn_id,"action_key":request.action_key,"objective":request.objective,"acceptance_criteria":request.acceptance_criteria,"implementation_brief":request.implementation_brief,"profile_id":profile.id});
-        let encoded =
-            serde_json::to_string(&identity).map_err(|_| error("subsession_identity_invalid"))?;
+        let encoded = serde_json::to_string(&identity)
+            .map_err(|source| error(BtccCode::SubsessionIdentityInvalid).with_source(source))?;
         let delegation_id = format!(
             "delegation-{}",
             crate::btcc::digest_identity(&format!("btcc.worker.delegation.v1\0{encoded}"))
@@ -71,7 +73,7 @@ impl NativeSubsessionService {
             .repository
             .by_delegation(delegation_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
         {
             self.ensure_child_binding(&existing).await?;
             self.replay(&existing).await?;
@@ -134,13 +136,13 @@ impl NativeSubsessionService {
                 created_at: now,
             })
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let stored = self
             .repository
             .by_delegation(delegation_id)
             .await
-            .map_err(storage)?
-            .ok_or_else(|| error("subsession_persist_failed"))?;
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::SubsessionPersistFailed))?;
         self.ensure_child_binding(&stored).await?;
         self.replay(&stored).await?;
         Ok(

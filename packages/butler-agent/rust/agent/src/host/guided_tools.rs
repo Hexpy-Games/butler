@@ -122,7 +122,7 @@ impl GuidedToolError {
         }
     }
     fn contract(self) -> BtccError {
-        BtccError::new(self.code, self.message)
+        BtccError::relayed(self.code, self.message)
     }
 }
 
@@ -171,7 +171,7 @@ impl NativeGuidedTools {
             .chain(binding.authorized_names.iter())
         {
             if !Self::supports(name) {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "guided_tool_executor_missing",
                     format!("No native executor is registered for {name}"),
                 ));
@@ -179,7 +179,7 @@ impl NativeGuidedTools {
         }
         for tool in &binding.surface {
             if !binding.visible_names.contains(&tool.name) {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "guided_tool_surface_not_visible",
                     format!("Selected tool {} is not visible", tool.name),
                 ));
@@ -298,7 +298,7 @@ impl NativeGuidedTools {
                     .journal
                     .list_signatures(self.binding.turn_id.clone())
                     .await
-                    .map_err(|error| BtccError::new(error.code, error.message))?;
+                    .map_err(BtccError::from)?;
                 Ok(Mutex::new(ResumePool::new(signatures)?))
             })
             .await
@@ -321,7 +321,7 @@ impl ToolPort for NativeGuidedTools {
                 )
             }) && invocation.operation_results.is_none()
             {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "operation_result_exact_read_unavailable",
                     "Exact result reader is not bound for this Turn",
                 ));
@@ -381,7 +381,7 @@ impl NativeGuidedTools {
         if invocation.turn.turn_id == self.binding.turn_id {
             Ok(())
         } else {
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "guided_tool_turn_mismatch",
                 "Tool owner belongs to a different Turn",
             ))

@@ -25,7 +25,7 @@ fn environment_selection_is_opt_in_and_rejects_invalid_limits() {
         _ => None,
     })
     .expect_err("invalid configured limit must fail");
-    assert_eq!(error.code, "invalid_turn_continuation_limit");
+    assert_eq!(error.code(), "invalid_turn_continuation_limit");
 }
 
 #[test]

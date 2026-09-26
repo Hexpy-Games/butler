@@ -101,14 +101,14 @@ impl SubsessionChildQueue for NativeSubsessionQueue {
 }
 
 fn invalid() -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "subsession_dispatch_intent_invalid",
         "Subsession dispatch intent is invalid",
     )
 }
 
 fn queue_error(error: crate::gateway::NativeQueueError) -> BtccError {
-    BtccError::new(error.code, error.message)
+    BtccError::relayed(error.code, error.message)
 }
 
 #[cfg(test)]

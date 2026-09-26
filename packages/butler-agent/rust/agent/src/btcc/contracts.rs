@@ -337,38 +337,3 @@ pub(crate) struct TurnOutcome {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) admission: Option<AdmissionKind>,
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct BtccError {
-    pub(crate) code: String,
-    pub(crate) message: String,
-}
-
-impl BtccError {
-    pub(crate) fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for BtccError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for BtccError {}
-
-impl From<crate::workspace::WorkspaceError> for BtccError {
-    fn from(error: crate::workspace::WorkspaceError) -> Self {
-        Self::new(error.code(), error.message())
-    }
-}
-
-impl From<crate::conversation::ConversationError> for BtccError {
-    fn from(error: crate::conversation::ConversationError) -> Self {
-        Self::new(error.code(), error.message())
-    }
-}

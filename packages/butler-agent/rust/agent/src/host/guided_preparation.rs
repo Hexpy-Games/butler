@@ -96,7 +96,7 @@ impl NativeGuidedPreparation {
                 start.cancellation.clone(),
             )
             .await
-            .map_err(|e| BtccError::new(e.code(), e.message()))?;
+            .map_err(BtccError::from)?;
         let workspace = recovered.workspace_reference;
         let plan_id = turn
             .context
@@ -183,7 +183,7 @@ impl NativeGuidedPreparation {
 }
 
 fn contract(code: &str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code.to_owned(), code)
 }
 
 #[expect(
@@ -204,8 +204,10 @@ fn ledger_error(error: ProjectLedgerReadError) -> BtccError {
 fn preparation_error(error: GuidedPreparationError) -> BtccError {
     match error {
         GuidedPreparationError::Work(error) => error,
-        GuidedPreparationError::Authority(error) => BtccError::new(error.code, error.message),
+        GuidedPreparationError::Authority(error) => BtccError::from(error),
         GuidedPreparationError::Contract(code) => contract(code),
-        GuidedPreparationError::Policy(message) => BtccError::new("guided_policy_invalid", message),
+        GuidedPreparationError::Policy(message) => {
+            BtccError::relayed("guided_policy_invalid", message)
+        }
     }
 }

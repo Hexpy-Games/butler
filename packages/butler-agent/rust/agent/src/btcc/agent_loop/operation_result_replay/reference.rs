@@ -2,6 +2,7 @@ use crate::btcc::BtccError;
 use crate::btcc::storage::{OperationResultReference as StoredReference, ToolJournalRecord};
 
 use super::contracts::*;
+use crate::btcc::BtccCode;
 
 pub(super) fn reference(
     record: &ToolJournalRecord,
@@ -12,14 +13,14 @@ pub(super) fn reference(
         .result_sha256
         .clone()
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| error("operation_result_reference_unavailable"))?;
+        .ok_or_else(|| error(BtccCode::OperationResultReferenceUnavailable))?;
     if record.result.is_none() {
-        return Err(error("operation_result_reference_unavailable"));
+        return Err(error(BtccCode::OperationResultReferenceUnavailable));
     }
     let kind = match stored.kind {
         "direct" => StoredResultKind::Direct,
         "work" => StoredResultKind::Work,
-        _ => return Err(error("operation_result_reference_invalid")),
+        _ => return Err(error(BtccCode::OperationResultReferenceInvalid)),
     };
     Ok(OperationResultReference {
         version: OperationResultReferenceVersion::V1,
@@ -28,17 +29,17 @@ pub(super) fn reference(
             kind,
             result_ref: bounded_identifier(
                 &stored.result_ref,
-                "operation_result_reference_invalid",
+                BtccCode::OperationResultReferenceInvalid,
             )?,
             tool_name: bounded_identifier(
                 &record.tool_name.clone(),
-                "operation_result_tool_name_invalid",
+                BtccCode::OperationResultToolNameInvalid,
             )?,
             work_id: stored
                 .work_id
                 .filter(|value| !value.is_empty())
                 .as_ref()
-                .map(|value| bounded_identifier(value, "operation_result_work_id_invalid"))
+                .map(|value| bounded_identifier(value, BtccCode::OperationResultWorkIdInvalid))
                 .transpose()?,
         },
         integrity: OperationResultIntegrity {
@@ -52,7 +53,7 @@ pub(super) fn reference(
                 .as_ref()
                 .map(|value| value.field("ok"))
                 .transpose()
-                .map_err(|_| error("tool_journal_json_invalid"))?
+                .map_err(|source| error(BtccCode::ToolJournalJsonInvalid).with_source(source))?
                 .flatten()
                 != Some("false"),
             verification: StoredExactAvailable::StoredExactAvailable,
@@ -74,7 +75,7 @@ pub(super) fn reference(
     })
 }
 
-fn bounded_identifier(value: &str, code: &'static str) -> Result<String, BtccError> {
+fn bounded_identifier(value: &str, code: BtccCode) -> Result<String, BtccError> {
     let trimmed = crate::public_text::trim_js_whitespace(value);
     if trimmed.is_empty() || trimmed.len() > 256 {
         Err(error(code))
@@ -100,6 +101,6 @@ fn bounded_error_code(value: Option<&str>) -> Option<String> {
     (!normalized.is_empty()).then_some(normalized)
 }
 
-fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+fn error(code: BtccCode) -> BtccError {
+    BtccError::detected(code, code.as_str())
 }

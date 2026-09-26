@@ -1,10 +1,11 @@
 //! Immutable context documents use the existing BTCC SQLite owner and table.
 
+use crate::btcc::BtccError;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::common::btcc_error;
 use super::{BtccRepositories, StorageError, StorageResult};
 use crate::btcc::PortFuture;
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 
 #[derive(Clone, Debug)]
@@ -38,7 +39,7 @@ impl BtccRepositories {
             self.storage
                 .execute(move |db| persist(db, &input))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -49,7 +50,7 @@ impl BtccRepositories {
             self.storage
                 .execute(move |db| resolve(db, &reference))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 
@@ -61,7 +62,7 @@ impl BtccRepositories {
             self.storage
                 .execute(move |db| read(db, &reference))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 }
@@ -108,7 +109,7 @@ fn resolve(db: &Connection, reference: &str) -> StorageResult<String> {
     match row {
         Some((content, hash)) if digest(&content) == hash => Ok(content),
         _ => Err(StorageError::new(
-            "context_document_unavailable",
+            StorageCode::ContextDocumentUnavailable,
             format!("BTCC context document is unavailable or corrupt: {reference}"),
         )),
     }
@@ -137,7 +138,7 @@ fn read(db: &Connection, key: &str) -> StorageResult<ContextDocumentRead> {
         .map_err(StorageError::sqlite)?;
     let invalid = || {
         StorageError::new(
-            "btcc_context_document_identity_invalid",
+            StorageCode::BtccContextDocumentIdentityInvalid,
             "btcc_context_document_identity_invalid",
         )
     };

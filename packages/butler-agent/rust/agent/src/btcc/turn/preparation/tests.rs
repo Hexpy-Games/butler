@@ -249,7 +249,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     let mut changed_identity = request.clone();
     changed_identity.message.content = "changed".into();
     let error = preparation.prepare(changed_identity).await.err().unwrap();
-    assert_eq!(error.code, "turn_replay_conflict");
+    assert_eq!(error.code(), "turn_replay_conflict");
     assert_eq!(identity.admissions.load(AtomicOrdering::Relaxed), 1);
 
     let stored = repositories.find_turn("turn-1").await.unwrap().unwrap();
@@ -266,7 +266,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     assert_eq!(
         request::assert_replay_identity(&stored_null, &absent_content)
             .unwrap_err()
-            .code,
+            .code(),
         "turn_replay_conflict"
     );
 
@@ -275,7 +275,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
     wrong_role.event_id = "event-role".into();
     wrong_role.route.role = BtccRole::Steward;
     assert_eq!(
-        preparation.prepare(wrong_role).await.err().unwrap().code,
+        preparation.prepare(wrong_role).await.err().unwrap().code(),
         "session_binding_role_mismatch"
     );
     assert_eq!(context.calls.load(AtomicOrdering::Relaxed), 1);
@@ -289,10 +289,7 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
                 rusqlite::params!["source-turn", "authority-ref", "scope-ref"],
             )
             .map(|_| ())
-            .map_err(|error| StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(StorageError::sqlite)
         })
         .await
         .unwrap();
@@ -306,7 +303,12 @@ async fn actual_sqlite_fresh_and_replay_skip_changed_context_and_catalog() {
         result_scope_ref: Some("wrong-scope".into()),
     };
     assert_eq!(
-        preparation.prepare(wake.clone()).await.err().unwrap().code,
+        preparation
+            .prepare(wake.clone())
+            .await
+            .err()
+            .unwrap()
+            .code(),
         "wake_authorization_denied"
     );
     assert_eq!(context.calls.load(AtomicOrdering::Relaxed), 1);

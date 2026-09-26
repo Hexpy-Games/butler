@@ -25,7 +25,7 @@ async fn relation_replay_preserves_identity_and_stop_fence_rejects_mutation() {
         ..input
     };
     let conflict = service.start_work(changed).await.unwrap_err();
-    assert_ne!(conflict.code, "sqlite_error");
+    assert_ne!(conflict.code(), "sqlite_error");
     assert_eq!(
         service
             .bound_work_for_turn("turn".into())
@@ -56,7 +56,7 @@ async fn relation_replay_preserves_identity_and_stop_fence_rejects_mutation() {
         })
         .await
         .unwrap_err();
-    assert_ne!(stopped.code, "sqlite_error");
+    assert_ne!(stopped.code(), "sqlite_error");
     let count: i64 = storage.execute(|db| {
         db.query_row("SELECT COUNT(*) FROM btcc_guided_work_relation_commands WHERE mutation_call_id = 'after-fence'", [], |row| row.get(0))
             .map_err(StorageError::sqlite)

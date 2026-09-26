@@ -140,7 +140,7 @@ async fn search(
         &filtered,
     )
     .map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_catalog_json",
             error.to_string(),
         ))
@@ -202,7 +202,7 @@ async fn describe(
         }
         if let Some(tool) = catalog.native_tool(name) {
             descriptions.push(describe_native(projection(owner, tool)).map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new(
+                ToolExecutionError::Integrity(BtccError::relayed(
                     "guided_bridge_catalog_json",
                     error.to_string(),
                 ))
@@ -223,7 +223,7 @@ pub(super) fn remember_described(
         return Ok(());
     }
     let Some(array) = result.field("descriptions").map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),
         ))
@@ -248,7 +248,7 @@ pub(super) fn remember_described(
         })
     })
     .map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),
         ))
@@ -298,12 +298,12 @@ pub(super) fn bridge_error(code: &str, message: &str) -> Value {
 }
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_bridge_result_json",
             error.to_string(),
         ))
     })
 }
 fn integrity(code: &'static str) -> ToolExecutionError {
-    ToolExecutionError::Integrity(BtccError::new(code, code))
+    ToolExecutionError::Integrity(BtccError::relayed(code, code))
 }

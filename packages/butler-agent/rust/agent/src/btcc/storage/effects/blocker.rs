@@ -4,12 +4,8 @@ use sha2::{Digest, Sha256};
 
 use crate::btcc::effects::contracts::*;
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
-    EffectFailure::storage("sqlite_error", error.to_string())
+    EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
 
 struct Raw {
@@ -55,8 +51,9 @@ fn hydrate(row: Raw) -> EffectResult<EffectBlocker> {
             ),
         ));
     }
-    let input: Value = serde_json::from_str(&row.input_json)
-        .map_err(|error| EffectFailure::storage("effect_blocker_json", error.to_string()))?;
+    let input: Value = serde_json::from_str(&row.input_json).map_err(|error| {
+        EffectFailure::storage("effect_blocker_json", error.to_string()).with_source(error)
+    })?;
     if !input.is_object() {
         return Err(EffectFailure::storage(
             "effect_blocker_corrupt",
@@ -84,6 +81,7 @@ fn hydrate(row: Raw) -> EffectResult<EffectBlocker> {
             .map(|text| {
                 serde_json::from_str::<Value>(text).map_err(|error| {
                     EffectFailure::storage("effect_blocker_json", error.to_string())
+                        .with_source(error)
                 })
             })
             .transpose()?;

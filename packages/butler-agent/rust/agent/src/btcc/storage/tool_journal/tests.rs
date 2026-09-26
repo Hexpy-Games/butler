@@ -67,7 +67,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
     let mut conflict = start("call");
     conflict.turn_id = "another".into();
     assert_eq!(
-        journal.start(conflict).await.unwrap_err().message,
+        journal.start(conflict).await.unwrap_err().message(),
         expected["failures"]["startConflict"]
     );
     journal.finish(finish()).await.unwrap();
@@ -75,7 +75,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
     let mut conflict = finish();
     conflict.result = Some(JsonDocument::from_value(&json!({"ok":false})).unwrap());
     assert_eq!(
-        journal.finish(conflict).await.unwrap_err().message,
+        journal.finish(conflict).await.unwrap_err().message(),
         expected["failures"]["finishConflict"]
     );
     assert_golden(
@@ -116,7 +116,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .release_deliveries("turn".into(), "wrong".into())
             .await
             .unwrap_err()
-            .message,
+            .message(),
         expected["failures"]["wrongRelease"]
     );
     journal
@@ -145,7 +145,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .acknowledge_deliveries("turn".into(), "round-2".into(), "b".repeat(64))
             .await
             .unwrap_err()
-            .message,
+            .message(),
         expected["failures"]["differentAck"]
     );
     for _ in 0..2 {
@@ -166,7 +166,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .acknowledge_deliveries("turn".into(), "round-2".into(), "a".repeat(64))
             .await
             .unwrap_err()
-            .message,
+            .message(),
         expected["failures"]["ackAfterPromote"]
     );
     for (call, result) in [("absent", None), ("null", Some(Value::Null))] {
@@ -217,7 +217,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .find_for_turn("turn".into(), "call".into())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "sqlite_owner_closed"
     );
     let reopened = BtccStorage::open(fixture.config("journal-reopened"))
@@ -249,7 +249,7 @@ async fn canonical_turn_journal_matches_bun_identity_delivery_and_reopen() {
             .find_for_turn("turn".into(), "call".into())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "operation_result_body_hash_mismatch"
     );
     reopened.close().await.unwrap();

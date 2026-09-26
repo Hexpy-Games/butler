@@ -160,7 +160,7 @@ pub(super) async fn read(
             || document.scope_kind != "user"
             || document.scope_id != user_ref
         {
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "guided_profile_instruction_document_invalid",
                 "guided_profile_instruction_document_invalid",
             ));
@@ -174,7 +174,7 @@ pub(super) async fn read(
         .next()
         .map(|document| crate::public_text::trim_js_whitespace(&document.content).to_owned());
     if eol.next().is_some() || eol_content.as_deref().is_none_or(str::is_empty) {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "guided_eol_instruction_document_invalid",
             "guided_eol_instruction_document_invalid",
         ));
@@ -197,7 +197,7 @@ pub(super) async fn read(
         !persona_sources.contains(document.source_id.as_str())
             && !governing_sources.contains(document.source_id.as_str())
     }) {
-        return Err(BtccError::new(
+        return Err(BtccError::relayed(
             "guided_profile_instruction_document_invalid",
             "guided_profile_instruction_document_invalid",
         ));

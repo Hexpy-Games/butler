@@ -128,5 +128,5 @@ pub(super) fn successful(projection: LegacyProjection, response: &Value) -> (Vec
 }
 
 fn invalid(code: &'static str) -> crate::btcc::ModelRoundError {
-    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::new(code, code))
+    crate::btcc::ModelRoundError::Integrity(crate::btcc::BtccError::relayed(code, code))
 }

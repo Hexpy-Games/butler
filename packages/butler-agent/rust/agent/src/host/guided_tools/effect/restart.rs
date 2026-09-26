@@ -20,13 +20,13 @@ pub(super) fn prepare(
     args: &serde_json::Map<String, Value>,
 ) -> Result<(String, Value, Arc<dyn EffectAdapter>), crate::btcc::BtccError> {
     if owner.binding.app_session_id.is_none() {
-        return Err(crate::btcc::BtccError::new(
+        return Err(crate::btcc::BtccError::relayed(
             "restart_app_turn_required",
             "A delivered App Turn is required for a service restart request.",
         ));
     }
     if !args.is_empty() {
-        return Err(crate::btcc::BtccError::new(
+        return Err(crate::btcc::BtccError::relayed(
             "restart_request_invalid",
             "This restart request takes no arguments.",
         ));
@@ -108,5 +108,5 @@ fn pending(key: &str, signal: &CancellationToken) -> Result<AdapterOutcome, Effe
 }
 
 fn invalid(code: &str) -> EffectFailure {
-    EffectFailure::policy(code, "Invalid native service restart request")
+    EffectFailure::policy(code.to_owned(), "Invalid native service restart request")
 }

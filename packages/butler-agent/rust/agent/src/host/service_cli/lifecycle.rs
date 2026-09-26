@@ -369,7 +369,7 @@ fn service_configuration(
     let home = user_home()?;
     let data = data_root.to_string_lossy();
     NativeServiceConfiguration::capture(Some(&data), &home, installation)
-        .map_err(|error| format!("{}: {}", error.code, error.message))
+        .map_err(|error| format!("{}: {}", error.code(), error.message()))
 }
 
 fn user_home() -> Result<PathBuf, String> {

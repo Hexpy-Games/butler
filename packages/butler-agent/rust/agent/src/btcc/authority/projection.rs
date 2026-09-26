@@ -18,8 +18,9 @@ pub(super) fn admission(
             request_ref: record.request_ref.clone(),
             source_work_id: record.source_work_id.clone(),
             normalized_target: record.normalized_target.clone(),
-            normalized_input: serde_json::from_str(&record.normalized_input_json)
-                .map_err(|_| AuthorityError::policy("authority_request_corrupt"))?,
+            normalized_input: serde_json::from_str(&record.normalized_input_json).map_err(
+                |source| AuthorityError::policy("authority_request_corrupt").with_source(source),
+            )?,
         }),
         "denied" => Ok(AuthorityAdmissionResult::Denied {
             request_ref: record.request_ref.clone(),

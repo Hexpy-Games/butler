@@ -4,6 +4,7 @@ use rusqlite::{Connection, params};
 use serde_json::Value;
 
 use super::{BtccStorage, StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::{ProgressDestination, RuntimeTurnEventInput};
 
 #[cfg(test)]
@@ -154,10 +155,13 @@ fn pending_page(
             event,
             destination,
         ) = row.map_err(StorageError::sqlite)?;
-        let event = serde_json::from_str(&event)
-            .map_err(|error| StorageError::new("progress_event_invalid", error.to_string()))?;
+        let event = serde_json::from_str(&event).map_err(|error| {
+            StorageError::new(StorageCode::ProgressEventInvalid, error.to_string())
+                .with_source(error)
+        })?;
         let destination = serde_json::from_str(&destination).map_err(|error| {
-            StorageError::new("progress_destination_invalid", error.to_string())
+            StorageError::new(StorageCode::ProgressDestinationInvalid, error.to_string())
+                .with_source(error)
         })?;
         Ok(CommittedProgressEvent {
             event_id,

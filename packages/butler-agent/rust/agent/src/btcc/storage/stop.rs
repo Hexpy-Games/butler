@@ -4,6 +4,7 @@ use super::common::error;
 use super::hydration::hydrate_final_payload;
 use super::{StorageError, StorageResult};
 use crate::btcc::AlreadyDeliveredOutcome;
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::StopPersistenceOutcome;
 
@@ -94,7 +95,7 @@ fn persist_existing(
         }
         "admitted" => cancel(connection, turn_id, request_id, &turn),
         value => Err(error(
-            "invalid_turn_state",
+            StorageCode::InvalidTurnState,
             format!("BTCC R3 Turn state is invalid: {value}"),
         )),
     }
@@ -114,13 +115,13 @@ fn delivered(
         .transpose()?
         .ok_or_else(|| {
             error(
-                "stop_final_missing",
+                StorageCode::StopFinalMissing,
                 "Delivered BTCC R3 Turn has no final payload",
             )
         })?;
     let message_id = turn.canonical_message_id.ok_or_else(|| {
         error(
-            "stop_message_missing",
+            StorageCode::StopMessageMissing,
             "Delivered BTCC R3 Turn has no canonical message",
         )
     })?;
@@ -145,10 +146,12 @@ fn cancel(
     request_id: &str,
     turn: &ControlRow,
 ) -> StorageResult<StopPersistenceOutcome> {
-    let revision = turn
-        .revision
-        .checked_add(1)
-        .ok_or_else(|| error("turn_revision_overflow", "BTCC Turn revision overflow"))?;
+    let revision = turn.revision.checked_add(1).ok_or_else(|| {
+        error(
+            StorageCode::TurnRevisionOverflow,
+            "BTCC Turn revision overflow",
+        )
+    })?;
     let changed = connection
         .execute(
             "UPDATE btcc_turns SET semantic_state='cancelled', active_checkpoint_id=NULL, \
@@ -159,7 +162,10 @@ fn cancel(
         )
         .map_err(StorageError::sqlite)?;
     if changed != 1 {
-        return Err(error("stop_cas_lost", "BTCC R3 Stop lost its Turn CAS"));
+        return Err(error(
+            StorageCode::StopCasLost,
+            "BTCC R3 Stop lost its Turn CAS",
+        ));
     }
     connection
         .execute(

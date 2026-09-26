@@ -5,6 +5,7 @@ use super::super::common::{column_exists, error, json, stringify};
 use super::super::{StorageError, StorageResult};
 use super::events::assert_claim;
 use super::normalizer::normalize;
+use crate::btcc::StorageCode;
 use crate::btcc::turn::{ModelRoundAcceptanceWrite, ModelRoundKey};
 
 pub(in crate::btcc::storage) fn load_acceptance(
@@ -32,19 +33,19 @@ pub(in crate::btcc::storage) fn load_acceptance(
         .optional()
         .map_err(StorageError::sqlite)?;
     row.map(|(raw, identity)| {
-        let mut value = normalize(&json(&raw, "model_acceptance_json")?)?;
+        let mut value = normalize(&json(&raw, StorageCode::ModelAcceptanceJson)?)?;
         if let Some(raw) = identity {
             value
                 .as_object_mut()
                 .ok_or_else(|| {
                     error(
-                        "model_response_invalid",
+                        StorageCode::ModelResponseInvalid,
                         "normalized response must be object",
                     )
                 })?
                 .insert(
                     "providerIdentity".into(),
-                    normalize_provider_identity(&json(&raw, "provider_identity_json")?)?,
+                    normalize_provider_identity(&json(&raw, StorageCode::ProviderIdentityJson)?)?,
                 );
         }
         Ok(value)
@@ -75,7 +76,7 @@ pub(in crate::btcc::storage) fn record_acceptance(
         .map_err(StorageError::sqlite)?;
     if claim_checkpoint != (checkpoint_id.to_owned(), checkpoint_revision) {
         return Err(error(
-            "model_acceptance_claim",
+            StorageCode::ModelAcceptanceClaim,
             "BTCC model response acceptance lost exact Turn claim",
         ));
     }
@@ -141,7 +142,7 @@ fn checkpoint(key: &ModelRoundKey) -> StorageResult<(&str, u64)> {
     match (key.checkpoint_id.as_deref(), key.checkpoint_revision) {
         (Some(id), Some(rev)) => Ok((id, rev)),
         _ => Err(error(
-            "model_checkpoint_missing",
+            StorageCode::ModelCheckpointMissing,
             "model acceptance requires checkpoint identity",
         )),
     }
@@ -165,7 +166,7 @@ fn assert_checkpoint(
             && r.3 == Some(1)
     }) {
         return Err(error(
-            "model_checkpoint_stale",
+            StorageCode::ModelCheckpointStale,
             "BTCC model response acceptance is not bound to the active checkpoint",
         ));
     }
@@ -233,13 +234,19 @@ fn project_execution_model(
     Ok(())
 }
 fn normalize_provider_identity(value: &Value) -> StorageResult<Value> {
-    let o = value
-        .as_object()
-        .ok_or_else(|| error("model_response_invalid", "invalid provider identity"))?;
+    let o = value.as_object().ok_or_else(|| {
+        error(
+            StorageCode::ModelResponseInvalid,
+            "invalid provider identity",
+        )
+    })?;
     let mut n = Map::new();
     for k in ["provider", "configuredModel", "reportedModel"] {
         if !o.get(k).is_some_and(Value::is_string) {
-            return Err(error("model_response_invalid", "invalid provider identity"));
+            return Err(error(
+                StorageCode::ModelResponseInvalid,
+                "invalid provider identity",
+            ));
         }
         n.insert(k.into(), o[k].clone());
     }

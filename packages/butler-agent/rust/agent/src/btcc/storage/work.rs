@@ -52,7 +52,7 @@ impl SessionWorkRepository {
         self.storage
             .execute(move |db| operation(db))
             .await
-            .map_err(map_error)
+            .map_err(BtccError::from)
     }
 
     async fn write<T, F>(&self, operation: F) -> Result<T, BtccError>
@@ -71,12 +71,8 @@ impl SessionWorkRepository {
                 Ok(result)
             })
             .await
-            .map_err(map_error)
+            .map_err(BtccError::from)
     }
-}
-
-fn map_error(error: StorageError) -> BtccError {
-    BtccError::new(error.code, error.message)
 }
 
 impl DurableWorkRepository for SessionWorkRepository {

@@ -123,7 +123,7 @@ fn invalid_cursor() -> Value {
 
 fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
     JsonDocument::from_value(value).map_err(|error| {
-        ToolExecutionError::Integrity(BtccError::new(
+        ToolExecutionError::Integrity(BtccError::relayed(
             "guided_project_source_result_json",
             error.to_string(),
         ))

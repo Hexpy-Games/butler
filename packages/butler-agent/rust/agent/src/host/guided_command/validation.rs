@@ -139,7 +139,7 @@ pub(super) fn capability_receipts(
 }
 
 fn error() -> BtccError {
-    BtccError::new(
+    BtccError::relayed(
         "command_result_encoding_failed",
         "command_result_encoding_failed",
     )

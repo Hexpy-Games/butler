@@ -69,6 +69,6 @@ async fn negative_covered_units_is_a_typed_corrupt_record() {
         .load("turn-a")
         .await
         .unwrap_err();
-    assert_eq!(error.code, "context_compaction_record_invalid");
+    assert_eq!(error.code(), "context_compaction_record_invalid");
     storage.close().await.unwrap();
 }

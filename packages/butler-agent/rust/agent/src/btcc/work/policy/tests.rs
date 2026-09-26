@@ -103,12 +103,12 @@ fn action_updates_replace_only_current_plan_actions() {
     assert_eq!(
         apply_work_action_updates(&work, &unknown)
             .unwrap_err()
-            .message,
+            .message(),
         "Durable Work action is not in the current Plan: missing"
     );
     work.current_plan = None;
     assert_eq!(
-        apply_work_action_updates(&work, &[]).unwrap_err().message,
+        apply_work_action_updates(&work, &[]).unwrap_err().message(),
         "Durable Work progress requires a current Plan"
     );
 }
@@ -177,7 +177,7 @@ fn review_transitions_follow_source_entry_and_target_stages() {
     )
     .unwrap_err();
     assert_eq!(
-        error.message,
+        error.message(),
         "Work cannot result_review_revise from execution; correction_scope_required. Next action: choose_planning_or_execution_correction"
     );
 }

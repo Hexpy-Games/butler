@@ -47,7 +47,7 @@ impl OperationResultRuntime for Fixture {
             if self.cleanup_error.load(std::sync::atomic::Ordering::SeqCst) {
                 return Err(
                     super::super::operation_result_replay::OperationResultError::Contract(
-                        BtccError::new("cleanup_failed", "cleanup_failed"),
+                        BtccError::relayed("cleanup_failed", "cleanup_failed"),
                     ),
                 );
             }

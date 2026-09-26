@@ -32,7 +32,7 @@ pub(super) fn open(
     ));
     let catalog = Arc::new(
         NativeGuidedCatalog::load(&capabilities)
-            .map_err(|e| BtccError::new("guided_catalog_unavailable", e.to_string()))?,
+            .map_err(|e| BtccError::relayed("guided_catalog_unavailable", e.to_string()))?,
     );
     Ok((skills, capabilities, catalog))
 }

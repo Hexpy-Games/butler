@@ -6,6 +6,7 @@ use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
 
 use super::types::AdmissionClaim;
+use crate::btcc::StorageCode;
 
 pub(super) fn acquire_claim(
     connection: &mut Connection,
@@ -21,14 +22,14 @@ pub(super) fn acquire_claim(
     ).map_err(StorageError::sqlite)?;
     let current = claim_row(&transaction, &claim_id)?.ok_or_else(|| {
         error(
-            "admission_claim_missing",
+            StorageCode::AdmissionClaimMissing,
             "BTCC Admission claim was not persisted",
         )
     })?;
     if current.0 != owner.owner_id() || current.1 != owner.generation() {
         if current.3 != "relinquished" && !owner.can_adopt_claim_from(&transaction, &current.0)? {
             return Err(error(
-                "admission_claim_live",
+                StorageCode::AdmissionClaimLive,
                 "BTCC Admission is actively owned by another live runtime",
             ));
         }
@@ -40,20 +41,20 @@ pub(super) fn acquire_claim(
         ).map_err(StorageError::sqlite)?;
         if changed != 1 {
             return Err(error(
-                "admission_claim_raced",
+                StorageCode::AdmissionClaimRaced,
                 "BTCC Admission claim adoption raced",
             ));
         }
     }
     let claimed = claim_row(&transaction, &claim_id)?.ok_or_else(|| {
         error(
-            "admission_claim_missing",
+            StorageCode::AdmissionClaimMissing,
             "BTCC Admission claim was not persisted",
         )
     })?;
     if claimed.0 != owner.owner_id() || claimed.1 != owner.generation() || claimed.3 != "active" {
         return Err(error(
-            "admission_claim_inactive",
+            StorageCode::AdmissionClaimInactive,
             "BTCC Admission is not actively owned by this runtime",
         ));
     }

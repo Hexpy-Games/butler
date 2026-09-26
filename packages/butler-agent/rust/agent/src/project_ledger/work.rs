@@ -33,7 +33,7 @@ use crate::btcc::{
 use super::NativeProjectLedger;
 
 fn invalid(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }
 
 pub(crate) struct NativeProjectWork {
@@ -107,7 +107,7 @@ impl MutationOwner {
         {
             let closing = self.0.closing.lock();
             if *closing {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "project_work_closed",
                     "Project Work owner is closed",
                 ));
@@ -117,7 +117,7 @@ impl MutationOwner {
             });
         }
         receive.await.map_err(|_| {
-            BtccError::new("project_work_task_lost", "Project Work operation stopped")
+            BtccError::relayed("project_work_task_lost", "Project Work operation stopped")
         })?
     }
 

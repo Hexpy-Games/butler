@@ -8,6 +8,7 @@ mod authority;
 mod continuation_budget;
 mod contracts;
 mod effects;
+mod error;
 mod execution_controls;
 mod guided_budget;
 mod guided_turn;
@@ -24,11 +25,12 @@ use std::sync::Arc;
 
 pub(crate) use contracts::{
     AcceptedWorkResult, AcceptedWorkStatus, AccessMode, AdmissionKind, AlreadyDeliveredOutcome,
-    ArtifactKind, AttachmentKind, AttachmentRef, BtccError, DeliveredOutcome, ExecutionOutcome,
-    FinalArtifact, ModelIdentity, Peer, PeerKind, ProgressDestination, ReasoningEffort,
-    RuntimeFailure, Sender, SessionRole, StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind,
-    TurnRequest, TurnRoute, TurnTrigger, WorkStatus,
+    ArtifactKind, AttachmentKind, AttachmentRef, DeliveredOutcome, ExecutionOutcome, FinalArtifact,
+    ModelIdentity, Peer, PeerKind, ProgressDestination, ReasoningEffort, RuntimeFailure, Sender,
+    SessionRole, StopRequest, TurnMessage, TurnOutcome, TurnOutcomeKind, TurnRequest, TurnRoute,
+    TurnTrigger, WorkStatus,
 };
+pub(crate) use error::{BtccCode, BtccError, BtccSource};
 
 pub(crate) use turn::{
     AdmissionContextPort, AdmissionModelCatalogPort, AdmissionModelCatalogSnapshot,
@@ -118,7 +120,7 @@ pub(crate) use storage::{
     ParentResultRoute, PersistedWorkTurnScope, ProcessLiveness, ProjectWorkResultAuthorityFactory,
     ProjectWorkResultAuthorityLocation, RuntimeOwnerIdentity, SessionPlanObservation,
     SessionWorkRepository, SqliteProjectWorkRuntime, SqliteSubsessionRepository, StorageActivation,
-    StorageEffectJournal, StorageError, StorageProfile, StorageProgressPublication,
+    StorageCode, StorageEffectJournal, StorageError, StorageProfile, StorageProgressPublication,
     StoredSubsessionDelegation, StoredSubsessionDirection, SubsessionCreate,
     ToolJournalCloseoutRow, ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord,
     ToolJournalRepository, ToolJournalSignature, ToolJournalStart, WorkStatusObservation,
@@ -167,7 +169,7 @@ pub(crate) fn build_project_work_material_snapshot(
     blockers: Vec<ProjectWorkMaterialBlocker>,
 ) -> Result<ProjectWorkMaterialSnapshot, BtccError> {
     storage::project_work_material_snapshot(work, fingerprint, effect_watermark, blockers)
-        .map_err(|error| BtccError::new(error.code, error.message))
+        .map_err(BtccError::from)
 }
 
 #[derive(Clone)]

@@ -4,6 +4,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::common::{error, state_text};
 use super::runtime_owner::RuntimeOwner;
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::turn::{StateExecutionClaim, TurnSemanticState};
 
@@ -28,13 +29,13 @@ pub(super) fn acquire(
         )
     {
         return Err(error(
-            "terminal_claim",
+            StorageCode::TerminalClaim,
             "Terminal BTCC R3 Turn cannot acquire an execution claim",
         ));
     }
     let checkpoint = turn.checkpoint.as_ref().ok_or_else(|| {
         error(
-            "checkpoint_missing",
+            StorageCode::CheckpointMissing,
             "Nonterminal BTCC Turn has no active checkpoint",
         )
     })?;
@@ -52,8 +53,12 @@ pub(super) fn acquire(
         params![claim_id, turn.turn_id, turn.revision, state, checkpoint.checkpoint_id,
             checkpoint.checkpoint_revision, turn.execution_fence, owner.owner_id(), owner.generation()],
     ).map_err(StorageError::sqlite)?;
-    let current = find(&transaction, &claim_id)?
-        .ok_or_else(|| error("state_claim_missing", "BTCC state claim was not persisted"))?;
+    let current = find(&transaction, &claim_id)?.ok_or_else(|| {
+        error(
+            StorageCode::StateClaimMissing,
+            "BTCC state claim was not persisted",
+        )
+    })?;
     if current.status == "relinquished"
         || current.owner_id != owner.owner_id()
         || current.owner_generation != owner.generation()
@@ -66,8 +71,12 @@ pub(super) fn acquire(
             checkpoint.checkpoint_revision,
         )?;
     }
-    let claimed = find(&transaction, &claim_id)?
-        .ok_or_else(|| error("state_claim_missing", "BTCC state claim was not persisted"))?;
+    let claimed = find(&transaction, &claim_id)?.ok_or_else(|| {
+        error(
+            StorageCode::StateClaimMissing,
+            "BTCC state claim was not persisted",
+        )
+    })?;
     if claimed.owner_id != owner.owner_id()
         || claimed.owner_generation != owner.generation()
         || claimed.status != "active"
@@ -75,7 +84,7 @@ pub(super) fn acquire(
         || claimed.execution_fence != turn.execution_fence
     {
         return Err(error(
-            "state_claim_inactive",
+            StorageCode::StateClaimInactive,
             "BTCC state is not actively owned by this runtime",
         ));
     }
@@ -86,7 +95,7 @@ pub(super) fn acquire(
     ).map_err(StorageError::sqlite)?;
     if activated != 1 {
         return Err(error(
-            "checkpoint_claimed",
+            StorageCode::CheckpointClaimed,
             "BTCC checkpoint is already claimed by another runtime",
         ));
     }
@@ -111,7 +120,7 @@ fn adopt(
 ) -> StorageResult<()> {
     if claim.status != "relinquished" && !owner.can_adopt_claim_from(connection, &claim.owner_id)? {
         return Err(error(
-            "state_claim_live",
+            StorageCode::StateClaimLive,
             "BTCC state is actively owned by another live runtime",
         ));
     }
@@ -136,7 +145,7 @@ fn adopt(
         .map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(error(
-            "state_claim_adoption_raced",
+            StorageCode::StateClaimAdoptionRaced,
             "BTCC state claim adoption raced",
         ));
     }
@@ -192,7 +201,7 @@ fn assert_exact_turn(
             && current.3 == checkpoint_id
     }) {
         return Err(error(
-            "state_claim_stale_turn",
+            StorageCode::StateClaimStaleTurn,
             "BTCC StateExecutionClaim lost its exact Turn revision",
         ));
     }

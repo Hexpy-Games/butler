@@ -65,19 +65,13 @@ async fn legacy_blocker_grouping_preserves_first_payload_and_conservative_relati
                     'legacy-key','prior effect','unresolved','2026-09-19T00:00:00.000Z')",
                     rusqlite::params![id, work_id, target, input, sha],
                 )
-                .map_err(|error| crate::btcc::storage::StorageError {
-                    code: "sqlite_error",
-                    message: error.to_string(),
-                })?;
+                .map_err(crate::btcc::storage::StorageError::sqlite)?;
             }
             db.execute(
                 "UPDATE btcc_guided_works SET status='blocked' WHERE work_id=?1",
                 [work_id],
             )
-            .map_err(|error| crate::btcc::storage::StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })?;
+            .map_err(crate::btcc::storage::StorageError::sqlite)?;
             Ok(())
         })
         .await
@@ -111,10 +105,7 @@ async fn legacy_blocker_grouping_preserves_first_payload_and_conservative_relati
                 [work.work_id],
                 |row| row.get(0),
             )
-            .map_err(|error| crate::btcc::storage::StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(crate::btcc::storage::StorageError::sqlite)
         })
         .await
         .unwrap();

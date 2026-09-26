@@ -183,8 +183,8 @@ fn failure_from_loop_error(error: &AgentLoopError) -> FailureSnapshot {
     match error {
         AgentLoopError::Runtime(value) => failure_from_runtime(Some(value)),
         AgentLoopError::Propagate(value) => {
-            let message = value.message.clone();
-            let code = value.code.clone();
+            let message = value.message().to_owned();
+            let code = value.code().to_owned();
             let failure = json!({
                 "code": code,
                 "message": message,

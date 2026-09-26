@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use super::{ToolJournalCloseoutRow, ToolJournalRecord, ToolJournalSignature};
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::storage::common::{error, json};
 use crate::btcc::storage::{StorageError, StorageResult};
@@ -59,7 +60,7 @@ pub(super) fn restart_requests(
         .map(|id| {
             find(db, turn_id, &id)?.ok_or_else(|| {
                 error(
-                    "restart_tool_result_missing",
+                    StorageCode::RestartToolResultMissing,
                     "Restart tool result disappeared",
                 )
             })
@@ -127,13 +128,15 @@ pub(super) fn closeout_page(
             && result_sha256.as_deref() != Some(digest(raw).as_str())
         {
             return Err(error(
-                "operation_result_body_hash_mismatch",
+                StorageCode::OperationResultBodyHashMismatch,
                 "operation_result_body_hash_mismatch",
             ));
         }
         let document = |raw| {
-            crate::json::JsonDocument::from_encoded(raw)
-                .map_err(|error| StorageError::new("tool_journal_json_invalid", error.to_string()))
+            crate::json::JsonDocument::from_encoded(raw).map_err(|error| {
+                StorageError::new(StorageCode::ToolJournalJsonInvalid, error.to_string())
+                    .with_source(error)
+            })
         };
         Ok(ToolJournalCloseoutRow {
             rowid,
@@ -174,7 +177,7 @@ pub(super) fn list_signatures(
             call_id,
             tool_name,
             raw_arguments,
-            arguments: json(&arguments_json, "tool_journal_json_invalid")?,
+            arguments: json(&arguments_json, StorageCode::ToolJournalJsonInvalid)?,
         })
     })
     .collect()
@@ -220,23 +223,24 @@ fn hydrate(row: StoredRecord) -> StorageResult<ToolJournalRecord> {
         && row.result_sha256.as_deref() != Some(digest(result).as_str())
     {
         return Err(error(
-            "operation_result_body_hash_mismatch",
+            StorageCode::OperationResultBodyHashMismatch,
             "operation_result_body_hash_mismatch",
         ));
     }
-    let arguments = json(&row.arguments_json, "tool_journal_json_invalid")?;
+    let arguments = json(&row.arguments_json, StorageCode::ToolJournalJsonInvalid)?;
     let result = row
         .result_json
         .map(|value| {
-            crate::json::JsonDocument::from_encoded(value)
-                .map_err(|failure| error("tool_journal_json_invalid", failure.to_string()))
+            crate::json::JsonDocument::from_encoded(value).map_err(|failure| {
+                error(StorageCode::ToolJournalJsonInvalid, failure.to_string()).with_source(failure)
+            })
         })
         .transpose()?;
     let changed_files = row
         .changed_files_json
         .as_deref()
         .filter(|value| !value.is_empty())
-        .map(|value| json(value, "tool_journal_json_invalid"))
+        .map(|value| json(value, StorageCode::ToolJournalJsonInvalid))
         .transpose()?;
     Ok(ToolJournalRecord {
         call_id: row.call_id,

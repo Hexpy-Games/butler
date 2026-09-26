@@ -395,7 +395,7 @@ fn unavailable(locale: String, reason: &'static str) -> BriefingSettings {
 }
 
 fn setup(error: impl std::fmt::Display) -> BtccError {
-    BtccError::new("new_chat_briefing_setup_failed", error.to_string())
+    BtccError::relayed("new_chat_briefing_setup_failed", error.to_string())
 }
 
 #[cfg(test)]

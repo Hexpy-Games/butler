@@ -138,7 +138,7 @@ impl ToolPort for Fixture {
         Box::pin(async move {
             observe_scope(invocation, "tool").await;
             if invocation.cancellation.is_cancelled() {
-                return Err(ToolExecutionError::Integrity(BtccError::new(
+                return Err(ToolExecutionError::Integrity(BtccError::relayed(
                     "turn_cancelled",
                     "turn_cancelled",
                 )));
@@ -154,7 +154,7 @@ impl ToolPort for Fixture {
                     .unwrap_or_else(|| json!({"value":call.id})),
             )
             .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new("tool_json", error.to_string()))
+                ToolExecutionError::Integrity(BtccError::relayed("tool_json", error.to_string()))
             })
         })
     }
@@ -210,7 +210,7 @@ impl JournalPort for Fixture {
         _: u32,
     ) -> PortFuture<'a, TextCallDisposition> {
         Box::pin(async {
-            Ok(TextCallDisposition::Fail(BtccError::new(
+            Ok(TextCallDisposition::Fail(BtccError::relayed(
                 "btcc_text_tool_calls_unsupported",
                 "structured calls required",
             )))

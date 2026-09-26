@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::btcc::BtccCode;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -74,7 +75,8 @@ impl GuidedCatalogSnapshot {
     }
     pub(crate) fn parse(json: &str) -> Result<Self, crate::btcc::BtccError> {
         serde_json::from_str(json).map_err(|error| {
-            crate::btcc::BtccError::new("guided_catalog_invalid", error.to_string())
+            crate::btcc::BtccError::detected(BtccCode::GuidedCatalogInvalid, error.to_string())
+                .with_source(error)
         })
     }
     pub(super) fn tool(&self, name: &str) -> Option<&GuidedCatalogTool> {

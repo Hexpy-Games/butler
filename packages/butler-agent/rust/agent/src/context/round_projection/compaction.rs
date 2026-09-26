@@ -424,9 +424,9 @@ fn trim_summary(value: &str) -> Result<String, BtccError> {
 
 fn json_string_bytes(value: &str) -> Result<usize, BtccError> {
     crate::json::string_bytes(value)
-        .map_err(|error| BtccError::new("context_serialization_failed", error.to_string()))
+        .map_err(|error| BtccError::relayed("context_serialization_failed", error.to_string()))
 }
 
 fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }

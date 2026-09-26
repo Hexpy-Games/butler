@@ -20,7 +20,7 @@ fn action(key: &str) -> PlanAction {
 #[test]
 fn plan_requires_objective_and_existing_non_self_dependencies() {
     assert_eq!(
-        required_text("  ", "objective").unwrap_err().message,
+        required_text("  ", "objective").unwrap_err().message(),
         "Durable Work requires objective"
     );
     let mut missing = action("a");
@@ -37,7 +37,7 @@ fn plan_requires_objective_and_existing_non_self_dependencies() {
         checks: vec![],
     };
     assert_eq!(
-        validate_replace(&input).unwrap_err().message,
+        validate_replace(&input).unwrap_err().message(),
         "Durable Work action dependency is missing: a -> missing"
     );
     let mut self_dep = action("a");
@@ -47,7 +47,7 @@ fn plan_requires_objective_and_existing_non_self_dependencies() {
         ..input
     };
     assert_eq!(
-        validate_replace(&input).unwrap_err().message,
+        validate_replace(&input).unwrap_err().message(),
         "Durable Work action cannot depend on itself: a"
     );
 }
@@ -74,12 +74,12 @@ fn disposition_rejects_invalid_generation_and_accepts_valid_hex() {
     assert!(validate_disposition(&input).is_ok());
     input.expected_material_fingerprint = Some("z".repeat(64));
     assert_eq!(
-        validate_disposition(&input).unwrap_err().message,
+        validate_disposition(&input).unwrap_err().message(),
         "Durable Work expected material fingerprint is invalid"
     );
     input.expected_material_fingerprint = None;
     assert_eq!(
-        validate_disposition(&input).unwrap_err().message,
+        validate_disposition(&input).unwrap_err().message(),
         "Runtime-owned open requires its material generation"
     );
 }

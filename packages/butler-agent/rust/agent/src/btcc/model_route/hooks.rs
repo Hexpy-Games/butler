@@ -141,7 +141,7 @@ impl RouteHooks {
 }
 
 fn contention(error: &BtccError) -> bool {
-    error.code == "sqlite_contention"
-        || error.message.contains("database is locked")
-        || error.message.contains("database is busy")
+    error.code() == "sqlite_contention"
+        || error.message().contains("database is locked")
+        || error.message().contains("database is busy")
 }

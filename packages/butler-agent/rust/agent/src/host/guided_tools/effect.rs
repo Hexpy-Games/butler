@@ -52,7 +52,7 @@ pub(super) async fn execute(
             .await
         {
             Ok(result) => Ok(result),
-            Err(error) => ordinary(&error.code, &error.message, None),
+            Err(error) => ordinary(error.code(), error.message(), None),
         };
     }
     if owner.binding.access_mode == AccessMode::ReadOnly {
@@ -125,7 +125,7 @@ pub(super) async fn execute(
     };
     let (target, input, adapter) = match prepared {
         Ok(prepared) => prepared,
-        Err(error) => return ordinary(&error.code, &error.message, None),
+        Err(error) => return ordinary(error.code(), error.message(), None),
     };
     let resumes_authority = owner.binding.authority_request_ref.is_some()
         && owner.binding.authority_source_call_id.as_deref() == Some(occurrence)
@@ -160,9 +160,7 @@ pub(super) async fn execute(
             adapter,
         })
         .await
-        .map_err(|error| {
-            ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
-        })?;
+        .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
     if let Some(approved) = approved
         && let Some(feedback) = authority::settle(owner, approved, &outcome).await?
     {
@@ -254,5 +252,8 @@ fn receipt_result(
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn wire_error(error: crate::json::JsonError) -> ToolExecutionError {
-    ToolExecutionError::Integrity(BtccError::new("guided_tool_result_json", error.to_string()))
+    ToolExecutionError::Integrity(BtccError::relayed(
+        "guided_tool_result_json",
+        error.to_string(),
+    ))
 }

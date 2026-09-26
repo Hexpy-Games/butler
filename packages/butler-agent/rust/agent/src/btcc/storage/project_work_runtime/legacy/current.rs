@@ -10,6 +10,7 @@ use crate::btcc::work::{
 
 use super::super::super::{StorageError, StorageResult, work::hydrate_work_view};
 use super::{import_id, invalid, source_hash};
+use crate::btcc::StorageCode;
 
 pub(super) struct LegacyWorkLocator {
     pub work_id: String,
@@ -126,7 +127,7 @@ pub(super) fn preflight(
         .map_err(StorageError::sqlite)?;
     match prior {
         None if collision.is_some() || !tuples.is_empty() => {
-            Err(invalid("project_work_legacy_identity_conflict"))
+            Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict))
         }
         None => Ok(()),
         Some(prior)
@@ -143,7 +144,7 @@ pub(super) fn preflight(
         {
             Ok(())
         }
-        Some(_) => Err(invalid("project_work_legacy_identity_conflict")),
+        Some(_) => Err(invalid(StorageCode::ProjectWorkLegacyIdentityConflict)),
     }
 }
 
@@ -153,7 +154,7 @@ pub(super) fn capture(
 ) -> StorageResult<Option<ProjectWorkLegacySnapshot>> {
     let rows = locate(db, input)?;
     if rows.len() > 1 {
-        return Err(invalid("project_work_legacy_multiple_open_works"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyMultipleOpenWorks));
     }
     let Some(row) = rows.first() else {
         return Ok(None);
@@ -171,7 +172,7 @@ pub(super) fn capture(
         .as_deref()
         .is_some_and(|id| !id.is_empty() && id != input.resolved_scope.ledger_project_id)
     {
-        return Err(invalid("project_work_legacy_scope_conflict"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyScopeConflict));
     }
     let mut work = hydrate_work_view(db, &row.work_id)?;
     let bindings = bindings(db, &row.work_id, &input.scope.session_id)?;
@@ -180,7 +181,7 @@ pub(super) fn capture(
         .iter()
         .any(|id| !bindings.iter().any(|binding| binding.turn_id == *id))
     {
-        return Err(invalid("project_work_legacy_binding_missing"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyBindingMissing));
     }
     let plans = history::plans(db, &row.work_id)?;
     let checkpoints = history::checkpoints(db, &row.work_id, &plans)?;
@@ -215,7 +216,7 @@ pub(super) fn capture(
         .find(|turn| turn.turn_id == work.origin.turn_id)
         .is_none_or(|turn| turn.original_message_id != work.origin.message_id)
     {
-        return Err(invalid("project_work_legacy_origin_message_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyOriginMessageInvalid));
     }
     let source_identity = if prior.is_some() {
         format!("r2:{source_program_id}:{}", row.work_id)
@@ -270,10 +271,12 @@ pub(super) fn bindings(
         .map(|row| {
             let (binding, session) = row.map_err(StorageError::sqlite)?;
             if session != session_id {
-                return Err(invalid("project_work_legacy_binding_session_mismatch"));
+                return Err(invalid(
+                    StorageCode::ProjectWorkLegacyBindingSessionMismatch,
+                ));
             }
             if !binding.is_current {
-                return Err(invalid("project_work_legacy_stale_binding_invalid"));
+                return Err(invalid(StorageCode::ProjectWorkLegacyStaleBindingInvalid));
             }
             Ok(binding)
         })
@@ -295,7 +298,7 @@ pub(super) fn turns(
             }),
         ).optional().map_err(StorageError::sqlite)?;
         row.filter(|turn| turn.session_id == session_id)
-            .ok_or_else(|| invalid("project_work_legacy_turn_ownership_invalid"))
+            .ok_or_else(|| invalid(StorageCode::ProjectWorkLegacyTurnOwnershipInvalid))
     }).collect()
 }
 

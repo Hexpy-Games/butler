@@ -12,6 +12,7 @@ use super::ports::{
 use super::progress::TurnProgressScope;
 use super::supervisor::TurnExecutionSupervisor;
 use super::transition::guided_final;
+use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, DeliveredOutcome, ProgressDestination, TurnOutcome, TurnOutcomeKind};
 
 pub(super) struct TurnRuntime {
@@ -220,8 +221,8 @@ impl TurnRuntime {
         let committed = self.store.activate_successor(&turn.turn_id).await?;
         if let TurnTransition::Suspend { reason, .. } = transition {
             if committed.suspension != Some(reason) {
-                return Err(BtccError::new(
-                    "suspension_not_persisted",
+                return Err(BtccError::detected(
+                    BtccCode::SuspensionNotPersisted,
                     "BTCC suspension commit did not persist its reason",
                 ));
             }
@@ -279,8 +280,8 @@ impl TurnRuntime {
             }
         }
         if !terminal(turn.semantic_state) {
-            return Err(BtccError::new(
-                "invalid_delivery_state",
+            return Err(BtccError::detected(
+                BtccCode::InvalidDeliveryState,
                 "Turn did not reach a terminal delivery state",
             ));
         }
@@ -343,13 +344,16 @@ fn project_terminal(turn: &TurnRecord) -> Result<TurnOutcome, BtccError> {
         }
     } else {
         let payload = turn.final_payload.as_ref().ok_or_else(|| {
-            BtccError::new(
-                "missing_final_payload",
+            BtccError::detected(
+                BtccCode::MissingFinalPayload,
                 "Delivered Turn has no final payload",
             )
         })?;
         let message_id = turn.canonical_assistant_message_id.clone().ok_or_else(|| {
-            BtccError::new("missing_canonical_message", "Delivered Turn has no message")
+            BtccError::detected(
+                BtccCode::MissingCanonicalMessage,
+                "Delivered Turn has no message",
+            )
         })?;
         TurnOutcomeKind::Delivered(Box::new(DeliveredOutcome {
             turn_id: turn.turn_id.clone(),
@@ -412,7 +416,7 @@ fn terminal(state: TurnSemanticState) -> bool {
 fn commit_error(error: TransitionCommitError) -> BtccError {
     match error {
         TransitionCommitError::Contention => {
-            BtccError::new("sqlite_contention", "delivery transition contention")
+            BtccError::detected(BtccCode::SqliteContention, "delivery transition contention")
         }
         TransitionCommitError::Failure(error) => error,
     }

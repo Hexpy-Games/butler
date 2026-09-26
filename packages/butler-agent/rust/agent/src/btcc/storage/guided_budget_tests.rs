@@ -37,7 +37,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
     };
     let missing = GuidedContinuationBudgetFactory::new(None, clock.clone());
     assert_eq!(
-        missing.bind(&turn, &claim).err().unwrap().code,
+        missing.bind(&turn, &claim).err().unwrap().code(),
         "turn_continuation_dependency_missing"
     );
     let mut without_budget = turn.clone();
@@ -92,7 +92,7 @@ async fn guided_budget_uses_real_claim_and_persists_once_without_retained_histor
         persisted
     );
     let exhausted = budget.record_output("round-2", 7).await.unwrap_err();
-    assert_eq!(exhausted.code, "turn_continuation_budget_exhausted");
+    assert_eq!(exhausted.code(), "turn_continuation_budget_exhausted");
     let terminal = repository
         .find_turn(&turn.turn_id)
         .await

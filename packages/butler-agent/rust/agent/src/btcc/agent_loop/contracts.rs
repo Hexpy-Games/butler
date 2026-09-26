@@ -10,6 +10,7 @@ use crate::btcc::{
 };
 
 use super::continuation::AuthorityLoopContinuation;
+use crate::btcc::BtccCode;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,16 +100,21 @@ pub(crate) struct SemanticTurn {
 
 impl SemanticTurn {
     pub(crate) fn parse(turn: &TurnRecord) -> Result<Self, BtccError> {
-        let model = AdmittedModelSelection::deserialize(&turn.model_selection)
-            .map_err(|_| super::invalid_contract("invalid_admitted_model_selection"))?;
-        let context = ButlerContext::deserialize(&turn.context)
-            .map_err(|_| super::invalid_contract("invalid_butler_context"))?;
+        let model =
+            AdmittedModelSelection::deserialize(&turn.model_selection).map_err(|source| {
+                super::invalid_contract(BtccCode::InvalidAdmittedModelSelection).with_source(source)
+            })?;
+        let context = ButlerContext::deserialize(&turn.context).map_err(|source| {
+            super::invalid_contract(BtccCode::InvalidButlerContext).with_source(source)
+        })?;
         let authority = turn
             .authority_continuation
             .as_ref()
             .map(AuthorityLoopContinuation::deserialize)
             .transpose()
-            .map_err(|_| super::invalid_contract("invalid_authority_continuation"))?;
+            .map_err(|source| {
+                super::invalid_contract(BtccCode::InvalidAuthorityContinuation).with_source(source)
+            })?;
         Ok(Self {
             model,
             context,

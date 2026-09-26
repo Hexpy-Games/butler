@@ -39,7 +39,7 @@ pub(super) fn open(
             models.provider.clone(),
             Arc::new(WebSearchMetrics::new(paths.data_root.clone())),
         )
-        .map_err(|error| BtccError::new(error.code, error.message))?,
+        .map_err(|error| BtccError::relayed(error.code, error.message))?,
     );
     Ok(ProcessWebServices { models, web_access })
 }

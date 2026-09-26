@@ -4,6 +4,7 @@ use rusqlite::OptionalExtension;
 
 use super::{SessionWorkRepository, StorageError, common::error};
 use crate::btcc::BtccError;
+use crate::btcc::StorageCode;
 
 pub(crate) enum PersistedWorkTurnScope {
     Unbound {
@@ -46,7 +47,7 @@ impl SessionWorkRepository {
                 .map_err(StorageError::sqlite)?;
             if rows.len() > 1 {
                 return Err(error(
-                    "work_scope_turn_binding_ambiguous",
+                    StorageCode::WorkScopeTurnBindingAmbiguous,
                     "Work Turn binding is ambiguous",
                 ));
             }
@@ -72,7 +73,7 @@ impl SessionWorkRepository {
                     .filter(|id| !id.is_empty())
                     .ok_or_else(|| {
                         error(
-                            "work_scope_project_projection_incomplete",
+                            StorageCode::WorkScopeProjectProjectionIncomplete,
                             "Project Work projection is incomplete",
                         )
                     })?;

@@ -42,8 +42,8 @@ impl NativeEffectService {
             Ok(value) => value,
             Err(error) => {
                 return Ok(EffectOutcome::Rejected(EffectError::new(
-                    &error.code,
-                    error.message,
+                    error.code(),
+                    error.message(),
                 )));
             }
         };

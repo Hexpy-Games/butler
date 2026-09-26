@@ -34,7 +34,7 @@ impl NativeGuidedJournal {
         if invocation.turn.turn_id == self.turn_id {
             Ok(())
         } else {
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "guided_journal_turn_mismatch",
                 "Journal owner belongs to a different Turn",
             ))
@@ -53,7 +53,7 @@ impl JournalPort for NativeGuidedJournal {
     ) -> PortFuture<'a, TextCallDisposition> {
         Box::pin(async move {
             self.check_turn(invocation)?;
-            Ok(TextCallDisposition::Fail(BtccError::new(
+            Ok(TextCallDisposition::Fail(BtccError::relayed(
                 "guided_text_tool_call_unsupported",
                 "Use the selected structured tool definition",
             )))
@@ -68,7 +68,7 @@ impl JournalPort for NativeGuidedJournal {
     ) -> PortFuture<'a, String> {
         Box::pin(async move {
             self.check_turn(invocation)?;
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "guided_final_synthesis_unbound",
                 "Native final synthesis requires a configured model owner",
             ))

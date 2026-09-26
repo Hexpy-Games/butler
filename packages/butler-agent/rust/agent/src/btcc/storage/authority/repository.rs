@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 
+use crate::btcc::AuthorityError;
 use crate::btcc::authority::contracts::{
     AuthorityAdmissionInput, AuthorityRecord, AuthorityRepository, AuthorityResult,
     AuthorityResumeSource, ConversationPermission, DecisionWrite, OutcomeWrite,
@@ -75,6 +76,6 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     }
     fn close_self(&mut self, session: &str, reason: &str, now: &str) -> AuthorityResult<usize> {
         close::close_pending_self_session_requests(self.db, session, reason, now)
-            .map_err(super::sql_error)
+            .map_err(AuthorityError::from)
     }
 }

@@ -98,7 +98,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
             .find_for_turn("turn".into(), "exact-0".into())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "tool_journal_json_invalid"
     );
     reopened
@@ -117,7 +117,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
             .find_for_turn("turn".into(), "exact-0".into())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "operation_result_body_hash_mismatch"
     );
     assert_eq!(
@@ -126,7 +126,7 @@ async fn source_exact_output_is_stored_hashed_replayed_and_reopened_without_scal
             .await
             .err()
             .unwrap()
-            .code,
+            .code(),
         "operation_result_body_hash_mismatch"
     );
     reopened.close().await.unwrap();

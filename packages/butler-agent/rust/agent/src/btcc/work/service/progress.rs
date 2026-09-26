@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::btcc::BtccError;
 
 use super::{DurableWorkService, fingerprint, serialized, with_null_project};
+use crate::btcc::BtccCode;
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
@@ -16,20 +17,20 @@ impl DurableWorkService {
             .load_context(input.scope.clone())
             .await?
             .ok_or_else(|| {
-                BtccError::new(
-                    "durable_work_open_missing",
+                BtccError::detected(
+                    BtccCode::DurableWorkOpenMissing,
                     "Durable Work progress requires open Work",
                 )
             })?;
         let plan = context.work.current_plan.as_ref().ok_or_else(|| {
-            BtccError::new(
-                "durable_work_plan_missing",
+            BtccError::detected(
+                BtccCode::DurableWorkPlanMissing,
                 "Durable Work progress requires a current Plan and stage",
             )
         })?;
         let stage = context.work.current_stage.ok_or_else(|| {
-            BtccError::new(
-                "durable_work_stage_missing",
+            BtccError::detected(
+                BtccCode::DurableWorkStageMissing,
                 "Durable Work progress requires a current Plan and stage",
             )
         })?;
@@ -96,20 +97,20 @@ impl DurableWorkService {
             .load_context(input.scope.clone())
             .await?
             .ok_or_else(|| {
-                BtccError::new(
-                    "durable_work_open_missing",
+                BtccError::detected(
+                    BtccCode::DurableWorkOpenMissing,
                     "Durable Work progress requires open Work",
                 )
             })?;
         let plan = context.work.current_plan.as_ref().ok_or_else(|| {
-            BtccError::new(
-                "durable_work_plan_missing",
+            BtccError::detected(
+                BtccCode::DurableWorkPlanMissing,
                 "Durable Work Review requires a current Plan and stage",
             )
         })?;
         let current_stage = context.work.current_stage.ok_or_else(|| {
-            BtccError::new(
-                "durable_work_stage_missing",
+            BtccError::detected(
+                BtccCode::DurableWorkStageMissing,
                 "Durable Work Review requires a current Plan and stage",
             )
         })?;

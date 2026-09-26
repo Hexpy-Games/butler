@@ -16,6 +16,7 @@ use super::super::ports::ModelRoundPort;
 use super::arguments::{MAX_EXACT_READ_BYTES, exact_read_arguments};
 use super::contracts::*;
 use super::reference::reference;
+use crate::btcc::BtccCode;
 
 const READERS: &[&str] = &[
     "list_operation_results",
@@ -53,7 +54,9 @@ impl OperationResultRuntimeFactory for OperationResultReplayFactory {
             return Ok(None);
         }
         if !self.selection.exact_read_capability {
-            return Err(contract("operation_result_exact_read_dependency_missing"));
+            return Err(contract(
+                BtccCode::OperationResultExactReadDependencyMissing,
+            ));
         }
         Ok(Some(Arc::new(OperationResultReplayRuntime {
             scope,
@@ -114,21 +117,21 @@ impl OperationResultReplayRuntime {
                 .map_err(OperationResultError::Model)?
                 .ok_or_else(|| {
                     OperationResultError::Contract(contract(
-                        "operation_result_message_measurement_missing",
+                        BtccCode::OperationResultMessageMeasurementMissing,
                     ))
                 })?;
             return Ok(replacement_bytes < original_bytes);
         }
         let replacement_bytes =
             crate::json::string_bytes(&replacement.content).map_err(|error| {
-                OperationResultError::Contract(BtccError::new(
-                    "operation_result_serialization_failed",
+                OperationResultError::Contract(BtccError::detected(
+                    BtccCode::OperationResultSerializationFailed,
                     error.to_string(),
                 ))
             })?;
         let original_bytes = crate::json::string_bytes(&original.content).map_err(|error| {
-            OperationResultError::Contract(BtccError::new(
-                "operation_result_serialization_failed",
+            OperationResultError::Contract(BtccError::detected(
+                BtccCode::OperationResultSerializationFailed,
                 error.to_string(),
             ))
         })?;
@@ -140,9 +143,9 @@ impl OperationResultReplayRuntime {
             .journal
             .find_for_turn(self.scope.turn_id.clone(), arguments.result_ref.clone())
             .await
-            .map_err(btcc)?;
+            .map_err(BtccError::from)?;
         if direct.is_some() && arguments.revision.is_some() {
-            return Err(contract("operation_result_revision_mismatch"));
+            return Err(contract(BtccCode::OperationResultRevisionMismatch));
         }
         let result = self
             .results
@@ -162,7 +165,7 @@ impl OperationResultReplayRuntime {
                 },
             })
             .await
-            .map_err(btcc)?;
+            .map_err(BtccError::from)?;
         Ok(json!({
             "encoding": result.encoding,
             "data": result.data,
@@ -211,10 +214,10 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                     continue;
                 }
                 let result_reference = self.reference_for(&record).await?;
-                let value = serde_json::to_value(&result_reference).map_err(|_| {
-                    OperationResultError::Contract(contract(
-                        "operation_result_serialization_failed",
-                    ))
+                let value = serde_json::to_value(&result_reference).map_err(|source| {
+                    OperationResultError::Contract(
+                        contract(BtccCode::OperationResultSerializationFailed).with_source(source),
+                    )
                 })?;
                 let content = crate::btcc::identity::stable_json(&value)
                     .map_err(OperationResultError::Contract)?;
@@ -231,7 +234,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                         .map_err(storage)?;
                     record = self.record(&record.call_id).await?.ok_or_else(|| {
                         OperationResultError::Contract(contract(
-                            "operation_result_delivery_admission_failed",
+                            BtccCode::OperationResultDeliveryAdmissionFailed,
                         ))
                     })?;
                 }
@@ -252,7 +255,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                     }
                     Some("in_flight") => {
                         return Err(OperationResultError::Contract(contract(
-                            "operation_result_delivery_in_flight_mismatch",
+                            BtccCode::OperationResultDeliveryInFlightMismatch,
                         )));
                     }
                     Some("acknowledged") => self
@@ -289,7 +292,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 != Some(round_id)
             {
                 return Err(OperationResultError::Contract(contract(
-                    "operation_result_route_acceptance_missing",
+                    BtccCode::OperationResultRouteAcceptanceMissing,
                 )));
             }
             let calls: Vec<_> = result
@@ -326,7 +329,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
     fn read_tool<'a>(&'a self, args: &'a Map<String, Value>) -> PortFuture<'a, Value> {
         Box::pin(async move {
             if !self.selection.exact_read_capability {
-                return Err(contract("operation_result_exact_read_unavailable"));
+                return Err(contract(BtccCode::OperationResultExactReadUnavailable));
             }
             self.read(exact_read_arguments(args)?).await
         })
@@ -378,7 +381,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                     limit,
                 })
                 .await
-                .map_err(btcc)?;
+                .map_err(BtccError::from)?;
             let mut entries = Vec::with_capacity(page.entries.len());
             for entry in page.entries {
                 let stored = self
@@ -388,7 +391,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                         call_id: entry.call_id,
                     })
                     .await
-                    .map_err(btcc)?;
+                    .map_err(BtccError::from)?;
                 entries.push(OperationResultListEntry {
                     tool_name: entry.tool_name,
                     status: entry.status,
@@ -409,7 +412,9 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 next_cursor: page.next_cursor,
                 entries,
             })
-            .map_err(|_| contract("operation_result_serialization_failed"))
+            .map_err(|source| {
+                contract(BtccCode::OperationResultSerializationFailed).with_source(source)
+            })
         })
     }
 
@@ -468,28 +473,24 @@ fn durable(record: &ToolJournalRecord) -> bool {
 }
 
 fn storage(error: StorageError) -> OperationResultError {
-    OperationResultError::Contract(btcc(error))
+    OperationResultError::Contract(BtccError::from(error))
 }
 fn contract_error(error: OperationResultError) -> BtccError {
     match error {
         OperationResultError::Contract(error) => error,
-        OperationResultError::Model(_) => contract("operation_result_model_measurement_unexpected"),
+        OperationResultError::Model(_) => {
+            contract(BtccCode::OperationResultModelMeasurementUnexpected)
+        }
     }
 }
-fn btcc(error: StorageError) -> BtccError {
-    BtccError::new(error.code, error.message)
-}
-fn contract(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+fn contract(code: BtccCode) -> BtccError {
+    BtccError::detected(code, code.as_str())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn numeric_argument_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::new(
-        "operation_result_argument_coercion_failed",
+    BtccError::detected(
+        BtccCode::OperationResultArgumentCoercionFailed,
         error.to_string(),
     )
+    .with_source(error)
 }

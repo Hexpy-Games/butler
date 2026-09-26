@@ -1,3 +1,4 @@
+use crate::btcc::StorageCode;
 use rusqlite::{Connection, params};
 use serde_json::json;
 
@@ -10,8 +11,8 @@ use crate::btcc::work::{
 
 use super::super::{StorageError, StorageResult};
 
-fn invalid(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+fn invalid(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }
 
 pub(super) fn capture(
@@ -20,7 +21,7 @@ pub(super) fn capture(
 ) -> StorageResult<ProjectWorkCapturedMaterial> {
     let work = &input.candidate;
     let material_fingerprint = crate::btcc::work::policy::disposition_material_fingerprint(work)
-        .map_err(|e| StorageError::new("project_work_material_invalid", e.message))?;
+        .map_err(|e| StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message()))?;
     let mut statement = db.prepare(
         "SELECT effect_id,receipt_id,status,journal_revision,updated_at FROM btcc_guided_effects \
          WHERE work_id=?1 ORDER BY effect_id",
@@ -40,7 +41,7 @@ pub(super) fn capture(
         .map_err(StorageError::sqlite)?;
     let effect_watermark = crate::btcc::identity::digest(
         &crate::btcc::identity::sqlite_stable_json(&serde_json::Value::Array(rows))
-            .map_err(|e| StorageError::new("project_work_material_invalid", e.message))?,
+            .map_err(|e| StorageError::new(StorageCode::ProjectWorkMaterialInvalid, e.message()))?,
     );
     let mut blockers_statement = db
         .prepare(
@@ -185,5 +186,5 @@ fn enum_text<T: serde::Serialize>(value: T) -> StorageResult<String> {
     serde_json::to_value(value)
         .ok()
         .and_then(|value| value.as_str().map(str::to_owned))
-        .ok_or_else(|| invalid("project_work_material_invalid"))
+        .ok_or_else(|| invalid(StorageCode::ProjectWorkMaterialInvalid))
 }

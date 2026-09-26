@@ -10,6 +10,7 @@ mod common;
 mod context_compactions;
 mod context_documents;
 mod effects;
+mod error;
 mod hydration;
 mod legacy_cutover;
 mod migration;
@@ -35,6 +36,7 @@ pub(crate) use bootstrap::{bootstrap_fresh_storage, read_activated_storage_manif
 pub(crate) use context_compactions::{ContextCompactionRecord, ContextCompactionRepository};
 pub(crate) use context_documents::{ContextDocumentInput, ContextDocumentRead};
 pub(crate) use effects::StorageEffectJournal;
+pub(crate) use error::{StorageCode, StorageError};
 pub(crate) use operation_results::*;
 pub(crate) use progress_publication::{CommittedProgressEvent, StorageProgressPublication};
 pub(crate) use project_work_runtime::SqliteProjectWorkRuntime;
@@ -53,7 +55,6 @@ pub(crate) use work::{
     PersistedWorkTurnScope, SessionPlanObservation, SessionWorkRepository, WorkStatusObservation,
 };
 
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -92,37 +93,6 @@ pub(crate) struct BtccStorageConfig {
     pub(crate) runtime_owner: RuntimeOwnerIdentity,
     pub(crate) process_liveness: Arc<dyn ProcessLiveness>,
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct StorageError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl StorageError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "map_err/iterator adapter taking owned values"
-    )]
-    fn sqlite(error: rusqlite::Error) -> Self {
-        Self::new("sqlite_error", error.to_string())
-    }
-}
-
-impl fmt::Display for StorageError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for StorageError {}
 
 #[derive(Clone)]
 pub(crate) struct BtccStorage {
@@ -166,13 +136,17 @@ impl BtccStorage {
                     initialized_tx,
                 )
             })
-            .map_err(|error| StorageError::new("sqlite_thread_spawn_failed", error.to_string()))?;
+            .map_err(|error| {
+                StorageError::new(StorageCode::SqliteThreadSpawnFailed, error.to_string())
+                    .with_source(error)
+            })?;
 
-        let initialized = initialized_rx.await.map_err(|_| {
+        let initialized = initialized_rx.await.map_err(|source| {
             StorageError::new(
-                "sqlite_initialization_channel_closed",
+                StorageCode::SqliteInitializationChannelClosed,
                 "BTCC SQLite owner exited before initialization completed",
             )
+            .with_source(source)
         });
         let owner = match initialized {
             Ok(Ok(owner)) => owner,
@@ -232,23 +206,25 @@ impl BtccStorage {
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
             StorageError::new(
-                "sqlite_owner_closed",
+                StorageCode::SqliteOwnerClosed,
                 "BTCC SQLite owner is closing or closed",
             )
         })?;
-        let permit = sender.reserve().await.map_err(|_| {
+        let permit = sender.reserve().await.map_err(|source| {
             StorageError::new(
-                "sqlite_owner_closed",
+                StorageCode::SqliteOwnerClosed,
                 "BTCC SQLite execution lane has closed",
             )
+            .with_source(source)
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|_| {
+        completion_rx.await.map_err(|source| {
             StorageError::new(
-                "sqlite_operation_completion_lost",
+                StorageCode::SqliteOperationCompletionLost,
                 "BTCC SQLite operation ended without a completion result",
             )
+            .with_source(source)
         })?
     }
 
@@ -263,7 +239,7 @@ impl BtccStorage {
                 Some(thread) => Some(thread),
                 None => {
                     let error = StorageError::new(
-                        "sqlite_thread_missing",
+                        StorageCode::SqliteThreadMissing,
                         "BTCC SQLite owner thread was unavailable during close",
                     );
                     lane.close_result = Some(Err(error.clone()));
@@ -282,11 +258,15 @@ impl BtccStorage {
             tokio::spawn(async move {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await
-                    .map_err(|error| StorageError::new("sqlite_join_failed", error.to_string()))
+                    .map_err(|error| {
+                        StorageError::new(StorageCode::SqliteJoinFailed, error.to_string())
+                            .with_source(error)
+                    })
                     .and_then(|joined| {
-                        joined.map_err(|_| {
+                        // A panic payload is not an Error; the code records the panic.
+                        joined.map_err(|_panic_payload| {
                             StorageError::new(
-                                "sqlite_thread_panicked",
+                                StorageCode::SqliteThreadPanicked,
                                 "BTCC SQLite owner thread panicked",
                             )
                         })?
@@ -300,11 +280,12 @@ impl BtccStorage {
                 }
             });
         }
-        waiter_rx.await.map_err(|_| {
+        waiter_rx.await.map_err(|source| {
             StorageError::new(
-                "sqlite_close_completion_lost",
+                StorageCode::SqliteCloseCompletionLost,
                 "BTCC SQLite close ended without a completion result",
             )
+            .with_source(source)
         })?
     }
 }
@@ -332,7 +313,8 @@ fn run_connection_lane(
     let setup: StorageResult<(Connection, RuntimeOwner)> = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
-                StorageError::new("sqlite_parent_create_failed", error.to_string())
+                StorageError::new(StorageCode::SqliteParentCreateFailed, error.to_string())
+                    .with_source(error)
             })?;
         }
         let mut connection = Connection::open(path).map_err(StorageError::sqlite)?;
@@ -364,7 +346,7 @@ fn run_connection_lane(
     owner.close(&connection)?;
     if !connection.is_autocommit() {
         return Err(StorageError::new(
-            "sqlite_transaction_open_at_close",
+            StorageCode::SqliteTransactionOpenAtClose,
             "BTCC database transaction remained open at close",
         ));
     }
@@ -405,13 +387,21 @@ fn validate_activation(
         "agent_storage_migration_receipt",
         "receipt_json",
     )?
-    .ok_or_else(|| StorageError::new("agent_btcc_storage_receipt_missing", "missing receipt"))?;
+    .ok_or_else(|| {
+        StorageError::new(
+            StorageCode::AgentBtccStorageReceiptMissing,
+            "missing receipt",
+        )
+    })?;
     let marker = storage_marker(connection, "agent_storage_activation_marker", "marker_json")?
         .ok_or_else(|| {
-            StorageError::new("agent_btcc_storage_activation_missing", "missing marker")
+            StorageError::new(
+                StorageCode::AgentBtccStorageActivationMissing,
+                "missing marker",
+            )
         })?;
-    let receipt_json = parse_marker(&receipt.1, "agent_btcc_storage_receipt_invalid")?;
-    let marker_json = parse_marker(&marker.1, "agent_btcc_storage_activation_invalid")?;
+    let receipt_json = parse_marker(&receipt.1, StorageCode::AgentBtccStorageReceiptInvalid)?;
+    let marker_json = parse_marker(&marker.1, StorageCode::AgentBtccStorageActivationInvalid)?;
     let valid = receipt.0 == activation.manifest_id
         && marker.0 == activation.manifest_id
         && receipt_json.get("manifestId").and_then(Value::as_str)
@@ -433,7 +423,7 @@ fn validate_activation(
             .is_some_and(|v| !v.is_empty());
     if !valid {
         return Err(StorageError::new(
-            "agent_btcc_storage_activation_invalid",
+            StorageCode::AgentBtccStorageActivationInvalid,
             "BTCC split activation does not match its validated migration receipt",
         ));
     }
@@ -467,8 +457,9 @@ fn storage_marker(
         .map_err(StorageError::sqlite)
 }
 
-fn parse_marker(value: &str, code: &'static str) -> StorageResult<Value> {
-    serde_json::from_str(value).map_err(|error| StorageError::new(code, error.to_string()))
+fn parse_marker(value: &str, code: StorageCode) -> StorageResult<Value> {
+    serde_json::from_str(value)
+        .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
 }
 
 async fn join_failed_initialization(thread: JoinHandle<StorageResult<()>>) {

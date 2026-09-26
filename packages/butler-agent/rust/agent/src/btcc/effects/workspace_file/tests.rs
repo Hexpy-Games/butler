@@ -52,7 +52,7 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
                 "{input}"
             ),
             Err(message) => assert_eq!(
-                path::input(&input, workspace).unwrap_err().message,
+                path::input(&input, workspace).unwrap_err().message(),
                 message,
                 "{input}"
             ),
@@ -77,7 +77,7 @@ fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
     ] {
         match expected {
             Ok(normalized) => assert_eq!(path::target(target).unwrap(), normalized),
-            Err(message) => assert_eq!(path::target(target).unwrap_err().message, message),
+            Err(message) => assert_eq!(path::target(target).unwrap_err().message(), message),
         }
     }
 }

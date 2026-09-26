@@ -132,10 +132,7 @@ async fn actual_bun_journal_result_and_receipt_bytes_match() {
                 [identity.effect_id],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .map_err(|error| crate::btcc::storage::StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(crate::btcc::storage::StorageError::sqlite)
         })
         .await
         .unwrap();

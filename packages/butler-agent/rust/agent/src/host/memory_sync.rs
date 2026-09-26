@@ -98,9 +98,9 @@ impl NativeMemorySync {
         self.consumer.close().await;
         let task = self.task.lock().take();
         let joined = match task {
-            Some(task) => task
-                .await
-                .map_err(|_| BtccError::new("memory_sync_join_failed", "Memory sync owner failed")),
+            Some(task) => task.await.map_err(|_| {
+                BtccError::relayed("memory_sync_join_failed", "Memory sync owner failed")
+            }),
             None => Ok(()),
         };
         self.registration.close().await;
@@ -158,5 +158,5 @@ impl CognitionVectorSearch for UnavailableNativeVector {
 }
 
 fn error(error: CognitionError) -> BtccError {
-    BtccError::new(error.code, error.message)
+    BtccError::relayed(error.code, error.message)
 }

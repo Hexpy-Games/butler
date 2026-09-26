@@ -42,7 +42,7 @@ impl ScopeSelectedWorkRepository {
         self.bindings
             .get_by_session_id(session_id)
             .await
-            .map_err(|error| BtccError::new(error.code(), error.message()))?
+            .map_err(BtccError::from)?
             .ok_or_else(|| scope_error("work_scope_session_binding_missing"))
     }
 
@@ -283,7 +283,7 @@ fn session_owned(binding: &StoredSessionBinding) -> bool {
 }
 
 fn scope_error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ use super::contracts::{ModelRoundTool, ModelRoundToolCall, ToolError, ToolResult
 use super::guided_ports::GuidedInvocation;
 use super::ports::{GuidedPolicyPort, ToolExecutionError};
 use super::progress::{Status, operation};
+use crate::btcc::BtccCode;
 
 pub(super) struct PreparedCall<'a> {
     pub call: ModelRoundToolCall,
@@ -180,9 +181,9 @@ fn validate_required(
 
 fn resolved_failure(output: &JsonDocument) -> Result<Option<ToolError>, BtccError> {
     let field = |name| {
-        output
-            .field(name)
-            .map_err(|e| BtccError::new("tool_result_json", e.to_string()))
+        output.field(name).map_err(|e| {
+            BtccError::detected(BtccCode::ToolResultJson, e.to_string()).with_source(e)
+        })
     };
     if field("ok")? != Some("false") {
         return Ok(None);

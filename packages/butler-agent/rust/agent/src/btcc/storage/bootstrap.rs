@@ -3,6 +3,7 @@
 mod manifest;
 mod validate;
 
+use crate::btcc::StorageCode;
 use std::fs::{self, File};
 use std::path::Path;
 
@@ -33,14 +34,14 @@ pub(crate) fn bootstrap_fresh_storage(
     now_iso: &str,
 ) -> StorageResult<String> {
     if fence_id.trim().is_empty() {
-        return Err(error("agent_btcc_storage_fence_invalid"));
+        return Err(error(StorageCode::AgentBtccStorageFenceInvalid));
     }
     if path.exists() {
-        return Err(error("agent_btcc_existing_storage_unsupported"));
+        return Err(error(StorageCode::AgentBtccExistingStorageUnsupported));
     }
     let parent = path
         .parent()
-        .ok_or_else(|| error("agent_btcc_storage_path_invalid"))?;
+        .ok_or_else(|| error(StorageCode::AgentBtccStoragePathInvalid))?;
     fs::create_dir_all(parent).map_err(io_error)?;
     let temp = path.with_extension("sqlite.migration.tmp");
     remove_temp(&temp)?;
@@ -88,7 +89,7 @@ pub(crate) fn bootstrap_fresh_storage(
             .and_then(|file| file.sync_all())
             .map_err(io_error)?;
         if path.exists() {
-            return Err(error("agent_btcc_storage_publish_target_exists"));
+            return Err(error(StorageCode::AgentBtccStoragePublishTargetExists));
         }
         fs::rename(&temp, path).map_err(io_error)?;
         File::open(parent)
@@ -143,14 +144,10 @@ fn remove_temp(temp: &Path) -> StorageResult<()> {
     Ok(())
 }
 
-fn error(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+fn error(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> StorageError {
-    StorageError::new("agent_btcc_storage_io_error", error.to_string())
+    StorageError::new(StorageCode::AgentBtccStorageIoError, error.to_string()).with_source(error)
 }

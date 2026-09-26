@@ -194,18 +194,18 @@ impl AppAuthorityHandoff for NativeAuthorityHandoff {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn authority_error(error: AuthorityError) -> GatewayApplicationError {
-    let (status, public_code, message) = match error.code.as_str() {
+    let (status, public_code, message) = match error.code() {
         "authority_modify_input_missing" | "authority_modify_input_too_large" => {
-            (400, error.code.as_str(), "Modify instruction is invalid.")
+            (400, error.code(), "Modify instruction is invalid.")
         }
         "authority_modify_identity_mismatch" => (
             409,
-            error.code.as_str(),
+            error.code(),
             "Modify instruction conflicts with the stored decision.",
         ),
         "authority_decision_conflict" => (
             409,
-            error.code.as_str(),
+            error.code(),
             "The authority request already has a different decision.",
         ),
         "authority_request_not_found" => (

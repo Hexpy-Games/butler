@@ -2,6 +2,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use super::common::{error, json, parse_state};
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use crate::btcc::turn::{
     ContentRef, DeliveryOutbox, DeliveryStatus, ExecutionRoute, FinalPayload, SuspensionReason,
     TurnCheckpoint, TurnRecord, TurnSemanticState,
@@ -89,13 +90,19 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
         .transpose()?;
     let turn = TurnRecord {
         wake_identity: load_wake_identity(connection, &row.turn_id)?,
-        model_selection: json(&row.model_selection_json, "invalid_model_selection")?,
-        model_route: parse_optional_json(row.route_state_json.as_deref(), "invalid_model_route")?,
+        model_selection: json(
+            &row.model_selection_json,
+            StorageCode::InvalidModelSelection,
+        )?,
+        model_route: parse_optional_json(
+            row.route_state_json.as_deref(),
+            StorageCode::InvalidModelRoute,
+        )?,
         continuation_budget: parse_optional_json(
             row.continuation_budget_json.as_deref(),
-            "invalid_continuation_budget",
+            StorageCode::InvalidContinuationBudget,
         )?,
-        context: json(&row.context_json, "invalid_turn_context")?,
+        context: json(&row.context_json, StorageCode::InvalidTurnContext)?,
         progress_destination: row
             .progress_destination_json
             .as_deref()
@@ -104,7 +111,7 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
         suspension: parse_suspension(row.suspension_reason.as_deref())?,
         authority_continuation: parse_optional_json(
             row.authority_continuation_json.as_deref(),
-            "invalid_authority_continuation",
+            StorageCode::InvalidAuthorityContinuation,
         )?,
         route: parse_route(row.route.as_deref())?,
         final_disposition: parse_disposition(row.final_disposition.as_deref())?,
@@ -128,7 +135,7 @@ fn hydrate(connection: &Connection, row: TurnRow) -> StorageResult<TurnRecord> {
 
 fn parse_optional_json(
     value: Option<&str>,
-    code: &'static str,
+    code: StorageCode,
 ) -> StorageResult<Option<serde_json::Value>> {
     value.map(|value| json(value, code)).transpose()
 }
@@ -157,10 +164,15 @@ fn load_checkpoint(
         )
         .optional()
         .map_err(StorageError::sqlite)?
-        .ok_or_else(|| error("checkpoint_missing", "BTCC R3 active checkpoint is missing"))?;
+        .ok_or_else(|| {
+            error(
+                StorageCode::CheckpointMissing,
+                "BTCC R3 active checkpoint is missing",
+            )
+        })?;
     if checkpoint.2 != "runtime" || parse_state(&checkpoint.3)? != state {
         return Err(error(
-            "checkpoint_mismatch",
+            StorageCode::CheckpointMismatch,
             "BTCC R3 checkpoint does not match its Turn",
         ));
     }
@@ -196,14 +208,19 @@ fn load_outbox(
         )
         .optional()
         .map_err(StorageError::sqlite)?
-        .ok_or_else(|| error("outbox_missing", "BTCC R3 delivery Outbox is missing"))?;
+        .ok_or_else(|| {
+            error(
+                StorageCode::OutboxMissing,
+                "BTCC R3 delivery Outbox is missing",
+            )
+        })?;
     let status = match row.5.as_str() {
         "pending" => DeliveryStatus::Pending,
         "inserted" => DeliveryStatus::Inserted,
         "observed" => DeliveryStatus::Observed,
         _ => {
             return Err(error(
-                "outbox_invalid",
+                StorageCode::OutboxInvalid,
                 "BTCC R3 delivery Outbox is invalid",
             ));
         }
@@ -244,16 +261,19 @@ fn load_wake_identity(
 }
 
 fn hydrate_legacy_progress_projection(value: &str) -> StorageResult<ProgressDestination> {
-    let mut destination: ProgressDestination = serde_json::from_str(value)
-        .map_err(|error| StorageError::new("invalid_progress_destination", error.to_string()))?;
+    let mut destination: ProgressDestination = serde_json::from_str(value).map_err(|error| {
+        StorageError::new(StorageCode::InvalidProgressDestination, error.to_string())
+            .with_source(error)
+    })?;
     // Named compatibility projection: exact stored JSON retains this field.
     destination.app_queue_claim_id = None;
     Ok(destination)
 }
 
 pub(super) fn hydrate_final_payload(value: &str) -> StorageResult<FinalPayload> {
-    let payload: FinalPayload = serde_json::from_str(value)
-        .map_err(|error| StorageError::new("invalid_final_payload", error.to_string()))?;
+    let payload: FinalPayload = serde_json::from_str(value).map_err(|error| {
+        StorageError::new(StorageCode::InvalidFinalPayload, error.to_string()).with_source(error)
+    })?;
     if payload.reference.id.is_empty()
         || payload.reference.sha256.is_empty()
         || payload.content_sha256.is_empty()
@@ -267,7 +287,7 @@ pub(super) fn hydrate_final_payload(value: &str) -> StorageResult<FinalPayload> 
         })
     {
         return Err(error(
-            "invalid_final_payload",
+            StorageCode::InvalidFinalPayload,
             "BTCC R3 final payload is invalid",
         ));
     }
@@ -287,7 +307,7 @@ fn parse_suspension(value: Option<&str>) -> StorageResult<Option<SuspensionReaso
         Some("authority_pending") => Ok(Some(SuspensionReason::AuthorityPending)),
         Some("waiting_for_worker") => Ok(Some(SuspensionReason::WaitingForWorker)),
         Some(_) => Err(error(
-            "invalid_suspension_reason",
+            StorageCode::InvalidSuspensionReason,
             "BTCC suspension reason is invalid",
         )),
     }
@@ -300,7 +320,7 @@ fn parse_route(value: Option<&str>) -> StorageResult<Option<ExecutionRoute>> {
         Some("assisted") => Ok(Some(ExecutionRoute::Assisted)),
         Some("managed") => Ok(Some(ExecutionRoute::Managed)),
         Some(value) => Err(error(
-            "invalid_route",
+            StorageCode::InvalidRoute,
             format!("BTCC R3 route is invalid: {value}"),
         )),
     }
@@ -312,7 +332,7 @@ fn parse_disposition(value: Option<&str>) -> StorageResult<Option<FinalDispositi
         Some("completed") => Ok(Some(FinalDisposition::Completed)),
         Some("cancelled") => Ok(Some(FinalDisposition::Cancelled)),
         Some(value) => Err(error(
-            "invalid_final_disposition",
+            StorageCode::InvalidFinalDisposition,
             format!("BTCC R3 final disposition is invalid: {value}"),
         )),
     }
@@ -324,14 +344,14 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
         || turn.semantic_state == TurnSemanticState::DeliveryCommitted;
     if nonterminal != turn.checkpoint.is_some() {
         return Err(error(
-            "checkpoint_lifecycle_mismatch",
+            StorageCode::CheckpointLifecycleMismatch,
             "BTCC R3 Turn checkpoint does not match lifecycle state",
         ));
     }
     if turn.semantic_state == TurnSemanticState::Admitted {
         if turn.final_payload.is_some() || turn.delivery_outbox.is_some() {
             return Err(error(
-                "admitted_has_delivery",
+                StorageCode::AdmittedHasDelivery,
                 "Admitted BTCC R3 Turn already has final delivery data",
             ));
         }
@@ -349,7 +369,7 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
         });
     if !matches {
         return Err(error(
-            "final_outbox_mismatch",
+            StorageCode::FinalOutboxMismatch,
             "BTCC R3 final payload does not match its Outbox",
         ));
     }
@@ -360,7 +380,7 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
             .is_some_and(|outbox| outbox.status == DeliveryStatus::Observed)
     {
         return Err(error(
-            "committed_already_observed",
+            StorageCode::CommittedAlreadyObserved,
             "BTCC R3 committed delivery is already observed",
         ));
     }
@@ -372,7 +392,7 @@ fn assert_record(turn: &TurnRecord) -> StorageResult<()> {
             || turn.canonical_assistant_message_id.is_none())
     {
         return Err(error(
-            "delivered_unobserved",
+            StorageCode::DeliveredUnobserved,
             "Delivered BTCC R3 Turn lacks canonical observation",
         ));
     }

@@ -69,7 +69,7 @@ pub(super) async fn run(
         Arc::new(ConfigurationWrites::new()),
         collation,
     )
-    .map_err(|error| CognitionError::new("native_model_setup_failed", error.code))?;
+    .map_err(|error| CognitionError::new("native_model_setup_failed", error.code()))?;
     let embedding = Arc::new(NativeEmbeddingOwner::new(data_root.to_owned())?);
     let clock: Arc<dyn Fn() -> String + Send + Sync> = Arc::new(|| SystemIdentity.now_iso());
     let vectors = Arc::new(NativeGenerationVectorAdapter::new(

@@ -185,7 +185,7 @@ async fn execute(
                 bind::bind_and_request(&envelope, bindings, data_root, default_workspace).await?;
             let session_id = request.session_id.clone();
             let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::NativeIngressError::new("inbound_turn_interrupted", error.code)
+                super::NativeIngressError::new("inbound_turn_interrupted", error.code())
             })?;
             let binding = bindings
                 .get_by_session_id(&session_id)
@@ -225,7 +225,7 @@ async fn execute(
                 })
                 .await
                 .map_err(|error| {
-                    super::NativeIngressError::new("inbound_turn_interrupted", error.code)
+                    super::NativeIngressError::new("inbound_turn_interrupted", error.code())
                 })?;
             (binding, outcome)
         }
@@ -233,7 +233,7 @@ async fn execute(
             let binding = bind::existing_control_binding(&envelope, bindings).await?;
             let request = bind::control_request(&envelope, &binding)?;
             let outcome = btcc.run_turn(request).await.map_err(|error| {
-                super::NativeIngressError::new("inbound_turn_interrupted", error.code)
+                super::NativeIngressError::new("inbound_turn_interrupted", error.code())
             })?;
             (binding, outcome)
         }
@@ -311,7 +311,7 @@ async fn complete_subsession_child(
             )
             .await
             .map_err(|error| {
-                super::NativeIngressError::new("subsession_result_commit_failed", error.code)
+                super::NativeIngressError::new("subsession_result_commit_failed", error.code())
             });
     }
     let (content, work_status) = match &outcome.result {
@@ -334,7 +334,7 @@ async fn complete_subsession_child(
         .complete_child(session_id, turn_id, status, content.to_owned())
         .await
         .map_err(|error| {
-            super::NativeIngressError::new("subsession_result_commit_failed", error.code)
+            super::NativeIngressError::new("subsession_result_commit_failed", error.code())
         })
 }
 

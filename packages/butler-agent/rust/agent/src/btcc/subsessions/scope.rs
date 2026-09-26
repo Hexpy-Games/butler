@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use serde_json::{Map, Value};
 
+use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
 use crate::public_text::trim_js_whitespace;
 
@@ -97,7 +98,7 @@ fn normalize_effects(
     .collect::<Vec<_>>();
     values.sort();
     if values.is_empty() {
-        return Err(error("delegation_allowed_effects_required"));
+        return Err(error(BtccCode::DelegationAllowedEffectsRequired));
     }
     let allowed = match mode {
         SubsessionExecutionMode::ReadOnly => READ_ONLY_EFFECTS,
@@ -107,22 +108,22 @@ fn normalize_effects(
         .iter()
         .any(|value| !allowed.contains(&value.as_str()))
     {
-        return Err(error("subsession_effect_not_allowed"));
+        return Err(error(BtccCode::SubsessionEffectNotAllowed));
     }
     if matches!(mode, SubsessionExecutionMode::ReadOnly) && values.len() != allowed.len() {
-        return Err(error("subsession_read_only_surface_incomplete"));
+        return Err(error(BtccCode::SubsessionReadOnlySurfaceIncomplete));
     }
     Ok(values)
 }
 
 fn normalize_scope(values: Vec<String>) -> Result<Vec<String>, BtccError> {
     if values.is_empty() {
-        return Err(error("delegation_mutation_scope_required"));
+        return Err(error(BtccCode::DelegationMutationScopeRequired));
     }
     let mut paths = Vec::new();
     for value in values {
         let path = normalize_scope_path(&value)
-            .ok_or_else(|| error("subsession_mutation_scope_invalid"))?;
+            .ok_or_else(|| error(BtccCode::SubsessionMutationScopeInvalid))?;
         if !paths.contains(&path) {
             paths.push(path);
         }
@@ -132,7 +133,7 @@ fn normalize_scope(values: Vec<String>) -> Result<Vec<String>, BtccError> {
         .iter()
         .any(|value| ['*', '?', '[', ']'].iter().any(|ch| value.contains(*ch)))
     {
-        return Err(error("subsession_mutation_scope_wildcard_not_allowed"));
+        return Err(error(BtccCode::SubsessionMutationScopeWildcardNotAllowed));
     }
     Ok(paths)
 }
@@ -218,8 +219,8 @@ fn file_scope_required(values: &[String]) -> bool {
     })
 }
 fn invalid() -> BtccError {
-    error("subsession_context_invalid")
+    error(BtccCode::SubsessionContextInvalid)
 }
-fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+fn error(code: BtccCode) -> BtccError {
+    BtccError::detected(code, code.as_str())
 }

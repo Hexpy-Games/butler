@@ -63,9 +63,10 @@ pub(super) fn contained(workspace: &Path, value: &str) -> EffectResult<String> {
     }
     let workspace = lexical_absolute(workspace)?;
     let absolute = lexical_absolute(Path::new(&trimmed))?;
-    let contained = absolute
-        .strip_prefix(&workspace)
-        .map_err(|_| invalid("write_file effect path must identify a file inside the workspace"))?;
+    let contained = absolute.strip_prefix(&workspace).map_err(|source| {
+        invalid("write_file effect path must identify a file inside the workspace")
+            .with_source(source)
+    })?;
     let value = contained.to_string_lossy();
     if value.is_empty() || value.starts_with("..") {
         return Err(invalid(
@@ -79,7 +80,7 @@ fn lexical_absolute(path: &Path) -> EffectResult<PathBuf> {
         path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|error| invalid(error.to_string()))?
+            .map_err(|error| invalid(error.to_string()).with_source(error))?
             .join(path)
     };
     let mut clean = PathBuf::new();

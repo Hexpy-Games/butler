@@ -1,6 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, ContentRef};
 
 pub(super) fn digest(value: &str) -> String {
@@ -17,8 +18,9 @@ pub(super) fn content_ref(kind: &str, body: &Value) -> Result<ContentRef, BtccEr
 
 /// Serializes a typed value for a canonical body.
 pub(super) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, BtccError> {
-    serde_json::to_value(value)
-        .map_err(|error| BtccError::new("btcc_json_error", error.to_string()))
+    serde_json::to_value(value).map_err(|error| {
+        BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
+    })
 }
 
 pub(super) fn stable_json(value: &Value) -> Result<String, BtccError> {
@@ -35,12 +37,8 @@ pub(super) fn json_stringify_without(value: &Value, field: &str) -> Result<Strin
     crate::json::stringify_without(value, field).map_err(identity_error)
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn identity_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::new("canonical_json", error.to_string())
+    BtccError::detected(BtccCode::CanonicalJson, error.to_string()).with_source(error)
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 use super::super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -139,6 +140,6 @@ pub(crate) struct ExactResultRange {
     pub complete: bool,
 }
 
-pub(super) fn error(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+pub(super) fn error(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }

@@ -1,31 +1,30 @@
+use crate::btcc::StorageCode;
 use rusqlite::Connection;
 use serde_json::Value;
 
 use super::{StorageError, StorageResult};
-use crate::btcc::BtccError;
 use crate::btcc::identity::sqlite_stable_json;
 use crate::btcc::turn::{ExecutionRoute, TurnSemanticState};
 
-pub(super) fn btcc_error(error: StorageError) -> BtccError {
-    BtccError::new(error.code, error.message)
-}
-
-pub(super) fn error(code: &'static str, message: impl Into<String>) -> StorageError {
+pub(super) fn error(code: StorageCode, message: impl Into<String>) -> StorageError {
     StorageError::new(code, message)
 }
 
-pub(super) fn json(value: &str, code: &'static str) -> StorageResult<Value> {
-    serde_json::from_str(value).map_err(|error| StorageError::new(code, error.to_string()))
+pub(super) fn json(value: &str, code: StorageCode) -> StorageResult<Value> {
+    serde_json::from_str(value)
+        .map_err(|error| StorageError::new(code, error.to_string()).with_source(error))
 }
 
 pub(super) fn canonical_json(value: &Value) -> StorageResult<String> {
-    sqlite_stable_json(value).map_err(|error| StorageError::new("canonical_json", error.message))
+    sqlite_stable_json(value)
+        .map_err(|error| StorageError::new(StorageCode::CanonicalJson, error.message()))
 }
 
 /// ECMAScript JSON.stringify object enumeration over an insertion-preserving Value.
 pub(super) fn stringify(value: &Value) -> StorageResult<String> {
-    crate::json::stringify(value)
-        .map_err(|error| StorageError::new("json_stringify", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        StorageError::new(StorageCode::JsonStringify, error.to_string()).with_source(error)
+    })
 }
 
 pub(super) fn state_text(state: TurnSemanticState) -> &'static str {
@@ -44,7 +43,7 @@ pub(super) fn parse_state(value: &str) -> StorageResult<TurnSemanticState> {
         "delivered" => Ok(TurnSemanticState::Delivered),
         "cancelled" => Ok(TurnSemanticState::Cancelled),
         _ => Err(error(
-            "invalid_turn_state",
+            StorageCode::InvalidTurnState,
             format!("BTCC R3 Turn state is invalid: {value}"),
         )),
     }

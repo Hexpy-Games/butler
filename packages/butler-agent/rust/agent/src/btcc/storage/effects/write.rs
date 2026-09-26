@@ -6,20 +6,18 @@ use crate::btcc::effects::recovery;
 
 use super::{receipt_json, row};
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn sql(error: rusqlite::Error) -> EffectFailure {
-    EffectFailure::storage("sqlite_error", error.to_string())
+    EffectFailure::storage("sqlite_error", error.to_string()).with_source(error)
 }
 fn json(value: &Value) -> EffectResult<String> {
-    crate::json::stringify(value)
-        .map_err(|error| EffectFailure::policy("effect_journal_json", error.to_string()))
+    crate::json::stringify(value).map_err(|error| {
+        EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)
+    })
 }
 fn serialized<T: serde::Serialize>(value: &T) -> EffectResult<String> {
-    let object = serde_json::to_value(value)
-        .map_err(|error| EffectFailure::policy("effect_journal_json", error.to_string()))?;
+    let object = serde_json::to_value(value).map_err(|error| {
+        EffectFailure::policy("effect_journal_json", error.to_string()).with_source(error)
+    })?;
     json(&object)
 }
 fn same(left: &EffectIdentity, right: &EffectIdentity) -> bool {
@@ -43,6 +41,7 @@ fn insert_recovery(db: &Connection, effect_id: &str, hint: &RecoveryHint) -> Eff
         } => {
             let value = serde_json::to_value(entries).map_err(|error| {
                 EffectFailure::policy("effect_request_invalid", error.to_string())
+                    .with_source(error)
             })?;
             let normalized = recovery::normalize_entries(&value)?;
             db.execute(

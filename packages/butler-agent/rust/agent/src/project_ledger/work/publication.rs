@@ -170,7 +170,7 @@ fn observed_work(snapshot: Snapshot) -> Result<ProjectWorkObserveWork, BtccError
 pub(super) fn publication_error(error: ProjectWorkPublicationError) -> BtccError {
     match error {
         ProjectWorkPublicationError::Work(error) => error,
-        other => BtccError::new(other.code(), other.code()),
+        other => BtccError::relayed(other.code().to_owned(), other.code()),
     }
 }
 

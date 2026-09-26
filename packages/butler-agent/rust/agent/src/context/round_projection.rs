@@ -144,7 +144,7 @@ impl NativeTurnContext {
         let request_digest = serialization::digest(&request);
         let model_facing_bytes = u64::try_from(overhead.saturating_add(projected_message_bytes))
             .map_err(|_| {
-                ContextProjectionError::Contract(BtccError::new(
+                ContextProjectionError::Contract(BtccError::relayed(
                     "invalid_model_facing_byte_limit",
                     "model-facing request byte count is out of range",
                 ))
@@ -250,7 +250,7 @@ impl NativeTurnContext {
             .await?;
         if let Some(record) = &projection.save_record {
             let Some(repository) = self.repository.as_ref() else {
-                return Err(ContextProjectionError::Contract(BtccError::new(
+                return Err(ContextProjectionError::Contract(BtccError::relayed(
                     "context_compaction_repository_missing",
                     "Compaction state requires a repository",
                 )));
@@ -296,7 +296,7 @@ impl ProviderBodyAdmissionPort for BudgetAdmission {
     {
         Box::pin(async move {
             let bytes = u64::try_from(serialized_bytes).map_err(|_| {
-                ModelRoundError::Integrity(BtccError::new(
+                ModelRoundError::Integrity(BtccError::relayed(
                     "invalid_model_facing_byte_limit",
                     "provider request byte count is out of range",
                 ))

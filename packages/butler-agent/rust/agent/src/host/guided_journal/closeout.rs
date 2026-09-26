@@ -20,14 +20,14 @@ pub(super) async fn collect(
         let page = journal
             .closeout_page(turn_id.to_owned(), after, 8)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message))?;
+            .map_err(BtccError::from)?;
         if page.is_empty() {
             break;
         }
         let count = page.len();
         for row in &page {
             if !super::super::NativeGuidedTools::supports(&row.tool_name) {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "guided_journal_closeout_unbound",
                     "A durable tool result requires its native closeout projection",
                 ));
@@ -56,7 +56,7 @@ pub(super) async fn collect(
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn invalid(error: crate::json::JsonError) -> BtccError {
-    BtccError::new("guided_journal_result_invalid", error.to_string())
+    BtccError::relayed("guided_journal_result_invalid", error.to_string())
 }
 
 fn trimmed(value: &str) -> &str {

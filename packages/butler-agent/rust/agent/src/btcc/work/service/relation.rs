@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::btcc::BtccError;
 
 use super::{DurableWorkService, fingerprint, object_mut, serialized};
+use crate::btcc::BtccCode;
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
@@ -53,8 +54,8 @@ impl DurableWorkService {
         if context.as_ref().is_some_and(|value| {
             !matches!(value.work.status, WorkStatus::Open | WorkStatus::Blocked)
         }) {
-            return Err(BtccError::new(
-                "durable_work_terminal_relation",
+            return Err(BtccError::detected(
+                BtccCode::DurableWorkTerminalRelation,
                 "Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn",
             ));
         }

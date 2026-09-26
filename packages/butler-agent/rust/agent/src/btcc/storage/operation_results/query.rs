@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 
 use super::super::{StorageError, StorageResult};
 use super::contracts::*;
+use crate::btcc::StorageCode;
 
 const OUTCOME: &str = r"CASE
   WHEN c.status IN ('cancelled', 'failed') THEN c.status
@@ -206,7 +207,8 @@ fn verify(
     work: &Work,
     hash: &str,
 ) -> StorageResult<()> {
-    let authority = authority.ok_or_else(|| error("operation_result_project_authority_missing"))?;
+    let authority =
+        authority.ok_or_else(|| error(StorageCode::OperationResultProjectAuthorityMissing))?;
     let canonical = authority.verify(&ExactProjectWorkResultVerification {
         result_ref: work.result_ref.clone(),
         revision: work.sequence,
@@ -223,7 +225,7 @@ fn verify(
         || work.status != "completed"
         || work.error_code.is_some()
     {
-        return Err(error("operation_result_project_reference_mismatch"));
+        return Err(error(StorageCode::OperationResultProjectReferenceMismatch));
     }
     Ok(())
 }
@@ -239,7 +241,7 @@ pub(super) fn resolve(
         .flatten()
     {
         let work = work(db, "result.result_ref=?1", &canonical.result_ref)?
-            .ok_or_else(|| error("operation_result_project_projection_mismatch"))?;
+            .ok_or_else(|| error(StorageCode::OperationResultProjectProjectionMismatch))?;
         verify(authority, &work, &canonical.result_sha256)?;
         return Ok(OperationResultReference {
             kind: "work",
@@ -254,9 +256,9 @@ pub(super) fn resolve(
     if let Some(work) = work_call(db, input)? {
         if managed(&work) {
             return Err(error(if authority.is_none() {
-                "operation_result_project_authority_missing"
+                StorageCode::OperationResultProjectAuthorityMissing
             } else {
-                "operation_result_project_reference_mismatch"
+                StorageCode::OperationResultProjectReferenceMismatch
             }));
         }
         return Ok(OperationResultReference {
@@ -314,13 +316,13 @@ pub(super) fn read_exact(
 ) -> StorageResult<ExactResultRange> {
     let payload = if let Some(work) = work(db, "result.result_ref=?1", &input.result_ref)? {
         if input.revision != Some(work.sequence) {
-            return Err(error("operation_result_revision_mismatch"));
+            return Err(error(StorageCode::OperationResultRevisionMismatch));
         }
         if input.work_id.as_deref() != Some(&work.work_id) {
-            return Err(error("operation_result_work_mismatch"));
+            return Err(error(StorageCode::OperationResultWorkMismatch));
         }
         if input.session_id.as_deref() != Some(&work.session_id) {
-            return Err(error("operation_result_session_mismatch"));
+            return Err(error(StorageCode::OperationResultSessionMismatch));
         }
         if (work.scope_kind == "session"
             && (input.session_id.as_deref() != Some(&work.scope_ref)
@@ -328,15 +330,15 @@ pub(super) fn read_exact(
             || (work.scope_kind == "project"
                 && input.project_ref.as_deref() != Some(&work.scope_ref))
         {
-            return Err(error("operation_result_scope_mismatch"));
+            return Err(error(StorageCode::OperationResultScopeMismatch));
         }
         if managed(&work) {
             verify(authority, &work, &input.result_sha256)?;
         }
         let payload = payload(db, &work.origin_turn_id, &work.call_id)?
-            .ok_or_else(|| error("operation_result_missing_or_scope_mismatch"))?;
+            .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
         if payload.tool != work.tool_name {
-            return Err(error("operation_result_project_reference_mismatch"));
+            return Err(error(StorageCode::OperationResultProjectReferenceMismatch));
         }
         payload
     } else {
@@ -355,12 +357,12 @@ pub(super) fn read_exact(
                 .flatten()
                 .is_some()
         {
-            return Err(error("operation_result_project_projection_mismatch"));
+            return Err(error(StorageCode::OperationResultProjectProjectionMismatch));
         }
         let payload = payload(db, &input.turn_id, &input.result_ref)?
-            .ok_or_else(|| error("operation_result_missing_or_scope_mismatch"))?;
+            .ok_or_else(|| error(StorageCode::OperationResultMissingOrScopeMismatch))?;
         if input.revision.is_some() {
-            return Err(error("operation_result_revision_mismatch"));
+            return Err(error(StorageCode::OperationResultRevisionMismatch));
         }
         payload
     };
@@ -368,25 +370,25 @@ pub(super) fn read_exact(
         .result
         .as_deref()
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| error("operation_result_body_hash_mismatch"))?;
+        .ok_or_else(|| error(StorageCode::OperationResultBodyHashMismatch))?;
     let hash = payload
         .hash
         .as_deref()
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| error("operation_result_body_hash_mismatch"))?;
+        .ok_or_else(|| error(StorageCode::OperationResultBodyHashMismatch))?;
     let actual = format!("{:x}", Sha256::digest(result.as_bytes()));
     if actual != hash {
-        return Err(error("operation_result_body_hash_mismatch"));
+        return Err(error(StorageCode::OperationResultBodyHashMismatch));
     }
     if hash != input.result_sha256 {
-        return Err(error("operation_result_integrity_mismatch"));
+        return Err(error(StorageCode::OperationResultIntegrityMismatch));
     }
     let bytes = match input.source {
         ExactResultSource::Request => payload.raw.as_bytes(),
         ExactResultSource::Result => result.as_bytes(),
     };
     if input.offset >= bytes.len() {
-        return Err(error("operation_result_range_out_of_bounds"));
+        return Err(error(StorageCode::OperationResultRangeOutOfBounds));
     }
     let end = input.offset.saturating_add(input.length).min(bytes.len());
     Ok(ExactResultRange {

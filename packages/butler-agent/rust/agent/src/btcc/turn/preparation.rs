@@ -13,6 +13,7 @@ use serde_json::{Map, Value};
 use super::{
     ConversationProjection, PortFuture, PreparedExecution, PreparedTurn, TurnPreparation, TurnStore,
 };
+use crate::btcc::BtccCode;
 use crate::btcc::storage::{BtccRepositories, WakeAuthorization};
 use crate::btcc::{BtccError, ReasoningEffort, TurnRequest, TurnTrigger};
 use crate::conversation::{
@@ -144,7 +145,7 @@ impl DefaultTurnPreparation {
                 .await?;
             if !authorized {
                 return Err(error(
-                    "wake_authorization_denied",
+                    BtccCode::WakeAuthorizationDenied,
                     "BTCC authorized wake denied",
                 ));
             }
@@ -153,10 +154,10 @@ impl DefaultTurnPreparation {
             .binding_store
             .get_by_session_id(&request.session_id)
             .await
-            .map_err(|value| error(value.code(), value.message()))?
+            .map_err(BtccError::from)?
             .ok_or_else(|| {
                 error(
-                    "session_binding_missing",
+                    BtccCode::SessionBindingMissing,
                     format!(
                         "Missing stored BTCC session binding: {}",
                         request.session_id
@@ -220,11 +221,8 @@ impl DefaultTurnPreparation {
             observer: Arc::clone(&self.observer),
         })
         .await
-        .map_err(|value| error(value.code(), value.message()))?;
-        admission
-            .admit_inbound()
-            .await
-            .map_err(|value| error(value.code(), value.message()))?;
+        .map_err(BtccError::from)?;
+        admission.admit_inbound().await.map_err(BtccError::from)?;
         let admission_input_hash = request::admission_hash(&command)?;
         let turn = PreparedTurn {
             preparation_id: request.turn_id.clone(),
@@ -251,8 +249,8 @@ impl TurnPreparation for DefaultTurnPreparation {
     }
 }
 
-fn error(code: impl Into<String>, message: impl Into<String>) -> BtccError {
-    BtccError::new(code, message)
+fn error(code: BtccCode, message: impl Into<String>) -> BtccError {
+    BtccError::detected(code, message)
 }
 
 fn object(value: Option<&Value>) -> &Map<String, Value> {

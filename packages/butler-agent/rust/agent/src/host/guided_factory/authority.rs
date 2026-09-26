@@ -21,7 +21,7 @@ impl AuthorityPort for NativeBoundAuthority {
     ) -> PortFuture<'a, Option<GuidedPresentation>> {
         Box::pin(async move {
             if invocation.turn.turn_id != self.turn_id {
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "guided_authority_turn_mismatch",
                     "Activity owner belongs to a different Turn",
                 ));

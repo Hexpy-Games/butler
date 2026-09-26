@@ -6,6 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{StorageError, StorageResult, common};
 
+use crate::btcc::StorageCode;
 pub(super) use checkpoint::record_checkpoint;
 pub(super) use plan::replace_plan;
 pub(super) use progress::{ProgressInput, assert_progress_revision, insert_progress};
@@ -22,7 +23,7 @@ pub(super) fn replay(
     };
     if stored_operation != operation || stored_hash != fingerprint {
         return Err(common::error(
-            "durable_work_mutation_identity_conflict",
+            StorageCode::DurableWorkMutationIdentityConflict,
             format!("Durable Work mutation identity conflict: {call_id}"),
         ));
     }

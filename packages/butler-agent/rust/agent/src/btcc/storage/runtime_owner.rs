@@ -3,6 +3,7 @@ use std::sync::Arc;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RuntimeOwnerIdentity {
@@ -62,7 +63,7 @@ impl RuntimeOwner {
             Some(row) if row.status == "active" && row.same_process(&identity) => row.generation,
             Some(row) if row.status == "active" && liveness.is_alive(&row.identity()) => {
                 return Err(StorageError::new(
-                    "runtime_owner_active",
+                    StorageCode::RuntimeOwnerActive,
                     format!(
                         "BTCC runtime owner is already active: {}",
                         identity.owner_id
@@ -72,7 +73,7 @@ impl RuntimeOwner {
             Some(row) => {
                 let generation = row.generation.checked_add(1).ok_or_else(|| {
                     StorageError::new(
-                        "runtime_owner_generation_overflow",
+                        StorageCode::RuntimeOwnerGenerationOverflow,
                         identity.owner_id.clone(),
                     )
                 })?;
@@ -94,7 +95,7 @@ impl RuntimeOwner {
                     .map_err(StorageError::sqlite)?;
                 if changed != 1 {
                     return Err(StorageError::new(
-                        "runtime_owner_registration_raced",
+                        StorageCode::RuntimeOwnerRegistrationRaced,
                         identity.owner_id.clone(),
                     ));
                 }
@@ -127,7 +128,7 @@ impl RuntimeOwner {
         }
         let row = find(connection, owner_id)?.ok_or_else(|| {
             StorageError::new(
-                "runtime_owner_registration_missing",
+                StorageCode::RuntimeOwnerRegistrationMissing,
                 format!("BTCC claim owner has no durable runtime registration: {owner_id}"),
             )
         })?;

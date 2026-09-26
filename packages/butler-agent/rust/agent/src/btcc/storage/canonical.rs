@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::common::error;
 use super::operation_input::CanonicalDelivery;
 use super::{StorageError, StorageResult};
+use crate::btcc::StorageCode;
 
 pub(super) fn insert(
     connection: &mut Connection,
@@ -10,7 +11,7 @@ pub(super) fn insert(
 ) -> StorageResult<String> {
     let outbox = turn.delivery_outbox.as_ref().ok_or_else(|| {
         error(
-            "canonical_outbox_missing",
+            StorageCode::CanonicalOutboxMissing,
             "BTCC canonical delivery requires an Outbox",
         )
     })?;
@@ -40,7 +41,7 @@ pub(super) fn insert(
             && matches!(stored.4.as_str(), "pending" | "inserted" | "observed")
     }) {
         return Err(error(
-            "canonical_outbox_mismatch",
+            StorageCode::CanonicalOutboxMismatch,
             "BTCC canonical delivery does not match its immutable Outbox",
         ));
     }
@@ -57,7 +58,7 @@ pub(super) fn insert(
         .is_some_and(|content| content != outbox.content)
     {
         return Err(error(
-            "canonical_message_conflict",
+            StorageCode::CanonicalMessageConflict,
             "BTCC canonical assistant message identity conflict",
         ));
     }
@@ -93,7 +94,7 @@ pub(super) fn insert(
         delivery.0 == outbox.outbox_id && delivery.1 == outbox.expected_message_id
     }) {
         return Err(error(
-            "canonical_delivery_conflict",
+            StorageCode::CanonicalDeliveryConflict,
             "BTCC canonical delivery identity conflict",
         ));
     }

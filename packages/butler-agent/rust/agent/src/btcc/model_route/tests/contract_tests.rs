@@ -106,6 +106,6 @@ fn continuation_rebase_validates_only_accepted_identity_and_compares_json_bytes(
     assert!(matches!(
         rebase_continuation(Some(&bounded), Some(&invalid_accepted)),
         Err(ModelRoundError::Integrity(ref value))
-            if value.code == "phase_continuity_projection_rebase_identity_invalid"
+            if value.code() == "phase_continuity_projection_rebase_identity_invalid"
     ));
 }

@@ -15,6 +15,7 @@ use super::contracts::{
 };
 use super::support::{selected, validate};
 use super::{hooks::RouteHooks, routed::RoutedRound};
+use crate::btcc::BtccCode;
 
 pub(crate) struct TurnModelExecutionFactory {
     store: Arc<dyn TurnStore>,
@@ -50,8 +51,9 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
                     reasoning: selected.1,
                 }) as Box<dyn ModelExecution>);
             };
-            let route: RouteState = serde_json::from_value(value.clone()).map_err(|_| {
-                BtccError::new("model_route_invalid", "invalid admitted model route")
+            let route: RouteState = serde_json::from_value(value.clone()).map_err(|source| {
+                BtccError::detected(BtccCode::ModelRouteInvalid, "invalid admitted model route")
+                    .with_source(source)
             })?;
             validate(&route)?;
             let candidate = route
@@ -59,8 +61,8 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
                 .get(route.active_cursor as usize)
                 .cloned()
                 .ok_or_else(|| {
-                    BtccError::new(
-                        "model_route_exhausted",
+                    BtccError::detected(
+                        BtccCode::ModelRouteExhausted,
                         "model route has no active candidate",
                     )
                 })?;

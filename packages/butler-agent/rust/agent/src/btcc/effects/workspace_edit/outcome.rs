@@ -125,6 +125,7 @@ fn applied(
         .map(AdapterOutcome::Applied)
         .map_err(|failure| {
             crate::btcc::effects::contracts::EffectFailure::adapter(failure.to_string())
+                .with_source(failure)
         })
 }
 

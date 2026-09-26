@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::btcc::work::{ActionStatus, ReviewCommand, ReviewSubject, WorkView};
 
 use super::{StorageError, StorageResult, common, mutation, read, relation};
+use crate::btcc::StorageCode;
 use mutation::{ProgressInput, assert_progress_revision, insert_progress};
 
 pub(super) fn record(
@@ -22,21 +23,21 @@ pub(super) fn record(
     let work = relation::require_bound(db, &input.scope, false)?;
     if input.subject == ReviewSubject::Plan && work.current_plan_revision_id.is_none() {
         return Err(common::error(
-            "durable_work_plan_review_missing",
+            StorageCode::DurableWorkPlanReviewMissing,
             "Durable Work Plan Review requires a current Plan",
         ));
     }
     if work.current_plan_revision_id.as_deref() != Some(command.expected_plan_revision_id.as_str())
     {
         return Err(common::error(
-            "durable_work_plan_changed",
+            StorageCode::DurableWorkPlanChanged,
             "Durable Work Plan changed before its Review",
         ));
     }
     assert_progress_revision(db, &work.id, command.expected_progress_revision)?;
     if common::latest_result_sequence(db, &work.id)? != command.expected_result_sequence {
         return Err(common::error(
-            "durable_work_results_changed",
+            StorageCode::DurableWorkResultsChanged,
             "Durable Work results changed before its Review",
         ));
     }
@@ -145,7 +146,7 @@ fn assert_completion_review(
         .as_deref()
         .ok_or_else(|| {
             common::error(
-                "durable_work_result_review_missing",
+                StorageCode::DurableWorkResultReviewMissing,
                 "Durable Work completion requires an accepted result Review",
             )
         })?;
@@ -155,7 +156,7 @@ fn assert_completion_review(
         id == expected && verdict == "accept" && sequence == Some(command.expected_result_sequence)
     }) {
         return Err(common::error(
-            "durable_work_result_review_changed",
+            StorageCode::DurableWorkResultReviewChanged,
             "Durable Work result Review changed before completion Validation",
         ));
     }

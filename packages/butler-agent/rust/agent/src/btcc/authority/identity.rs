@@ -10,8 +10,9 @@ pub(super) fn canonical(
     value: &Value,
     collation: &crate::locale::LocaleCollation,
 ) -> AuthorityResult<String> {
-    crate::json::stringify_sorted(value, &|a, b| collation.compare(a, b))
-        .map_err(|error| AuthorityError::policy(format!("authority_json: {error}")))
+    crate::json::stringify_sorted(value, &|a, b| collation.compare(a, b)).map_err(|error| {
+        AuthorityError::policy(format!("authority_json: {error}")).with_source(error)
+    })
 }
 pub(super) fn identity(
     input: &AuthorityAdmissionInput,

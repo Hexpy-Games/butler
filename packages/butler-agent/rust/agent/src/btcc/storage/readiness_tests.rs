@@ -39,7 +39,7 @@ async fn write_probe_waits_for_external_lock_and_restores_owner_state() {
         .expect("cancelled probe settles after admitted SQL")
         .expect("wait task")
         .expect_err("cancelled readiness");
-    assert_eq!(error.code, "cancelled");
+    assert_eq!(error.code(), "cancelled");
     let state = repositories
         .storage
         .execute(|db| {

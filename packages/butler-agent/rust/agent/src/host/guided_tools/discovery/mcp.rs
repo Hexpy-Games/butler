@@ -61,5 +61,5 @@ pub(super) async fn describe(
         signal,
     ))
     .await
-    .map_err(|error| ToolExecutionError::Integrity(BtccError::new(error.code, error.message)))
+    .map_err(|error| ToolExecutionError::Integrity(BtccError::relayed(error.code, error.message)))
 }

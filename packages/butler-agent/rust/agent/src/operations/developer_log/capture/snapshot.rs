@@ -169,10 +169,10 @@ pub(super) fn failure_snapshot(error: &ModelRoundError) -> FailureSnapshot {
         ),
         ModelRoundError::Operational(value) => runtime_failure(value),
         ModelRoundError::Integrity(value) => (
-            value.code.clone(),
-            value.message.clone(),
+            value.code().to_owned(),
+            value.message().to_owned(),
             true,
-            json!({"code": value.code, "message": value.message, "retryable": true}),
+            json!({"code": value.code(), "message": value.message(), "retryable": true}),
         ),
     };
     let diagnostics = diagnostic_details(&failure, &code, retryable);

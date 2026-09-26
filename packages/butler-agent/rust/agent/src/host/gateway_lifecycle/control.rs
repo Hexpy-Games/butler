@@ -169,7 +169,7 @@ async fn serve_one(
                     .finish_restart_handoff(key.to_owned(), state)
                     .await
                     .map_err(|error| {
-                        format!("{}: journal result could not be recorded", error.code)
+                        format!("{}: journal result could not be recorded", error.code())
                     })?;
                 Ok(json!({"recorded":true}))
             } else {

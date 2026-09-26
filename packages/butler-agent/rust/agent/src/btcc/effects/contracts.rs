@@ -1,9 +1,10 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{borrow::Cow, future::Future, pin::Pin, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
+use crate::btcc::BtccSource;
 use crate::btcc::work::WorkView;
 use crate::json::JsonDocument;
 
@@ -13,47 +14,112 @@ pub(crate) use fault::{EffectFaultHook, NoEffectFault};
 pub(crate) type EffectResult<T> = Result<T, EffectFailure>;
 pub(crate) type EffectFuture<'a, T> = Pin<Box<dyn Future<Output = EffectResult<T>> + Send + 'a>>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum EffectFailureKind {
-    Policy,
-    Storage,
-    Adapter,
+/// Failures of guided effect admission, journaling and adapters.
+///
+/// `Display` renders `code: message`.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum EffectFailure {
+    /// An effect policy check refused the effect (identity, target, blocker,
+    /// recovery or input rules).
+    #[error("{code}: {message}")]
+    Policy {
+        code: Cow<'static, str>,
+        message: String,
+        #[source]
+        source: Option<BtccSource>,
+    },
+    /// Reading or writing the effect journal failed.
+    #[error("{code}: {message}")]
+    Storage {
+        code: Cow<'static, str>,
+        message: String,
+        #[source]
+        source: Option<BtccSource>,
+    },
+    /// An effect adapter raised instead of returning an outcome.
+    #[error("effect_adapter_exception: {message}")]
+    Adapter {
+        message: String,
+        #[source]
+        source: Option<BtccSource>,
+    },
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct EffectFailure {
-    pub kind: EffectFailureKind,
-    pub code: String,
-    pub message: String,
-}
+
 impl EffectFailure {
-    pub(crate) fn policy(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            kind: EffectFailureKind::Policy,
+    pub(crate) fn policy(code: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+        Self::Policy {
             code: code.into(),
             message: message.into(),
+            source: None,
         }
     }
-    pub(crate) fn storage(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            kind: EffectFailureKind::Storage,
+
+    pub(crate) fn storage(code: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+        Self::Storage {
             code: code.into(),
             message: message.into(),
+            source: None,
         }
     }
+
     pub(crate) fn adapter(message: impl Into<String>) -> Self {
-        Self {
-            kind: EffectFailureKind::Adapter,
-            code: "effect_adapter_exception".into(),
+        Self::Adapter {
             message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Records `cause` as the source when none is recorded yet.
+    #[must_use]
+    pub(crate) fn with_source(
+        mut self,
+        cause: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        let (Self::Policy { source, .. }
+        | Self::Storage { source, .. }
+        | Self::Adapter { source, .. }) = &mut self;
+        if source.is_none() {
+            *source = Some(Arc::new(cause));
+        }
+        self
+    }
+
+    pub(crate) fn code(&self) -> &str {
+        match self {
+            Self::Policy { code, .. } | Self::Storage { code, .. } => code,
+            Self::Adapter { .. } => "effect_adapter_exception",
+        }
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        match self {
+            Self::Policy { message, .. }
+            | Self::Storage { message, .. }
+            | Self::Adapter { message, .. } => message,
         }
     }
 }
-impl std::fmt::Display for EffectFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.code, self.message)
+
+/// Wire equality: the same variant, code and message (causes are diagnostic only).
+impl PartialEq for EffectFailure {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+            && self.code() == other.code()
+            && self.message() == other.message()
     }
 }
-impl std::error::Error for EffectFailure {}
+
+impl Eq for EffectFailure {}
+
+impl From<crate::btcc::StorageError> for EffectFailure {
+    fn from(error: crate::btcc::StorageError) -> Self {
+        Self::Storage {
+            code: error.code().into(),
+            message: error.message(),
+            source: Some(Arc::new(error)),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

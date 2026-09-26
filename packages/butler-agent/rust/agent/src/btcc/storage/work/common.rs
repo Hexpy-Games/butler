@@ -1,3 +1,4 @@
+use crate::btcc::StorageCode;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use serde_json::Value;
@@ -42,45 +43,50 @@ pub(super) struct TurnRow {
 pub(super) fn session_scope(scope: &WorkTurnScope) -> StorageResult<()> {
     if scope.project_ref.is_some() {
         return Err(error(
-            "project_work_repository_required",
+            StorageCode::ProjectWorkRepositoryRequired,
             "Project Work requires its canonical Project Ledger repository",
         ));
     }
     Ok(())
 }
 
-pub(super) fn error(code: &'static str, message: impl Into<String>) -> StorageError {
+pub(super) fn error(code: StorageCode, message: impl Into<String>) -> StorageError {
     StorageError::new(code, message)
 }
 
 pub(super) fn parse_enum<T: serde::de::DeserializeOwned>(value: &str) -> StorageResult<T> {
-    serde_json::from_value(Value::String(value.into()))
-        .map_err(|err| error("durable_work_hydration_failed", err.to_string()))
+    serde_json::from_value(Value::String(value.into())).map_err(|err| {
+        error(StorageCode::DurableWorkHydrationFailed, err.to_string()).with_source(err)
+    })
 }
 
 pub(super) fn parse_json<T: serde::de::DeserializeOwned>(value: &str) -> StorageResult<T> {
-    serde_json::from_str(value)
-        .map_err(|err| error("durable_work_hydration_failed", err.to_string()))
+    serde_json::from_str(value).map_err(|err| {
+        error(StorageCode::DurableWorkHydrationFailed, err.to_string()).with_source(err)
+    })
 }
 
 pub(super) fn enum_text<T: Serialize>(value: T) -> StorageResult<String> {
     serde_json::to_value(value)
-        .map_err(|err| error("durable_work_serialization_failed", err.to_string()))?
+        .map_err(|err| {
+            error(StorageCode::DurableWorkSerializationFailed, err.to_string()).with_source(err)
+        })?
         .as_str()
         .map(str::to_owned)
         .ok_or_else(|| {
             error(
-                "durable_work_serialization_failed",
+                StorageCode::DurableWorkSerializationFailed,
                 "enum did not encode as text",
             )
         })
 }
 
 pub(super) fn stable<T: Serialize>(value: &T) -> StorageResult<String> {
-    let value = serde_json::to_value(value)
-        .map_err(|err| error("durable_work_serialization_failed", err.to_string()))?;
+    let value = serde_json::to_value(value).map_err(|err| {
+        error(StorageCode::DurableWorkSerializationFailed, err.to_string()).with_source(err)
+    })?;
     crate::btcc::identity::sqlite_stable_json(&value)
-        .map_err(|err| error("durable_work_serialization_failed", err.message))
+        .map_err(|err| error(StorageCode::DurableWorkSerializationFailed, err.message()))
 }
 
 pub(super) fn record_id(kind: &str, identity: &str) -> String {
@@ -132,13 +138,13 @@ pub(super) fn turn(db: &Connection, scope: &WorkTurnScope) -> StorageResult<Turn
     }).optional().map_err(StorageError::sqlite)?;
     let row = row.ok_or_else(|| {
         error(
-            "durable_work_turn_not_admitted",
+            StorageCode::DurableWorkTurnNotAdmitted,
             format!("Durable Work Turn is not admitted: {}", scope.turn_id),
         )
     })?;
     if row.session_id != scope.session_id {
         return Err(error(
-            "durable_work_turn_session_mismatch",
+            StorageCode::DurableWorkTurnSessionMismatch,
             format!(
                 "Durable Work Turn Session does not match: {}",
                 scope.turn_id
@@ -152,7 +158,7 @@ pub(super) fn relation_turn(db: &Connection, scope: &WorkTurnScope) -> StorageRe
     let turn = turn(db, scope)?;
     if turn.state != "admitted" || turn.fence != 0 {
         return Err(error(
-            "durable_work_turn_fenced",
+            StorageCode::DurableWorkTurnFenced,
             format!(
                 "Durable Work Turn is stopped or fenced (cancelled or execution fence changed): {}",
                 scope.turn_id

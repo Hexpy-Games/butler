@@ -234,7 +234,7 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
         .record_disposition(disposition.clone())
         .await
         .unwrap_err();
-    assert_eq!(blocked.code, "durable_work_effect_blocker");
+    assert_eq!(blocked.code(), "durable_work_effect_blocker");
     storage
         .execute(|db| {
             db.execute(
@@ -273,7 +273,7 @@ async fn real_admission_plan_journal_review_disposition_and_reopen_share_one_own
         .record_disposition(disposition.clone())
         .await
         .unwrap_err();
-    assert_eq!(pending.code, "durable_work_pending_effect");
+    assert_eq!(pending.code(), "durable_work_pending_effect");
     storage
         .execute(|db| {
             db.execute(

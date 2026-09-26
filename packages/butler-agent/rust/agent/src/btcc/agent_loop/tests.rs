@@ -309,13 +309,13 @@ async fn failed_model_releases_operation_results_and_preserves_operational_facts
         .lock()
         .unwrap()
         .push_back(Err(ModelRoundError::Integrity(
-            crate::btcc::BtccError::new("route_journal_failed", "route_journal_failed"),
+            crate::btcc::BtccError::relayed("route_journal_failed", "route_journal_failed"),
         )));
     let error = run(&integrity.agent(), &turn(None, "safe_fallback"))
         .await
         .unwrap_err();
     assert!(
-        matches!(error, AgentLoopError::Propagate(value) if value.code == "route_journal_failed")
+        matches!(error, AgentLoopError::Propagate(value) if value.code() == "route_journal_failed")
     );
 }
 
@@ -437,7 +437,7 @@ async fn cancelled_tool_io_and_integrity_failures_propagate() {
     let error = run(&fixture.agent(), &turn(None, "safe_fallback"))
         .await
         .unwrap_err();
-    assert!(matches!(error, AgentLoopError::Propagate(value) if value.code == "turn_cancelled"));
+    assert!(matches!(error, AgentLoopError::Propagate(value) if value.code() == "turn_cancelled"));
 }
 
 fn position(events: &[String], exact: &str) -> usize {

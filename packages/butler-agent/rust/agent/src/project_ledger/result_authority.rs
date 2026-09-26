@@ -155,10 +155,7 @@ fn assert_unique(identities: &[ExactProjectWorkResultIdentity]) -> Result<(), St
 }
 
 fn storage_error(code: &'static str) -> StorageError {
-    StorageError {
-        code,
-        message: code.into(),
-    }
+    StorageError::relayed(code, code)
 }
 #[expect(
     clippy::needless_pass_by_value,

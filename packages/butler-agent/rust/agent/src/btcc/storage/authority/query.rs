@@ -14,12 +14,8 @@ pub(super) const ROW: &str = "SELECT request_id, request_ref, identity_sha256, o
     private_alternative_input, outcome, outcome_receipt_json, close_reason, close_scope, \
     closed_at, created_at, updated_at FROM btcc_authority_requests";
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 pub(super) fn sql(error: rusqlite::Error) -> AuthorityError {
-    AuthorityError::storage("sqlite_error", error.to_string())
+    AuthorityError::storage("sqlite_error", error.to_string()).with_source(error)
 }
 
 pub(super) fn retains_approval_claim(db: &Connection, turn_id: &str) -> AuthorityResult<bool> {
@@ -228,6 +224,7 @@ pub(super) fn resume_source(
                 .map(|json| {
                     serde_json::from_str::<Value>(&json).map_err(|error| {
                         AuthorityError::storage("authority_destination_json", error.to_string())
+                            .with_source(error)
                     })
                 })
                 .transpose()?;

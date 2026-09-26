@@ -13,6 +13,8 @@ use crate::btcc::storage::runtime_owner::RuntimeOwner;
 use crate::btcc::storage::{StorageError, StorageResult};
 
 use super::types::{AdmissionClaim, Inbox, kind, object, text, text_object};
+use crate::btcc::BtccCode;
+use crate::btcc::StorageCode;
 
 pub(super) fn construct_turn(
     connection: &mut Connection,
@@ -41,7 +43,7 @@ pub(super) fn construct_turn(
         .map_err(StorageError::sqlite)?
         .ok_or_else(|| {
             error(
-                "inbox_missing",
+                StorageCode::InboxMissing,
                 "BTCC Turn construction lacks its exact Admission claim",
             )
         })?;
@@ -56,7 +58,7 @@ pub(super) fn construct_turn(
         .map_err(StorageError::sqlite)?;
     if status.as_deref() != Some("active") {
         return Err(error(
-            "construction_claim_missing",
+            StorageCode::ConstructionClaimMissing,
             "BTCC Turn construction lacks its exact Admission claim",
         ));
     }
@@ -73,7 +75,7 @@ pub(super) fn construct_turn(
         .is_some_and(|value| value != inbox.inbox_id)
     {
         return Err(error(
-            "turn_inbox_conflict",
+            StorageCode::TurnInboxConflict,
             "BTCC Turn id is already owned by another Admission Inbox",
         ));
     }
@@ -102,8 +104,9 @@ fn insert_initial_turn(
     command_json: &str,
     limits: Option<TurnContinuationBudgetLimits>,
 ) -> StorageResult<()> {
-    let command: Value = serde_json::from_str(command_json)
-        .map_err(|error| StorageError::new("invalid_turn_command", error.to_string()))?;
+    let command: Value = serde_json::from_str(command_json).map_err(|error| {
+        StorageError::new(StorageCode::InvalidTurnCommand, error.to_string()).with_source(error)
+    })?;
     let source = if kind(&command)? == "run" {
         object(&command, "message")?
     } else {
@@ -111,7 +114,7 @@ fn insert_initial_turn(
     };
     let context = command
         .get("context")
-        .ok_or_else(|| error("invalid_turn_command", "missing context"))?;
+        .ok_or_else(|| error(StorageCode::InvalidTurnCommand, "missing context"))?;
     let model = object(&command, "modelSelection")?;
     let context_json = canonical_json(context)?;
     let snapshot_json = canonical_json(&json!({"context": context}))?;
@@ -141,7 +144,10 @@ fn insert_initial_turn(
     let now_ms = u64::try_from(
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|error| StorageError::new("clock_before_epoch", error.to_string()))?
+            .map_err(|error| {
+                StorageError::new(StorageCode::ClockBeforeEpoch, error.to_string())
+                    .with_source(error)
+            })?
             .as_millis(),
     )
     .unwrap_or(u64::MAX);
@@ -155,14 +161,17 @@ fn insert_initial_turn(
             )
             .and_then(|state| {
                 serde_json::to_value(state).map_err(|error| {
-                    crate::btcc::BtccError::new("continuation_budget_json", error.to_string())
+                    crate::btcc::BtccError::detected(
+                        BtccCode::ContinuationBudgetJson,
+                        error.to_string(),
+                    )
+                    .with_source(error)
                 })
             })
-            .and_then(|value| {
-                stringify(&value)
-                    .map_err(|error| crate::btcc::BtccError::new(error.code, error.message))
+            .and_then(|value| stringify(&value).map_err(crate::btcc::BtccError::from))
+            .map_err(|error| {
+                StorageError::new(StorageCode::InvalidContinuationBudget, error.message())
             })
-            .map_err(|error| StorageError::new("invalid_continuation_budget", error.message))
         })
         .transpose()?;
     let has_legacy = column_exists(connection, "btcc_turns", "continuation_snapshot_json")?;
@@ -250,7 +259,7 @@ fn insert_immutable_record(
         .map_err(StorageError::sqlite)?;
     if stored != (kind.to_owned(), sha.to_owned(), content.to_owned()) {
         return Err(error(
-            "immutable_record_conflict",
+            StorageCode::ImmutableRecordConflict,
             format!("Immutable BTCC record conflict: {id}"),
         ));
     }

@@ -159,5 +159,5 @@ pub(super) fn write_string(text: &str, output: &mut String) -> Result<(), BtccEr
     reason = "map_err/iterator adapter taking owned values"
 )]
 pub(super) fn json_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::new("guided_prompt_json_invalid", error.to_string())
+    BtccError::relayed("guided_prompt_json_invalid", error.to_string())
 }

@@ -1,3 +1,4 @@
+use crate::btcc::BtccError;
 use crate::btcc::ProgressDestination;
 use crate::btcc::continuation_budget::TurnContinuationBudgetLimits;
 use crate::btcc::turn::{
@@ -9,12 +10,12 @@ use crate::btcc::turn::{
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use super::common::btcc_error;
 use super::operation_input::{CanonicalDelivery, TurnVersion};
 use super::{
     BtccStorage, StorageError, admission, budget, canonical, claims, hydration, model, progress,
     readiness, stop, transitions,
 };
+use crate::btcc::StorageCode;
 
 #[derive(Clone)]
 pub(crate) struct BtccRepositories {
@@ -31,7 +32,7 @@ impl TurnStore for BtccRepositories {
         Box::pin(async move {
             admission::load_or_admit(&storage, command, admission_input_hash, limits)
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn find_turn(&self, turn_id: &str) -> PortFuture<'_, Option<TurnRecord>> {
@@ -41,7 +42,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| hydration::find_turn(db, &id))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn resume_authority(&self, turn_id: &str) -> PortFuture<'_, Option<TurnRecord>> {
@@ -54,7 +55,7 @@ impl TurnStore for BtccRepositories {
                     hydration::find_turn(db, &id)
                 })
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn acquire_state_claim(&self, turn: &TurnRecord) -> PortFuture<'_, StateExecutionClaim> {
@@ -64,7 +65,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute_with_owner(move |db, owner| claims::acquire(db, owner, &turn))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn commit_transition(
@@ -84,10 +85,10 @@ impl TurnStore for BtccRepositories {
                 .execute(move |db| transitions::commit(db, &turn, &claim, &transition))
                 .await
                 .map_err(|error| {
-                    if error.code == "transition_contention" {
+                    if error.code() == "transition_contention" {
                         TransitionCommitError::Contention
                     } else {
-                        TransitionCommitError::Failure(btcc_error(error))
+                        TransitionCommitError::Failure(BtccError::from(error))
                     }
                 })
         })
@@ -98,11 +99,12 @@ impl TurnStore for BtccRepositories {
         Box::pin(async move {
             storage
                 .execute(move |db| {
-                    hydration::find_turn(db, &id)?
-                        .ok_or_else(|| super::common::error("turn_missing", "BTCC Turn is missing"))
+                    hydration::find_turn(db, &id)?.ok_or_else(|| {
+                        super::common::error(StorageCode::TurnMissing, "BTCC Turn is missing")
+                    })
                 })
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn stop(&self, turn_id: &str) -> PortFuture<'_, StopPersistenceOutcome> {
@@ -112,7 +114,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| stop::stop(db, &id))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn record_model_route_event(
@@ -124,7 +126,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| model::record_event(db, &write))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn load_model_route_attempt_history(&self, key: ModelRoundKey) -> PortFuture<'_, Value> {
@@ -133,7 +135,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| model::load_history(db, &key))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn load_model_round_acceptance(&self, key: ModelRoundKey) -> PortFuture<'_, Option<Value>> {
@@ -142,7 +144,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| model::load_acceptance(db, &key))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn record_model_round_acceptance(
@@ -154,7 +156,7 @@ impl TurnStore for BtccRepositories {
             storage
                 .execute(move |db| model::record_acceptance(db, &write))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn transition_continuation_budget(
@@ -166,7 +168,7 @@ impl TurnStore for BtccRepositories {
             let result = storage
                 .execute(move |db| budget::transition(db, &write))
                 .await
-                .map_err(btcc_error)?;
+                .map_err(BtccError::from)?;
             if let Some(error) = result.terminal {
                 return Err(error.into_btcc_error());
             }
@@ -183,7 +185,7 @@ impl CanonicalMessageStore for BtccRepositories {
             storage
                 .execute(move |db| canonical::insert(db, &turn))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 }
@@ -194,7 +196,7 @@ impl ProgressEventRepository for BtccRepositories {
             storage
                 .execute(move |db| progress::append(db, write))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
     fn first_destination(&self, turn_id: &str) -> PortFuture<'_, Option<ProgressDestination>> {
@@ -204,7 +206,7 @@ impl ProgressEventRepository for BtccRepositories {
             storage
                 .execute(move |db| progress::first_destination(db, &id))
                 .await
-                .map_err(btcc_error)
+                .map_err(BtccError::from)
         })
     }
 }
@@ -216,7 +218,7 @@ impl StorageReadiness for BtccRepositories {
 }
 impl HostDependencies for BtccRepositories {
     fn close(&self) -> PortFuture<'_, ()> {
-        Box::pin(async move { BtccRepositories::close(self).await.map_err(btcc_error) })
+        Box::pin(async move { BtccRepositories::close(self).await.map_err(BtccError::from) })
     }
 }
 

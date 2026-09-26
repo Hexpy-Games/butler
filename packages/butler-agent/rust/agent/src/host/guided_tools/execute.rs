@@ -48,9 +48,7 @@ pub(super) async fn execute(
                 .journal
                 .find_for_turn(owner.binding.turn_id.clone(), claimed.clone())
                 .await
-                .map_err(|error| {
-                    ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
-                })?;
+                .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
             if record.is_none() {
                 return Err(integrity("guided_tool_resume_record_missing"));
             }
@@ -140,9 +138,7 @@ pub(super) async fn execute(
                 error_code: Some("cancelled".into()),
             })
             .await
-            .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
-            })?;
+            .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
         return Err(integrity("turn_cancelled"));
     }
     finish(
@@ -178,24 +174,22 @@ pub(super) async fn record_unexecuted(
             arguments: Value::Object(call.arguments.clone()),
         })
         .await
-        .map_err(|error| BtccError::new(error.code, error.message))?;
+        .map_err(BtccError::from)?;
     let body = serde_json::to_string(result)
-        .map_err(|error| BtccError::new("guided_tool_result_json", error.to_string()))?;
+        .map_err(|error| BtccError::relayed("guided_tool_result_json", error.to_string()))?;
     owner
         .journal
         .finish(ToolJournalFinish {
             call_id,
             status: ToolJournalFinishStatus::Cancelled,
-            result: Some(
-                JsonDocument::from_encoded(body).map_err(|error| {
-                    BtccError::new("guided_tool_result_json", error.to_string())
-                })?,
-            ),
+            result: Some(JsonDocument::from_encoded(body).map_err(|error| {
+                BtccError::relayed("guided_tool_result_json", error.to_string())
+            })?),
             changed_files: None,
             error_code: None,
         })
         .await
-        .map_err(|error| BtccError::new(error.code, error.message))
+        .map_err(BtccError::from)
 }
 
 fn next_index(owner: &NativeGuidedTools) -> u64 {
@@ -221,7 +215,7 @@ async fn resolve_record(
         .journal
         .find_for_turn(owner.binding.turn_id.clone(), occurrence.call_id.clone())
         .await
-        .map_err(|error| ToolExecutionError::Integrity(BtccError::new(error.code, error.message)))?
+        .map_err(|error| ToolExecutionError::Integrity(error.into()))?
     {
         return Ok(Some(record));
     }
@@ -230,9 +224,7 @@ async fn resolve_record(
             .journal
             .find_for_turn(owner.binding.turn_id.clone(), legacy.clone())
             .await
-            .map_err(|error| {
-                ToolExecutionError::Integrity(BtccError::new(error.code, error.message))
-            });
+            .map_err(|error| ToolExecutionError::Integrity(error.into()));
     }
     Ok(None)
 }
@@ -253,7 +245,7 @@ async fn start(
             arguments: presentation_args.clone(),
         })
         .await
-        .map_err(|error| ToolExecutionError::Integrity(BtccError::new(error.code, error.message)))
+        .map_err(|error| ToolExecutionError::Integrity(error.into()))
 }
 async fn finish(
     owner: &NativeGuidedTools,
@@ -271,7 +263,7 @@ async fn finish(
             error_code: None,
         })
         .await
-        .map_err(|error| ToolExecutionError::Integrity(BtccError::new(error.code, error.message)))
+        .map_err(|error| ToolExecutionError::Integrity(error.into()))
 }
 fn record_output(record: &ToolJournalRecord) -> Result<JsonDocument, ToolExecutionError> {
     record
@@ -299,8 +291,8 @@ fn encoded(value: &Value) -> Result<JsonDocument, ToolExecutionError> {
         .map_err(|error| integrity_message("guided_tool_result_json", error.to_string()))
 }
 fn integrity(code: &'static str) -> ToolExecutionError {
-    ToolExecutionError::Integrity(BtccError::new(code, code))
+    ToolExecutionError::Integrity(BtccError::relayed(code, code))
 }
 fn integrity_message(code: &'static str, message: String) -> ToolExecutionError {
-    ToolExecutionError::Integrity(BtccError::new(code, message))
+    ToolExecutionError::Integrity(BtccError::relayed(code, message))
 }

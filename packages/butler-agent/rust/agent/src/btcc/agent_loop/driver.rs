@@ -1,3 +1,4 @@
+use crate::btcc::BtccCode;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -51,7 +52,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
     let restored = input.semantic.authority.take();
     if restored.is_some() && prepared.authority_decision.is_none() {
         return Err(propagated(super::invalid_contract(
-            "authority_decision_missing",
+            BtccCode::AuthorityDecisionMissing,
         )));
     }
     if let (Some(restored), Some(decision)) = (restored.as_ref(), &prepared.authority_decision) {
@@ -246,7 +247,7 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
                 CandidateDisposition::Continue(observation) => {
                     if observation.trim().is_empty() {
                         return Err(propagated(super::invalid_contract(
-                            "btcc_agent_loop_final_candidate_observation_missing",
+                            BtccCode::BtccAgentLoopFinalCandidateObservationMissing,
                         )));
                     }
                     state.final_report = false;
@@ -387,7 +388,9 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
                     .policy
                     .operation_result_call_id(&prepared_call.call.id)
                     .ok_or_else(|| {
-                        propagated(super::invalid_contract("authority_source_call_missing"))
+                        propagated(super::invalid_contract(
+                            BtccCode::AuthoritySourceCallMissing,
+                        ))
                     })?;
                 let presentation = input
                     .policy
@@ -416,8 +419,11 @@ pub(super) async fn run(mut input: Invocation<'_>) -> Result<AgentLoopResult, Ag
                     },
                     extensions: Default::default(),
                 };
-                let value = serde_json::to_value(continuation).map_err(|_| {
-                    propagated(super::invalid_contract("invalid_authority_continuation"))
+                let value = serde_json::to_value(continuation).map_err(|source| {
+                    propagated(
+                        super::invalid_contract(BtccCode::InvalidAuthorityContinuation)
+                            .with_source(source),
+                    )
                 })?;
                 return finish(
                     &input,

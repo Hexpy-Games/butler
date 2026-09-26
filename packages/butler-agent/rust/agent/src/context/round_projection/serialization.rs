@@ -286,7 +286,7 @@ pub(super) fn digest(value: &str) -> String {
 
 pub(super) fn stringify(value: &Value) -> Result<String, BtccError> {
     crate::json::stringify(value)
-        .map_err(|error| BtccError::new("context_serialization_failed", error.to_string()))
+        .map_err(|error| BtccError::relayed("context_serialization_failed", error.to_string()))
 }
 
 fn field<T: Serialize + ?Sized>(
@@ -413,12 +413,12 @@ fn array_index(key: &str) -> Option<u32> {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn json_error(error: crate::json::JsonError) -> BtccError {
-    BtccError::new("context_serialization_failed", error.to_string())
+    BtccError::relayed("context_serialization_failed", error.to_string())
 }
 
 fn usize_value(value: usize) -> Result<Value, BtccError> {
     u64::try_from(value).map(Value::from).map_err(|_| {
-        BtccError::new(
+        BtccError::relayed(
             "context_compaction_record_invalid",
             "context compaction covered unit count is out of range",
         )
@@ -430,5 +430,5 @@ fn usize_value(value: usize) -> Result<Value, BtccError> {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn serialization_error(error: serde_json::Error) -> BtccError {
-    BtccError::new("context_serialization_failed", error.to_string())
+    BtccError::relayed("context_serialization_failed", error.to_string())
 }

@@ -5,6 +5,7 @@ use crate::btcc::work::{
 };
 
 use super::{StorageError, StorageResult, common, read, tool_result};
+use crate::btcc::StorageCode;
 
 pub(super) fn start(
     db: &Connection,
@@ -31,7 +32,7 @@ pub(super) fn start(
     let turn = common::relation_turn(db, &input.scope)?;
     if common::bound(db, &input.scope.turn_id)?.is_some() {
         return Err(common::error(
-            "durable_work_relation_selected",
+            StorageCode::DurableWorkRelationSelected,
             "Durable Work relation is already selected for this Turn",
         ));
     }
@@ -96,7 +97,7 @@ pub(super) fn continue_work(
         && bound.id != input.work_id
     {
         return Err(common::error(
-            "durable_work_relation_other",
+            StorageCode::DurableWorkRelationOther,
             "Durable Work relation is already selected for another Work",
         ));
     }
@@ -106,7 +107,7 @@ pub(super) fn continue_work(
         })
         .ok_or_else(|| {
             common::error(
-                "durable_work_continuation_not_current",
+                StorageCode::DurableWorkContinuationNotCurrent,
                 "Durable Work continuation target is not the current open Work",
             )
         })?;
@@ -152,13 +153,13 @@ pub(super) fn bind_open(
         }
         if head.as_ref().is_none_or(|head| head.id != bound.id) {
             return Err(common::error(
-                "durable_work_binding_not_head",
+                StorageCode::DurableWorkBindingNotHead,
                 "Durable Work Turn binding is no longer the Session head",
             ));
         }
         if !common::matches_scope(&bound, scope) {
             return Err(common::error(
-                "durable_work_scope_mismatch",
+                StorageCode::DurableWorkScopeMismatch,
                 "Durable Work Turn scope does not match its bound Work",
             ));
         }
@@ -207,18 +208,18 @@ pub(super) fn select_for_plan(
     {
         if turn_committed(db, &input.scope.turn_id, &bound.id)? {
             return Err(common::error(
-                "durable_work_relation_committed",
+                StorageCode::DurableWorkRelationCommitted,
                 "Durable Work continuation is already committed for this Turn; continue the current Work or start new Work in a fresh Turn",
             ));
         }
         return Err(common::error(
-            "durable_work_relation_selected",
+            StorageCode::DurableWorkRelationSelected,
             "Durable Work relation is already selected for this Turn; startNew cannot switch Work; continue the current Work or start new Work in a fresh Turn",
         ));
     }
     if bound.as_ref().is_some_and(|work| !work.is_open()) {
         return Err(common::error(
-            "durable_work_terminal_relation",
+            StorageCode::DurableWorkTerminalRelation,
             "Durable Work relation is already selected for a terminal Work; start new Work in a fresh Turn",
         ));
     }
@@ -228,7 +229,7 @@ pub(super) fn select_for_plan(
         .is_some_and(|(bound, head)| bound.id != head.id)
     {
         return Err(common::error(
-            "durable_work_binding_not_head",
+            StorageCode::DurableWorkBindingNotHead,
             "Durable Work Turn binding is no longer the Session head",
         ));
     }
@@ -238,7 +239,7 @@ pub(super) fn select_for_plan(
         && !common::matches_scope(current, &input.scope)
     {
         return Err(common::error(
-            "durable_work_scope_changed",
+            StorageCode::DurableWorkScopeChanged,
             "Durable Work scope changed; startNew is required",
         ));
     }
@@ -309,25 +310,25 @@ pub(super) fn require_bound(
     common::relation_turn(db, scope)?;
     let bound = common::bound(db, &scope.turn_id)?.ok_or_else(|| {
         common::error(
-            "durable_work_not_bound",
+            StorageCode::DurableWorkNotBound,
             format!("Durable Work is not bound to Turn: {}", scope.turn_id),
         )
     })?;
     if common::head(db, &scope.session_id)?.is_none_or(|head| head.id != bound.id) {
         return Err(common::error(
-            "durable_work_binding_not_head",
+            StorageCode::DurableWorkBindingNotHead,
             "Durable Work Turn binding is no longer the Session head",
         ));
     }
     if !(bound.is_open() || allow_completed && bound.status == "completed") {
         return Err(common::error(
-            "durable_work_not_open",
+            StorageCode::DurableWorkNotOpen,
             format!("Durable Work is not open: {}", bound.id),
         ));
     }
     if !common::matches_scope(&bound, scope) {
         return Err(common::error(
-            "durable_work_scope_mismatch",
+            StorageCode::DurableWorkScopeMismatch,
             "Durable Work Turn scope does not match its bound Work",
         ));
     }
@@ -347,7 +348,7 @@ fn replay(
     };
     if stored_operation != operation || stored_fingerprint != fingerprint {
         return Err(common::error(
-            "durable_work_relation_identity_conflict",
+            StorageCode::DurableWorkRelationIdentityConflict,
             format!("Durable Work relation identity conflict: {call_id}"),
         ));
     }
@@ -381,7 +382,7 @@ fn create_and_bind(
     bind(db, turn, &work_id, clock)?;
     common::head(db, &scope.session_id)?.ok_or_else(|| {
         common::error(
-            "durable_work_head_missing",
+            StorageCode::DurableWorkHeadMissing,
             "Durable Work session head was not persisted",
         )
     })
@@ -396,7 +397,7 @@ pub(super) fn abandon(
     let changed = db.execute("UPDATE btcc_guided_works SET status = 'abandoned', updated_at = ?1 WHERE work_id = ?2 AND status IN ('open', 'blocked')", params![now, work_id]).map_err(StorageError::sqlite)?;
     if changed != 1 {
         return Err(common::error(
-            "durable_work_abandon_failed",
+            StorageCode::DurableWorkAbandonFailed,
             format!("Durable Work could not be abandoned: {work_id}"),
         ));
     }

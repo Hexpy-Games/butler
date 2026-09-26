@@ -10,6 +10,7 @@ use super::contracts::{
 };
 use super::guided_ports::{GuidedInvocation, GuidedPolicyDependencies};
 use super::ports::{ContextProjectionFuture, GuidedPolicyPort, ToolExecutionError};
+use crate::btcc::BtccCode;
 pub(super) struct GuidedPolicy {
     dependencies: GuidedPolicyDependencies,
     authority_decision: Option<super::contracts::AuthorityDecision>,
@@ -118,8 +119,8 @@ impl GuidedPolicyPort for GuidedPolicy {
         ) {
             return Box::pin(async move {
                 let runtime = invocation.operation_results.ok_or_else(|| {
-                    ToolExecutionError::Integrity(crate::btcc::BtccError::new(
-                        "operation_result_exact_read_unavailable",
+                    ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
+                        BtccCode::OperationResultExactReadUnavailable,
                         "operation_result_exact_read_unavailable",
                     ))
                 })?;
@@ -131,8 +132,8 @@ impl GuidedPolicyPort for GuidedPolicy {
                 .map_err(ToolExecutionError::Integrity)
                 .and_then(|value| {
                     crate::json::JsonDocument::from_value(&value).map_err(|error| {
-                        ToolExecutionError::Integrity(crate::btcc::BtccError::new(
-                            "guided_tool_result_json",
+                        ToolExecutionError::Integrity(crate::btcc::BtccError::detected(
+                            BtccCode::GuidedToolResultJson,
                             error.to_string(),
                         ))
                     })

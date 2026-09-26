@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::btcc::BtccCode;
 use crate::btcc::BtccError;
 use crate::public_text::trim_js_whitespace;
 
@@ -8,8 +9,6 @@ use super::contracts::{
     DispositionActionUpdate, DispositionInput, DispositionStatus, PlanAction, ReplacePlanInput,
     ReviewInput, StartWorkInput, WorkTurnScope,
 };
-
-const ERROR_CODE: &str = "durable_work_validation";
 
 pub(crate) fn validate_scope(scope: &WorkTurnScope) -> Result<(), BtccError> {
     required_text(&scope.turn_id, "turnId")?;
@@ -276,7 +275,7 @@ fn action_status_name(status: ActionStatus) -> &'static str {
 }
 
 fn error(message: impl Into<String>) -> BtccError {
-    BtccError::new(ERROR_CODE, message)
+    BtccError::detected(BtccCode::DurableWorkValidation, message)
 }
 
 #[cfg(test)]

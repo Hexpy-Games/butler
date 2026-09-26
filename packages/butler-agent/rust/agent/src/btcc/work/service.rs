@@ -11,6 +11,7 @@ use serde_json::Value;
 use crate::btcc::{BtccError, PortFuture};
 
 use super::contracts::*;
+use crate::btcc::BtccCode;
 
 pub(crate) trait DurableWorkRepository: Send + Sync {
     fn load_context(&self, scope: WorkTurnScope) -> PortFuture<'_, Option<WorkContext>>;
@@ -101,16 +102,18 @@ fn fingerprint(operation: &str, input: &Value) -> Result<String, BtccError> {
 /// The serialized input as an object; typed inputs are structs.
 fn object_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>, BtccError> {
     value.as_object_mut().ok_or_else(|| {
-        BtccError::new(
-            "durable_work_serialization_failed",
+        BtccError::detected(
+            BtccCode::DurableWorkSerializationFailed,
             "serialized work input is not an object",
         )
     })
 }
 
 fn serialized<T: serde::Serialize>(input: &T) -> Result<Value, BtccError> {
-    serde_json::to_value(input)
-        .map_err(|error| BtccError::new("durable_work_serialization_failed", error.to_string()))
+    serde_json::to_value(input).map_err(|error| {
+        BtccError::detected(BtccCode::DurableWorkSerializationFailed, error.to_string())
+            .with_source(error)
+    })
 }
 
 fn with_null_project(scope: &WorkTurnScope, map: &mut serde_json::Map<String, Value>) {

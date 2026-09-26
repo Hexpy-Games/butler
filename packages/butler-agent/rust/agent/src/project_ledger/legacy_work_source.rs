@@ -37,7 +37,7 @@ impl LegacyProjectWorkSource for NativeProjectLedger {
                             "project_work_legacy_source_changed"
                         }
                     };
-                    BtccError::new(code, code)
+                    BtccError::relayed(code, code)
                 })
         })
     }

@@ -231,5 +231,5 @@ fn closed() -> BtccError {
 }
 
 fn failure(code: &'static str, message: impl std::fmt::Display) -> BtccError {
-    BtccError::new(code, message.to_string())
+    BtccError::relayed(code, message.to_string())
 }

@@ -2,6 +2,7 @@ mod current;
 mod observe;
 mod raw;
 
+use crate::btcc::StorageCode;
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::btcc::work::{
@@ -12,8 +13,8 @@ use crate::btcc::work::{
 use super::super::{StorageError, StorageResult};
 use super::SqliteProjectWorkRuntime;
 
-fn invalid(code: &'static str) -> StorageError {
-    StorageError::new(code, code)
+fn invalid(code: StorageCode) -> StorageError {
+    StorageError::new(code, code.as_str())
 }
 
 pub(super) fn import_observation(
@@ -23,7 +24,7 @@ pub(super) fn import_observation(
     require_turn(db, &input.scope)?;
     let rows = current::locate(db, input)?;
     if rows.len() > 1 {
-        return Err(invalid("project_work_legacy_multiple_open_works"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyMultipleOpenWorks));
     }
     let Some(row) = rows.first() else {
         return Ok(None);
@@ -51,7 +52,7 @@ pub(super) fn import_observation(
         || prior.source_authority != "project_ledger"
         || prior.work_id != row.work_id
     {
-        return Err(invalid("project_work_legacy_observation_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyObservationInvalid));
     }
     current::preflight(
         db,
@@ -108,7 +109,7 @@ fn require_turn(db: &Connection, scope: &crate::btcc::work::WorkTurnScope) -> St
         .optional()
         .map_err(StorageError::sqlite)?;
     if row.as_deref() != Some(scope.session_id.as_str()) {
-        return Err(invalid("project_work_legacy_turn_ownership_invalid"));
+        return Err(invalid(StorageCode::ProjectWorkLegacyTurnOwnershipInvalid));
     }
     Ok(())
 }
@@ -135,10 +136,12 @@ fn import_id(program: &str, session: &str, app_project: &str) -> String {
 }
 
 fn source_hash<T: serde::Serialize>(value: &T) -> StorageResult<String> {
-    let json =
-        serde_json::to_value(value).map_err(|_| invalid("project_work_legacy_source_invalid"))?;
+    let json = serde_json::to_value(value).map_err(|source| {
+        invalid(StorageCode::ProjectWorkLegacySourceInvalid).with_source(source)
+    })?;
     Ok(crate::btcc::identity::digest(
-        &crate::btcc::identity::sqlite_stable_json(&json)
-            .map_err(|_| invalid("project_work_legacy_source_invalid"))?,
+        &crate::btcc::identity::sqlite_stable_json(&json).map_err(|source| {
+            invalid(StorageCode::ProjectWorkLegacySourceInvalid).with_source(source)
+        })?,
     ))
 }

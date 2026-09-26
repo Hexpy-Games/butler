@@ -129,7 +129,7 @@ impl NativeAppGatewayLifecycle {
         let mut current = self.current.lock().await;
         self.stop_locked(&mut current)
             .await
-            .map_err(|message| BtccError::new("app_gateway_close_failed", message))
+            .map_err(|message| BtccError::relayed("app_gateway_close_failed", message))
     }
 
     async fn start_locked(
@@ -158,12 +158,12 @@ impl NativeAppGatewayLifecycle {
         {
             if let Err(error) = server.close_application().await {
                 *current = Some(server);
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "app_gateway_close_failed",
                     format!("initial health check failed; cleanup also failed: {error}"),
                 ));
             }
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "app_gateway_health_check_failed",
                 "App gateway did not become healthy after initialization",
             ));
@@ -173,12 +173,12 @@ impl NativeAppGatewayLifecycle {
             self.endpoint.clear();
             if let Err(close_error) = server.close_application().await {
                 *current = Some(server);
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "app_gateway_close_failed",
                     format!("instance state update failed; cleanup also failed: {close_error}"),
                 ));
             }
-            return Err(BtccError::new(
+            return Err(BtccError::relayed(
                 "native_service_instance_state_unavailable",
                 error,
             ));
@@ -207,7 +207,7 @@ impl NativeAppGatewayLifecycle {
         if self.captured_dependencies.matches(desired) {
             Ok(())
         } else {
-            Err(BtccError::new(
+            Err(BtccError::relayed(
                 "service_restart_required",
                 "App database or local authority changed; restart the native service to apply it",
             ))
@@ -322,5 +322,5 @@ async fn health_check(base_url: &str, auth: crate::gateway::LocalAuthConfig) -> 
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn error_text(error: BtccError) -> String {
-    format!("{}: {}", error.code, error.message)
+    format!("{}: {}", error.code(), error.message())
 }

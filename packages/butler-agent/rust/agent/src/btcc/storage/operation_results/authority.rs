@@ -8,6 +8,7 @@ use super::contracts::{
     ExactResultRangeInput, OperationResultReferenceInput, ProjectWorkResultAuthorityLocation,
 };
 use super::query;
+use crate::btcc::StorageCode;
 
 struct ProjectedWork {
     work_id: String,
@@ -93,7 +94,7 @@ fn current_binding(db: &Connection, turn_id: &str) -> StorageResult<Option<Proje
         .is_some()
     {
         return Err(StorageError::new(
-            "work_scope_turn_binding_ambiguous",
+            StorageCode::WorkScopeTurnBindingAmbiguous,
             "Work Turn binding is ambiguous",
         ));
     }

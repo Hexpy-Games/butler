@@ -2,7 +2,8 @@
 
 use serde_json::{Value, json};
 
-use super::{NativeSubsessionService, error, storage};
+use super::{NativeSubsessionService, error};
+use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
 
@@ -44,36 +45,36 @@ impl NativeSubsessionService {
             .repository
             .relation_by_id(request.relation_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .filter(|relation| {
                 relation.parent_session_id == request.parent_session_id
                     && relation.packet.get("child_role").and_then(Value::as_str) == Some("steward")
             })
-            .ok_or_else(|| error("steward_relation_not_found"))?;
+            .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
         let parent = self
             .bindings
             .get_by_session_id(&request.parent_session_id)
             .await
-            .map_err(|value| BtccError::new(value.code(), value.message()))?
+            .map_err(BtccError::from)?
             .filter(|binding| binding.role == SessionRole::Butler)
-            .ok_or_else(|| error("steward_relation_not_found"))?;
+            .ok_or_else(|| error(BtccCode::StewardRelationNotFound))?;
         let _ = parent;
         if self
             .repository
             .open_relation_by_work(relation.root_work_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .is_none()
         {
-            return Err(error("steward_relation_not_active"));
+            return Err(error(BtccCode::StewardRelationNotActive));
         }
         let turn = self
             .repository
             .latest_resume_turn(relation.child_session_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .filter(|turn| turn.semantic_state == "admitted")
-            .ok_or_else(|| error("steward_relation_not_active"))?;
+            .ok_or_else(|| error(BtccCode::StewardRelationNotActive))?;
         let interrupted = self
             .queue
             .interrupted_event(
@@ -86,7 +87,7 @@ impl NativeSubsessionService {
                     && event.message_id == turn.original_message_id
                     && event.message == turn.original_message
             })
-            .ok_or_else(|| error("steward_relation_not_recoverable"))?;
+            .ok_or_else(|| error(BtccCode::StewardRelationNotRecoverable))?;
         let request_id = format!(
             "app-steward-resume:{}:{}",
             relation.relation_id, interrupted.recovery_id
@@ -116,10 +117,10 @@ impl NativeSubsessionService {
     ) -> Result<Value, BtccError> {
         let instruction = crate::public_text::trim_js_whitespace(&request.instruction);
         if instruction.is_empty() {
-            return Err(error("steward_direction_instruction_required"));
+            return Err(error(BtccCode::StewardDirectionInstructionRequired));
         }
         if instruction.chars().count() > 1_200 {
-            return Err(error("steward_direction_instruction_too_long"));
+            return Err(error(BtccCode::StewardDirectionInstructionTooLong));
         }
         if request.access_mode == "read_only"
             || !self
@@ -130,9 +131,9 @@ impl NativeSubsessionService {
                     request.source_message_id.clone(),
                 )
                 .await
-                .map_err(storage)?
+                .map_err(BtccError::from)?
         {
-            return Err(error("steward_followup_authority_mismatch"));
+            return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
         }
         let relation = self
             .select_relation(
@@ -160,15 +161,15 @@ impl NativeSubsessionService {
                 (self.now)(),
             )
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         if direction.instruction_id != instruction_id || direction.instruction != instruction {
-            return Err(error("steward_direction_identity_conflict"));
+            return Err(error(BtccCode::StewardDirectionIdentityConflict));
         }
         let latest = self
             .repository
             .latest_turn(relation.child_session_id.clone())
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
             self.enqueue_direction(&relation, &direction).await?;
         }
@@ -195,16 +196,16 @@ impl NativeSubsessionService {
             .repository
             .result_for_relation(relation.relation_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .is_some()
         {
-            return Err(error("active_steward_relation_not_found"));
+            return Err(error(BtccCode::ActiveStewardRelationNotFound));
         }
         let turn_id = self
             .repository
             .latest_turn(relation.child_session_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .map(|(id, _)| id)
             .unwrap_or_else(|| relation.child_turn_id.clone());
         let identity = json!({"relation_id":relation.relation_id,"source_message_id":request.source_message_id});
@@ -244,7 +245,7 @@ impl NativeSubsessionService {
         self.repository
             .consume_direction(child_session_id.into(), child_turn_id.into(), (self.now)())
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
 
     pub(crate) async fn recover_directions(&self) -> Result<(), BtccError> {
@@ -253,7 +254,7 @@ impl NativeSubsessionService {
             .repository
             .pending_directions()
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
         {
             if !relations.insert(direction.relation_id.clone()) {
                 continue;
@@ -262,13 +263,13 @@ impl NativeSubsessionService {
                 .repository
                 .relation_by_id(direction.relation_id.clone())
                 .await
-                .map_err(storage)?
-                .ok_or_else(|| error("subsession_direction_relation_missing"))?;
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::SubsessionDirectionRelationMissing))?;
             let latest = self
                 .repository
                 .latest_turn(relation.child_session_id.clone())
                 .await
-                .map_err(storage)?;
+                .map_err(BtccError::from)?;
             if latest.as_ref().is_none_or(|(_, state)| state != "admitted") {
                 self.enqueue_direction(&relation, &direction).await?;
             }
@@ -285,16 +286,16 @@ impl NativeSubsessionService {
             .repository
             .pending_direction(relation.relation_id.clone())
             .await
-            .map_err(storage)?
+            .map_err(BtccError::from)?
             .unwrap_or_else(|| requested.clone());
         let child = self
             .bindings
             .get_by_session_id(&relation.child_session_id)
             .await
-            .map_err(|e| BtccError::new(e.code(), e.message()))?
-            .ok_or_else(|| error("subsession_direction_child_binding_missing"))?;
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::SubsessionDirectionChildBindingMissing))?;
         if !matches!(child.role, SessionRole::Steward | SessionRole::Worker) {
-            return Err(error("subsession_direction_child_binding_missing"));
+            return Err(error(BtccCode::SubsessionDirectionChildBindingMissing));
         }
         let role = if child.role == SessionRole::Worker {
             "worker"
@@ -333,20 +334,20 @@ impl NativeSubsessionService {
                 self.repository
                     .open_relation_by_work(work.into())
                     .await
-                    .map_err(storage)?
+                    .map_err(BtccError::from)?
                     .into_iter()
                     .collect()
             } else {
                 self.repository
                     .relations_for_parent(parent.into())
                     .await
-                    .map_err(storage)?
+                    .map_err(BtccError::from)?
             }
         } else {
             self.repository
                 .relations_for_parent(parent.into())
                 .await
-                .map_err(storage)?
+                .map_err(BtccError::from)?
         };
         candidates.retain(|candidate| {
             relation_id.is_none_or(|id| candidate.relation_id == id)
@@ -362,15 +363,15 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(parent)
             .await
-            .map_err(|e| BtccError::new(e.code(), e.message()))?
-            .ok_or_else(|| error("steward_followup_authority_mismatch"))?;
+            .map_err(BtccError::from)?
+            .ok_or_else(|| error(BtccCode::StewardFollowupAuthorityMismatch))?;
         let expected_parent = if *role == SessionRole::Worker {
             SessionRole::Steward
         } else {
             SessionRole::Butler
         };
         if source.role != expected_parent {
-            return Err(error("steward_followup_authority_mismatch"));
+            return Err(error(BtccCode::StewardFollowupAuthorityMismatch));
         }
         let mut owned = Vec::new();
         for candidate in candidates {
@@ -378,8 +379,8 @@ impl NativeSubsessionService {
                 .bindings
                 .get_by_session_id(&candidate.child_session_id)
                 .await
-                .map_err(|e| BtccError::new(e.code(), e.message()))?
-                .ok_or_else(|| error("steward_followup_authority_mismatch"))?;
+                .map_err(BtccError::from)?
+                .ok_or_else(|| error(BtccCode::StewardFollowupAuthorityMismatch))?;
             let same_parent = candidate.parent_session_id == parent;
             let same_project = work_id.is_some()
                 && source.ledger_project_id.is_some()
@@ -405,7 +406,7 @@ impl NativeSubsessionService {
                 .repository
                 .result_for_relation(candidate.relation_id.clone())
                 .await
-                .map_err(storage)?
+                .map_err(BtccError::from)?
                 .is_some();
             if !terminal
                 || (allow_followup
@@ -414,7 +415,7 @@ impl NativeSubsessionService {
                         .repository
                         .open_relation_by_work(candidate.root_work_id.clone())
                         .await
-                        .map_err(storage)?
+                        .map_err(BtccError::from)?
                         .is_some())
             {
                 eligible.push(candidate);
@@ -422,9 +423,9 @@ impl NativeSubsessionService {
         }
         candidates = eligible;
         match candidates.len() {
-            0 => Err(error("active_steward_relation_not_found")),
+            0 => Err(error(BtccCode::ActiveStewardRelationNotFound)),
             1 => Ok(candidates.remove(0)),
-            _ => Err(error("active_steward_relation_ambiguous")),
+            _ => Err(error(BtccCode::ActiveStewardRelationAmbiguous)),
         }
     }
 }

@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 
 use super::identity::{digest, json_stringify_without};
 use super::{AccessMode, BtccError, ReasoningEffort};
+use crate::btcc::BtccCode;
 
 const SCHEMA: &str = "butler.turn-execution-controls.v1";
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
@@ -164,8 +165,8 @@ impl ExecutionControls {
         };
         let expected = digest(&json_stringify_without(&self.0, "integrity_hash")?);
         if expected != verified.integrity_hash {
-            return Err(BtccError::new(
-                "turn_execution_controls_integrity_mismatch",
+            return Err(BtccError::detected(
+                BtccCode::TurnExecutionControlsIntegrityMismatch,
                 "turn_execution_controls_integrity_mismatch",
             ));
         }
@@ -190,8 +191,8 @@ impl SubsessionResultContext {
 
     fn normalized(&self) -> Result<Self, BtccError> {
         if !self.valid() {
-            return Err(BtccError::new(
-                "subsession_result_turn_context_invalid",
+            return Err(BtccError::detected(
+                BtccCode::SubsessionResultTurnContextInvalid,
                 "subsession_result_turn_context_invalid",
             ));
         }
@@ -209,14 +210,15 @@ impl SubsessionResultContext {
 }
 
 fn json(value: &impl Serialize) -> Result<Value, BtccError> {
-    serde_json::to_value(value).map_err(|_| invalid())
+    serde_json::to_value(value).map_err(|source| invalid().with_source(source))
 }
 
 fn required<T: serde::de::DeserializeOwned>(
     fields: &Map<String, Value>,
     key: &str,
 ) -> Result<T, BtccError> {
-    serde_json::from_value(fields.get(key).ok_or_else(invalid)?.clone()).map_err(|_| invalid())
+    serde_json::from_value(fields.get(key).ok_or_else(invalid)?.clone())
+        .map_err(|source| invalid().with_source(source))
 }
 
 fn optional<T: serde::de::DeserializeOwned>(
@@ -252,8 +254,8 @@ fn js_space(character: char) -> bool {
 }
 
 fn invalid() -> BtccError {
-    BtccError::new(
-        "turn_execution_controls_invalid",
+    BtccError::detected(
+        BtccCode::TurnExecutionControlsInvalid,
         "turn_execution_controls_invalid",
     )
 }

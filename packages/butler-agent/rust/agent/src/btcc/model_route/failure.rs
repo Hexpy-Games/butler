@@ -2,6 +2,7 @@ use crate::btcc::agent_loop::ModelRoundError;
 use crate::btcc::{BtccError, RuntimeFailure};
 
 use super::contracts::{FailureDisposition, ProviderRequestError};
+use crate::btcc::BtccCode;
 
 const ADVANCE: &[&str] = &[
     "provider_quota_exhausted",
@@ -109,8 +110,8 @@ fn provider_runtime(error: &ProviderRequestError) -> RuntimeFailure {
 }
 
 pub(super) fn durability(phase: &str, error: &BtccError) -> ModelRoundError {
-    ModelRoundError::Integrity(BtccError::new(
-        "model_route_durability_failure",
+    ModelRoundError::Integrity(BtccError::detected(
+        BtccCode::ModelRouteDurabilityFailure,
         format!("BTCC model route durability failed during {phase}: {error}"),
     ))
 }

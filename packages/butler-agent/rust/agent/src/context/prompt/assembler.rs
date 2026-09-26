@@ -97,5 +97,5 @@ impl AdmissionContextPort for PromptAssembler {
 }
 
 fn btcc_error(error: crate::context::ContextError) -> BtccError {
-    BtccError::new(error.code, error.message)
+    BtccError::relayed(error.code, error.message)
 }

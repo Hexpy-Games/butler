@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::btcc::work::{OriginalRequest, WorkContext, WorkResultFact};
 
 use super::super::{StorageError, StorageResult, common};
+use crate::btcc::StorageCode;
 
 /// Reverse the entire source tuple, cap in SQLite, then restore ascending order.
 const TAIL_ORDER: &str = "CASE WHEN result.source_turn_rowid IS NULL THEN 1 ELSE 0 END DESC, result.source_turn_rowid DESC, CASE WHEN result.source_turn_sequence IS NULL THEN 1 ELSE 0 END DESC, result.source_turn_sequence DESC, result.sequence DESC, result.rowid DESC";
@@ -26,13 +27,13 @@ pub(super) fn hydrate(db: &Connection, row: &common::WorkRow) -> StorageResult<W
         .map_err(StorageError::sqlite)?;
     let Some((turn_id, _session_id, message_id, content)) = origin else {
         return Err(common::error(
-            "durable_work_original_request_unavailable",
+            StorageCode::DurableWorkOriginalRequestUnavailable,
             format!("Durable Work original request is unavailable: {}", row.id),
         ));
     };
     if message_id != row.origin_message_id {
         return Err(common::error(
-            "durable_work_original_request_unavailable",
+            StorageCode::DurableWorkOriginalRequestUnavailable,
             format!("Durable Work original request is unavailable: {}", row.id),
         ));
     }

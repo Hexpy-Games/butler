@@ -41,7 +41,7 @@ impl NativePrincipalAuthority {
                 Ok(operation(&mut repository))
             })
             .await
-            .map_err(|error| AuthorityError::storage(error.code, error.message))?
+            .map_err(|error| AuthorityError::storage(error.code(), error.message()))?
     }
     pub(crate) async fn admit(
         &self,

@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{ToolJournalFinish, ToolJournalStart};
+use crate::btcc::StorageCode;
 use crate::btcc::identity::digest;
 use crate::btcc::storage::common::{canonical_json, error, json, stringify};
 use crate::btcc::storage::{StorageError, StorageResult};
@@ -42,13 +43,13 @@ pub(super) fn start(
         .optional()
         .map_err(StorageError::sqlite)?;
     if let Some((turn_id, tool_name, stored)) = current {
-        let stored = canonical_json(&json(&stored, "tool_journal_json_invalid")?)?;
+        let stored = canonical_json(&json(&stored, StorageCode::ToolJournalJsonInvalid)?)?;
         if turn_id == input.turn_id && tool_name == input.tool_name && stored == arguments_json {
             return Ok(());
         }
     }
     Err(error(
-        "Guided tool call identity conflict",
+        StorageCode::GuidedToolCallIdentityConflict,
         "Guided tool call identity conflict",
     ))
 }
@@ -101,7 +102,7 @@ pub(super) fn finish(
         return Ok(());
     }
     Err(error(
-        "Guided tool result identity conflict",
+        StorageCode::GuidedToolResultIdentityConflict,
         "Guided tool result identity conflict",
     ))
 }

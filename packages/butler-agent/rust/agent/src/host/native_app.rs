@@ -105,8 +105,9 @@ impl NativeAppServer {
         ));
         let dependencies = AppApplicationDependencies {
             updates: Arc::new(
-                super::update_cli::open_app_update(data_root, installation)
-                    .map_err(|code| BtccError::new(code, "App update service is unavailable"))?,
+                super::update_cli::open_app_update(data_root, installation).map_err(|code| {
+                    BtccError::relayed(code, "App update service is unavailable")
+                })?,
             ),
             skills: runtime.skills.clone(),
             mcp_client: runtime.mcp_client.clone(),
@@ -210,7 +211,7 @@ impl NativeAppServer {
             Ok(listener) => listener,
             Err(error) => {
                 let _ = application.close().await;
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "app_listener_bind_failed",
                     error.to_string(),
                 ));
@@ -222,7 +223,7 @@ impl NativeAppServer {
             Ok(server) => server,
             Err(error) => {
                 let _ = application.close().await;
-                return Err(BtccError::new(
+                return Err(BtccError::relayed(
                     "app_listener_start_failed",
                     error.to_string(),
                 ));
@@ -249,10 +250,9 @@ impl NativeAppServer {
         self.listener_ready.store(false, Ordering::Release);
         self.application.cancel_updates();
         let listener = match self.listener.take() {
-            Some(server) => server
-                .close()
-                .await
-                .map_err(|error| BtccError::new("app_listener_close_failed", error.to_string())),
+            Some(server) => server.close().await.map_err(|error| {
+                BtccError::relayed("app_listener_close_failed", error.to_string())
+            }),
             None => Ok(()),
         };
         let dispatch = self.application.stop_dispatch().await.map_err(app_error);
@@ -276,9 +276,9 @@ impl Drop for NativeAppServer {
 
 fn app_error(error: GatewayApplicationError) -> BtccError {
     match error {
-        GatewayApplicationError::Public { code, message, .. } => BtccError::new(code, message),
+        GatewayApplicationError::Public { code, message, .. } => BtccError::relayed(code, message),
         GatewayApplicationError::Internal => {
-            BtccError::new("app_application_failed", "App application is unavailable")
+            BtccError::relayed("app_application_failed", "App application is unavailable")
         }
     }
 }

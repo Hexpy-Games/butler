@@ -60,14 +60,14 @@ pub(super) async fn reconcile(
                     must_dispatch = true;
                     continue;
                 }
-                return Ok(Some(prior_error(error)));
+                return Ok(Some(prior_error(&error)));
             }
         };
         let prior_target = match context.input.adapter.normalize_target(&blocker.target) {
             Ok(value) => value,
             Err(error) => {
                 if !custom {
-                    return Ok(Some(prior_error(error)));
+                    return Ok(Some(prior_error(&error)));
                 }
                 context.resolved.normalized_target.clone()
             }
@@ -91,7 +91,7 @@ pub(super) async fn reconcile(
                     must_dispatch = true;
                     continue;
                 }
-                return Ok(Some(prior_error(error)));
+                return Ok(Some(prior_error(&error)));
             }
         };
         match observed {
@@ -176,9 +176,9 @@ pub(super) async fn reconcile(
     ))
 }
 
-fn prior_error(error: EffectFailure) -> EffectOutcome {
+fn prior_error(error: &EffectFailure) -> EffectOutcome {
     outcomes::uncertain(
-        EffectError::new("effect_reconciliation_required", error.message),
+        EffectError::new("effect_reconciliation_required", error.message()),
         None,
     )
 }

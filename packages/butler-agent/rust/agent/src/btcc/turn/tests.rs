@@ -86,7 +86,7 @@ impl TurnStore for Harness {
         Box::pin(async move {
             result
                 .map(|turn| (turn, true))
-                .ok_or_else(|| BtccError::new("replay_identity_mismatch", "missing fixture"))
+                .ok_or_else(|| BtccError::relayed("replay_identity_mismatch", "missing fixture"))
         })
     }
     fn find_turn(&self, turn_id: &str) -> PortFuture<'_, Option<TurnRecord>> {
@@ -214,7 +214,7 @@ impl AgentLoop for Harness {
             if self.block_agent.load(Ordering::SeqCst) {
                 tokio::select! {
                     permit = self.permits.acquire() => permit.unwrap().forget(),
-                    () = cancellation.cancelled() => return Err(AgentLoopError::Propagate(BtccError::new("turn_cancelled", "cancelled")))
+                    () = cancellation.cancelled() => return Err(AgentLoopError::Propagate(BtccError::relayed("turn_cancelled", "cancelled")))
                 }
             }
             assert!(
@@ -252,7 +252,10 @@ impl ProgressEventRepository for Harness {
         self.progress.lock().unwrap().push(write);
         Box::pin(async move {
             if should_fail {
-                Err(BtccError::new("progress_append_failed", "fixture failure"))
+                Err(BtccError::relayed(
+                    "progress_append_failed",
+                    "fixture failure",
+                ))
             } else {
                 Ok(())
             }
@@ -332,7 +335,7 @@ async fn turn_outcome_follows_agent_result_progress_failures_and_resume_state() 
                 assert_eq!(stored.suspension, Some(SuspensionReason::WaitingForWorker));
             }
             Setup::StartedProgressFails => {
-                assert_eq!(outcome.unwrap_err().code, "progress_append_failed");
+                assert_eq!(outcome.unwrap_err().code(), "progress_append_failed");
             }
         }
     }

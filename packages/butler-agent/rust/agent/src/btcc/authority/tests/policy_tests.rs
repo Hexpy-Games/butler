@@ -121,7 +121,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
     let mut invalid = decision("missing", "modify");
     invalid.alternative_input = Some(" \t".into());
     assert_eq!(
-        ready.authority.decide(invalid).await.unwrap_err().code,
+        ready.authority.decide(invalid).await.unwrap_err().code(),
         "authority_modify_input_missing"
     );
     let allowed = ready
@@ -143,7 +143,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
             .decide(decision(&ready.request_ref, "deny"))
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "authority_decision_conflict"
     );
     let base = AuthorityExecutionInput {
@@ -171,7 +171,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
             })
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "authority_request_not_found"
     );
     assert_eq!(
@@ -183,7 +183,7 @@ async fn modify_precedence_same_decision_replay_and_optional_execution_identity(
             })
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "authority_request_not_found"
     );
     ready.storage.close().await.unwrap();
@@ -257,17 +257,14 @@ async fn missing_started_call_rolls_back_pending_authority_insert() {
     unmatched.action_key = "another".into();
     unmatched.operation_occurrence_id = Some("missing-call".into());
     let error = ready.authority.admit(unmatched).await.unwrap_err();
-    assert_eq!(error.code, "authority_source_call_not_pending");
+    assert_eq!(error.code(), "authority_source_call_not_pending");
     let rows: i64 = ready
         .storage
         .execute(|db| {
             db.query_row("SELECT COUNT(*) FROM btcc_authority_requests", [], |row| {
                 row.get(0)
             })
-            .map_err(|error| StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(StorageError::sqlite)
         })
         .await
         .unwrap();
@@ -287,7 +284,7 @@ async fn terminal_slot_generation_and_close_decision_cas_preserve_source_order()
             .admit(different.clone())
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "authority_slot_identity_mismatch"
     );
     ready
@@ -323,10 +320,7 @@ async fn terminal_slot_generation_and_close_decision_cas_preserve_source_order()
                 [generated],
                 |row| row.get(0),
             )
-            .map_err(|error| StorageError {
-                code: "sqlite_error",
-                message: error.to_string(),
-            })
+            .map_err(StorageError::sqlite)
         })
         .await
         .unwrap();
@@ -366,7 +360,7 @@ async fn corrupt_receipt_projection_fails_closed() {
         .unwrap();
     second.storage.execute({ let request = second.request_ref.clone(); move |db| {
         db.execute("UPDATE btcc_authority_requests SET outcome_receipt_json='{}' WHERE request_ref=?1",
-            [request]).map_err(|error| StorageError { code: "sqlite_error", message: error.to_string() })?;
+            [request]).map_err(StorageError::sqlite)?;
         Ok(())
     }}).await.unwrap();
     assert_eq!(
@@ -381,7 +375,7 @@ async fn corrupt_receipt_projection_fails_closed() {
             })
             .await
             .unwrap_err()
-            .code,
+            .code(),
         "authority_request_corrupt"
     );
     second.storage.close().await.unwrap();

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use serde_json::{Map, Value};
 
 use super::{ContextAssembly, ContextSection, js_truthy, object};
+use crate::btcc::BtccCode;
 use crate::btcc::identity::digest;
 use crate::btcc::storage::{BtccRepositories, ContextDocumentInput};
 use crate::btcc::subsessions::SubsessionMetadata;
@@ -36,14 +37,14 @@ pub(super) async fn snapshot(
             "user" => user_ref.clone(),
             "session" => binding.session_id.clone(),
             "project" => project_ref.clone().ok_or_else(|| {
-                BtccError::new(
-                    "context_project_binding_missing",
+                BtccError::detected(
+                    BtccCode::ContextProjectBindingMissing,
                     "BTCC project context section requires a project binding",
                 )
             })?,
             _ => {
-                return Err(BtccError::new(
-                    "context_scope_invalid",
+                return Err(BtccError::detected(
+                    BtccCode::ContextScopeInvalid,
                     "BTCC context scope is invalid",
                 ));
             }
@@ -64,8 +65,8 @@ pub(super) async fn snapshot(
             "mandatory_hot_cache" => mandatory.push(reference),
             "optional_hot_cache" => optional.push(reference),
             _ => {
-                return Err(BtccError::new(
-                    "context_projection_invalid",
+                return Err(BtccError::detected(
+                    BtccCode::ContextProjectionInvalid,
                     "BTCC context projection is invalid",
                 ));
             }
@@ -386,6 +387,6 @@ fn unique(values: impl IntoIterator<Item = String>) -> Vec<String> {
 fn strings(values: Vec<String>) -> Value {
     Value::Array(values.into_iter().map(Value::String).collect())
 }
-fn json_error(error: impl std::fmt::Display) -> BtccError {
-    BtccError::new("btcc_json_error", error.to_string())
+fn json_error(error: impl std::error::Error + Send + Sync + 'static) -> BtccError {
+    BtccError::detected(BtccCode::BtccJsonError, error.to_string()).with_source(error)
 }

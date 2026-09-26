@@ -57,7 +57,7 @@ fn reconstructs_same_durable_identity_before_and_after_a_single_edit() {
     assert_eq!(
         recover(&edit, &state, &identity, &adapter)
             .unwrap_err()
-            .code,
+            .code(),
         "edit_file_reconciliation_mismatch"
     );
     std::fs::remove_dir_all(root).unwrap();

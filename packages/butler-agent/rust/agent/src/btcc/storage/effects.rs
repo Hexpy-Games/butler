@@ -42,7 +42,7 @@ impl StorageEffectJournal {
                 .map_err(super::StorageError::sqlite)
             })
             .await
-            .map_err(outer)
+            .map_err(EffectFailure::from)
     }
 
     pub(crate) async fn record_restart_handoff(
@@ -86,7 +86,7 @@ impl StorageEffectJournal {
                 .map_err(super::StorageError::sqlite)
             })
             .await
-            .map_err(outer)
+            .map_err(EffectFailure::from)
     }
 
     /// A helper reports its outcome through the current serialized BTCC owner.
@@ -131,7 +131,7 @@ impl StorageEffectJournal {
                 .map_err(super::StorageError::sqlite)
             })
             .await
-            .map_err(outer)
+            .map_err(EffectFailure::from)
     }
 }
 fn terminal_restart_state(state: &str) -> bool {
@@ -145,9 +145,6 @@ fn terminal_restart_state(state: &str) -> bool {
             | "start_unverified"
             | "precondition_failed"
     )
-}
-fn outer(error: super::StorageError) -> EffectFailure {
-    EffectFailure::storage(error.code, error.message)
 }
 fn inner<T: Send + 'static>(result: EffectResult<T>) -> super::StorageResult<EffectResult<T>> {
     Ok(result)
@@ -165,7 +162,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(write::prepare(db, &identity, recovery.as_ref(), &*clock)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn find(&self, effect_id: String) -> EffectFuture<'_, Option<EffectRecord>> {
@@ -174,7 +171,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(row::find(db, &effect_id)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn list_for_work(
@@ -187,7 +184,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(row::list_for_work(db, &work_id, limit)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn blockers(&self, work_id: String) -> EffectFuture<'_, Vec<EffectBlocker>> {
@@ -196,7 +193,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(blocker::list(db, &work_id)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn resolve_blockers(
@@ -219,7 +216,7 @@ impl EffectJournal for StorageEffectJournal {
                     ))
                 })
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn claim_dispatch(
@@ -233,7 +230,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(write::claim(db, &effect_id, revision, &*clock)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn return_prepared(
@@ -247,7 +244,7 @@ impl EffectJournal for StorageEffectJournal {
             storage
                 .execute(move |db| inner(write::return_prepared(db, &effect_id, revision, &*clock)))
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn record_applied(
@@ -266,7 +263,7 @@ impl EffectJournal for StorageEffectJournal {
                     ))
                 })
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn record_uncertain(
@@ -285,7 +282,7 @@ impl EffectJournal for StorageEffectJournal {
                     ))
                 })
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
     fn record_failed(
@@ -304,7 +301,7 @@ impl EffectJournal for StorageEffectJournal {
                     ))
                 })
                 .await
-                .map_err(outer)?
+                .map_err(EffectFailure::from)?
         })
     }
 }

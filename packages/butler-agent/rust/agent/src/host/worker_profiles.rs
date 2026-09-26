@@ -128,5 +128,5 @@ fn parse_profile(value: &Value) -> Result<WorkerProfile, BtccError> {
 }
 
 fn error(code: &'static str) -> BtccError {
-    BtccError::new(code, code)
+    BtccError::relayed(code, code)
 }

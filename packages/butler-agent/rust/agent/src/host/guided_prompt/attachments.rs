@@ -10,7 +10,7 @@ pub(super) fn source_refs(turn: &TurnRecord) -> Result<Vec<AttachmentRef>, BtccE
         .filter(|value| !value.is_null())
     {
         Some(value) => serde_json::from_value(value.clone())
-            .map_err(|error| BtccError::new("guided_attachment_invalid", error.to_string())),
+            .map_err(|error| BtccError::relayed("guided_attachment_invalid", error.to_string())),
         None => Ok(Vec::new()),
     }
 }
