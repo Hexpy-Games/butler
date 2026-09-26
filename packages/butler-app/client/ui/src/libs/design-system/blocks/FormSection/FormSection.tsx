@@ -1,15 +1,16 @@
 import { useId, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { repeatsSettingsCopy, useSettingsPage } from "../SettingsShell/settingsPage";
 import styles from "./FormSection.module.css";
 
 export interface FormSectionProps {
   /**
-   * Section title. Omit it only when the section is the page's single card
-   * and its title would repeat the page title.
+   * Section title. Omit it when it would repeat the page title; inside a
+   * `SettingsShell` page a title that repeats `pageTitle` is not rendered.
    */
   title?: string;
-  /** Optional description */
+  /** Optional description; inside a `SettingsShell` page one that repeats `pageDescription` is not rendered. */
   description?: string;
   /** Form rows or fields */
   children: ReactNode;
@@ -23,7 +24,9 @@ export interface FormSectionProps {
  * description, max 60ch) sits above the card, outside its surface, and the
  * bordered card holds only fields. Header -> card is
  * `--settings-section-header-gap`; card -> next header is the wider
- * `--settings-section-gap` owned by `SettingsShell`.
+ * `--settings-section-gap` owned by `SettingsShell`. Copy that repeats the
+ * page header (see `repeatsSettingsCopy`) is dropped, so a page whose single
+ * section only restates the page renders the card alone.
  */
 export function FormSection({
   title,
@@ -32,19 +35,23 @@ export function FormSection({
   className,
 }: FormSectionProps) {
   const titleId = useId();
+  const page = useSettingsPage();
+  const shownTitle = title && !repeatsSettingsCopy(title, page?.title) ? title : undefined;
+  const shownDescription =
+    description && !repeatsSettingsCopy(description, page?.description) ? description : undefined;
   return (
     <section
       className={cn(styles.section, className)}
       data-slot="form-section"
-      aria-labelledby={title ? titleId : undefined}
+      aria-labelledby={shownTitle ? titleId : undefined}
     >
-      {title || description ? (
+      {shownTitle || shownDescription ? (
         <div className={styles.header} data-slot="form-section-header">
-          {title ? (
-            <Typo.H4 as="h3" id={titleId} className={styles.title}>{title}</Typo.H4>
+          {shownTitle ? (
+            <Typo.H4 as="h3" id={titleId} className={styles.title}>{shownTitle}</Typo.H4>
           ) : null}
-          {description ? (
-            <Typo.Body className={styles.description}>{description}</Typo.Body>
+          {shownDescription ? (
+            <Typo.Body className={styles.description}>{shownDescription}</Typo.Body>
           ) : null}
         </div>
       ) : null}

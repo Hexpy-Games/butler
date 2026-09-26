@@ -112,6 +112,8 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
     <SettingsShell
       active={isActive}
       compactPane={compactPane}
+      pageTitle={title}
+      pageDescription={activeDescriptor?.description}
       detailNavigation={
         <IconButton
           label={settingsCopy.back}

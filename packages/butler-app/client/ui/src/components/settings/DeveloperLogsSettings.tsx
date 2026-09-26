@@ -83,10 +83,7 @@ export function DeveloperLogsSettings() {
   );
 
   return (
-    <SettingsSection
-      title={copy.panels.developerLogs}
-      description={copy.descriptions.developerLogs}
-    >
+    <SettingsSection>
       <Stack gap="md">
         <Stack align="row" gap="sm" wrap>
           <Input

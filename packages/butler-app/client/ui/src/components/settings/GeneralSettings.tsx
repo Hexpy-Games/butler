@@ -24,7 +24,7 @@ export function GeneralSettings() {
 
   return (
     <>
-      <SettingsSection title={settingsCopy.sections.general}>
+      <SettingsSection>
         <SettingsSwitch label={appCopy.interfaceDetails.smartGroups} description={appCopy.interfaceDetails.smartGroupsDescription}
           checked={draft.smart_grouping_enabled} onChange={value => update({ smart_grouping_enabled: value }, setSettings)} />
         <SettingsSelect

@@ -42,13 +42,21 @@ import { FormSection, FormRow } from "@/butler-ds";
 </FormSection>
 ```
 
-`title` is optional. Omit it only when the section is the page's single card
-and its title would repeat the page title (for example Appearance or
-Personalization under a page titled the same). A description that differs
-from the page description may still sit above the card on its own; one that
-repeats the page description is dropped. Title-only sections (Models "Model
-settings") and list sections (MCP servers, registered models) use the same
-header-above-card pattern.
+`title` is optional. Omit it when the section's title would repeat the page
+title (for example Appearance, General or MCP under a page titled the same).
+A description that differs from the page description may still sit above the
+card on its own; one that repeats the page description is dropped, so a
+section whose title and description both restate the page (MCP, Skills, Logs)
+renders the card alone. Title-only sections (Models "Model settings") use the
+same header-above-card pattern.
+
+Inside a `SettingsShell` with `pageTitle` / `pageDescription`, FormSection
+enforces this: a title or description that repeats the page header is not
+rendered (`repeatsSettingsCopy`: equal after NFKC, case, whitespace and end
+punctuation normalization, or, for descriptions of three or more words, the
+page description followed by more words). Short titles only match exactly, so
+"Model settings" stays on "Models" in every locale. Product pages still omit
+the repeated copy themselves; the check is a safety net.
 
 ## Structure
 

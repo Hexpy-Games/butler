@@ -30,6 +30,13 @@ It is at least 3x the header -> card gap (`--settings-section-header-gap`,
 `FormSection`), and at least 1.5x `--settings-field-gap` (20px), the gap
 between fields inside a card.
 
+### Page header and sections
+
+Pass `pageTitle` and `pageDescription` (the copy `detailHeader` shows). The
+detail content is wrapped in a `SettingsPageProvider`, so `FormSection` drops a
+section title or description that repeats the page header and a page never
+reads its title twice (`repeatsSettingsCopy`).
+
 ## Who can use this component
 Butler client settings containers and design-system fixtures.
 

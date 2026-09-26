@@ -2,6 +2,7 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Input } from "../../components/Input";
 import { Switch } from "../../components/Switch";
 import { SettingsField } from "../SettingsField";
+import { SettingsPageProvider } from "../SettingsShell/settingsPage";
 import { FormSection } from "./FormSection";
 import styles from "./FormSection.showcase.module.css";
 
@@ -94,6 +95,16 @@ export const stories: ShowcaseStory[] = [
       <FormSection>
         <SettingsField id="bare-theme" label={text(context).theme} control={<Input id="bare-theme" defaultValue="Bloom" />} />
       </FormSection>
+    ),
+  },
+  {
+    name: "Header that repeats the page is dropped",
+    render: (context) => (
+      <SettingsPageProvider title={text(context).search} description={text(context).searchDescription}>
+        <FormSection title={text(context).search} description={text(context).searchDescription}>
+          <Fields context={context} id="repeats-page" />
+        </FormSection>
+      </SettingsPageProvider>
     ),
   },
   {

@@ -24,7 +24,6 @@ import { SettingsListSkeleton } from "./SettingsListSkeleton";
 
 export function SkillsSettings() {
   useAppLocale();
-  const copy = appCopy.settings;
   const openSession = useButlerStore((state) => state.openSession);
   const closeSettings = useButlerStore((state) => state.closeSettings);
   const nickname = useSettingsUIStore(
@@ -71,7 +70,7 @@ export function SkillsSettings() {
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
   return (
-    <SettingsSection description={copy.descriptions.skills}>
+    <SettingsSection>
       <Stack gap="md">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>

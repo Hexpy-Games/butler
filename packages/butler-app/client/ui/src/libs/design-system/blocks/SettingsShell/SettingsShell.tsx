@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./SettingsShell.module.css";
+import { SettingsPageProvider } from "./settingsPage";
 
 export interface SettingsShellProps {
   sidebar: ReactNode;
@@ -9,6 +10,10 @@ export interface SettingsShellProps {
   active?: boolean;
   compactPane?: "master" | "detail";
   detailNavigation?: ReactNode;
+  /** Title the detail header shows; sections never repeat it (see FormSection). */
+  pageTitle?: string;
+  /** Description the detail header shows; section descriptions never repeat it. */
+  pageDescription?: string;
 }
 
 export function SettingsShell({
@@ -18,6 +23,8 @@ export function SettingsShell({
   active = false,
   compactPane = "master",
   detailNavigation,
+  pageTitle,
+  pageDescription,
 }: SettingsShellProps) {
   return (
     <section
@@ -57,7 +64,9 @@ export function SettingsShell({
           contentClassName={styles.detailContent}
           dataTestClass="settings-detail-scroll"
         >
-          {detail}
+          <SettingsPageProvider title={pageTitle} description={pageDescription}>
+            {detail}
+          </SettingsPageProvider>
         </ScrollArea>
       </main>
       {active ? (

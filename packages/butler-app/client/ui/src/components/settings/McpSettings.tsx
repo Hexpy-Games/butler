@@ -89,10 +89,7 @@ export function McpSettings() {
     setOpen(true);
   }
   return (
-    <SettingsSection
-      title={copy.panels.mcpServers}
-      description={copy.descriptions.mcpServers}
-    >
+    <SettingsSection>
       <Stack gap="md">
         <Stack gap="xs" cross="start">
           <Button
