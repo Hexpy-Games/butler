@@ -113,8 +113,10 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
     let mut legacy: Option<(i64, u64)> = None;
     visit_json_lines(&root.join("metrics/prompt-cache-usage.jsonl"), |value| {
         let ts = value.get("ts").and_then(Value::as_i64).unwrap_or(-1);
-        let prompt = positive_tokens(value.get("promptTokens"));
-        if value.get("scope").and_then(Value::as_str) != Some(&scope) || prompt.is_none() {
+        let Some(prompt) = positive_tokens(value.get("promptTokens")) else {
+            return;
+        };
+        if value.get("scope").and_then(Value::as_str) != Some(&scope) {
             return;
         }
         if query
@@ -123,7 +125,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
             .is_some_and(|turn| value.get("turnId").and_then(Value::as_str) == Some(turn))
         {
             if exact.is_none_or(|current| ts >= current.0) {
-                exact = Some((ts, prompt.unwrap()));
+                exact = Some((ts, prompt));
             }
         } else if value.get("turnId").is_none()
             && query
@@ -131,7 +133,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
                 .is_some_and(|start| ts >= start)
             && legacy.is_none_or(|current| ts >= current.0)
         {
-            legacy = Some((ts, prompt.unwrap()));
+            legacy = Some((ts, prompt));
         }
     });
     let mut monitor: Option<(i64, u64)> = None;

@@ -79,7 +79,7 @@ pub(super) fn parse(args: &[OsString]) -> Result<Options, String> {
                                 })?,
                         );
                     }
-                    _ => unreachable!(),
+                    _ => return Err(format!("unknown option: {option}")),
                 }
                 index += 2;
             }

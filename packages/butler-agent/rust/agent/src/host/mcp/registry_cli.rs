@@ -83,6 +83,8 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             CliError::invalid(format!("mcp {subcommand} requires <id>")),
         );
     }
+    // Validated non-empty above for every subcommand that reads it.
+    let id = id.unwrap_or_default();
     let data_root = match resolve_data_root(parsed.data.as_deref(), &installation) {
         Ok(path) => path,
         Err(message) => {
@@ -134,7 +136,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
         }
         "enable" | "disable" => {
             let enabled = subcommand == "enable";
-            match client.set_server_enabled(id.unwrap(), enabled).await {
+            match client.set_server_enabled(id, enabled).await {
                 Ok(server) => report_success(
                     &parsed,
                     if enabled {
@@ -152,7 +154,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 Err(message) => report_error(&args, CliError::failed("not_found", message, 1)),
             }
         }
-        "delete" | "remove" => match client.delete_server(id.unwrap()).await {
+        "delete" | "remove" => match client.delete_server(id).await {
             Ok(data) => {
                 let human = if data["removed"] == true {
                     format!("MCP server deleted: {}.", data["id"].as_str().unwrap_or(""))
@@ -170,9 +172,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             ),
         },
         "test" | "probe" => {
-            let result = client
-                .probe_server(&id.unwrap(), &CancellationToken::new())
-                .await;
+            let result = client.probe_server(&id, &CancellationToken::new()).await;
             let server = match result {
                 Ok(server) => server,
                 Err(error) => return report_probe_failure(&parsed, error.message),

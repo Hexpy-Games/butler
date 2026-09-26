@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     btcc::{AccessMode, ModelRoundToolCall, ToolExecutionError},
     json::JsonDocument,
-    profile::{FirstChatOnboardingUpdate, ProfilingMode},
+    profile::{FirstChatOnboardingUpdate, ProfileError, ProfilingMode},
 };
 
 use super::NativeGuidedTools;
@@ -33,7 +33,7 @@ pub(super) async fn execute(
                 .profile
                 .update_first_chat_onboarding(input)
                 .await
-                .map(|value| serde_json::to_value(value).expect("profile result is serializable"))
+                .and_then(profile_value)
         }
         "summarize_user_profile" => {
             let locale = if text(&call.arguments, "locale") == Some("en") {
@@ -45,9 +45,13 @@ pub(super) async fn execute(
                 .profile
                 .reflective_summary(locale)
                 .await
-                .map(|value| serde_json::to_value(value).expect("profile summary is serializable"))
+                .and_then(profile_value)
         }
-        _ => unreachable!("profile dispatch checks supports"),
+        // Dispatch routes only supported names here.
+        _ => Err(ProfileError::new(
+            "unknown_tool",
+            "This tool is not a profile tool.",
+        )),
     };
     match result {
         Ok(value) => encoded(value),
@@ -56,6 +60,11 @@ pub(super) async fn execute(
             "message":error.message
         }})),
     }
+}
+
+fn profile_value(value: impl serde::Serialize) -> Result<Value, ProfileError> {
+    serde_json::to_value(value)
+        .map_err(|error| ProfileError::new("profile_result_invalid", error.to_string()))
 }
 
 fn onboarding_input(args: &Map<String, Value>) -> FirstChatOnboardingUpdate {

@@ -219,7 +219,9 @@ fn should_run(data_root: &std::path::Path, day: &str, minute: u16) -> bool {
 }
 
 fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
-    let parent = path.parent().expect("scheduler state has parent");
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "state path has no parent")
+    })?;
     fs::create_dir_all(parent)?;
     let temporary = parent.join(format!(".context-maintenance-{}.tmp", uuid::Uuid::new_v4()));
     let result = (|| {

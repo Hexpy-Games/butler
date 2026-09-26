@@ -139,7 +139,9 @@ async fn handle(
                     }
                 }
             }
-            let loaded = engine.as_mut().expect("engine loaded above");
+            let Some(loaded) = engine.as_mut() else {
+                return WorkerResponse::error(id, "embed_worker_unavailable");
+            };
             match request.op {
                 WorkerOperation::Initialize => Ok(WorkerResult::Ready),
                 WorkerOperation::Tokenize => loaded
@@ -153,7 +155,8 @@ async fn handle(
                         request.max_embeddings,
                     )
                     .map(|result| WorkerResult::Embedding(Box::new(result))),
-                WorkerOperation::Close => unreachable!(),
+                // Handled by the outer match.
+                WorkerOperation::Close => Ok(WorkerResult::Closed),
             }
             .unwrap_or_else(|error| WorkerResult::Error {
                 code: error.0.to_owned(),

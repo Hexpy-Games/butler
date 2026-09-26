@@ -36,7 +36,7 @@ impl PhaseExecutor for NativeCyclePhases {
     ) -> Pin<Box<dyn Future<Output = Result<Map<String, Value>, PhaseError>> + Send + 'a>> {
         Box::pin(async move {
             match phase {
-                Phase::Preflight => Ok(json!({ "ok": true }).as_object().unwrap().clone()),
+                Phase::Preflight => Ok(crate::json::json_object!({ "ok": true })),
                 Phase::FeedbackTriage => self.profile.feedback_triage(),
                 Phase::ProfileConsolidation => self.profile.consolidate(run_id, cancellation).await,
                 Phase::BoxIndex => self
@@ -44,13 +44,10 @@ impl PhaseExecutor for NativeCyclePhases {
                     .rebuild_index()
                     .await
                     .map(|report| {
-                        json!({
+                        crate::json::json_object!({
                             "indexed_count": report.indexed_count,
                             "skipped_count": report.skipped_count,
                         })
-                        .as_object()
-                        .unwrap()
-                        .clone()
                     })
                     .map_err(cognition_phase_error),
                 Phase::MemoryMetadataIntegrity => self
@@ -58,14 +55,11 @@ impl PhaseExecutor for NativeCyclePhases {
                     .check()
                     .await
                     .map(|report| {
-                        json!({
+                        crate::json::json_object!({
                             "chunk_count": report.chunk_count,
                             "missing_box_refs_count": report.missing_box_refs_count,
                             "missing_feedback_refs_count": report.missing_feedback_refs_count,
                         })
-                        .as_object()
-                        .unwrap()
-                        .clone()
                     })
                     .map_err(cognition_phase_error),
                 Phase::SourceQualityAggregation => self
@@ -73,13 +67,10 @@ impl PhaseExecutor for NativeCyclePhases {
                     .aggregate_and_rebuild()
                     .await
                     .map(|report| {
-                        json!({
+                        crate::json::json_object!({
                             "source_quality_summary_count": report.source_quality_summary_count,
                             "knowhow_indexed_count": report.knowhow_indexed_count,
                         })
-                        .as_object()
-                        .unwrap()
-                        .clone()
                     })
                     .map_err(cognition_phase_error),
                 Phase::KnowhowRevision => {
@@ -95,14 +86,11 @@ impl PhaseExecutor for NativeCyclePhases {
                         .revise(&feedback, self.feedback.as_ref())
                         .await
                         .map(|report| {
-                            json!({
+                            crate::json::json_object!({
                                 "revised_knowhow_count": report.revised_knowhow_count,
                                 "demoted_knowhow_count": report.demoted_knowhow_count,
                                 "applied_feedback_count": report.applied_feedback_count,
                             })
-                            .as_object()
-                            .unwrap()
-                            .clone()
                         })
                         .map_err(cognition_phase_error)
                 }
@@ -116,15 +104,12 @@ impl PhaseExecutor for NativeCyclePhases {
                             report.metric_status,
                             report.metric_dimensions,
                         );
-                        json!({
+                        crate::json::json_object!({
                             "memory_chunks_count": report.memory_chunks_count,
                             "vector_rows_count": report.vector_rows_count,
                             "maintenance_status": report.maintenance_status.as_str(),
                             "diagnostics_count": report.diagnostics_count,
                         })
-                        .as_object()
-                        .unwrap()
-                        .clone()
                     })
                     .map_err(cognition_phase_error),
                 Phase::NewChatBriefing => self
@@ -142,10 +127,7 @@ impl PhaseExecutor for NativeCyclePhases {
                         "ok",
                         json!({ "raw_text_included": false }),
                     );
-                    Ok(json!({ "raw_text_included": false })
-                        .as_object()
-                        .unwrap()
-                        .clone())
+                    Ok(crate::json::json_object!({ "raw_text_included": false }))
                 }
                 Phase::BoxRetention => self
                     .box_store
@@ -155,13 +137,10 @@ impl PhaseExecutor for NativeCyclePhases {
                     )
                     .await
                     .map(|report| {
-                        json!({
+                        crate::json::json_object!({
                             "expired_candidate_count": report.expired_candidate_count,
                             "pruned_box_owned_count": report.pruned_box_owned_count,
                         })
-                        .as_object()
-                        .unwrap()
-                        .clone()
                     })
                     .map_err(cognition_phase_error),
             }

@@ -81,13 +81,12 @@ fn envelope(
 ) -> String {
     format!(
         "{}\n",
-        serde_json::to_string_pretty(&json!({
+        crate::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(serde_json::Value::Null),
             "error": error,
             "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
         }))
-        .expect("JSON envelope serialization cannot fail")
     )
 }

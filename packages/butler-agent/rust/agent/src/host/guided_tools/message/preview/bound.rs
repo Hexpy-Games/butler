@@ -231,7 +231,7 @@ impl Key {
     }
     fn known(name: &str) -> Self {
         Self {
-            encoded: serde_json::to_string(name).expect("field name"),
+            encoded: serde_json::Value::from(name).to_string(),
             decoded: Some(name.into()),
         }
     }

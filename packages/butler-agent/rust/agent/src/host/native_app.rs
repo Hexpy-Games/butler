@@ -34,6 +34,8 @@ use super::{
 
 pub(crate) struct NativeAppServer {
     listener: Option<GatewayServer>,
+    /// Bound address, kept after the listener stops.
+    address: SocketAddr,
     listener_ready: Arc<AtomicBool>,
     application: Arc<AppApplication>,
     artifacts: Arc<NativeAppMessageFiles>,
@@ -41,10 +43,7 @@ pub(crate) struct NativeAppServer {
 
 impl NativeAppServer {
     pub(crate) fn local_addr(&self) -> SocketAddr {
-        self.listener
-            .as_ref()
-            .expect("App listener address is owned until stop")
-            .local_addr()
+        self.address
     }
 
     pub(crate) async fn open(
@@ -237,6 +236,7 @@ impl NativeAppServer {
             return Err(app_error(error));
         }
         Ok(Self {
+            address: server.local_addr(),
             listener: Some(server),
             listener_ready,
             application,

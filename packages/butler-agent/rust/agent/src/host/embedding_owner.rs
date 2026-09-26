@@ -314,19 +314,20 @@ async fn run_item(
     if child.is_none() {
         *child = Some(spawn_worker(&inner.executable, &inner.data_root)?);
     }
-    if !child.as_ref().expect("spawned above").initialized {
-        let process = child.as_mut().expect("spawned above");
+    if let Some(process) = child.as_mut().filter(|process| !process.initialized) {
         let initialized = tokio::select! {
             biased;
             _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),
             result = tokio::time::timeout(Duration::from_secs(300), initialize(process, item.id)) =>
                 result.unwrap_or_else(|_| Err(error("embed_worker_unavailable"))),
         };
-        if let Err(failure) = initialized {
-            kill_and_reap(child).await;
-            return Err(failure);
+        match initialized {
+            Ok(()) => process.initialized = true,
+            Err(failure) => {
+                kill_and_reap(child).await;
+                return Err(failure);
+            }
         }
-        child.as_mut().expect("initialized above").initialized = true;
     }
     // Initialization belongs to the owner. An initiating caller may have
     // timed out while the same child became ready for later live requests.
@@ -336,7 +337,9 @@ async fn run_item(
     if expired(item.deadline) {
         return Err(error("embed_request_deadline"));
     }
-    let process = child.as_mut().expect("spawned above");
+    let Some(process) = child.as_mut() else {
+        return Err(error("embed_worker_unavailable"));
+    };
     let outcome = tokio::select! {
         biased;
         _ = inner.shutdown.cancelled() => Err(error("embed_owner_closed")),

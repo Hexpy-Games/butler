@@ -158,7 +158,10 @@ fn append(output: &mut String, name: &str, raw: Option<&str>) -> Result<(), Btcc
 
 fn string(value: &str) -> String {
     let mut output = String::new();
-    crate::json::write_string(value, &mut output).expect("writing to String");
+    // Encoding a Rust string to JSON cannot fail; fall back to serde's encoding.
+    if crate::json::write_string(value, &mut output).is_err() {
+        return serde_json::Value::from(value).to_string();
+    }
     output
 }
 

@@ -123,11 +123,13 @@ pub(super) async fn upsert_app_binding(
     metadata.insert("source".into(), "native-butler-queued-app-context".into());
     metadata.insert("appSessionKind".into(), session_kind.into());
     metadata.insert("accessMode".into(), access.into());
-    let controls = envelope
-        .execution_controls
-        .as_ref()
-        .expect("verified controls")
-        .as_json();
+    let Some(controls) = envelope.execution_controls.as_ref() else {
+        return Err(NativeIngressError::new(
+            "session_binding_unavailable",
+            "Verified execution controls are missing",
+        ));
+    };
+    let controls = controls.as_json();
     metadata.insert(
         "reasoning_effort".into(),
         controls

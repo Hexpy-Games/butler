@@ -187,7 +187,11 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         Command::Show => commands::show(&profile).await,
         Command::Set => commands::set(&options.positionals[2..], &profile).await,
         Command::MigrationImport => commands::import(&options.positionals[2..], &profile).await,
-        Command::MigrationPrompt | Command::Unknown => unreachable!(),
+        // Answered before the profile opens; kept total so dispatch needs no panic.
+        Command::MigrationPrompt | Command::Unknown => Err(CliError::failed(
+            "unknown_command",
+            "personalization command is not supported here",
+        )),
     };
     profile.close().await;
     match result {

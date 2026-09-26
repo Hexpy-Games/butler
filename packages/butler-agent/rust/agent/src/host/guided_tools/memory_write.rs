@@ -34,7 +34,9 @@ pub(super) async fn execute(
     let result = match call.name.as_str() {
         "ingest_task_memory" => ingest(owner, &call.arguments),
         "update_explicit_memory" => update(owner, invocation, &call.arguments, call_id),
-        _ => unreachable!("memory write dispatch checks supports"),
+        // Dispatch routes only supported names here.
+        _ => json!({"ok":false,"error":{"code":"unknown_tool",
+            "message":"This tool is not a memory write tool."}}),
     };
     encoded(result)
 }

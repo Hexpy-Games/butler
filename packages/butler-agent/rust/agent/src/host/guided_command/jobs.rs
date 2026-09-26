@@ -58,7 +58,10 @@ impl CommandJobs {
             if state.closing {
                 return Err(error("command_jobs_closed"));
             }
-            state.active = state.active.checked_add(1).expect("command jobs overflow");
+            let Some(active) = state.active.checked_add(1) else {
+                return Err(error("command_jobs_exhausted"));
+            };
+            state.active = active;
         }
         let active = Active(Arc::clone(&self.inner));
         tokio::task::spawn_blocking(move || {

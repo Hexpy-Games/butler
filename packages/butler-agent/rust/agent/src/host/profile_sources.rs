@@ -69,11 +69,7 @@ fn project_message(message: ConversationMessageWithParts) -> CanonicalProfileMes
     let mut parts = Vec::with_capacity(message.parts.len());
     for part in &message.parts {
         let mut projected = Vec::new();
-        while scalars
-            .peek()
-            .is_some_and(|scalar| std::ptr::eq(scalar.part, part))
-        {
-            let scalar = scalars.next().unwrap();
+        while let Some(scalar) = scalars.next_if(|scalar| std::ptr::eq(scalar.part, part)) {
             projected.push(CanonicalProfileScalar {
                 pointer: scalar.pointer,
                 source_hash: scalar.hash,

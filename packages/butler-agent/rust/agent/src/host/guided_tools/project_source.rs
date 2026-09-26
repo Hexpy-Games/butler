@@ -78,10 +78,7 @@ pub(super) async fn execute(
     };
     let truncated = end < units.len();
     let next_cursor = truncated.then(|| {
-        URL_SAFE_NO_PAD.encode(
-            serde_json::to_vec(&json!({"fileId":file_id,"digest":digest,"offset":end}))
-                .expect("cursor value is serializable"),
-        )
+        URL_SAFE_NO_PAD.encode(json!({"fileId":file_id,"digest":digest,"offset":end}).to_string())
     });
     encoded(json!({
         "ok":true,"title":source.get("title").cloned().unwrap_or(Value::Null),

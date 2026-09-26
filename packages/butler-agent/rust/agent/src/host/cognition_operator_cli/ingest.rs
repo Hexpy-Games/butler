@@ -136,8 +136,7 @@ pub(super) async fn run(
         )
         .await
         {
-            Ok(()) => {
-                let service = index.as_ref().expect("index owner initialized");
+            Ok(service) => {
                 let vector_session = crate::cognition::normalize_session_id_for_storage(&format!(
                     "hot_{}",
                     chunk.chunk_id
@@ -309,28 +308,33 @@ fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProc
     .map_err(|error| error.code)
 }
 
-async fn ensure_index_owner(
+async fn ensure_index_owner<'a>(
     data_root: &std::path::Path,
     paths: &CognitionPathEnvironment,
     coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,
     embedding: &mut Option<Arc<crate::host::NativeEmbeddingOwner>>,
-    index: &mut Option<LegacyIndexService>,
-) -> Result<(), String> {
-    if embedding.is_none() {
-        *embedding = Some(Arc::new(
-            crate::host::NativeEmbeddingOwner::new(data_root.to_owned())
-                .map_err(|error| error.code)?,
-        ));
-    }
+    index: &'a mut Option<LegacyIndexService>,
+) -> Result<&'a LegacyIndexService, String> {
     if index.is_none() {
+        let owner = match embedding {
+            Some(owner) => owner.clone(),
+            None => embedding
+                .insert(Arc::new(
+                    crate::host::NativeEmbeddingOwner::new(data_root.to_owned())
+                        .map_err(|error| error.code)?,
+                ))
+                .clone(),
+        };
         *index = Some(LegacyIndexService::new(
             data_root.to_owned(),
             paths.clone(),
             coordinator,
-            embedding.as_ref().expect("embedding created").clone(),
+            owner,
         ));
     }
-    Ok(())
+    index
+        .as_ref()
+        .ok_or_else(|| "memory_index_unavailable".to_owned())
 }
 
 fn record_raw_graph(

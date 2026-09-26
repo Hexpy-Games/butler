@@ -73,13 +73,12 @@ pub(super) fn render_error(
 fn envelope(ok: bool, command: &str, data: Option<Value>, error: Option<Value>) -> String {
     format!(
         "{}\n",
-        serde_json::to_string_pretty(&json!({
+        crate::json::pretty(&json!({
             "ok": ok,
             "command": command,
             "data": data.unwrap_or(Value::Null),
             "error": error,
             "privacy": { "rawTextIncluded": false, "secretsIncluded": false }
         }))
-        .expect("JSON envelope serialization cannot fail")
     )
 }

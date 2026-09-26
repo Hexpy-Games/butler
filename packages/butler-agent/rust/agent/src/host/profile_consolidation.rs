@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -18,10 +18,7 @@ pub(super) struct ProfileConsolidation {
 impl ProfileConsolidation {
     pub(super) fn feedback_triage(&self) -> Result<Map<String, Value>, PhaseError> {
         let counts = self.feedback.counts(now_ms()).map_err(feedback_error)?;
-        Ok(json!({"active_feedback_count":counts.active_count})
-            .as_object()
-            .expect("triage metrics object")
-            .clone())
+        Ok(crate::json::json_object!({"active_feedback_count":counts.active_count}))
     }
 
     pub(super) async fn consolidate(
@@ -38,16 +35,13 @@ impl ProfileConsolidation {
             .await
             .map_err(profile_error)?;
         if consent.mode == ProfilingMode::Off {
-            return Ok(json!({
+            return Ok(crate::json::json_object!({
                 "profiling_enabled":false,
                 "profile_feedback_count":feedback_count,
                 "captured_candidate_count":0,
                 "applied_feedback_count":0,
                 "raw_text_included":false,
-            })
-            .as_object()
-            .expect("disabled metrics object")
-            .clone());
+            }));
         }
         let capture = self
             .profile
@@ -68,16 +62,13 @@ impl ProfileConsolidation {
             .consolidate_profile_candidates()
             .await
             .map_err(profile_error)?;
-        let mut metrics = serde_json::to_value(consolidated)
-            .map_err(|_| PhaseError {
-                code: "consolidation_profile_metrics_failed",
-                message: "consolidation_profile_metrics_failed".into(),
-                metrics: Map::new(),
-            })?
-            .as_object()
-            .cloned()
-            .expect("profile consolidation metrics object");
-        let more = json!({
+        let mut consolidated = serde_json::to_value(consolidated).map_err(|_| PhaseError {
+            code: "consolidation_profile_metrics_failed",
+            message: "consolidation_profile_metrics_failed".into(),
+            metrics: Map::new(),
+        })?;
+        let mut metrics = std::mem::take(crate::json::object_mut(&mut consolidated));
+        let more = crate::json::json_object!({
             "profile_feedback_count":feedback_count,
             "transcript_since":Value::Null,
             "semantic_scanned_session_count":capture.semantic_scanned_session_count,
@@ -102,7 +93,7 @@ impl ProfileConsolidation {
             "applied_feedback_count":0,
             "raw_text_included":false,
         });
-        metrics.extend(more.as_object().expect("capture metrics object").clone());
+        metrics.extend(more);
         if capture.model_error.is_some() {
             return Err(PhaseError {
                 code: "profile_consolidation_incomplete_coverage",

@@ -449,8 +449,7 @@ fn failure(
 fn envelope(ok: bool, command: &str, data: Value, error: Option<Value>) -> String {
     format!(
         "{}\n",
-        serde_json::to_string_pretty(&json!({"ok":ok,"command":command,"data":data,
+        crate::json::pretty(&json!({"ok":ok,"command":command,"data":data,
         "error":error,"privacy":{"rawTextIncluded":false,"secretsIncluded":false}}))
-        .unwrap()
     )
 }

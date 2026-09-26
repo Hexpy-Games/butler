@@ -269,7 +269,10 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
                 );
                 (json!({"automation":automation}), human)
             }),
-        Command::MissingId(_) | Command::Unknown => unreachable!(),
+        // Rejected above; kept total so dispatch needs no panic.
+        Command::MissingId(_) | Command::Unknown => Err(CliError::invalid(
+            "automation requires list, show <id>, run <id>, or delete <id>",
+        )),
     };
     match result {
         Ok((data, human)) => report_success(&options, command_name, data, &human),

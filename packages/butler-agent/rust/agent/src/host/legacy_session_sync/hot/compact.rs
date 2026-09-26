@@ -11,7 +11,8 @@ struct Block<'a> {
 pub(super) fn compact(raw: &str, max_bytes: usize) -> String {
     let (legacy, blocks) = parse_blocks(raw);
     let now: DateTime<Utc> = std::time::SystemTime::now().into();
-    let mut structured: Vec<Block<'_>> = blocks
+    // Structured blocks that are still valid, as (body, entry).
+    let mut structured: Vec<(&str, &Value)> = blocks
         .iter()
         .filter_map(|block| {
             let entry = block.entry.as_ref()?;
@@ -20,15 +21,10 @@ pub(super) fn compact(raw: &str, max_bytes: usize) -> String {
                 .and_then(Value::as_str)
                 .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
                 .is_none_or(|until| until.with_timezone(&Utc) > now);
-            valid.then_some(Block {
-                body: block.body,
-                entry: block.entry.clone(),
-            })
+            valid.then_some((block.body, entry))
         })
         .collect();
-    structured.sort_by(|left, right| {
-        let l = left.entry.as_ref().expect("structured");
-        let r = right.entry.as_ref().expect("structured");
+    structured.sort_by(|(_, l), (_, r)| {
         rank(l)
             .cmp(&rank(r))
             .then_with(|| string(r, "source_time").cmp(string(l, "source_time")))
@@ -36,12 +32,12 @@ pub(super) fn compact(raw: &str, max_bytes: usize) -> String {
     });
     let mut admitted: Vec<String> = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for block in structured {
-        let entry_id = string(block.entry.as_ref().expect("structured"), "entry_id");
+    for (body, entry) in structured {
+        let entry_id = string(entry, "entry_id");
         if !seen.insert(entry_id.to_owned()) {
             continue;
         }
-        let body = block.body.trim_end();
+        let body = body.trim_end();
         let candidate = serialize(
             admitted
                 .iter()

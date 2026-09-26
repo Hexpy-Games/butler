@@ -73,10 +73,7 @@ impl RecallMetricSink for RecallMetrics {
                     "context_executed": context_executed,
                 });
                 if v_ann_distance.is_none() {
-                    dimensions
-                        .as_object_mut()
-                        .expect("object literal")
-                        .remove("v_ann_distance");
+                    crate::json::object_mut(&mut dimensions).remove("v_ann_distance");
                 }
                 (
                     "recall_v2_ranking",

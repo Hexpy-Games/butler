@@ -30,6 +30,12 @@ macro_rules! json_object {
 }
 pub(crate) use json_object;
 
+/// Pretty-prints a JSON value. Writing a `Value` to memory cannot fail; the
+/// compact form is the fallback regardless.
+pub(crate) fn pretty(value: &Value) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+}
+
 /// `value` as a mutable object; any other value is first replaced by `{}`.
 pub(crate) fn object_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
     match value {

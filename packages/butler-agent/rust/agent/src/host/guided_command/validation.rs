@@ -26,7 +26,8 @@ fn valid_with_markers(units: &[u16], next_marker: &mut u32, forbidden: &[u16]) -
                 {
                     *next_marker += 1;
                 }
-                let character = char::from_u32(*next_marker).expect("private-use marker");
+                // Markers are private-use scalars, which are always valid chars.
+                let character = char::from_u32(*next_marker).unwrap_or(char::REPLACEMENT_CHARACTER);
                 valid.push(character);
                 escaped_units.push((character, error.unpaired_surrogate()));
                 *next_marker += 1;

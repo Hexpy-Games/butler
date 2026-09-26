@@ -142,7 +142,9 @@ pub(super) async fn execute(
             value["ok"] = json!(true);
             value
         }
-        _ => unreachable!("monitoring dispatch checks supports"),
+        // Dispatch routes only supported names here.
+        _ => json!({"ok":false,"error":{"code":"unknown_tool",
+            "message":"This tool is not a monitoring tool."}}),
     };
     JsonDocument::from_value(&result).map_err(|error| {
         ToolExecutionError::Integrity(BtccError::new(

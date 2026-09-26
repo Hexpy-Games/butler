@@ -186,11 +186,15 @@ impl NativeGuidedActivity {
             } else {
                 state.managed = true;
             }
-            let group = state.groups.get(&group_id).expect("activity group exists");
+            // Every group id above names a created group.
+            let (stage, deferred) = state
+                .groups
+                .get(&group_id)
+                .map_or((None, false), |group| (group.stage, group.deferred));
             let binding = ActivityBinding {
                 id: group_id.clone(),
-                stage: group.stage,
-                deferred: group.deferred,
+                stage,
+                deferred,
             };
             let events = if (state.managed || batch_managed) && !binding.deferred {
                 publish(&mut state, &group_id, &self.turn_id, &self.source_revision)

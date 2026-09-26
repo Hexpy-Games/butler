@@ -320,9 +320,18 @@ fn should_open_browser() -> bool {
 }
 
 async fn cancellation() {
-    let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .expect("SIGTERM listener");
-    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-        .expect("SIGINT listener");
-    tokio::select! { _ = term.recv() => {}, _ = interrupt.recv() => {} }
+    use tokio::signal::unix::{SignalKind, signal};
+    // A signal whose listener cannot be installed simply never cancels.
+    let term = signal(SignalKind::terminate()).ok();
+    let interrupt = signal(SignalKind::interrupt()).ok();
+    tokio::select! { () = received(term) => {}, () = received(interrupt) => {} }
+}
+
+async fn received(listener: Option<tokio::signal::unix::Signal>) {
+    match listener {
+        Some(mut listener) => {
+            listener.recv().await;
+        }
+        None => std::future::pending().await,
+    }
 }

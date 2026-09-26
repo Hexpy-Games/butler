@@ -25,7 +25,9 @@ pub(super) async fn execute(
         _ => return Ok(None),
     };
     let id = text(args.get("id")).to_owned();
-    'replan: for refreshes in 0..=1 {
+    // One replan is allowed when a transition races a concurrent status change.
+    let mut refreshes = 0;
+    'replan: loop {
         let shown = command(
             ledger,
             root,
@@ -79,6 +81,7 @@ pub(super) async fn execute(
             executed.push(json!({"command":format!("{kind} update --id {id} --status {next}")}));
             if updated.get("ok") != Some(&Value::Bool(true)) {
                 if refreshes == 0 && error_code(&updated) == "invalid_transition" {
+                    refreshes += 1;
                     continue 'replan;
                 }
                 return Ok(Some(with_plan(recoverable(updated), executed, refreshes)));
@@ -88,11 +91,11 @@ pub(super) async fn execute(
         executed.push(json!({"command":final_summary(kind, &id, args)}));
         let result = with_plan(recoverable(result), executed, refreshes);
         if refreshes == 0 && error_code(&result) == "invalid_transition" {
+            refreshes += 1;
             continue;
         }
         return Ok(Some(result));
     }
-    unreachable!("bounded replan returns on its second pass")
 }
 
 /// Successful lifecycle mutations retain their result; failed derived views retain it under mutation_result.
