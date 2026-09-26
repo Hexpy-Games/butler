@@ -19,16 +19,17 @@ use super::gateway_lifecycle::{
 };
 use super::native_ingress::NativeIngressDispatcher;
 use super::restart_handoff::NativeRestartHandoff;
+mod maintenance;
 mod support;
 use super::service_delivery::NativeAppDelivery;
 use super::{
     NativeAgentRuntime, NativeProcessEnvironment, NativeProgressPublisher, NativeRuntimePaths,
     NativeServiceConfiguration, ResolvedInstallation, SystemIdentity, require_model_ref,
 };
-use support::{close_runtime, deliver_parent_results, failure, io, process_locale};
+use maintenance::{maintenance_join_result, run_service_maintenance, unexpected_maintenance_exit};
+use support::{close_runtime, failure, io, process_locale};
 
 const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
-const SERVICE_MAINTENANCE_INTERVAL: Duration = Duration::from_millis(500);
 
 /// The product binary's sole entrypoint; domains remain crate-private.
 pub async fn run_native_service(installation: ResolvedInstallation) -> Result<String, String> {
@@ -430,70 +431,6 @@ async fn poll_service(owners: PollOwners<'_>, shutdown: PollShutdown) -> Result<
         None => Ok(()),
     };
     result.and(maintenance_result)
-}
-
-async fn run_service_maintenance(
-    progress: Arc<NativeProgressPublisher>,
-    parent_client: reqwest::Client,
-    subsessions: crate::btcc::SqliteSubsessionRepository,
-    app_endpoint: NativeActiveAppEndpoint,
-    mut stop: oneshot::Receiver<()>,
-) -> Result<(), BtccError> {
-    let mut interval = tokio::time::interval(SERVICE_MAINTENANCE_INTERVAL);
-    interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    loop {
-        tokio::select! {
-            biased;
-            _ = &mut stop => return Ok(()),
-            _ = interval.tick() => {},
-        }
-        let pass = async {
-            progress.reconcile().await?;
-            if let Some(active) = app_endpoint.snapshot() {
-                deliver_parent_results(
-                    &parent_client,
-                    &subsessions,
-                    &active.base_url,
-                    &active.local_auth,
-                )
-                .await?;
-            }
-            Ok::<(), BtccError>(())
-        };
-        tokio::select! {
-            biased;
-            _ = &mut stop => return Ok(()),
-            result = pass => result?,
-        }
-    }
-}
-
-fn maintenance_join_result(
-    joined: Result<Result<(), BtccError>, tokio::task::JoinError>,
-) -> Result<(), BtccError> {
-    match joined {
-        Ok(result) => result,
-        Err(_) => Err(failure(
-            "native_service_maintenance_failed",
-            "Native service maintenance task failed",
-        )),
-    }
-}
-
-fn unexpected_maintenance_exit(
-    joined: Option<Result<Result<(), BtccError>, tokio::task::JoinError>>,
-) -> Result<(), BtccError> {
-    match joined {
-        Some(Ok(Err(error))) => Err(error),
-        Some(Err(_)) => Err(failure(
-            "native_service_maintenance_failed",
-            "Native service maintenance task failed",
-        )),
-        Some(Ok(Ok(()))) | None => Err(failure(
-            "native_service_maintenance_stopped",
-            "Native service maintenance stopped unexpectedly",
-        )),
-    }
 }
 
 async fn wait_for_foreground_close(lease: Option<&ForegroundLease>) -> Result<(), String> {
