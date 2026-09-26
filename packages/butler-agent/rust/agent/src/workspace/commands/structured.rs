@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use super::decode::Utf8Decoder;
-use super::process::{FORCE_SETTLEMENT_GRACE, TERMINATION_GRACE, signal_pid};
+use super::process::{FORCE_SETTLEMENT_GRACE, ProcessHost, TERMINATION_GRACE};
 use super::{CommandError, StructuredCommandInput, StructuredCommandOutput};
 
 mod invocation;
@@ -18,18 +18,20 @@ use result::{bounded_timeout, pipeline_exit, result};
 use streams::{StreamChunk, StreamKind, read_stream};
 
 pub(super) async fn dispatch(
+    host: &dyn ProcessHost,
     input: StructuredCommandInput,
     shutdown: CancellationToken,
     completion: oneshot::Sender<StructuredCommandOutput>,
 ) {
     let mut completion = Some(completion);
-    let output = execute(input, shutdown, &mut completion).await;
+    let output = execute(host, input, shutdown, &mut completion).await;
     if let Some(sender) = completion {
         let _ = sender.send(output);
     }
 }
 
 async fn execute(
+    host: &dyn ProcessHost,
     input: StructuredCommandInput,
     shutdown: CancellationToken,
     completion: &mut Option<oneshot::Sender<StructuredCommandOutput>>,
@@ -102,15 +104,7 @@ async fn execute(
     let environment = environment(&input);
     let mut children = Vec::with_capacity(steps.len());
     let mut pids = Vec::with_capacity(steps.len());
-    for (index, step) in steps.iter().enumerate() {
-        #[cfg(test)]
-        if index == 1
-            && let Some(gate) = &input.test_pause_before_second_spawn
-        {
-            gate.notified().await;
-        }
-        #[cfg(not(test))]
-        let _ = index;
+    for step in &steps {
         let mut command = Command::new(&step.executable);
         command
             .args(&step.arguments)
@@ -128,7 +122,7 @@ async fn execute(
             use std::os::unix::process::CommandExt;
             command.as_std_mut().process_group(0);
         }
-        match command.spawn() {
+        match host.spawn(&mut command).await {
             Ok(child) => {
                 pids.push(child.id().expect("spawned child has pid"));
                 children.push(child);
@@ -136,7 +130,7 @@ async fn execute(
             Err(spawn_error) => {
                 let mut cleanup_error = None;
                 for child in &mut children {
-                    if let Err(error) = super::process::terminate_and_reap(child).await
+                    if let Err(error) = super::process::terminate_and_reap(host, child).await
                         && cleanup_error.is_none()
                     {
                         cleanup_error = Some(error);
@@ -233,24 +227,20 @@ async fn execute(
         .map(|_| Utf8Decoder::default())
         .collect();
     let mut streams_done = false;
-    #[cfg(test)]
-    let late_reap = input.test_late_reap.clone();
-    #[cfg(not(test))]
-    let late_reap: Option<std::sync::Arc<tokio::sync::Notify>> = None;
     let mut public_settled = false;
     loop {
         for index in 0..children.len() {
             if statuses[index].is_none() {
-                match children[index].try_wait() {
+                match host.try_wait(&mut children[index]) {
                     Ok(Some(status)) => statuses[index] = Some(status),
                     Ok(None) => {}
                     Err(error) => {
                         for pid in &pids {
-                            let _ = signal_pid(*pid, true);
+                            let _ = host.signal_group(*pid, true);
                         }
                         for child in &mut children {
                             let _ = child.start_kill();
-                            let _ = child.wait().await;
+                            let _ = host.wait(child).await;
                         }
                         for task in io_tasks {
                             task.abort();
@@ -270,11 +260,7 @@ async fn execute(
             }
         }
         let all_reaped = statuses.iter().all(Option::is_some);
-        if all_reaped
-            && streams_done
-            && io_tasks.iter().all(tokio::task::JoinHandle::is_finished)
-            && !(late_reap.is_some() && first_termination.is_some() && !public_settled)
-        {
+        if all_reaped && streams_done && io_tasks.iter().all(tokio::task::JoinHandle::is_finished) {
             break;
         }
         tokio::select! {
@@ -292,23 +278,23 @@ async fn execute(
             }
             _ = tokio::time::sleep_until(deadline), if !timeout_fired => {
                 timeout_fired = true;
-                request_termination(&pids, &mut first_termination);
+                request_termination(host, &pids, &mut first_termination);
             }
             _ = input.abort.cancelled(), if !cancelled => {
                 cancelled = true;
-                request_termination(&pids, &mut first_termination);
+                request_termination(host, &pids, &mut first_termination);
             }
             _ = shutdown.cancelled(), if !closing => {
                 cancelled = true;
                 closing = true;
-                request_termination(&pids, &mut first_termination);
+                request_termination(host, &pids, &mut first_termination);
             }
             _ = tokio::time::sleep(Duration::from_millis(10)) => {},
         }
         if let Some(when) = first_termination {
             if !forced && tokio::time::Instant::now() >= when + TERMINATION_GRACE {
                 for pid in &pids {
-                    let _ = signal_pid(*pid, true);
+                    let _ = host.signal_group(*pid, true);
                 }
                 forced = true;
             }
@@ -329,11 +315,9 @@ async fn execute(
                     let _ = sender.send(output);
                 }
                 public_settled = true;
+                // The owner stays active until every child is reaped.
                 for child in &mut children {
                     let _ = child.start_kill();
-                }
-                if let Some(gate) = &late_reap {
-                    gate.notified().await;
                 }
             }
         }
@@ -377,9 +361,13 @@ async fn execute(
     )
 }
 
-fn request_termination(pids: &[u32], first: &mut Option<tokio::time::Instant>) {
+fn request_termination(
+    host: &dyn ProcessHost,
+    pids: &[u32],
+    first: &mut Option<tokio::time::Instant>,
+) {
     for pid in pids {
-        let _ = signal_pid(*pid, false);
+        let _ = host.signal_group(*pid, false);
     }
     if first.is_none() {
         *first = Some(tokio::time::Instant::now());

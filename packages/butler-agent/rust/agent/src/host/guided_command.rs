@@ -198,10 +198,6 @@ impl NativeGuidedCommand {
                         pipefail: true,
                         read_only_installation_root: scope.installation_root.map(Path::to_path_buf),
                     }),
-                    #[cfg(test)]
-                    test_late_reap: None,
-                    #[cfg(test)]
-                    test_pause_before_second_spawn: None,
                 })
                 .map_err(|e| BtccError::new(e.code, e.message))?
                 .await
@@ -241,10 +237,6 @@ impl NativeGuidedCommand {
             access: GuidedAccess::ReadOnlyObservation,
             host_environment: (*self.host_environment).clone(),
             abort: scope.abort,
-            #[cfg(test)]
-            test_capture_fail_after_first_chunk: false,
-            #[cfg(test)]
-            test_late_reap: None,
         };
         let spooled = self
             .commands

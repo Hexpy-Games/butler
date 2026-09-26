@@ -156,10 +156,6 @@ impl EffectAdapter for CommandEffectAdapter {
                     access: GuidedAccess::FullAccessContained,
                     host_environment: (*self.host_environment).clone(),
                     abort: signal.clone(),
-                    #[cfg(test)]
-                    test_capture_fail_after_first_chunk: false,
-                    #[cfg(test)]
-                    test_late_reap: None,
                 })
                 .map_err(|error| crate::btcc::EffectFailure::adapter(error.message))?
                 .await

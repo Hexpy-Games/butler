@@ -1,11 +1,116 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::task::{Context, Poll};
 
+use tokio::io::AsyncWrite;
+use tokio::process::{Child, Command};
+use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
+use super::process::{CaptureSink, ProcessFuture, ProcessHost, signal_pid};
 use super::{
-    CommandStep, GuidedAccess, GuidedCommandInput, NativeCommands, StructuredCommandInput,
+    CommandError, CommandStep, GuidedAccess, GuidedCommandInput, NativeCommands,
+    StructuredCommandInput,
 };
+
+/// Real processes with the conditions the lifecycle tests depend on made
+/// deterministic: a child that ignores SIGTERM from the first instant, a
+/// child that is not reaped until the test releases it, a pause before a
+/// pipeline step spawns, and a spool writer that fails.
+#[derive(Default)]
+struct ScriptedProcesses {
+    ignore_term: bool,
+    reaping: Option<watch::Receiver<bool>>,
+    before_second_spawn: Option<Arc<Notify>>,
+    spawns: AtomicUsize,
+    failing_capture: bool,
+}
+
+impl ScriptedProcesses {
+    fn reaped_on_release() -> (Self, watch::Sender<bool>) {
+        let (release, reaping) = watch::channel(false);
+        let host = Self {
+            ignore_term: true,
+            reaping: Some(reaping),
+            ..Self::default()
+        };
+        (host, release)
+    }
+
+    fn reaping_released(&self) -> bool {
+        self.reaping
+            .as_ref()
+            .is_none_or(|reaping| *reaping.borrow())
+    }
+}
+
+impl ProcessHost for ScriptedProcesses {
+    fn spawn<'a>(&'a self, command: &'a mut Command) -> ProcessFuture<'a, std::io::Result<Child>> {
+        Box::pin(async move {
+            if self.spawns.fetch_add(1, Ordering::SeqCst) == 1
+                && let Some(gate) = &self.before_second_spawn
+            {
+                gate.notified().await;
+            }
+            command.spawn()
+        })
+    }
+
+    fn signal_group(&self, pid: u32, force: bool) -> Result<(), CommandError> {
+        if self.ignore_term && !force {
+            return Ok(());
+        }
+        signal_pid(pid, force)
+    }
+
+    fn wait<'a>(
+        &'a self,
+        child: &'a mut Child,
+    ) -> ProcessFuture<'a, std::io::Result<std::process::ExitStatus>> {
+        Box::pin(async move {
+            if let Some(reaping) = &self.reaping {
+                let _ = reaping.clone().wait_for(|released| *released).await;
+            }
+            child.wait().await
+        })
+    }
+
+    fn try_wait(&self, child: &mut Child) -> std::io::Result<Option<std::process::ExitStatus>> {
+        if !self.reaping_released() {
+            return Ok(None);
+        }
+        child.try_wait()
+    }
+
+    fn capture_sink(&self, file: tokio::fs::File) -> CaptureSink {
+        if self.failing_capture {
+            Box::new(FailingSink)
+        } else {
+            Box::new(file)
+        }
+    }
+}
+
+struct FailingSink;
+
+impl AsyncWrite for FailingSink {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Poll::Ready(Err(std::io::Error::other("spool device full")))
+    }
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+    fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
 
 struct Fixture(PathBuf);
 impl Fixture {
@@ -29,8 +134,6 @@ impl Fixture {
             access: GuidedAccess::FullAccessContained,
             host_environment,
             abort: CancellationToken::new(),
-            test_capture_fail_after_first_chunk: false,
-            test_late_reap: None,
         }
     }
     fn structured(&self, steps: Vec<CommandStep>) -> StructuredCommandInput {
@@ -44,8 +147,6 @@ impl Fixture {
             timeout_ms: None,
             abort: CancellationToken::new(),
             legacy: None,
-            test_late_reap: None,
-            test_pause_before_second_spawn: None,
         }
     }
 }
@@ -148,13 +249,10 @@ async fn caller_drop_does_not_cancel_owned_child() {
     let marker = fixture.0.join("done");
     let command = format!("sleep 0.05; printf x > '{}'", marker.display());
     drop(owner.submit_guided(fixture.guided(&command)).unwrap());
-    tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        while owner.active_count() != 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
+    crate::testing::eventually("the dropped command to finish", || {
+        owner.active_count() == 0
     })
-    .await
-    .unwrap();
+    .await;
     assert_eq!(std::fs::read(&marker).unwrap(), b"x");
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
@@ -226,3 +324,34 @@ async fn structured_preabort_and_legacy_pipefail() {
 }
 
 mod lifecycle;
+
+/// Darwin answers `killpg` with EPERM once every member of the group is a
+/// zombie; termination must treat such a group as already gone.
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn signalling_a_group_of_only_zombies_succeeds() {
+    use std::os::unix::process::CommandExt;
+
+    use libproc::bsd_info::BSDInfo;
+    use libproc::proc_pid::pidinfo;
+    use nix::errno::Errno;
+    use nix::sys::signal::{Signal, killpg};
+    use nix::unistd::Pid;
+
+    let mut leader = std::process::Command::new("/usr/bin/true")
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let pid = leader.id();
+    // Not reaped: the exited leader stays a zombie of this process.
+    crate::testing::eventually("the unreaped leader to exit", || {
+        pidinfo::<BSDInfo>(pid as i32, 0).is_err()
+    })
+    .await;
+    assert_eq!(
+        killpg(Pid::from_raw(pid as i32), Signal::SIGKILL),
+        Err(Errno::EPERM)
+    );
+    assert_eq!(signal_pid(pid, true), Ok(()));
+    leader.wait().unwrap();
+}

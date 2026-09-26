@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use super::process::{CaptureSink, ProcessHost};
 use super::{CommandError, GuidedSummary, SpooledPayload};
 
 pub(super) struct Spool {
@@ -53,9 +54,9 @@ impl Spool {
 
     pub(super) fn capture(
         self,
+        host: &dyn ProcessHost,
         stdout: ChildStdout,
         stderr: ChildStderr,
-        fail_after_first_chunk: bool,
     ) -> (SpoolPaths, Capture) {
         let paths = SpoolPaths {
             stdout: self.stdout_path,
@@ -66,17 +67,15 @@ impl Spool {
         let stop = CancellationToken::new();
         let stdout_task = tokio::spawn(report_copy(
             stdout,
-            self.stdout_file,
+            host.capture_sink(self.stdout_file),
             failure_tx.clone(),
             stop.clone(),
-            fail_after_first_chunk,
         ));
         let stderr_task = tokio::spawn(report_copy(
             stderr,
-            self.stderr_file,
+            host.capture_sink(self.stderr_file),
             failure_tx,
             stop.clone(),
-            false,
         ));
         (
             paths,
@@ -209,7 +208,7 @@ async fn exclusive(path: &Path) -> Result<File, CommandError> {
 
 async fn copy_pipe<R: AsyncRead + Unpin>(
     mut reader: R,
-    mut writer: File,
+    mut writer: CaptureSink,
     stop: CancellationToken,
 ) -> std::io::Result<()> {
     let mut bytes = [0_u8; 8192];
@@ -228,22 +227,11 @@ async fn copy_pipe<R: AsyncRead + Unpin>(
 
 async fn report_copy<R: AsyncRead + Unpin>(
     reader: R,
-    writer: File,
+    writer: CaptureSink,
     failure: mpsc::Sender<CommandError>,
     stop: CancellationToken,
-    fail_after_first_chunk: bool,
 ) -> std::io::Result<()> {
-    #[cfg(test)]
-    let result = if fail_after_first_chunk {
-        copy_pipe_with_fault(reader, writer).await
-    } else {
-        copy_pipe(reader, writer, stop).await
-    };
-    #[cfg(not(test))]
-    let result = {
-        let _ = fail_after_first_chunk;
-        copy_pipe(reader, writer, stop).await
-    };
+    let result = copy_pipe(reader, writer, stop).await;
     if let Err(error) = &result {
         let _ = failure
             .send(CommandError::new(
@@ -253,21 +241,6 @@ async fn report_copy<R: AsyncRead + Unpin>(
             .await;
     }
     result
-}
-
-#[cfg(test)]
-async fn copy_pipe_with_fault<R: AsyncRead + Unpin>(
-    mut reader: R,
-    mut writer: File,
-) -> std::io::Result<()> {
-    let mut bytes = [0_u8; 8192];
-    let count = reader.read(&mut bytes).await?;
-    if count != 0 {
-        writer.write_all(&bytes[..count]).await?;
-    }
-    Err(std::io::Error::other(
-        "injected command capture write failure",
-    ))
 }
 
 async fn copy_payload(path: &Path, payload: &mut File, size: &mut u64) -> Result<(), CommandError> {
