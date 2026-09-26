@@ -1,11 +1,11 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Button } from "../../components/Button";
 import { Section } from "../../components/Section";
 import { SegmentedControl } from "../../components/SegmentedControl";
 import { Spinner } from "../../components/Spinner";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import type { ShowcaseRenderContext } from "../../showcase";
+import type { ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
 import type { ShowcaseEntry } from "../../showcase/collectShowcaseEntries";
 import { tokenCatalog } from "../foundations/catalog";
 import { PageHeader } from "../parts";
@@ -31,25 +31,38 @@ const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["components/Toast", "Motion", "Toasts: drop in, stack, leave faster"],
 ];
 
-function useReplay(): [boolean, () => void] {
-  const [on, setOn] = useState(false);
+/**
+ * Replay by remount: bumping `run` changes the demos' keys, so the browser
+ * mounts new nodes and their CSS animations start again from the first frame.
+ * (Flipping an attribute off and on reverses a running transition instead.)
+ */
+function useReplay(): [number, () => void] {
   const [run, setRun] = useState(0);
-  useEffect(() => {
-    setOn(false);
-    const frame = requestAnimationFrame(() => requestAnimationFrame(() => setOn(true)));
-    return () => cancelAnimationFrame(frame);
-  }, [run]);
-  return [on, () => setRun((value) => value + 1)];
+  return [run, () => setRun((value) => value + 1)];
 }
 
-function Track({ name, duration, easing, on }: { name: string; duration: string; easing: string; on: boolean }) {
+function Track({ name, duration, easing, run }: { name: string; duration: string; easing: string; run: number }) {
   const style = { "--motion-duration": duration, "--motion-easing": easing } as CSSProperties;
   return (
     <Stack gap="xs" data-ds-motion-token={name}>
       <Stack align="row" justify="between" gap="sm"><Typo.Code>{name}</Typo.Code>
         <Typo.Caption tone="tertiary">{tokenCatalog.find((token) => token.name === name)?.light ?? ""}</Typo.Caption></Stack>
-      <div className={styles.motionTrack} data-on={on} style={style}><span className={styles.motionDot} /></div>
+      <div className={styles.motionTrack} data-ds-motion-demo data-ds-motion-run={run} key={run} style={style}><span className={styles.motionDot} /></div>
     </Stack>
+  );
+}
+
+/** A component story card with its own Replay: remounting the story restarts its enter motion. */
+function ComponentStoryCard({ id, title, story, locale }: { id: string; title: string; story: ShowcaseStory; locale: AppLocale }) {
+  const [run, replay] = useReplay();
+  return (
+    <div className={styles.card} data-ds-motion-component={id}>
+      <Section title={title} actions={<Button size="xs" variant="borderless" text="Replay" data-ds-motion="story" onClick={replay} />}>
+        <div data-ds-motion-demo data-ds-motion-run={run} key={run}>
+          <StoryCanvas story={story} locale={locale === "ko-KR" ? "ko" : "en"} />
+        </div>
+      </Section>
+    </div>
   );
 }
 
@@ -60,9 +73,9 @@ export function MotionPage({ entries, locale, state, onChange }: {
   onChange: (patch: Partial<ViewerState>) => void;
   onOpen: (page: string) => void;
 }) {
-  const [durationsOn, replayDurations] = useReplay();
-  const [easingsOn, replayEasings] = useReplay();
-  const [shiftOn, replayShift] = useReplay();
+  const [durationsRun, replayDurations] = useReplay();
+  const [easingsRun, replayEasings] = useReplay();
+  const [shiftRun, replayShift] = useReplay();
   const group = (name: string) => tokenCatalog.filter((token) => token.category === "motion" && token.group === name);
   return (
     <Stack gap="2xl" data-ds-motion-page>
@@ -76,22 +89,22 @@ export function MotionPage({ entries, locale, state, onChange }: {
       </PageHeader>
       <Section title="Durations" titleAs="h2" description="Each dot travels the same track with the standard easing; exits run about 0.7×."
         actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="durations" onClick={replayDurations} />}>
-        <div className={styles.cardGrid}>
-          {group("Durations").map((token) => <Track key={token.name} name={token.name} duration={`var(${token.name})`} easing="var(--motion-ease-standard)" on={durationsOn} />)}
+        <div className={styles.cardGrid} data-ds-motion-group="durations">
+          {group("Durations").map((token) => <Track key={token.name} name={token.name} duration={`var(${token.name})`} easing="var(--motion-ease-standard)" run={durationsRun} />)}
         </div>
       </Section>
       <Section title="Easings" titleAs="h2" description="Played at three times --motion-deliberate so the curve is visible."
         actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="easings" onClick={replayEasings} />}>
-        <div className={styles.cardGrid}>
-          {group("Easings").map((token) => <Track key={token.name} name={token.name} duration="calc(var(--motion-deliberate) * 3)" easing={`var(${token.name})`} on={easingsOn} />)}
+        <div className={styles.cardGrid} data-ds-motion-group="easings">
+          {group("Easings").map((token) => <Track key={token.name} name={token.name} duration="calc(var(--motion-deliberate) * 3)" easing={`var(${token.name})`} run={easingsRun} />)}
         </div>
       </Section>
       <Section title="Distances and scales" titleAs="h2" description="Travel and scale are tokens, so reduced motion zeroes them globally."
         actions={<Button size="sm" variant="outline" text="Replay" data-ds-motion="distances" onClick={replayShift} />}>
-        <Stack align="row" gap="xl" wrap>
+        <Stack align="row" gap="xl" wrap data-ds-motion-group="distances">
           {group("Distances and scales").map((token) => (
             <Stack gap="xs" cross="center" key={token.name} data-ds-motion-token={token.name}>
-              <span className={styles.motionBox} data-on={shiftOn} style={{ [token.name.includes("distance") ? "--sample" : "--sample-scale"]: `var(${token.name})` } as CSSProperties} />
+              <span className={styles.motionBox} data-ds-motion-demo data-ds-motion-run={shiftRun} key={shiftRun} style={{ [token.name.includes("distance") ? "--sample" : "--sample-scale"]: `var(${token.name})` } as CSSProperties} />
               <Typo.Code>{token.name}</Typo.Code>
             </Stack>
           ))}
@@ -108,9 +121,7 @@ export function MotionPage({ entries, locale, state, onChange }: {
           {COMPONENT_STORIES.map(([id, storyName, title]) => {
             const story = entries.find((entry) => entry.id === id)?.stories.find((item) => item.name === storyName);
             return story ? (
-              <div className={styles.card} data-ds-motion-component={id} key={`${id}#${storyName}`}>
-                <Section title={title}><StoryCanvas story={story} locale={locale === "ko-KR" ? "ko" : "en"} /></Section>
-              </div>
+              <ComponentStoryCard key={`${id}#${storyName}`} id={id} title={title} story={story} locale={locale} />
             ) : null;
           })}
         </div>

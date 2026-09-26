@@ -552,8 +552,10 @@
   overflow: hidden;
   border-radius: var(--radius-pill);
   background: var(--selection);
+  container-type: inline-size;
 }
 
+/* Demos animate on mount; Replay remounts them (MotionPage useReplay). */
 .motionDot {
   position: absolute;
   top: calc(50% - var(--space-sm));
@@ -562,12 +564,9 @@
   height: var(--space-lg);
   border-radius: var(--radius-pill);
   background: var(--accent);
-  transition: translate var(--motion-duration, var(--motion-deliberate))
-    var(--motion-easing, var(--motion-ease-standard));
-}
-
-.motionTrack[data-on="true"] .motionDot {
-  translate: calc(var(--motion-track-width, 16rem) - var(--space-xl)) 0;
+  translate: calc(100cqi - var(--space-lg) - var(--space-sm)) 0;
+  animation: motion-travel var(--motion-duration, var(--motion-deliberate))
+    var(--motion-easing, var(--motion-ease-standard)) both;
 }
 
 .motionBox {
@@ -575,13 +574,20 @@
   height: var(--control-height-lg);
   border-radius: var(--radius-control);
   background: var(--accent);
-  transition:
-    transform var(--motion-base) var(--motion-ease-standard),
-    opacity var(--motion-base) var(--motion-ease-standard);
+  transform: translateY(var(--sample, 0)) scale(var(--sample-scale, 1));
+  animation: motion-shift var(--motion-base) var(--motion-ease-standard) both;
 }
 
-.motionBox[data-on="true"] {
-  transform: translateY(var(--sample, 0)) scale(var(--sample-scale, 1));
+@keyframes motion-travel {
+  from {
+    translate: 0 0;
+  }
+}
+
+@keyframes motion-shift {
+  from {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -592,7 +598,7 @@
 
   .motionDot,
   .motionBox {
-    transition-property: opacity;
+    animation-name: fade-in;
   }
 }
 
