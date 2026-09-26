@@ -7,9 +7,13 @@
  *   ProgressMeter fills through transform, never width.
  * - M7: the send flight (QueuedMessage "Send flight" story) travels with a
  *   translate animation whose frames run no Layout and no long task.
+ * - Overlay enters: progress of each overlay's enter in the first 60Hz frame
+ *   (seeked on the real CSS animation or transition) must be <= 30%.
+ * - Thinking mark: working marks run without long tasks and stop drawing when
+ *   offscreen or under reduced motion.
  * - Optional `--video`: Playwright recordings of each motion in light and dark.
  *
- * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR]
+ * Usage: bun run tests/smoke/ds-motion-trace.ts [--video] [--out=DIR] [--only=overlays] [--report-only]
  * Needs a built UI (`npm --prefix packages/butler-app/client/ui run build`).
  */
 import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -23,6 +27,10 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const outArg = Bun.argv.find((arg) => arg.startsWith("--out="));
 const outDir = resolve(outArg ? outArg.slice("--out=".length) : join(root, ".tmp", "ds-motion"));
 const recordVideo = Bun.argv.includes("--video");
+const onlyOverlays = Bun.argv.includes("--only=overlays");
+/** Report numbers without asserting (used to measure an older build). */
+const reportOnly = Bun.argv.includes("--report-only");
+const FIRST_FRAME_MAX = 0.3;
 const tempDir = mkdtempSync(join(tmpdir(), "butler-ds-motion-"));
 const LONG_TASK_MS = 50;
 const viewport = { width: 960, height: 720 };
@@ -287,6 +295,157 @@ async function measureSendFlight(page: Page, serverUrl: string, ids: Map<string,
   return { animationFrames: windows, whole, travel };
 }
 
+type EnterProbe = { name: string; durationMs: number; firstFrame60Hz: number; observedFirstFrame: { ms: number; progress: number } };
+
+/** Watches for the next overlay enter (CSS *-enter animation or the toast opacity transition) and measures it. */
+async function armEnterProbe(page: Page) {
+  await page.evaluate(() => {
+    const state = window as unknown as { __enter: unknown };
+    state.__enter = null;
+    const existing = new Set(document.getAnimations());
+    const started = performance.now();
+    const isEnter = (animation: Animation) => {
+      if (existing.has(animation)) return false;
+      // CSS module keyframe names are hashed (_menu-enter_x1y2_1).
+      if (animation instanceof CSSAnimation) return /(?:^|_)(?:menu|context-menu|popover|tooltip|select|dialog)-enter(?:_|$)/u.test(animation.animationName);
+      const target = (animation.effect as KeyframeEffect | null)?.target as Element | null;
+      return animation instanceof CSSTransition && animation.transitionProperty === "opacity" && Boolean(target?.closest("[data-sonner-toast]"));
+    };
+    const loop = () => {
+      const found = document.getAnimations().find(isEnter);
+      if (found && Number(found.currentTime) > 0) {
+        const effect = found.effect as KeyframeEffect;
+        const element = effect.target as HTMLElement;
+        const opacity = () => Number(getComputedStyle(element).opacity);
+        const observedMs = Number(found.currentTime);
+        const observed = opacity();
+        const duration = Number(effect.getComputedTiming().duration);
+        found.pause();
+        const at = (time: number) => { found.currentTime = time; return opacity(); };
+        const from = at(0);
+        const to = at(duration - 0.01);
+        const frame = at(1000 / 60);
+        found.currentTime = observedMs;
+        found.play();
+        const progress = (value: number) => Math.round(((value - from) / (to - from)) * 1000) / 1000;
+        state.__enter = {
+          name: found instanceof CSSAnimation ? found.animationName : `transition:${(found as CSSTransition).transitionProperty}`,
+          durationMs: Math.round(duration),
+          firstFrame60Hz: progress(frame),
+          observedFirstFrame: { ms: Math.round(observedMs * 10) / 10, progress: progress(observed) },
+        };
+        return;
+      }
+      if (performance.now() - started < 3_000) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  });
+}
+
+async function readEnterProbe(page: Page): Promise<EnterProbe | null> {
+  await page.waitForFunction(() => (window as unknown as { __enter: unknown }).__enter !== null, undefined, { timeout: 4_000 }).catch(() => undefined);
+  return page.evaluate(() => (window as unknown as { __enter: EnterProbe | null }).__enter);
+}
+
+const OVERLAY_ENTERS: Array<{ name: string; item: string; story?: string; open: (page: Page, scope: ReturnType<Page["locator"]>) => Promise<void> }> = [
+  { name: "menu", item: "DropdownMenu", open: (_page, scope) => scope.getByRole("button", { name: "Session actions" }).click() },
+  { name: "contextMenu", item: "ContextMenu", story: "Message copy menu", open: (_page, scope) => scope.locator('[data-state="closed"]').first().click({ button: "right" }) },
+  { name: "popover", item: "Popover", story: "Composer access menu", open: (_page, scope) => scope.getByRole("button").first().click() },
+  { name: "tooltip", item: "Tooltip", story: "Icon button label", open: (_page, scope) => scope.getByRole("button").first().hover() },
+  { name: "select", item: "Select", story: "Default", open: (_page, scope) => scope.getByRole("combobox").first().click() },
+  { name: "toast", item: "Toast", story: "Motion", open: (_page, scope) => scope.locator('[data-ds-motion="toast"]').click() },
+  { name: "dialog", item: "Dialog", open: (_page, scope) => scope.getByRole("button", { name: "Rename" }).click() },
+];
+
+/** First-frame progress of every overlay enter; the first 60Hz frame must carry at most 30% of the change. */
+async function measureOverlayEnters(page: Page, serverUrl: string, ids: Map<string, string>) {
+  const results: Record<string, EnterProbe | null> = {};
+  for (const overlay of OVERLAY_ENTERS) {
+    const scope = await openItem(page, serverUrl, ids.get(overlay.item)!, "light", overlay.story);
+    await armEnterProbe(page);
+    await overlay.open(page, scope);
+    results[overlay.name] = await readEnterProbe(page);
+    await page.keyboard.press("Escape");
+  }
+  if (!reportOnly) {
+    for (const [name, probe] of Object.entries(results)) {
+      assert(probe, `${name} enter animation was not observed`);
+      assert(probe.firstFrame60Hz <= FIRST_FRAME_MAX, `${name} enter lands ${Math.round(probe.firstFrame60Hz * 100)}% in the first 60Hz frame (max ${FIRST_FRAME_MAX * 100}%)`);
+    }
+  }
+  return results;
+}
+
+/**
+ * Thinking mark: working marks draw without long tasks; marks scrolled
+ * offscreen and marks under reduced motion stop drawing (counted per canvas).
+ */
+async function measureThinkingMark(page: Page, serverUrl: string, ids: Map<string, string>) {
+  const browser = page.context().browser()!;
+  const scope = await openItem(page, serverUrl, ids.get("ButlerThinkingMark")!, "light", "Idle to working");
+  await page.evaluate(() => {
+    const counts = new Map<HTMLCanvasElement, number>();
+    const draw = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function drawImage(this: CanvasRenderingContext2D, ...args: unknown[]) {
+      if (this.canvas.isConnected) counts.set(this.canvas, (counts.get(this.canvas) ?? 0) + 1);
+      return (draw as (...values: unknown[]) => void).apply(this, args);
+    } as typeof draw;
+    (window as unknown as { __markDraws: () => number }).__markDraws = () =>
+      [...document.querySelectorAll<HTMLCanvasElement>("[data-ds-thinking-mark-demo] canvas")].reduce((sum, canvas) => sum + (counts.get(canvas) ?? 0), 0);
+  });
+  const draws = () => page.evaluate(() => (window as unknown as { __markDraws: () => number }).__markDraws());
+  const drawsOver = async (ms: number) => {
+    const before = await draws();
+    await page.waitForTimeout(ms);
+    return (await draws()) - before;
+  };
+  await scope.locator('[data-ds-motion="thinking-mark"]').click();
+  await page.waitForTimeout(300);
+  const { events, thread } = await traced(browser, page, async () => {
+    await markNow(page, "mark-start");
+    await page.waitForTimeout(2_000);
+    await markNow(page, "mark-end");
+    return {};
+  });
+  const working = windowStats(events, thread, markTs(events, "mark-start"), markTs(events, "mark-end"));
+  const visibleDrawsPerSecond = await drawsOver(1_000);
+  await page.evaluate(() => {
+    const demo = document.querySelector("[data-ds-thinking-mark-demo]")!;
+    let node: HTMLElement | null = demo.parentElement;
+    while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
+    (node ?? document.scrollingElement!).scrollTop = 1e6;
+  });
+  await page.waitForTimeout(300);
+  const offscreen = await scope.evaluate((story) => {
+    const rect = story.querySelector("[data-ds-thinking-mark-demo]")!.getBoundingClientRect();
+    return rect.bottom < 0 || rect.top > window.innerHeight;
+  });
+  const offscreenDrawsPerSecond = await drawsOver(1_000);
+  await scope.evaluate((story) => story.scrollIntoView({ block: "start" }));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.body.dataset.motion = "reduced"; });
+  await page.waitForTimeout(300);
+  const reducedDrawsPerSecond = await drawsOver(1_000);
+  // Control window: the same page with every mark still (reduced motion), to attribute the cost.
+  const control = await traced(browser, page, async () => {
+    await markNow(page, "still-start");
+    await page.waitForTimeout(2_000);
+    await markNow(page, "still-end");
+    return {};
+  });
+  const still = windowStats(control.events, control.thread, markTs(control.events, "still-start"), markTs(control.events, "still-end"));
+  const markCount = await page.evaluate(() => document.querySelectorAll('[data-mark-state="working"]').length);
+  const breathe = await scope.evaluate((story) => story.querySelector("[data-ds-thinking-mark-demo] canvas")?.getAttribute("data-breathe") ?? null);
+  await page.evaluate(() => { delete document.body.dataset.motion; });
+  assert(working.longTasks === 0, `thinking mark produced ${working.longTasks} task(s) over ${LONG_TASK_MS}ms (max ${working.maxTaskMs}ms)`);
+  assert(visibleDrawsPerSecond > 60, `working marks did not animate: ${visibleDrawsPerSecond} draws/s`);
+  assert(offscreen, "the thinking-mark demo did not scroll offscreen");
+  assert(offscreenDrawsPerSecond === 0, `offscreen marks kept drawing: ${offscreenDrawsPerSecond} draws/s`);
+  assert(reducedDrawsPerSecond === 0, `reduced-motion marks kept drawing: ${reducedDrawsPerSecond} draws/s`);
+  assert(breathe === "on", `reduced-motion working marks should breathe in CSS, got ${breathe}`);
+  return { workingMarksOnPage: markCount, working, stillControl: still, visibleDrawsPerSecond, offscreenDrawsPerSecond, reducedDrawsPerSecond, reducedBreathe: breathe };
+}
+
 async function newContext(browser: Browser, video: string | null): Promise<BrowserContext> {
   const context = await browser.newContext({
     viewport,
@@ -421,6 +580,9 @@ async function measure(browser: Browser, serverUrl: string, ids: Map<string, str
   const page = await context.newPage();
   const results: Record<string, unknown> = {};
   try {
+    results.overlayEnter = await measureOverlayEnters(page, serverUrl, ids);
+    if (onlyOverlays) return results;
+    results.thinkingMark = await measureThinkingMark(page, serverUrl, ids);
     // Overlay open/close: animation windows are the enter/exit token durations
     // after the first rendered frame (the mount frame itself lays out).
     for (const [name, item, trigger] of [
