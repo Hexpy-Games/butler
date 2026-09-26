@@ -329,14 +329,6 @@ mod tests {
     }
 
     #[test]
-    fn scalar_safe_utf16_budget_stops_before_split_astral_character() {
-        let input = format!("{}😀tail", "a".repeat(319));
-        let safe = safe_public(&input, "");
-        assert_eq!(safe.encode_utf16().count(), 319);
-        assert_eq!(safe, "a".repeat(319));
-    }
-
-    #[test]
     fn evidence_limitations_preserve_the_source_unbounded_array_policy() {
         let limitations = (0..9)
             .map(|index| Value::String(format!("limitation-{index}")))

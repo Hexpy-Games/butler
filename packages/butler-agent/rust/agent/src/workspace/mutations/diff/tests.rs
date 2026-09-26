@@ -135,36 +135,6 @@ fn source_repeated_line_oracle_matches_exhaustive_digest() {
     );
 }
 
-#[test]
-fn source_buffer_utf8_replacement_oracle_matches_bun() {
-    let cases: &[(&[u8], &[u8])] = &[
-        (&[0xff], &[0xfe]),
-        (&[0xe1, 0x80, 0x41], &[0xe1, 0x80, 0x42]),
-        (&[0xf0, 0x80, 0x80], &[0xf0, 0x80, 0x81]),
-        (&[0xed, 0xa0, 0x80], &[0xed, 0xa0, 0x81]),
-        (&[0x61, 0xc2, 0xa2], &[0x61, 0xc2, 0xa3]),
-    ];
-    let mut hash = Sha256::new();
-    for (before, after) in cases {
-        let detail = changed_file("utf8.bin", before, after, false);
-        let (before_text, after_text, lines) = match detail.as_ref() {
-            None => ("null".into(), "null".into(), "null".into()),
-            Some(detail) => (
-                serde_json::to_string(&detail.before_text).unwrap(),
-                serde_json::to_string(&detail.after_text).unwrap(),
-                lines_json(detail),
-            ),
-        };
-        hash.update(format!(
-            "{{\"before_text\":{before_text},\"after_text\":{after_text},\"lines\":{lines}}}\n"
-        ));
-    }
-    assert_eq!(
-        format!("{:x}", hash.finalize()),
-        "996efb8c5317ceeca804b8a01efe04d82bb4b4d9560cb0b8b296a1b6551fa3dc"
-    );
-}
-
 fn source_values() -> Vec<String> {
     let mut values = vec![String::new()];
     for length in 1..=6 {

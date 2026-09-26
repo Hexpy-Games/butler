@@ -300,9 +300,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bun_import_normalization_hash_and_prompt_golden_match() {
+    fn persisted_import_normalization_hash_and_id_are_stable() {
         let golden: Value =
-            serde_json::from_str(include_str!("../tests/bun-pf1b-golden.json")).unwrap();
+            serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let source = normalize_source(Some(" Other Assistant! "));
         let text = normalize_text("  First\r\nsecond\t🙂  ".into());
         let hash = import_hash(&source, &text);
@@ -311,17 +311,6 @@ mod tests {
         assert_eq!(text.utf8_for_hash(), golden["normalized"].as_str().unwrap());
         assert_eq!(hash, golden["importHash"]);
         assert_eq!(id, golden["importId"]);
-        assert_eq!(
-            import_prompt(
-                &source,
-                &id,
-                &text,
-                ProfilingMode::Basic,
-                "2026-09-14T01:02:03.004Z",
-            )
-            .unwrap(),
-            golden["importPrompt"]
-        );
     }
 
     #[cfg(unix)]

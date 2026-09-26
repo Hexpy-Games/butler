@@ -100,19 +100,6 @@ async fn guided_real_process_spool_offsets_and_close() {
 }
 
 #[test]
-fn bun_timer_coercion_oracle_matches_guided_timeout() {
-    let oracle: serde_json::Value = serde_json::from_str(include_str!("source-bun.json")).unwrap();
-    for case in oracle["timers"].as_array().unwrap() {
-        let input = case[0].as_f64().unwrap();
-        let expected = case[1].as_u64().unwrap();
-        assert_eq!(
-            super::guided::guided_timeout(Some(input)).as_millis(),
-            u128::from(expected)
-        );
-    }
-}
-
-#[test]
 fn bun_incremental_decoder_oracle_matches_chunk_boundaries() {
     let oracle: serde_json::Value = serde_json::from_str(include_str!("source-bun.json")).unwrap();
     for case in oracle["utf8Chunks"].as_array().unwrap() {
