@@ -34,7 +34,14 @@ transitions, animations or keyframes (`bun run lint:motion`).
 ratchet mode: existing violations are baselined per file and may only shrink.
 
 - Style DS components through their props (`variant`, `size`, `tone`, layout
-  props); do not pass `className` or `style` to them.
+  props). `className` and `style` are not part of the public DS types
+  (`DsBaseProps`, `lib/dsProps.ts`): they are DS-private slots typed
+  `DsClassName`/`DsStyle` that only `dsClass()`/`dsStyle()` in `lib/internal`
+  mint, and ESLint blocks `lib/internal` outside this folder, so `tsc` rejects
+  product styling. Data-driven geometry uses `UNSAFE_style` (width, height,
+  min/max sizes, transform, inset and custom properties) on `Stack`,
+  `ScrollArea`, `MessageRow` and `AdaptiveShell`; product uses are counted by
+  `butler-ds/unsafe-style-allowlist` against `baseline/unsafe-style.json`.
 - Use `Button`, `IconButton`, `Clickable`, `Input`, `Textarea`, `Select`,
   `NativeSelect`, `Switch` and `Slider` instead of raw `<button>`, `<input>`,
   `<select>`, `<textarea>` or an `<a onClick>` without `href`.

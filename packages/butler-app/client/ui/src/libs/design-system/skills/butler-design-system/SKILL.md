@@ -14,8 +14,8 @@ domain-coupled blocks, or visually inconsistent UI.
 
 ## Hard Rules
 
-Product UI is assembled only from the design system. The lints below enforce
-most of this; the rest is review.
+Product UI is assembled only from the design system. The type system and the
+lints below enforce most of this; the rest is review.
 
 1. **Pick, don't build.** Look the need up in `references/catalog.md` (the
    decision guide: "I need X → use Y") and the DS Viewer before writing JSX.
@@ -23,9 +23,18 @@ most of this; the rest is review.
    duplicates one.
 2. **No new CSS.** Product code adds no CSS modules outside the frozen
    allowlist, no Tailwind or other utility classes, no global class names.
-3. **No className and no inline style on DS components.** Style through props
-   (`variant`, `size`, `tone`, `gap`, layout item props). No `style={{…}}` in
-   product code.
+3. **No className and no inline style on DS components (enforced by types).**
+   Public DS props are `DsBaseProps` (`className`/`style` omitted; they exist
+   only as DS-private slots typed `DsClassName`/`DsStyle`, minted by
+   `dsClass()`/`dsStyle()` from `lib/internal`, which ESLint blocks outside
+   the DS). `tsc` rejects `className="…"` or `style={{…}}` on a DS
+   component. Style through props (`variant`, `size`, `tone`, `gap`, layout
+   item props, `windowDrag`, `permissionTone`, `theme`, …). Data-driven
+   geometry (virtualized row offsets, resizable panel widths) goes through
+   `UNSAFE_style` (width/height/min/max, transform, inset, `--*` only) on the
+   few components that offer it (`Stack`, `ScrollArea`, `MessageRow`,
+   `AdaptiveShell`); every product use is allowlisted per file. No
+   `style={{…}}` on raw elements in product code either.
 4. **No raw interactive or typography elements.** Use `Button`, `IconButton`,
    `Clickable`, `Input`, `Textarea`, `Select`, `NativeSelect`, `Switch`,
    `Slider` instead of `<button>`, `<input>`, `<select>`, `<textarea>`; use
@@ -125,7 +134,10 @@ function ProjectSessionRowContainer({ sessionId }: { sessionId: string }) {
 
 | Command | What it enforces |
 | --- | --- |
-| `bun run lint:ds` | Product-code ratchet (per-file baselines only shrink): `no-classname-on-ds`, `no-inline-style`, `no-raw-interactive`, `no-raw-typography`, `no-new-css-module`, `token-only-values`, `no-ds-internal-selector`, `no-ds-custom-prop-override`; warning `no-raw-length-custom-prop`. |
+| `bun run typecheck` | The first gate: DS component types have no public `className`/`style`; `UNSAFE_style` accepts geometry only. |
+| `bun run lint:ds` | Product-code ratchet (per-file baselines only shrink): `no-classname-on-ds`, `no-inline-style`, `no-raw-interactive`, `no-raw-typography`, `unsafe-style-allowlist` (`baseline/unsafe-style.json`), `no-new-css-module`, `token-only-values`, `no-ds-internal-selector`, `no-ds-custom-prop-override`; warning `no-raw-length-custom-prop`. |
+| `eslint` (`no-restricted-imports`) | `lib/internal` (`dsClass`, `dsStyle`) is importable only inside `libs/design-system`. |
+| `packages/butler-app/scripts/codemods/ds-unsafe-style.ts` | Dry run fails on any `className`/`style` left on a DS component; `--write` renames geometry-only `style` to `UNSAFE_style`. |
 | `bun run lint:motion` | `motion-outside-ds`, `keyword-easing` (tokens, not `ease`/`linear`), `transition-property` (compositor and paint properties only), `waapi-outside-helper`. |
 | `bun run lint:design` | Token lint (no raw colors or font values), DS rules (focus ring, z-index tokens, control heights), copy lint, 160-line component limit, CSS module globals, prop boundaries, then `lint:ds` and `lint:motion`. |
 | `bun run lint:css` | Prettier format check and stylelint for every UI stylesheet. |
@@ -140,7 +152,9 @@ When the catalog has nothing that fits:
 1. **Spec**: update the design-system spec in Project Ledger (existing `butler`
    project) with the API and the product need.
 2. **Tests first**: add unit tests for the component contract.
-3. **DS component**: `components/<Name>/` or `blocks/<Name>/` with
+3. **DS component**: props extend `DsBaseProps<…>` (never a public
+   `className`/`style`); DS code composing other DS components passes classes
+   with `className={dsClass(styles.x)}`. `components/<Name>/` or `blocks/<Name>/` with
    `<Name>.tsx`, CSS module, `index.ts`, `README.md`, `<Name>.showcase.tsx`
    (stories mirroring real usage, en/ko, states matrix when interactive) and
    `<Name>.guidance.tsx` (purpose, when/when not, recipes, do/don't, content,
