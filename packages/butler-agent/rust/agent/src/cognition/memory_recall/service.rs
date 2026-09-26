@@ -1,10 +1,7 @@
 //! Caller-drop-safe accepted recall work and source-owning close/drain.
 
-use std::{
-    cmp::Ordering,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{cmp::Ordering, path::PathBuf, sync::Arc};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -57,7 +54,7 @@ impl NativeMemoryRecall {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let closing = self.lifecycle.lock().map_err(|_| closed())?;
+            let closing = self.lifecycle.lock();
             if *closing {
                 return Err(closed());
             }
@@ -146,7 +143,7 @@ impl NativeMemoryRecall {
         let input = validate::normalize(request, |value| (self.parse_date)(value))?;
         let deadline_at = (self.clock)() + 5_000;
         let token = {
-            let closing = self.lifecycle.lock().map_err(|_| closed())?;
+            let closing = self.lifecycle.lock();
             if *closing {
                 return Err(closed());
             }
@@ -192,7 +189,7 @@ impl NativeMemoryRecall {
 
     pub(crate) async fn close(&self) {
         {
-            let mut closing = self.lifecycle.lock().expect("recall lifecycle poisoned");
+            let mut closing = self.lifecycle.lock();
             if !*closing {
                 *closing = true;
                 self.shutdown.cancel();

@@ -6,9 +6,10 @@ mod relocation;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 
 use serde_json::Map;
 use tokio::sync::oneshot;
@@ -129,11 +130,7 @@ impl NativeSessionWorktrees {
     ) -> WorkspaceResult<BindSessionWorktreeResult> {
         let (tx, rx) = oneshot::channel();
         {
-            let state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let state = self.inner.state.lock();
             if state.closing {
                 return Ok(failure(input.action, None, "cancelled"));
             }
@@ -153,11 +150,7 @@ impl NativeSessionWorktrees {
 
     pub(crate) async fn close(&self) {
         {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
             self.inner.shutdown.cancel();
             self.inner.jobs.close();
@@ -199,7 +192,7 @@ impl Owner {
     }
 
     fn session_lock(&self, session_id: &str) -> Arc<SessionLock> {
-        let mut state = self.state.lock().expect("session worktree owner poisoned");
+        let mut state = self.state.lock();
         let lock = state
             .locks
             .get(session_id)
@@ -212,7 +205,7 @@ impl Owner {
     }
 
     fn release_session_lock(&self, session_id: &str, lock: &Arc<SessionLock>) {
-        let mut state = self.state.lock().expect("session worktree owner poisoned");
+        let mut state = self.state.lock();
         if Arc::strong_count(lock) == 1
             && state
                 .locks

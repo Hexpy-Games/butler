@@ -1,6 +1,6 @@
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
-    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -30,7 +30,7 @@ impl FixedWindowRateLimiter {
 
     pub(super) fn consume(&self, key: String) -> bool {
         let now = Instant::now();
-        let mut buckets = self.buckets.lock().expect("rate limiter poisoned");
+        let mut buckets = self.buckets.lock();
         buckets.retain(|_, bucket| bucket.reset_at > now);
         match buckets.get_mut(&key) {
             Some(bucket) if bucket.count >= self.max => false,

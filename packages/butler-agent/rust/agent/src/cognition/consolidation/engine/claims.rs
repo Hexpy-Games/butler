@@ -57,12 +57,8 @@ impl CycleService {
             .unwrap_or_else(|| expected.clone());
             if let Some(active) = &current.active_phase {
                 let same_process = active.owner_pid == self.host.process_id();
-                let locally_active = same_process
-                    && self
-                        .active_claims
-                        .lock()
-                        .expect("claim set poisoned")
-                        .contains(&active.owner_nonce);
+                let locally_active =
+                    same_process && self.active_claims.lock().contains(&active.owner_nonce);
                 let other_active = !same_process
                     && self.host.process_status(u64::from(active.owner_pid))
                         != CognitionProcessStatus::DefinitelyDead;

@@ -30,7 +30,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }

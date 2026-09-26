@@ -2,10 +2,10 @@ mod async_operations;
 mod extraction;
 mod personalization;
 mod prompt_port;
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
@@ -83,7 +83,7 @@ impl ProfileService {
 
     pub(crate) async fn close(&self) {
         {
-            let mut lifecycle = self.lifecycle.lock().unwrap();
+            let mut lifecycle = self.lifecycle.lock();
             if !lifecycle.closing {
                 lifecycle.closing = true;
                 self.shutdown.cancel();
@@ -389,7 +389,7 @@ impl ProfileService {
             .await
             .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
                     "profile_closed",

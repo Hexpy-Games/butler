@@ -1,9 +1,10 @@
 //! Bounded terminal-turn snapshot compaction owner.
 
+use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
     time::Duration,
@@ -278,8 +279,6 @@ fn push(queue: &mut VecDeque<String>, turn: String) {
         queue.push_back(turn)
     }
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

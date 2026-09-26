@@ -26,7 +26,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -64,7 +64,7 @@ impl CognitionRegistrationService {
                         let now = clock();
                         // Snapshot after the write lease. Claims register their
                         // owner while holding that same lease.
-                        let active = active_owners.lock().unwrap().clone();
+                        let active = active_owners.lock().clone();
                         let result = graph.recover_interrupted_semantic(
                             crate::cognition::graph::ClaimProjectionWindowInput {
                                 job_id: None,

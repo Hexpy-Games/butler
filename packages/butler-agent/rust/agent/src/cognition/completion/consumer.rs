@@ -3,11 +3,8 @@
 mod catchup;
 mod process;
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -104,7 +101,7 @@ impl NativeMemorySyncConsumer {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let closing = self.closing.lock().expect("memory consumer state poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(closed());
             }
@@ -148,7 +145,7 @@ impl NativeMemorySyncConsumer {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let closing = self.closing.lock().expect("memory consumer state poisoned");
+            let closing = self.closing.lock();
             if *closing || cancellation.is_cancelled() {
                 return Err(closed());
             }
@@ -203,7 +200,7 @@ impl NativeMemorySyncConsumer {
 
     pub(crate) async fn close(&self) {
         {
-            let mut closing = self.closing.lock().expect("memory consumer state poisoned");
+            let mut closing = self.closing.lock();
             if !*closing {
                 *closing = true;
                 self.admission.close();

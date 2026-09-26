@@ -1,5 +1,6 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
@@ -54,7 +55,7 @@ impl TurnExecutionSupervisor {
         turn_id: &str,
         semantic_state: TurnSemanticState,
     ) -> Result<ExecutionPermit, BtccError> {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         let permit_generation = next_generation(&mut state);
         let registration_generation = if let Some(registration) = state.turns.get_mut(turn_id) {
             let allowed = registration.fence == FenceState::Open
@@ -93,7 +94,7 @@ impl TurnExecutionSupervisor {
     /// Installs the process fence synchronously. Repository Stop must occur only
     /// after this method returns, so an active or queued Turn observes cancellation.
     pub(super) fn install_stop(&self, turn_id: &str) -> StopTicket {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         let generation = next_generation(&mut state);
         let stop_attempt_generation = next_generation(&mut state);
         let registration = state
@@ -118,7 +119,7 @@ impl TurnExecutionSupervisor {
     }
 
     pub(super) fn observe_stop(&self, ticket: &StopTicket, outcome: StopPersistenceOutcome) {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         let Some(registration) = state.turns.get_mut(&ticket.turn_id) else {
             return;
         };
@@ -145,7 +146,7 @@ impl TurnExecutionSupervisor {
     }
 
     pub(super) fn observe_stop_failure(&self, ticket: &StopTicket) {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         if let Some(registration) = state.turns.get_mut(&ticket.turn_id)
             && registration.generation == ticket.registration_generation
             && registration.stop_attempt_generation == ticket.stop_attempt_generation
@@ -155,7 +156,7 @@ impl TurnExecutionSupervisor {
     }
 
     pub(super) fn observe_terminal(&self, turn_id: &str) {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         if let Some(registration) = state.turns.get_mut(turn_id) {
             registration.durable_terminal = true;
             if registration.permit_generation.is_none() {
@@ -165,7 +166,7 @@ impl TurnExecutionSupervisor {
     }
 
     fn close_permit(&self, turn_id: &str, registration_generation: u64, permit_generation: u64) {
-        let mut state = self.inner.lock().expect("supervisor lock poisoned");
+        let mut state = self.inner.lock();
         let mut retire = false;
         if let Some(registration) = state.turns.get_mut(turn_id)
             && registration.generation == registration_generation
@@ -181,11 +182,7 @@ impl TurnExecutionSupervisor {
 
     #[cfg(test)]
     pub(super) fn registration_count(&self) -> usize {
-        self.inner
-            .lock()
-            .expect("supervisor lock poisoned")
-            .turns
-            .len()
+        self.inner.lock().turns.len()
     }
 }
 

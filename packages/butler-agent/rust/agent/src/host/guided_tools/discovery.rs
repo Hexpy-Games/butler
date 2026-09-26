@@ -252,12 +252,7 @@ pub(super) fn remember_described(
             error.to_string(),
         ))
     })?;
-    owner
-        .state
-        .lock()
-        .expect("guided tool state poisoned")
-        .described_ids
-        .extend(ids);
+    owner.state.lock().described_ids.extend(ids);
     Ok(())
 }
 

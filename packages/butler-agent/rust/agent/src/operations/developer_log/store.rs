@@ -1,7 +1,8 @@
+use parking_lot::Mutex;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -28,10 +29,7 @@ impl DeveloperLogStore {
     }
 
     pub(crate) fn append(&self, entry: &Value) -> io::Result<()> {
-        let _guard = self
-            .mutation
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = self.mutation.lock();
         let destination = self.path();
         self.authority.authorize(&destination)?;
         self.ensure_parent(&destination)?;

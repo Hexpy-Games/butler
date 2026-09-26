@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use rusqlite::Connection;
@@ -216,7 +217,7 @@ impl CoordinatorInner {
                 return Err(error);
             }
         };
-        self.local.lock().unwrap().insert(
+        self.local.lock().insert(
             request.lock_path.clone(),
             LocalRegistration {
                 registration_id: registration_id.clone(),
@@ -233,7 +234,7 @@ impl CoordinatorInner {
     }
 
     fn remove_registration(&self, path: &Path, registration_id: &str) {
-        let mut local = self.local.lock().unwrap();
+        let mut local = self.local.lock();
         if local
             .get(path)
             .is_some_and(|current| current.registration_id == registration_id)

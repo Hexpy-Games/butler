@@ -59,7 +59,7 @@ impl PhaseExecutor for TestPhases {
         _cancellation: &'a CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<Map<String, Value>, PhaseError>> + Send + 'a>> {
         Box::pin(async move {
-            self.calls.lock().unwrap().push(phase);
+            self.calls.lock().push(phase);
             if phase == Phase::FeedbackTriage && self.block_feedback.load(Ordering::SeqCst) {
                 self.entered.notify_one();
                 self.release.notified().await;
@@ -163,7 +163,6 @@ async fn partial_run_and_resume_skip_success_and_resolve_prior_error() {
         phases
             .calls
             .lock()
-            .unwrap()
             .iter()
             .filter(|phase| **phase == Phase::Preflight)
             .count(),

@@ -24,25 +24,15 @@ impl WebSession {
     }
 
     pub(in crate::web_access) fn first_search_consumed(&self) -> bool {
-        self.state
-            .lock()
-            .expect("web session poisoned")
-            .first_search_consumed
+        self.state.lock().first_search_consumed
     }
 
     pub(in crate::web_access) fn original_request(&self) -> String {
-        self.state
-            .lock()
-            .expect("web session poisoned")
-            .original_request
-            .clone()
+        self.state.lock().original_request.clone()
     }
 
     pub(in crate::web_access) fn mark_planner_ran(&self) {
-        self.state
-            .lock()
-            .expect("web session poisoned")
-            .first_search_consumed = true;
+        self.state.lock().first_search_consumed = true;
     }
 
     pub(in crate::web_access) async fn lock_planning(&self) -> tokio::sync::OwnedMutexGuard<()> {
@@ -56,7 +46,6 @@ impl WebSession {
         let path = self
             .state
             .lock()
-            .expect("web session poisoned")
             .page_cache
             .get(key)
             .map(|spool| spool.path.clone());
@@ -103,25 +92,16 @@ impl WebSession {
                     "Turn web cache could not be written.",
                 )
             })?;
-        self.state
-            .lock()
-            .expect("web session poisoned")
-            .page_cache
-            .insert(key, spool);
+        self.state.lock().page_cache.insert(key, spool);
         Ok(())
     }
 
     pub(in crate::web_access) fn cached_observation(&self, key: &str) -> Option<Value> {
-        self.state
-            .lock()
-            .expect("web session poisoned")
-            .observation_cache
-            .get(key)
-            .cloned()
+        self.state.lock().observation_cache.get(key).cloned()
     }
 
     pub(in crate::web_access) fn remember_observation(&self, key: String, value: Value) {
-        let mut state = self.state.lock().expect("web session poisoned");
+        let mut state = self.state.lock();
         if !state.observation_cache.contains_key(&key)
             && state.observation_cache.len() >= MAX_OBSERVATION_CACHE_ENTRIES
         {

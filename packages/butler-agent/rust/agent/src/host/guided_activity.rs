@@ -4,9 +4,8 @@ mod content;
 mod publication;
 mod snapshot;
 
-use std::sync::Mutex;
-
 use indexmap::IndexMap;
+use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
 use crate::btcc::{
@@ -88,12 +87,12 @@ impl NativeGuidedActivity {
 
     pub(crate) fn restore(&self, snapshot: &GuidedActivitySnapshot) -> Result<(), BtccError> {
         let state = snapshot::restore(snapshot)?;
-        *self.state.lock().expect("guided activity state poisoned") = state;
+        *self.state.lock() = state;
         Ok(())
     }
 
     pub(crate) fn snapshot(&self) -> GuidedActivitySnapshot {
-        snapshot::capture(&self.state.lock().expect("guided activity state poisoned"))
+        snapshot::capture(&self.state.lock())
     }
 
     pub(crate) fn source_revision(&self) -> u64 {
@@ -107,7 +106,7 @@ impl NativeGuidedActivity {
         calls: &[ModelRoundToolCall],
     ) -> Result<(), BtccError> {
         self.check_turn(turn_id)?;
-        let mut state = self.state.lock().expect("guided activity state poisoned");
+        let mut state = self.state.lock();
         state.pending.clear();
         let mut ordinary_group: Option<String> = None;
         let ordinary_calls = calls
@@ -148,7 +147,7 @@ impl NativeGuidedActivity {
     ) -> Result<ActivityBinding, BtccError> {
         self.check_turn(turn_id)?;
         let (binding, events) = {
-            let mut state = self.state.lock().expect("guided activity state poisoned");
+            let mut state = self.state.lock();
             if let Some(existing) = state.bindings.get(journal_call_id) {
                 return Ok(existing.clone());
             }
@@ -216,7 +215,7 @@ impl NativeGuidedActivity {
     ) -> Result<(), BtccError> {
         self.check_turn(turn_id)?;
         let events = {
-            let mut state = self.state.lock().expect("guided activity state poisoned");
+            let mut state = self.state.lock();
             state.managed = true;
             let Some(binding) = state.bindings.get(journal_call_id).cloned() else {
                 return Ok(());

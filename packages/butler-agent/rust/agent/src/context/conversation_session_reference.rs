@@ -6,10 +6,8 @@ mod source;
 #[cfg(test)]
 mod tests;
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc};
 
 use serde_json::Value;
 use tokio::sync::{Semaphore, oneshot};
@@ -57,10 +55,7 @@ impl NativeConversationSessionReference {
         let memory_sources = self.memory_sources.clone();
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self
-                .closing
-                .lock()
-                .expect("conversation reference owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -87,10 +82,7 @@ impl NativeConversationSessionReference {
 
     pub(crate) async fn close(&self) -> ContextResult<()> {
         {
-            let mut closing = self
-                .closing
-                .lock()
-                .expect("conversation reference owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();

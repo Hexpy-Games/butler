@@ -1,6 +1,7 @@
 //! Bounded, query-local-metadata-only continuation inventory.
 
-use std::{collections::HashMap, sync::Mutex};
+use parking_lot::Mutex;
+use std::collections::HashMap;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
@@ -153,14 +154,10 @@ fn invalid_arguments() -> CognitionError {
     CognitionError::new("invalid_arguments", "invalid_arguments")
 }
 
-fn lock_error() -> CognitionError {
-    CognitionError::new("memory_recall_unavailable", "memory_recall_unavailable")
-}
-
 impl CursorStore {
     pub(super) fn read(&self, cursor: &str, now: i64) -> CognitionResult<Page> {
         let wire = decode(cursor)?;
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         state.expire(now);
         let inventory = state
             .entries
@@ -202,7 +199,7 @@ impl CursorStore {
             coverage: None,
             diagnostics: None,
         };
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         state.expire(now);
         state.entries.insert(key.clone(), inventory.clone());
         state.touch(&key);
@@ -222,7 +219,7 @@ impl CursorStore {
         key: &str,
         response: &crate::cognition::recall::RecallResponse,
     ) -> CognitionResult<()> {
-        let mut state = self.0.lock().map_err(|_| lock_error())?;
+        let mut state = self.0.lock();
         if let Some(entry) = state.entries.get_mut(key) {
             entry.status = Some(response.status);
             entry.coverage = Some(response.coverage.clone());
@@ -235,7 +232,7 @@ impl CursorStore {
     }
 
     pub(super) fn remove(&self, key: &str) -> CognitionResult<()> {
-        self.0.lock().map_err(|_| lock_error())?.remove(key);
+        self.0.lock().remove(key);
         Ok(())
     }
 }

@@ -6,9 +6,10 @@ mod typed;
 mod typed_lifecycle;
 mod types;
 
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -116,7 +117,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -143,7 +144,7 @@ impl CognitionRegistrationService {
 
     pub(crate) async fn close(&self) {
         {
-            let mut lifecycle = self.lifecycle.lock().unwrap();
+            let mut lifecycle = self.lifecycle.lock();
             if !lifecycle.closing {
                 lifecycle.closing = true;
                 self.shutdown.cancel();

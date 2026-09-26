@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::btcc::{
     AgentLoopError, AgentLoopResult, ModelRoundError, ModelRoundObserver, ModelRoundRequest,
@@ -126,9 +127,7 @@ impl TurnDeveloperLogExecution for ExecutionCapture {
 }
 
 impl ExecutionCapture {
-    fn lock_state(&self) -> std::sync::MutexGuard<'_, CaptureState> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    fn lock_state(&self) -> parking_lot::MutexGuard<'_, CaptureState> {
+        self.state.lock()
     }
 }

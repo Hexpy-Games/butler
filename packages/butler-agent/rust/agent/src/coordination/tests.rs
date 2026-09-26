@@ -1,7 +1,8 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use super::*;
 
@@ -23,7 +24,7 @@ impl Host {
     }
 
     fn status(&self, pid: u64, status: CognitionProcessStatus) {
-        self.statuses.lock().unwrap().insert(pid, status);
+        self.statuses.lock().insert(pid, status);
     }
 }
 
@@ -39,7 +40,6 @@ impl CognitionCoordinationHost for Host {
     fn process_status(&self, pid: u64) -> CognitionProcessStatus {
         self.statuses
             .lock()
-            .unwrap()
             .get(&pid)
             .copied()
             .unwrap_or(CognitionProcessStatus::Uncertain)
@@ -198,7 +198,7 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
     // A successor registered the same path after this lease (e.g. after a
     // reclaim); dropping the old lease must not remove it.
     let local = &coordinator.inner.local;
-    local.lock().unwrap().insert(
+    local.lock().insert(
         fixture.lock.clone(),
         coordinator::LocalRegistration {
             registration_id: "new-registration".into(),
@@ -209,13 +209,12 @@ fn drop_rolls_back_and_old_guard_does_not_remove_successor_registration() {
     assert_eq!(
         local
             .lock()
-            .unwrap()
             .get(&fixture.lock)
             .map(|registration| registration.registration_id.as_str()),
         Some("new-registration")
     );
 
-    local.lock().unwrap().remove(&fixture.lock);
+    local.lock().remove(&fixture.lock);
     let reacquired = coordinator
         .try_acquire(CognitionWriteAcquire::immediate(
             fixture.lock.clone(),

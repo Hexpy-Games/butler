@@ -1,5 +1,6 @@
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub(crate) struct WorkspaceReference(Arc<Mutex<ReferenceState>>);
@@ -27,7 +28,7 @@ impl WorkspaceReference {
     }
 
     pub(crate) fn get(&self) -> Result<PathBuf, WorkspaceReferenceError> {
-        match &*self.0.lock().expect("workspace reference poisoned") {
+        match &*self.0.lock() {
             ReferenceState::Path(path) => Ok(path.clone()),
             ReferenceState::Unavailable(code) => {
                 Err(WorkspaceReferenceError { code: code.clone() })
@@ -42,8 +43,7 @@ impl WorkspaceReference {
                 code: "workspace_reference_path_required".into(),
             });
         }
-        *self.0.lock().expect("workspace reference poisoned") =
-            ReferenceState::Path(resolve(Path::new(trimmed)));
+        *self.0.lock() = ReferenceState::Path(resolve(Path::new(trimmed)));
         Ok(())
     }
 }

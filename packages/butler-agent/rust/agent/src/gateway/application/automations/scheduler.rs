@@ -1,4 +1,5 @@
-use std::{sync::Mutex, time::Duration};
+use parking_lot::Mutex;
+use std::time::Duration;
 
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -39,17 +40,13 @@ impl AutomationScheduler {
                 }
             }
         });
-        *self.task.lock().unwrap_or_else(|error| error.into_inner()) = Some(task);
+        *self.task.lock() = Some(task);
         Ok(())
     }
 
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         self.cancellation.cancel();
-        let task = self
-            .task
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take();
+        let task = self.task.lock().take();
         if let Some(task) = task {
             task.await.map_err(|_| GatewayApplicationError::Internal)?;
         }

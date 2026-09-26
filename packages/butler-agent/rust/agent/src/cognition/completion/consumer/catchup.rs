@@ -39,10 +39,7 @@ async fn run(input: &Input, force: bool) -> CognitionResult<CatchupReport> {
         return Ok(CatchupReport::default());
     }
     if !force {
-        let mut last = input
-            .catchup_at
-            .lock()
-            .expect("memory catchup state poisoned");
+        let mut last = input.catchup_at.lock();
         if last.is_some_and(|time| time.elapsed() < Duration::from_secs(60)) {
             return Ok(CatchupReport::default());
         }

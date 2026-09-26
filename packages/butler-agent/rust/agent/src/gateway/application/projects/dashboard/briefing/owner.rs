@@ -1,10 +1,7 @@
 //! Closeable owner for explicitly requested project-briefing generations.
 
-use std::{
-    collections::VecDeque,
-    future::Future,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{collections::VecDeque, future::Future, sync::Arc};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
@@ -50,11 +47,7 @@ impl ProjectDashboardBriefingOwner {
     }
 
     pub(super) fn state(&self, revision: &str) -> BriefingState {
-        let state = self
-            .0
-            .state
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let state = self.0.state.lock();
         if state.closing {
             return BriefingState::Unavailable;
         }
@@ -73,19 +66,11 @@ impl ProjectDashboardBriefingOwner {
     }
 
     pub(super) fn is_closing(&self) -> bool {
-        self.0
-            .state
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .closing
+        self.0.state.lock().closing
     }
 
     pub(super) fn with_open<T>(&self, operation: impl FnOnce() -> T) -> Option<T> {
-        let state = self
-            .0
-            .state
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let state = self.0.state.lock();
         (!state.closing).then(operation)
     }
 
@@ -95,11 +80,7 @@ impl ProjectDashboardBriefingOwner {
         Fut: Future<Output = ()> + Send + 'static,
     {
         let (id, cancellation) = {
-            let mut state = self
-                .0
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
+            let mut state = self.0.state.lock();
             if state.closing {
                 return BriefingState::Unavailable;
             }
@@ -143,11 +124,7 @@ impl ProjectDashboardBriefingOwner {
 
     pub(crate) async fn close(&self) {
         let cancellation = {
-            let mut state = self
-                .0
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
+            let mut state = self.0.state.lock();
             state.closing = true;
             state.active.take().map(|active| active.cancellation)
         };
@@ -159,11 +136,7 @@ impl ProjectDashboardBriefingOwner {
     }
 
     fn finish(&self, id: u64) {
-        let mut state = self
-            .0
-            .state
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
+        let mut state = self.0.state.lock();
         if state.active.as_ref().is_some_and(|active| active.id == id) {
             state.active = None;
         }

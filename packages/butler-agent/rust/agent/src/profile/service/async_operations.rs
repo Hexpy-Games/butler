@@ -24,7 +24,7 @@ impl ProfileService {
             .await
             .map_err(|_| ProfileError::new("profile_closed", "Profile service is closed."))?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(ProfileError::new(
                     "profile_closed",

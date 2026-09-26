@@ -16,7 +16,8 @@ pub(super) use snapshot::{
     read_current as read_current_project_work, validate_publication_candidate,
 };
 
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 use tokio::sync::oneshot;
 use tokio_util::task::TaskTracker;
@@ -104,7 +105,7 @@ impl MutationOwner {
     ) -> Result<T, BtccError> {
         let (send, receive) = oneshot::channel();
         {
-            let closing = self.0.closing.lock().expect("Project Work owner poisoned");
+            let closing = self.0.closing.lock();
             if *closing {
                 return Err(BtccError::new(
                     "project_work_closed",
@@ -122,7 +123,7 @@ impl MutationOwner {
 
     async fn close(&self) {
         {
-            let mut closing = self.0.closing.lock().expect("Project Work owner poisoned");
+            let mut closing = self.0.closing.lock();
             *closing = true;
             self.0.tasks.close();
         }

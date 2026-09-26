@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use rusqlite::{OptionalExtension, Transaction, params};
 
@@ -94,7 +95,7 @@ pub(super) fn claim(
         }
         drop(update);
         tx.commit().map_err(storage::db_error)?;
-        let mut registry = active.lock().unwrap();
+        let mut registry = active.lock();
         for window in windows {
             let key = operation_key(root, &window.coverage_key, &nonce);
             registry.insert(key.clone());
@@ -103,7 +104,7 @@ pub(super) fn claim(
         Ok(Some(nonce.clone()))
     })();
     if result.is_err() {
-        let mut registry = active.lock().unwrap();
+        let mut registry = active.lock();
         for key in added {
             registry.remove(&key);
         }
@@ -136,7 +137,7 @@ pub(super) fn release(
         drop(statement);
         tx.commit().map_err(storage::db_error)
     })();
-    let mut registry = active.lock().unwrap();
+    let mut registry = active.lock();
     for window in windows {
         registry.remove(&operation_key(root, &window.coverage_key, nonce));
     }
@@ -189,7 +190,7 @@ pub(super) fn forget(
     nonce: &str,
     active: &Arc<Mutex<HashSet<String>>>,
 ) {
-    let mut registry = active.lock().unwrap();
+    let mut registry = active.lock();
     for window in windows {
         registry.remove(&operation_key(root, &window.coverage_key, nonce));
     }
@@ -267,10 +268,7 @@ fn owner_live(
     active: &Arc<Mutex<HashSet<String>>>,
 ) -> bool {
     if pid == f64::from(host.process_id()) {
-        return active
-            .lock()
-            .unwrap()
-            .contains(&operation_key(root, key, nonce));
+        return active.lock().contains(&operation_key(root, key, nonce));
     }
     host.process_status(pid) != CognitionProcessStatus::DefinitelyDead
 }

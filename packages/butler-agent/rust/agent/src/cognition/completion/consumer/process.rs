@@ -1,10 +1,7 @@
 //! Queue authority, registration, then one pending semantic quantum.
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;

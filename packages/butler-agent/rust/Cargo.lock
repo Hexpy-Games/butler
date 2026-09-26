@@ -716,6 +716,7 @@ dependencies = [
  "nix",
  "notify",
  "ort",
+ "parking_lot",
  "regex",
  "regress",
  "reqwest 0.12.28",

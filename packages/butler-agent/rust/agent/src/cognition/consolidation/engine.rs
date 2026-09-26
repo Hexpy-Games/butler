@@ -2,11 +2,8 @@
 
 mod claims;
 
-use std::{
-    collections::HashSet,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
@@ -227,10 +224,7 @@ impl CycleService {
                 }
                 Err(error) => return Err(error),
             };
-            self.active_claims
-                .lock()
-                .expect("claim set poisoned")
-                .insert(nonce.clone());
+            self.active_claims.lock().insert(nonce.clone());
             let execution = self
                 .executor
                 .execute(phase, &run_id, &input.cancellation)
@@ -274,10 +268,7 @@ impl CycleService {
                 }
             }
             let commit = self.commit_checkpoint(&claimed, &committed, None).await;
-            self.active_claims
-                .lock()
-                .expect("claim set poisoned")
-                .remove(&nonce);
+            self.active_claims.lock().remove(&nonce);
             commit?;
             checkpoint = committed;
         }

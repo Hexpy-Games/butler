@@ -1,11 +1,8 @@
 //! Process-owned completion consumer. Queue and semantic work run independently
 //! of interactive Turns, using the same model and writer-coordination owners.
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -95,7 +92,7 @@ impl NativeMemorySync {
     pub(super) async fn close(&self) -> Result<(), BtccError> {
         self.shutdown.cancel();
         self.consumer.close().await;
-        let task = self.task.lock().expect("memory sync task poisoned").take();
+        let task = self.task.lock().take();
         let joined = match task {
             Some(task) => task
                 .await

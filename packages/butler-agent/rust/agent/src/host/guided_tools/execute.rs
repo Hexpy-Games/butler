@@ -37,14 +37,10 @@ pub(super) async fn execute(
         .await
         .map_err(ToolExecutionError::Integrity)?;
     if record.is_some() {
-        resume
-            .lock()
-            .expect("guided resume pool poisoned")
-            .discard(&call_id);
+        resume.lock().discard(&call_id);
     } else if occurrence.provider_call_id.is_none() {
         let claimed = resume
             .lock()
-            .expect("guided resume pool poisoned")
             .claim(&effective_name, &presentation_args, catalog_id.as_deref())
             .map_err(ToolExecutionError::Integrity)?;
         if let Some(claimed) = claimed {
@@ -203,7 +199,7 @@ pub(super) async fn record_unexecuted(
 }
 
 fn next_index(owner: &NativeGuidedTools) -> u64 {
-    let mut state = owner.state.lock().expect("guided tool state poisoned");
+    let mut state = owner.state.lock();
     let current = state.next_call_index;
     state.next_call_index += 1;
     current
@@ -213,7 +209,6 @@ fn remember_provider(owner: &NativeGuidedTools, occurrence: &Occurrence, call_id
         owner
             .state
             .lock()
-            .expect("guided tool state poisoned")
             .journal_by_provider
             .insert(provider.clone(), call_id.into());
     }

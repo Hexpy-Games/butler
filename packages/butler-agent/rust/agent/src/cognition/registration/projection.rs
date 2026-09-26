@@ -5,12 +5,13 @@ mod recovery;
 mod stages;
 pub(crate) use notice::ProjectionSourceNotice;
 use notice::assert_notice_current;
+use parking_lot::Mutex;
 
 use std::{
     collections::HashSet,
     path::PathBuf,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -80,7 +81,7 @@ struct ActiveWindow {
 }
 impl Drop for ActiveWindow {
     fn drop(&mut self) {
-        self.owners.lock().unwrap().remove(&self.key);
+        self.owners.lock().remove(&self.key);
     }
 }
 
@@ -106,7 +107,7 @@ impl CognitionRegistrationService {
             .await
             .map_err(|_| closed())?;
         let token = {
-            let lifecycle = self.lifecycle.lock().unwrap();
+            let lifecycle = self.lifecycle.lock();
             if lifecycle.closing {
                 return Err(closed());
             }
@@ -196,7 +197,7 @@ async fn execute(
     deps: &ProjectionDependencies,
 ) -> CognitionResult<Option<GraphProgress>> {
     let host = deps.host.clone();
-    let active = owners.lock().unwrap().clone();
+    let active = owners.lock().clone();
     let claim_owners = owners.clone();
     let nonce = host.new_uuid();
     let now = (operation.clock)();
@@ -213,7 +214,7 @@ async fn execute(
                 },
             )?;
             if let Some(claim) = &claim {
-                claim_owners.lock().unwrap().insert((
+                claim_owners.lock().insert((
                     claim.job_id.clone(),
                     claim.window_ref.clone(),
                     claim.owner_nonce.clone(),
@@ -402,7 +403,7 @@ impl Operation {
         let lock_path = self.lock_path.clone();
         let environment = self.environment.clone();
         tokio::task::spawn_blocking(move || {
-            let mut guard = shared.lock().unwrap();
+            let mut guard = shared.lock();
             let state = guard.as_mut().ok_or_else(closed)?;
             lease
                 .assert_for_path(&lock_path)
@@ -426,7 +427,7 @@ impl Operation {
     ) -> CognitionResult<T> {
         let shared = self.state.clone();
         tokio::task::spawn_blocking(move || {
-            let mut guard = shared.lock().unwrap();
+            let mut guard = shared.lock();
             operation(guard.as_mut().ok_or_else(closed)?)
         })
         .await
@@ -435,7 +436,7 @@ impl Operation {
     async fn close(&self) -> CognitionResult<()> {
         let shared = self.state.clone();
         tokio::task::spawn_blocking(move || {
-            let state = shared.lock().unwrap().take().ok_or_else(closed)?;
+            let state = shared.lock().take().ok_or_else(closed)?;
             let graph = state.graph.close();
             let canonical = state.canonical.close().map_err(conversation_error);
             canonical.and(graph)

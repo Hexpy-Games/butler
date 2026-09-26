@@ -194,11 +194,11 @@ impl RoutedRound<'_> {
                     None,
                 )
                 .await?;
-            let pending = self.view.pending_fallback.lock().unwrap().take();
+            let pending = self.view.pending_fallback.lock().take();
             if pending.as_ref() == Some(&(round_id.clone(), candidate.model_ref.clone())) {
                 projection::fallback_started(self.progress, &round_id, &candidate.model_ref).await;
             } else if let Some(pending) = pending {
-                *self.view.pending_fallback.lock().unwrap() = Some(pending);
+                *self.view.pending_fallback.lock() = Some(pending);
             }
             if let Some(status) = status(&started)
                 && status != "recorded"
@@ -321,8 +321,7 @@ impl RoutedRound<'_> {
                     value,
                 )
                 .await?;
-            *self.view.accepted.lock().unwrap() =
-                Some(identity(&request, &candidate.model_ref, &result));
+            *self.view.accepted.lock() = Some(identity(&request, &candidate.model_ref, &result));
             return Ok(ModelRoundResult {
                 accepted_checkpoint: Some(crate::btcc::agent_loop::AcceptedCheckpoint {
                     round_id,
@@ -404,9 +403,8 @@ impl RoutedRound<'_> {
                 Some(route_value),
             )
             .await?;
-        *self.view.active.lock().unwrap() = candidate.model_ref.clone();
-        *self.view.pending_fallback.lock().unwrap() =
-            Some((round.into(), candidate.model_ref.clone()));
+        *self.view.active.lock() = candidate.model_ref.clone();
+        *self.view.pending_fallback.lock() = Some((round.into(), candidate.model_ref.clone()));
         projection::fallback(
             self.progress,
             self.semantic_state,

@@ -77,12 +77,7 @@ pub(super) async fn run(
     }
     // Source permits an already authorized current tool without a prior describe.
     if !owner.binding.authorized_names.contains(name)
-        && !owner
-            .state
-            .lock()
-            .expect("guided tool state poisoned")
-            .described_ids
-            .contains(id)
+        && !owner.state.lock().described_ids.contains(id)
     {
         let mut error = bridge_error(
             "tool_not_described",
@@ -206,12 +201,7 @@ async fn run_mcp(
         return encoded(&error);
     }
     if !owner.binding.visible_names.contains(&parsed.tool_name)
-        && !owner
-            .state
-            .lock()
-            .expect("guided tool state poisoned")
-            .described_ids
-            .contains(id)
+        && !owner.state.lock().described_ids.contains(id)
     {
         let mut error = bridge_error(
             "tool_not_described",

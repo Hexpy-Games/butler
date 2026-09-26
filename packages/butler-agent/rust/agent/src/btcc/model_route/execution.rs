@@ -1,5 +1,6 @@
+use parking_lot::Mutex;
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicU64, Ordering},
 };
 
@@ -137,13 +138,13 @@ struct RoutedExecution<'a> {
 
 impl ModelExecutionView for RoutedExecution<'_> {
     fn active_model_ref(&self) -> String {
-        self.runner.view.active.lock().unwrap().clone()
+        self.runner.view.active.lock().clone()
     }
     fn selected_reasoning_effort(&self) -> ReasoningEffort {
         self.runner.view.selected_reasoning.clone()
     }
     fn accepted_model_identity(&self) -> Option<ModelIdentity> {
-        self.runner.view.accepted.lock().unwrap().clone()
+        self.runner.view.accepted.lock().clone()
     }
 }
 impl ModelExecution for RoutedExecution<'_> {

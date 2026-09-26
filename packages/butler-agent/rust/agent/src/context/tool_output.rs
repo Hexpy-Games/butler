@@ -9,8 +9,9 @@ mod wire;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
@@ -269,10 +270,7 @@ impl NativeToolOutput {
                 }
             }
             if let Some(admission) = worker_admission.upgrade() {
-                admission
-                    .lock()
-                    .expect("tool-output admission poisoned")
-                    .closed = true;
+                admission.lock().closed = true;
             }
             worker_drained.notify_waiters();
         });
@@ -284,10 +282,7 @@ impl NativeToolOutput {
     }
 
     fn enqueue(&self, job: Job) -> ContextResult<()> {
-        let state = self
-            .admission
-            .lock()
-            .expect("tool-output admission poisoned");
+        let state = self.admission.lock();
         if state.closing {
             return Err(ContextError::new(
                 "tool_output_closed",
@@ -363,10 +358,7 @@ impl NativeToolOutput {
 
     pub(crate) async fn close(&self) {
         {
-            let mut state = self
-                .admission
-                .lock()
-                .expect("tool-output admission poisoned");
+            let mut state = self.admission.lock();
             if !state.closing {
                 state.closing = true;
                 self.slots.close();
@@ -377,12 +369,7 @@ impl NativeToolOutput {
             let notified = self.drained.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self
-                .admission
-                .lock()
-                .expect("tool-output admission poisoned")
-                .closed
-            {
+            if self.admission.lock().closed {
                 break;
             }
             notified.await;

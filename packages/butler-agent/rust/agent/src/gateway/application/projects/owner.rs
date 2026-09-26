@@ -1,9 +1,7 @@
 //! A project create retains its folder, row and event lifetime after HTTP disconnect.
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc};
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
@@ -40,20 +38,11 @@ impl ProjectCreationOwner {
     }
 
     pub(in crate::gateway::application) fn workspace_root(&self) -> PathBuf {
-        self.0
-            .state
-            .lock()
-            .expect("App project owner poisoned")
-            .workspace_root
-            .clone()
+        self.0.state.lock().workspace_root.clone()
     }
 
     pub(in crate::gateway::application) fn set_workspace_root(&self, root: PathBuf) {
-        self.0
-            .state
-            .lock()
-            .expect("App project owner poisoned")
-            .workspace_root = root;
+        self.0.state.lock().workspace_root = root;
     }
 
     pub(in crate::gateway::application) fn resolve_workspace_selection(
@@ -78,7 +67,7 @@ impl ProjectCreationOwner {
             .map_err(|_| GatewayApplicationError::Internal)?;
         let (send, receive) = oneshot::channel();
         {
-            let state = self.0.state.lock().expect("App project owner poisoned");
+            let state = self.0.state.lock();
             if state.closing {
                 return Err(GatewayApplicationError::Internal);
             }
@@ -99,7 +88,7 @@ impl ProjectCreationOwner {
 
     pub(in crate::gateway::application) async fn close(&self) {
         {
-            let mut state = self.0.state.lock().expect("App project owner poisoned");
+            let mut state = self.0.state.lock();
             state.closing = true;
             self.0.permits.close();
             self.0.tasks.close();

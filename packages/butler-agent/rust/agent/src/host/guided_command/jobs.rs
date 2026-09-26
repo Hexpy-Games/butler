@@ -1,6 +1,7 @@
 //! Bounded admission and close-drain for synchronous artifact work.
 
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 use tokio::sync::{Notify, Semaphore};
 
@@ -22,7 +23,7 @@ struct State {
 struct Active(Arc<Inner>);
 impl Drop for Active {
     fn drop(&mut self) {
-        let mut state = self.0.state.lock().expect("command jobs poisoned");
+        let mut state = self.0.state.lock();
         state.active -= 1;
         drop(state);
         self.0.idle.notify_waiters();
@@ -53,7 +54,7 @@ impl CommandJobs {
             .await
             .map_err(|_| error("command_jobs_closed"))?;
         {
-            let mut state = self.inner.state.lock().expect("command jobs poisoned");
+            let mut state = self.inner.state.lock();
             if state.closing {
                 return Err(error("command_jobs_closed"));
             }
@@ -71,7 +72,7 @@ impl CommandJobs {
 
     pub(super) async fn close(&self) {
         {
-            let mut state = self.inner.state.lock().expect("command jobs poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
             self.inner.slots.close();
         }
@@ -79,14 +80,7 @@ impl CommandJobs {
             let notified = self.inner.idle.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self
-                .inner
-                .state
-                .lock()
-                .expect("command jobs poisoned")
-                .active
-                == 0
-            {
+            if self.inner.state.lock().active == 0 {
                 return;
             }
             notified.await;

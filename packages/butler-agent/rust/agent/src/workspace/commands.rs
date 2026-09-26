@@ -5,6 +5,7 @@ mod process;
 mod spool;
 mod structured;
 
+use parking_lot::Mutex;
 use process::{ProcessHost, SystemProcesses};
 
 #[cfg(test)]
@@ -12,7 +13,7 @@ mod tests;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Notify, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -138,12 +139,7 @@ struct Active {
 
 impl Drop for Active {
     fn drop(&mut self) {
-        self.owner
-            .state
-            .lock()
-            .expect("command owner poisoned")
-            .active
-            .remove(&self.id);
+        self.owner.state.lock().active.remove(&self.id);
         self.owner.idle.notify_waiters();
     }
 }
@@ -180,7 +176,7 @@ impl NativeCommands {
     }
 
     fn register(&self) -> Result<(Active, CancellationToken), CommandError> {
-        let mut state = self.inner.state.lock().expect("command owner poisoned");
+        let mut state = self.inner.state.lock();
         if state.closing {
             return Err(CommandError::new(
                 "command_owner_closed",
@@ -204,12 +200,7 @@ impl NativeCommands {
     }
 
     pub(crate) fn active_count(&self) -> usize {
-        self.inner
-            .state
-            .lock()
-            .expect("command owner poisoned")
-            .active
-            .len()
+        self.inner.state.lock().active.len()
     }
 
     pub(crate) fn submit_guided(
@@ -242,7 +233,7 @@ impl NativeCommands {
 
     pub(crate) async fn close(&self) {
         let tokens = {
-            let mut state = self.inner.state.lock().expect("command owner poisoned");
+            let mut state = self.inner.state.lock();
             state.closing = true;
             state.active.values().cloned().collect::<Vec<_>>()
         };

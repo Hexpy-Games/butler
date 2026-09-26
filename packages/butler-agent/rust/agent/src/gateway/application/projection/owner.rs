@@ -1,8 +1,9 @@
 //! Native watcher and bounded projection worker ownership.
 
+use parking_lot::Mutex;
 use std::{
     collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
@@ -174,9 +175,7 @@ impl ProjectionOwner {
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        if let Ok(watcher) = self.watcher.get_mut() {
-            watcher.take();
-        }
+        self.watcher.get_mut().take();
         let _ = self.sender.try_send(Command::Close);
     }
 }
@@ -381,8 +380,6 @@ async fn sync_requested(
     while sync_deferred_once(context).await? {}
     Ok(())
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

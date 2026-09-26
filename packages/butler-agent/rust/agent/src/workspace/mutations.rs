@@ -26,7 +26,8 @@ pub(crate) fn net_changed_file_detail(
 
 pub(crate) use edit::prepare_exact_text;
 
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::{Notify, Semaphore, oneshot};
@@ -56,7 +57,7 @@ struct Active(Arc<MutationOwner>);
 
 impl Drop for Active {
     fn drop(&mut self) {
-        let mut state = self.0.state.lock().expect("mutation owner poisoned");
+        let mut state = self.0.state.lock();
         state.active -= 1;
         drop(state);
         self.0.idle.notify_waiters();
@@ -93,7 +94,7 @@ impl WorkspaceMutations {
         command: MutationCommand,
     ) -> Result<oneshot::Receiver<MutationCompletion>, MutationOwnerError> {
         {
-            let mut state = self.inner.state.lock().expect("mutation owner poisoned");
+            let mut state = self.inner.state.lock();
             if state.closing {
                 return Err(MutationOwnerError {
                     code: "workspace_mutations_closed",
@@ -129,19 +130,11 @@ impl WorkspaceMutations {
     }
 
     pub(crate) fn active_count(&self) -> usize {
-        self.inner
-            .state
-            .lock()
-            .expect("mutation owner poisoned")
-            .active
+        self.inner.state.lock().active
     }
 
     pub(crate) async fn close(&self) {
-        self.inner
-            .state
-            .lock()
-            .expect("mutation owner poisoned")
-            .closing = true;
+        self.inner.state.lock().closing = true;
         loop {
             let notified = self.inner.idle.notified();
             tokio::pin!(notified);

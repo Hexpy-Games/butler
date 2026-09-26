@@ -1,11 +1,12 @@
 //! Dashboard-consumed worker completion safety from durable task evidence.
 
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::LazyLock,
 };
 
 use regex::Regex;
@@ -380,7 +381,7 @@ fn json_lines(path: &Path) -> impl Iterator<Item = Value> {
 fn pattern(source: &'static str, value: &str) -> bool {
     static CACHE: LazyLock<Mutex<HashMap<&'static str, Regex>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
-    let mut cache = CACHE.lock().expect("worker evidence patterns poisoned");
+    let mut cache = CACHE.lock();
     cache
         .entry(source)
         .or_insert_with(|| Regex::new(source).expect("source evidence pattern"))

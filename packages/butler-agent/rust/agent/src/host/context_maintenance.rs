@@ -1,10 +1,11 @@
 //! Process-owned daily context maintenance. The service starts this after readiness.
 
+use parking_lot::Mutex;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -55,7 +56,7 @@ impl ContextMaintenance {
     }
 
     pub(crate) fn start(&self) {
-        let mut task = self.task.lock().expect("maintenance task poisoned");
+        let mut task = self.task.lock();
         if task.is_some() || self.cancellation.is_cancelled() {
             return;
         }
@@ -130,7 +131,7 @@ impl ContextMaintenance {
 
     pub(crate) async fn close(&self) {
         self.cancellation.cancel();
-        let task = self.task.lock().expect("maintenance task poisoned").take();
+        let task = self.task.lock().take();
         if let Some(task) = task {
             let _ = task.await;
         }

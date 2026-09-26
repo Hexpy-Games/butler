@@ -1,5 +1,6 @@
+use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Notify, Semaphore};
 
@@ -27,7 +28,7 @@ struct OwnerState {
 struct ActiveOperation(Arc<FileOwner>);
 impl Drop for ActiveOperation {
     fn drop(&mut self) {
-        let mut state = self.0.state.lock().expect("workspace file owner poisoned");
+        let mut state = self.0.state.lock();
         state.active -= 1;
         drop(state);
         self.0.idle.notify_waiters();
@@ -53,19 +54,11 @@ impl NativeWorkspaceFiles {
         }
     }
     pub(crate) fn active_count(&self) -> usize {
-        self.inner
-            .state
-            .lock()
-            .expect("workspace file owner poisoned")
-            .active
+        self.inner.state.lock().active
     }
     pub(crate) async fn close(&self) {
         {
-            self.inner
-                .state
-                .lock()
-                .expect("workspace file owner poisoned")
-                .closing = true;
+            self.inner.state.lock().closing = true;
         }
         self.inner.permits.close();
         loop {
@@ -92,11 +85,7 @@ impl NativeWorkspaceFiles {
                 code: "workspace_files_closed",
             })?;
         {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .expect("workspace file owner poisoned");
+            let mut state = self.inner.state.lock();
             if state.closing {
                 return Err(FileOwnerError {
                     code: "workspace_files_closed",

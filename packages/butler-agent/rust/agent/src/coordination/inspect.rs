@@ -13,7 +13,7 @@ impl CoordinatorInner {
         lock_path: &Path,
     ) -> CoordinationResult<ConsolidationLockInspection> {
         let path = coordinator_path(lock_path);
-        if let Some(local) = self.local.lock().unwrap().get(lock_path).cloned() {
+        if let Some(local) = self.local.lock().get(lock_path).cloned() {
             return Ok(inspection(
                 ConsolidationLockState::Held,
                 Some(local.owner.clone()),

@@ -9,9 +9,10 @@ mod runtime;
 mod targets;
 mod types;
 
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 

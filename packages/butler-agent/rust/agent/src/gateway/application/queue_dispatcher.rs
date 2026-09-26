@@ -1,9 +1,7 @@
 //! Long-lived FIFO session queue dispatch and lease recovery ownership.
 
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use parking_lot::Mutex;
+use std::{sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -352,8 +350,6 @@ async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, Gateway
         }))
     }).await.map_err(app_error)
 }
-fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    value
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock<T>(value: &Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
+    value.lock()
 }

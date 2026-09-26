@@ -4,8 +4,9 @@ mod clip;
 mod project_source;
 mod read;
 
+use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
@@ -56,7 +57,7 @@ impl NativeAttachmentContext {
         let title = title.to_owned();
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self.closing.lock().expect("attachment owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -95,7 +96,7 @@ impl NativeAttachmentContext {
         let data = self.butler_data.clone();
         let (sender, receiver) = oneshot::channel();
         {
-            let closing = self.closing.lock().expect("attachment owner poisoned");
+            let closing = self.closing.lock();
             if *closing {
                 return Err(ContextError::new(
                     "closed",
@@ -120,7 +121,7 @@ impl NativeAttachmentContext {
 
     pub(crate) async fn close(&self) -> ContextResult<()> {
         {
-            let mut closing = self.closing.lock().expect("attachment owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();

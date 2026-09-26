@@ -72,11 +72,7 @@ impl NativeSessionWorktrees {
     {
         let (tx, rx) = oneshot::channel();
         {
-            let state = self
-                .inner
-                .state
-                .lock()
-                .expect("session worktree owner poisoned");
+            let state = self.inner.state.lock();
             if state.closing {
                 return Err(WorkspaceError::new(
                     "session_worktree_owner_closed",

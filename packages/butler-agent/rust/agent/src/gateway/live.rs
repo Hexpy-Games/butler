@@ -1,9 +1,10 @@
+use parking_lot::Mutex;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::Infallible,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Poll, Waker},
     time::Duration,
 };
@@ -80,8 +81,8 @@ pub(super) async fn create_live_stream(
     })
 }
 
-fn state_lock(state: &Arc<Mutex<LiveState>>) -> std::sync::MutexGuard<'_, LiveState> {
-    state.lock().expect("live event state poisoned")
+fn state_lock(state: &Arc<Mutex<LiveState>>) -> parking_lot::MutexGuard<'_, LiveState> {
+    state.lock()
 }
 
 struct LiveState {
@@ -194,7 +195,7 @@ impl Stream for LiveEventStream {
             return Poll::Ready(None);
         }
         let chunk = {
-            let mut state = self.state.lock().expect("live event state poisoned");
+            let mut state = self.state.lock();
             let chunk = state.output.pop_front();
             if chunk.is_none() {
                 state.waker = Some(cx.waker().clone());

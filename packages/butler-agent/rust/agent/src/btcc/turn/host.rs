@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use futures_util::FutureExt;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
@@ -45,7 +46,7 @@ impl Coordinator {
         request: TurnRequest,
     ) -> Result<TurnOutcome, BtccError> {
         let (flight, predecessor, leader) = {
-            let mut state = self.state.lock().expect("coordinator lock poisoned");
+            let mut state = self.state.lock();
             if state.closing {
                 return Err(closing_error());
             }
@@ -83,7 +84,7 @@ impl Coordinator {
             flight.attach(task).await;
         }
         let result = flight.wait().await;
-        let mut state = self.state.lock().expect("coordinator lock poisoned");
+        let mut state = self.state.lock();
         if state
             .active
             .get(&cleanup_turn_id)
@@ -103,7 +104,7 @@ impl Coordinator {
 
     pub(super) async fn stop(self: &Arc<Self>, turn_id: &str) -> Result<TurnOutcome, BtccError> {
         let (generation, flight) = {
-            let mut state = self.state.lock().expect("coordinator lock poisoned");
+            let mut state = self.state.lock();
             if state.closing {
                 return Err(closing_error());
             }
@@ -137,7 +138,7 @@ impl Coordinator {
 
     pub(super) async fn close(self: &Arc<Self>) -> Result<(), BtccError> {
         let (close, leader, active) = {
-            let mut state = self.state.lock().expect("coordinator lock poisoned");
+            let mut state = self.state.lock();
             if let Some(close) = &state.close {
                 (close.clone(), false, Vec::new())
             } else {
@@ -162,8 +163,7 @@ impl Coordinator {
                         let _ = flight.wait().await;
                     }
                     {
-                        let mut state =
-                            coordinator.state.lock().expect("coordinator lock poisoned");
+                        let mut state = coordinator.state.lock();
                         state.active.clear();
                         state.active_stops.clear();
                         state.session_tails.clear();
@@ -182,33 +182,21 @@ impl Coordinator {
 
     #[cfg(test)]
     pub(super) fn active_count(&self) -> usize {
-        self.state
-            .lock()
-            .expect("coordinator lock poisoned")
-            .active
-            .len()
+        self.state.lock().active.len()
     }
 
     #[cfg(test)]
     pub(super) fn session_tail_count(&self) -> usize {
-        self.state
-            .lock()
-            .expect("coordinator lock poisoned")
-            .session_tails
-            .len()
+        self.state.lock().session_tails.len()
     }
 
     #[cfg(test)]
     pub(super) fn active_stop_count(&self) -> usize {
-        self.state
-            .lock()
-            .expect("coordinator lock poisoned")
-            .active_stops
-            .len()
+        self.state.lock().active_stops.len()
     }
 
     fn remove_flight(&self, turn_id: &str, session_id: &str, flight: &Arc<Flight<TurnOutcome>>) {
-        let mut state = self.state.lock().expect("coordinator lock poisoned");
+        let mut state = self.state.lock();
         if state
             .active
             .get(turn_id)
@@ -226,7 +214,7 @@ impl Coordinator {
     }
 
     fn remove_stop(&self, generation: u64, flight: &Arc<Flight<TurnOutcome>>) {
-        let mut state = self.state.lock().expect("coordinator lock poisoned");
+        let mut state = self.state.lock();
         if state
             .active_stops
             .get(&generation)

@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex as StdMutex};
+use parking_lot::Mutex as StdMutex;
+use std::sync::Arc;
 
 use tokio::{
     sync::{Mutex, mpsc, oneshot},
@@ -89,12 +90,7 @@ impl AutomationRunOwner {
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         let sender = self.inner.admission.lock().await.sender.take();
         drop(sender);
-        let task = self
-            .inner
-            .task
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .take();
+        let task = self.inner.task.lock().take();
         if let Some(task) = task {
             task.await.map_err(|_| GatewayApplicationError::Internal)?;
         }

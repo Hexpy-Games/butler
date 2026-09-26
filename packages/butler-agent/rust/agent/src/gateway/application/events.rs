@@ -1,8 +1,9 @@
 //! Durable event rows and bounded synchronous subscriber publication.
 
+use parking_lot::Mutex;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Weak},
 };
 
 use rusqlite::{Connection, params};
@@ -27,16 +28,13 @@ struct SubscriberState {
 
 impl EventSubscribers {
     pub(super) fn observe_cursor(&self, observer: Arc<dyn Fn(u64) + Send + Sync>) {
-        self.inner
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .cursor_observer = Some(observer);
+        self.inner.lock().cursor_observer = Some(observer);
     }
     pub(super) fn subscribe(
         &self,
         listener: Arc<dyn Fn(AppEventEnvelope) + Send + Sync>,
     ) -> Box<dyn EventSubscription> {
-        let mut state = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        let mut state = self.inner.lock();
         state.next_id += 1;
         let id = state.next_id;
         state.listeners.insert(id, listener);
@@ -48,7 +46,7 @@ impl EventSubscribers {
 
     pub(super) fn publish(&self, event: AppEventEnvelope) {
         let (listeners, cursor_observer) = {
-            let state = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+            let state = self.inner.lock();
             (
                 state.listeners.values().cloned().collect::<Vec<_>>(),
                 state.cursor_observer.clone(),
@@ -71,11 +69,7 @@ impl EventSubscription for Subscription {}
 impl Drop for Subscription {
     fn drop(&mut self) {
         if let Some(owner) = self.owner.upgrade() {
-            owner
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .listeners
-                .remove(&self.id);
+            owner.lock().listeners.remove(&self.id);
         }
     }
 }

@@ -8,10 +8,8 @@ mod snapshot;
 mod tests;
 mod upload;
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc};
 
 use bytes::Bytes;
 use tokio::sync::{Semaphore, oneshot};
@@ -45,7 +43,7 @@ impl NativeAppMessageFiles {
 
     pub(crate) async fn close(&self) -> Result<(), GatewayApplicationError> {
         {
-            let mut closing = self.closing.lock().expect("App files owner poisoned");
+            let mut closing = self.closing.lock();
             *closing = true;
             self.permits.close();
             self.jobs.close();
@@ -87,7 +85,7 @@ impl NativeAppMessageFiles {
             // Close and registration share a lock; caller cancellation cannot
             // detach file writes from the runtime's shutdown sequence.
             {
-                let closing = closing.lock().expect("App files owner poisoned");
+                let closing = closing.lock();
                 if *closing {
                     return Err(GatewayApplicationError::Internal);
                 }

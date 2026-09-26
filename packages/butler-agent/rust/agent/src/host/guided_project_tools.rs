@@ -6,9 +6,10 @@ mod lifecycle;
 mod options;
 mod recovery;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
@@ -98,10 +99,7 @@ impl NativeGuidedProjectTools {
         let name = name.to_owned();
         let args = args.clone();
         let task = {
-            let open = self
-                .admission
-                .lock()
-                .expect("project tool admission poisoned");
+            let open = self.admission.lock();
             if !*open {
                 return Err(error("project_tools_closed"));
             }
@@ -122,10 +120,7 @@ impl NativeGuidedProjectTools {
 
     pub(crate) async fn close(&self) {
         {
-            let mut open = self
-                .admission
-                .lock()
-                .expect("project tool admission poisoned");
+            let mut open = self.admission.lock();
             *open = false;
             self.tasks.close();
         }

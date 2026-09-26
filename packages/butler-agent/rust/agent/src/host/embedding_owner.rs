@@ -1,11 +1,12 @@
 //! Host-owned, bounded client for the private same-executable embedding worker.
 //! One in-process queue serializes one child and one inference at a time.
 
+use parking_lot::Mutex;
 use std::{
     panic::AssertUnwindSafe,
     path::PathBuf,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -89,7 +90,7 @@ impl NativeEmbeddingOwner {
         loop {
             let completed = *completion.borrow_and_update();
             if let Some(completed) = completed {
-                let actor = self.actor.lock().expect("embedding actor mutex").take();
+                let actor = self.actor.lock().take();
                 if let Some(actor) = actor {
                     actor.await.map_err(|_| error("embed_worker_unavailable"))?;
                 }
@@ -141,7 +142,7 @@ impl NativeEmbeddingOwner {
         let admitted_cancel = cancellation.child_token();
         let (sender, receiver) = oneshot::channel();
         {
-            let mut state = self.inner.state.lock().expect("embedding queue mutex");
+            let mut state = self.inner.state.lock();
             if state.closed {
                 return Err(error("embed_owner_closed"));
             }
@@ -207,7 +208,7 @@ impl CognitionEmbeddingPort for NativeEmbeddingOwner {
 
 impl Inner {
     fn close(&self) {
-        let mut state = self.state.lock().expect("embedding queue mutex");
+        let mut state = self.state.lock();
         if state.closed {
             return;
         }
@@ -227,7 +228,7 @@ impl Inner {
     }
 
     fn remove_waiting(&self, id: u64) {
-        let mut state = self.state.lock().expect("embedding queue mutex");
+        let mut state = self.state.lock();
         let removed = state
             .interactive
             .iter()
@@ -259,7 +260,7 @@ async fn run_actor(inner: Arc<Inner>) {
     let mut child: Option<WorkerChild> = None;
     loop {
         let next = {
-            let mut state = inner.state.lock().expect("embedding queue mutex");
+            let mut state = inner.state.lock();
             if state.closed {
                 None
             } else {
@@ -269,7 +270,7 @@ async fn run_actor(inner: Arc<Inner>) {
         if let Some(item) = next {
             let result = run_item(&inner, &mut child, &item).await;
             let _ = item.response.send(result);
-            let mut state = inner.state.lock().expect("embedding queue mutex");
+            let mut state = inner.state.lock();
             state.active_cancel = None;
             state.release(item.bytes);
             continue;
