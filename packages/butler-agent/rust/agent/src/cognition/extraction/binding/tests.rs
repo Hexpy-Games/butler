@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::cognition::extraction::CandidateEvidence;
 

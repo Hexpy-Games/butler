@@ -1,4 +1,3 @@
-
 use rusqlite::Connection;
 
 use super::{InternalSupersessionInput, supersede};

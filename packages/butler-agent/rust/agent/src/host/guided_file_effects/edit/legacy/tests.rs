@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::btcc::{EffectFuture, RegisteredEditPort, WorkspaceFileEditEffectAdapter};
 use crate::workspace::EffectFileScope;

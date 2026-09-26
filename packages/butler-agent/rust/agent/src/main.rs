@@ -290,9 +290,11 @@ fn installation(
 mod tests {
     use std::ffi::OsString;
 
+    type Recognizer = fn(&[OsString]) -> bool;
+
     /// Mirrors the dispatch order of `main`: the first family that claims argv runs.
     fn route(args: &[OsString]) -> &'static str {
-        let families: [(&str, fn(&[OsString]) -> bool); 18] = [
+        let families: [(&str, Recognizer); 18] = [
             (
                 "conversation_recovery",
                 butler_agent::native_conversation_recovery_cli_recognizes,

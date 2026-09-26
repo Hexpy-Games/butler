@@ -1,4 +1,3 @@
-
 use super::parse_and_chunk;
 
 fn event(kind: &str, timestamp: &str, payload: serde_json::Value) -> String {

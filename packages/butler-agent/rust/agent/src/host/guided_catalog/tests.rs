@@ -14,18 +14,20 @@ fn catalog() -> NativeGuidedCatalog {
     NativeGuidedCatalog::load(&capabilities).unwrap()
 }
 
+/// (admitted access, turn context, phase surface enabled, replay flag,
+/// Ok((mode, phase, write_file authorized, work tools authorized)) | Err(policy error))
+type PhaseCase = (
+    &'static str,
+    &'static str,
+    bool,
+    &'static str,
+    Result<(&'static str, &'static str, bool, bool), &'static str>,
+);
+
 #[test]
 fn phase_selection_enforces_execution_policy_access_and_required_tools() {
     let catalog = catalog();
-    // (admitted access, turn context, phase surface enabled, replay flag,
-    //  Ok((mode, phase, write_file authorized, work tools authorized)) | Err(policy error))
-    let cases: [(
-        &str,
-        &str,
-        bool,
-        &str,
-        Result<(&str, &str, bool, bool), &str>,
-    ); 13] = [
+    let cases: [PhaseCase; 13] = [
         (
             "full_access",
             r#"{"projectSources":[{"title":"source"}],"baselineObservationScopeRefs":[],"executionPolicy":{"role":"butler","accessMode":"full_access","trackingMode":"local","requiredNativeToolProfiles":[],"requiredNativeTools":[],"workspacePath":"/tmp"}}"#,

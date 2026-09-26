@@ -1,4 +1,3 @@
-
 use super::*;
 #[test]
 fn structured_previews_drop_private_fields_and_bound_artifact_pages() {

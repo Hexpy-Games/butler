@@ -89,106 +89,106 @@ fn serializers_preserve_gemini_levels_and_openai_stable_prefix_identity() {
 }
 
 #[test]
-fn local_text_tool_marker_is_repaired_without_exposing_it_as_visible_text() {
-    let messages = [ModelRoundMessage {
-        role: ModelRoundRole::User,
-        content: "find it".into(),
-        tool_call_id: None,
-        name: None,
-        tool_calls: None,
-        image_attachments: Vec::new(),
-        provider_data: None,
-        request_segment_kind: None,
-        operation_result_reference: None,
-        operation_result_call_id: None,
-        continuation_item_id: Some("turn-item-0".into()),
-    }];
-    let tools = [ModelRoundTool {
-        name: "search_web".into(),
-        description: "Search".into(),
-        parameters: Map::new(),
-        concurrency_safe: None,
-        tool_contract_version: None,
-    }];
-    let mut request = request(
-        "local/test",
-        &messages,
-        &ReasoningEffort::None,
-        CancellationToken::new(),
-        None,
-    );
-    request.tools = &tools;
-    let response = serde_json::json!({
-        "choices":[{"message":{"role":"assistant","content":"<|tool_call>call: search_web {query:\"rust\",}<tool_call|>"}}]
-    });
-    let result = result::decode(
-        response,
-        "local",
-        "local/test",
-        serialize::Carrier::Chat { stream: false },
-        0,
-        &request,
-        None,
-    );
-    assert_eq!(result.text, None);
-    assert_eq!(result.tool_calls.len(), 1);
-    assert_eq!(result.tool_calls[0].name, "search_web");
-    assert_eq!(result.tool_calls[0].origin, Some(ToolCallOrigin::Text));
-    assert_eq!(result.tool_calls[0].arguments["query"], "rust");
-}
+fn local_text_protocol_repairs_tool_markers_and_hides_reasoning_but_not_user_fences() {
+    {
+        let messages = [ModelRoundMessage {
+            role: ModelRoundRole::User,
+            content: "find it".into(),
+            tool_call_id: None,
+            name: None,
+            tool_calls: None,
+            image_attachments: Vec::new(),
+            provider_data: None,
+            request_segment_kind: None,
+            operation_result_reference: None,
+            operation_result_call_id: None,
+            continuation_item_id: Some("turn-item-0".into()),
+        }];
+        let tools = [ModelRoundTool {
+            name: "search_web".into(),
+            description: "Search".into(),
+            parameters: Map::new(),
+            concurrency_safe: None,
+            tool_contract_version: None,
+        }];
+        let mut request = request(
+            "local/test",
+            &messages,
+            &ReasoningEffort::None,
+            CancellationToken::new(),
+            None,
+        );
+        request.tools = &tools;
+        let response = serde_json::json!({
+            "choices":[{"message":{"role":"assistant","content":"<|tool_call>call: search_web {query:\"rust\",}<tool_call|>"}}]
+        });
+        let result = result::decode(
+            response,
+            "local",
+            "local/test",
+            serialize::Carrier::Chat { stream: false },
+            0,
+            &request,
+            None,
+        );
+        assert_eq!(result.text, None);
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].name, "search_web");
+        assert_eq!(result.tool_calls[0].origin, Some(ToolCallOrigin::Text));
+        assert_eq!(result.tool_calls[0].arguments["query"], "rust");
+    }
+    {
+        let messages = [ModelRoundMessage {
+            role: ModelRoundRole::User,
+            content: "explain".into(),
+            tool_call_id: None,
+            name: None,
+            tool_calls: None,
+            image_attachments: Vec::new(),
+            provider_data: None,
+            request_segment_kind: None,
+            operation_result_reference: None,
+            operation_result_call_id: None,
+            continuation_item_id: Some("turn-item-0".into()),
+        }];
+        let tools = [ModelRoundTool {
+            name: "search_web".into(),
+            description: "Search".into(),
+            parameters: Map::new(),
+            concurrency_safe: None,
+            tool_contract_version: None,
+        }];
+        let mut input = request(
+            "local/test",
+            &messages,
+            &ReasoningEffort::None,
+            CancellationToken::new(),
+            None,
+        );
+        input.tools = &tools;
+        let response = serde_json::json!({
+            "choices":[{"message":{"role":"assistant","content":[
+                {"text":"analysis:\nprivate reasoning\n<|channel|final|>Visible  \n\n\n```text\nanalysis: preserved\n```"},
+                {"text":"\n<|tool_call>call: unknown_tool {}<tool_call|>"}
+            ]}}]
+        });
 
-#[test]
-fn local_text_protocol_hides_reasoning_but_preserves_fenced_user_content() {
-    let messages = [ModelRoundMessage {
-        role: ModelRoundRole::User,
-        content: "explain".into(),
-        tool_call_id: None,
-        name: None,
-        tool_calls: None,
-        image_attachments: Vec::new(),
-        provider_data: None,
-        request_segment_kind: None,
-        operation_result_reference: None,
-        operation_result_call_id: None,
-        continuation_item_id: Some("turn-item-0".into()),
-    }];
-    let tools = [ModelRoundTool {
-        name: "search_web".into(),
-        description: "Search".into(),
-        parameters: Map::new(),
-        concurrency_safe: None,
-        tool_contract_version: None,
-    }];
-    let mut input = request(
-        "local/test",
-        &messages,
-        &ReasoningEffort::None,
-        CancellationToken::new(),
-        None,
-    );
-    input.tools = &tools;
-    let response = serde_json::json!({
-        "choices":[{"message":{"role":"assistant","content":[
-            {"text":"analysis:\nprivate reasoning\n<|channel|final|>Visible  \n\n\n```text\nanalysis: preserved\n```"},
-            {"text":"\n<|tool_call>call: unknown_tool {}<tool_call|>"}
-        ]}}]
-    });
+        let result = result::decode(
+            response,
+            "local",
+            "local/test",
+            serialize::Carrier::Chat { stream: false },
+            0,
+            &input,
+            None,
+        );
 
-    let result = result::decode(
-        response,
-        "local",
-        "local/test",
-        serialize::Carrier::Chat { stream: false },
-        0,
-        &input,
-        None,
-    );
-
-    assert_eq!(
-        result.text.as_deref(),
-        Some("Visible\n\n```text\nanalysis: preserved\n```")
-    );
-    assert!(result.tool_calls.is_empty());
+        assert_eq!(
+            result.text.as_deref(),
+            Some("Visible\n\n```text\nanalysis: preserved\n```")
+        );
+        assert!(result.tool_calls.is_empty());
+    }
 }
 
 pub(super) fn carrier_config(

@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Content references are persisted; canonicalization must keep producing
