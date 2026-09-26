@@ -32,7 +32,9 @@ async fn write_probe_waits_for_external_lock_and_restores_owner_state() {
         "write probe must observe the external lock"
     );
     cancelled.cancel();
-    let error = tokio::time::timeout(Duration::from_secs(1), wait)
+    // Liveness bound, not a latency assertion: one probe waits at most its
+    // 250 ms busy timeout, but loaded CI runners have stalled past 1 s here.
+    let error = tokio::time::timeout(Duration::from_secs(30), wait)
         .await
         .expect("cancelled probe settles after admitted SQL")
         .expect("wait task")
