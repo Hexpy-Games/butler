@@ -10,8 +10,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { choose: "Choose", one: "One", two: "Two" },
-  "ko-KR": { choose: "선택", one: "하나", two: "둘" },
+  "en-US": { choose: "Choose", one: "One", two: "Two", local: "Local", worktree: "Worktree" },
+  "ko-KR": { choose: "선택", one: "하나", two: "둘", local: "로컬", worktree: "워크트리" },
 } as const;
 
 function SelectExample({ locale, value }: ShowcaseRenderContext & { value?: string }) {
@@ -49,6 +49,23 @@ export const stories: ShowcaseStory[] = [
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="one">{labels[locale].one}</SelectItem>
+        </SelectContent>
+      </Select>
+    ),
+  },
+  {
+    name: "Disabled option",
+    states: ["disabled"],
+    render: ({ locale }) => (
+      // Open it: the unavailable option keeps its place in the disabled tone
+      // (--interactive-disabled-fg) and never takes the hover fill.
+      <Select defaultValue="local">
+        <SelectTrigger aria-label="Workspace">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="local">{labels[locale].local}</SelectItem>
+          <SelectItem value="worktree" disabled>{labels[locale].worktree}</SelectItem>
         </SelectContent>
       </Select>
     ),

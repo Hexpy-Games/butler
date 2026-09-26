@@ -31,6 +31,14 @@ height, left-aligned value, and plain chevron.
 
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
+### Disabled tone
+
+Disabled options, menu items, rows and Clickables use the DS disabled tone:
+`--interactive-disabled-fg` (the theme's `--color-text-disabled`) and
+`--interactive-disabled-cursor`, never opacity, and they never take the hover
+or keyboard highlight fill. Product code passes `disabled`; it does not style
+the state.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

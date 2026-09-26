@@ -293,6 +293,9 @@
   --color-text-secondary: var(--neutral-light-text-secondary);
   --color-text-tertiary: var(--grayscale-07);
   --color-text-disabled: var(--neutral-light-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
+  --interactive-disabled-cursor: not-allowed;
   --color-text-inverse: var(--neutral-white);
 
   --color-action-primary: var(--blue-06);
@@ -654,6 +657,8 @@
   --color-text-secondary: var(--neutral-dark-text-secondary);
   --color-text-tertiary: var(--neutral-dark-text-tertiary);
   --color-text-disabled: var(--neutral-dark-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
   --color-text-inverse: var(--grayscale-11);
 
   --color-action-primary: var(--blue-06);
@@ -810,6 +815,8 @@
   --color-text-secondary: var(--neutral-light-text-secondary);
   --color-text-tertiary: var(--grayscale-07);
   --color-text-disabled: var(--neutral-light-text-disabled);
+  /* Disabled tone for rows, menu items and options: text color, not opacity. */
+  --interactive-disabled-fg: var(--color-text-disabled);
   --color-text-inverse: var(--neutral-white);
 
   --focus-ring-color: var(--color-action-primary);

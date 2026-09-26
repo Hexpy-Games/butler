@@ -15,7 +15,8 @@
 }
 
 .clickable[data-disabled="true"] {
-  cursor: default;
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .clickable[data-stretch="true"] {

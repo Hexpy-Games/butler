@@ -69,12 +69,12 @@
   font-size: var(--font-size-2);
 }
 
-.interactive:hover {
+.interactive:not(.disabled):hover {
   background: color-mix(in srgb, var(--selection) 60%, transparent);
 }
 
 .active,
-.interactive.active:hover {
+.interactive.active:not(.disabled):hover {
   background: var(--selection-strong);
   color: var(--text-primary);
 }
@@ -88,8 +88,8 @@
 }
 
 .disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .labelRegion {

@@ -33,9 +33,15 @@
   outline: none;
 }
 
-.item:focus,
-.item:hover {
+.item:not([data-disabled]):focus,
+.item:not([data-disabled]):hover {
   background: var(--selection);
+}
+
+/* Disabled items keep their place but read as unavailable (DS disabled tone). */
+.item[data-disabled] {
+  color: var(--interactive-disabled-fg);
+  cursor: var(--interactive-disabled-cursor);
 }
 
 .item[data-variant="destructive"] {

@@ -62,6 +62,14 @@ function ProjectRowContainer({ project }: { project: ProjectSummary }) {
 }
 ```
 
+### Disabled tone
+
+Disabled options, menu items, rows and Clickables use the DS disabled tone:
+`--interactive-disabled-fg` (the theme's `--color-text-disabled`) and
+`--interactive-disabled-cursor`, never opacity, and they never take the hover
+or keyboard highlight fill. Product code passes `disabled`; it does not style
+the state.
+
 ## Accessibility
 
 - Uses `role="button"` via Clickable when interactive
