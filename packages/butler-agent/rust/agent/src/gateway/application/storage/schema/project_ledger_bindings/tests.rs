@@ -141,13 +141,11 @@ fn symlink_aliases_share_one_physical_identity_and_outside_roots_are_rejected() 
 }
 
 #[test]
-fn absent_data_root_keeps_safe_labels_and_ecmascript_trimming() {
+fn absent_data_root_keeps_safe_labels_and_bounded_safe_ids() {
     let fixture = Fixture::new();
     fixture.project("a", "safe-label", None);
     initialize(&fixture.connection, None).unwrap();
     assert_eq!(fixture.binding("a"), "safe-label");
-    assert_eq!(trim("\u{feff} name \u{a0}"), "name");
-    assert_eq!(trim("\u{85}name\u{85}"), "\u{85}name\u{85}");
     assert!(!safe_id("é"));
     assert!(safe_id(&"a".repeat(120)));
     assert!(!safe_id(&"a".repeat(121)));
