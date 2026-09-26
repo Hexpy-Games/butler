@@ -209,12 +209,14 @@ async fn cancelled_first_close_does_not_abandon_owner_completion() {
         .expect("blocking job started");
     let first_storage = storage.clone();
     let first_close = tokio::spawn(async move { first_storage.close().await });
-    loop {
-        if storage.inner.lane.lock().await.sender.is_none() {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    crate::testing::eventually("close to detach the lane sender", || {
+        storage
+            .inner
+            .lane
+            .try_lock()
+            .is_ok_and(|lane| lane.sender.is_none())
+    })
+    .await;
     first_close.abort();
     release_tx.send(()).expect("release queued job");
 

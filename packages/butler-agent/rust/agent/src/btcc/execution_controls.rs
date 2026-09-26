@@ -207,14 +207,6 @@ impl SubsessionResultContext {
                 .join(" "),
         })
     }
-
-    #[cfg(test)]
-    pub(crate) fn status_label(&self) -> Result<String, BtccError> {
-        Ok(format!(
-            "{} 작업에 대한 보고 준비 중",
-            self.normalized()?.safe_title
-        ))
-    }
 }
 
 fn json(value: &impl Serialize) -> Result<Value, BtccError> {

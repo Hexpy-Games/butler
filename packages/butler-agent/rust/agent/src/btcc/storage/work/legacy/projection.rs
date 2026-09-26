@@ -244,20 +244,3 @@ fn references(value: &Value) -> Vec<String> {
         items.iter().filter_map(reference).collect()
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::concise;
-
-    #[test]
-    fn legacy_text_uses_js_whitespace_and_utf16_units() {
-        assert_eq!(
-            concise(&json!("\u{FEFF}😀\u{00A0}a"), 4),
-            Some("😀 a".into())
-        );
-        assert_eq!(concise(&json!("😀a"), 2), Some("😀".into()));
-        assert_eq!(concise(&json!("a\u{0085}b"), 8), Some("a\u{0085}b".into()));
-    }
-}

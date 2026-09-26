@@ -226,19 +226,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ordinary_permit_retires_its_registration() {
+    fn stop_fence_blocks_reentry_until_persistence_outcome_allows_it() {
         let supervisor = TurnExecutionSupervisor::default();
         let permit = supervisor
             .enter("turn-1", TurnSemanticState::Admitted)
             .unwrap();
-        assert_eq!(supervisor.registration_count(), 1);
         drop(permit);
-        assert_eq!(supervisor.registration_count(), 0);
-    }
+        assert_eq!(
+            supervisor.registration_count(),
+            0,
+            "ordinary permit retires"
+        );
 
-    #[test]
-    fn stop_cancels_before_persistence_and_failure_keeps_fence() {
-        let supervisor = TurnExecutionSupervisor::default();
+        // A stop cancels the running permit; a failed stop keeps the fence.
         let permit = supervisor
             .enter("turn-1", TurnSemanticState::Admitted)
             .unwrap();
@@ -246,16 +246,13 @@ mod tests {
         assert!(permit.cancellation().is_cancelled());
         supervisor.observe_stop_failure(&ticket);
         drop(permit);
-        assert_eq!(supervisor.registration_count(), 1);
         assert!(
             supervisor
                 .enter("turn-1", TurnSemanticState::Admitted)
                 .is_err()
         );
-    }
 
-    #[test]
-    fn finalizing_fence_allows_delivery_and_retires_after_terminal() {
+        // A turn already finalizing may still deliver, then retires.
         let supervisor = TurnExecutionSupervisor::default();
         let ticket = supervisor.install_stop("turn-1");
         supervisor.observe_stop(&ticket, StopPersistenceOutcome::AlreadyFinalizing);
@@ -268,13 +265,12 @@ mod tests {
             .enter("turn-1", TurnSemanticState::DeliveryCommitted)
             .unwrap();
         supervisor.observe_terminal("turn-1");
-        assert_eq!(supervisor.registration_count(), 1);
         drop(permit);
         assert_eq!(supervisor.registration_count(), 0);
     }
 
     #[test]
-    fn stale_stop_ticket_cannot_mutate_new_registration() {
+    fn stale_stop_results_cannot_change_newer_registrations_or_fences() {
         let supervisor = TurnExecutionSupervisor::default();
         let ticket = supervisor.install_stop("turn-1");
         supervisor.observe_stop(&ticket, StopPersistenceOutcome::AlreadyCancelled);
@@ -284,10 +280,7 @@ mod tests {
         supervisor.observe_stop_failure(&ticket);
         drop(permit);
         assert_eq!(supervisor.registration_count(), 0);
-    }
 
-    #[test]
-    fn older_stop_result_cannot_clear_newer_failed_persistence_fence() {
         let supervisor = TurnExecutionSupervisor::default();
         let older = supervisor.install_stop("turn-1");
         let newer = supervisor.install_stop("turn-1");

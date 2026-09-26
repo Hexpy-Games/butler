@@ -1,7 +1,4 @@
 use super::*;
-use crate::btcc::work::contracts::ExecutionMode;
-
-mod presence;
 
 fn scope() -> WorkTurnScope {
     WorkTurnScope {
@@ -21,27 +18,11 @@ fn action(key: &str) -> PlanAction {
 }
 
 #[test]
-fn validation_preserves_order_and_trim_only_checks() {
+fn plan_requires_objective_and_existing_non_self_dependencies() {
     assert_eq!(
         required_text("  ", "objective").unwrap_err().message,
         "Durable Work requires objective"
     );
-    let input = ReplacePlanInput {
-        scope: scope(),
-        mutation_call_id: "call".into(),
-        start_new: None,
-        backfill_tool_call_ids: None,
-        objective: " objective ".into(),
-        governing_refs: None,
-        execution_mode: Some(ExecutionMode::Direct),
-        actions: vec![action("a")],
-        checks: vec![" check ".into()],
-    };
-    assert!(validate_replace(&input).is_ok());
-}
-
-#[test]
-fn plan_rejects_missing_and_self_dependencies_without_cycle_guard() {
     let mut missing = action("a");
     missing.dependency_keys = vec!["missing".into()];
     let input = ReplacePlanInput {

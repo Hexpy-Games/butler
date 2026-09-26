@@ -18,6 +18,8 @@ mod profile;
 mod project_ledger;
 mod segmentation;
 mod skills;
+#[cfg(test)]
+mod testing;
 mod tool_protocol;
 
 mod host;

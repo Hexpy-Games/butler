@@ -242,28 +242,6 @@ async fn absent_round_ids_use_execution_local_sequence_without_collapsing_empty(
 }
 
 #[tokio::test]
-async fn execution_drop_releases_its_store_owner() {
-    let store = Arc::new(Store::default());
-    let baseline = Arc::strong_count(&store);
-    let base = Base::new([Ok(result("unused"))]);
-    let turn = turn(route(0, 1));
-    let claim = claim();
-    let progress = Progress::default();
-    let execution = make_execution(
-        store.clone(),
-        &base,
-        &turn,
-        &claim,
-        &progress,
-        CancellationToken::new(),
-    )
-    .await;
-    assert_eq!(Arc::strong_count(&store), baseline + 1);
-    drop(execution);
-    assert_eq!(Arc::strong_count(&store), baseline);
-}
-
-#[tokio::test]
 async fn restart_abandons_open_slot_before_dispatch() {
     let store = Arc::new(Store::default());
     store

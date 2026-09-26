@@ -110,11 +110,6 @@ pub(crate) fn transition_turn_continuation_budget(
     }
 }
 
-#[cfg(test)]
-pub(crate) fn continuation_request_digest(serialized_json: &str) -> String {
-    crate::btcc::identity::digest(serialized_json)
-}
-
 fn admit_request(
     mut state: TurnContinuationBudgetState,
     round_id: String,
