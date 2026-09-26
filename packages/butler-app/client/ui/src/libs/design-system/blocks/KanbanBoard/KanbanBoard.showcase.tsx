@@ -2,6 +2,8 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { FileText } from "../../components/Icons";
 import { DocumentTile } from "../DocumentTile";
 import { EmptyLine } from "../EmptyLine";
+import { Box } from "../../components/Box";
+import { Section } from "../../components/Section";
 import { KanbanBoard, KanbanLane } from "./KanbanBoard";
 
 export const meta: ShowcaseMeta = {
@@ -31,4 +33,23 @@ function Board({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
-export const stories: ShowcaseStory[] = [{ name: "Plan board", widths: ["app", "wide"], render: (context) => <Board context={context} /> }];
+// ProjectWorkBoard: six status lanes stay in one row and scroll sideways at narrow widths.
+function ScrollingBoard({ context }: { context: ShowcaseRenderContext }) {
+  const copy = labels[context.locale];
+  return (
+    <KanbanBoard scroll>
+      {[...copy.lanes, ...copy.lanes.slice(0, 2)].map((lane, index) => (
+        <Box key={`${lane}-${index}`} surface="base" border="hairline" radius="control" padding="md" alignSelf="start">
+          <Section title={lane}>
+            <DocumentTile icon={<FileText size="md" />} title={copy.plans[index % copy.plans.length]!} meta="plan" actionLabel={copy.open} onOpen={() => undefined} />
+          </Section>
+        </Box>
+      ))}
+    </KanbanBoard>
+  );
+}
+
+export const stories: ShowcaseStory[] = [
+  { name: "Plan board", widths: ["app", "wide"], render: (context) => <Board context={context} /> },
+  { name: "Scrolling lanes", widths: ["375", "app"], render: (context) => <ScrollingBoard context={context} /> },
+];

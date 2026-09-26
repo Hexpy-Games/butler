@@ -149,6 +149,8 @@
   --chart-height-panel: 13rem;
   /* Fixed pane heights of the document board and the spec browser. */
   --kanban-lane-height: 22rem;
+  /* Minimum lane width of a sideways-scrolling board (KanbanBoard scroll). */
+  --kanban-lane-min-width: 15rem;
   --split-browser-height: 14.5rem;
   /* StatusCapsule part caps (composer work capsules). */
   --status-capsule-title-max: min(34vw, 240px);

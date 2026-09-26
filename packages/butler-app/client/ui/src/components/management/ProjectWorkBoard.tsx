@@ -3,9 +3,8 @@ import { useButlerStore } from "@/app/store.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { planLanes } from "@/app/projectDocuments.ts";
 import { useProjectBoard } from "@/hooks/useProjectBoard.ts";
-import { Box, Button, Notice, Section, SegmentedControl, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Typo, useScrollEdges } from "@/butler-ds";
+import { Box, Button, KanbanBoard, Notice, Section, SegmentedControl, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Stack, Typo } from "@/butler-ds";
 import { ProjectBoardCard } from "./ProjectBoardCard.tsx";
-import styles from "./ProjectWorkBoard.module.css";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 
 export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision }: {
@@ -14,7 +13,6 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
   onSelect: (document: ProjectDashboardDocument) => void;
 }) {
   useAppLocale();
-  const boardFadeRef = useScrollEdges("x");
   const disconnected = useButlerStore((state) => state.liveConnectionLost);
   const kind = useProjectDashboardState((state) => state.projects[projectId]?.boardKind ?? "work");
   const parent = useProjectDashboardState((state) => state.projects[projectId]?.boardParent);
@@ -52,7 +50,7 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
     {page?.status === "unavailable" && <Typo.Body>{page.reason === "unbound" ? copy.unbound : copy.unavailable}</Typo.Body>}
     {loading && !page && <Typo.Body role="status">{appCopy.feedback.dashboardLoading}</Typo.Body>}
     {page?.status === "ready" && <>
-      <div ref={boardFadeRef} className={styles.board} data-test-class="project-work-board">
+      <KanbanBoard scroll data-test-class="project-work-board">
         {lanes.map((lane) => {
           const board = boards[lane.id];
           const lanePage = board.page?.status === "ready" ? board.page : null;
@@ -67,7 +65,7 @@ export function ProjectWorkBoard({ projectId, onOpenSession, onSelect, revision 
           {lanePage?.nextCursor && <Button variant="borderless" disabled={board.loading} onClick={board.loadMore}>{copy.loadMore}</Button>}
         </Section></Box>;
         })}
-      </div>
+      </KanbanBoard>
       {Object.values(page.laneCounts).every((count) => count === 0) && <Typo.Body>{copy.noWork}</Typo.Body>}
     </>}
   </Stack>;

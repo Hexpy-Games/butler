@@ -1909,7 +1909,7 @@ Lanes of documents side by side; each lane scrolls at a fixed height under its t
 - Use for: Plans or tasks grouped by status
 - Not for: One list of documents → `CardList`
 - Not for: Categories with a detail list → `SplitBrowser`
-- Tokens: `--kanban-lane-height`, `--space-md`, `--line`
+- Tokens: `--kanban-lane-height`, `--kanban-lane-min-width`, `--space-md`, `--line`
 
 ### MarkdownContent
 

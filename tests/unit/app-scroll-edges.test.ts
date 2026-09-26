@@ -158,12 +158,14 @@ test("horizontal scrollers and legacy vertical masks use the shared scroll-fade 
     "libs/design-system/components/Tabs/Tabs.tsx",
     "libs/design-system/blocks/ChangedLineDiff/ChangedLineDiff.tsx",
     "libs/design-system/blocks/ActivityHeatmap/ActivityHeatmap.tsx",
-    "components/management/ProjectWorkBoard.tsx",
+    "libs/design-system/blocks/KanbanBoard/KanbanBoard.tsx",
     "libs/design-system/blocks/MarkdownContent/MarkdownParts.tsx",
   ];
   for (const file of horizontal) {
-    expect(`${file}: ${readFileSync(`${ui}/${file}`, "utf8").includes('useScrollEdges("x")')}`).toBe(`${file}: true`);
+    expect(`${file}: ${readFileSync(`${ui}/${file}`, "utf8").includes('useScrollEdges("x"')}`).toBe(`${file}: true`);
   }
+  // The project work board gets the fade from KanbanBoard scroll.
+  expect(readFileSync(`${ui}/components/management/ProjectWorkBoard.tsx`, "utf8")).toContain("<KanbanBoard scroll");
   for (const file of [
     "libs/design-system/blocks/ScrollArea/ScrollArea.module.css",
     "libs/design-system/blocks/SidebarShell/SidebarShell.module.css",

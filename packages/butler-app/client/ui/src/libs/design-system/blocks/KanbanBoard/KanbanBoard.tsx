@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import type { DsBaseProps } from "../../lib/dsProps";
 import { dsClass } from "../../lib/internal";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { Grid, type GridColumnPreset } from "../../components/Grid";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
@@ -10,14 +11,21 @@ import styles from "./KanbanBoard.module.css";
 
 export interface KanbanBoardProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   children: ReactNode;
-  /** One column per lane (default four). */
+  /** One column per lane (default four). Ignored with `scroll`. */
   columns?: GridColumnPreset;
+  /**
+   * Keep every lane in one row at least `--kanban-lane-min-width` wide; the
+   * board scrolls sideways with the x scroll-edge fade instead of wrapping.
+   */
+  scroll?: boolean;
 }
 
-/** Lanes side by side; each lane is a KanbanLane. */
-export function KanbanBoard({ children, columns = "4", className, ...props }: KanbanBoardProps) {
+/** Lanes side by side; each lane is a KanbanLane (or any lane surface). */
+export function KanbanBoard({ children, columns = "4", scroll = false, className, ...props }: KanbanBoardProps) {
+  const edgesRef = useScrollEdges("x", scroll);
   return (
-    <Grid columns={columns} gap="md" className={dsClass(styles.board, className)} {...props}>
+    <Grid columns={columns} gap="md" className={dsClass(styles.board, className)}
+      data-scroll={scroll ? "true" : undefined} ref={scroll ? edgesRef : undefined} {...props}>
       {children}
     </Grid>
   );

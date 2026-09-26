@@ -1,5 +1,5 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Grid.module.css";
 
@@ -22,6 +22,8 @@ export interface GridProps extends DsBaseProps<HTMLAttributes<HTMLElement>> {
   as?: LayoutElement;
   columns?: GridColumnPreset | GridResponsiveColumns;
   gap?: GapToken;
+  /** DOM ref (e.g. a scroll-edge observer on a scrolling grid). */
+  ref?: Ref<HTMLElement>;
 }
 
 function GridRoot({
@@ -30,6 +32,7 @@ function GridRoot({
   columns = "auto-fit",
   gap = "md",
   className,
+  ref,
   ...props
 }: GridProps) {
   const responsive = typeof columns === "object";
@@ -49,6 +52,8 @@ function GridRoot({
       data-columns={base}
       data-columns-wide={responsive ? columns.wide : undefined}
       {...props}
+      // One ref type for every element the grid can render as.
+      ref={ref as Ref<HTMLDivElement & HTMLUListElement & HTMLOListElement & HTMLLIElement>}
     >
       {children}
     </Component>

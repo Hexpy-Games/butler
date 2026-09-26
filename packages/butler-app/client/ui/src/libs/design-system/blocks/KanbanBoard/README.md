@@ -15,6 +15,8 @@ The lane geometry lives in the DS instead of inline styles.
 ## How to use this component
 `<KanbanBoard><KanbanLane title="Draft">{tiles}</KanbanLane></KanbanBoard>`
 
+`scroll` keeps every lane in one row at least `--kanban-lane-min-width` (15rem) wide; the board scrolls sideways with the x scroll-edge fade and pads its bottom for the scrollbar (the project work board's six status lanes). Lanes can be `KanbanLane`s or any lane surface (`Box` + `Section`).
+
 ## Who can use this component
 Dashboard components.
 
