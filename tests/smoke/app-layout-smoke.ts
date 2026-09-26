@@ -427,7 +427,7 @@ try {
     .first()
     .waitFor({ state: "visible" });
   await page
-    .locator(`${testClass("assistant-status-mark-complete")} svg`)
+    .locator(`${testClass("assistant-status-mark-complete")} canvas`)
     .first()
     .waitFor({ state: "visible" });
   screenshots.push(await screenshot(page, "desktop-components.png"));
@@ -4328,8 +4328,8 @@ try {
   await expectLocatorCount(
     page,
     "canvas",
-    2,
-    "thinking mark should render dark and light canvas samples",
+    8,
+    "thinking mark should render large, 14px, 24px and status-label canvas samples in both themes",
   );
   await expectLocatorCount(
     page,

@@ -96,6 +96,15 @@
   background: var(--surface-raised);
 }
 
+.surface-small {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2xl);
+  padding: var(--space-2xl);
+}
+
 .mark {
   width: min(var(--thinking-mark-size, 230px), 100%);
 }

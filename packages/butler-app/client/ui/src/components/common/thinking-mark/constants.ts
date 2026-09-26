@@ -1,33 +1,61 @@
+// Butler mark geometry in the 1200 x 1200 design space (matches the filled logo).
+export const TAU = Math.PI * 2;
 export const DESIGN_SIZE = 1200;
 export const CENTER = DESIGN_SIZE / 2;
+/** Radius of the two opposing ribbon sectors. */
+export const RR = 329.43;
+/** Half-angle of each ribbon sector. */
+export const AL = Math.atan2(136, 300);
+/** Corner rounding of the ribbon sectors. */
+export const RHO = 34;
+export const RING_R = 435;
+export const RING_W = 74;
 
-export const CONFIG = {
-  radius: 435,
-  circleWidth: 74,
-  ribbonWidth: 68,
-  graphRadius: 300,
-  activeRadius: 480,
-  samples: 180,
-} as const;
+/** Radius of the lit "moon" sphere the bowtie rounds into. */
+export const HS_R = 288;
+/** Halftone cells live inside this disc (inside the ring). */
+export const DISC_R = 392;
+/** Granulation wave width: dots appear from the crossing outward. */
+export const WAVE = 0.6;
+/** The single spring that drives the morph (0 = logo, 1 = thinking form). */
+export const MORPH_SPRING = { k: 9, zeta: 0.95 } as const;
 
-export const PEAK_POSITIONS = [0.66, 0.31, 0.57, 0.42, 0.73, 0.27, 0.49, 0.62, 0.36, 0.7, 0.53, 0.29];
-export const PEAK_HEIGHTS = [0.92, 0.34, 1.16, 0.58, 0.78, 0.22, 1.05, 0.48, 0.86, 0.31, 1.22, 0.64];
-export const PEAK_DURATIONS = [190, 330, 240, 420, 210, 300, 170, 380, 260, 450, 220, 350];
-export const PEAK_CYCLE_MS = PEAK_DURATIONS.reduce((total, duration) => total + duration, 0);
+export type SizeClass = 0 | 1 | 2;
 
-export const WAVE_LAYERS = [
-  { alpha: 0.42, xShift: -0.06, yScale: 0.76, timeShift: 860, peakShift: 7 },
-  { alpha: 0.56, xShift: 0.055, yScale: 0.88, timeShift: 430, peakShift: 3 },
-  { alpha: 0.62, xShift: 0, yScale: 0.64, timeShift: 0, peakShift: 0 },
-] as const;
-
-export interface WaveLayer {
-  alpha: number;
-  xShift: number;
-  yScale: number;
-  timeShift: number;
-  peakShift: number;
+export interface HalftonePreset {
+  /** Screen pitch in design units. */
+  pitch: number;
+  /** Misregistration scale; small marks need a larger offset to read as colour. */
+  mis: number;
+  /** Paper grain strength at full morph (0 disables it). */
+  grain: number;
 }
 
-export type Side = "top" | "bottom";
-export type Point = [number, number];
+// Index by size class: <20px, 20-63px, >=64px. All sizes print all three inks.
+export const HALFTONE_PRESETS: readonly HalftonePreset[] = [
+  { pitch: 100, mis: 2.6, grain: 0 },
+  { pitch: 64, mis: 1.8, grain: 0 },
+  { pitch: 25, mis: 1, grain: 0.18 },
+];
+
+/** Screen angles: key ink 45deg, riso blue 15deg, fluorescent pink 75deg. */
+export const SCREEN_ANGLES = [Math.PI / 4, Math.PI / 12, (Math.PI * 5) / 12] as const;
+
+export const RISO_MOTION = {
+  /** Dot-size ripple amplitude. */
+  wave: 0.2,
+  /** Speed of the diagonal sweep that trades blue and pink. */
+  sweep: 1.9,
+  /** Light orbit: phi = phase + rate * T. */
+  lightPhase: 2.3,
+  lightRate: 1.1,
+} as const;
+
+export const REDUCED_MOTION = {
+  /** Time constant of the reduced-motion fade, seconds. */
+  tau: 0.28,
+  /** Breathe period, seconds. */
+  period: 3.4,
+} as const;
+
+export const GRAIN_TILE = 128;

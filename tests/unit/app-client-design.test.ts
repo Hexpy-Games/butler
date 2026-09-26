@@ -2845,7 +2845,7 @@ test("thinking mark components expose state and theme contracts", () => {
   expect(canvasMark).toContain("theme?: ButlerMarkTheme");
   expect(canvasMark).toContain("themeColors?: ButlerMarkThemeColors");
   expect(canvasMark).toContain("variant?: ButlerThinkingMarkVariant");
-  expect(canvasMark).toContain("ctx.setTransform(pixelSide / DESIGN_SIZE");
+  expect(canvasMark).toContain("pixelSide / DESIGN_SIZE");
   expect(canvasMark).toContain('canvas.getContext("2d", { alpha: true })');
   expect(canvasMark).toContain("1000 / 60");
   expect(svgIcon).toContain('viewBox="0 0 1200 1200"');
