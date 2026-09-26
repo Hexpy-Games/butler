@@ -221,10 +221,13 @@ try {
   }
 } finally {
   cdp?.close();
+  // The app may keep running after SIGTERM (window lifecycle); make sure it ends.
   electron.kill("SIGTERM");
-  await wait(500);
+  await wait(1500);
+  if (electron.exitCode === null) electron.kill("SIGKILL");
   proxy.stop(true);
   server.stop();
   rmSync(dir, { recursive: true, force: true });
 }
 console.log("sidebar drop zones: ok");
+process.exit(0);
