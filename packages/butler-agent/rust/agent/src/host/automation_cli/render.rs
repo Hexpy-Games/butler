@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -45,21 +46,12 @@ fn safe_preview_text(value: &str) -> String {
     static SECRET_LABEL: OnceLock<Regex> = OnceLock::new();
     static SECRET_TOKEN: OnceLock<Regex> = OnceLock::new();
     let field = SECRET_FIELD.get_or_init(|| {
-        Regex::new(
-            r"(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)\b(\s*[:=]\s*|\s+is\s+)([^\s,;]+)",
-        )
-        .expect("static automation redaction expression compiles")
+        fixed_regex(r"(?i)\b(password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)\b(\s*[:=]\s*|\s+is\s+)([^\s,;]+)")
     });
     let label = SECRET_LABEL.get_or_init(|| {
-        Regex::new(
-            r"(?i)\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)[-_][A-Za-z0-9._~-]{4,}",
-        )
-        .expect("static automation secret-label expression compiles")
+        fixed_regex(r"(?i)\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)[-_][A-Za-z0-9._~-]{4,}")
     });
-    let token = SECRET_TOKEN.get_or_init(|| {
-        Regex::new(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b")
-            .expect("static automation token expression compiles")
-    });
+    let token = SECRET_TOKEN.get_or_init(|| fixed_regex(r"\b(?:sk|pk|rk)-[A-Za-z0-9_-]{12,}\b"));
     let redacted = crate::operations::redact_log_line(value);
     let redacted = field.replace_all(&redacted, "$1$2[redacted]");
     let redacted = label.replace_all(&redacted, "[redacted]");

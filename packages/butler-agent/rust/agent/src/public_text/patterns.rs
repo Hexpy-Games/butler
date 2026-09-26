@@ -1,3 +1,4 @@
+use super::fixed_regex::{fixed_regex, fixed_regex_ci};
 use std::borrow::Cow;
 
 use regex::Regex;
@@ -75,10 +76,8 @@ impl Patterns {
                     None,
                 ),
             ],
-            json_start: Regex::new(&format!(r"^{SPACE}*[\{{\[]"))
-                .expect("fixed public text pattern"),
-            json_key: Regex::new(r#""(?:eventId|sessionId|payload|arguments|tool_call)""#)
-                .expect("fixed public text pattern"),
+            json_start: fixed_regex(&format!(r"^{SPACE}*[\{{\[]")),
+            json_key: fixed_regex(r#""(?:eventId|sessionId|payload|arguments|tool_call)""#),
         }
     }
 
@@ -97,10 +96,11 @@ pub(super) struct BoundaryPattern {
 
 impl BoundaryPattern {
     fn new(pattern: &str, insensitive: bool, before: bool, after_capture: Option<usize>) -> Self {
-        let regex = regex::RegexBuilder::new(pattern)
-            .case_insensitive(insensitive)
-            .build()
-            .expect("fixed public text pattern");
+        let regex = if insensitive {
+            fixed_regex_ci(pattern)
+        } else {
+            fixed_regex(pattern)
+        };
         Self {
             regex,
             insensitive,

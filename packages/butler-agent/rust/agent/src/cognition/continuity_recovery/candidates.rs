@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
@@ -306,8 +307,7 @@ fn contains_secret(value: &str) -> bool {
     static SECRET: OnceLock<Regex> = OnceLock::new();
     SECRET
         .get_or_init(|| {
-            Regex::new(r"(?i)-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b|\bAKIA[0-9A-Z]{16}\b|\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,}")
-                .expect("fixed continuity-recovery secret pattern")
+            fixed_regex(r"(?i)-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{16,}\b|\bAKIA[0-9A-Z]{16}\b|\b(?:password|passwd|token|api[_ -]?key)\s*[:=]\s*[^\s]{8,}")
         })
         .is_match(value)
 }

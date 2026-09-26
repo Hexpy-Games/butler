@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -317,7 +318,9 @@ fn safe_text(value: &str) -> Option<String> {
         return None;
     }
     static SECRET: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+").unwrap()
+        fixed_regex(
+            r"(?i)\b(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+|Bearer\s+[A-Za-z0-9._~+/=-]+",
+        )
     });
     Some(bounded(
         SECRET.replace_all(&words, "[redacted]").into_owned(),

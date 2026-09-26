@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::{
     collections::{HashMap, HashSet},
     sync::LazyLock,
@@ -18,10 +19,8 @@ const BM25_TERM_FREQUENCY_SATURATION_K1: f64 = 1.2;
 const BM25_DOCUMENT_LENGTH_NORMALIZATION_B: f64 = 0.75;
 const LEXICAL_SEED_COVERAGE_EXPONENT: i32 = 4;
 
-static TOKEN_SPLIT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}._-]+").expect("constant recall token regex"));
-static LETTER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\p{L}").expect("constant Unicode letter regex"));
+static TOKEN_SPLIT: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[^\p{L}\p{N}._-]+"));
+static LETTER: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"\p{L}"));
 
 #[derive(Default)]
 pub(super) struct LexicalStats {

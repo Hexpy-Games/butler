@@ -1,5 +1,6 @@
 //! Transport value normalization shared by non-final projections.
 
+use crate::public_text::fixed_regex::fixed_regex;
 use regex::Regex;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Map, Value};
@@ -49,10 +50,8 @@ pub(super) fn copy_string(
 }
 
 fn public_text(value: &str) -> String {
-    static SECRET: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?iu)\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+")
-            .expect("public progress secret pattern")
-    });
+    static SECRET: LazyLock<Regex> =
+        LazyLock::new(|| fixed_regex(r"(?iu)\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+"));
     let stripped = value
         .chars()
         .map(|character| {

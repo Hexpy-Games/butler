@@ -1,5 +1,6 @@
 //! Actual BTCC Work facts for the source work-status projection.
 
+use crate::public_text::fixed_regex::fixed_regex;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
@@ -74,15 +75,14 @@ fn project_observation(observation: WorkStatusObservation) -> Option<AppBoundWor
 
 fn safe_work_text(value: &str, fallback: &str, ids: [&str; 3]) -> String {
     static PATHS: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?:/Users|/home|/var|/tmp)/[^\s),;]+|\b[A-Za-z]:\\[^\s),;]+")
-            .expect("fixed work-status path pattern")
+        fixed_regex(r"(?:/Users|/home|/var|/tmp)/[^\s),;]+|\b[A-Za-z]:\\[^\s),;]+")
     });
     static SECRETS: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+")
-            .expect("fixed work-status secret pattern")
+        fixed_regex(
+            r"(?i)\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|authorization|credential|session[_-]?key)\s*[:=]\s*(?:bearer\s+)?\S+",
+        )
     });
-    static BEARER: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?i)\bbearer\s+[\w.~+/=-]+").expect("fixed bearer pattern"));
+    static BEARER: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"(?i)\bbearer\s+[\w.~+/=-]+"));
     let mut text = value.to_owned();
     for id in ids.into_iter().filter(|id| !id.is_empty()) {
         text = text.replace(id, "internal reference");

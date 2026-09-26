@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -131,7 +132,7 @@ fn safe_project_label(value: &str) -> String {
     static UNSAFE: OnceLock<Regex> = OnceLock::new();
     let normalized = value.nfkc().collect::<String>().to_lowercase();
     let output = UNSAFE
-        .get_or_init(|| Regex::new(r"[^\p{L}\p{N}._-]+").expect("fixed project label expression"))
+        .get_or_init(|| fixed_regex(r"[^\p{L}\p{N}._-]+"))
         .replace_all(&normalized, "-");
     let output = output.trim_matches(['.', '_', '-']);
     let output = if output.is_empty() { "project" } else { output };

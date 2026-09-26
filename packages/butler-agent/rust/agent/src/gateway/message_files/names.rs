@@ -1,16 +1,17 @@
 //! Source attachment name, MIME, and kind rules.
 
+use crate::public_text::fixed_regex::fixed_regex;
 use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::public_text::trim_js_whitespace;
 
-static UNSAFE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}_ .@()+\-\[\]]+").expect("constant name expression"));
+static UNSAFE: LazyLock<Regex> = LazyLock::new(|| fixed_regex(r"[^\p{L}\p{N}_ .@()+\-\[\]]+"));
 static TEXT_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\.(?:txt|md|markdown|json|ya?ml|jsx?|tsx?|css|html?|xml|csv|log|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|sh|zsh|toml|ini)$")
-        .expect("constant text extension expression")
+    fixed_regex(
+        r"(?i)\.(?:txt|md|markdown|json|ya?ml|jsx?|tsx?|css|html?|xml|csv|log|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|sh|zsh|toml|ini)$",
+    )
 });
 
 pub(super) struct SafeName {

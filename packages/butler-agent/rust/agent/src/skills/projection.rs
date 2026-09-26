@@ -1,3 +1,4 @@
+use crate::public_text::fixed_regex::fixed_regex;
 use std::{
     collections::HashSet,
     fs::File,
@@ -120,7 +121,7 @@ fn safe_short_token(value: &Value) -> Option<String> {
     let text = trim_js_whitespace(value.as_str()?);
     if text.is_empty()
         || !TOKEN
-            .get_or_init(|| Regex::new(r"^[A-Za-z0-9_:./-]+$").expect("static token regex"))
+            .get_or_init(|| fixed_regex(r"^[A-Za-z0-9_:./-]+$"))
             .is_match(text)
     {
         return None;

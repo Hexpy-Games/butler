@@ -1,6 +1,7 @@
 //! Shared public-text projection policy. Compiled patterns live for the process;
 //! input, decoded candidates and projected output belong to each call.
 
+pub(crate) mod fixed_regex;
 mod patterns;
 
 use std::borrow::Cow;

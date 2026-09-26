@@ -1,6 +1,7 @@
+use crate::public_text::fixed_regex::fixed_regex_ci;
 use std::{collections::HashMap, sync::OnceLock};
 
-use regex::{Regex, RegexBuilder};
+use regex::Regex;
 use serde_json::Value;
 
 use super::super::types::ProjectCapsuleSourceSnapshot;
@@ -198,24 +199,14 @@ fn strip_markdown_prefix(value: &str) -> String {
 
 fn strip_provenance(value: &str) -> String {
     static TRAILER: OnceLock<Regex> = OnceLock::new();
-    let regex = TRAILER.get_or_init(|| {
-        RegexBuilder::new(r"\s*\((?:provenance|source):[^)]*\)\s*$")
-            .case_insensitive(true)
-            .build()
-            .expect("static provenance expression")
-    });
+    let regex = TRAILER.get_or_init(|| fixed_regex_ci(r"\s*\((?:provenance|source):[^)]*\)\s*$"));
     crate::public_text::trim_js_whitespace(&regex.replace(value, "")).to_owned()
 }
 
 fn category_for(statement: &str) -> Option<PromotionCategory> {
     static LABEL: OnceLock<Regex> = OnceLock::new();
     let regex = LABEL.get_or_init(|| {
-        RegexBuilder::new(
-            r"^\s*(?:\[(convention|conventions|decision|decisions|feedback|risk|risks)\]|(convention|conventions|decision|decisions|feedback|risk|risks)\s*[:：-])",
-        )
-        .case_insensitive(true)
-        .build()
-        .expect("static category expression")
+        fixed_regex_ci(r"^\s*(?:\[(convention|conventions|decision|decisions|feedback|risk|risks)\]|(convention|conventions|decision|decisions|feedback|risk|risks)\s*[:：-])")
     });
     let captures = regex.captures(statement)?;
     let label = captures

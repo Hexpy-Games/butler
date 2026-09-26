@@ -1,6 +1,7 @@
+use crate::public_text::fixed_regex::{fixed_regex, fixed_regex_ci};
 use std::{collections::HashSet, fs, path::Path, sync::OnceLock};
 
-use regex::{Regex, RegexBuilder};
+use regex::Regex;
 use serde_json::Value;
 
 use crate::cognition::mutable_paths::ensure_data_authority;
@@ -229,18 +230,13 @@ fn has_decision(text: &str) -> bool {
     static KOREAN: OnceLock<Regex> = OnceLock::new();
     static ARROW: OnceLock<Regex> = OnceLock::new();
     ENGLISH
-        .get_or_init(|| {
-            RegexBuilder::new(r"decided|chose|went with|switched to")
-                .case_insensitive(true)
-                .build()
-                .unwrap()
-        })
+        .get_or_init(|| fixed_regex_ci(r"decided|chose|went with|switched to"))
         .is_match(text)
         || KOREAN
-            .get_or_init(|| Regex::new(r"결정|채택|선택|대신").unwrap())
+            .get_or_init(|| fixed_regex(r"결정|채택|선택|대신"))
             .is_match(text)
         || ARROW
-            .get_or_init(|| Regex::new(r"→\s*[A-Za-z0-9_]").unwrap())
+            .get_or_init(|| fixed_regex(r"→\s*[A-Za-z0-9_]"))
             .is_match(text)
 }
 
@@ -248,16 +244,10 @@ fn concept_patterns() -> &'static [Regex] {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS.get_or_init(|| {
         [
-            RegexBuilder::new(r"([A-Za-z0-9_]+)\s+is\s+a\s+(.{5,60})")
-                .case_insensitive(true)
-                .build()
-                .unwrap(),
-            RegexBuilder::new(r"([A-Za-z0-9_]+)\s+means\s+(.{5,60})")
-                .case_insensitive(true)
-                .build()
-                .unwrap(),
-            Regex::new(r"([A-Za-z0-9_]+)이란\s+(.{5,60})").unwrap(),
-            Regex::new(r"([A-Za-z0-9_]+)란\s+(.{5,60})").unwrap(),
+            fixed_regex_ci(r"([A-Za-z0-9_]+)\s+is\s+a\s+(.{5,60})"),
+            fixed_regex_ci(r"([A-Za-z0-9_]+)\s+means\s+(.{5,60})"),
+            fixed_regex(r"([A-Za-z0-9_]+)이란\s+(.{5,60})"),
+            fixed_regex(r"([A-Za-z0-9_]+)란\s+(.{5,60})"),
         ]
         .to_vec()
     })
@@ -267,15 +257,10 @@ fn has_interest(text: &str) -> bool {
     static ENGLISH: OnceLock<Regex> = OnceLock::new();
     static KOREAN: OnceLock<Regex> = OnceLock::new();
     ENGLISH
-        .get_or_init(|| {
-            RegexBuilder::new(r"curious about|learning|interested in")
-                .case_insensitive(true)
-                .build()
-                .unwrap()
-        })
+        .get_or_init(|| fixed_regex_ci(r"curious about|learning|interested in"))
         .is_match(text)
         || KOREAN
-            .get_or_init(|| Regex::new(r"궁금|배우|공부|관심").unwrap())
+            .get_or_init(|| fixed_regex(r"궁금|배우|공부|관심"))
             .is_match(text)
 }
 
