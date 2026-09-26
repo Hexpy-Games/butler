@@ -22,7 +22,7 @@ pub(super) fn project(
         None => 10,
     };
     let tasks = tasks::summaries(tasks_root, collation)?;
-    let data = tasks_root.parent().ok_or(WorkRecordReadError)?;
+    let data = tasks_root.parent().ok_or(WorkRecordReadError::Malformed)?;
     let notifications =
         notifications::pending(&data.join("runtime/task-notifications"), collation)?;
     let active = selected(&tasks.items, limit, debug, |task| {

@@ -38,8 +38,8 @@ pub(super) fn summaries(
     let mut running = 0;
     let mut recoverable = 0;
     let mut failed = 0;
-    for entry in std::fs::read_dir(root).map_err(|_| WorkRecordReadError)? {
-        let entry = entry.map_err(|_| WorkRecordReadError)?;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let directory = entry.path();
         match read_text(&directory.join("status")).as_str() {

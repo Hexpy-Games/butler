@@ -89,8 +89,8 @@ impl WorkRecordReader {
             return Ok(Vec::new());
         }
         let mut ids = Vec::new();
-        for entry in std::fs::read_dir(&self.tasks).map_err(|_| WorkRecordReadError)? {
-            let entry = entry.map_err(|_| WorkRecordReadError)?;
+        for entry in std::fs::read_dir(&self.tasks)? {
+            let entry = entry?;
             if entry.path().join("status").exists() {
                 ids.push(entry.file_name().to_string_lossy().into_owned());
             }

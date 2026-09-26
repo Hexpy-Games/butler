@@ -8,16 +8,26 @@ pub(crate) enum ReadAvailability {
     Strict,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WorkRecordReadError;
-
-impl std::fmt::Display for WorkRecordReadError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("memory_source_unavailable")
-    }
+/// A work record could not be read under strict availability.
+///
+/// Every variant renders the wire code `memory_source_unavailable`, as before;
+/// the variant and source say what actually failed.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum WorkRecordReadError {
+    /// Reading a record file or listing a record directory failed.
+    #[error("memory_source_unavailable")]
+    Io(#[from] std::io::Error),
+    /// A record file is not valid JSON or does not match its schema.
+    #[error("memory_source_unavailable")]
+    Json(#[from] serde_json::Error),
+    /// Re-encoding a record for its revision hash failed.
+    #[error("memory_source_unavailable")]
+    Encode(#[from] crate::json::JsonError),
+    /// A record is structurally invalid: a required field is missing or has
+    /// the wrong type, or the records root has no parent.
+    #[error("memory_source_unavailable")]
+    Malformed,
 }
-
-impl std::error::Error for WorkRecordReadError {}
 
 pub(super) fn text(
     path: &Path,
@@ -27,7 +37,7 @@ pub(super) fn text(
         Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) if matches!(availability, ReadAvailability::BestEffort) => Ok(None),
-        Err(_) => Err(WorkRecordReadError),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -41,7 +51,7 @@ pub(super) fn json(
     match serde_json::from_str(&text) {
         Ok(value) => Ok(Some(value)),
         Err(_) if matches!(availability, ReadAvailability::BestEffort) => Ok(None),
-        Err(_) => Err(WorkRecordReadError),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -79,9 +89,9 @@ pub(super) fn snapshot(
         }
         Ok::<(), std::io::Error>(())
     })();
-    if listing.is_err() {
+    if let Err(error) = listing {
         if matches!(availability, ReadAvailability::Strict) {
-            return Err(WorkRecordReadError);
+            return Err(error.into());
         }
         attempts.clear();
     }

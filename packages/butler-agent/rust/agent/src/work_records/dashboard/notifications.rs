@@ -14,8 +14,8 @@ pub(super) fn pending(
         return Ok(Vec::new());
     }
     let mut notifications = Vec::new();
-    for entry in std::fs::read_dir(root).map_err(|_| WorkRecordReadError)? {
-        let entry = entry.map_err(|_| WorkRecordReadError)?;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
         if !entry.file_name().to_string_lossy().ends_with(".json") {
             continue;
         }

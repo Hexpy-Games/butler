@@ -99,10 +99,12 @@ pub(super) fn read(
     {
         return Ok(None);
     }
-    let goal_review = review.get("goal_review").ok_or(WorkRecordReadError)?;
+    let goal_review = review
+        .get("goal_review")
+        .ok_or(WorkRecordReadError::Malformed)?;
     let internal_goal = match current.plan.get("internal_goal") {
         None | Some(Value::Null) => "",
-        Some(value) => trim(value.as_str().ok_or(WorkRecordReadError)?),
+        Some(value) => trim(value.as_str().ok_or(WorkRecordReadError::Malformed)?),
     };
     let internal_goal = if internal_goal.is_empty() {
         trim(string(&current.plan, "goal")?)
@@ -150,12 +152,11 @@ pub(super) fn read(
         binding["report_hash"],
         binding["disposition"]
     ]);
-    let revision = crate::json::stringify(&revision).map_err(|_| WorkRecordReadError)?;
+    let revision = crate::json::stringify(&revision)?;
     if binding.get("source_revision").and_then(Value::as_str) != Some(hash(&revision).as_str()) {
         return Ok(None);
     }
-    let mut output: PlannedTaskMemoryReport =
-        serde_json::from_value(binding).map_err(|_| WorkRecordReadError)?;
+    let mut output: PlannedTaskMemoryReport = serde_json::from_value(binding)?;
     output.text = report;
     Ok(Some(output))
 }
@@ -166,7 +167,7 @@ fn current_disposition(review: &Value) -> Result<&'static str, WorkRecordReadErr
         let goal = review
             .get("goal_review")
             .filter(|value| !value.is_null())
-            .ok_or(WorkRecordReadError)?;
+            .ok_or(WorkRecordReadError::Malformed)?;
         if goal.get("verdict").and_then(Value::as_str) == Some("PASS")
             && array(review, "criteria")?
                 .iter()
@@ -189,7 +190,7 @@ fn missing_criteria(plan: &Value, reviews: &[Value]) -> Result<bool, WorkRecordR
         .map(|review| Ok(trim(string(review, "criterion")?).to_lowercase()))
         .collect::<Result<std::collections::HashSet<_>, WorkRecordReadError>>()?;
     for (index, criterion) in acceptance.iter().enumerate() {
-        let criterion = trim(criterion.as_str().ok_or(WorkRecordReadError)?);
+        let criterion = trim(criterion.as_str().ok_or(WorkRecordReadError::Malformed)?);
         if criterion.is_empty() {
             continue;
         }
@@ -207,13 +208,13 @@ fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str, WorkRecordReadErro
     value
         .get(key)
         .and_then(Value::as_str)
-        .ok_or(WorkRecordReadError)
+        .ok_or(WorkRecordReadError::Malformed)
 }
 fn array<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>, WorkRecordReadError> {
     value
         .get(key)
         .and_then(Value::as_array)
-        .ok_or(WorkRecordReadError)
+        .ok_or(WorkRecordReadError::Malformed)
 }
 fn hash(text: &str) -> String {
     format!("{:x}", Sha256::digest(text.as_bytes()))
