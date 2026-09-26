@@ -137,7 +137,7 @@ impl ProjectCapsuleService {
         let lease = coordinator
             .acquire(request, CognitionWaitClass::Background)
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| unavailable_lease(cancellation, deadline_at_epoch_ms))?;
 
         let data_root = self.data_root.clone();
@@ -154,9 +154,7 @@ impl ProjectCapsuleService {
                 &cancellation,
                 deadline_at_epoch_ms,
             );
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(path), Ok(())) => Ok(path),

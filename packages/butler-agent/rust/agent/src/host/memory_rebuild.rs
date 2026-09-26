@@ -52,7 +52,7 @@ pub async fn run(
         Operation::Prepare => {
             let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
                 Ok(value) => Arc::new(value),
-                Err(error) => return failure(options.json, error.code, &error.message, 1),
+                Err(error) => return failure(options.json, error.code(), &error.message(), 1),
             };
             let cancellation = CancellationToken::new();
             let signal_task = match signals(cancellation.clone()) {
@@ -92,7 +92,7 @@ pub async fn run(
         Operation::Build(generation) => {
             let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
                 Ok(value) => Arc::new(value),
-                Err(error) => return failure(options.json, error.code, &error.message, 1),
+                Err(error) => return failure(options.json, error.code(), &error.message(), 1),
             };
             let cancellation = CancellationToken::new();
             let signal_task = match signals(cancellation.clone()) {
@@ -119,7 +119,7 @@ pub async fn run(
         } => {
             let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
                 Ok(value) => Arc::new(value),
-                Err(error) => return failure(options.json, error.code, &error.message, 1),
+                Err(error) => return failure(options.json, error.code(), &error.message(), 1),
             };
             let cancellation = CancellationToken::new();
             let signal_task = match signals(cancellation.clone()) {
@@ -156,7 +156,7 @@ pub async fn run(
         } => {
             let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
                 Ok(value) => Arc::new(value),
-                Err(error) => return failure(options.json, error.code, &error.message, 1),
+                Err(error) => return failure(options.json, error.code(), &error.message(), 1),
             };
             let cancellation = CancellationToken::new();
             let signal_task = match signals(cancellation.clone()) {
@@ -190,7 +190,7 @@ pub async fn run(
         Operation::Rollback { generation } => {
             let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
                 Ok(value) => Arc::new(value),
-                Err(error) => return failure(options.json, error.code, &error.message, 1),
+                Err(error) => return failure(options.json, error.code(), &error.message(), 1),
             };
             let cancellation = CancellationToken::new();
             let signal_task = match signals(cancellation.clone()) {
@@ -277,7 +277,7 @@ async fn classify_before_prepare(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|error| CognitionError::new(error.code, &error.message))?
+        .map_err(CognitionError::from)?
         .ok_or_else(|| {
             CognitionError::new(
                 "memory_write_lock_unavailable",

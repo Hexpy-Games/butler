@@ -58,7 +58,7 @@ impl CoordinatorInner {
                 ));
             }
             Err(error) => {
-                let busy = error.code == "memory_write_busy";
+                let busy = error.is_busy();
                 return Ok(inspection(
                     if busy {
                         ConsolidationLockState::Busy
@@ -79,7 +79,7 @@ impl CoordinatorInner {
         let connection = match open_readwrite(&path) {
             Ok(connection) => connection,
             Err(error) => {
-                let busy = error.code == "memory_write_busy";
+                let busy = error.is_busy();
                 return Ok(inspection(
                     if busy {
                         ConsolidationLockState::Busy

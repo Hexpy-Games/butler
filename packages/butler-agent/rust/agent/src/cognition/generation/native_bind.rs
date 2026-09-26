@@ -31,7 +31,7 @@ pub(crate) fn bind_native_embedding_identity(
     let lock_path = environment.consolidation_lock(data_root);
     lease
         .assert_for_path(&lock_path)
-        .map_err(|failure| CognitionError::new(failure.code, failure.message))?;
+        .map_err(CognitionError::from)?;
     validate_native_embedding_identity(observed)?;
 
     let current = resolve_generation(data_root, environment, target)?;
@@ -153,7 +153,7 @@ fn write_manifest_atomically(
     assert_write_authority(data_root, environment, handle, manifest_path, lock_path)?;
     lease
         .assert_for_path(lock_path)
-        .map_err(|failure| CognitionError::new(failure.code, failure.message))?;
+        .map_err(CognitionError::from)?;
 
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -173,7 +173,7 @@ fn write_manifest_atomically(
         assert_write_authority(data_root, environment, handle, manifest_path, lock_path)?;
         lease
             .assert_for_path(lock_path)
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?;
+            .map_err(CognitionError::from)?;
         fs::rename(&temporary, manifest_path).map_err(write_error)?;
         File::open(parent)
             .and_then(|directory| directory.sync_all())

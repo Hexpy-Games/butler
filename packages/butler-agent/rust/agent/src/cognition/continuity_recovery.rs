@@ -129,7 +129,7 @@ impl ContinuityRecoveryService {
                 CognitionWaitClass::Interactive,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -143,9 +143,7 @@ impl ContinuityRecoveryService {
                 let updated = manifest::approve(&data_root, &paths, current, candidate_ids)?;
                 view(updated)
             })();
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                 (Ok(view), Ok(())) => Ok(view),
@@ -202,7 +200,7 @@ impl ContinuityRecoveryService {
                 CognitionWaitClass::Interactive,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         tokio::task::spawn_blocking(move || {
             let result = if rollback {
@@ -224,9 +222,7 @@ impl ContinuityRecoveryService {
                     &lease,
                 )
             };
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                 (Ok(action), Ok(())) => Ok(action),

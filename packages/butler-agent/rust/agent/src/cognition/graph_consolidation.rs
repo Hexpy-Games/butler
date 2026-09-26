@@ -52,7 +52,7 @@ impl GraphConsolidationService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|error| CognitionError::new(error.code, error.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -66,7 +66,7 @@ impl GraphConsolidationService {
                 graph.close()?;
                 Ok(serde_json::json!({"candidates_considered":metrics.candidates_considered,"merges_applied":metrics.merges_applied,"edges_boosted":metrics.edges_boosted,"conflicts_archived":metrics.conflicts_archived,"activations_written":metrics.activations_written}))
             })();
-            let released = lease.release(result.is_ok()).map_err(|error| CognitionError::new(error.code,error.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result,released) { (Err(error),_) | (Ok(_),Err(error)) => Err(error), (Ok(value),Ok(())) => Ok(value) }
         }).await.map_err(|_| error("memory_consolidation_operation_failed"))?
     }

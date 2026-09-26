@@ -36,7 +36,7 @@ pub(crate) async fn initialize_empty_memory_generation(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|e| CognitionError::new(e.code, e.message))?
+        .map_err(CognitionError::from)?
         .ok_or_else(|| error("memory_write_busy"))?;
     let result = initialize_locked(
         &data_root,
@@ -45,9 +45,7 @@ pub(crate) async fn initialize_empty_memory_generation(
         &unicode_version,
         &icu_version,
     );
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|e| CognitionError::new(e.code, e.message));
+    let released = lease.release(result.is_ok()).map_err(CognitionError::from);
     match (result, released) {
         (Err(error), _) | (Ok(()), Err(error)) => Err(error),
         (Ok(()), Ok(())) => resolve_active_generation(&data_root, &environment),

@@ -45,6 +45,7 @@ subtle = "2.6.1"
 tokio = { version = "1.47.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-util = { version = "0.7.16", features = ["rt"] }
 tz-rs = { version = "=0.7.3", default-features = false, features = ["alloc"] }
+thiserror = "2.0.20"
 tiktoken-rs = { version = "0.12.0", default-features = false }
 unicode-normalization = "0.1.24"
 unicode-segmentation = "=1.13.3"

@@ -223,7 +223,7 @@ fn paused(input: &process::Input) -> CognitionResult<bool> {
     let state = input
         .coordinator
         .inspect(&lock)
-        .map_err(|e| CognitionError::new(e.code, e.message))?
+        .map_err(CognitionError::from)?
         .state;
     Ok(matches!(
         state,

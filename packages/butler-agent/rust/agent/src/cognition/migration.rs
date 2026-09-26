@@ -108,13 +108,11 @@ impl CognitionNamespaceMigrationService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|error| CognitionError::new(error.code, error.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| failure("memory_write_busy"))?;
         tokio::task::spawn_blocking(move || {
             let result = plan::apply_locked(&data_root, &paths);
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|error| CognitionError::new(error.code, error.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(value), Ok(())) => Ok(value),

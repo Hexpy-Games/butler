@@ -214,11 +214,9 @@ async fn save_cursors(
             CognitionWaitClass::Background,
         )
         .await
-        .map_err(|e| CognitionError::new(e.code, e.message))?
+        .map_err(CognitionError::from)?
         .ok_or_else(|| error("memory_write_busy"))?;
-    lease
-        .assert_for_path(&lock)
-        .map_err(|e| CognitionError::new(e.code, e.message))?;
+    lease.assert_for_path(&lock).map_err(CognitionError::from)?;
     let target = input
         .target
         .clone()
@@ -232,9 +230,7 @@ async fn save_cursors(
         graph.close()?;
         saved
     })();
-    let released = lease
-        .release(result.is_ok())
-        .map_err(|e| CognitionError::new(e.code, e.message));
+    let released = lease.release(result.is_ok()).map_err(CognitionError::from);
     result.and(released)
 }
 

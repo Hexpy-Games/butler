@@ -405,13 +405,13 @@ async fn acquire(
             biased;
             () = shutdown.cancelled() => return Err(write_aborted()),
             () = cancellation.cancelled() => return Err(write_aborted()),
-            result = acquire => result.map_err(coordination_error)?,
+            result = acquire => result.map_err(CognitionError::from)?,
         }
     } else {
         tokio::select! {
             biased;
             () = shutdown.cancelled() => return Err(write_aborted()),
-            result = acquire => result.map_err(coordination_error)?,
+            result = acquire => result.map_err(CognitionError::from)?,
         }
     };
     lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))
@@ -426,7 +426,7 @@ fn mutate<T>(
 ) -> CognitionResult<T> {
     lease
         .assert_for_path(lock_path)
-        .map_err(coordination_error)?;
+        .map_err(CognitionError::from)?;
     let result = assert_mutation_authority(
         &state.input.data_root,
         environment,
@@ -434,7 +434,7 @@ fn mutate<T>(
         &state.handle,
     )
     .and_then(|()| operation(state));
-    let release = lease.release(result.is_ok()).map_err(coordination_error);
+    let release = lease.release(result.is_ok()).map_err(CognitionError::from);
     release.and(result)
 }
 
@@ -467,9 +467,6 @@ fn closed() -> CognitionError {
 )]
 fn join_error(error: tokio::task::JoinError) -> CognitionError {
     CognitionError::new("memory_registration_operation_failed", error.to_string())
-}
-fn coordination_error(error: crate::coordination::CoordinationError) -> CognitionError {
-    CognitionError::new(error.code, error.message)
 }
 fn conversation_error(error: crate::conversation::ConversationError) -> CognitionError {
     CognitionError::new(error.code, error.message)

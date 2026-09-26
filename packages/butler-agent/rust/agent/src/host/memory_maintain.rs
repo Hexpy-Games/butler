@@ -48,7 +48,7 @@ pub async fn run(
     };
     let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
         Ok(value) => Arc::new(value),
-        Err(error) => return fail(options.json, error.code, &error.message, 1),
+        Err(error) => return fail(options.json, error.code(), &error.message(), 1),
     };
     let health = MemoryHealthService::new(options.data.clone(), paths.clone(), coordinator.clone());
     let before = match health.read().await {

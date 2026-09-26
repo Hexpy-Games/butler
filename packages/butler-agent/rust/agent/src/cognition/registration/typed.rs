@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-use super::{CognitionRegistrationService, closed, coordination_error, join_error};
+use super::{CognitionRegistrationService, closed, join_error};
 use crate::{
     cognition::{
         CognitionError, CognitionPathEnvironment, CognitionResult, MemoryGenerationTarget,
@@ -111,11 +111,11 @@ async fn run(
         biased;
         () = shutdown.cancelled() => return Err(aborted()),
         () = input.cancellation.cancelled() => return Err(aborted()),
-        acquired = acquisition => acquired.map_err(coordination_error)?.ok_or_else(aborted)?,
+        acquired = acquisition => acquired.map_err(CognitionError::from)?.ok_or_else(aborted)?,
     };
     tokio::task::spawn_blocking(move || {
         let result = (|| {
-            lease.assert_for_path(&lock).map_err(coordination_error)?;
+            lease.assert_for_path(&lock).map_err(CognitionError::from)?;
             if shutdown.is_cancelled() || input.cancellation.is_cancelled() {
                 return Err(aborted());
             }
@@ -179,7 +179,7 @@ async fn run(
                 Ok(progress)
             })
         })();
-        let released = lease.release(result.is_ok()).map_err(coordination_error);
+        let released = lease.release(result.is_ok()).map_err(CognitionError::from);
         result.and_then(|progress| {
             released?;
             Ok(progress)

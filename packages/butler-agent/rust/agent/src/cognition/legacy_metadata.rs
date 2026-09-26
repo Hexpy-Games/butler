@@ -129,7 +129,7 @@ impl LegacyMetadataIntegrityService {
                     CognitionWaitClass::Interactive,
                 )
                 .await
-                .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+                .map_err(CognitionError::from)?
                 .ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))?;
             let data_root = self.data_root.clone();
             let path = self.path.clone();
@@ -146,9 +146,7 @@ impl LegacyMetadataIntegrityService {
                     })?;
                     remove_missing_links(&data_root, &path, &descriptor, &boxes, &feedback)
                 })();
-                let released = lease
-                    .release(result.is_ok())
-                    .map_err(|failure| CognitionError::new(failure.code, failure.message));
+                let released = lease.release(result.is_ok()).map_err(CognitionError::from);
                 match (result, released) {
                     (Err(failure), _) | (Ok(_), Err(failure)) => Err(failure),
                     (Ok(value), Ok(())) => Ok(value),

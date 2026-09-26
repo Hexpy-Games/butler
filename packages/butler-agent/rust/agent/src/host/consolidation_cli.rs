@@ -58,8 +58,8 @@ pub async fn run_native_consolidation_cli(
             return failure(
                 parsed.json,
                 "butler cognition consolidation run --manual",
-                error.code,
-                &error.message,
+                error.code(),
+                &error.message(),
                 1,
             );
         }

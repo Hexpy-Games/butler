@@ -161,7 +161,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             return report_error(
                 &command_name,
                 options.json,
-                &CliError::failed(error.code, error.message),
+                &CliError::failed(error.code(), error.message()),
             );
         }
     };

@@ -128,7 +128,7 @@ impl NativeLegacyHot {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|failure| failure.code.to_owned())?
+            .map_err(|failure| failure.code().to_owned())?
             .ok_or_else(|| "memory_write_busy".to_owned())?;
         let project = project.to_owned();
         let session_id = session_id.to_owned();
@@ -155,7 +155,7 @@ impl NativeLegacyHot {
             });
             let release = lease
                 .release(result.is_ok())
-                .map_err(|failure| failure.code.to_owned());
+                .map_err(|failure| failure.code().to_owned());
             match (result, release) {
                 (Err(code), _) | (Ok(()), Err(code)) => Err(code),
                 _ => Ok(entry),

@@ -153,13 +153,11 @@ impl FeedbackBufferService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| operator_error("memory_write_busy"))?;
         tokio::task::spawn_blocking(move || {
             let result = operation(path);
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(error), _) | (Ok(_), Err(error)) => Err(error),
                 (Ok(value), Ok(())) => Ok(value),

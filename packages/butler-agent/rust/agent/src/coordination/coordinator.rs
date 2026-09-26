@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 
-use super::error::{CoordinationError, CoordinationResult, sqlite_error, unavailable};
+use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::fence::{
     bind_coordinator_fence, coordinator_path, initialize_coordinator, is_busy, open_readwrite,
     read_coordinator_meta, read_known_coordinator, write_owner,
@@ -85,10 +85,7 @@ impl CognitionWriteCoordinator {
         ));
         loop {
             if cancelled(&request) {
-                return Err(CoordinationError::new(
-                    "memory_write_aborted",
-                    "Memory writer acquisition was aborted",
-                ));
+                return Err(CoordinationError::Aborted);
             }
             if let Some(lease) = self.inner.try_acquire(&request)? {
                 return Ok(Some(lease));
@@ -112,10 +109,7 @@ impl CognitionWriteCoordinator {
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {
                     () = cancellation.cancelled() => {
-                        return Err(CoordinationError::new(
-                            "memory_write_aborted",
-                            "Memory writer acquisition was aborted",
-                        ));
+                        return Err(CoordinationError::Aborted);
                     }
                     () = tokio::time::sleep(wait) => {}
                 }
@@ -148,13 +142,13 @@ impl CoordinatorInner {
             Ok(None) => {
                 initialize_coordinator(&request.lock_path, self.pid, &self.host)?;
             }
-            Err(error) if error.code == "memory_write_busy" => return Ok(None),
+            Err(error) if error.is_busy() => return Ok(None),
             Err(error) => return Err(error),
         }
         let initialized = match read_known_coordinator(&request.lock_path) {
             Ok(Some(meta)) => meta,
-            Ok(None) => return Err(unavailable("coordinator initialization unavailable")),
-            Err(error) if error.code == "memory_write_busy" => return Ok(None),
+            Ok(None) => return Err(invalid("coordinator initialization unavailable")),
+            Err(error) if error.is_busy() => return Ok(None),
             Err(error) => return Err(error),
         };
         if initialized.fence_sha256.is_none()
@@ -167,23 +161,23 @@ impl CoordinatorInner {
         }
         let verified = match read_known_coordinator(&request.lock_path) {
             Ok(Some(meta)) => meta,
-            Ok(None) => return Err(unavailable("coordinator verification unavailable")),
-            Err(error) if error.code == "memory_write_busy" => return Ok(None),
+            Ok(None) => return Err(invalid("coordinator verification unavailable")),
+            Err(error) if error.is_busy() => return Ok(None),
             Err(error) => return Err(error),
         };
         if verified.fence_sha256.is_none() {
-            return Err(unavailable("coordinator fence unbound"));
+            return Err(invalid("coordinator fence unbound"));
         }
         let connection = match open_readwrite(&coordinator_path(&request.lock_path)) {
             Ok(connection) => connection,
-            Err(error) if error.code == "memory_write_busy" => return Ok(None),
+            Err(error) if error.is_busy() => return Ok(None),
             Err(error) => return Err(error),
         };
         if let Err(error) = connection.execute_batch("BEGIN EXCLUSIVE") {
             return if is_busy(&error) {
                 Ok(None)
             } else {
-                Err(unavailable(error))
+                Err(CoordinationError::gate_io(error))
             };
         }
         if cancelled(request) || expired(request, self.host.now_epoch_millis()) {
@@ -193,10 +187,10 @@ impl CoordinatorInner {
         let acquired = (|| {
             let current = read_coordinator_meta(&connection)?
                 .filter(|meta| meta.format_version == super::fence::COORDINATOR_VERSION)
-                .ok_or_else(|| unavailable("coordinator metadata mismatch"))?;
+                .ok_or_else(|| invalid("coordinator metadata mismatch"))?;
             let known = read_known_coordinator_inside(&request.lock_path, current)?;
             if !known {
-                return Err(unavailable("coordinator fence changed"));
+                return Err(invalid("coordinator fence changed"));
             }
             let purpose = request
                 .purpose
@@ -257,7 +251,7 @@ impl CognitionWriteLease {
 
     pub(crate) fn assert_for_path(&self, path: &Path) -> CoordinationResult<()> {
         if self.lock_path != path || self.connection.is_none() {
-            return Err(unavailable("consolidation lease does not own path"));
+            return Err(invalid("consolidation lease does not own path"));
         }
         Ok(())
     }
@@ -282,7 +276,7 @@ impl CognitionWriteLease {
             return Err(sqlite_error(error));
         }
         if let Some(error) = close_error {
-            return Err(unavailable(error));
+            return Err(CoordinationError::gate_io(error));
         }
         Ok(())
     }
@@ -301,7 +295,7 @@ fn read_known_coordinator_inside(
     let Some(expected) = meta.fence_sha256 else {
         return Ok(false);
     };
-    let bytes = std::fs::read(lock_path).map_err(unavailable)?;
+    let bytes = std::fs::read(lock_path).map_err(CoordinationError::gate_io)?;
     let text = String::from_utf8_lossy(&bytes);
     Ok(super::fence::digest(&text) == expected)
 }

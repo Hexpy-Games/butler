@@ -27,3 +27,9 @@ impl From<super::CognitionSourceError> for CognitionError {
         Self::new(error.code, error.message)
     }
 }
+
+impl From<crate::coordination::CoordinationError> for CognitionError {
+    fn from(error: crate::coordination::CoordinationError) -> Self {
+        Self::new(error.code(), error.message())
+    }
+}

@@ -94,7 +94,7 @@ impl LegacyIndexService {
                 CognitionWaitClass::Interactive,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         let result = tokio::task::spawn_blocking(move || {
             let result = (|| {
@@ -111,9 +111,7 @@ impl LegacyIndexService {
                     &marker,
                 )
             })();
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),

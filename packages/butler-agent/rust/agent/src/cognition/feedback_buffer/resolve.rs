@@ -49,16 +49,14 @@ impl FeedbackBufferService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         let id = id.to_owned();
         let now_ms =
             chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).timestamp_millis();
         tokio::task::spawn_blocking(move || {
             let result = rewrite_resolved(&path, &id, now_ms);
-            let released = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let released = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, released) {
                 (Err(error), _) | (Ok(()), Err(error)) => Err(error),
                 (Ok(()), Ok(())) => Ok(()),

@@ -190,7 +190,7 @@ impl LegacyIndexService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         // Once mutation starts, await it and release the lease after all writes drain.
         let rows = chunks
@@ -233,9 +233,7 @@ impl LegacyIndexService {
                 row_count,
                 &stats_temporary,
             );
-            let release = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let release = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, release) {
                 (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),

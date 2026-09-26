@@ -267,11 +267,11 @@ impl BriefingGenerationService {
             .coordinator
             .acquire(request, CognitionWaitClass::Background)
             .await
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message))?
+            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()))?
             .ok_or_else(|| error("memory_write_busy", "Memory writer is busy"))?;
         lease
             .assert_for_path(&lock)
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message))?;
+            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()))?;
         let current = self.source.snapshot().await?;
         ensure_active(cancellation)?;
         if prepared_fingerprint(input, project.map(|project| project.id.as_str()))
@@ -285,7 +285,7 @@ impl BriefingGenerationService {
         let result = write::write(&path, &artifact);
         let release = lease
             .release(result.is_ok())
-            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message));
+            .map_err(|failure| error("new_chat_briefing_write_failed", failure.message()));
         release?;
         result?;
         Ok(path.to_string_lossy().into_owned())

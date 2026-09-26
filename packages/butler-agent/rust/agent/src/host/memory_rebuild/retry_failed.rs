@@ -20,8 +20,7 @@ pub(super) async fn run(
     vector_repair_input: Option<&Path>,
 ) -> Result<Value, CognitionError> {
     let coordinator = Arc::new(
-        CognitionWriteCoordinator::new(Arc::new(SystemIdentity))
-            .map_err(|error| CognitionError::new(error.code, &error.message))?,
+        CognitionWriteCoordinator::new(Arc::new(SystemIdentity)).map_err(CognitionError::from)?,
     );
     let cancellation = CancellationToken::new();
     let signal_task = signals(cancellation.clone())

@@ -385,7 +385,7 @@ fn io_error(error: std::io::Error) -> CognitionError {
     reason = "map_err/iterator adapter taking owned values"
 )]
 fn gate_error(failure: crate::coordination::CoordinationError) -> CognitionError {
-    if failure.code == "memory_write_aborted" {
+    if matches!(failure, crate::coordination::CoordinationError::Aborted) {
         error("memory_operation_aborted")
     } else {
         error("memory_write_busy")

@@ -151,7 +151,7 @@ pub(super) fn commit(
     check_active(cancellation, deadline)?;
     lease
         .assert_for_path(lock_path)
-        .map_err(|failure| CognitionError::new(failure.code, failure.message))?;
+        .map_err(CognitionError::from)?;
     ensure_source_authority(data_root, paths, &prepared.path)?;
     if !sources_are_current(
         data_root,

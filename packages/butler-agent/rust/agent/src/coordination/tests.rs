@@ -270,7 +270,7 @@ fn legacy_reclaim_requires_same_host_definitely_dead_safe_pid() {
         )) else {
             panic!("legacy owner should block acquisition")
         };
-        assert_eq!(error.code, "memory_write_legacy_blocked");
+        assert_eq!(error.code(), "memory_write_legacy_blocked");
         assert_eq!(
             coordinator.inspect(&fixture.lock).unwrap().state,
             ConsolidationLockState::LegacyBlocked
@@ -314,7 +314,7 @@ async fn cancellation_while_waiting_leaves_no_sqlite_owner() {
     let Err(error) = waiting.await.unwrap() else {
         panic!("cancelled acquisition should fail")
     };
-    assert_eq!(error.code, "memory_write_aborted");
+    assert_eq!(error.code(), "memory_write_aborted");
     drop(held);
     second
         .try_acquire(&CognitionWriteAcquire::immediate(
@@ -381,7 +381,7 @@ async fn async_deadline_preserves_first_attempt_expiry_and_cancel_classes() {
     else {
         panic!("cancelled async acquisition should fail")
     };
-    assert_eq!(error.code, "memory_write_aborted");
+    assert_eq!(error.code(), "memory_write_aborted");
     assert!(!cancelled.lock.exists());
     assert!(
         coordinator

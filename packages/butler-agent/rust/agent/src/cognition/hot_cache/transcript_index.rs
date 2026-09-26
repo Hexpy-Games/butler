@@ -190,7 +190,7 @@ impl LegacyIndexService {
                 CognitionWaitClass::Background,
             )
             .await
-            .map_err(|failure| CognitionError::new(failure.code, failure.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| error("memory_write_busy"))?;
         // Once the Lance mutation begins, keep the lease until all writes finish.
         let row_count = match self.writer.upsert_session(&lease, session_id, &rows).await {
@@ -223,9 +223,7 @@ impl LegacyIndexService {
                 row_count,
                 temp: &temp,
             });
-            let release = lease
-                .release(result.is_ok())
-                .map_err(|failure| CognitionError::new(failure.code, failure.message));
+            let release = lease.release(result.is_ok()).map_err(CognitionError::from);
             match (result, release) {
                 (Err(failure), _) | (Ok(()), Err(failure)) => Err(failure),
                 (Ok(()), Ok(())) => Ok(()),

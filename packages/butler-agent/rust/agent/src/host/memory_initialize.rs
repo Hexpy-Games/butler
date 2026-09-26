@@ -26,7 +26,7 @@ pub async fn run(
     };
     let coordinator = match CognitionWriteCoordinator::new(Arc::new(SystemIdentity)) {
         Ok(value) => Arc::new(value),
-        Err(error) => return failure(json_mode, error.code, &error.message, 1),
+        Err(error) => return failure(json_mode, error.code(), &error.message(), 1),
     };
     let paths = CognitionPathEnvironment {
         cognition_home: std::env::var("BUTLER_COGNITION_HOME").ok(),

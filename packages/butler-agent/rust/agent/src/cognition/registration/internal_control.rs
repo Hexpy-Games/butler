@@ -41,7 +41,7 @@ pub(super) async fn run(state: Input) -> CognitionResult<ConversationRegistratio
         let result = (|| {
             lease
                 .assert_for_path(&lock_path)
-                .map_err(super::coordination_error)?;
+                .map_err(CognitionError::from)?;
             assert_mutation_authority(
                 &state.input.data_root,
                 &state.environment,
@@ -66,9 +66,7 @@ pub(super) async fn run(state: Input) -> CognitionResult<ConversationRegistratio
                 .map_err(super::conversation_error)
                 .and(result)
         })();
-        let release = lease
-            .release(result.is_ok())
-            .map_err(super::coordination_error);
+        let release = lease.release(result.is_ok()).map_err(CognitionError::from);
         release.and(result)
     })
     .await

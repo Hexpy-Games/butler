@@ -53,14 +53,14 @@ impl CognitionRegistrationService {
                 () = shutdown.cancelled() => Err(write_aborted()),
                 () = cancellation.cancelled() => Err(write_aborted()),
                 result = coordinator.acquire(request, CognitionWaitClass::Background) =>
-                    result.map_err(coordination_error).and_then(|lease|
+                    result.map_err(CognitionError::from).and_then(|lease|
                         lease.ok_or_else(|| CognitionError::new("memory_write_busy", "memory_write_busy"))),
             };
             let result = match acquired {
                 Err(error) => Err(error),
                 Ok(lease) => tokio::task::spawn_blocking(move || {
                     let result = (|| {
-                        lease.assert_for_path(&lock).map_err(coordination_error)?;
+                        lease.assert_for_path(&lock).map_err(CognitionError::from)?;
                         assert_mutation_authority(&data_root, &environment, &target, &handle)?;
                         let mut graph = GraphRepository::open(&handle.graph_path)?;
                         let nonce = host.new_uuid();
@@ -81,7 +81,7 @@ impl CognitionRegistrationService {
                         let closed = graph.close();
                         result.and(closed)
                     })();
-                    let released = lease.release(result.is_ok()).map_err(coordination_error);
+                    let released = lease.release(result.is_ok()).map_err(CognitionError::from);
                     result.and(released)
                 })
                 .await

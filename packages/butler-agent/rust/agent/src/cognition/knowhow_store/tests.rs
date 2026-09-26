@@ -63,13 +63,11 @@ impl FeedbackResolvePort for LockProbe {
                     self.lock_path.clone(),
                     "knowhow-test-resolver",
                 ))
-                .map_err(|error| CognitionError::new(error.code, error.message))?
+                .map_err(CognitionError::from)?
                 .ok_or_else(|| {
                     CognitionError::new("test_lock_busy", "KnowHow held the lock during resolve")
                 })?;
-            lease
-                .release(true)
-                .map_err(|error| CognitionError::new(error.code, error.message))?;
+            lease.release(true).map_err(CognitionError::from)?;
             self.resolved
                 .lock()
                 .expect("resolver mutex")

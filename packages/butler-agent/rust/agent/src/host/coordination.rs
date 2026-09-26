@@ -19,9 +19,7 @@ impl CognitionCoordinationHost for SystemIdentity {
     fn hostname(&self) -> CoordinationResult<String> {
         gethostname()
             .map(|name| name.to_string_lossy().into_owned())
-            .map_err(|error| {
-                CoordinationError::new("memory_write_gate_unavailable", error.to_string())
-            })
+            .map_err(CoordinationError::gate_io)
     }
 
     fn process_status(&self, pid: u64) -> CognitionProcessStatus {

@@ -14,14 +14,12 @@ impl CycleService {
             .coordinator
             .acquire(request, CognitionWaitClass::Background)
             .await
-            .map_err(|e| CognitionError::new(e.code, e.message))?
+            .map_err(CognitionError::from)?
             .ok_or_else(|| {
                 CognitionError::new("memory_write_busy", "Consolidation lock is held")
             })?;
         let outcome = run();
-        let released = lease
-            .release(outcome.is_ok())
-            .map_err(|e| CognitionError::new(e.code, e.message));
+        let released = lease.release(outcome.is_ok()).map_err(CognitionError::from);
         match (outcome, released) {
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
             (Ok(value), Ok(())) => Ok(value),

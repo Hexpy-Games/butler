@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 
-use super::error::{CoordinationError, CoordinationResult, sqlite_error, unavailable};
+use super::error::{CoordinationError, CoordinationResult, invalid, sqlite_error};
 use super::types::{CognitionCoordinationHost, CognitionProcessStatus, LockInfo};
 
 pub(super) const COORDINATOR_VERSION: i64 = 1;
@@ -117,19 +117,19 @@ pub(super) fn read_known_coordinator(
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .map_err(sqlite_error)?;
     if !journal.eq_ignore_ascii_case("delete") {
-        return Err(unavailable("unexpected coordinator journal mode"));
+        return Err(invalid("unexpected coordinator journal mode"));
     }
     let Some(meta) = read_coordinator_meta(&connection)? else {
-        return Err(unavailable("coordinator metadata missing"));
+        return Err(invalid("coordinator metadata missing"));
     };
     if meta.format_version != COORDINATOR_VERSION {
-        return Err(unavailable("coordinator version mismatch"));
+        return Err(invalid("coordinator version mismatch"));
     }
     if let Some(expected) = &meta.fence_sha256 {
         let bytes =
-            read_fence_bytes(lock_path)?.ok_or_else(|| unavailable("coordinator fence missing"))?;
+            read_fence_bytes(lock_path)?.ok_or_else(|| invalid("coordinator fence missing"))?;
         if digest(&bytes) != *expected {
-            return Err(unavailable("coordinator fence mismatch"));
+            return Err(invalid("coordinator fence mismatch"));
         }
     }
     Ok(Some(meta))
@@ -196,19 +196,19 @@ pub(super) fn initialize_coordinator(
     temp_name.push(format!(".init-{pid}-{}", host.new_uuid()));
     let temp = PathBuf::from(temp_name);
     let result = (|| {
-        let connection = Connection::open(&temp).map_err(unavailable)?;
+        let connection = Connection::open(&temp).map_err(CoordinationError::gate_io)?;
         connection
             .busy_timeout(Duration::ZERO)
-            .map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
         let journal: String = connection
             .query_row("PRAGMA journal_mode=DELETE", [], |row| row.get(0))
-            .map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
         if !journal.eq_ignore_ascii_case("delete") {
-            return Err(unavailable("failed to select DELETE journal mode"));
+            return Err(invalid("failed to select DELETE journal mode"));
         }
         connection
             .execute_batch("BEGIN IMMEDIATE")
-            .map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
         let setup = connection.execute_batch(
             "CREATE TABLE memory_write_gate (\
              singleton INTEGER PRIMARY KEY CHECK(singleton=1),\
@@ -221,21 +221,21 @@ pub(super) fn initialize_coordinator(
         );
         if let Err(error) = setup {
             let _ = connection.execute_batch("ROLLBACK");
-            return Err(unavailable(error));
+            return Err(CoordinationError::gate_io(error));
         }
         connection
             .close()
-            .map_err(|(_, error)| unavailable(error))?;
+            .map_err(|(_, error)| CoordinationError::gate_io(error))?;
         File::open(&temp)
             .and_then(|file| file.sync_all())
-            .map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
         match std::fs::hard_link(&temp, &path) {
             Ok(()) => {
                 sync_parent(&path)?;
                 Ok(true)
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
-            Err(error) => Err(unavailable(error)),
+            Err(error) => Err(CoordinationError::gate_io(error)),
         }
     })();
     let _ = std::fs::remove_file(&temp);
@@ -252,49 +252,49 @@ pub(super) fn bind_coordinator_fence(
         return if is_busy(&error) {
             Ok(false)
         } else {
-            Err(unavailable(error))
+            Err(CoordinationError::gate_io(error))
         };
     }
     let result = (|| {
         let meta = read_coordinator_meta(&connection)?
             .filter(|value| value.format_version == COORDINATOR_VERSION)
-            .ok_or_else(|| unavailable("coordinator metadata mismatch"))?;
+            .ok_or_else(|| invalid("coordinator metadata mismatch"))?;
         if let Some(expected) = meta.fence_sha256 {
-            let bytes = read_fence_bytes(lock_path)?
-                .ok_or_else(|| unavailable("coordinator fence missing"))?;
+            let bytes =
+                read_fence_bytes(lock_path)?.ok_or_else(|| invalid("coordinator fence missing"))?;
             if digest(&bytes) != expected {
-                return Err(unavailable("coordinator fence mismatch"));
+                return Err(invalid("coordinator fence mismatch"));
             }
-            connection.execute_batch("ROLLBACK").map_err(unavailable)?;
+            connection
+                .execute_batch("ROLLBACK")
+                .map_err(CoordinationError::gate_io)?;
             return Ok(true);
         }
         let mut fence = classify_unbound_fence(lock_path, hostname, host.as_ref())?;
         if !fence.available {
-            return Err(CoordinationError::new(
-                if fence.reason == Some("legacy_owner_live_or_uncertain") {
-                    "memory_write_legacy_blocked"
-                } else {
-                    "memory_write_gate_unavailable"
-                },
-                fence.reason.unwrap_or("invalid_fence"),
-            ));
+            let reason = fence.reason.unwrap_or("invalid_fence");
+            return Err(if reason == "legacy_owner_live_or_uncertain" {
+                CoordinationError::LegacyBlocked { reason }
+            } else {
+                invalid(reason)
+            });
         }
         if fence.bytes.is_none() {
             let _ = install_fence(lock_path, host)?;
             fence = classify_unbound_fence(lock_path, hostname, host.as_ref())?;
         }
         if !fence.available || fence.bytes.is_none() {
-            return Err(unavailable("coordinator fence unavailable"));
+            return Err(invalid("coordinator fence unavailable"));
         }
         File::open(lock_path)
             .and_then(|file| file.sync_all())
-            .map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
         sync_parent(lock_path)?;
         sync_parent(&coordinator_path(lock_path))?;
         let durable =
-            read_fence_bytes(lock_path)?.ok_or_else(|| unavailable("coordinator fence missing"))?;
+            read_fence_bytes(lock_path)?.ok_or_else(|| invalid("coordinator fence missing"))?;
         if Some(&durable) != fence.bytes.as_ref() {
-            return Err(unavailable("coordinator fence changed"));
+            return Err(invalid("coordinator fence changed"));
         }
         connection
             .execute(
@@ -302,8 +302,10 @@ pub(super) fn bind_coordinator_fence(
                  WHERE singleton=1 AND fence_sha256 IS NULL",
                 [digest(&durable)],
             )
-            .map_err(unavailable)?;
-        connection.execute_batch("COMMIT").map_err(unavailable)?;
+            .map_err(CoordinationError::gate_io)?;
+        connection
+            .execute_batch("COMMIT")
+            .map_err(CoordinationError::gate_io)?;
         Ok(true)
     })();
     if result.is_err() {
@@ -323,20 +325,21 @@ fn install_fence(
         fence_id: host.new_uuid(),
         created_at: host.now_iso(),
     })
-    .map_err(unavailable)?;
+    .map_err(CoordinationError::gate_io)?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     options.mode(0o600);
     match options.open(path) {
         Ok(mut file) => {
-            file.write_all(bytes.as_bytes()).map_err(unavailable)?;
-            file.sync_all().map_err(unavailable)?;
+            file.write_all(bytes.as_bytes())
+                .map_err(CoordinationError::gate_io)?;
+            file.sync_all().map_err(CoordinationError::gate_io)?;
             sync_parent(path)?;
             Ok(Some(bytes))
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
-        Err(error) => Err(unavailable(error)),
+        Err(error) => Err(CoordinationError::gate_io(error)),
     }
 }
 
@@ -344,24 +347,24 @@ fn read_fence_bytes(path: &Path) -> CoordinationResult<Option<String>> {
     match std::fs::read(path) {
         Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(unavailable(error)),
+        Err(error) => Err(CoordinationError::gate_io(error)),
     }
 }
 
 fn create_parent(path: &Path) -> CoordinationResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| unavailable("coordinator parent missing"))?;
-    std::fs::create_dir_all(parent).map_err(unavailable)
+        .ok_or_else(|| invalid("coordinator parent missing"))?;
+    std::fs::create_dir_all(parent).map_err(CoordinationError::gate_io)
 }
 
 fn sync_parent(path: &Path) -> CoordinationResult<()> {
     let parent = path
         .parent()
-        .ok_or_else(|| unavailable("coordinator parent missing"))?;
+        .ok_or_else(|| invalid("coordinator parent missing"))?;
     File::open(parent)
         .and_then(|file| file.sync_all())
-        .map_err(unavailable)
+        .map_err(CoordinationError::gate_io)
 }
 
 fn valid_fence(value: &Value) -> bool {
@@ -424,7 +427,7 @@ pub(super) fn is_busy(error: &rusqlite::Error) -> bool {
 }
 
 pub(super) fn write_owner(connection: &Connection, info: &LockInfo) -> CoordinationResult<()> {
-    let json = serde_json::to_string(info).map_err(unavailable)?;
+    let json = serde_json::to_string(info).map_err(CoordinationError::gate_io)?;
     connection
         .execute(
             "UPDATE memory_write_gate SET last_owner_json=?1 WHERE singleton=1",
