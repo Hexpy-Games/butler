@@ -1,4 +1,4 @@
-import { withUnsafeStyle, type DsBaseProps, type UnsafeStyleProps } from "../../lib/dsProps";
+import type { DsBaseProps } from "../../lib/dsProps";
 import { forwardRef, useRef } from "react";
 import type { HTMLAttributes, MutableRefObject, ReactNode, Ref } from "react";
 import { useSendFlight } from "../../lib/sendFlight";
@@ -17,7 +17,7 @@ export type MessageRowTone = "pending" | "failed" | "complete";
 export interface MessageRowProps extends Omit<
   DsBaseProps<HTMLAttributes<HTMLElement>>,
   "role"
->, UnsafeStyleProps {
+> {
   role: MessageRowRole;
   children: ReactNode;
   avatar?: ReactNode;
@@ -31,6 +31,8 @@ export interface MessageRowProps extends Omit<
   index?: number;
   rowRef?: Ref<HTMLElement>;
   dataTestClass?: string;
+  /** Virtual list placement: the row's vertical offset (translateY, px). */
+  offsetY?: number;
 }
 
 function assignRef(
@@ -58,7 +60,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
       entering = false,
       index,
       style,
-      UNSAFE_style,
+      offsetY,
       rowRef,
       dataTestClass,
       className,
@@ -88,7 +90,7 @@ export const MessageRow = forwardRef<HTMLElement, MessageRowProps>(
           assignRef(rowRef, node);
           assignRef(forwardedRef, node);
         }}
-        style={withUnsafeStyle(style, UNSAFE_style)}
+        style={offsetY === undefined ? style : { ...style, transform: `translateY(${offsetY}px)` }}
       >
         {avatar}
         <div className={styles.body} data-test-class="message-body" ref={bodyRef}>

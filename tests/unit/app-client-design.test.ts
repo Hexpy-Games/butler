@@ -831,9 +831,6 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   const inspectorShellStyles = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/InspectorShell/InspectorShell.module.css",
   );
-  const inspectorLayout = read(
-    "packages/butler-app/client/ui/src/components/inspector/inspectorLayout.ts",
-  );
   const rightPanelOverlayTitlebar = read(
     "packages/butler-app/client/ui/src/components/layout/RightPanelOverlayTitlebar.tsx",
   );
@@ -894,11 +891,11 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   expect(contextPanel).toContain("ScrollArea");
   expect(contextPanel).toContain('dataTestClass="context-legend-scroll"');
   expect(contextPanel).toContain('data-test-class="context-legend"');
-  expect(contextPanel).toContain("inspectorLayout.ts");
   expect(contextPanel).toContain("<InspectorInset fill>");
   expect(contextPanel).toContain('bleed="inline-end"');
-  expect(contextPanel).toContain("UNSAFE_style={contextLegendGeometry}");
-  expect(inspectorLayout).toContain("contextLegendGeometry");
+  // The legend floor is a ScrollArea prop (--scroll-area-min-height-xs), not an UNSAFE_style.
+  expect(contextPanel).toContain('minHeight="xs"');
+  expect(contextPanel).not.toContain("UNSAFE_style");
   expect(scrollAreaStyles).toContain("--scroll-area-frame-width: calc(100% + var(--scroll-area-bleed))");
   expect(scrollAreaStyles).toContain("--scroll-area-content-width: 100%");
   expect(scrollAreaStyles).toContain("padding-inline-end: var(--scroll-area-bleed)");
@@ -4686,9 +4683,6 @@ describe("app-client design system foundation", () => {
     );
     const inspectorShellStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/InspectorShell/InspectorShell.module.css",
-    );
-    const inspectorLayout = read(
-      "packages/butler-app/client/ui/src/components/inspector/inspectorLayout.ts",
     );
     const summaryPanel = read(
       "packages/butler-app/client/ui/src/components/inspector/SummaryPanel.tsx",

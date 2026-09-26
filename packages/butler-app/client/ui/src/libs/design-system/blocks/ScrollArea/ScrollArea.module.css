@@ -22,6 +22,10 @@
   max-height: var(--scroll-area-max-height-sm);
 }
 
+.frame[data-min-height="xs"] {
+  min-height: var(--scroll-area-min-height-xs);
+}
+
 /* Bleed into the container's inline-end gutter (inspector padding). */
 .frame[data-bleed="inline-end"] {
   --scroll-area-bleed: var(--inspector-inline-padding, 18px);

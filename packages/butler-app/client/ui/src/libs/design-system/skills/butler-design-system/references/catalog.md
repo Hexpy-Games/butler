@@ -1211,7 +1211,7 @@ A scroll container with the shared edge fades and thin scrollbars on its scrolli
 - Use for: Any region that scrolls inside a fixed height or width
 - Not for: The whole page scrolls → `ManagementPage`
 - Not for: A sidebar list → `SidebarShell`
-- Tokens: `--scroll-fade-size`
+- Tokens: `--scroll-fade-size`, `--scroll-area-max-height-xs`, `--scroll-area-min-height-xs`
 
 ### SetupWizardShell
 

@@ -45,3 +45,10 @@ test("an active status label shimmers its text and stays static under reduced mo
   const reduced = messageRowCss.slice(messageRowCss.indexOf("@media (prefers-reduced-motion: reduce)"));
   expect(reduced).toMatch(/\.statusContent\[data-shimmer="true"\] > \* \{[^}]*animation: none;/u);
 });
+
+test("offsetY places a virtualized row with translateY; the row offers no UNSAFE_style", () => {
+  const html = renderToStaticMarkup(<MessageRow role="user" offsetY={128}>Placed</MessageRow>);
+  expect(html).toContain('style="transform:translateY(128px)"');
+  expect(renderToStaticMarkup(<MessageRow role="user">Static</MessageRow>)).not.toContain("style=");
+  expect(readFileSync(new URL("./MessageRow.tsx", import.meta.url), "utf8")).not.toContain("UNSAFE_style");
+});

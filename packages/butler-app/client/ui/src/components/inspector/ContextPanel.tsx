@@ -7,9 +7,6 @@ import { ChartContainer } from "@/butler-ds";
 import type { ContextDetailsView } from "@/app/types.ts";
 import { ContextCategoryRow } from "./ContextCategoryRow.tsx";
 import { buildContextChart, formatTokenCount } from "./contextPanelUtils.ts";
-import {
-  contextLegendGeometry,
-} from "./inspectorLayout.ts";
 
 export function ContextPanel({ context }: { context?: ContextDetailsView }) {
   useAppLocale();
@@ -96,7 +93,7 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
               dataSlot="context-legend-scroll"
               dataTestClass="context-legend-scroll"
               fill
-              UNSAFE_style={contextLegendGeometry}
+              minHeight="xs"
             >
               <Stack gap="sm" data-test-class="context-legend">
                 {sortedCategories.map((category) => (

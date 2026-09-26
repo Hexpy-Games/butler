@@ -56,7 +56,7 @@ export function VirtualMessageRow({
           dataTestClass={messageTestClassName(message, isCompactionEvent)}
           index={virtualRow.index}
           rowRef={rowVirtualizer.measureElement}
-          UNSAFE_style={{ transform: `translateY(${virtualRow.start + topOffset}px)` }}
+          offsetY={virtualRow.start + topOffset}
         >
           {children}
         </MessageRow>

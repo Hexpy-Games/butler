@@ -30,10 +30,10 @@ lints below enforce most of this; the rest is review.
    the DS). `tsc` rejects `className="…"` or `style={{…}}` on a DS
    component. Style through props (`variant`, `size`, `tone`, `gap`, layout
    item props, `windowDrag`, `permissionTone`, `theme`, …). Data-driven
-   geometry (virtualized row offsets, resizable panel widths) goes through
-   `UNSAFE_style` (width/height/min/max, transform, inset, `--*` only) on the
-   few components that offer it (`Stack`, `ScrollArea`, `MessageRow`,
-   `AdaptiveShell`); every product use is allowlisted per file. No
+   geometry (resizable panel widths) goes through `UNSAFE_style`
+   (width/height/min/max, transform, inset, `--*` only) on the few
+   components that offer it (`Stack`, `AdaptiveShell`); every product use is
+   allowlisted per file. Virtualized rows use `MessageRow offsetY`. No
    `style={{…}}` on raw elements in product code either.
 4. **No raw interactive or typography elements.** Use `Button`, `IconButton`,
    `Clickable`, `Input`, `Textarea`, `Select`, `NativeSelect`, `Switch`,

@@ -37,7 +37,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Answers in cards look like attachments, not conversation.", render: () => <Card><Typo.Body>The header block now ends with a divider.</Typo.Body></Card> },
     },
   ],
-  content: ["Virtualized rows position themselves with UNSAFE_style={{ transform }}; nothing else styles a row.", "Status labels are short (Response completed / 응답 완료); times are local clock times."],
+  content: ["Virtualized rows position themselves with offsetY (translateY); nothing else styles a row.", "Status labels are short (Response completed / 응답 완료); times are local clock times."],
   accessibility: ["Messages are articles in reading order; footers are toolbars of labelled buttons; shimmer is decorative."],
   tokens: ["--user-message-bg", "--page-max-width-reading", "--motion-base", "--motion-distance-sm", "--shimmer-duration"],
 };

@@ -23,7 +23,7 @@ export const guidance: ShowcaseGuidance = {
     { when: "The whole page scrolls", use: "ManagementPage" },
     { when: "A sidebar list", use: "SidebarShell" },
   ],
-  recipes: [{ name: "Bounded transcript", description: "Cap it with maxHeight (xs 180px, sm 320px) or let it fill; the fades follow the scroll position. UNSAFE_style is only for data-driven geometry.", render: () => <Transcript /> }],
+  recipes: [{ name: "Bounded transcript", description: "Cap it with maxHeight (xs 180px, sm 320px), keep a floor with minHeight (xs 96px) or let it fill; the fades follow the scroll position.", render: () => <Transcript /> }],
   doDont: [
     {
       do: { caption: "Fades only on edges that still have content.", render: () => <Transcript /> },
@@ -32,5 +32,5 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: ["bleed=\"inline-end\" puts the scrollbar in the inspector gutter; windowDrag=\"no-drag\" keeps a scroller inside a drag region scrollable.", "No copy of its own."],
   accessibility: ["Scrollable regions that hold focusable content need no tabIndex; otherwise give them a label and tabIndex=0."],
-  tokens: ["--scroll-fade-size"],
+  tokens: ["--scroll-fade-size", "--scroll-area-max-height-xs", "--scroll-area-min-height-xs"],
 };

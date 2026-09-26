@@ -25,7 +25,8 @@ and footer controls with ad hoc CSS.
 
 Pass `role`, optional `status`, optional `avatar`, and rendered body content.
 Pass `index` when tests or diagnostics need a stable row order marker. Pass
-`rowRef` and `style` from the virtualizer only from the list container.
+`rowRef` and `offsetY` (the virtual row's translateY in px) from the
+virtualizer only from the list container.
 
 ## Who can use this component
 

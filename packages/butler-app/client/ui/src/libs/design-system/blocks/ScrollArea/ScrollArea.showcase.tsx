@@ -67,4 +67,15 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  {
+    // ContextPanel legend with two categories: minHeight keeps the 96px floor.
+    name: "Minimum height",
+    render: (context) => (
+      <ScrollArea bleed="inline-end" minHeight="xs">
+        <Stack gap="sm">
+          {Array.from({ length: 2 }, (_, index) => <Typo.Body key={index}>{text(context).row(index + 1)}</Typo.Body>)}
+        </Stack>
+      </ScrollArea>
+    ),
+  },
 ];

@@ -44,9 +44,11 @@ ratchet mode: existing violations are baselined per file and may only shrink.
   `DsClassName`/`DsStyle` that only `dsClass()`/`dsStyle()` in `lib/internal`
   mint, and ESLint blocks `lib/internal` outside this folder, so `tsc` rejects
   product styling. Data-driven geometry uses `UNSAFE_style` (width, height,
-  min/max sizes, transform, inset and custom properties) on `Stack`,
-  `ScrollArea`, `MessageRow` and `AdaptiveShell`; product uses are counted by
+  min/max sizes, transform, inset and custom properties) on `Stack` and
+  `AdaptiveShell` (resizable panel widths); product uses are counted by
   `butler-ds/unsafe-style-allowlist` against `baseline/unsafe-style.json`.
+  Virtualized rows use `MessageRow offsetY`; a scroller floor uses
+  `ScrollArea minHeight`.
 - Use `Button`, `IconButton`, `Clickable`, `Input`, `Textarea`, `Select`,
   `NativeSelect`, `Switch` and `Slider` instead of raw `<button>`, `<input>`,
   `<select>`, `<textarea>` or an `<a onClick>` without `href`.

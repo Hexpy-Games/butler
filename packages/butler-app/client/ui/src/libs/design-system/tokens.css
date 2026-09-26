@@ -145,6 +145,8 @@
   /* ScrollArea maxHeight caps (raw log blocks). */
   --scroll-area-max-height-xs: 180px;
   --scroll-area-max-height-sm: 320px;
+  /* ScrollArea minHeight floor (the inspector context legend). */
+  --scroll-area-min-height-xs: 96px;
   /* Chart height for dashboard panel charts (ChartContainer size="panel"). */
   --chart-height-panel: 13rem;
   /* Fixed pane heights of the document board and the spec browser. */
