@@ -17,6 +17,19 @@ pub(crate) use document::{
 mod number;
 pub(crate) use number::{coerce_number, number_from_string};
 
+/// Builds a JSON object literal as a `serde_json::Map`, so callers can insert
+/// or remove keys without unwrapping `Value::as_object_mut`.
+macro_rules! json_object {
+    ({ $($body:tt)* }) => {
+        match ::serde_json::json!({ $($body)* }) {
+            ::serde_json::Value::Object(map) => map,
+            // `json!({ .. })` always builds an object.
+            _ => ::serde_json::Map::new(),
+        }
+    };
+}
+pub(crate) use json_object;
+
 #[derive(Debug)]
 pub(crate) struct JsonError(String);
 impl JsonError {

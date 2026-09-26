@@ -101,14 +101,13 @@ impl ExecutionControls {
         if let Some(context) = resolution.subsession_result {
             fields.insert("subsession_result".into(), json(&context.normalized()?)?);
         }
-        let mut controls = Self(Value::Object(fields));
-        let hash = digest(&json_stringify_without(&controls.0, "integrity_hash")?);
-        controls
-            .0
-            .as_object_mut()
-            .expect("constructed object")
-            .insert("integrity_hash".into(), hash.into());
-        Ok(controls)
+        let unsigned = Value::Object(fields);
+        let hash = digest(&json_stringify_without(&unsigned, "integrity_hash")?);
+        let Value::Object(mut fields) = unsigned else {
+            return Err(invalid());
+        };
+        fields.insert("integrity_hash".into(), hash.into());
+        Ok(Self(Value::Object(fields)))
     }
 
     pub(crate) fn verify(&self) -> Result<VerifiedExecutionControls, BtccError> {

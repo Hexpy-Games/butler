@@ -55,15 +55,11 @@ pub(super) fn digest(bytes: &[u8]) -> String {
 }
 
 pub(super) fn manifest_id() -> String {
-    #[derive(serde::Serialize)]
-    struct Manifest<'a> {
-        schema: &'static str,
-        tables: &'a [&'static str],
-    }
-    let encoded = serde_json::to_vec(&Manifest {
-        schema: "butler.agent-btcc-manifest.v1",
-        tables: &TABLES,
+    // `Value`'s Display is the compact serde_json encoding and cannot fail.
+    let encoded = serde_json::json!({
+        "schema": "butler.agent-btcc-manifest.v1",
+        "tables": TABLES.as_slice(),
     })
-    .expect("static manifest serialization");
-    digest(&encoded)
+    .to_string();
+    digest(encoded.as_bytes())
 }

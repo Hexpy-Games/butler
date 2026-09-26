@@ -29,16 +29,16 @@ pub(super) struct Store {
 
 impl TurnStore for Store {
     fn load_or_admit(&self, _: &crate::btcc::PreparedTurn) -> PortFuture<'_, (TurnRecord, bool)> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn find_turn(&self, _: &str) -> PortFuture<'_, Option<TurnRecord>> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn resume_authority(&self, _: &str) -> PortFuture<'_, Option<TurnRecord>> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn acquire_state_claim(&self, _: &TurnRecord) -> PortFuture<'_, StateExecutionClaim> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn commit_transition(
         &self,
@@ -46,13 +46,13 @@ impl TurnStore for Store {
         _: &StateExecutionClaim,
         _: &TurnTransition,
     ) -> Pin<Box<dyn Future<Output = Result<(), TransitionCommitError>> + Send + '_>> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn activate_successor(&self, _: &str) -> PortFuture<'_, TurnRecord> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn stop(&self, _: &str) -> PortFuture<'_, StopPersistenceOutcome> {
-        unreachable!()
+        panic!("not used by this test")
     }
     fn record_model_route_event(
         &self,
@@ -97,7 +97,7 @@ impl TurnStore for Store {
         &self,
         _: ContinuationBudgetTransition,
     ) -> PortFuture<'_, Value> {
-        unreachable!()
+        panic!("not used by this test")
     }
 }
 

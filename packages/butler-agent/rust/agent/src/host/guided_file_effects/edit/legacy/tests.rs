@@ -5,7 +5,7 @@ use crate::workspace::EffectFileScope;
 struct UnusedRegisteredEdit;
 impl RegisteredEditPort for UnusedRegisteredEdit {
     fn edit<'a>(&'a self, _: Value) -> EffectFuture<'a, Value> {
-        Box::pin(async { unreachable!("recovery never dispatches") })
+        Box::pin(async { panic!("recovery never dispatches") })
     }
 }
 

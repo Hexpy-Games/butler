@@ -28,8 +28,10 @@ pub(crate) use contracts::{
 pub(crate) use execution::TurnModelExecutionFactory;
 pub(crate) use source_revision::GuidedSourceRevision;
 
+pub(crate) use failure::ReducedModelError;
+
 pub(crate) fn reduce_model_error(
     error: crate::btcc::agent_loop::ModelRoundError,
-) -> crate::btcc::agent_loop::ModelRoundError {
-    failure::reduce(error)
+) -> ReducedModelError {
+    failure::reduce_outer(error)
 }

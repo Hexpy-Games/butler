@@ -128,9 +128,9 @@ fn observed_result(
     {
         result["changed_file"] = detail.clone();
     }
-    Some(AdapterOutcome::Applied(
-        crate::json::JsonDocument::from_value(&result).expect("workspace receipt JSON"),
-    ))
+    // A receipt built from JSON values always encodes; a failure means no observation.
+    let receipt = crate::json::JsonDocument::from_value(&result).ok()?;
+    Some(AdapterOutcome::Applied(receipt))
 }
 fn observation_error(observation: EffectFileObservation) -> EffectAdapterError {
     match observation {

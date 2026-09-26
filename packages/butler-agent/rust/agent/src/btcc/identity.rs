@@ -15,6 +15,12 @@ pub(super) fn content_ref(kind: &str, body: &Value) -> Result<ContentRef, BtccEr
     })
 }
 
+/// Serializes a typed value for a canonical body.
+pub(super) fn json_value<T: serde::Serialize + ?Sized>(value: &T) -> Result<Value, BtccError> {
+    serde_json::to_value(value)
+        .map_err(|error| BtccError::new("btcc_json_error", error.to_string()))
+}
+
 pub(super) fn stable_json(value: &Value) -> Result<String, BtccError> {
     crate::json::canonical_json(value, crate::json::CanonicalKeyOrder::Utf16Lexical)
         .map_err(identity_error)

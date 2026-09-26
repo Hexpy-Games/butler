@@ -331,10 +331,10 @@ fn destination(request: &TurnRequest) -> Result<Value, BtccError> {
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        value
-            .as_object_mut()
-            .expect("serialized destination")
-            .insert("appQueueClaimId".into(), claim.clone().into());
+        let Some(object) = value.as_object_mut() else {
+            return Err(json_error("progress destination is not an object"));
+        };
+        object.insert("appQueueClaimId".into(), claim.clone().into());
     }
     Ok(value)
 }

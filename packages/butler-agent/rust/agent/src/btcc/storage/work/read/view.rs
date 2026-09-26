@@ -19,10 +19,12 @@ pub(super) fn hydrate(db: &Connection, row: &common::WorkRow) -> StorageResult<W
         .transpose()?
         .flatten();
     let checkpoint = checkpoint(db, &row.id, plan.as_ref(), row.status.as_str())?;
-    let checkpoint_matches_plan = plan
+    // The checkpoint, when it belongs to the current plan revision.
+    let plan_checkpoint = plan
         .as_ref()
         .zip(checkpoint.as_ref())
-        .is_some_and(|(p, c)| p.plan_revision_id == c.plan_revision_id);
+        .filter(|(p, c)| p.plan_revision_id == c.plan_revision_id)
+        .map(|(_, c)| c);
     let default_progress: Vec<ActionProgress> = plan.as_ref().map_or_else(Vec::new, |p| {
         p.actions
             .iter()
@@ -37,17 +39,12 @@ pub(super) fn hydrate(db: &Connection, row: &common::WorkRow) -> StorageResult<W
             })
             .collect()
     });
-    let action_progress = if checkpoint_matches_plan {
-        checkpoint.as_ref().unwrap().action_progress.clone()
-    } else {
-        default_progress
+    let action_progress = match plan_checkpoint {
+        Some(checkpoint) => checkpoint.action_progress.clone(),
+        None => default_progress,
     };
     let current_stage = if plan.is_some() {
-        Some(if checkpoint_matches_plan {
-            checkpoint.as_ref().unwrap().stage
-        } else {
-            WorkStage::Planning
-        })
+        Some(plan_checkpoint.map_or(WorkStage::Planning, |checkpoint| checkpoint.stage))
     } else {
         checkpoint.as_ref().map(|c| c.stage)
     };

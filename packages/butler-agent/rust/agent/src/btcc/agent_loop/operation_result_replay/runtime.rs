@@ -428,17 +428,16 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
             let Some(record) = self.record(call_id).await.map_err(contract_error)? else {
                 return Ok(Default::default());
             };
-            if !durable(&record) {
+            let Some(result) = record.result.as_ref().filter(|_| durable(&record)) else {
                 return Ok(OperationResultMessageReferences {
                     operation_result_call_id: Some(call_id.into()),
                     ..Default::default()
                 });
-            }
+            };
             let reference = self.reference_for(&record).await.map_err(contract_error)?;
             let exact_read = if provider_tool_name != "read_operation_results"
                 && self.selection.exact_read_capability
             {
-                let result = record.result.as_ref().expect("durable record has result");
                 let total_bytes = result.as_str().len();
                 Some(ToolResultExactReadReference {
                     capability: ReadOperationResultsOnly::ReadOperationResults,

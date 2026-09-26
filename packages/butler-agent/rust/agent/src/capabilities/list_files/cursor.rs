@@ -15,7 +15,7 @@ pub(super) fn encode(query: &str, marker: &str) -> String {
     fields.insert("tool".into(), json!("list_files"));
     fields.insert("query".into(), json!(query));
     fields.insert("marker".into(), json!(marker));
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(fields)).expect("list cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(fields).to_string())
 }
 
 pub(super) fn decode(value: &Value) -> Option<ListCursor> {

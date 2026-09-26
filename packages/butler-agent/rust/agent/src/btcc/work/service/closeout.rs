@@ -1,6 +1,6 @@
 use crate::btcc::BtccError;
 
-use super::{DurableWorkService, fingerprint, serialized};
+use super::{DurableWorkService, fingerprint, object_mut, serialized};
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
@@ -10,7 +10,7 @@ impl DurableWorkService {
     ) -> Result<WorkView, BtccError> {
         super::super::validation::validate_disposition(&input)?;
         let mut identity = serialized(&input)?;
-        let object = identity.as_object_mut().expect("typed object");
+        let object = object_mut(&mut identity)?;
         object.remove("backfillToolCallIds");
         object.remove("expectedMaterialFingerprint");
         let request_sha256 = fingerprint("record_work_disposition", identity)?;

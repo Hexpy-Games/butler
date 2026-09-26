@@ -22,17 +22,15 @@ pub(in crate::capabilities) fn changed_file_value(detail: &ChangedFile) -> Value
     value
 }
 
-pub(super) fn project(outcome: MutationOutcome, elapsed: Duration, batch: bool) -> Value {
-    if batch {
-        let MutationOutcome::Batch(result) = outcome else {
-            unreachable!("batch result")
-        };
-        batch_result(result, elapsed)
-    } else {
-        let MutationOutcome::Single(result) = outcome else {
-            unreachable!("single result")
-        };
-        single_result(result, elapsed)
+pub(super) fn project(outcome: MutationOutcome, elapsed: Duration) -> Value {
+    match outcome {
+        MutationOutcome::Batch(result) => batch_result(result, elapsed),
+        MutationOutcome::Single(result) => single_result(result, elapsed),
+        MutationOutcome::Write(_) => super::failure(
+            "workspace_mutation_outcome_mismatch",
+            "The workspace returned a write outcome for an edit.",
+            "Retry the edit.",
+        ),
     }
 }
 

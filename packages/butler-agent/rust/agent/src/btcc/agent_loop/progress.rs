@@ -54,7 +54,7 @@ pub(super) async fn operation(
     output: Option<&crate::json::JsonDocument>,
 ) {
     let mut event = RuntimeTurnEventInput::new(status.event_kind());
-    let mut payload = json!({
+    let mut payload = crate::json::json_object!({
         "safeLabel": tool_name,
         "toolName": tool_name,
         "toolCallId": call_id,
@@ -62,10 +62,7 @@ pub(super) async fn operation(
         "bridgePhase": "btcc_operation",
         "semanticBlockId": format!("tool-{call_id}"),
         "operationStatus": status.as_str(),
-    })
-    .as_object()
-    .cloned()
-    .expect("object literal");
+    });
     let encoded = output.map(crate::json::JsonDocument::as_str);
     let result_ref = encoded.map(|body| {
         let sha256 = super::super::identity::digest(body);

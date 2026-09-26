@@ -3,7 +3,7 @@ use serde_json::{Map, Value};
 use super::contracts::{DeliveryOutbox, DeliveryStatus, FinalPayload, TurnRecord, TurnTransition};
 use super::failure::runtime_failure_message;
 use crate::btcc::BtccError;
-use crate::btcc::identity::{content_ref, digest};
+use crate::btcc::identity::{content_ref, digest, json_value};
 
 pub(super) fn guided_final(
     turn: &TurnRecord,
@@ -32,29 +32,20 @@ pub(super) fn guided_final(
         "contentSha256".into(),
         Value::String(content_sha256.clone()),
     );
-    body.insert("route".into(), serde_json::to_value(result.route).unwrap());
+    body.insert("route".into(), json_value(&result.route)?);
     body.insert("disposition".into(), Value::String("completed".into()));
     body.insert("content".into(), Value::String(content.clone()));
     if let Some(value) = &result.work_status {
-        body.insert("workStatus".into(), serde_json::to_value(value).unwrap());
+        body.insert("workStatus".into(), json_value(value)?);
     }
     if let Some(value) = &result.accepted_work_result {
-        body.insert(
-            "acceptedWorkResult".into(),
-            serde_json::to_value(value).unwrap(),
-        );
+        body.insert("acceptedWorkResult".into(), json_value(value)?);
     }
     if let Some(value) = &result.runtime_failure {
-        body.insert(
-            "runtimeFailure".into(),
-            serde_json::to_value(value).unwrap(),
-        );
+        body.insert("runtimeFailure".into(), json_value(value)?);
     }
     if !result.artifacts.is_empty() {
-        body.insert(
-            "artifacts".into(),
-            serde_json::to_value(&result.artifacts).unwrap(),
-        );
+        body.insert("artifacts".into(), json_value(&result.artifacts)?);
     }
     if !result.changed_files.is_empty() {
         body.insert(
@@ -66,7 +57,7 @@ pub(super) fn guided_final(
         body.insert("plan".into(), value.clone());
     }
     if let Some(value) = &result.model_identity {
-        body.insert("modelIdentity".into(), serde_json::to_value(value).unwrap());
+        body.insert("modelIdentity".into(), json_value(value)?);
     }
     let reference = content_ref("payload", &Value::Object(body))?;
     let outbox_id = digest(&format!(

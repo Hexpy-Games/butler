@@ -34,7 +34,7 @@ pub(super) async fn execute(
         _ => None,
     };
     let create_parents = args.get("create_parents") == Some(&Value::Bool(true));
-    if requested.is_empty() || content.is_none() || overwrite.is_none() {
+    let (false, Some(content), Some(overwrite)) = (requested.is_empty(), content, overwrite) else {
         return Ok(failure(
             &root,
             &requested,
@@ -42,7 +42,7 @@ pub(super) async fn execute(
             "write_file requires path, content, and boolean overwrite.",
             "Retry with path, content, and overwrite=false or true.",
         ));
-    }
+    };
     if !arguments::allowed(&input, "write_file:workspace") {
         return Ok(failure(
             &root,
@@ -77,8 +77,8 @@ pub(super) async fn execute(
     let command = MutationCommand::Write(WriteMutation {
         context,
         path: requested,
-        content: content.expect("validated").to_owned(),
-        overwrite: overwrite.expect("validated"),
+        content: content.to_owned(),
+        overwrite,
         create_parents,
         expected_sha256,
     });
@@ -90,7 +90,9 @@ pub(super) async fn execute(
         })?
         .map_err(owner_error)?;
     let MutationOutcome::Write(result) = outcome else {
-        unreachable!("write command outcome")
+        return Err(CapabilityError {
+            code: "workspace_mutation_outcome_mismatch".into(),
+        });
     };
     Ok(match result {
         Ok(committed) => {

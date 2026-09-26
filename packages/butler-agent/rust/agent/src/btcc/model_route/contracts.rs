@@ -125,6 +125,17 @@ pub(super) enum FailureDisposition {
     Surface,
 }
 
+impl FailureDisposition {
+    /// The serde (`snake_case`) name.
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Retry => "retry",
+            Self::Advance => "advance",
+            Self::Surface => "surface",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct AttemptHistory {

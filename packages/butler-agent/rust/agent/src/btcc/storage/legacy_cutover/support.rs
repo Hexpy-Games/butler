@@ -47,25 +47,29 @@ impl Delivery {
     }
 }
 
-pub(super) fn new_delivery(turn_id: &str, revision: i64, content: &str, prefix: &str) -> Delivery {
+pub(super) fn new_delivery(
+    turn_id: &str,
+    revision: i64,
+    content: &str,
+    prefix: &str,
+) -> StorageResult<Delivery> {
     let content_sha = digest(content);
     let body = json!({"turnId": turn_id, "contentSha256": content_sha,
         "route": "assisted", "disposition": "completed", "content": content});
-    let body_json = stable_json(&body).expect("finite static delivery JSON");
+    let body_json = stable_json(&body)?;
     let payload_sha = digest(&body_json);
     let payload_id = digest(&format!("btcc-payload.v1\0{payload_sha}"));
     let outbox_id = digest(&format!("{prefix}\0{turn_id}\0{revision}\0{payload_sha}"));
     let message_id = digest(&format!("btcc-assistant-message.v1\0{outbox_id}"));
-    let payload_json =
-        payload(turn_id, content, &payload_id, &payload_sha).expect("finite static delivery JSON");
-    Delivery {
+    let payload_json = payload(turn_id, content, &payload_id, &payload_sha)?;
+    Ok(Delivery {
         outbox_id,
         payload_id,
         payload_sha,
         message_id,
         content: content.to_owned(),
         payload_json,
-    }
+    })
 }
 
 pub(super) fn payload(turn_id: &str, content: &str, id: &str, sha: &str) -> StorageResult<String> {

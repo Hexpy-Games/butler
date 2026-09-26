@@ -46,7 +46,7 @@ pub(super) fn encode(query: &str, index: usize, offset: usize, path: &str, sha: 
         object.insert("file_path".into(), json!(path));
     }
     object.insert("file_sha256".into(), json!(sha));
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(object)).expect("cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(object).to_string())
 }
 
 pub(super) fn decode(value: &Value) -> Option<ReadCursor> {

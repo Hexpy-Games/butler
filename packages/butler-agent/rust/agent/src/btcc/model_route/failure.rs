@@ -59,19 +59,27 @@ pub(super) fn code(error: &ModelRoundError) -> &str {
     }
 }
 
-pub(super) fn reduce(error: ModelRoundError) -> ModelRoundError {
+/// A model-round error reduced to the two outcomes the agent loop reports.
+pub(crate) enum ReducedModelError {
+    Operational(RuntimeFailure),
+    Integrity(BtccError),
+}
+
+pub(super) fn reduce_outer(error: ModelRoundError) -> ReducedModelError {
     match error {
+        ModelRoundError::Operational(failure) => ReducedModelError::Operational(failure),
+        ModelRoundError::Integrity(error) => ReducedModelError::Integrity(error),
         ModelRoundError::Provider(provider) => {
-            ModelRoundError::Operational(provider_runtime(&provider))
+            ReducedModelError::Operational(provider_runtime(&provider))
         }
         ModelRoundError::Recovered {
             failure_code,
             disposition,
-        } => ModelRoundError::Operational(RuntimeFailure {
+        } => ReducedModelError::Operational(RuntimeFailure {
             code: failure_code,
             retryable: disposition == "retry",
         }),
-        ModelRoundError::Cancelled => ModelRoundError::Operational(RuntimeFailure {
+        ModelRoundError::Cancelled => ReducedModelError::Operational(RuntimeFailure {
             code: "turn_cancelled".into(),
             retryable: false,
         }),
@@ -79,11 +87,17 @@ pub(super) fn reduce(error: ModelRoundError) -> ModelRoundError {
         | ModelRoundError::InvocationFailure { .. }
         | ModelRoundError::StablePrefix(_)
         | ModelRoundError::ImageAdmission { .. }
-        | ModelRoundError::DispatchLimit => ModelRoundError::Operational(RuntimeFailure {
+        | ModelRoundError::DispatchLimit => ReducedModelError::Operational(RuntimeFailure {
             code: "gateway_failed".into(),
             retryable: true,
         }),
-        other => other,
+    }
+}
+
+pub(super) fn reduce(error: ModelRoundError) -> ModelRoundError {
+    match reduce_outer(error) {
+        ReducedModelError::Operational(failure) => ModelRoundError::Operational(failure),
+        ReducedModelError::Integrity(error) => ModelRoundError::Integrity(error),
     }
 }
 

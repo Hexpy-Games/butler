@@ -5,7 +5,7 @@ mod result;
 pub(super) use definition::definition;
 pub(super) use result::changed_file_value;
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, arguments, mutation_evidence};
 use crate::workspace::{EditMutation, MutationCommand, WorkspaceMutations};
@@ -99,11 +99,15 @@ pub(super) async fn execute(
             code: "workspace_mutation_completion_lost".into(),
         })?
         .map_err(owner_error)?;
-    Ok(result::project(outcome, elapsed, has_batch))
+    Ok(result::project(outcome, elapsed))
 }
 
 pub(super) fn failure(error: &str, message: &str, hint: &str) -> Value {
-    json!({"ok":false,"error":error,"message":message,"recovery_hint":hint,
+    Value::Object(failure_object(error, message, hint))
+}
+
+fn failure_object(error: &str, message: &str, hint: &str) -> Map<String, Value> {
+    crate::json::json_object!({"ok":false,"error":error,"message":message,"recovery_hint":hint,
         "evidence_capability_receipts":mutation_evidence::failure("edit_file",error,&[],&[],&[],&[])})
 }
 
@@ -112,13 +116,10 @@ pub(super) fn invalid(message: impl Into<String>, hint: impl Into<String>) -> Va
 }
 
 pub(super) fn no_change(message: impl Into<String>) -> Value {
-    let mut value = failure("no_change_requested", &message.into(), "");
-    value
-        .as_object_mut()
-        .expect("object")
-        .remove("recovery_hint");
-    value["changed"] = json!(false);
-    value
+    let mut value = failure_object("no_change_requested", &message.into(), "");
+    value.remove("recovery_hint");
+    value.insert("changed".into(), json!(false));
+    Value::Object(value)
 }
 
 fn scope_failure(root: &std::path::Path, path: &str) -> Value {

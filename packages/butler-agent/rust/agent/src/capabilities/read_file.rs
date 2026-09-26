@@ -193,7 +193,7 @@ pub(super) async fn execute(
                 .result
                 .get("content")
                 .and_then(Value::as_str)
-                .expect("successful content");
+                .unwrap_or_default();
             let end = utf8_prefix_end(content, available);
             if end == 0 && read.output_bytes > 0 {
                 truncated = true;
@@ -201,17 +201,20 @@ pub(super) async fn execute(
                 add_pending(&mut results, &requests[index + 1..]);
                 break;
             }
-            let start_line = read.result["start_line"].as_u64().expect("successful line");
+            let start_line = read
+                .result
+                .get("start_line")
+                .and_then(Value::as_u64)
+                .unwrap_or(1);
             let line_count = content[..end].bytes().filter(|b| *b == b'\n').count() as u64;
             read.result["end_line"] = json!(if end == 0 {
                 start_line.saturating_sub(1)
             } else {
                 start_line + line_count
             });
-            let Value::String(content) = &mut read.result["content"] else {
-                unreachable!("successful content is a string")
-            };
-            content.truncate(end);
+            if let Some(Value::String(content)) = read.result.get_mut("content") {
+                content.truncate(end);
+            }
             read.result["byte_truncated"] = json!(true);
             read.result["truncated"] = json!(true);
             read.output_bytes = end;
@@ -223,16 +226,10 @@ pub(super) async fn execute(
                 request,
                 &read,
             ));
-        } else if read.has_more {
+        } else if let Some(next_offset) = read.next_offset.filter(|_| read.has_more) {
             truncated = true;
             stopped_by = Some("max_bytes");
-            next_cursor = Some(make_cursor(
-                &query,
-                index,
-                read.next_offset.expect("has more offset"),
-                request,
-                &read,
-            ));
+            next_cursor = Some(make_cursor(&query, index, next_offset, request, &read));
         }
         total_output += read.output_bytes;
         files_read += 1;
@@ -295,7 +292,8 @@ fn make_cursor(
         index,
         offset,
         &request.path,
-        read.sha256.as_deref().expect("successful read SHA"),
+        // Successful reads carry a digest; a cursor without one fails validation.
+        read.sha256.as_deref().unwrap_or_default(),
     )
 }
 fn add_pending(results: &mut Vec<Value>, requests: &[Request]) {

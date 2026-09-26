@@ -53,8 +53,7 @@ pub(super) fn success(
         })
         .collect();
     let mut partial_reasons = Vec::new();
-    for candidate in &partial {
-        let reason = candidate.read.reason.expect("partial reason");
+    for reason in partial.iter().filter_map(|candidate| candidate.read.reason) {
         if !partial_reasons.contains(&reason) {
             partial_reasons.push(reason);
         }
@@ -111,14 +110,11 @@ pub(super) fn success(
         .as_deref()
         .or(searched.processed_candidate.as_deref())
         .or(listed.last_path.as_deref());
-    let next_cursor = if supports_cursor
-        && searched.stopped_within_candidate
-        && (last_match.is_some() || after.is_some())
-    {
-        let (marker, line) = last_match
-            .map(|item| (item.path.as_str(), item.line))
-            .or(after)
-            .expect("window marker");
+    let window_marker = last_match
+        .map(|item| (item.path.as_str(), item.line))
+        .or(after)
+        .filter(|_| supports_cursor && searched.stopped_within_candidate);
+    let next_cursor = if let Some((marker, line)) = window_marker {
         searched
             .window_start
             .as_ref()

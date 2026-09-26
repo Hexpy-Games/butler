@@ -41,7 +41,12 @@ pub(super) fn admit(
     catalog: &AdmissionModelCatalogSnapshot,
 ) -> Result<Value, BtccError> {
     let refs = requested_refs(binding, controls)?;
-    let primary = refs.first().expect("primary model");
+    let Some(primary) = refs.first() else {
+        return Err(BtccError::new(
+            "admitted_model_invalid",
+            "BTCC admitted model is missing",
+        ));
+    };
     let separator = primary
         .find('/')
         .filter(|value| *value > 0 && *value < primary.len() - 1)

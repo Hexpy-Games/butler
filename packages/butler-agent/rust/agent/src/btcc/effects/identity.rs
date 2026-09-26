@@ -187,19 +187,22 @@ pub(super) fn build_identity(parts: IdentityParts<'_>) -> EffectResult<EffectIde
     } else {
         None
     };
-    let base = json!({"version":1,"workId":parts.work_id,"planRevisionId":parts.plan_revision_id,
+    let base = crate::json::json_object!({"version":1,"workId":parts.work_id,"planRevisionId":parts.plan_revision_id,
         "actionKey":parts.action_key,"capability":parts.capability,"targetSha256":target_sha256,
         "inputSha256":input_sha256});
     let mut identity_body = base.clone();
     let mut slot_body = base;
-    slot_body.as_object_mut().unwrap().remove("inputSha256");
+    slot_body.remove("inputSha256");
     if let Some(sha) = occurrence_sha256.as_deref() {
-        identity_body["occurrenceSha256"] = json!(sha);
-        slot_body.as_object_mut().unwrap().remove("targetSha256");
-        slot_body["occurrenceSha256"] = json!(sha);
+        identity_body.insert("occurrenceSha256".into(), json!(sha));
+        slot_body.remove("targetSha256");
+        slot_body.insert("occurrenceSha256".into(), json!(sha));
     }
-    let identity_sha256 = digest(&stable(&identity_body)?);
-    let effect_id = format!("guided-effect-{}", digest(&stable(&slot_body)?));
+    let identity_sha256 = digest(&stable(&Value::Object(identity_body))?);
+    let effect_id = format!(
+        "guided-effect-{}",
+        digest(&stable(&Value::Object(slot_body))?)
+    );
     let request_sha256 = digest(&stable(&json!({"capability":parts.capability,
         "normalizedTarget":parts.normalized_target,"normalizedInput":parts.normalized_input}))?);
     Ok(EffectIdentity {

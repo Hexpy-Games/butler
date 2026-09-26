@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::btcc::agent_loop::{ModelRoundError, ModelRoundRequest, ModelRoundResult};
 use crate::btcc::{BtccError, ModelIdentity, ReasoningEffort};
@@ -13,9 +13,9 @@ pub(super) fn event(
     model: &str,
     failure: Option<(&str, FailureDisposition)>,
 ) -> Value {
-    let mut value =
-        json!({"type":kind,"roundId":round,"candidateIndex":candidate,"modelRef":model});
-    let object = value.as_object_mut().unwrap();
+    let mut object = crate::json::json_object!(
+        {"type":kind,"roundId":round,"candidateIndex":candidate,"modelRef":model}
+    );
     if let Some(attempt) = attempt {
         object.insert("transportAttempt".into(), Value::from(attempt));
     }
@@ -23,10 +23,10 @@ pub(super) fn event(
         object.insert("errorCode".into(), Value::String(code.into()));
         object.insert(
             "failureDisposition".into(),
-            serde_json::to_value(disposition).unwrap(),
+            Value::String(disposition.as_str().into()),
         );
     }
-    value
+    Value::Object(object)
 }
 pub(super) fn status(value: &Option<Value>) -> Option<&str> {
     value.as_ref()?.get("status")?.as_str()

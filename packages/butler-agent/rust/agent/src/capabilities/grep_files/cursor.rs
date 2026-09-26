@@ -108,5 +108,5 @@ pub(super) fn encode(cursor: &GrepCursor) -> String {
     if let Some(end) = &cursor.window_end {
         fields.insert("window_end_path".into(), json!(end));
     }
-    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&Value::Object(fields)).expect("grep cursor JSON"))
+    URL_SAFE_NO_PAD.encode(Value::Object(fields).to_string())
 }

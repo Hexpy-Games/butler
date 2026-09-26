@@ -370,9 +370,10 @@ fn map_attempt(error: AttemptError, input: &Invocation<'_>, iteration: u32) -> A
 }
 
 fn reduced(error: ModelRoundError) -> AgentLoopError {
+    use crate::btcc::model_route::ReducedModelError;
+
     match crate::btcc::model_route::reduce_model_error(error) {
-        ModelRoundError::Operational(failure) => runtime(failure),
-        ModelRoundError::Integrity(error) => propagated(error),
-        _ => unreachable!("model error reduction must produce an outer error"),
+        ReducedModelError::Operational(failure) => runtime(failure),
+        ReducedModelError::Integrity(error) => propagated(error),
     }
 }

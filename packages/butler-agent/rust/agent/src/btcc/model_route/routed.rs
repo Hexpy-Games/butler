@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 
@@ -210,13 +210,11 @@ impl RoutedRound<'_> {
                 value.reasoning_effort = Some(candidate.reasoning_effort.clone());
                 value
             });
-            let mut route_context = json!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
+            let mut route_context = crate::json::json_object!({"schemaVersion":"butler.model-route-request.v1","routeDigest":route.route_digest,"cursor":route.active_cursor,"modelRef":candidate.model_ref});
             if let Some(digest) = request.tool_surface_digest {
-                route_context
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("toolSurfaceDigest".into(), Value::String(digest.into()));
+                route_context.insert("toolSurfaceDigest".into(), Value::String(digest.into()));
             }
+            let route_context = Value::Object(route_context);
             let physical = ModelRoundRequest {
                 max_output_tokens: request.max_output_tokens,
                 round_id: Some(&round_id),

@@ -37,7 +37,7 @@ impl StorageProgressPublication {
         after: Option<(u64, String)>,
         limit: usize,
     ) -> StorageResult<Vec<CommittedProgressEvent>> {
-        let limit = i64::try_from(limit.clamp(1, 64)).expect("bounded page limit");
+        let limit = i64::try_from(limit.clamp(1, 64)).unwrap_or(64);
         self.storage
             .execute(move |connection| pending_page(connection, after, limit))
             .await

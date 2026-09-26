@@ -13,11 +13,11 @@ struct SnapshotPort(Arc<ModelCatalogSnapshot>);
 
 impl ProviderRequestConfigPort for SnapshotPort {
     fn effective_prompt_model(&self, _: Option<&str>) -> Result<String, ModelRoundError> {
-        unreachable!()
+        panic!("not used by this test")
     }
 
     fn resolve<'a>(&'a self, _: ProviderConfigRequest<'a>) -> ProviderConfigFuture<'a> {
-        unreachable!()
+        panic!("not used by this test")
     }
 
     fn sizing_snapshot(

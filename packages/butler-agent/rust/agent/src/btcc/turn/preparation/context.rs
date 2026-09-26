@@ -146,10 +146,7 @@ pub(super) async fn snapshot(
                     .map(|value| {
                         let mut item = Map::new();
                         item.insert("id".into(), value.id.clone().into());
-                        item.insert(
-                            "kind".into(),
-                            serde_json::to_value(&value.kind).expect("attachment kind"),
-                        );
+                        item.insert("kind".into(), value.kind.as_str().into());
                         if let Some(v) = value.mime_type.as_ref().filter(|v| !v.is_empty()) {
                             item.insert("mimeType".into(), v.clone().into());
                         }
