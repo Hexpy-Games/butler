@@ -9,7 +9,7 @@ use nix::{
 
 use crate::{models, operations};
 
-use super::super::service_instance;
+use crate::host::service::instance as service_instance;
 
 pub(super) async fn text(data_root: &Path) -> Result<String, String> {
     let models = models::open_status_models(data_root.to_path_buf())

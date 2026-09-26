@@ -6,11 +6,11 @@ use crate::skills::NativeSkills;
 pub(super) struct RuntimeOwners {
     pub(super) stores: RuntimeStores,
     pub(super) project_work: Arc<NativeProjectWork>,
-    pub(super) project_tools: Arc<super::super::guided_project_tools::NativeGuidedProjectTools>,
+    pub(super) project_tools: Arc<crate::host::guided::project_tools::NativeGuidedProjectTools>,
     pub(super) session_worktrees: NativeSessionWorktrees,
     pub(super) image_files: Arc<crate::gateway::NativeAppImageFiles>,
     pub(super) attachment_context: Arc<crate::context::NativeAttachmentContext>,
-    pub(super) memory_sync: super::super::memory_sync::NativeMemorySync,
+    pub(super) memory_sync: crate::host::memory_jobs::sync::NativeMemorySync,
     #[cfg(unix)]
     pub(super) embedding: Arc<super::super::NativeEmbeddingOwner>,
     pub(super) profile: Arc<ProfileService>,
@@ -21,7 +21,7 @@ pub(super) struct RuntimeOwners {
     pub(super) conversation_tools: Arc<NativeConversationTools>,
     pub(super) observer: Arc<NativeConversationObserver>,
     pub(super) plans: NativeAcceptedPlanProducer,
-    pub(super) command: Arc<super::super::guided_command::NativeGuidedCommand>,
+    pub(super) command: Arc<crate::host::guided::command::NativeGuidedCommand>,
     pub(super) commands: NativeCommands,
     pub(super) tool_output: NativeToolOutput,
     pub(super) context_maintenance: Arc<ContextMaintenance>,

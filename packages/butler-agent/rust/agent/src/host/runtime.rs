@@ -2,25 +2,31 @@
 
 mod boundary;
 mod contracts;
+pub(super) mod environment;
 mod mcp_owner;
+pub(super) mod models;
 mod monitoring;
 mod owners;
+#[cfg(unix)]
+pub(super) mod process_probe;
 mod skills_owner;
+pub(super) mod storage_bootstrap;
+pub(super) mod stores;
 mod subsession_queue;
 mod web_owner;
+use super::NativeAcceptedPlanProducer;
+use super::NativeActiveAppEndpoint;
+use super::NativeCognitionPrompt;
+use super::NativeConversationObserver;
 #[cfg(unix)]
 use super::NativeEmbeddingOwner;
-use super::context_maintenance::ContextMaintenance;
-#[cfg(unix)]
-use super::daily_cognition::{DailyCognitionJobs, DailyCognitionOwners};
-use super::process_environment::NativeProcessEnvironment;
-use super::runtime_stores::RuntimeStores;
-use super::{
-    NativeAcceptedPlanProducer, NativeActiveAppEndpoint, NativeCognitionPrompt,
-    NativeConversationObserver, NativeGuidedCatalog, NativeGuidedPreparation,
-    NativeGuidedTurnFactory, NativePromptClock, ProfileConversationSources, ResolvedInstallation,
-    SystemIdentity, recall_metrics::RecallMetrics,
-};
+use super::NativeGuidedCatalog;
+use super::NativeGuidedPreparation;
+use super::NativeGuidedTurnFactory;
+use super::NativePromptClock;
+use super::ProfileConversationSources;
+use super::ResolvedInstallation;
+use super::SystemIdentity;
 use crate::btcc::{
     self, BtccError, BtccRepositories, ContextCompactionRepository, DefaultTurnPreparation,
     DurableWorkService, GuidedContinuationBudgetFactory, HostDependencies, ModelRouteRetryConfig,
@@ -42,6 +48,13 @@ use crate::context::{
 };
 use crate::conversation::conversation_store_path;
 use crate::coordination::CognitionWriteCoordinator;
+use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
+#[cfg(unix)]
+use crate::host::memory_jobs::daily::DailyCognitionJobs;
+use crate::host::memory_jobs::daily::DailyCognitionOwners;
+use crate::host::memory_jobs::recall_metrics::RecallMetrics;
+use crate::host::runtime::environment::NativeProcessEnvironment;
+use crate::host::runtime::stores::RuntimeStores;
 use crate::locale::LocaleCollation;
 use crate::models::ModelConfigurationClock;
 use crate::operations::MetricFiles;
@@ -130,7 +143,7 @@ impl NativeAgentRuntime {
                 return Err(setup(error));
             }
         };
-        let memory_sync = match super::memory_sync::NativeMemorySync::open(
+        let memory_sync = match crate::host::memory_jobs::sync::NativeMemorySync::open(
             &paths.data_root,
             &environment.cognition_paths,
             coordinator.clone(),
@@ -174,13 +187,15 @@ impl NativeAgentRuntime {
         let project_ledger =
             NativeProjectLedger::with_collation(&paths.data_root, 2, collation.clone());
         let plans = NativeAcceptedPlanProducer::from_ledger(project_ledger.clone());
-        let project_tools = Arc::new(super::guided_project_tools::NativeGuidedProjectTools::new(
-            project_ledger.clone(),
-            commands.clone(),
-            host_environment.clone(),
-            crate::work_records::WorkRecordReader::new(&paths.data_root),
-            collation.clone(),
-        ));
+        let project_tools = Arc::new(
+            crate::host::guided::project_tools::NativeGuidedProjectTools::new(
+                project_ledger.clone(),
+                commands.clone(),
+                host_environment.clone(),
+                crate::work_records::WorkRecordReader::new(&paths.data_root),
+                collation.clone(),
+            ),
+        );
         let context_budget = Arc::new(ContextBudgetOwner::new(
             models.configuration.clone(),
             models.catalog.clone(),
@@ -215,7 +230,7 @@ impl NativeAgentRuntime {
             #[cfg(unix)]
             daily_cognition,
         ));
-        let command = Arc::new(super::guided_command::NativeGuidedCommand::new(
+        let command = Arc::new(crate::host::guided::command::NativeGuidedCommand::new(
             commands.clone(),
             tool_output.clone(),
             host_environment.clone(),
@@ -306,11 +321,11 @@ impl NativeAgentRuntime {
             project_runtime,
         ));
         let work_repository = Arc::new(
-            super::scope_selected_work::ScopeSelectedWorkRepository::new(
+            crate::host::guided::scope_selected_work::ScopeSelectedWorkRepository::new(
                 stores.bindings.clone(),
                 session_work.clone(),
                 Arc::new(
-                    super::project_work_provider::NativeProjectWorkProvider::new(
+                    crate::host::guided::project_work_provider::NativeProjectWorkProvider::new(
                         project_ledger.clone(),
                         project_work.clone(),
                     ),
@@ -360,7 +375,7 @@ impl NativeAgentRuntime {
                     OperationResultRepository::with_project_authority_factory(
                         stores.btcc.clone(),
                         Arc::new(
-                            super::project_work_provider::NativeProjectResultAuthority::new(
+                            crate::host::guided::project_work_provider::NativeProjectResultAuthority::new(
                                 project_ledger.clone(),
                                 paths.data_root.clone(),
                             ),
@@ -460,7 +475,7 @@ impl NativeAgentRuntime {
             messages: repositories.clone(),
             progress: repositories.clone(),
             readiness: repositories,
-            developer_log_capture: super::developer_log::capture(
+            developer_log_capture: crate::host::service::developer_log::capture(
                 paths.data_root.clone(),
                 app_database_path,
                 installation,

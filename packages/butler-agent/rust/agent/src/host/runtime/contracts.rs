@@ -1,12 +1,12 @@
 use std::{path::PathBuf, sync::Arc};
 
-use super::super::context_maintenance::ContextMaintenance;
 use crate::btcc::{
     Btcc, BtccError, BtccHost, ContextCompactionRepository, NativePrincipalAuthority,
     SessionWorkRepository, StorageProgressPublication,
 };
 use crate::context::ContextBudgetOwner;
 use crate::conversation::AgentConversationStore;
+use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::locale::LocaleCollation;
 use crate::project_ledger::NativeProjectLedger;
 use crate::skills::NativeSkills;
