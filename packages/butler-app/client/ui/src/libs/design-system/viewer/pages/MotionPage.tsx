@@ -19,7 +19,7 @@ type AppLocale = ShowcaseRenderContext["locale"];
 const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["components/Presence", "Rise", "Presence: mount and unmount with an exit"],
   ["components/Collapsible", "Reveal", "Collapsible: height reveal with interpolate-size"],
-  ["components/CopyButton", "Copy and confirm", "CopyButton: icon morph to a check"],
+  ["components/CopyButton", "Copy and confirm", "CopyButton: icon morph to a drawn check"],
   ["components/AnimatedNumber", "Count to a new value", "AnimatedNumber: counts over --motion-deliberate"],
   ["components/Tabs", "Page navigation (line)", "Tabs: the line indicator slides"],
   ["components/Switch", "Sizes and values", "Switch: spring thumb"],
@@ -28,6 +28,7 @@ const COMPONENT_STORIES: Array<[string, string, string]> = [
   ["components/Tooltip", "Icon button label", "Overlays: tooltip presence"],
   ["blocks/QueuedMessage", "Send flight", "Send flight: the bubble flies from the composer"],
   ["components/Spinner", "Sizes and busy button", "Spinner: arc loop"],
+  ["components/LoadingIndicator", "Spinner to check", "LoadingIndicator: spinner resolves into a drawn check"],
   ["components/Toast", "Motion", "Toasts: drop in, stack, leave faster"],
 ];
 
