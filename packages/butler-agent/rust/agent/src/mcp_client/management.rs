@@ -4,6 +4,7 @@ use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 
+use super::registry::McpRegistryError;
 use super::{
     NativeMcpClient,
     registry::{
@@ -13,7 +14,7 @@ use super::{
 };
 
 impl NativeMcpClient {
-    pub(crate) fn list_servers(&self) -> Result<Value, String> {
+    pub(crate) fn list_servers(&self) -> Result<Value, McpRegistryError> {
         let registry = read_registry_value(&self.data_root)?;
         let servers = normalized_servers(&registry)?;
         Ok(json!({
@@ -22,7 +23,7 @@ impl NativeMcpClient {
         }))
     }
 
-    pub(crate) async fn upsert_server(&self, input: Value) -> Result<Value, String> {
+    pub(crate) async fn upsert_server(&self, input: Value) -> Result<Value, McpRegistryError> {
         self.write_registry(move |data_root, guard| {
             let id_input = input
                 .get("id")
@@ -31,7 +32,7 @@ impl NativeMcpClient {
                 .unwrap_or("");
             let id = normalize_server_id(id_input);
             if id.is_empty() {
-                return Err("MCP server id is required.".into());
+                return Err(McpRegistryError::ServerIdRequired);
             }
             let now = now_iso();
             let mut registry = read_registry_value(data_root)?;
@@ -107,7 +108,7 @@ impl NativeMcpClient {
         &self,
         server_id: String,
         input: Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, McpRegistryError> {
         self.write_registry(move |data_root, guard| {
             let id = normalize_server_id(&server_id);
             let mut registry = read_registry_value(data_root)?;
@@ -116,7 +117,7 @@ impl NativeMcpClient {
                 .iter()
                 .position(|server| server.get("id").and_then(Value::as_str) == Some(id.as_str()))
             else {
-                return Err(format!("MCP server not found: {server_id}"));
+                return Err(McpRegistryError::ServerNotFound(server_id));
             };
             let existing = servers[index].clone();
             let mut next = existing.clone();
@@ -157,12 +158,12 @@ impl NativeMcpClient {
         &self,
         server_id: String,
         enabled: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, McpRegistryError> {
         self.update_server(server_id, json!({"enabled": enabled}))
             .await
     }
 
-    pub(crate) async fn delete_server(&self, server_id: String) -> Result<Value, String> {
+    pub(crate) async fn delete_server(&self, server_id: String) -> Result<Value, McpRegistryError> {
         self.write_registry(move |data_root, guard| {
             let id = normalize_server_id(&server_id);
             let mut registry = read_registry_value(data_root)?;
@@ -180,9 +181,11 @@ impl NativeMcpClient {
         .await
     }
 
-    async fn write_registry<F>(&self, operation: F) -> Result<Value, String>
+    async fn write_registry<F>(&self, operation: F) -> Result<Value, McpRegistryError>
     where
-        F: FnOnce(&Path, &super::RegistryPathGuard) -> Result<Value, String> + Send + 'static,
+        F: FnOnce(&Path, &super::RegistryPathGuard) -> Result<Value, McpRegistryError>
+            + Send
+            + 'static,
     {
         let data_root = self.data_root.clone();
         let path_guard = Arc::clone(&self.registry_path_guard);
@@ -192,11 +195,11 @@ impl NativeMcpClient {
             operation(&data_root, path_guard.as_ref())
         })
         .await
-        .map_err(|_| "MCP registry write failed.".to_owned())?
+        .map_err(McpRegistryError::WriteTask)?
     }
 }
 
-fn normalized_servers(registry: &Value) -> Result<Vec<McpServerConfig>, String> {
+fn normalized_servers(registry: &Value) -> Result<Vec<McpServerConfig>, McpRegistryError> {
     registry
         .get("servers")
         .and_then(Value::as_array)
@@ -207,7 +210,7 @@ fn normalized_servers(registry: &Value) -> Result<Vec<McpServerConfig>, String> 
         .collect()
 }
 
-fn normalized_server_values(registry: &Value) -> Result<Vec<Value>, String> {
+fn normalized_server_values(registry: &Value) -> Result<Vec<Value>, McpRegistryError> {
     normalized_servers(registry).map(|servers| servers.iter().map(server_to_value).collect())
 }
 
@@ -280,19 +283,19 @@ fn write_registry(
     data_root: &Path,
     guard: &super::RegistryPathGuard,
     registry: &Value,
-) -> Result<(), String> {
+) -> Result<(), McpRegistryError> {
     let target = registry_path(data_root);
     let canonical = json!({
         "version": 1,
         "servers": normalized_server_values(registry)?,
     });
-    let parent = target
-        .parent()
-        .ok_or_else(|| "MCP registry path is invalid.".to_owned())?;
-    guard(data_root, data_root)?;
-    guard(data_root, parent)?;
-    guard(data_root, &target)?;
-    crate::configuration::write_json_atomic(&target, &canonical).map_err(|error| error.to_string())
+    let parent = target.parent().ok_or(McpRegistryError::InvalidPath)?;
+    guard(data_root, data_root).map_err(McpRegistryError::PathRejected)?;
+    guard(data_root, parent).map_err(McpRegistryError::PathRejected)?;
+    guard(data_root, &target).map_err(McpRegistryError::PathRejected)?;
+    Ok(crate::configuration::write_json_atomic(
+        &target, &canonical,
+    )?)
 }
 
 #[cfg(test)]

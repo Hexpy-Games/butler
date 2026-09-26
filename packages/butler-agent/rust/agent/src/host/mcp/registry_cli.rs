@@ -108,9 +108,9 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             Ok(data) => {
                 report_success(&parsed, "butler mcp list", &data.clone(), &list_text(&data))
             }
-            Err(message) => report_error(
+            Err(error) => report_error(
                 &args,
-                &CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", error.to_string(), 1),
             ),
         },
         "add" | "set" => {
@@ -133,7 +133,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                         server["transport"].as_str().unwrap_or("stdio")
                     ),
                 ),
-                Err(message) => report_error(&args, &CliError::invalid(message)),
+                Err(error) => report_error(&args, &CliError::invalid(error.to_string())),
             }
         }
         "enable" | "disable" => {
@@ -153,7 +153,9 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                         server["id"].as_str().unwrap_or("")
                     ),
                 ),
-                Err(message) => report_error(&args, &CliError::failed("not_found", message, 1)),
+                Err(error) => {
+                    report_error(&args, &CliError::failed("not_found", error.to_string(), 1))
+                }
             }
         }
         "delete" | "remove" => match client.delete_server(id).await {
@@ -168,9 +170,9 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
                 };
                 report_success(&parsed, "butler mcp delete", &data, &human)
             }
-            Err(message) => report_error(
+            Err(error) => report_error(
                 &args,
-                &CliError::failed("native_settings_cli_failed", message, 1),
+                &CliError::failed("native_settings_cli_failed", error.to_string(), 1),
             ),
         },
         "test" | "probe" => {

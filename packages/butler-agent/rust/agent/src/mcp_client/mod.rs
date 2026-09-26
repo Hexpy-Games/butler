@@ -16,3 +16,4 @@ pub(crate) use catalog::{
     search as search_mcp_tool_catalog,
 };
 pub(crate) use client::{NativeMcpClient, RegistryPathGuard};
+pub(crate) use registry::McpRegistryError;

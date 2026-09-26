@@ -127,7 +127,7 @@ where
         )),
         result = tokio::time::timeout_at(operation_deadline.into(), execute) => match result {
             Ok(Ok(result)) => Ok(result),
-            Ok(Err(error)) => Err(operation_failure(&error, attempted.load(Ordering::Acquire))),
+            Ok(Err(error)) => Err(operation_failure(error, attempted.load(Ordering::Acquire))),
             Err(_) => Err(failure(
                 "mcp_timeout",
                 "MCP operation timed out.",
@@ -289,8 +289,8 @@ fn method_not_found(error: &rmcp::ServiceError) -> bool {
     }
 }
 
-fn operation_failure(error: &rmcp::ServiceError, attempted: bool) -> McpClientError {
-    if attempted {
+fn operation_failure(error: rmcp::ServiceError, attempted: bool) -> McpClientError {
+    let failure = if attempted {
         failure(
             "mcp_tool_dispatch_uncertain",
             "MCP tool dispatch failed; the remote outcome may be unknown.",
@@ -304,5 +304,6 @@ fn operation_failure(error: &rmcp::ServiceError, attempted: bool) -> McpClientEr
             "MCP server request failed.",
             false,
         )
-    }
+    };
+    failure.with_source(error)
 }

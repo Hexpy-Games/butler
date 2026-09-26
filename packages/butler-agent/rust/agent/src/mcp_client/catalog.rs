@@ -96,12 +96,13 @@ pub(crate) async fn search(
                 .filter(|schema| schema.is_object())
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            let digest = schema_digest(&schema).map_err(|_| {
+            let digest = schema_digest(&schema).map_err(|source| {
                 super::client::failure(
                     "mcp_catalog_unavailable",
                     "MCP tool catalog could not be prepared.",
                     false,
                 )
+                .with_source(source)
             })?;
             ranked.push((
                 query_score + capability_score,
@@ -159,12 +160,13 @@ pub(crate) async fn describe(
                     .filter(|schema| schema.is_object())
                     .unwrap_or(&Value::Null),
             );
-            let digest = schema_digest(&schema).map_err(|_| {
+            let digest = schema_digest(&schema).map_err(|source| {
                 super::client::failure(
                     "mcp_catalog_unavailable",
                     "MCP tool description could not be prepared.",
                     false,
                 )
+                .with_source(source)
             })?;
             Ok(Some(json!({
                 "id":id,

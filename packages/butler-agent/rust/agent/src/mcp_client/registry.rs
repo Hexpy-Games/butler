@@ -50,7 +50,43 @@ pub(super) struct ResolvedServerSecrets {
     pub redact: Vec<String>,
 }
 
-pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, String> {
+/// Failures reading, validating or writing the MCP server registry.
+/// `Display` is the user-facing message.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum McpRegistryError {
+    /// A server entry has no id.
+    #[error("MCP server id is required.")]
+    ServerIdRequired,
+    /// No server with this id is registered.
+    #[error("MCP server not found: {0}")]
+    ServerNotFound(String),
+    /// A stdio server has no command.
+    #[error("stdio MCP servers require command.")]
+    CommandRequired,
+    /// An http or sse server has no url; the value is the transport.
+    #[error("{0} MCP servers require url.")]
+    UrlRequired(&'static str),
+    /// A server entry is not a JSON object.
+    #[error("MCP server configuration is invalid.")]
+    InvalidConfiguration,
+    /// The registry path has no parent directory.
+    #[error("MCP registry path is invalid.")]
+    InvalidPath,
+    /// The host's registry path guard refused the path; the message is the guard's.
+    #[error("{0}")]
+    PathRejected(String),
+    /// A server's secret file exists but could not be read.
+    #[error("MCP secret file could not be read.")]
+    SecretUnreadable(#[source] std::io::Error),
+    /// The blocking registry write panicked or was cancelled.
+    #[error("MCP registry write failed.")]
+    WriteTask(#[source] tokio::task::JoinError),
+    /// Reading or writing the registry file failed.
+    #[error(transparent)]
+    Config(#[from] crate::configuration::ConfigError),
+}
+
+pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, McpRegistryError> {
     let value = read_registry_value(data_root)?;
     let Some(servers) = value.get("servers").and_then(Value::as_array) else {
         return Ok(Vec::new());
@@ -63,19 +99,20 @@ pub(super) fn read_registry(data_root: &Path) -> Result<Vec<McpServerConfig>, St
         .collect()
 }
 
-pub(super) fn read_registry_value(data_root: &Path) -> Result<Value, String> {
-    crate::configuration::read_json_object(&registry_path(data_root))
-        .map_err(|error| error.to_string())
+pub(super) fn read_registry_value(data_root: &Path) -> Result<Value, McpRegistryError> {
+    Ok(crate::configuration::read_json_object(&registry_path(
+        data_root,
+    ))?)
 }
 
 pub(super) fn registry_path(data_root: &Path) -> std::path::PathBuf {
     data_root.join("config").join("mcp-servers.json")
 }
 
-pub(super) fn normalize_server_config(value: &Value) -> Result<McpServerConfig, String> {
+pub(super) fn normalize_server_config(value: &Value) -> Result<McpServerConfig, McpRegistryError> {
     value
         .as_object()
-        .ok_or_else(|| "MCP server configuration is invalid.".to_owned())
+        .ok_or(McpRegistryError::InvalidConfiguration)
         .and_then(normalize_server)
 }
 
@@ -234,7 +271,7 @@ pub(super) fn normalize_server_id(value: &str) -> String {
 pub(super) fn resolve_secrets(
     server: &McpServerConfig,
     environment: &HashMap<String, String>,
-) -> Result<ResolvedServerSecrets, String> {
+) -> Result<ResolvedServerSecrets, McpRegistryError> {
     let mut result = ResolvedServerSecrets {
         env: Vec::new(),
         headers: Vec::new(),
@@ -270,14 +307,16 @@ pub(super) fn redact_text(value: &str, secrets: &[String]) -> String {
     })
 }
 
-fn normalize_server(value: &serde_json::Map<String, Value>) -> Result<McpServerConfig, String> {
+fn normalize_server(
+    value: &serde_json::Map<String, Value>,
+) -> Result<McpServerConfig, McpRegistryError> {
     let id = normalize_server_id(
         string_field(value, "id")
             .or_else(|| string_field(value, "display_name"))
             .unwrap_or(""),
     );
     if id.is_empty() {
-        return Err("MCP server id is required.".into());
+        return Err(McpRegistryError::ServerIdRequired);
     }
     let transport = match string_field(value, "transport") {
         Some("http") => McpTransportKind::Http,
@@ -288,13 +327,13 @@ fn normalize_server(value: &serde_json::Map<String, Value>) -> Result<McpServerC
     let url = clean_string(value.get("url"));
     match transport {
         McpTransportKind::Stdio if command.is_none() => {
-            return Err("stdio MCP servers require command.".into());
+            return Err(McpRegistryError::CommandRequired);
         }
         McpTransportKind::Http if url.is_none() => {
-            return Err("http MCP servers require url.".into());
+            return Err(McpRegistryError::UrlRequired("http"));
         }
         McpTransportKind::Sse if url.is_none() => {
-            return Err("sse MCP servers require url.".into());
+            return Err(McpRegistryError::UrlRequired("sse"));
         }
         _ => {}
     }
@@ -369,7 +408,7 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
 fn resolve_secret(
     secret: &SecretValue,
     environment: &HashMap<String, String>,
-) -> Result<String, String> {
+) -> Result<String, McpRegistryError> {
     match secret.source {
         SecretSource::Literal => Ok(secret.value.clone()),
         SecretSource::Environment => {
@@ -378,7 +417,7 @@ fn resolve_secret(
         SecretSource::File => match fs::read_to_string(Path::new(&secret.value)) {
             Ok(value) => Ok(value.trim_end().to_owned()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-            Err(_) => Err("MCP secret file could not be read.".into()),
+            Err(error) => Err(McpRegistryError::SecretUnreadable(error)),
         },
     }
 }

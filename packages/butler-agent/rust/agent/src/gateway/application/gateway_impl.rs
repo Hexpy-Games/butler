@@ -258,10 +258,10 @@ impl GatewayApplication for AppApplication {
                 .upsert_server(input)
                 .await
                 .map(|server| serde_json::json!({"server": server}))
-                .map_err(|message| GatewayApplicationError::Public {
+                .map_err(|error| GatewayApplicationError::Public {
                     status: 400,
                     code: "mcp_server_save_failed".into(),
-                    message,
+                    message: error.to_string(),
                 })
         })
     }
@@ -276,14 +276,17 @@ impl GatewayApplication for AppApplication {
                 .update_server(id, input)
                 .await
                 .map(|server| serde_json::json!({"server": server}))
-                .map_err(|message| GatewayApplicationError::Public {
-                    status: if message.contains("not found") {
+                .map_err(|error| GatewayApplicationError::Public {
+                    status: if matches!(
+                        error,
+                        crate::mcp_client::McpRegistryError::ServerNotFound(_)
+                    ) {
                         404
                     } else {
                         400
                     },
                     code: "mcp_server_update_failed".into(),
-                    message,
+                    message: error.to_string(),
                 })
         })
     }

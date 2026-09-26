@@ -20,11 +20,38 @@ pub(crate) struct NativeMcpClient {
 pub(crate) type RegistryPathGuard =
     dyn Fn(&Path, &Path) -> Result<(), String> + Send + Sync + 'static;
 
-#[derive(Clone, Debug)]
+/// A failed MCP registry read, server start or tool call. `code` and
+/// `message` are the tool-result wire fields, `attempted` says whether the
+/// remote call may have run, and `source` keeps the underlying error.
+#[derive(Clone, Debug, thiserror::Error)]
+#[error("{message}")]
 pub(crate) struct McpClientError {
     pub code: &'static str,
     pub message: &'static str,
     pub attempted: bool,
+    #[source]
+    source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+}
+
+impl McpClientError {
+    pub(super) fn new(code: &'static str, message: &'static str, attempted: bool) -> Self {
+        Self {
+            code,
+            message,
+            attempted,
+            source: None,
+        }
+    }
+
+    /// Records the underlying error.
+    #[must_use]
+    pub(super) fn with_source(
+        mut self,
+        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+    ) -> Self {
+        self.source = Some(Arc::from(source.into()));
+        self
+    }
 }
 
 impl NativeMcpClient {
@@ -58,12 +85,13 @@ impl NativeMcpClient {
         include_disabled: bool,
         signal: &CancellationToken,
     ) -> Result<Value, McpClientError> {
-        let registry = read_registry(&self.data_root).map_err(|_| {
+        let registry = read_registry(&self.data_root).map_err(|source| {
             failure(
                 "mcp_registry_unavailable",
                 "MCP server registry is unavailable.",
                 false,
             )
+            .with_source(source)
         })?;
         let mut servers = Vec::new();
         for server in registry {
@@ -109,12 +137,13 @@ impl NativeMcpClient {
         if tool_name.is_empty() {
             return Ok(None);
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|_| {
+        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
                 false,
             )
+            .with_source(source)
         })?;
         if signal.is_cancelled() {
             return Err(failure(
@@ -186,12 +215,13 @@ impl NativeMcpClient {
                 false,
             ));
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|_| {
+        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
                 false,
             )
+            .with_source(source)
         })?;
         if signal.is_cancelled() {
             return Err(failure(
@@ -288,12 +318,13 @@ impl NativeMcpClient {
                 false,
             ));
         }
-        let secrets = resolve_secrets(&server, &self.environment).map_err(|_| {
+        let secrets = resolve_secrets(&server, &self.environment).map_err(|source| {
             failure(
                 "mcp_server_unavailable",
                 "MCP server credentials are unavailable.",
                 false,
             )
+            .with_source(source)
         })?;
         if signal.is_cancelled() {
             return Err(failure(
@@ -317,12 +348,13 @@ impl NativeMcpClient {
     pub(super) fn find_server(&self, server_id: &str) -> Result<McpServerConfig, McpClientError> {
         let id = super::registry::normalize_server_id(server_id);
         read_registry(&self.data_root)
-            .map_err(|_| {
+            .map_err(|source| {
                 failure(
                     "mcp_registry_unavailable",
                     "MCP server registry is unavailable.",
                     false,
                 )
+                .with_source(source)
             })?
             .into_iter()
             .find(|server| server.id == id)
@@ -374,11 +406,7 @@ pub(super) fn failure(
     message: &'static str,
     attempted: bool,
 ) -> McpClientError {
-    McpClientError {
-        code,
-        message,
-        attempted,
-    }
+    McpClientError::new(code, message, attempted)
 }
 
 #[cfg(test)]

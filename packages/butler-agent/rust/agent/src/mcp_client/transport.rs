@@ -62,12 +62,13 @@ impl NativeMcpClient {
                 for (key, value) in &secrets.env {
                     command.env(key, value);
                 }
-                let mut child = command.spawn().map_err(|_| {
+                let mut child = command.spawn().map_err(|source| {
                     failure(
                         "mcp_server_unavailable",
                         "MCP server could not be started.",
                         false,
                     )
+                    .with_source(source)
                 })?;
                 let Some(stdout) = child.stdout.take() else {
                     let _ = child.start_kill();
@@ -95,12 +96,13 @@ impl NativeMcpClient {
             }
             McpTransportKind::Http => {
                 let url = parse_http_url(server.url.as_deref())?;
-                let custom_headers = streamable_headers(&secrets.headers).map_err(|_| {
+                let custom_headers = streamable_headers(&secrets.headers).map_err(|source| {
                     failure(
                         "mcp_server_unavailable",
                         "MCP server headers are invalid.",
                         false,
                     )
+                    .with_source(source)
                 })?;
                 let mut config = StreamableHttpClientTransportConfig::with_uri(url.as_str());
                 config.reinit_on_expired_session = false;
@@ -110,12 +112,13 @@ impl NativeMcpClient {
             }
             McpTransportKind::Sse => {
                 let url = parse_http_url(server.url.as_deref())?;
-                let custom_headers = sse_headers(&secrets.headers).map_err(|_| {
+                let custom_headers = sse_headers(&secrets.headers).map_err(|source| {
                     failure(
                         "mcp_server_unavailable",
                         "MCP server headers are invalid.",
                         false,
                     )
+                    .with_source(source)
                 })?;
                 let transport = LegacySseTransport::connect(
                     reqwest::Client::new(),
@@ -263,9 +266,5 @@ pub(super) fn with_probe_error(mut base: Value, message: &str) -> Value {
 }
 
 fn failure(code: &'static str, message: &'static str, attempted: bool) -> McpClientError {
-    McpClientError {
-        code,
-        message,
-        attempted,
-    }
+    McpClientError::new(code, message, attempted)
 }

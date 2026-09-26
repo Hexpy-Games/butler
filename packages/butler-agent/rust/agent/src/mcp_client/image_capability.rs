@@ -71,12 +71,13 @@ impl NativeMcpClient {
         });
         let canonical =
             crate::json::canonical_json(&descriptor, crate::json::CanonicalKeyOrder::Utf16Lexical)
-                .map_err(|_| {
+                .map_err(|source| {
                     failure(
                         "mcp_catalog_unavailable",
                         "MCP tool capability could not be prepared.",
                         false,
                     )
+                    .with_source(source)
                 })?;
         Ok(format!("{:x}", Sha256::digest(canonical.as_bytes())))
     }
