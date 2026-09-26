@@ -64,9 +64,28 @@ impl Drop for Active {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct MutationOwnerError {
-    pub code: &'static str,
+/// Failures of the serial workspace mutation owner.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MutationOwnerError {
+    /// The owner is closing, so no new mutation is admitted.
+    #[error("workspace_mutations_closed")]
+    Closed,
+    /// Preparing the mutation's path guard failed with an I/O error.
+    #[error("workspace_mutation_guard_io")]
+    GuardIo(#[source] std::io::Error),
+    /// The blocking mutation task panicked or was cancelled.
+    #[error("workspace_mutation_worker_failed")]
+    WorkerFailed(#[source] tokio::task::JoinError),
+}
+
+impl MutationOwnerError {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Closed => "workspace_mutations_closed",
+            Self::GuardIo(_) => "workspace_mutation_guard_io",
+            Self::WorkerFailed(_) => "workspace_mutation_worker_failed",
+        }
+    }
 }
 
 impl WorkspaceMutations {
@@ -96,9 +115,7 @@ impl WorkspaceMutations {
         {
             let mut state = self.inner.state.lock();
             if state.closing {
-                return Err(MutationOwnerError {
-                    code: "workspace_mutations_closed",
-                });
+                return Err(MutationOwnerError::Closed);
             }
             state.active += 1;
         }
@@ -120,12 +137,8 @@ impl WorkspaceMutations {
                         .await
                         .map(|outcome| (outcome, started.elapsed()))
                 }
-                Ok(Err(_)) => Err(MutationOwnerError {
-                    code: "workspace_mutation_guard_io",
-                }),
-                Err(_) => Err(MutationOwnerError {
-                    code: "workspace_mutation_worker_failed",
-                }),
+                Ok(Err(error)) => Err(MutationOwnerError::GuardIo(error)),
+                Err(error) => Err(MutationOwnerError::WorkerFailed(error)),
             };
             let _ignored_cancelled_caller = sender.send(result);
         });
@@ -158,9 +171,8 @@ async fn execute_serial(
     let permit = serial
         .acquire_owned()
         .await
-        .map_err(|_| MutationOwnerError {
-            code: "workspace_mutations_closed",
-        })?;
+        // The serial semaphore is never closed; AcquireError carries no cause.
+        .map_err(|_closed| MutationOwnerError::Closed)?;
     tokio::task::spawn_blocking(move || {
         let _lease = permit;
         match command {
@@ -171,7 +183,5 @@ async fn execute_serial(
         }
     })
     .await
-    .map_err(|_| MutationOwnerError {
-        code: "workspace_mutation_worker_failed",
-    })
+    .map_err(MutationOwnerError::WorkerFailed)
 }

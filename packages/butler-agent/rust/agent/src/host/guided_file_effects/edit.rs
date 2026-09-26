@@ -99,7 +99,7 @@ pub(super) async fn prepare(
     for edit in &mut edits {
         let (text, before, identity) = read_effect_edit_target(&owner.scope, &edit.path)
             .await
-            .map_err(|error| rejected(&error.code, error.message))?;
+            .map_err(|error| rejected(error.code(), error.message()))?;
         let canonical = actual_targets
             .entry(identity)
             .or_insert_with(|| edit.path.clone());

@@ -9,6 +9,7 @@ use tokio::io::AsyncWrite;
 use tokio::process::{Child, Command};
 
 use super::CommandError;
+use crate::workspace::CommandCode;
 
 pub(super) const TERMINATION_GRACE: Duration = Duration::from_millis(500);
 pub(super) const FORCE_SETTLEMENT_GRACE: Duration = Duration::from_millis(500);
@@ -57,11 +58,12 @@ pub(super) fn signal_pid(pid: u32, force: bool) -> Result<(), CommandError> {
     use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
 
-    let group = i32::try_from(pid).map_err(|_| {
+    let group = i32::try_from(pid).map_err(|source| {
         CommandError::new(
-            "command_termination_failed",
+            CommandCode::CommandTerminationFailed,
             "The child process ID is outside the supported signal range",
         )
+        .with_source(source)
     })?;
     let signal = if force {
         Signal::SIGKILL
@@ -74,7 +76,7 @@ pub(super) fn signal_pid(pid: u32, force: bool) -> Result<(), CommandError> {
         // zombies awaiting their parent; there is nothing left to signal.
         Err(Errno::EPERM) if group_has_only_zombies(pid) => Ok(()),
         Err(error) => Err(CommandError::new(
-            "command_termination_failed",
+            CommandCode::CommandTerminationFailed,
             format!("Failed to deliver {signal:?} while terminating the command: {error}",),
         )),
     }
@@ -196,12 +198,13 @@ pub(super) async fn terminate_and_reap(
         Ok(Err(error)) => {
             let _ = child.start_kill();
             let _ = host.wait(child).await;
-            Err(CommandError::new("command_wait_failed", error.to_string()))
+            Err(CommandError::new(
+                CommandCode::CommandWaitFailed,
+                error.to_string(),
+            ))
         }
-        Err(_) => host
-            .wait(child)
-            .await
-            .map(|_| ())
-            .map_err(|error| CommandError::new("command_wait_failed", error.to_string())),
+        Err(_) => host.wait(child).await.map(|_| ()).map_err(|error| {
+            CommandError::new(CommandCode::CommandWaitFailed, error.to_string()).with_source(error)
+        }),
     }
 }

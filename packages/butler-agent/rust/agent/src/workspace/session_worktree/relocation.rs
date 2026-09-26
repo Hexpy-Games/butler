@@ -5,6 +5,7 @@ mod cleanup;
 use std::path::Path;
 
 use super::{NativeSessionWorktrees, Owner, git::GitWorktrees, path};
+use crate::workspace::WorkspaceCode;
 use crate::workspace::{WorkspaceError, WorkspaceResult};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
@@ -75,7 +76,7 @@ impl NativeSessionWorktrees {
             let state = self.inner.state.lock();
             if state.closing {
                 return Err(WorkspaceError::new(
-                    "session_worktree_owner_closed",
+                    WorkspaceCode::SessionWorktreeOwnerClosed,
                     "Session worktree owner is closed",
                 ));
             }
@@ -84,11 +85,12 @@ impl NativeSessionWorktrees {
                 let _ = tx.send(operation(owner).await);
             });
         }
-        rx.await.map_err(|_| {
+        rx.await.map_err(|source| {
             WorkspaceError::new(
-                "session_worktree_owner_lost",
+                WorkspaceCode::SessionWorktreeOwnerLost,
                 "Session worktree operation stopped",
             )
+            .with_source(source)
         })?
     }
 }
@@ -118,7 +120,7 @@ impl Owner {
                 .files
                 .run(move || path::canonical_path(&data.to_string_lossy()))
                 .await
-                .map_err(file_owner_error)?
+                .map_err(WorkspaceError::from)?
                 .map_err(io_error)?
                 .to_string_lossy()
                 .into_owned();
@@ -141,13 +143,13 @@ impl Owner {
                 Ok(canonical)
             })
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         let canonical_project = canonical_project.to_string_lossy().into_owned();
         let git = self.git();
         let anchor = match git.repository_anchor(&canonical_project).await? {
             Ok(anchor) => anchor,
-            Err("git_repository_required") => {
+            Err(WorkspaceCode::GitRepositoryRequired) => {
                 return Ok(RelocationWorkspacePlan {
                     runtime_session_id: input.runtime_session_id,
                     operation_id: input.operation_id,
@@ -177,7 +179,7 @@ impl Owner {
                 )
             })
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         let entries = git
             .list(&anchor, self.shutdown.child_token())
@@ -195,7 +197,7 @@ impl Owner {
             }
         }
         if !existing && git.occupied(&target).await? {
-            return Err(workspace_error("worktree_target_occupied"));
+            return Err(workspace_error(WorkspaceCode::WorktreeTargetOccupied));
         }
         let bound_at = self
             .clock
@@ -243,7 +245,7 @@ impl Owner {
         self.files
             .run(move || path::ensure_target_root(&data, &target))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         let git = self.git();
         let abort = self.shutdown.child_token();
@@ -263,7 +265,7 @@ impl Owner {
             }
         }
         if !existing && git.occupied(&plan.workspace_path).await? {
-            return Err(workspace_error("worktree_target_occupied"));
+            return Err(workspace_error(WorkspaceCode::WorktreeTargetOccupied));
         }
         if !existing {
             let output = git
@@ -280,7 +282,8 @@ impl Owner {
                     abort.clone(),
                 )
                 .await?;
-            if let Some(code) = super::git::command_failure(&output, "worktree_preparation_failed")
+            if let Some(code) =
+                super::git::command_failure(&output, WorkspaceCode::WorktreePreparationFailed)
             {
                 return Err(workspace_error(code));
             }
@@ -310,14 +313,14 @@ impl Owner {
         self.files
             .run(move || path::validate_target_root(&data, &target))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)
     }
 }
 
 fn validate_plan(plan: &RelocationWorkspacePlan) -> WorkspaceResult<()> {
     let Some(marker) = plan.marker.as_ref() else {
-        return Err(workspace_error("relocation_plan_invalid"));
+        return Err(workspace_error(WorkspaceCode::RelocationPlanInvalid));
     };
     if marker.schema != MARKER_SCHEMA
         || marker.ownership != "session"
@@ -325,27 +328,15 @@ fn validate_plan(plan: &RelocationWorkspacePlan) -> WorkspaceResult<()> {
         || !path::safe_ref(&marker.branch, false)
         || plan.operation_id.is_empty()
     {
-        return Err(workspace_error("relocation_plan_invalid"));
+        return Err(workspace_error(WorkspaceCode::RelocationPlanInvalid));
     }
     Ok(())
 }
 
-fn workspace_error(code: &'static str) -> WorkspaceError {
+fn workspace_error(code: WorkspaceCode) -> WorkspaceError {
     WorkspaceError::new(code, "Session relocation workspace operation failed")
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
-    WorkspaceError::new("session_worktree_io", error.to_string())
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
-    WorkspaceError::new(error.code, "Workspace file owner closed")
+    WorkspaceError::new(WorkspaceCode::SessionWorktreeIo, error.to_string()).with_source(error)
 }

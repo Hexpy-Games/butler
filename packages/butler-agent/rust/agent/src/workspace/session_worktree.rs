@@ -23,6 +23,7 @@ use super::{
 use git::GitWorktrees;
 use path::{marker, normalize_ref, public_label, safe_ref};
 
+use crate::workspace::WorkspaceCode;
 pub(crate) use path::short_session_worktree_branch;
 pub(crate) use relocation::{
     RelocationWorkspaceInput, RelocationWorkspaceMarker, RelocationWorkspacePlan,
@@ -140,11 +141,12 @@ impl NativeSessionWorktrees {
                 let _ = tx.send(result);
             });
         }
-        rx.await.map_err(|_| {
+        rx.await.map_err(|source| {
             super::WorkspaceError::new(
-                "session_worktree_owner_lost",
+                WorkspaceCode::SessionWorktreeOwnerLost,
                 "Session worktree operation stopped",
             )
+            .with_source(source)
         })?
     }
 
@@ -258,7 +260,7 @@ impl Owner {
         let git = GitWorktrees::new(&self.commands, &self.files, &self.host_environment);
         let anchor = match git.repository_anchor(anchor_path).await? {
             Ok(path) => path,
-            Err(code) => return Ok(failure(action, Some(branch), code)),
+            Err(code) => return Ok(failure(action, Some(branch), code.as_str())),
         };
         let target = if action == SessionWorktreeAction::Create {
             let data = self.butler_data.clone();
@@ -285,17 +287,24 @@ impl Owner {
                 &anchor,
                 &["check-ref-format", "--branch", branch],
                 abort.clone(),
-                "invalid_branch",
+                WorkspaceCode::InvalidBranch,
             )
             .await?
         {
             return self
-                .cancel_or_fail(&git, action, branch, target.as_deref(), &anchor, code)
+                .cancel_or_fail(
+                    &git,
+                    action,
+                    branch,
+                    target.as_deref(),
+                    &anchor,
+                    code.as_str(),
+                )
                 .await;
         }
         let entries = match git.list(&anchor, abort.clone()).await? {
             Ok(entries) => entries,
-            Err(code) => return Ok(failure(action, Some(branch), code)),
+            Err(code) => return Ok(failure(action, Some(branch), code.as_str())),
         };
         let branch_entries: Vec<_> = entries
             .iter()
@@ -357,9 +366,11 @@ impl Owner {
                     ]
                 };
                 let created = git.run(&anchor, args, abort.clone()).await?;
-                if let Some(code) = git::command_failure(&created, "git_operation_failed") {
+                if let Some(code) =
+                    git::command_failure(&created, WorkspaceCode::GitOperationFailed)
+                {
                     return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code)
+                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
                         .await;
                 }
                 (target, false, false)
@@ -371,23 +382,29 @@ impl Owner {
         {
             Ok(value) => value,
             Err(code) => {
-                if code == "cancelled" && !reusable && action == SessionWorktreeAction::Create {
+                if code == WorkspaceCode::Cancelled
+                    && !reusable
+                    && action == SessionWorktreeAction::Create
+                {
                     return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code)
+                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
                         .await;
                 }
-                return Ok(failure(action, Some(branch), code));
+                return Ok(failure(action, Some(branch), code.as_str()));
             }
         };
         let source_dirty = match git.dirty(&anchor, abort.clone()).await? {
             Ok(value) => value,
             Err(code) => {
-                if code == "cancelled" && !reusable && action == SessionWorktreeAction::Create {
+                if code == WorkspaceCode::Cancelled
+                    && !reusable
+                    && action == SessionWorktreeAction::Create
+                {
                     return self
-                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code)
+                        .cancel_or_fail(&git, action, branch, Some(&target), &anchor, code.as_str())
                         .await;
                 }
-                return Ok(failure(action, Some(branch), code));
+                return Ok(failure(action, Some(branch), code.as_str()));
             }
         };
         let now = self
@@ -421,7 +438,7 @@ impl Owner {
             .workspace_reference
             .set(&validated.path)
             .map_err(|error| {
-                super::WorkspaceError::new("workspace_reference_failed", error.code)
+                super::WorkspaceError::new(WorkspaceCode::WorkspaceReferenceFailed, error.code())
             })?;
         Ok(BindSessionWorktreeResult::Bound {
             action,

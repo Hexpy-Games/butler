@@ -59,7 +59,7 @@ pub(super) fn execute(edits: &[GuardedEdit], observer: &dyn CommitObserver) -> B
                     outcome.preflight_failures.push(EditFailure::new(
                         edit.input.index,
                         Some(key.clone()),
-                        error,
+                        error.code(),
                     ));
                     continue;
                 }

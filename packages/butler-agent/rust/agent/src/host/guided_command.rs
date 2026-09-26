@@ -124,7 +124,7 @@ impl NativeGuidedCommand {
                 .jobs
                 .run(move || NativeCommands::guarded_directory(&guarded_root, requested.as_deref()))
                 .await?
-                .map_err(|e| BtccError::new(e.code, e.message))?;
+                .map_err(|e| BtccError::new(e.code(), e.message()))?;
             let guard_command = command.to_owned();
             let guard_cwd = resolved_cwd.clone();
             let guard_root = root.clone();
@@ -177,7 +177,7 @@ impl NativeGuidedCommand {
                 .jobs
                 .run(move || NativeCommands::tool_environment(&host, &data))
                 .await?
-                .map_err(|e| BtccError::new(e.code, e.message))?;
+                .map_err(|e| BtccError::new(e.code(), e.message()))?;
             let output_abort = scope.abort.clone();
             let result = self
                 .commands
@@ -199,7 +199,7 @@ impl NativeGuidedCommand {
                         read_only_installation_root: scope.installation_root.map(Path::to_path_buf),
                     }),
                 })
-                .map_err(|e| BtccError::new(e.code, e.message))?
+                .map_err(|e| BtccError::new(e.code(), e.message()))?
                 .await
                 .map_err(|_| error("command_completion_lost"))?;
             return output::registered_result(
@@ -241,10 +241,10 @@ impl NativeGuidedCommand {
         let spooled = self
             .commands
             .submit_guided(input)
-            .map_err(|e| BtccError::new(e.code, e.message))?
+            .map_err(|e| BtccError::new(e.code(), e.message()))?
             .await
             .map_err(|_| error("command_completion_lost"))?
-            .map_err(|e| BtccError::new(e.code, e.message))?;
+            .map_err(|e| BtccError::new(e.code(), e.message()))?;
         output::public_result(
             output::OutputResources {
                 output: &self.output,
@@ -276,7 +276,7 @@ fn active_root(scope: &CommandScope<'_>) -> Result<PathBuf, BtccError> {
     match scope.workspace_reference {
         Some(reference) => reference
             .get()
-            .map_err(|error| BtccError::new(error.code.clone(), error.code)),
+            .map_err(|error| BtccError::new(error.code(), error.code())),
         None => Ok(scope.workspace_path.to_path_buf()),
     }
 }

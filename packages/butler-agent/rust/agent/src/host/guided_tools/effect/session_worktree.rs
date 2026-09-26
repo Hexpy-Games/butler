@@ -106,7 +106,7 @@ impl SessionWorktreeEffect {
                 AdapterOutcome::NotApplied(adapter(code))
             }
             Err(error) => AdapterOutcome::Uncertain(Some(EffectAdapterError::new(
-                error.code,
+                error.code(),
                 "The session worktree outcome may be uncertain; inspect the canonical session workspace.",
             ))),
         }

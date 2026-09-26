@@ -100,7 +100,7 @@ fn read_active_session_facts(
             )
         }
         Err(error) => {
-            let reason = error.code.to_owned();
+            let reason = error.code().to_owned();
             (
                 StatusFact::Unavailable(reason.clone()),
                 StatusFact::Unavailable(reason),

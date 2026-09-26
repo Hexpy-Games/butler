@@ -122,7 +122,7 @@ impl NativeSessionWorkspaceRecovery {
             SessionWorkspaceValidation::Valid { path, .. } => {
                 WorkspaceReference::new(std::path::Path::new(path))
             }
-            SessionWorkspaceValidation::Invalid { code } => WorkspaceReference::unavailable(*code),
+            SessionWorkspaceValidation::Invalid { code } => WorkspaceReference::unavailable(code),
         };
         Ok(RecoveredSessionWorkspaceReference {
             authority,

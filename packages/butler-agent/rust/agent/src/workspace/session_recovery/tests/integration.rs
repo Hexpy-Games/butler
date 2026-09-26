@@ -217,7 +217,7 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
     .unwrap();
     let golden: Value = serde_json::from_str(include_str!("../bun-golden.json")).unwrap();
     assert_eq!(
-        missing_git.workspace_reference.get().unwrap_err().code,
+        missing_git.workspace_reference.get().unwrap_err().code(),
         golden["missingGit"]["code"].as_str().unwrap()
     );
     fixture.store.close().await.unwrap();
@@ -245,7 +245,7 @@ async fn actual_binding_git_worktree_reopen_dirty_and_invalid_authority() {
         }
     ));
     assert_eq!(
-        wrong.workspace_reference.get().unwrap_err().code,
+        wrong.workspace_reference.get().unwrap_err().code(),
         "session_workspace_unavailable"
     );
 
@@ -269,7 +269,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        empty.workspace_reference.get().unwrap_err().code,
+        empty.workspace_reference.get().unwrap_err().code(),
         "session_workspace_unavailable"
     );
     let preaborted = CancellationToken::new();
@@ -294,7 +294,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        invalid.workspace_reference.get().unwrap_err().code,
+        invalid.workspace_reference.get().unwrap_err().code(),
         "session_workspace_marker_invalid"
     );
     assert!(matches!(
@@ -311,7 +311,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        missing.workspace_reference.get().unwrap_err().code,
+        missing.workspace_reference.get().unwrap_err().code(),
         "session_workspace_unavailable"
     );
 
@@ -323,7 +323,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        symlink.workspace_reference.get().unwrap_err().code,
+        symlink.workspace_reference.get().unwrap_err().code(),
         "session_workspace_unavailable"
     );
 
@@ -335,7 +335,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        stale.workspace_reference.get().unwrap_err().code,
+        stale.workspace_reference.get().unwrap_err().code(),
         "session_workspace_unavailable"
     );
 
@@ -352,7 +352,7 @@ async fn project_marker_missing_symlink_and_abort_keep_source_precedence() {
         .await
         .unwrap();
     assert_eq!(
-        aborted.workspace_reference.get().unwrap_err().code,
+        aborted.workspace_reference.get().unwrap_err().code(),
         "cancelled"
     );
     assert_eq!(fixture.commands.active_count(), 0);

@@ -17,7 +17,7 @@ impl NativeSubsessionService {
                 .bindings
                 .get_by_session_id(&pending.parent_session_id)
                 .await
-                .map_err(workspace)?
+                .map_err(BtccError::from)?
                 .ok_or_else(|| error("parent_steward_session_required"))?;
             if parent.role != SessionRole::Steward {
                 return Err(error("parent_steward_session_required"));

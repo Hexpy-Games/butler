@@ -128,7 +128,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(&request.parent_session_id)
             .await
-            .map_err(workspace)?
+            .map_err(BtccError::from)?
             .ok_or_else(|| error("parent_butler_session_required"))?;
         if parent.role != SessionRole::Butler {
             return Err(error("parent_butler_session_required"));
@@ -285,7 +285,7 @@ impl NativeSubsessionService {
                 metadata: metadata.as_object().cloned(),
             })
             .await
-            .map_err(workspace)?;
+            .map_err(BtccError::from)?;
         Ok(())
     }
     async fn ensure_child_binding(
@@ -301,7 +301,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(&stored.child_session_id)
             .await
-            .map_err(workspace)?
+            .map_err(BtccError::from)?
         {
             if existing.role != role {
                 return Err(error("subsession_child_binding_mismatch"));
@@ -312,7 +312,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(&stored.parent_session_id)
             .await
-            .map_err(workspace)?
+            .map_err(BtccError::from)?
             .ok_or_else(|| error("subsession_parent_binding_missing"))?;
         let access = stored.packet["access_mode"]
             .as_str()
@@ -354,7 +354,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(session)
             .await
-            .map_err(workspace)?
+            .map_err(BtccError::from)?
             .ok_or_else(|| error("subsession_child_binding_missing"))?;
         let scope = child_work_scope(&stored, &binding, turn)?;
         let existing = self.work.bound_work_for_turn(turn.into()).await?;

@@ -214,7 +214,7 @@ async fn close_drains_running_and_queued_mutations_after_callers_drop() {
         expected_sha256: None,
     });
     assert!(
-        matches!(owner.submit(rejected), Err(error) if error.code == "workspace_mutations_closed")
+        matches!(owner.submit(rejected), Err(error) if error.code() == "workspace_mutations_closed")
     );
     release_tx.send(()).unwrap();
     join.await.unwrap();

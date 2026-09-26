@@ -363,7 +363,7 @@ pub(super) async fn execute(
             .map_err(|error| {
                 ToolExecutionError::Integrity(BtccError::new(
                     "project_workspace_unavailable",
-                    error.code,
+                    error.code(),
                 ))
             })?
             .unwrap_or_else(|| owner.binding.workspace_path.clone());

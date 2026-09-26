@@ -6,6 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::SessionWorkspaceValidation;
 use super::path::{canonical_path, listed_worktree_matches, precheck_linked_worktree};
+use crate::workspace::WorkspaceCode;
 use crate::workspace::{
     CommandStep, NativeCommands, NativeWorkspaceFiles, StructuredCommandInput,
     StructuredCommandOutput, WorkspaceError, WorkspaceResult,
@@ -33,7 +34,7 @@ pub(super) async fn inspect_project_workspace(
                 .unwrap_or(false)
         })
         .await
-        .map_err(file_owner_error)?;
+        .map_err(WorkspaceError::from)?;
     if !exists {
         return Ok(ProjectWorkspaceInspection::Unavailable {
             code: "git_workspace_unavailable",
@@ -47,8 +48,10 @@ pub(super) async fn inspect_project_workspace(
         abort.clone(),
     )
     .await?;
-    if let Some(code) = command_failure_code(&version, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable { code });
+    if let Some(code) = command_failure_code(&version, WorkspaceCode::GitWorkspaceUnavailable) {
+        return Ok(ProjectWorkspaceInspection::Unavailable {
+            code: code.as_str(),
+        });
     }
     let probe = git(
         commands,
@@ -64,8 +67,10 @@ pub(super) async fn inspect_project_workspace(
     {
         return Ok(ProjectWorkspaceInspection::Folder);
     }
-    if let Some(code) = command_failure_code(&probe, "git_workspace_unavailable") {
-        return Ok(ProjectWorkspaceInspection::Unavailable { code });
+    if let Some(code) = command_failure_code(&probe, WorkspaceCode::GitWorkspaceUnavailable) {
+        return Ok(ProjectWorkspaceInspection::Unavailable {
+            code: code.as_str(),
+        });
     }
     let branch = git(
         commands,
@@ -75,7 +80,7 @@ pub(super) async fn inspect_project_workspace(
         abort.clone(),
     )
     .await?;
-    if command_failure(&branch, "git_workspace_unavailable").is_some() {
+    if command_failure(&branch, WorkspaceCode::GitWorkspaceUnavailable).is_some() {
         return Ok(ProjectWorkspaceInspection::Unavailable {
             code: "git_workspace_unavailable",
         });
@@ -88,7 +93,7 @@ pub(super) async fn inspect_project_workspace(
         abort,
     )
     .await?;
-    if command_failure(&status, "git_workspace_unavailable").is_some() {
+    if command_failure(&status, WorkspaceCode::GitWorkspaceUnavailable).is_some() {
         return Ok(ProjectWorkspaceInspection::Unavailable {
             code: "git_workspace_unavailable",
         });
@@ -124,7 +129,7 @@ pub(super) async fn validate_linked_worktree(
     let exists = files
         .run(move || precheck_linked_worktree(&target_for_check))
         .await
-        .map_err(file_owner_error)?;
+        .map_err(WorkspaceError::from)?;
     if !exists {
         return Ok(invalid("session_workspace_unavailable"));
     }
@@ -137,7 +142,7 @@ pub(super) async fn validate_linked_worktree(
             abort.clone(),
         )
         .await?;
-        command_failure(&top, "session_workspace_unavailable")
+        command_failure(&top, WorkspaceCode::SessionWorkspaceUnavailable)
     };
     if let Some(validation) = top_failure {
         return Ok(validation);
@@ -151,7 +156,9 @@ pub(super) async fn validate_linked_worktree(
             abort.clone(),
         )
         .await?;
-        if let Some(validation) = command_failure(&worktrees, "session_workspace_unavailable") {
+        if let Some(validation) =
+            command_failure(&worktrees, WorkspaceCode::SessionWorkspaceUnavailable)
+        {
             return Ok(validation);
         }
         worktrees.stdout
@@ -161,7 +168,7 @@ pub(super) async fn validate_linked_worktree(
     let listed = files
         .run(move || listed_worktree_matches(&stdout, &target_for_list, &branch_for_list))
         .await
-        .map_err(file_owner_error)?
+        .map_err(WorkspaceError::from)?
         .map_err(io_error)?;
     if !listed {
         return Ok(invalid("session_workspace_unavailable"));
@@ -175,7 +182,7 @@ pub(super) async fn validate_linked_worktree(
             abort.clone(),
         )
         .await?;
-        command_failure(&symbolic, "session_workspace_unavailable").or_else(|| {
+        command_failure(&symbolic, WorkspaceCode::SessionWorkspaceUnavailable).or_else(|| {
             (crate::public_text::trim_js_whitespace(&symbolic.stdout) != branch)
                 .then(|| invalid("session_workspace_unavailable"))
         })
@@ -192,7 +199,9 @@ pub(super) async fn validate_linked_worktree(
             abort,
         )
         .await?;
-        if let Some(validation) = command_failure(&status, "session_workspace_unavailable") {
+        if let Some(validation) =
+            command_failure(&status, WorkspaceCode::SessionWorkspaceUnavailable)
+        {
             return Ok(validation);
         }
         !status.stdout.is_empty()
@@ -201,7 +210,7 @@ pub(super) async fn validate_linked_worktree(
     let path = files
         .run(move || canonical_path(&target_for_final))
         .await
-        .map_err(file_owner_error)?
+        .map_err(WorkspaceError::from)?
         .map_err(io_error)?;
     Ok(SessionWorkspaceValidation::Valid {
         path: path.to_string_lossy().into_owned(),
@@ -215,23 +224,23 @@ fn invalid(code: &'static str) -> SessionWorkspaceValidation {
 
 fn command_failure(
     result: &StructuredCommandOutput,
-    other_code: &'static str,
+    other_code: WorkspaceCode,
 ) -> Option<SessionWorkspaceValidation> {
-    command_failure_code(result, other_code).map(invalid)
+    command_failure_code(result, other_code).map(|code| invalid(code.as_str()))
 }
 
 fn command_failure_code(
     result: &StructuredCommandOutput,
-    other_code: &'static str,
-) -> Option<&'static str> {
+    other_code: WorkspaceCode,
+) -> Option<WorkspaceCode> {
     if result.cancelled || result.timed_out {
-        Some("cancelled")
+        Some(WorkspaceCode::Cancelled)
     } else if result
         .error
         .as_ref()
-        .is_some_and(|error| error.code == "ENOENT")
+        .is_some_and(|error| error.code() == "ENOENT")
     {
-        Some("git_not_installed")
+        Some(WorkspaceCode::GitNotInstalled)
     } else if result.exit_code != Some(0) {
         Some(other_code)
     } else {
@@ -262,23 +271,17 @@ async fn git(
     };
     commands
         .submit_structured(input)
-        .map_err(|error| WorkspaceError::new(error.code, error.message))?
+        .map_err(WorkspaceError::from)?
         .await
-        .map_err(|_| WorkspaceError::new("workspace_recovery_command_lost", "Git result lost"))
+        .map_err(|source| {
+            WorkspaceError::new(
+                WorkspaceCode::WorkspaceRecoveryCommandLost,
+                "Git result lost",
+            )
+            .with_source(source)
+        })
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
-    WorkspaceError::new(error.code, "Workspace file owner closed")
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
-    WorkspaceError::new("workspace_recovery_io", error.to_string())
+    WorkspaceError::new(WorkspaceCode::WorkspaceRecoveryIo, error.to_string()).with_source(error)
 }

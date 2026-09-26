@@ -96,7 +96,7 @@ impl NativeGuidedPreparation {
                 start.cancellation.clone(),
             )
             .await
-            .map_err(|e| BtccError::new(e.code, e.message))?;
+            .map_err(|e| BtccError::new(e.code(), e.message()))?;
         let workspace = recovered.workspace_reference;
         let plan_id = turn
             .context
@@ -106,7 +106,7 @@ impl NativeGuidedPreparation {
         let accepted_plan = if let (Some(plan_id), Some(project)) =
             (plan_id, project_id.filter(|v| !v.is_empty()))
         {
-            let path = workspace.get().map_err(|e| contract(&e.code))?;
+            let path = workspace.get().map_err(|e| contract(e.code()))?;
             self.accepted_plans
                 .read_accepted(
                     path.to_string_lossy().into_owned(),
@@ -122,7 +122,7 @@ impl NativeGuidedPreparation {
             return Err(contract("accepted_project_plan_unavailable"));
         }
         let work_scope = work_scope_for_turn(turn, &policy.tracking_mode);
-        let path = workspace.get().map_err(|e| contract(&e.code))?;
+        let path = workspace.get().map_err(|e| contract(e.code()))?;
         let initial_work = load_guided_turn_work(
             &self.work,
             Some(&self.authority),

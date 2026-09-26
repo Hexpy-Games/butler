@@ -163,7 +163,7 @@ pub(super) async fn execute(
             result.reads.push(CandidateResult {
                 path: entry.path.clone(),
                 read: read.map_err(|error| super::super::CapabilityError {
-                    code: error.code.into(),
+                    code: error.code().into(),
                 })?,
             });
         }

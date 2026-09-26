@@ -13,6 +13,7 @@ use super::{CommandError, StructuredCommandInput, StructuredCommandOutput};
 mod invocation;
 mod result;
 mod streams;
+use crate::workspace::CommandCode;
 use invocation::{environment, invocation_steps};
 use result::{bounded_timeout, pipeline_exit, result};
 use streams::{StreamChunk, StreamKind, read_stream};
@@ -64,11 +65,11 @@ async fn execute(
     let legacy = input.legacy.is_some();
     let steps = match invocation_steps(&input) {
         Ok(steps) => steps,
-        Err(error) if error.code == "legacy_command_empty" => {
+        Err(error) if error.code() == "legacy_command_empty" => {
             return result(
                 started,
                 String::new(),
-                format!("{}\n", error.message),
+                format!("{}\n", error.message()),
                 Some(64),
                 false,
                 false,
@@ -96,7 +97,7 @@ async fn execute(
             false,
             false,
             Some(CommandError::new(
-                "command_plan_empty",
+                CommandCode::CommandPlanEmpty,
                 "command plan must contain at least one executable step",
             )),
         );
@@ -160,20 +161,20 @@ async fn execute(
                         Some(error),
                     );
                 }
-                let mut error = if legacy {
+                let error = if legacy {
                     CommandError::new(
-                        "legacy_shell_spawn_failed",
+                        CommandCode::LegacyShellSpawnFailed,
                         "legacy command compatibility process could not be started",
                     )
                 } else {
                     CommandError::new(
-                        "command_spawn_failed",
+                        CommandCode::CommandSpawnFailed,
                         "command process could not be started",
                     )
-                };
-                error.io_kind = Some(spawn_error.kind());
+                }
+                .with_source(spawn_error);
                 let stderr = if legacy {
-                    format!("{}\n", error.message)
+                    format!("{}\n", error.message())
                 } else {
                     String::new()
                 };
@@ -214,7 +215,7 @@ async fn execute(
             false,
             false,
             Some(CommandError::new(
-                "command_plan_empty",
+                CommandCode::CommandPlanEmpty,
                 "command plan must contain at least one executable step",
             )),
         );
@@ -281,7 +282,10 @@ async fn execute(
                             None,
                             timeout_fired,
                             cancelled,
-                            Some(CommandError::new("command_wait_failed", error.to_string())),
+                            Some(CommandError::new(
+                                CommandCode::CommandWaitFailed,
+                                error.to_string(),
+                            )),
                         );
                     }
                 }
@@ -356,13 +360,13 @@ async fn execute(
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 stream_error = Some(CommandError::new(
-                    "command_stream_failed",
+                    CommandCode::CommandStreamFailed,
                     error.to_string(),
                 ));
             }
             Err(error) => {
                 stream_error = Some(CommandError::new(
-                    "command_stream_failed",
+                    CommandCode::CommandStreamFailed,
                     error.to_string(),
                 ));
             }

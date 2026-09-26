@@ -7,7 +7,7 @@ use crate::btcc::BtccError;
 use crate::locale::LocaleCollation;
 use crate::workspace::{
     OwnOptional, SessionBindingStore, SessionLifecycleState, SessionRole, StoredSessionBinding,
-    UpsertSessionBinding, WorkspaceError,
+    UpsertSessionBinding,
 };
 
 use super::{NativeServiceBootstrap, NativeServiceConfiguration};
@@ -25,7 +25,7 @@ impl NativeServiceConfiguration {
         let existing = store
             .get_by_session_id(&session_id)
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         let (binding, newly_registered) = if let Some(existing) = existing.filter(|binding| {
             !matches!(
                 binding.lifecycle_state,
@@ -59,7 +59,7 @@ impl NativeServiceConfiguration {
                 SessionLifecycleState::Closing,
             ]))
             .await
-            .map_err(storage)?;
+            .map_err(BtccError::from)?;
         sessions.retain(|session| session.role == SessionRole::Butler);
         // Stable sort preserves the store's updated_at/session_id order for a tie.
         sessions.sort_by(|left, right| {
@@ -109,7 +109,7 @@ impl NativeServiceConfiguration {
                 metadata: Some(metadata),
             })
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
 
     async fn reactivate(
@@ -152,7 +152,7 @@ impl NativeServiceConfiguration {
                 metadata: existing.metadata,
             })
             .await
-            .map_err(storage)
+            .map_err(BtccError::from)
     }
 
     fn read_session_pointer(&self) -> Option<String> {
@@ -181,10 +181,6 @@ impl NativeServiceConfiguration {
                 .then(|| name.clone())
         })
     }
-}
-
-fn storage(error: WorkspaceError) -> BtccError {
-    BtccError::new(error.code, error.message)
 }
 
 fn io(code: &'static str, error: &std::io::Error) -> BtccError {

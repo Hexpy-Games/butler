@@ -153,7 +153,7 @@ impl DefaultTurnPreparation {
             .binding_store
             .get_by_session_id(&request.session_id)
             .await
-            .map_err(|value| error(value.code, value.message))?
+            .map_err(|value| error(value.code(), value.message()))?
             .ok_or_else(|| {
                 error(
                     "session_binding_missing",

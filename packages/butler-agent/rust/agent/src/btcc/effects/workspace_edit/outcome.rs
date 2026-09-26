@@ -28,14 +28,14 @@ async fn states(
         let path = entry["path"].as_str().unwrap_or("");
         let guarded = guard_effect_file(scope, path)
             .await
-            .map_err(|failure| error(&failure.code, failure.message))?;
+            .map_err(|failure| error(failure.code(), &failure.message()))?;
         match observe_effect_file(&guarded).await {
             EffectFileObservation::File { bytes, sha256 } => found.push((bytes, sha256)),
             EffectFileObservation::Missing => {
                 return Err(error("not_found", "The reviewed edit target is missing."));
             }
             EffectFileObservation::Unavailable(failure) => {
-                return Err(error(&failure.code, failure.message));
+                return Err(error(failure.code(), &failure.message()));
             }
         }
     }

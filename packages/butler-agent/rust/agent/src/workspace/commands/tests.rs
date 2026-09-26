@@ -207,7 +207,7 @@ async fn guided_real_process_spool_offsets_and_close() {
             .submit_guided(fixture.guided("true"))
             .err()
             .unwrap()
-            .code,
+            .code(),
         "command_owner_closed"
     );
 }
@@ -307,7 +307,7 @@ async fn structured_utf8_fragments_and_spawn_failure() {
         .unwrap()
         .await
         .unwrap();
-    assert_eq!(failed.error.unwrap().code, "command_spawn_failed");
+    assert_eq!(failed.error.unwrap().code(), "command_spawn_failed");
     assert_eq!(failed.exit_code, None);
     owner.close().await;
 }

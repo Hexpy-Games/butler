@@ -3,6 +3,7 @@
 
 use std::io::Read;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 
@@ -16,10 +17,85 @@ pub(crate) struct EffectFileScope {
     pub installation_root: Option<PathBuf>,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct EffectFileError {
-    pub code: String,
-    pub message: &'static str,
+/// Failures to resolve or observe the target of a write/edit file effect.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum EffectFileError {
+    /// The target's containment in the workspace could not be resolved.
+    #[error("write_file target containment could not be observed.")]
+    ContainmentUnavailable {
+        #[source]
+        source: Option<Arc<dyn std::error::Error + Send + Sync>>,
+    },
+    /// The mutation guard rejected the target; `reason` is the guard's wire code.
+    #[error("write_file target is outside the admitted workspace boundary.")]
+    OutsideBoundary { reason: &'static str },
+    /// The existing file to edit could not be observed.
+    #[error("The existing workspace file could not be observed for editing.")]
+    EditTargetUnobservable {
+        #[source]
+        source: Arc<dyn std::error::Error + Send + Sync>,
+    },
+    /// The edit target exists but is not a regular file.
+    #[error("edit_file only changes an existing regular workspace file.")]
+    EditTargetNotRegularFile,
+    /// The edit target contains NUL bytes in its first 4 KiB.
+    #[error("edit_file supports valid UTF-8 text files only.")]
+    EditTargetBinary,
+    /// The edit target is not valid UTF-8.
+    #[error("edit_file supports valid UTF-8 text files only.")]
+    EditTargetInvalidUtf8 {
+        #[source]
+        source: std::string::FromUtf8Error,
+    },
+    /// The write target exists but is not a regular file.
+    #[error("write_file target is not a regular file.")]
+    WriteTargetNotFile,
+    /// The write target's bytes could not be read.
+    #[error("write_file target bytes could not be observed.")]
+    WriteTargetUnobservable {
+        #[source]
+        source: Arc<dyn std::error::Error + Send + Sync>,
+    },
+}
+
+impl EffectFileError {
+    /// The wire code reported with the effect's failure.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::ContainmentUnavailable { .. } => "workspace_target_unavailable",
+            Self::OutsideBoundary { reason } => reason,
+            Self::EditTargetUnobservable { .. } | Self::WriteTargetUnobservable { .. } => {
+                "workspace_target_observation_failed"
+            }
+            Self::EditTargetNotRegularFile => "target_not_regular_file",
+            Self::EditTargetBinary => "binary_file_not_supported",
+            Self::EditTargetInvalidUtf8 { .. } => "invalid_utf8",
+            Self::WriteTargetNotFile => "workspace_target_not_file",
+        }
+    }
+
+    /// The user-facing message; identical to `Display`.
+    pub(crate) fn message(&self) -> String {
+        self.to_string()
+    }
+
+    fn containment(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::ContainmentUnavailable {
+            source: Some(Arc::new(source)),
+        }
+    }
+
+    fn edit_target(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::EditTargetUnobservable {
+            source: Arc::new(source),
+        }
+    }
+
+    fn write_target(source: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::WriteTargetUnobservable {
+            source: Arc::new(source),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -52,30 +128,18 @@ pub(crate) async fn guard_effect_file(
             installation_root: scope.installation_root.as_deref(),
             protected_roots: &protected,
         })
-        .map_err(|_| EffectFileError {
-            code: "workspace_target_unavailable".into(),
-            message: "write_file target containment could not be observed.",
-        })?;
+        .map_err(EffectFileError::containment)?;
         if let Some(reason) = guarded.reason {
-            return Err(EffectFileError {
-                code: reason.into(),
-                message: "write_file target is outside the admitted workspace boundary.",
-            });
+            return Err(EffectFileError::OutsideBoundary { reason });
         }
         let identity = guarded.real.clone().or_else(|| guarded.absolute.clone());
         match (guarded.absolute, identity) {
             (Some(absolute), Some(identity)) => Ok(GuardedEffectFile { absolute, identity }),
-            _ => Err(EffectFileError {
-                code: "workspace_target_unavailable".into(),
-                message: "write_file target containment could not be observed.",
-            }),
+            _ => Err(EffectFileError::ContainmentUnavailable { source: None }),
         }
     })
     .await
-    .map_err(|_| EffectFileError {
-        code: "workspace_target_unavailable".into(),
-        message: "write_file target containment could not be observed.",
-    })?
+    .map_err(EffectFileError::containment)?
 }
 
 /// Source edit preparation reads current UTF-8 only after the same guarded target resolution.
@@ -86,38 +150,21 @@ pub(crate) async fn read_effect_edit_target(
     let guarded = guard_effect_file(scope, path).await?;
     tokio::task::spawn_blocking(move || {
         let metadata =
-            std::fs::symlink_metadata(&guarded.absolute).map_err(|_| EffectFileError {
-                code: "workspace_target_observation_failed".into(),
-                message: "The existing workspace file could not be observed for editing.",
-            })?;
+            std::fs::symlink_metadata(&guarded.absolute).map_err(EffectFileError::edit_target)?;
         if !metadata.file_type().is_file() {
-            return Err(EffectFileError {
-                code: "target_not_regular_file".into(),
-                message: "edit_file only changes an existing regular workspace file.",
-            });
+            return Err(EffectFileError::EditTargetNotRegularFile);
         }
-        let bytes = std::fs::read(&guarded.absolute).map_err(|_| EffectFileError {
-            code: "workspace_target_observation_failed".into(),
-            message: "The existing workspace file could not be observed for editing.",
-        })?;
+        let bytes = std::fs::read(&guarded.absolute).map_err(EffectFileError::edit_target)?;
         if bytes.iter().take(4096).any(|byte| *byte == 0) {
-            return Err(EffectFileError {
-                code: "binary_file_not_supported".into(),
-                message: "edit_file supports valid UTF-8 text files only.",
-            });
+            return Err(EffectFileError::EditTargetBinary);
         }
-        let text = String::from_utf8(bytes).map_err(|_| EffectFileError {
-            code: "invalid_utf8".into(),
-            message: "edit_file supports valid UTF-8 text files only.",
-        })?;
+        let text = String::from_utf8(bytes)
+            .map_err(|source| EffectFileError::EditTargetInvalidUtf8 { source })?;
         let sha = format!("{:x}", Sha256::digest(text.as_bytes()));
         Ok((text, sha, guarded.identity))
     })
     .await
-    .map_err(|_| EffectFileError {
-        code: "workspace_target_observation_failed".into(),
-        message: "The existing workspace file could not be observed for editing.",
-    })?
+    .map_err(EffectFileError::edit_target)?
 }
 
 pub(crate) async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFileObservation {
@@ -126,10 +173,9 @@ pub(crate) async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFil
         let observed = (|| -> std::io::Result<EffectFileObservation> {
             let metadata = std::fs::metadata(&path)?;
             if !metadata.is_file() {
-                return Ok(EffectFileObservation::Unavailable(EffectFileError {
-                    code: "workspace_target_not_file".into(),
-                    message: "write_file target is not a regular file.",
-                }));
+                return Ok(EffectFileObservation::Unavailable(
+                    EffectFileError::WriteTargetNotFile,
+                ));
             }
             let mut file = std::fs::File::open(&path)?;
             let mut chunk = vec![0_u8; 64 * 1024];
@@ -158,18 +204,12 @@ pub(crate) async fn observe_effect_file(target: &GuardedEffectFile) -> EffectFil
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 EffectFileObservation::Missing
             }
-            Err(_) => EffectFileObservation::Unavailable(EffectFileError {
-                code: "workspace_target_observation_failed".into(),
-                message: "write_file target bytes could not be observed.",
-            }),
+            Err(error) => EffectFileObservation::Unavailable(EffectFileError::write_target(error)),
         }
     })
     .await
-    .unwrap_or_else(|_| {
-        EffectFileObservation::Unavailable(EffectFileError {
-            code: "workspace_target_observation_failed".into(),
-            message: "write_file target bytes could not be observed.",
-        })
+    .unwrap_or_else(|error| {
+        EffectFileObservation::Unavailable(EffectFileError::write_target(error))
     })
 }
 

@@ -1,5 +1,6 @@
 //! Source Git commit evidence normalization using the existing tracked command owner.
 
+use crate::workspace::CommandError;
 use std::{collections::HashMap, path::Path};
 
 use serde::Serialize;
@@ -162,7 +163,7 @@ async fn git_text(
         .map_err(|error| {
             failure(
                 "git_evidence_failed",
-                &format!("Unable to collect Git commit evidence: {}", error.message),
+                &format!("Unable to collect Git commit evidence: {}", error.message()),
             )
         })?;
     let result = receiver.await.map_err(|_| {
@@ -175,7 +176,7 @@ async fn git_text(
         let code = if result
             .error
             .as_ref()
-            .is_some_and(|error| error.io_kind == Some(std::io::ErrorKind::NotFound))
+            .is_some_and(|error| error.io_kind() == Some(std::io::ErrorKind::NotFound))
         {
             "git_not_installed"
         } else {
@@ -186,15 +187,15 @@ async fn git_text(
             result
                 .error
                 .as_ref()
-                .map(|error| error.message.as_str())
-                .unwrap_or("")
+                .map(CommandError::message)
+                .unwrap_or_default()
         } else {
-            detail
+            detail.to_owned()
         };
         let detail = if detail.is_empty() {
             args.join(" ")
         } else {
-            detail.to_owned()
+            detail
         };
         return Err(failure(
             code,

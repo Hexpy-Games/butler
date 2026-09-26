@@ -26,7 +26,7 @@ pub(super) async fn prepare(
         .jobs
         .run(move || NativeCommands::guarded_directory(&guarded_root, requested.as_deref()))
         .await?
-        .map_err(|e| BtccError::new(e.code, e.message))?;
+        .map_err(|e| BtccError::new(e.code(), e.message()))?;
     let root_identity = canonical_root(&workspace);
     let cwd_identity = canonical_root(&cwd);
     let relative = cwd_identity
@@ -166,10 +166,10 @@ impl EffectAdapter for CommandEffectAdapter {
                     host_environment: (*self.host_environment).clone(),
                     abort: signal.clone(),
                 })
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message))?
+                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?
                 .await
                 .map_err(|_| crate::btcc::EffectFailure::adapter("Command completion was lost"))?
-                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message))?;
+                .map_err(|error| crate::btcc::EffectFailure::adapter(error.message()))?;
             let effect = if self.effect == "remote_observation" {
                 "remote_observation"
             } else {

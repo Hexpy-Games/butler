@@ -118,7 +118,7 @@ impl GuidedTurnFactory for NativeGuidedTurnFactory {
                 language.clone(),
                 start.turn.original_message.clone(),
             )?);
-            let workspace_path = workspace.get().map_err(|e| error(&e.code))?;
+            let workspace_path = workspace.get().map_err(|e| error(e.code()))?;
             let activity = Arc::new(NativeGuidedActivity::new(
                 start.turn.turn_id.clone(),
                 source_revision.clone(),

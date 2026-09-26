@@ -35,9 +35,9 @@ pub(super) fn root(
     args: &Map<String, Value>,
 ) -> Result<PathBuf, CapabilityError> {
     if let Some(reference) = input.workspace_reference {
-        return reference
-            .get()
-            .map_err(|error| CapabilityError { code: error.code });
+        return reference.get().map_err(|error| CapabilityError {
+            code: error.code().to_owned(),
+        });
     }
     if let Some(path) = input.workspace_path
         && !crate::public_text::trim_js_whitespace(&path.to_string_lossy()).is_empty()

@@ -42,7 +42,7 @@ impl ScopeSelectedWorkRepository {
         self.bindings
             .get_by_session_id(session_id)
             .await
-            .map_err(|error| BtccError::new(error.code, error.message))?
+            .map_err(|error| BtccError::new(error.code(), error.message()))?
             .ok_or_else(|| scope_error("work_scope_session_binding_missing"))
     }
 

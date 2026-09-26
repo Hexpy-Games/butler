@@ -1,6 +1,7 @@
 //! Identity-checked cleanup for a prepared relocation worktree.
 
 use super::{Owner, RelocationWorkspacePlan};
+use crate::workspace::WorkspaceCode;
 use crate::workspace::WorkspaceResult;
 
 pub(super) async fn discard(owner: &Owner, plan: RelocationWorkspacePlan) -> WorkspaceResult<bool> {
@@ -58,7 +59,8 @@ async fn discard_unlocked(owner: &Owner, plan: RelocationWorkspacePlan) -> Works
             owner.shutdown.child_token(),
         )
         .await?;
-    if super::super::git::command_failure(&removed, "worktree_cleanup_failed").is_some() {
+    if super::super::git::command_failure(&removed, WorkspaceCode::WorktreeCleanupFailed).is_some()
+    {
         return Ok(false);
     }
     let _ = git

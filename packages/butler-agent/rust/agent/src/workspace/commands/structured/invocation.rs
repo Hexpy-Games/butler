@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::workspace::CommandCode;
 use crate::workspace::commands::{CommandError, CommandStep, StructuredCommandInput};
 
 pub(super) fn invocation_steps(
@@ -11,7 +12,7 @@ pub(super) fn invocation_steps(
     let command = crate::public_text::trim_js_whitespace(&legacy.command);
     if command.is_empty() {
         return Err(CommandError::new(
-            "legacy_command_empty",
+            CommandCode::LegacyCommandEmpty,
             "legacy command compatibility input is empty",
         ));
     }
@@ -94,8 +95,11 @@ fn protect_program_files(
         }
         let mut clauses = Vec::with_capacity(roots.len());
         for root in roots {
-            let quoted = serde_json::to_string(&root.to_string_lossy().as_ref())
-                .map_err(|error| CommandError::new("command_json_failed", error.to_string()))?;
+            let quoted =
+                serde_json::to_string(&root.to_string_lossy().as_ref()).map_err(|error| {
+                    CommandError::new(CommandCode::CommandJsonFailed, error.to_string())
+                        .with_source(error)
+                })?;
             clauses.push(format!("(subpath {quoted})"));
         }
         let profile = format!(

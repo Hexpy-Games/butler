@@ -217,14 +217,16 @@ async fn bound_project(
         clock: Arc::new(crate::host::SystemIdentity),
     })
     .await
-    .map_err(|error| CliError::failed(error.code, error.message))?;
+    .map_err(|error| CliError::failed(error.code(), error.message()))?;
     let result = store
         .get_by_session_id(&plan.session_id)
         .await
         .map(|binding| binding.and_then(|binding| binding.project_id));
     let closed = store.close().await;
     match (result, closed) {
-        (Err(error), _) | (Ok(_), Err(error)) => Err(CliError::failed(error.code, error.message)),
+        (Err(error), _) | (Ok(_), Err(error)) => {
+            Err(CliError::failed(error.code(), error.message()))
+        }
         (Ok(project), Ok(())) => Ok(project),
     }
 }

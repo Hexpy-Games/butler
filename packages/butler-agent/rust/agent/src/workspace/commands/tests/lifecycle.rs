@@ -48,7 +48,7 @@ async fn spool_initialization_failure_does_not_start_child() {
         .await
         .unwrap()
         .unwrap_err();
-    assert_eq!(failure.code, "command_io_failed");
+    assert_eq!(failure.code(), "command_io_failed");
     assert!(!marker.exists());
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
@@ -72,7 +72,7 @@ async fn capture_write_failure_terminates_child_and_discards_owned_files() {
     })
     .await
     .unwrap();
-    assert_eq!(failure.code, "command_capture_failed");
+    assert_eq!(failure.code(), "command_capture_failed");
     owner.close().await;
     assert_eq!(owner.active_count(), 0);
     let spool = fixture.0.join("runtime/btcc/command-spool");
@@ -111,14 +111,14 @@ async fn close_cancels_running_command_and_rejects_admission() {
         .await
         .unwrap();
     let result = receiver.await.unwrap().unwrap_err();
-    assert_eq!(result.code, "command_cancelled");
+    assert_eq!(result.code(), "command_cancelled");
     assert_eq!(owner.active_count(), 0);
     assert_eq!(
         owner
             .submit_guided(fixture.guided("true"))
             .err()
             .unwrap()
-            .code,
+            .code(),
         "command_owner_closed"
     );
 }
@@ -279,7 +279,7 @@ async fn partial_pipeline_spawn_failure_reaps_term_ignoring_descendant() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(result.error.unwrap().code, "command_spawn_failed");
+    assert_eq!(result.error.unwrap().code(), "command_spawn_failed");
     crate::testing::eventually("the descendant to be reaped", || {
         kill(Pid::from_raw(pid), None) == Err(Errno::ESRCH)
     })

@@ -45,7 +45,7 @@ async fn dropped_caller_is_owned_until_operation_completes_and_close_drains() {
         .unwrap();
     assert_eq!(files.active_count(), 0);
     assert_eq!(
-        files.run(|| ()).await.unwrap_err().code,
+        files.run(|| ()).await.unwrap_err().code(),
         "workspace_files_closed"
     );
 }

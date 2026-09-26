@@ -260,6 +260,3 @@ pub(super) fn error(code: &'static str) -> BtccError {
 pub(super) fn storage(e: crate::btcc::StorageError) -> BtccError {
     BtccError::new(e.code, e.message)
 }
-pub(super) fn workspace(e: crate::workspace::WorkspaceError) -> BtccError {
-    BtccError::new(e.code, e.message)
-}

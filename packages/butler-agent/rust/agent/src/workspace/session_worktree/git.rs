@@ -5,13 +5,14 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use super::path::{canonical_path, linked_directory, occupied};
+use crate::workspace::WorkspaceCode;
 use crate::workspace::session_recovery::path::{WorktreeEntry, parse_worktrees};
 use crate::workspace::{
     CommandStep, NativeCommands, NativeWorkspaceFiles, StructuredCommandInput,
     StructuredCommandOutput, WorkspaceError, WorkspaceResult,
 };
 
-pub(super) type GitOutcome<T> = Result<T, &'static str>;
+pub(super) type GitOutcome<T> = Result<T, WorkspaceCode>;
 
 pub(super) struct Validated {
     pub path: String,
@@ -59,9 +60,12 @@ impl<'a> GitWorktrees<'a> {
         };
         self.commands
             .submit_structured(input)
-            .map_err(|error| WorkspaceError::new(error.code, error.message))?
+            .map_err(WorkspaceError::from)?
             .await
-            .map_err(|_| WorkspaceError::new("session_worktree_command_lost", "Git result lost"))
+            .map_err(|source| {
+                WorkspaceError::new(WorkspaceCode::SessionWorktreeCommandLost, "Git result lost")
+                    .with_source(source)
+            })
     }
 
     pub(super) async fn failure(
@@ -69,8 +73,8 @@ impl<'a> GitWorktrees<'a> {
         cwd: &str,
         args: &[&str],
         abort: CancellationToken,
-        other: &'static str,
-    ) -> WorkspaceResult<Option<&'static str>> {
+        other: WorkspaceCode,
+    ) -> WorkspaceResult<Option<WorkspaceCode>> {
         let output = self
             .run(cwd, args.iter().map(|arg| (*arg).into()).collect(), abort)
             .await?;
@@ -95,14 +99,14 @@ impl<'a> GitWorktrees<'a> {
                 Ok((Some(canonical.to_string_lossy().into_owned()), false))
             })
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         let (candidate, not_directory) = candidate;
         let Some(candidate) = candidate else {
             return Ok(Err(if not_directory {
-                "git_repository_required"
+                WorkspaceCode::GitRepositoryRequired
             } else {
-                "session_workspace_unavailable"
+                WorkspaceCode::SessionWorkspaceUnavailable
             }));
         };
         let result = self
@@ -115,20 +119,20 @@ impl<'a> GitWorktrees<'a> {
         if result
             .error
             .as_ref()
-            .is_some_and(|error| error.code == "ENOENT")
+            .is_some_and(|error| error.code() == "ENOENT")
         {
-            return Ok(Err("git_not_installed"));
+            return Ok(Err(WorkspaceCode::GitNotInstalled));
         }
         let top = crate::public_text::trim_js_whitespace(&result.stdout);
         if result.exit_code != Some(0) || top.is_empty() {
-            return Ok(Err("git_repository_required"));
+            return Ok(Err(WorkspaceCode::GitRepositoryRequired));
         }
         let top = top.to_owned();
         let canonical = self
             .files
             .run(move || canonical_path(&top))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         Ok(Ok(canonical.to_string_lossy().into_owned()))
     }
@@ -150,14 +154,14 @@ impl<'a> GitWorktrees<'a> {
                 abort,
             )
             .await?;
-        if let Some(code) = command_failure(&result, "git_repository_required") {
+        if let Some(code) = command_failure(&result, WorkspaceCode::GitRepositoryRequired) {
             return Ok(Err(code));
         }
         let entries = self
             .files
             .run(move || parse_worktrees(&result.stdout))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         Ok(Ok(entries))
     }
@@ -168,7 +172,7 @@ impl<'a> GitWorktrees<'a> {
         self.files
             .run(move || Ok::<_, std::io::Error>(canonical_path(&left)? == canonical_path(&right)?))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)
     }
 
@@ -177,7 +181,7 @@ impl<'a> GitWorktrees<'a> {
         self.files
             .run(move || occupied(&path))
             .await
-            .map_err(file_owner_error)
+            .map_err(WorkspaceError::from)
     }
 
     pub(super) async fn local_branch_exists(
@@ -209,16 +213,16 @@ impl<'a> GitWorktrees<'a> {
         abort: CancellationToken,
     ) -> WorkspaceResult<GitOutcome<Validated>> {
         if abort.is_cancelled() {
-            return Ok(Err("cancelled"));
+            return Ok(Err(WorkspaceCode::Cancelled));
         }
         let path = target.to_owned();
         if !self
             .files
             .run(move || linked_directory(&path))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
         {
-            return Ok(Err("linked_worktree_not_found"));
+            return Ok(Err(WorkspaceCode::LinkedWorktreeNotFound));
         }
         let top = self
             .run(
@@ -227,7 +231,7 @@ impl<'a> GitWorktrees<'a> {
                 abort.clone(),
             )
             .await?;
-        if let Some(code) = command_failure(&top, "git_repository_required") {
+        if let Some(code) = command_failure(&top, WorkspaceCode::GitRepositoryRequired) {
             return Ok(Err(code));
         }
         let listed = match self.list(anchor, abort.clone()).await? {
@@ -246,7 +250,7 @@ impl<'a> GitWorktrees<'a> {
             }
         }
         if !found {
-            return Ok(Err("partial_creation"));
+            return Ok(Err(WorkspaceCode::PartialCreation));
         }
         let symbolic = self
             .run(
@@ -260,11 +264,11 @@ impl<'a> GitWorktrees<'a> {
                 abort.clone(),
             )
             .await?;
-        if let Some(code) = command_failure(&symbolic, "partial_creation") {
+        if let Some(code) = command_failure(&symbolic, WorkspaceCode::PartialCreation) {
             return Ok(Err(code));
         }
         if crate::public_text::trim_js_whitespace(&symbolic.stdout) != branch {
-            return Ok(Err("partial_creation"));
+            return Ok(Err(WorkspaceCode::PartialCreation));
         }
         let dirty = match self.dirty(target, abort).await? {
             Ok(value) => value,
@@ -275,7 +279,7 @@ impl<'a> GitWorktrees<'a> {
             .files
             .run(move || canonical_path(&path))
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
             .map_err(io_error)?;
         Ok(Ok(Validated {
             path: canonical.to_string_lossy().into_owned(),
@@ -300,7 +304,7 @@ impl<'a> GitWorktrees<'a> {
                 abort,
             )
             .await?;
-        if let Some(code) = command_failure(&status, "git_repository_required") {
+        if let Some(code) = command_failure(&status, WorkspaceCode::GitRepositoryRequired) {
             return Ok(Err(code));
         }
         Ok(Ok(!status.stdout.is_empty()))
@@ -317,7 +321,7 @@ impl<'a> GitWorktrees<'a> {
             .files
             .run(move || std::path::Path::new(&target_path).exists())
             .await
-            .map_err(file_owner_error)?
+            .map_err(WorkspaceError::from)?
         {
             return Ok(false);
         }
@@ -339,16 +343,16 @@ impl<'a> GitWorktrees<'a> {
 
 pub(super) fn command_failure(
     result: &StructuredCommandOutput,
-    other: &'static str,
-) -> Option<&'static str> {
+    other: WorkspaceCode,
+) -> Option<WorkspaceCode> {
     if result.cancelled || result.timed_out {
-        Some("cancelled")
+        Some(WorkspaceCode::Cancelled)
     } else if result
         .error
         .as_ref()
-        .is_some_and(|error| error.code == "ENOENT")
+        .is_some_and(|error| error.code() == "ENOENT")
     {
-        Some("git_not_installed")
+        Some(WorkspaceCode::GitNotInstalled)
     } else if result.exit_code != Some(0) {
         Some(other)
     } else {
@@ -356,17 +360,6 @@ pub(super) fn command_failure(
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
-fn file_owner_error(error: crate::workspace::FileOwnerError) -> WorkspaceError {
-    WorkspaceError::new(error.code, "Workspace file owner closed")
-}
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn io_error(error: std::io::Error) -> WorkspaceError {
-    WorkspaceError::new("session_worktree_io", error.to_string())
+    WorkspaceError::new(WorkspaceCode::SessionWorktreeIo, error.to_string()).with_source(error)
 }

@@ -12,6 +12,7 @@ use super::process::{
 };
 use super::spool::{Capture, Spool, SpoolPaths};
 use super::{CommandError, GuidedAccess, GuidedCommandInput, GuidedCommandOutput, GuidedSummary};
+use crate::workspace::CommandCode;
 use crate::workspace::path_guard::{GuardInput, lexical_absolute, resolve_workspace_path_guard};
 
 pub(super) async fn dispatch(
@@ -29,7 +30,7 @@ pub(super) async fn dispatch(
     let result = match outcome {
         Ok(Some(output)) => Ok(output),
         Ok(None) => Err(CommandError::new(
-            "command_settlement_lost",
+            CommandCode::CommandSettlementLost,
             "Command result was settled without a completion",
         )),
         Err(error) => Err(error),
@@ -45,7 +46,7 @@ async fn execute(
 ) -> Result<Option<GuidedCommandOutput>, CommandError> {
     if input.command.is_empty() {
         return Err(CommandError::new(
-            "command_invalid",
+            CommandCode::CommandInvalid,
             "command must be a string",
         ));
     }
@@ -58,10 +59,13 @@ async fn execute(
         move || guided_environment(&host, &butler_data)
     })
     .await
-    .map_err(|error| CommandError::new("command_environment_failed", error.to_string()))??;
+    .map_err(|error| {
+        CommandError::new(CommandCode::CommandEnvironmentFailed, error.to_string())
+            .with_source(error)
+    })??;
     if shutdown.is_cancelled() {
         return Err(CommandError::new(
-            "command_cancelled",
+            CommandCode::CommandCancelled,
             "Command owner is closing",
         ));
     }
@@ -94,7 +98,7 @@ async fn execute(
         // `kill_on_drop` stops the child when it is dropped here.
         spool.discard().await;
         return Err(CommandError::new(
-            "command_spawn_failed",
+            CommandCode::CommandSpawnFailed,
             "Spawned command has no pid or piped output",
         ));
     };
@@ -189,7 +193,7 @@ async fn execute(
             let finished = capture.finish(true).await;
             paths.discard().await;
             finished.and(Err(CommandError::new(
-                "command_cancelled",
+                CommandCode::CommandCancelled,
                 "Command cancelled",
             )))
         } else {
@@ -220,13 +224,13 @@ async fn execute(
         let finished = capture.finish(true).await;
         paths.discard().await;
         return finished.and(Err(CommandError::new(
-            "command_cancelled",
+            CommandCode::CommandCancelled,
             "Command cancelled",
         )));
     }
     let Some(status) = status else {
         let error = CommandError::new(
-            "command_termination_failed",
+            CommandCode::CommandTerminationFailed,
             "Command exited without a reaped status",
         );
         return cleanup_error(host, &mut child, pid, capture, paths, error).await;
@@ -285,7 +289,9 @@ pub(super) async fn resolve_guided_cwd(
     let cwd = cwd.map(str::to_owned);
     tokio::task::spawn_blocking(move || guarded_directory(&root, cwd.as_deref()))
         .await
-        .map_err(|error| CommandError::new("command_cwd_failed", error.to_string()))?
+        .map_err(|error| {
+            CommandError::new(CommandCode::CommandCwdFailed, error.to_string()).with_source(error)
+        })?
 }
 
 pub(super) fn guarded_directory(
@@ -310,14 +316,11 @@ pub(super) fn guarded_directory(
     })
     .map_err(CommandError::io)?;
     if let Some(reason) = result.reason {
-        return Err(CommandError::new(
-            reason,
-            "The requested command directory is outside the admitted workspace safety policy.",
-        ));
+        return Err(CommandError::CwdRejected { reason });
     }
     result.absolute.ok_or_else(|| {
         CommandError::new(
-            "command_cwd_rejected",
+            CommandCode::CommandCwdRejected,
             "The requested command directory was not resolved",
         )
     })

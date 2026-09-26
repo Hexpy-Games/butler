@@ -4,6 +4,7 @@ use std::time::Duration;
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 use super::{WorkspaceError, WorkspaceResult};
+use crate::workspace::WorkspaceCode;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StatusSessionIdentity {
@@ -18,21 +19,31 @@ pub(crate) fn read_active_butler_session(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
             return Err(WorkspaceError::new(
-                "session_store_unavailable",
+                WorkspaceCode::SessionStoreUnavailable,
                 error.to_string(),
-            ));
+            )
+            .with_source(error));
         }
         Ok(_) => {}
     }
 
-    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| WorkspaceError::new("session_store_unavailable", error.to_string()))?;
+    let connection =
+        Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|error| {
+            WorkspaceError::new(WorkspaceCode::SessionStoreUnavailable, error.to_string())
+                .with_source(error)
+        })?;
     connection
         .busy_timeout(Duration::from_millis(5_000))
-        .map_err(|error| WorkspaceError::new("session_store_unavailable", error.to_string()))?;
+        .map_err(|error| {
+            WorkspaceError::new(WorkspaceCode::SessionStoreUnavailable, error.to_string())
+                .with_source(error)
+        })?;
     connection
         .pragma_update(None, "query_only", "ON")
-        .map_err(|error| WorkspaceError::new("session_store_unavailable", error.to_string()))?;
+        .map_err(|error| {
+            WorkspaceError::new(WorkspaceCode::SessionStoreUnavailable, error.to_string())
+                .with_source(error)
+        })?;
 
     let has_bindings: bool = connection
         .query_row(
@@ -40,10 +51,10 @@ pub(crate) fn read_active_butler_session(
             [],
             |row| row.get(0),
         )
-        .map_err(|error| WorkspaceError::new("session_store_schema_unavailable", error.to_string()))?;
+        .map_err(|error| WorkspaceError::new(WorkspaceCode::SessionStoreSchemaUnavailable, error.to_string()).with_source(error))?;
     if !has_bindings {
         return Err(WorkspaceError::new(
-            "session_store_schema_unavailable",
+            WorkspaceCode::SessionStoreSchemaUnavailable,
             "session_bindings table is missing",
         ));
     }
@@ -63,10 +74,15 @@ pub(crate) fn read_active_butler_session(
         )
         .optional()
         .map_err(|error| {
-            WorkspaceError::new("session_store_schema_unavailable", error.to_string())
+            WorkspaceError::new(
+                WorkspaceCode::SessionStoreSchemaUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)
         })?;
     connection.close().map_err(|(_, error)| {
-        WorkspaceError::new("session_store_close_failed", error.to_string())
+        WorkspaceError::new(WorkspaceCode::SessionStoreCloseFailed, error.to_string())
+            .with_source(error)
     })?;
     Ok(session)
 }

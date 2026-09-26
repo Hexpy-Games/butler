@@ -100,7 +100,7 @@ pub(super) async fn execute(
         })
         .await
         .map_err(|error| CapabilityError {
-            code: error.code.into(),
+            code: error.code().into(),
         })?
         .map_err(|_| CapabilityError {
             code: "workspace_list_io_error".into(),

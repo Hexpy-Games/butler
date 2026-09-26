@@ -54,7 +54,7 @@ async fn admitted_git_child_is_drained_by_same_command_owner() {
     cancellation.cancel();
     let cancelled = cancelled_task.await.unwrap();
     assert_eq!(
-        cancelled.workspace_reference.get().unwrap_err().code,
+        cancelled.workspace_reference.get().unwrap_err().code(),
         "cancelled"
     );
     assert_eq!(fixture.commands.active_count(), 0);
@@ -77,7 +77,7 @@ async fn admitted_git_child_is_drained_by_same_command_owner() {
         .unwrap();
     let result = task.await.unwrap();
     assert_eq!(
-        result.workspace_reference.get().unwrap_err().code,
+        result.workspace_reference.get().unwrap_err().code(),
         "cancelled"
     );
     assert_eq!(fixture.commands.active_count(), 0);

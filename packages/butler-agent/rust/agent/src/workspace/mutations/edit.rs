@@ -41,7 +41,7 @@ fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile
         return Err(EditFailure::new(0, Some(path), "not_found"));
     }
     let text = decode(&snapshot.bytes).map_err(|error| {
-        let mut failure = EditFailure::new(0, Some(path.clone()), error);
+        let mut failure = EditFailure::new(0, Some(path.clone()), error.code());
         failure.bytes = Some(snapshot.bytes.len());
         failure
     })?;
@@ -83,11 +83,32 @@ fn single(edit: GuardedEdit, observer: &dyn CommitObserver) -> Result<EditedFile
     })
 }
 
-pub(super) fn decode(bytes: &[u8]) -> Result<&str, &'static str> {
-    if bytes.iter().take(4096).any(|byte| *byte == 0) {
-        return Err("binary_file_not_supported");
+/// Why a file's bytes cannot be edited as text.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum TextDecodeError {
+    /// A NUL byte appears in the first 4 KiB.
+    #[error("binary_file_not_supported")]
+    Binary,
+    /// The bytes are not valid UTF-8.
+    #[error("invalid_utf8")]
+    InvalidUtf8(#[source] std::str::Utf8Error),
+}
+
+impl TextDecodeError {
+    /// The edit failure code reported for this file.
+    pub(super) fn code(&self) -> &'static str {
+        match self {
+            Self::Binary => "binary_file_not_supported",
+            Self::InvalidUtf8(_) => "invalid_utf8",
+        }
     }
-    std::str::from_utf8(bytes).map_err(|_| "invalid_utf8")
+}
+
+pub(super) fn decode(bytes: &[u8]) -> Result<&str, TextDecodeError> {
+    if bytes.iter().take(4096).any(|byte| *byte == 0) {
+        return Err(TextDecodeError::Binary);
+    }
+    std::str::from_utf8(bytes).map_err(TextDecodeError::InvalidUtf8)
 }
 
 pub(super) fn edit_failure(

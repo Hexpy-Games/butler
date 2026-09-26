@@ -4,6 +4,7 @@ mod bindings;
 mod commands;
 mod discovery;
 mod effect_file;
+mod error;
 mod file_owner;
 mod files;
 mod grep;
@@ -15,8 +16,8 @@ mod session_worktree;
 mod status;
 
 pub(crate) use commands::{
-    CommandStep, GuidedAccess, GuidedCommandInput, GuidedCommandOutput, GuidedSummary, LegacyShell,
-    NativeCommands, StructuredCommandInput, StructuredCommandOutput,
+    CommandCode, CommandError, CommandStep, GuidedAccess, GuidedCommandInput, GuidedCommandOutput,
+    GuidedSummary, LegacyShell, NativeCommands, StructuredCommandInput, StructuredCommandOutput,
 };
 pub(crate) use discovery::{
     WorkspaceListEntry, WorkspaceListInput, WorkspaceListLimits, WorkspaceListOutcome,
@@ -26,6 +27,7 @@ pub(crate) use effect_file::{
     EffectFileError, EffectFileObservation, EffectFileScope, guard_effect_file,
     observe_effect_file, read_effect_edit_target,
 };
+pub(crate) use error::{WorkspaceCode, WorkspaceError};
 pub(crate) use file_owner::{FileOwnerError, NativeWorkspaceFiles};
 pub(crate) use files::{ReadFileInput, WorkspaceFileRead, cursor_path, utf8_prefix_end};
 pub(crate) use grep::{GrepCandidate, GrepMatch, GrepRead};
@@ -51,7 +53,6 @@ pub(crate) use status::{StatusSessionIdentity, read_active_butler_session};
 
 pub(crate) use bindings::*;
 
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::JoinHandle;
@@ -78,41 +79,6 @@ pub(crate) trait WorkspaceClock: Send + Sync {
     fn parse_iso_millis(&self, value: &str) -> Option<i64>;
     fn iso_from_epoch_millis(&self, value: i64) -> WorkspaceResult<String>;
 }
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct WorkspaceError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl WorkspaceError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "map_err/iterator adapter taking owned values"
-    )]
-    fn sqlite(error: rusqlite::Error) -> Self {
-        Self::new("workspace_sqlite_error", error.to_string())
-    }
-
-    fn json(error: impl fmt::Display) -> Self {
-        Self::new("workspace_json_error", error.to_string())
-    }
-}
-
-impl fmt::Display for WorkspaceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for WorkspaceError {}
 
 pub(crate) type WorkspaceResult<T> = Result<T, WorkspaceError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
@@ -150,7 +116,8 @@ impl SessionBindingStore {
             .name("butler-workspace-bindings-sqlite".into())
             .spawn(move || run_connection_lane(path, profile, receiver, initialized_tx))
             .map_err(|error| {
-                WorkspaceError::new("workspace_thread_spawn_failed", error.to_string())
+                WorkspaceError::new(WorkspaceCode::WorkspaceThreadSpawnFailed, error.to_string())
+                    .with_source(error)
             })?;
         match initialized_rx.await {
             Ok(Ok(())) => Ok(Self {
@@ -171,7 +138,7 @@ impl SessionBindingStore {
             Err(_) => {
                 join_failed_initialization(thread).await;
                 Err(WorkspaceError::new(
-                    "workspace_initialization_lost",
+                    WorkspaceCode::WorkspaceInitializationLost,
                     "Workspace SQLite owner exited before initialization completed",
                 ))
             }
@@ -193,18 +160,26 @@ impl SessionBindingStore {
         });
         let lane = self.inner.lane.lock().await;
         let sender = lane.sender.as_ref().ok_or_else(|| {
-            WorkspaceError::new("workspace_closed", "Workspace binding store is closing")
+            WorkspaceError::new(
+                WorkspaceCode::WorkspaceClosed,
+                "Workspace binding store is closing",
+            )
         })?;
-        let permit = sender.reserve().await.map_err(|_| {
-            WorkspaceError::new("workspace_closed", "Workspace execution lane closed")
+        let permit = sender.reserve().await.map_err(|source| {
+            WorkspaceError::new(
+                WorkspaceCode::WorkspaceClosed,
+                "Workspace execution lane closed",
+            )
+            .with_source(source)
         })?;
         permit.send(job);
         drop(lane);
-        completion_rx.await.map_err(|_| {
+        completion_rx.await.map_err(|source| {
             WorkspaceError::new(
-                "workspace_completion_lost",
+                WorkspaceCode::WorkspaceCompletionLost,
                 "Workspace operation ended without completion",
             )
+            .with_source(source)
         })?
     }
 
@@ -221,7 +196,7 @@ impl SessionBindingStore {
         };
         if lane.thread.is_none() && thread.is_none() && lane.close_waiters.is_empty() {
             let error = WorkspaceError::new(
-                "workspace_thread_missing",
+                WorkspaceCode::WorkspaceThreadMissing,
                 "Workspace SQLite owner thread is unavailable",
             );
             lane.close_result = Some(Err(error.clone()));
@@ -237,12 +212,14 @@ impl SessionBindingStore {
                 let result = tokio::task::spawn_blocking(move || thread.join())
                     .await
                     .map_err(|error| {
-                        WorkspaceError::new("workspace_join_failed", error.to_string())
+                        WorkspaceError::new(WorkspaceCode::WorkspaceJoinFailed, error.to_string())
+                            .with_source(error)
                     })
                     .and_then(|joined| {
-                        joined.map_err(|_| {
+                        // A panic payload is not an Error; the code records the panic.
+                        joined.map_err(|_panic_payload| {
                             WorkspaceError::new(
-                                "workspace_thread_panicked",
+                                WorkspaceCode::WorkspaceThreadPanicked,
                                 "Workspace SQLite owner thread panicked",
                             )
                         })?
@@ -256,11 +233,12 @@ impl SessionBindingStore {
                 }
             });
         }
-        waiter_rx.await.map_err(|_| {
+        waiter_rx.await.map_err(|source| {
             WorkspaceError::new(
-                "workspace_close_completion_lost",
+                WorkspaceCode::WorkspaceCloseCompletionLost,
                 "Workspace close ended without completion",
             )
+            .with_source(source)
         })?
     }
 }
@@ -283,7 +261,11 @@ fn run_connection_lane(
     let setup = (|| {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| {
-                WorkspaceError::new("workspace_parent_create_failed", error.to_string())
+                WorkspaceError::new(
+                    WorkspaceCode::WorkspaceParentCreateFailed,
+                    error.to_string(),
+                )
+                .with_source(error)
             })?;
         }
         let connection = Connection::open(path).map_err(WorkspaceError::sqlite)?;
@@ -322,7 +304,7 @@ fn run_connection_lane(
     }
     if !connection.is_autocommit() {
         return Err(WorkspaceError::new(
-            "workspace_transaction_open_at_close",
+            WorkspaceCode::WorkspaceTransactionOpenAtClose,
             "Workspace transaction remained open at close",
         ));
     }

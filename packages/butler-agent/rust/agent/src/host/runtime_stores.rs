@@ -66,7 +66,7 @@ impl RuntimeStores {
             Ok(store) => store,
             Err(e) => {
                 let _ = btcc.close().await;
-                return Err(error(e.code, &e.message));
+                return Err(error(e.code(), e.message()));
             }
         };
         let conversations = match AgentConversationStore::open(ConversationStoreConfig {
@@ -101,7 +101,7 @@ impl RuntimeStores {
             .bindings
             .close()
             .await
-            .map_err(|e| error(e.code, e.message));
+            .map_err(|e| error(e.code(), e.message()));
         let btcc = self
             .btcc
             .close()

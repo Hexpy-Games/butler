@@ -41,7 +41,7 @@ fn adapter_error(code: &str, message: impl Into<String>) -> EffectAdapterError {
     EffectAdapterError::new(code, message)
 }
 fn workspace_error(error: &crate::workspace::EffectFileError) -> EffectAdapterError {
-    adapter_error(&error.code, error.message)
+    adapter_error(error.code(), error.message())
 }
 fn mismatch(target: &str, input: &Value) -> Option<EffectAdapterError> {
     let path = input.get("path").and_then(Value::as_str).unwrap_or("");

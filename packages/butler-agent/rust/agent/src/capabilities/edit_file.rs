@@ -165,6 +165,6 @@ fn safe_path(root: &std::path::Path, path: &str) -> Option<String> {
 )]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError {
-        code: error.code.into(),
+        code: error.code().into(),
     }
 }

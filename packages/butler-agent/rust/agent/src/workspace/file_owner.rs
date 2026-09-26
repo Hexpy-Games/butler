@@ -35,9 +35,24 @@ impl Drop for ActiveOperation {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct FileOwnerError {
-    pub code: &'static str,
+/// Failures of the bounded blocking-read owner for workspace files.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum FileOwnerError {
+    /// The owner is closing, so no new read is admitted.
+    #[error("workspace_files_closed")]
+    Closed,
+    /// The blocking read task panicked or was cancelled.
+    #[error("workspace_file_worker_failed")]
+    WorkerFailed(#[source] tokio::task::JoinError),
+}
+
+impl FileOwnerError {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Closed => "workspace_files_closed",
+            Self::WorkerFailed(_) => "workspace_file_worker_failed",
+        }
+    }
 }
 
 impl NativeWorkspaceFiles {
@@ -81,15 +96,12 @@ impl NativeWorkspaceFiles {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| FileOwnerError {
-                code: "workspace_files_closed",
-            })?;
+            // The permit semaphore is never closed; AcquireError carries no cause.
+            .map_err(|_closed| FileOwnerError::Closed)?;
         {
             let mut state = self.inner.state.lock();
             if state.closing {
-                return Err(FileOwnerError {
-                    code: "workspace_files_closed",
-                });
+                return Err(FileOwnerError::Closed);
             }
             state.active += 1;
         }
@@ -99,9 +111,7 @@ impl NativeWorkspaceFiles {
             let _permit = permit;
             action()
         });
-        task.await.map_err(|_| FileOwnerError {
-            code: "workspace_file_worker_failed",
-        })
+        task.await.map_err(FileOwnerError::WorkerFailed)
     }
     pub(crate) async fn guard(
         &self,

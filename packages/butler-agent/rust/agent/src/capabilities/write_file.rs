@@ -190,6 +190,6 @@ fn write_reference(committed: &crate::workspace::CommittedFile, create_parents: 
 )]
 fn owner_error(error: crate::workspace::MutationOwnerError) -> CapabilityError {
     CapabilityError {
-        code: error.code.into(),
+        code: error.code().into(),
     }
 }

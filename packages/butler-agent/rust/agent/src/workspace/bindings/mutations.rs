@@ -9,6 +9,7 @@ use super::{
     SessionLifecycleState, UpsertSessionBinding, dedupe_transport_bindings, encode_metadata,
     normalize_thread_id,
 };
+use crate::workspace::WorkspaceCode;
 use crate::workspace::{SessionBindingStore, WorkspaceClock, WorkspaceError, WorkspaceResult};
 
 impl SessionBindingStore {
@@ -221,7 +222,7 @@ fn upsert(
     transaction.commit().map_err(WorkspaceError::sqlite)?;
     get_by_session_id(connection, &binding.session_id)?.ok_or_else(|| {
         WorkspaceError::new(
-            "workspace_upsert_lost",
+            WorkspaceCode::WorkspaceUpsertLost,
             "Upserted session binding was not readable",
         )
     })
@@ -314,7 +315,7 @@ fn compare_and_set(
         .map_err(WorkspaceError::sqlite)?;
     let binding = get_by_session_id(&transaction, &input.session_id)?.ok_or_else(|| {
         WorkspaceError::new(
-            "workspace_cas_lost",
+            WorkspaceCode::WorkspaceCasLost,
             "Updated session binding was not readable",
         )
     })?;

@@ -52,11 +52,9 @@ pub(super) async fn execute(
         4_194_304,
     )?;
     let bound_root = if let Some(reference) = input.workspace_reference {
-        Some(
-            reference
-                .get()
-                .map_err(|error| CapabilityError { code: error.code })?,
-        )
+        Some(reference.get().map_err(|error| CapabilityError {
+            code: error.code().to_owned(),
+        })?)
     } else {
         input
             .workspace_path
@@ -272,7 +270,7 @@ pub(super) async fn execute(
 )]
 fn owner_error(error: crate::workspace::FileOwnerError) -> CapabilityError {
     CapabilityError {
-        code: error.code.into(),
+        code: error.code().into(),
     }
 }
 #[expect(

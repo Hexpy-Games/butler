@@ -1,10 +1,12 @@
 mod decode;
 mod environment;
+mod error;
 mod guided;
 mod process;
 mod spool;
 mod structured;
 
+pub(crate) use error::{CommandCode, CommandError};
 use parking_lot::Mutex;
 use process::{ProcessHost, SystemProcesses};
 
@@ -17,30 +19,6 @@ use std::sync::Arc;
 
 use tokio::sync::{Notify, oneshot};
 use tokio_util::sync::CancellationToken;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CommandError {
-    pub code: &'static str,
-    pub message: String,
-    pub io_kind: Option<std::io::ErrorKind>,
-}
-
-impl CommandError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            io_kind: None,
-        }
-    }
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "map_err/iterator adapter taking owned values"
-    )]
-    fn io(error: std::io::Error) -> Self {
-        Self::new("command_io_failed", error.to_string())
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GuidedAccess {
@@ -183,14 +161,14 @@ impl NativeCommands {
         let mut state = self.inner.state.lock();
         if state.closing {
             return Err(CommandError::new(
-                "command_owner_closed",
+                CommandCode::CommandOwnerClosed,
                 "Native command owner is closing",
             ));
         }
         let id = state.next_id;
         let Some(next_id) = state.next_id.checked_add(1) else {
             return Err(CommandError::new(
-                "command_owner_exhausted",
+                CommandCode::CommandOwnerExhausted,
                 "Native command operation ids are exhausted",
             ));
         };

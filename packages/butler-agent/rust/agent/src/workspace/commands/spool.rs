@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::process::{CaptureSink, ProcessHost};
 use super::{CommandError, GuidedSummary, SpooledPayload};
+use crate::workspace::CommandCode;
 
 pub(super) struct Spool {
     stdout_path: PathBuf,
@@ -127,7 +128,7 @@ impl Capture {
                 Err(error) => {
                     if first_error.is_none() {
                         first_error = Some(CommandError::new(
-                            "command_capture_failed",
+                            CommandCode::CommandCaptureFailed,
                             error.to_string(),
                         ));
                     }
@@ -168,8 +169,9 @@ impl SpoolPaths {
     async fn write_payload(&self, summary: &GuidedSummary) -> Result<SpooledPayload, CommandError> {
         let mut payload = exclusive(&self.payload).await?;
         let mut size = 0_u64;
-        let header = serde_json::to_vec(summary)
-            .map_err(|error| CommandError::new("command_json_failed", error.to_string()))?;
+        let header = serde_json::to_vec(summary).map_err(|error| {
+            CommandError::new(CommandCode::CommandJsonFailed, error.to_string()).with_source(error)
+        })?;
         write_chunk(&mut payload, &mut size, &header).await?;
         write_chunk(&mut payload, &mut size, b"\n--- stdout ---\n").await?;
         let stdout_start = size;
@@ -235,7 +237,7 @@ async fn report_copy<R: AsyncRead + Unpin>(
     if let Err(error) = &result {
         let _ = failure
             .send(CommandError::new(
-                "command_capture_failed",
+                CommandCode::CommandCaptureFailed,
                 error.to_string(),
             ))
             .await;
@@ -259,7 +261,7 @@ async fn write_chunk(payload: &mut File, size: &mut u64, bytes: &[u8]) -> Result
     payload.write_all(bytes).await.map_err(CommandError::io)?;
     *size = size.checked_add(bytes.len() as u64).ok_or_else(|| {
         CommandError::new(
-            "command_output_overflow",
+            CommandCode::CommandOutputOverflow,
             "Command output length overflowed",
         )
     })?;

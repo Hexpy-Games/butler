@@ -307,7 +307,7 @@ fn from_app_plan(plan: AppRelocationWorkspacePlan) -> RelocationWorkspacePlan {
 fn relocation_error(error: WorkspaceError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 409,
-        code: error.code.into(),
+        code: error.code().into(),
         message: "대화의 작업공간을 이동할 수 없습니다.".into(),
     }
 }

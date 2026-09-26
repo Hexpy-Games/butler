@@ -116,7 +116,7 @@ pub(super) async fn registered_result(
         return Err(error("command_cancelled"));
     }
     if let Some(error) = result.error {
-        return Err(BtccError::new(error.code, error.message));
+        return Err(BtccError::new(error.code(), error.message()));
     }
     let summary = GuidedSummary {
         command,

@@ -276,6 +276,7 @@ use uuid::Uuid;
 
 use crate::conversation::ConversationIdentityClock;
 use crate::gateway::AppIdentityClock;
+use crate::workspace::WorkspaceCode;
 use crate::workspace::{WorkspaceClock, WorkspaceError, WorkspaceResult};
 
 pub(crate) struct SystemIdentity;
@@ -328,7 +329,7 @@ impl WorkspaceClock for SystemIdentity {
     fn iso_from_epoch_millis(&self, value: i64) -> WorkspaceResult<String> {
         date::format_iso_millis(value).ok_or_else(|| {
             WorkspaceError::new(
-                "workspace_invalid_time",
+                WorkspaceCode::WorkspaceInvalidTime,
                 "Invalid session revision timestamp",
             )
         })

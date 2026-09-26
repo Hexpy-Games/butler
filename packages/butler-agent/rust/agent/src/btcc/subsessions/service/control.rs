@@ -54,7 +54,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(&request.parent_session_id)
             .await
-            .map_err(|value| BtccError::new(value.code, value.message))?
+            .map_err(|value| BtccError::new(value.code(), value.message()))?
             .filter(|binding| binding.role == SessionRole::Butler)
             .ok_or_else(|| error("steward_relation_not_found"))?;
         let _ = parent;
@@ -291,7 +291,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(&relation.child_session_id)
             .await
-            .map_err(|e| BtccError::new(e.code, e.message))?
+            .map_err(|e| BtccError::new(e.code(), e.message()))?
             .ok_or_else(|| error("subsession_direction_child_binding_missing"))?;
         if !matches!(child.role, SessionRole::Steward | SessionRole::Worker) {
             return Err(error("subsession_direction_child_binding_missing"));
@@ -362,7 +362,7 @@ impl NativeSubsessionService {
             .bindings
             .get_by_session_id(parent)
             .await
-            .map_err(|e| BtccError::new(e.code, e.message))?
+            .map_err(|e| BtccError::new(e.code(), e.message()))?
             .ok_or_else(|| error("steward_followup_authority_mismatch"))?;
         let expected_parent = if *role == SessionRole::Worker {
             SessionRole::Steward
@@ -378,7 +378,7 @@ impl NativeSubsessionService {
                 .bindings
                 .get_by_session_id(&candidate.child_session_id)
                 .await
-                .map_err(|e| BtccError::new(e.code, e.message))?
+                .map_err(|e| BtccError::new(e.code(), e.message()))?
                 .ok_or_else(|| error("steward_followup_authority_mismatch"))?;
             let same_parent = candidate.parent_session_id == parent;
             let same_project = work_id.is_some()
