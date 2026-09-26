@@ -43,10 +43,11 @@ pub(super) fn validate_performance(
         .iter()
         .filter(|sample| sample.mode == "hybrid")
         .collect::<Vec<_>>();
-    let first_trace: super::types::CaseTrace = capture.read_json(
-        &acceptance.cases[0].trace_ref,
-        &acceptance.cases[0].trace_sha256,
-    )?;
+    let Some(first_case) = acceptance.cases.first() else {
+        return Err(invalid("memory_acceptance_performance_invalid"));
+    };
+    let first_trace: super::types::CaseTrace =
+        capture.read_json(&first_case.trace_ref, &first_case.trace_sha256)?;
     let inventory: serde_json::Value = capture.read_json(
         &first_trace.qualification_source_inventory_ref,
         &first_trace.qualification_source_inventory_sha256,

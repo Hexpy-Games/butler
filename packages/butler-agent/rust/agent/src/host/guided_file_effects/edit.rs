@@ -134,7 +134,13 @@ pub(super) async fn prepare(
         )
         .map_err(|error| rejected(&error.code, error.message))?
     } else {
-        format!("workspace:{}", edits[0].path)
+        let Some(first) = edits.first() else {
+            return Err(rejected(
+                "invalid_arguments",
+                "edit_file requires one edit.",
+            ));
+        };
+        format!("workspace:{}", first.path)
     };
     Ok(PreparedGuidedFileEffect {
         target,
@@ -330,11 +336,17 @@ fn recover(
     prior: &EffectRecord,
     adapter: &Arc<dyn EffectAdapter>,
 ) -> Result<Value, BtccError> {
+    let Some(first) = edits.first() else {
+        return Err(rejected(
+            "invalid_arguments",
+            "edit_file requires one edit.",
+        ));
+    };
     let Some(hint) = &prior.recovery_hint else {
         if !batch {
             return legacy::recover(
-                &edits[0],
-                observed(states, &edits[0].path)?,
+                first,
+                observed(states, &first.path)?,
                 &prior.identity.input_sha256,
                 adapter,
             );
@@ -354,8 +366,8 @@ fn recover(
                 after_sha256,
             },
         ) if capability == "edit_file" && *start_line > 0 => {
-            vec![json!({"path":edits[0].path,"start_line":start_line,
-                "old_text":edits[0].old_text,"new_text":edits[0].new_text,
+            vec![json!({"path":first.path,"start_line":start_line,
+                "old_text":first.old_text,"new_text":first.new_text,
                 "before_sha256":before_sha256,"after_sha256":after_sha256})]
         }
         (

@@ -20,7 +20,14 @@ pub(super) fn prepare(
             })
         }
         MutationCommand::Edit(mut edit) if !edit.batch => {
-            let guarded = path(&edit.context, &edit.edits[0].path, false)?;
+            let Some(first) = edit.edits.first() else {
+                return Ok(Err(MutationOutcome::Single(Err(EditFailure::new(
+                    0,
+                    None,
+                    "invalid_arguments",
+                )))));
+            };
+            let guarded = path(&edit.context, &first.path, false)?;
             Ok(match guarded {
                 Ok(path) => {
                     let input = edit.edits.remove(0);

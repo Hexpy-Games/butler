@@ -205,8 +205,13 @@ pub(in crate::cognition) fn meaning_to_output(
                 evidence: e
                     .evidence
                     .iter()
-                    .map(|x| passages[crate::json::saturating_usize(*x)].quote.clone())
-                    .collect(),
+                    .map(|x| {
+                        passages
+                            .get(crate::json::saturating_usize(*x))
+                            .map(|passage| passage.quote.clone())
+                            .ok_or_else(|| error("memory_extract_invalid_evidence"))
+                    })
+                    .collect::<CognitionResult<_>>()?,
             })
         })
         .collect::<CognitionResult<Vec<_>>>()?;
@@ -263,7 +268,13 @@ pub(in crate::cognition) fn meaning_to_output(
             basis: if kind == "inference" {
                 "inference".into()
             } else {
-                basis(&input.source_units[0].role).into()
+                basis(
+                    input
+                        .source_units
+                        .first()
+                        .map_or("", |unit| unit.role.as_str()),
+                )
+                .into()
             },
             polarity: if kind == "not_relation" {
                 "negative".into()

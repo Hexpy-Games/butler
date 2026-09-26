@@ -112,7 +112,8 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         },
         Command::SearchTest => run_search_test(options, command, data_root, metrics).await,
         Command::WebRead => {
-            let requested_url = &options.positionals[2];
+            // Parsing admitted `web read <url>` with exactly three positionals.
+            let requested_url = options.positionals.get(2).map_or("", String::as_str);
             match access
                 .read_cli(requested_url, &CancellationToken::new())
                 .await
