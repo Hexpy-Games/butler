@@ -80,7 +80,8 @@ doc_markdown = "allow"
 format_push_string = "allow"
 # `Default::default()` in struct literals avoids repeating long type names.
 default_trait_access = "allow"
-# Module APIs keep uniform fallible signatures; error types are redesigned in P2c.
+# 25 functions keep fallible signatures that mirror their sibling adapters
+# (see the P2c notes); unwrapping them is a follow-up, not an error-type issue.
 unnecessary_wraps = "allow"
 # Methods keep their receiver for symmetry with sibling methods on the owner.
 unused_self = "allow"
