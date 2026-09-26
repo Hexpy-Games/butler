@@ -101,13 +101,13 @@ impl AppUpdateService {
         let mut artifact_path = None;
         if !request.dry_run && status["update_available"] == true {
             artifact_path = Some(
-                stage::download(
+                Box::pin(stage::download(
                     &self.client,
                     &self.shutdown,
                     &self.data,
                     &self.installation,
                     &artifact,
-                )
+                ))
                 .await?,
             );
         }

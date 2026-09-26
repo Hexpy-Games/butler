@@ -245,7 +245,7 @@ fn real_or_nearest(path: &Path) -> PathBuf {
                 .rev()
                 .fold(real, |path, part| path.join(part));
         }
-        let Some(name) = current.file_name().map(|name| name.to_owned()) else {
+        let Some(name) = current.file_name().map(std::borrow::ToOwned::to_owned) else {
             return lexical(path);
         };
         suffix.push(name);

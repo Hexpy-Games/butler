@@ -46,7 +46,7 @@ pub fn recognizes(args: &[OsString]) -> bool {
 
 pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> ExitCode {
     if registry_cli::recognizes(&args) {
-        return registry_cli::run(installation, args).await;
+        return Box::pin(registry_cli::run(installation, args)).await;
     }
     let options = match parse(&args) {
         Ok(options) => options,

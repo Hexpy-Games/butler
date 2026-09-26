@@ -47,12 +47,9 @@ pub(super) fn cache_prefix(data: &std::path::Path) -> String {
     use sha2::{Digest, Sha256};
     let data = data.canonicalize().unwrap_or_else(|_| data.to_path_buf());
     let stable = format!("butler|{}", data.display());
-    let digest = Sha256::digest(stable.as_bytes());
-    let prefix = digest
-        .iter()
-        .take(6)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    // Hex of the first 6 digest bytes.
+    let mut prefix = format!("{:x}", Sha256::digest(stable.as_bytes()));
+    prefix.truncate(12);
     format!("butler:{prefix}")
 }
 

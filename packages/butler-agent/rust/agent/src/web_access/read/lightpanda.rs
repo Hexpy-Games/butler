@@ -44,7 +44,7 @@ pub(super) async fn render(
         .unwrap_or(DEFAULT_WAIT_MS)
         .min(u64::try_from(MAX_RUNTIME.as_millis().saturating_sub(1_000)).unwrap_or(u64::MAX))
         .max(500);
-    let fetched = match run_dump(access, &binary, url, wait_ms, cancellation).await {
+    let fetched = match Box::pin(run_dump(access, &binary, url, wait_ms, cancellation)).await {
         Ok(fetched) => fetched,
         Err(error) if error.code == "cancelled" => return Err(error),
         Err(_) => {

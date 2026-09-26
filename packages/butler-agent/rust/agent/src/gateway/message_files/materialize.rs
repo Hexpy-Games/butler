@@ -163,7 +163,7 @@ fn read_and_hash(
     let mut digest = Sha256::new();
     let mut size = 0_u64;
     let mut bytes = buffer.then(Vec::new);
-    let mut chunk = [0_u8; 64 * 1024];
+    let mut chunk = vec![0_u8; 64 * 1024];
     loop {
         let n = file.read(&mut chunk).map_err(internal)?;
         if n == 0 {

@@ -56,7 +56,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
         CancellationToken::new(),
     );
     let signal = CancellationToken::new();
-    let result = run_session(
+    let result = Box::pin(run_session(
         transport,
         Operation::CallTool {
             name: "echo".into(),
@@ -64,7 +64,7 @@ async fn legacy_sse_endpoint_posts_and_receives_through_scoped_rmcp_session() {
         },
         Duration::from_secs(3),
         &signal,
-    )
+    ))
     .await
     .expect("SSE MCP call");
 

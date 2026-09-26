@@ -25,7 +25,7 @@ pub(super) async fn run(
         ));
     };
     if id.starts_with("mcp:") {
-        return run_mcp(owner, invocation, call, outer_call_id, id, args).await;
+        return Box::pin(run_mcp(owner, invocation, call, outer_call_id, id, args)).await;
     }
     let Some(name) = id
         .strip_prefix("native:")
@@ -167,14 +167,14 @@ async fn run_mcp(
         return encoded(&error);
     };
     let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
-    let description = match crate::mcp_client::describe_mcp_tool(
+    let description = match Box::pin(crate::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
         &parsed.server_id,
         &parsed.tool_name,
         call_available,
         invocation.cancellation,
-    )
+    ))
     .await
     {
         Ok(Some(description)) => description,

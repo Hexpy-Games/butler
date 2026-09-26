@@ -18,6 +18,10 @@ use serde_json::{Value, json};
 
 use super::ResolvedInstallation;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,

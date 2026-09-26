@@ -14,6 +14,10 @@ use render::{redact_json_strings, report_error, report_success, safe_preview};
 
 const STORE_MUTATION_PATHS: &[&str] = &["automations", "automations/.automation-store.lock"];
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,

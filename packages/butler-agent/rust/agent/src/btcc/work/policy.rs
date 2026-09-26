@@ -146,7 +146,7 @@ pub(crate) fn allowed_next_work_stages(stage: Option<WorkStage>) -> Vec<WorkStag
     match stage {
         None => vec![WorkStage::Conception],
         Some(WorkStage::Conception) => vec![WorkStage::Planning],
-        Some(WorkStage::Planning) | Some(WorkStage::Execution) => vec![WorkStage::Review],
+        Some(WorkStage::Planning | WorkStage::Execution) => vec![WorkStage::Review],
         Some(WorkStage::Review) => vec![
             WorkStage::Planning,
             WorkStage::Execution,

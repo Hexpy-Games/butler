@@ -27,12 +27,9 @@ fn optional_text(path: &Path) -> CognitionResult<Option<String>> {
 }
 
 pub(super) fn continuity(memory_root: &Path, session: &str) -> CognitionResult<Option<String>> {
-    let hash = Sha256::digest(session.as_bytes());
-    let key = hash
-        .iter()
-        .take(16)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    // Hex of the first 16 digest bytes.
+    let mut key = format!("{:x}", Sha256::digest(session.as_bytes()));
+    key.truncate(32);
     optional_text(&memory_root.join("sessions").join(format!("{key}.md")))
 }
 

@@ -84,7 +84,7 @@ fn hash_file(path: &Path) -> Result<String, &'static str> {
     }
     let mut file = File::open(path).map_err(|_| "payload_unreadable")?;
     let mut digest = Sha256::new();
-    let mut buffer = [0; 1024 * 1024];
+    let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer).map_err(|_| "payload_unreadable")?;
         if read == 0 {
@@ -112,7 +112,7 @@ fn hash_directory(root: &Path, relative: &str, digest: &mut Sha256) -> Result<()
         .map_err(|_| "payload_unreadable")?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| "payload_unreadable")?;
-    entries.sort_by_key(|entry| entry.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
         let name = entry.file_name();
         let name = name.to_str().ok_or("payload_unreadable")?;
@@ -142,7 +142,7 @@ fn hash_directory(root: &Path, relative: &str, digest: &mut Sha256) -> Result<()
 
 fn hash_file_into(path: &Path, digest: &mut Sha256) -> Result<(), &'static str> {
     let mut file = File::open(path).map_err(|_| "payload_unreadable")?;
-    let mut buffer = [0; 1024 * 1024];
+    let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer).map_err(|_| "payload_unreadable")?;
         if read == 0 {

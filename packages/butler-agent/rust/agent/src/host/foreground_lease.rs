@@ -37,7 +37,7 @@ impl ForegroundLease {
                 file.read(&mut byte)
             }) {
                 Ok(Ok(0)) => return Ok(()),
-                Ok(Ok(_)) | Err(_) => continue,
+                Ok(Ok(_)) | Err(_) => {}
                 Ok(Err(error)) => return Err(format!("foreground_lease_failed: {error}")),
             }
         }

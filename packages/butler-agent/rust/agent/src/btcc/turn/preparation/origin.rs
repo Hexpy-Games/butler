@@ -19,7 +19,7 @@ pub(super) fn resolve(
     let subsession_result = request
         .execution_controls
         .as_ref()
-        .map(|value| value.verify())
+        .map(crate::btcc::execution_controls::ExecutionControls::verify)
         .transpose()?
         .is_some_and(|value| value.subsession_result.is_some());
     let authority = authority_ref(request);

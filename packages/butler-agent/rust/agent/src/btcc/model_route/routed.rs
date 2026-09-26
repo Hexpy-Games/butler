@@ -200,7 +200,7 @@ impl RoutedRound<'_> {
             } else if let Some(pending) = pending {
                 *self.view.pending_fallback.lock() = Some(pending);
             }
-            if let Some(status) = status(&started)
+            if let Some(status) = status(started.as_ref())
                 && status != "recorded"
             {
                 loaded_key = None;

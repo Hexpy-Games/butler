@@ -33,6 +33,10 @@ mod recall;
 #[path = "cognition_operator_cli/recovery.rs"]
 mod recovery;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,

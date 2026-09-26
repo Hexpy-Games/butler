@@ -274,6 +274,10 @@ async fn run(
     }
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Default)]
 struct Work {
     pending: bool,

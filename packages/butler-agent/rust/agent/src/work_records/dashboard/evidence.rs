@@ -16,6 +16,10 @@ use crate::public_text::fixed_regex::fixed_regex;
 
 use crate::public_text::trim_js_whitespace as trim;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Default)]
 struct Facts {
     implementation: bool,

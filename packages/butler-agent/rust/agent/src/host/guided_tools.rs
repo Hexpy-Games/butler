@@ -346,7 +346,7 @@ impl ToolPort for NativeGuidedTools {
     ) -> Pin<
         Box<dyn Future<Output = Result<crate::json::JsonDocument, ToolExecutionError>> + Send + 'a>,
     > {
-        Box::pin(async move { execute::execute(self, invocation, call).await })
+        Box::pin(async move { Box::pin(execute::execute(self, invocation, call)).await })
     }
 
     fn record_unexecuted<'a>(

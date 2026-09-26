@@ -112,8 +112,14 @@ pub(crate) async fn record(
         }
         let current = resolve_generation(data_root, environment, target)?;
         assert_mutation_authority(data_root, environment, target, &current)?;
-        if current.embedding.as_ref().map(|value| value.version())
-            != handle.embedding.as_ref().map(|value| value.version())
+        if current
+            .embedding
+            .as_ref()
+            .map(super::super::types::GenerationEmbedding::version)
+            != handle
+                .embedding
+                .as_ref()
+                .map(super::super::types::GenerationEmbedding::version)
         {
             return Err(error("memory_embedding_version_mismatch"));
         }
@@ -328,7 +334,11 @@ fn graph_facts(
             let Ok(receipt) = serde_json::from_str::<Value>(raw) else {
                 return true;
             };
-            let Some(version) = handle.embedding.as_ref().map(|value| value.version()) else {
+            let Some(version) = handle
+                .embedding
+                .as_ref()
+                .map(super::super::types::GenerationEmbedding::version)
+            else {
                 return true;
             };
             let Some(refs) = row

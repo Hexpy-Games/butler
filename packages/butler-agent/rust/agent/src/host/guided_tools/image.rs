@@ -58,16 +58,14 @@ pub(super) async fn execute(
 
     let (tuple, capability, manifest, manifest_value) =
         admitted_image(&invocation.turn.context, &file_id)?;
-    let digest = owner
-        .mcp_client
-        .zai_vision_tool_capability_digest(
-            &tuple.provider_id,
-            &tuple.model_id,
-            capability.credential_id.as_deref(),
-            invocation.cancellation,
-        )
-        .await
-        .map_err(|_| integrity("zai_vision_carrier_changed", "Z.AI Vision carrier changed."))?;
+    let digest = Box::pin(owner.mcp_client.zai_vision_tool_capability_digest(
+        &tuple.provider_id,
+        &tuple.model_id,
+        capability.credential_id.as_deref(),
+        invocation.cancellation,
+    ))
+    .await
+    .map_err(|_| integrity("zai_vision_carrier_changed", "Z.AI Vision carrier changed."))?;
     if digest != tuple.catalog_capability_digest
         || digest
             != capability
@@ -116,17 +114,15 @@ pub(super) async fn execute(
         ("image_source".into(), Value::String(image_source)),
         ("prompt".into(), Value::String(prompt)),
     ]);
-    let result = owner
-        .mcp_client
-        .call_tool_with_timeout(
-            SERVER_ID,
-            TOOL_NAME,
-            args,
-            MCP_TIMEOUT,
-            invocation.cancellation,
-        )
-        .await
-        .map_err(|_| integrity("mcp_server_unavailable", "Z.AI Vision is unavailable."))?;
+    let result = Box::pin(owner.mcp_client.call_tool_with_timeout(
+        SERVER_ID,
+        TOOL_NAME,
+        args,
+        MCP_TIMEOUT,
+        invocation.cancellation,
+    ))
+    .await
+    .map_err(|_| integrity("mcp_server_unavailable", "Z.AI Vision is unavailable."))?;
     let value = project_result(&result, &file_id, temp.directory(), &image_path);
     JsonDocument::from_value(&value).map_err(|_| {
         integrity(

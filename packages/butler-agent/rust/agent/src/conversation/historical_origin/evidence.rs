@@ -83,6 +83,10 @@ pub(super) fn read_page(
         .collect()
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 pub(super) struct SourceEvidence {
     available: bool,
     matched: bool,

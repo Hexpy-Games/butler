@@ -27,12 +27,12 @@ pub(super) async fn search(
     } else {
         filtered.remove("category");
     }
-    match crate::mcp_client::search_mcp_tool_catalog(
+    match Box::pin(crate::mcp_client::search_mcp_tool_catalog(
         &owner.mcp_client,
         &filtered,
         call_available,
         signal,
-    )
+    ))
     .await
     {
         Ok(result) => encoded(&result),
@@ -52,14 +52,14 @@ pub(super) async fn describe(
         return Ok(None);
     };
     let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
-    crate::mcp_client::describe_mcp_tool(
+    Box::pin(crate::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
         &parsed.server_id,
         &parsed.tool_name,
         call_available,
         signal,
-    )
+    ))
     .await
     .map_err(|error| ToolExecutionError::Integrity(BtccError::new(error.code, error.message)))
 }

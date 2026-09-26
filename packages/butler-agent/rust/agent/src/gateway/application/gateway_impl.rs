@@ -38,8 +38,7 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<serde_json::Value> {
         let updates = self.dependencies.updates.clone();
         Box::pin(async move {
-            updates
-                .apply(request)
+            Box::pin(updates.apply(request))
                 .await
                 .map_err(super::updates::update_error)
         })
@@ -243,8 +242,7 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<serde_json::Value> {
         let client = self.dependencies.mcp_client.clone();
         Box::pin(async move {
-            client
-                .list_capabilities(true, &shutdown)
+            Box::pin(client.list_capabilities(true, &shutdown))
                 .await
                 .map_err(|error| GatewayApplicationError::Public {
                     status: 500,
@@ -305,8 +303,7 @@ impl GatewayApplication for AppApplication {
     ) -> ApplicationFuture<serde_json::Value> {
         let client = self.dependencies.mcp_client.clone();
         Box::pin(async move {
-            client
-                .probe_server(&id, &shutdown)
+            Box::pin(client.probe_server(&id, &shutdown))
                 .await
                 .map(|server| serde_json::json!({"servers": [server]}))
                 .map_err(|error| GatewayApplicationError::Public {

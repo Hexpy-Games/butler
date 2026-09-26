@@ -174,7 +174,7 @@ pub(super) async fn run(installation: ResolvedInstallation, args: Vec<OsString>)
             ),
         },
         "test" | "probe" => {
-            let result = client.probe_server(&id, &CancellationToken::new()).await;
+            let result = Box::pin(client.probe_server(&id, &CancellationToken::new())).await;
             let server = match result {
                 Ok(server) => server,
                 Err(error) => return report_probe_failure(&parsed, error.message),

@@ -88,7 +88,7 @@ impl ContextMaintenance {
                             if cancellation.is_cancelled() {
                                 break;
                             }
-                            if let Err(error) = daily_schedule::run_due(
+                            if let Err(error) = Box::pin(daily_schedule::run_due(
                                 &data_root,
                                 "session-sync",
                                 &day,
@@ -96,7 +96,7 @@ impl ContextMaintenance {
                                 now_ms,
                                 &cancellation,
                                 daily_cognition.session_sync(&cancellation),
-                            )
+                            ))
                             .await
                             {
                                 eprintln!("[session-sync] {error}");

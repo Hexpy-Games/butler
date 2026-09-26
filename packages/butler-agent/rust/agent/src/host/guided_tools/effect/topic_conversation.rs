@@ -248,30 +248,26 @@ impl TopicConversationEffect {
             "current_session_id".into(),
             Value::String(current_session_id.to_owned()),
         );
-        let response = match tokio::select! {
+        let sent = tokio::select! {
             biased;
             () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
             result = request.json(&Value::Object(body)).send() => result,
-        } {
-            Ok(response) => response,
-            Err(_) => {
-                return Ok(AdapterOutcome::Uncertain(Some(adapter(
-                    "branch_outcome_unknown",
-                ))));
-            }
+        };
+        let Ok(response) = sent else {
+            return Ok(AdapterOutcome::Uncertain(Some(adapter(
+                "branch_outcome_unknown",
+            ))));
         };
         let status = response.status();
-        let payload = match tokio::select! {
+        let decoded = tokio::select! {
             biased;
             () = signal.cancelled() => return Ok(AdapterOutcome::Uncertain(Some(adapter("branch_outcome_unknown")))),
             result = response.json::<Value>() => result,
-        } {
-            Ok(value) => value,
-            Err(_) => {
-                return Ok(AdapterOutcome::Uncertain(Some(adapter(
-                    "branch_response_invalid",
-                ))));
-            }
+        };
+        let Ok(payload) = decoded else {
+            return Ok(AdapterOutcome::Uncertain(Some(adapter(
+                "branch_response_invalid",
+            ))));
         };
         if !status.is_success() {
             let error = payload

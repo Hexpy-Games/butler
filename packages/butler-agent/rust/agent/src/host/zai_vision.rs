@@ -26,15 +26,14 @@ impl ProviderVisualCapabilityPort for NativeZaiVisionCapability {
         cancellation: &'a CancellationToken,
     ) -> ProviderVisualCapabilityFuture<'a> {
         Box::pin(async move {
-            self.mcp
-                .zai_vision_tool_capability_digest(
-                    &metadata.provider_id,
-                    &metadata.model_id,
-                    metadata.credential_id.as_deref(),
-                    cancellation,
-                )
-                .await
-                .map_err(|_| ())
+            Box::pin(self.mcp.zai_vision_tool_capability_digest(
+                &metadata.provider_id,
+                &metadata.model_id,
+                metadata.credential_id.as_deref(),
+                cancellation,
+            ))
+            .await
+            .map_err(|_| ())
         })
     }
 }
@@ -64,15 +63,14 @@ pub(crate) async fn catalog_for_visual_admission(
     {
         return Ok(catalog);
     }
-    let digest = mcp
-        .zai_vision_tool_capability_digest(
-            &entry.provider_id,
-            &entry.model_id,
-            entry.credential_id.as_deref(),
-            &CancellationToken::new(),
-        )
-        .await
-        .map_err(|_| carrier_unavailable())?;
+    let digest = Box::pin(mcp.zai_vision_tool_capability_digest(
+        &entry.provider_id,
+        &entry.model_id,
+        entry.credential_id.as_deref(),
+        &CancellationToken::new(),
+    ))
+    .await
+    .map_err(|_| carrier_unavailable())?;
     entry.image_input_support = Some("supported".into());
     entry.image_capability_source = Some("provider_discovery".into());
     entry.image_route_health = Some("healthy".into());

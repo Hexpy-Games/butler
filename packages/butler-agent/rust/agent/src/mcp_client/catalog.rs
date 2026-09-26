@@ -20,9 +20,7 @@ pub(crate) async fn search(
     signal: &CancellationToken,
 ) -> Result<Value, McpClientError> {
     let include_disabled_servers = args.get("include_disabled") == Some(&Value::Bool(true));
-    let capabilities = client
-        .list_capabilities(include_disabled_servers, signal)
-        .await?;
+    let capabilities = Box::pin(client.list_capabilities(include_disabled_servers, signal)).await?;
     let include_disabled = args.get("include_disabled") != Some(&Value::Bool(false));
     let category = text(args, "category");
     let query = terms(text(args, "query"));
@@ -154,10 +152,7 @@ pub(crate) async fn describe(
             MCP_RECOVERY,
         )));
     }
-    match client
-        .describe_tool_schema(server_id, tool_name, signal)
-        .await
-    {
+    match Box::pin(client.describe_tool_schema(server_id, tool_name, signal)).await {
         Ok(Some(tool)) => {
             let schema = sanitize(
                 tool.get("input_schema")

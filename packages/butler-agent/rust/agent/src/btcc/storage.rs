@@ -174,13 +174,16 @@ impl BtccStorage {
                 "BTCC SQLite owner exited before initialization completed",
             )
         });
-        let (_owner_id, _owner_generation) = match initialized {
+        let owner = match initialized {
             Ok(Ok(owner)) => owner,
             Ok(Err(error)) | Err(error) => {
                 join_failed_initialization(thread).await;
                 return Err(error);
             }
         };
+        // The owner identity is only retained for test assertions.
+        #[cfg(not(test))]
+        let _ = owner;
         Ok(Self {
             inner: Arc::new(StorageInner {
                 lane: AsyncMutex::new(LaneState {
@@ -190,9 +193,9 @@ impl BtccStorage {
                     close_waiters: Vec::new(),
                 }),
                 #[cfg(test)]
-                owner_id: _owner_id,
+                owner_id: owner.0,
                 #[cfg(test)]
-                owner_generation: _owner_generation,
+                owner_generation: owner.1,
             }),
         })
     }

@@ -27,14 +27,13 @@ impl WebAccess {
         let requested_for_task = requested_url.to_owned();
         let backend_for_task = backend.to_owned();
         let mut task = tokio::spawn(async move {
-            access
-                .read_page_with_budget(
-                    url_for_task,
-                    &requested_for_task,
-                    &backend_for_task,
-                    &task_budget,
-                )
-                .await
+            Box::pin(access.read_page_with_budget(
+                url_for_task,
+                &requested_for_task,
+                &backend_for_task,
+                &task_budget,
+            ))
+            .await
         });
         tokio::select! {
             biased;
@@ -80,7 +79,14 @@ impl WebAccess {
         match backend {
             "jina-hosted" => add_warning(&mut page, "jina-hosted-reader-not-yet-enabled"),
             "auto" | "lightpanda" if page.render_recommended => {
-                match super::lightpanda::render(self, &url, requested_url, cancellation).await {
+                match Box::pin(super::lightpanda::render(
+                    self,
+                    &url,
+                    requested_url,
+                    cancellation,
+                ))
+                .await
+                {
                     Ok(Some(rendered)) if should_use_rendered(&page, &rendered) => {
                         page = rendered;
                     }

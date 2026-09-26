@@ -149,7 +149,7 @@ fn read_follow_state(state: &mut FollowState, output: &mut Vec<LogEntry>) -> io:
     }
     state.file.seek(SeekFrom::Start(state.offset))?;
     let mut remaining = metadata.len().saturating_sub(state.offset);
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     while remaining > 0 {
         let requested = buffer
             .len()

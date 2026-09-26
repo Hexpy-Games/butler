@@ -58,7 +58,7 @@ pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -
     let result = if options.check && !dry_run {
         service.check(&request).await
     } else {
-        service.apply(&request).await
+        Box::pin(service.apply(&request)).await
     };
     service.close();
     signal_task.abort();

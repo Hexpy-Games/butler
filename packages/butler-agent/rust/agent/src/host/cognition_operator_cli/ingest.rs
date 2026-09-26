@@ -133,9 +133,7 @@ pub(super) async fn run(
             coordinator.clone(),
             &mut embedding,
             &mut index,
-        )
-        .await
-        {
+        ) {
             Ok(service) => {
                 let vector_session = crate::cognition::normalize_session_id_for_storage(&format!(
                     "hot_{}",
@@ -307,7 +305,7 @@ fn process_models(data_root: &std::path::Path) -> Result<crate::host::NativeProc
     .map_err(|error| error.code)
 }
 
-async fn ensure_index_owner<'a>(
+fn ensure_index_owner<'a>(
     data_root: &std::path::Path,
     paths: &CognitionPathEnvironment,
     coordinator: Arc<crate::coordination::CognitionWriteCoordinator>,

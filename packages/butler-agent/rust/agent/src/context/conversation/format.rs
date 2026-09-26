@@ -234,11 +234,11 @@ fn render_outcome(outcome: &TurnOutcomeCapsule) -> ContextResult<String> {
     body.insert("source_hash".into(), outcome.source_hash.clone().into());
     body.insert(
         "request_message_id".into(),
-        option_string(&outcome.request_message_id),
+        option_string(outcome.request_message_id.as_ref()),
     );
     body.insert(
         "public_assistant_message_id".into(),
-        option_string(&outcome.public_assistant_message_id),
+        option_string(outcome.public_assistant_message_id.as_ref()),
     );
     body.insert(
         "evidence_refs".into(),
@@ -256,7 +256,10 @@ fn render_outcome(outcome: &TurnOutcomeCapsule) -> ContextResult<String> {
             .map(Value::Object)
             .unwrap_or(Value::Null),
     );
-    body.insert("safe_code".into(), option_string(&outcome.safe_code));
+    body.insert(
+        "safe_code".into(),
+        option_string(outcome.safe_code.as_ref()),
+    );
     let kind = match outcome.outcome {
         TurnOutcomeKind::Delivered => "delivered",
         TurnOutcomeKind::Failed => "failed",
@@ -276,7 +279,10 @@ fn source_hash(messages: &[&ConversationMessageWithParts]) -> ContextResult<Stri
         .map(|message| {
             let mut value = Map::new();
             value.insert("id".into(), message.message.id.clone().into());
-            value.insert("turn_id".into(), option_string(&message.message.turn_id));
+            value.insert(
+                "turn_id".into(),
+                option_string(message.message.turn_id.as_ref()),
+            );
             value.insert("seq".into(), message.message.seq.into());
             value.insert("role".into(), enum_text(role_text(message.message.role)));
             value.insert(
@@ -294,10 +300,13 @@ fn source_hash(messages: &[&ConversationMessageWithParts]) -> ContextResult<Stri
                             item.insert("id".into(), part.id.clone().into());
                             item.insert("kind".into(), enum_text(part_kind_text(part.kind)));
                             item.insert("content_json".into(), part.content_json.clone());
-                            item.insert("tool_call_id".into(), option_string(&part.tool_call_id));
+                            item.insert(
+                                "tool_call_id".into(),
+                                option_string(part.tool_call_id.as_ref()),
+                            );
                             item.insert(
                                 "parent_tool_call_id".into(),
-                                option_string(&part.parent_tool_call_id),
+                                option_string(part.parent_tool_call_id.as_ref()),
                             );
                             item.insert("status".into(), enum_text(status_text(part.status)));
                             Value::Object(item)
@@ -349,8 +358,8 @@ fn string_hash(value: &str) -> String {
 fn hash_bytes(value: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(value))
 }
-fn option_string(value: &Option<String>) -> Value {
-    value.clone().map(Value::String).unwrap_or(Value::Null)
+fn option_string(value: Option<&String>) -> Value {
+    value.cloned().map(Value::String).unwrap_or(Value::Null)
 }
 fn json_error(e: impl std::fmt::Display) -> ContextError {
     ContextError::new("context_json_error", e.to_string())

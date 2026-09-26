@@ -42,6 +42,10 @@ pub(crate) struct RecallRuntime {
     pub project_id: Option<String>,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized result schema field for field"
+)]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct RecallAdmittedChannels {
     pub graph: bool,

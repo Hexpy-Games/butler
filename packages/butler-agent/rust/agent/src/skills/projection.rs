@@ -35,7 +35,7 @@ fn latest_names(path: &Path, turn: Option<&str>) -> Option<Vec<String>> {
     let mut reversed = Vec::new();
     let mut oversize = false;
     let mut ended_with_newline = false;
-    let mut chunk = [0_u8; 32 * 1024];
+    let mut chunk = vec![0_u8; 32 * 1024];
     while remaining > 0 {
         let count = usize::try_from(remaining.min(chunk.len() as u64)).unwrap_or(usize::MAX);
         remaining -= count as u64;

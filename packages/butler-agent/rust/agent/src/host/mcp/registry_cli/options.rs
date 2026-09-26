@@ -5,6 +5,10 @@ use std::{
 
 use serde_json::{Map, Value, json};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 pub(super) struct Options {
     pub(super) data: Option<String>,

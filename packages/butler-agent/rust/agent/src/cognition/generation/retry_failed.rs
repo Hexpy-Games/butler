@@ -83,8 +83,14 @@ pub(crate) async fn run(
         let current = resolve_generation(data_root, environment, &target)?;
         assert_mutation_authority(data_root, environment, &target, &current)?;
         if current.graph_path != handle.graph_path
-            || current.embedding.as_ref().map(|value| value.version())
-                != handle.embedding.as_ref().map(|value| value.version())
+            || current
+                .embedding
+                .as_ref()
+                .map(super::types::GenerationEmbedding::version)
+                != handle
+                    .embedding
+                    .as_ref()
+                    .map(super::types::GenerationEmbedding::version)
         {
             return Err(error("memory_generation_changed"));
         }
@@ -95,7 +101,7 @@ pub(crate) async fn run(
             let version = current
                 .embedding
                 .as_ref()
-                .map(|value| value.version())
+                .map(super::types::GenerationEmbedding::version)
                 .ok_or_else(|| error("memory_vector_repair_preimage_changed"))?;
             let count = graph.repair_selected_invalid_vectors(generation_id, version, request)?;
             json!({"semantic_windows":0,"vector_units":count,"cache_jobs":0})

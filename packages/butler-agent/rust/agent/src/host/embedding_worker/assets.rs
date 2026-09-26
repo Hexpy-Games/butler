@@ -208,7 +208,7 @@ fn matches_asset(path: &Path, asset: &Asset) -> Result<bool, &'static str> {
 fn hash_file(path: &Path) -> Result<String, &'static str> {
     let mut file = File::open(path).map_err(|_| "embed_asset_unavailable")?;
     let mut digest = Sha256::new();
-    let mut chunk = [0u8; 64 * 1024];
+    let mut chunk = vec![0u8; 64 * 1024];
     loop {
         let count = file
             .read(&mut chunk)

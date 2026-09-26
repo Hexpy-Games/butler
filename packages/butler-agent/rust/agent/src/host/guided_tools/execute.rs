@@ -121,7 +121,7 @@ pub(super) async fn execute(
     if record.is_none() {
         start(owner, call, &call_id, &effective_name, &presentation_args).await?;
     }
-    let result = super::dispatch::execute(owner, invocation, call, &call_id).await?;
+    let result = Box::pin(super::dispatch::execute(owner, invocation, call, &call_id)).await?;
     super::discovery::remember_described(owner, call, &result)?;
     if result.field("authority_pending").ok().flatten() == Some("true") {
         // Authority admission atomically moved this call to awaiting_authority.

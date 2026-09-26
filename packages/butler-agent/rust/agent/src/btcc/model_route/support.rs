@@ -28,7 +28,7 @@ pub(super) fn event(
     }
     Value::Object(object)
 }
-pub(super) fn status(value: &Option<Value>) -> Option<&str> {
+pub(super) fn status(value: Option<&Value>) -> Option<&str> {
     value.as_ref()?.get("status")?.as_str()
 }
 pub(super) fn max_attempt(history: &AttemptHistory) -> u32 {

@@ -38,7 +38,7 @@ pub(crate) async fn prepare_representatives(
     let Some(version) = generation
         .embedding
         .as_ref()
-        .map(|embedding| embedding.version())
+        .map(crate::cognition::GenerationEmbedding::version)
     else {
         return Ok(Vec::new());
     };
@@ -77,9 +77,8 @@ pub(crate) async fn prepare_representatives(
     let Ok(connection) = lance_store::connect(&root).await else {
         return Ok(Vec::new());
     };
-    let table = match lance_store::open(&connection, TABLE).await {
-        Ok(table) => table,
-        Err(_) => return Ok(Vec::new()),
+    let Ok(table) = lance_store::open(&connection, TABLE).await else {
+        return Ok(Vec::new());
     };
     let mut prepared = Vec::new();
     for key in &keys {

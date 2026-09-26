@@ -37,7 +37,7 @@ pub(super) fn canonicalize(
     };
     let max_workers = stored
         .get("max_simultaneous_workers")
-        .and_then(|value| value.as_f64())
+        .and_then(serde_json::Value::as_f64)
         .filter(|value| value.fract() == 0.0 && (1.0..=10.0).contains(value))
         .map(crate::json::saturating_u64)
         .unwrap_or(DEFAULT_MAX_WORKERS);

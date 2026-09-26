@@ -16,6 +16,10 @@ use crate::btcc::{
 use content::{Content, activity_kind, content, resumed};
 use publication::{emit, publish};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 #[derive(Clone)]
 struct Group {
     id: String,

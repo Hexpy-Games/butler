@@ -381,7 +381,7 @@ fn hash_file(path: &PathBuf) -> Result<String, EmbeddingFailure> {
     let mut file =
         File::open(path).map_err(|_| EmbeddingFailure("embed_asset_identity_unavailable"))?;
     let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
+    let mut buffer = vec![0_u8; 64 * 1024];
     loop {
         let count = file
             .read(&mut buffer)

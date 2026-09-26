@@ -188,12 +188,10 @@ fn entity_id(entity: &ExtractedEntity) -> String {
         entity.name.to_lowercase(),
         entity.project.as_deref().unwrap_or_default()
     );
-    let digest = Sha256::digest(key.as_bytes());
-    digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    // Hex of the first 8 digest bytes.
+    let mut hex = format!("{:x}", Sha256::digest(key.as_bytes()));
+    hex.truncate(16);
+    hex
 }
 
 fn entity_key(kind: &str, name: &str) -> String {

@@ -13,6 +13,10 @@ use crate::{
 
 const SCHEMA: &str = "butler.cognition.namespace-migration.v1";
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized result schema field for field"
+)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CognitionNamespaceMigrationPlan {
     pub schema: &'static str,

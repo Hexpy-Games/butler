@@ -211,7 +211,7 @@ impl AppApplication {
         if current.state != "queued" {
             return Err(not_found_error());
         }
-        if has_authority(&current.control_resolution_json) {
+        if has_authority(current.control_resolution_json.as_ref()) {
             return Err(authority_immutable());
         }
 
@@ -301,7 +301,7 @@ impl AppApplication {
             .map_err(app_error)?;
         apply_plan_binding(
             &mut resolved.persisted,
-            &current.control_resolution_json,
+            current.control_resolution_json.as_ref(),
             request.plan_id.as_deref(),
         );
 
@@ -312,7 +312,8 @@ impl AppApplication {
         final_request.plan_mode = request.plan_mode.map(Value::Bool);
         let mut prepared = inspected.prepared;
         let has_project_refs = has_project_sources(content.as_ref());
-        let same_sources = content_matches_current(&content, &current.content_parts_json)?;
+        let same_sources =
+            content_matches_current(content.as_ref(), current.content_parts_json.as_ref())?;
         prepared.project_sources = if same_sources {
             parse_project_sources(current.project_source_refs_json.as_deref())?
         } else {
@@ -369,7 +370,7 @@ impl AppApplication {
                 let transaction = db.transaction().map_err(AppStorageError::sqlite)?;
                 let row = queue_view::mutation_row(&transaction, &id)?
                     .ok_or_else(storage_not_found)?;
-                if has_authority(&row.control_resolution_json) {
+                if has_authority(row.control_resolution_json.as_ref()) {
                     return Err(AppStorageError::new(
                         "authority_queue_immutable",
                         "Approved command queue entries cannot be edited.",
@@ -428,7 +429,7 @@ impl AppApplication {
                 if !matches!(row.state.as_str(), "queued" | "failed") {
                     return Err(storage_not_found());
                 }
-                if has_authority(&row.control_resolution_json) {
+                if has_authority(row.control_resolution_json.as_ref()) {
                     return Err(AppStorageError::new(
                         "authority_queue_immutable",
                         "Approved command queue entries cannot be deleted.",

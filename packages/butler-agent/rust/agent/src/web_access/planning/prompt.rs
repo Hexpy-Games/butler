@@ -163,7 +163,7 @@ fn current_date(timezone: &str) -> String {
     let seconds = epoch_ms.div_euclid(1_000);
     let offset = zone
         .find_local_time_type(seconds)
-        .map(|value| value.ut_offset())
+        .map(tz::LocalTimeType::ut_offset)
         .unwrap_or(0);
     let wall_ms = epoch_ms.saturating_add(i64::from(offset).saturating_mul(1_000));
     let (year, month, day) = crate::js_date::civil_from_days(wall_ms.div_euclid(86_400_000));

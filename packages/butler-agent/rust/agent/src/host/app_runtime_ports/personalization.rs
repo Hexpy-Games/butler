@@ -158,7 +158,6 @@ impl NativeAppPersonalization {
         let user = self
             .configuration
             .read_user_settings()
-            .await
             .map_err(model_error)?;
         let presets = self
             .profile

@@ -109,7 +109,7 @@ pub(crate) async fn closeout(
 }
 
 fn nullable_text(value: Option<&Value>) -> Value {
-    nonempty(value).map_or(Value::Null, |value| value.into())
+    nonempty(value).map_or(Value::Null, std::convert::Into::into)
 }
 
 fn error_summary(result: &Value) -> Value {

@@ -41,6 +41,10 @@ pub(crate) struct ProfileModelUsageSummary {
     pub models: Vec<String>,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized result schema field for field"
+)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct ProfileModelTranscriptCaptureResult {
     pub profiling_enabled: bool,
@@ -78,6 +82,10 @@ pub(crate) struct ProfileThirdPartyImportOptions {
     pub cancellation: CancellationToken,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the serialized result schema field for field"
+)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct ProfileThirdPartyImportResult {
     pub profiling_enabled: bool,

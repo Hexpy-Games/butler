@@ -13,6 +13,10 @@ use crate::operations::{AppUpdateService, UpdateRequest};
 
 mod agent;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,
@@ -57,7 +61,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     }
     let component = options.component.as_deref().unwrap_or("agent");
     if matches!(component, "agent" | "service" | "butler-agent") {
-        return agent::run(installation, &options).await;
+        return Box::pin(agent::run(installation, &options)).await;
     }
     if !matches!(component, "app" | "butler-app" | "app-server") {
         return failure(
@@ -91,7 +95,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         ..UpdateRequest::default()
     };
     let result = if options.dry_run {
-        service.apply(request).await
+        Box::pin(service.apply(request)).await
     } else {
         service.check(request).await
     };

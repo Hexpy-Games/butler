@@ -14,6 +14,10 @@ pub(super) struct CandidateResult {
     pub read: GrepRead,
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent observed facts, each read separately"
+)]
 pub(super) struct SearchResult {
     pub matches: Vec<GrepMatch>,
     pub reads: Vec<CandidateResult>,

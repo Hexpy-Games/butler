@@ -6,12 +6,12 @@ pub(super) fn pipeline_exit(statuses: &[Option<std::process::ExitStatus>]) -> Op
     statuses
         .iter()
         .rev()
-        .filter_map(|status| status.as_ref().and_then(|status| status.code()))
+        .filter_map(|status| status.as_ref().and_then(std::process::ExitStatus::code))
         .find(|code| *code != 0)
         .or_else(|| {
             statuses
                 .last()
-                .and_then(|status| status.as_ref().and_then(|status| status.code()))
+                .and_then(|status| status.as_ref().and_then(std::process::ExitStatus::code))
         })
 }
 

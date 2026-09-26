@@ -361,7 +361,7 @@ fn hash_file(path: &Path) -> CognitionResult<String> {
     use std::io::Read;
     let mut file = File::open(path).map_err(io_error)?;
     let mut hash = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     loop {
         let n = file.read(&mut buffer).map_err(io_error)?;
         if n == 0 {

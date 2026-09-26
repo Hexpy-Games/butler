@@ -14,7 +14,7 @@ pub(super) fn parse_access(value: &str) -> Option<AccessMode> {
 pub(super) fn json_type(value: Option<&Value>) -> &'static str {
     match value {
         None => "undefined",
-        Some(Value::Null) | Some(Value::Array(_) | Value::Object(_)) => "object",
+        Some(Value::Null | Value::Array(_) | Value::Object(_)) => "object",
         Some(Value::Bool(_)) => "boolean",
         Some(Value::Number(_)) => "number",
         Some(Value::String(_)) => "string",

@@ -139,7 +139,7 @@ pub(super) fn create_scratch(
                     identity: identity(&metadata),
                 });
             }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(_) => {
                 return Err(error(
                     400,

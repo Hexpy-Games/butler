@@ -39,7 +39,7 @@ impl std::fmt::Debug for AuthError {
         formatter
             .debug_struct("AuthError")
             .field("code", &self.code)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 impl std::fmt::Display for AuthError {
@@ -103,9 +103,18 @@ impl AuthOwner<'_> {
         {
             value.to_owned()
         } else {
-            let platform = required(&self.environment.os_platform, "provider_os_facts_missing")?;
-            let release = required(&self.environment.os_release, "provider_os_facts_missing")?;
-            let arch = required(&self.environment.os_arch, "provider_os_facts_missing")?;
+            let platform = required(
+                self.environment.os_platform.as_ref(),
+                "provider_os_facts_missing",
+            )?;
+            let release = required(
+                self.environment.os_release.as_ref(),
+                "provider_os_facts_missing",
+            )?;
+            let arch = required(
+                self.environment.os_arch.as_ref(),
+                "provider_os_facts_missing",
+            )?;
             format!("butler ({platform} {release}; {arch})")
         };
         Ok(ProviderAuth::Codex {
@@ -357,9 +366,9 @@ pub(crate) fn pkce_challenge(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn required<'a>(value: &'a Option<String>, code: &'static str) -> Result<&'a str, AuthError> {
+fn required<'a>(value: Option<&'a String>, code: &'static str) -> Result<&'a str, AuthError> {
     value
-        .as_deref()
+        .map(String::as_str)
         .and_then(|value| trimmed(Some(value)))
         .ok_or_else(|| error(code, "Required host identity facts are unavailable."))
 }

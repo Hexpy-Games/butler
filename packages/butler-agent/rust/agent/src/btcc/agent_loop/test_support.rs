@@ -244,10 +244,10 @@ impl GuidedPolicyPort for Fixture {
     fn prepare_context<'a>(
         &'a self,
         context: &'a dyn TurnContextProjection,
-        _invocation: GuidedInvocation<'a>,
+        invocation: GuidedInvocation<'a>,
         input: ContextProjectionInput<'a>,
     ) -> ContextProjectionFuture<'a> {
-        context.project(_invocation, input)
+        context.project(invocation, input)
     }
 
     fn execute_tool<'a>(

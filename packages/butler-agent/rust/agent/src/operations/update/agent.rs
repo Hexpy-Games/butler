@@ -89,7 +89,7 @@ impl AgentArchiveUpdateService {
             );
             let label = format!("updates/artifacts/{name}");
             artifact_path = Some(
-                stage::download_to_label(
+                Box::pin(stage::download_to_label(
                     &self.client,
                     &self.shutdown,
                     &self.data,
@@ -97,7 +97,7 @@ impl AgentArchiveUpdateService {
                     url,
                     sha256,
                     &label,
-                )
+                ))
                 .await?,
             );
         }

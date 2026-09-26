@@ -56,8 +56,10 @@ impl AppNativeAssetResolver for NativeAppAssets {
                     .get("model_ref")
                     .and_then(Value::as_str)
                     .ok_or(GatewayApplicationError::Internal)?;
-                let catalog =
-                    crate::host::catalog_for_visual_admission(&models, &mcp, model_ref).await?;
+                let catalog = Box::pin(crate::host::catalog_for_visual_admission(
+                    &models, &mcp, model_ref,
+                ))
+                .await?;
                 images
                     .validate_queued_visual(
                         &snapshot.queue_attachments,

@@ -26,13 +26,13 @@ pub(super) fn node_join(base: &Path, child: &str) -> PathBuf {
 
 impl CognitionPathEnvironment {
     pub(crate) fn cognition_root(&self, data_root: &Path) -> PathBuf {
-        trimmed(&self.cognition_home)
+        trimmed(self.cognition_home.as_ref())
             .map(PathBuf::from)
             .unwrap_or_else(|| data_root.join("cognition"))
     }
 
     pub(crate) fn memory_root(&self, data_root: &Path) -> PathBuf {
-        trimmed(&self.memory_home)
+        trimmed(self.memory_home.as_ref())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.cognition_root(data_root).join("memory"))
     }
@@ -43,10 +43,9 @@ impl CognitionPathEnvironment {
     }
 }
 
-fn trimmed(value: &Option<String>) -> Option<&str> {
+fn trimmed(value: Option<&String>) -> Option<&str> {
     value
-        .as_deref()
-        .map(crate::public_text::trim_js_whitespace)
+        .map(|value| crate::public_text::trim_js_whitespace(value))
         .filter(|value| !value.is_empty())
 }
 

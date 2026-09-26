@@ -57,6 +57,9 @@ impl ConfiguredPhase {
 pub(crate) struct ConfiguredCycleOptions {
     pub enabled: bool,
     pub total_budget_ms: u64,
+    /// Parsed for parity with the source config, which records these soft
+    /// subphase budgets but never enforces or emits them.
+    #[expect(dead_code, reason = "parity with the source config; never enforced")]
     pub subphase_budgets_ms: [u64; 4],
     pub activation_decay_d: f64,
     pub project_capsule_refresh_limit: usize,
@@ -153,7 +156,7 @@ impl ConfiguredCycleService {
             aborted: None,
             failed_phases: Vec::new(),
         };
-        for (phase_index, phase) in ConfiguredPhase::ALL.into_iter().enumerate() {
+        for phase in ConfiguredPhase::ALL {
             if cancellation.is_cancelled() {
                 result.aborted = Some("cancelled");
                 result.exit_code = 1;
@@ -164,8 +167,6 @@ impl ConfiguredCycleService {
                 break;
             }
             let phase_start = Instant::now();
-            // The source records a soft subphase budget but never enforces or emits it.
-            let _phase_soft_budget_ms = config.subphase_budgets_ms[phase_index];
             let output = self.executor.run(phase, deadline, cancellation).await;
             let duration =
                 u64::try_from(phase_start.elapsed().as_millis().min(u128::from(u64::MAX)))

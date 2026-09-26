@@ -79,7 +79,7 @@ async fn streamable_http_client_posts_initialize_and_call_with_auth_then_closes(
         "headers":[{"key":"x-mcp-fixture-key","source":"literal","value":"fixture-secret"}],
     }));
     let client = NativeMcpClient::new(scratch.0.clone(), HashMap::new());
-    let result = tokio::time::timeout(
+    let result = Box::pin(tokio::time::timeout(
         Duration::from_secs(8),
         client.call_tool(
             "http-fixture",
@@ -87,7 +87,7 @@ async fn streamable_http_client_posts_initialize_and_call_with_auth_then_closes(
             serde_json::Map::from_iter([("text".into(), json!("request"))]),
             &CancellationToken::new(),
         ),
-    )
+    ))
     .await
     .expect("the loopback MCP call should complete")
     .unwrap();

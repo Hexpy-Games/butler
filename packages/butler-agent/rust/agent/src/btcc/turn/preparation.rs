@@ -180,7 +180,7 @@ impl DefaultTurnPreparation {
         let controls = request
             .execution_controls
             .as_ref()
-            .map(|value| value.verify())
+            .map(super::super::execution_controls::ExecutionControls::verify)
             .transpose()?;
         let context = context::snapshot(
             &self.repositories,

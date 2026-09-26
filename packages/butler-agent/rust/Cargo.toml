@@ -63,5 +63,13 @@ doc_markdown = "allow"
 format_push_string = "allow"
 # `Default::default()` in struct literals avoids repeating long type names.
 default_trait_access = "allow"
+# Module APIs keep uniform fallible signatures; error types are redesigned in P2c.
+unnecessary_wraps = "allow"
+# Methods keep their receiver for symmetry with sibling methods on the owner.
+unused_self = "allow"
+# `Option<Option<T>>` models JSON tri-state fields: absent, explicit null, value.
+option_option = "allow"
+# Counting newlines in small buffers; not worth a `bytecount` dependency.
+naive_bytecount = "allow"
 # Parity fixtures deliberately carry decomposed (non-NFC) text.
 unicode_not_nfc = "allow"

@@ -100,7 +100,7 @@ impl RequestProgress {
             match next {
                 Some((deadline, kind)) => tokio::select! {
                     biased;
-                    () = self.shared.changed.notified() => continue,
+                    () = self.shared.changed.notified() => {}
                     () = tokio::time::sleep_until(deadline) => return kind,
                 },
                 None => self.shared.changed.notified().await,

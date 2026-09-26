@@ -21,9 +21,11 @@ pub(super) async fn execute(
     outer_call_id: &str,
 ) -> Result<JsonDocument, ToolExecutionError> {
     match call.name.as_str() {
-        "tool_search" => search(owner, &call.arguments, invocation.cancellation).await,
-        "tool_describe" => describe(owner, &call.arguments, invocation.cancellation).await,
-        "tool_call" => invoke::run(owner, invocation, call, outer_call_id).await,
+        "tool_search" => Box::pin(search(owner, &call.arguments, invocation.cancellation)).await,
+        "tool_describe" => {
+            Box::pin(describe(owner, &call.arguments, invocation.cancellation)).await
+        }
+        "tool_call" => Box::pin(invoke::run(owner, invocation, call, outer_call_id)).await,
         _ => Err(integrity("guided_bridge_tool_invalid")),
     }
 }
@@ -101,7 +103,7 @@ async fn search(
     match provider.as_deref() {
         None | Some("native") => (),
         Some("mcp") => {
-            return mcp::search(owner, args, category, signal).await;
+            return Box::pin(mcp::search(owner, args, category, signal)).await;
         }
         Some("plugin") => {
             return encoded(&bridge_error(
@@ -116,7 +118,7 @@ async fn search(
         }
     }
     if category == Some("mcp") {
-        return mcp::search(owner, args, category, signal).await;
+        return Box::pin(mcp::search(owner, args, category, signal)).await;
     }
     let mut filtered = args.clone();
     if let Some(category) = category {
@@ -178,7 +180,7 @@ async fn describe(
             .filter(|name| !name.contains(':'))
         else {
             if id.starts_with("mcp:") {
-                match mcp::describe(owner, id, signal).await? {
+                match Box::pin(mcp::describe(owner, id, signal)).await? {
                     Some(description) => descriptions.push(description),
                     None => missing.push(json!({"id":id,"error":"unknown_tool_catalog_id"})),
                 }

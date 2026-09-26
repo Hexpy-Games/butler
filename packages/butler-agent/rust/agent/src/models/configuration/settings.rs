@@ -27,7 +27,7 @@ pub(crate) struct ConfigUserSettings {
 impl ModelConfiguration {
     /// Read the current `user` object without initializing DATA or exposing
     /// provider credentials.
-    pub(crate) async fn read_user_settings(&self) -> Result<ConfigUserSettings, String> {
+    pub(crate) fn read_user_settings(&self) -> Result<ConfigUserSettings, String> {
         let config = configuration::read_json_object(&self.data_root.join("butler.config.json"))?;
         Ok(ConfigUserSettings {
             value: config

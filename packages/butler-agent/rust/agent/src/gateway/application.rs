@@ -279,7 +279,7 @@ impl AppApplication {
             .as_ref()
             .ok_or(GatewayApplicationError::Internal)?;
         self.automation_runs.initialize(self.clone_handle()).await?;
-        automation_scheduler.initialize(self.clone_handle()).await?;
+        automation_scheduler.initialize(self.clone_handle())?;
         self.recover_turn_cancellations().await?;
         // Failed authority retries remain durable for the next startup.
         let _ = self.dependencies.authority_handoff.retry_decided().await;

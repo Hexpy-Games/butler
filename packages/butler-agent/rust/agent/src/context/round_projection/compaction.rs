@@ -66,7 +66,7 @@ impl CompactionState {
         };
         self.current = active.clone();
         let mut projected = project(messages, &units, active.as_deref());
-        let projected_bytes = measure(view(messages, &projected))?;
+        let projected_bytes = measure(view(messages, projected.as_ref()))?;
         // The source returns before constructing a rebase identity in this
         // fitting, all-mandatory pressure case, even with a saved summary.
         if projected_bytes > max_bytes * PRESSURE_RATIO
@@ -408,9 +408,9 @@ fn flatten_matching(
 
 fn view<'a>(
     messages: &'a [ModelRoundMessage],
-    projected: &'a Option<Vec<ModelRoundMessage>>,
+    projected: Option<&'a Vec<ModelRoundMessage>>,
 ) -> &'a [ModelRoundMessage] {
-    projected.as_deref().unwrap_or(messages)
+    projected.map_or(messages, Vec::as_slice)
 }
 
 fn trim_summary(value: &str) -> Result<String, BtccError> {

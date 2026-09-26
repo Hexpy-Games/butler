@@ -2,6 +2,10 @@
 
 use sha2::{Digest, Sha256};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one independent flag per recall channel"
+)]
 #[derive(Clone, Copy)]
 pub(super) struct Executed {
     pub graph: bool,

@@ -58,7 +58,7 @@ pub(in crate::project_ledger) fn read_current(
     for _attempt in 0..3 {
         match current_attempt(scope, work_id, collation)? {
             Attempt::Missing => return Ok(None),
-            Attempt::Changed => continue,
+            Attempt::Changed => {}
             Attempt::Ready(snapshot) => return Ok(Some(*snapshot)),
         }
     }

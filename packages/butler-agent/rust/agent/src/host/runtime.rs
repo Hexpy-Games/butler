@@ -131,17 +131,15 @@ impl NativeAgentRuntime {
             }
         };
         let memory_sync = match super::memory_sync::NativeMemorySync::open(
-            paths.data_root.clone(),
-            environment.cognition_paths.clone(),
+            &paths.data_root,
+            &environment.cognition_paths,
             coordinator.clone(),
             models.provider.clone(),
             #[cfg(unix)]
             embedding.clone(),
             #[cfg(unix)]
             vectors.clone(),
-        )
-        .await
-        {
+        ) {
             Ok(owner) => owner,
             Err(error) => {
                 let _ = observer.close().await;

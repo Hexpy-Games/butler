@@ -57,7 +57,7 @@ impl AsyncRead for NonblockingStdio {
                     return Poll::Ready(Ok(()));
                 }
                 Ok(Err(error)) => return Poll::Ready(Err(error)),
-                Err(_) => continue,
+                Err(_) => {}
             }
         }
     }
@@ -76,12 +76,11 @@ impl AsyncWrite for NonblockingStdio {
                 Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                 Poll::Pending => return Poll::Pending,
             };
-            match readiness.try_io(|fd| {
+            if let Ok(result) = readiness.try_io(|fd| {
                 let mut file = fd.get_ref();
                 file.write(buffer)
             }) {
-                Ok(result) => return Poll::Ready(result),
-                Err(_) => continue,
+                return Poll::Ready(result);
             }
         }
     }

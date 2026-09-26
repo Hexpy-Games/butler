@@ -147,7 +147,7 @@ pub(super) fn operation_recorded_at(
             .map_err(StorageError::sqlite)
         })
         .transpose()
-        .map(|v| v.flatten())
+        .map(std::option::Option::flatten)
 }
 
 pub(super) fn prepare_disposition(

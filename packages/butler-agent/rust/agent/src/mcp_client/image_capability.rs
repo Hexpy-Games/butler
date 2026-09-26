@@ -35,7 +35,7 @@ impl NativeMcpClient {
                 false,
             ));
         }
-        let probe = self.probe_config(&server, signal).await;
+        let probe = Box::pin(self.probe_config(&server, signal)).await;
         if probe.get("ok") != Some(&Value::Bool(true)) {
             return Err(failure(
                 "mcp_server_unavailable",

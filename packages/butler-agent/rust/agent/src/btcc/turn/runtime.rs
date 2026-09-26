@@ -268,7 +268,6 @@ impl TurnRuntime {
                                     == TurnSemanticState::DeliveryCommitted =>
                         {
                             turn = current;
-                            continue;
                         }
                         Some(current) if terminal(current.semantic_state) => {
                             turn = current;

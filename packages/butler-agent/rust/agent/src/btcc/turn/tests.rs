@@ -157,7 +157,7 @@ impl TurnStore for Harness {
                 .lock()
                 .unwrap()
                 .as_ref()
-                .is_none_or(|token| token.is_cancelled()),
+                .is_none_or(tokio_util::sync::CancellationToken::is_cancelled),
             Ordering::SeqCst,
         );
         self.stop_started.store(true, Ordering::SeqCst);

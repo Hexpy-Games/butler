@@ -20,6 +20,10 @@ mod compaction;
 mod maintenance;
 mod status;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 #[derive(Default)]
 struct Options {
     data: Option<PathBuf>,

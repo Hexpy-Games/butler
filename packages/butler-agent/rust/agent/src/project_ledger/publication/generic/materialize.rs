@@ -41,7 +41,7 @@ pub(super) fn inspect(root: &Path, collation: &LocaleCollation) -> Result<(), Le
 
 fn validate_events(path: &Path) -> Result<(), LedgerEffectError> {
     let mut file = File::open(path).map_err(|_| LedgerEffectError::Uncertain)?;
-    let mut buffer = [0u8; 64 * 1024];
+    let mut buffer = vec![0u8; 64 * 1024];
     let mut line = Vec::new();
     loop {
         let size = file

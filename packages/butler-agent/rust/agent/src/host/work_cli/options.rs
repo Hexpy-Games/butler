@@ -2,6 +2,10 @@ use std::{ffi::OsString, path::PathBuf};
 
 use super::{ResolvedInstallation, output};
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent command-line flags"
+)]
 pub(super) struct Options {
     pub args: Vec<String>,
     pub data: Option<String>,

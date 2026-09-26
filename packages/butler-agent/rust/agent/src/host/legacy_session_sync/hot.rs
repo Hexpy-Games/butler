@@ -211,13 +211,9 @@ fn commit(input: &HotCommit<'_>) -> Result<(), String> {
     }
     let source_id = {
         let digest = Sha256::digest(format!("{project}\0{session_id}\0{body}").as_bytes());
-        format!(
-            "save_{}",
-            digest[..16]
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        )
+        let mut hex = format!("{digest:x}");
+        hex.truncate(32);
+        format!("save_{hex}")
     };
     let start = format!("<!-- butler-semantic:{source_id}:start -->");
     let current = match fs::read_to_string(target) {

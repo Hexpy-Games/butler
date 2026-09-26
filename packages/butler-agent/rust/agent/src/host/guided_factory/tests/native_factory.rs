@@ -223,7 +223,7 @@ async fn native_factory_reads_physical_file_journals_result_and_continues_provid
             scratch.0.clone(),
             Default::default(),
             Arc::new(crate::js_date::parse_iso_millis),
-            Arc::new(|left, right| left.cmp(right)),
+            Arc::new(std::cmp::Ord::cmp),
             Arc::new(|| 0),
             1,
         )),

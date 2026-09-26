@@ -98,7 +98,7 @@ impl OperationResultReplayRuntime {
             .map_err(OperationResultError::Contract)
     }
 
-    async fn replacement_saves(
+    fn replacement_saves(
         &self,
         original: &ModelRoundMessage,
         replacement: &ModelRoundMessage,
@@ -222,10 +222,7 @@ impl OperationResultRuntime for OperationResultReplayRuntime {
                 candidate.content = content.into();
                 candidate.request_segment_kind = Some("older_tool_result_projection".into());
                 if record.delivery_state.is_none() {
-                    if !self
-                        .replacement_saves(message, &candidate, model, butler_data)
-                        .await?
-                    {
+                    if !self.replacement_saves(message, &candidate, model, butler_data)? {
                         continue;
                     }
                     self.journal

@@ -21,10 +21,7 @@ impl AutomationScheduler {
         }
     }
 
-    pub(crate) async fn initialize(
-        &self,
-        app: AppApplication,
-    ) -> Result<(), GatewayApplicationError> {
+    pub(crate) fn initialize(&self, app: AppApplication) -> Result<(), GatewayApplicationError> {
         let cancel = self.cancellation.clone();
         let task = tokio::spawn(async move {
             let mut timer = tokio::time::interval(SCHEDULER_INTERVAL);

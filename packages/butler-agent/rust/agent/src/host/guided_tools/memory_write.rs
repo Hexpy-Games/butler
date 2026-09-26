@@ -18,7 +18,7 @@ pub(super) fn supports(name: &str) -> bool {
     matches!(name, "ingest_task_memory" | "update_explicit_memory")
 }
 
-pub(super) async fn execute(
+pub(super) fn execute(
     owner: &NativeGuidedTools,
     invocation: GuidedInvocation<'_>,
     call: &ModelRoundToolCall,

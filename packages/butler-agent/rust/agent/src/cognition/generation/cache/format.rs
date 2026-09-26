@@ -437,11 +437,10 @@ fn safe_marker_id(value: &str) -> String {
         .take(120)
         .collect::<String>();
     if compact.is_empty() {
-        let digest = Sha256::digest(value.as_bytes());
-        digest[..16]
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
+        // Hex of the first 16 digest bytes.
+        let mut hex = format!("{:x}", Sha256::digest(value.as_bytes()));
+        hex.truncate(32);
+        hex
     } else {
         compact
     }

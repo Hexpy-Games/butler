@@ -14,7 +14,7 @@ pub(super) fn facts(
     let mut error = None;
     let mut effect_status = None;
     let mut effect_receipt = None;
-    let mut current = result.map(|result| result.as_str());
+    let mut current = result.map(crate::json::JsonDocument::as_str);
     for _ in 0..4 {
         let Some(layer) = current.filter(|raw| raw.trim_start().starts_with('{')) else {
             break;
