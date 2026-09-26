@@ -6,10 +6,11 @@ import {
   SHOWCASE_BLOCK_CATEGORIES,
   SHOWCASE_COMPONENT_CATEGORIES,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/showcase/categories.ts";
-import type { ShowcaseModule } from "../../packages/butler-app/client/ui/src/libs/design-system/showcase/types.ts";
+import type { ShowcaseGuidance, ShowcaseModule } from "../../packages/butler-app/client/ui/src/libs/design-system/showcase/types.ts";
 
 // Every design-system component and block folder owns a co-located
-// `<Name>.showcase.tsx` and a README, and is exported from the public barrel.
+// `<Name>.showcase.tsx`, `<Name>.guidance.tsx` and a README, and is exported
+// from the public barrel.
 // There is no gap baseline: the coverage is complete and must stay complete.
 
 const uiRoot = resolve("packages/butler-app/client/ui");
@@ -36,6 +37,10 @@ function folderIds(): string[] {
 
 function showcasePath(id: string): string {
   return join(designSystemRoot, id, `${id.split("/")[1]}.showcase.tsx`);
+}
+
+function guidancePath(id: string): string {
+  return join(designSystemRoot, id, `${id.split("/")[1]}.guidance.tsx`);
 }
 
 async function loadShowcases(): Promise<Array<{ id: string; module: ShowcaseModule }>> {
@@ -104,6 +109,64 @@ describe("design-system showcase coverage", () => {
       }
     }
     expect({ empty, korean }).toEqual({ empty: [], korean: [] });
+  });
+
+  test("every item has complete usage guidance that points at real exports and tokens", async () => {
+    const render = renderer();
+    const tokens = new Set(readFileSync(join(designSystemRoot, "tokens.css"), "utf8").match(/--[\w-]+(?=\s*:)/gu) ?? []);
+    const known = new Set(folderIds().map((id) => id.split("/")[1]!));
+    for (const id of folderIds()) {
+      for (const key of Object.keys(await import(join(designSystemRoot, id, "index.ts")))) known.add(key);
+    }
+    const problems: string[] = [];
+    for (const id of folderIds()) {
+      const path = guidancePath(id);
+      if (!existsSync(path)) { problems.push(`${id}: missing ${id.split("/")[1]}.guidance.tsx`); continue; }
+      const source = readFileSync(path, "utf8");
+      const { guidance } = (await import(path)) as { guidance?: ShowcaseGuidance };
+      if (!guidance) { problems.push(`${id}: no guidance export`); continue; }
+      const need = (ok: boolean, what: string) => { if (!ok) problems.push(`${id}: ${what}`); };
+      need(guidance.purpose?.trim().length > 20, "purpose");
+      need(guidance.whenToUse?.length > 0, "whenToUse");
+      need(guidance.whenNotToUse?.length > 0, "whenNotToUse");
+      need(guidance.recipes?.length > 0, "recipes");
+      need(guidance.doDont?.length > 0, "doDont");
+      need(guidance.content?.length > 0, "content guidelines");
+      need(guidance.accessibility?.length > 0, "accessibility notes");
+      need(guidance.tokens?.length > 0, "related tokens");
+      for (const alternative of guidance.whenNotToUse ?? []) {
+        need(known.has(alternative.use) || /^Typo\.\w+$/u.test(alternative.use), `alternative ${alternative.use} is not a DS export`);
+      }
+      for (const token of guidance.tokens ?? []) need(tokens.has(token), `token ${token} is not in tokens.css`);
+      for (const recipe of guidance.recipes ?? []) {
+        need(source.includes(`// #region recipe: ${recipe.name}\n`), `recipe "${recipe.name}" has no #region block`);
+        const markup = render(() => recipe.render({ locale: "en-US" }));
+        need(markup.length > 0 && !/[가-힣]/u.test(markup.replace(/<[^>]*>/gu, " ")), `recipe "${recipe.name}" renders`);
+      }
+      for (const pair of guidance.doDont ?? []) {
+        need(render(() => pair.do.render({ locale: "en-US" })).length > 0 && render(() => pair.dont.render({ locale: "en-US" })).length > 0,
+          `do/don't "${pair.do.caption}" renders`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  test("every exported component is shown in a story, a recipe or a do/don't, or named as internal", async () => {
+    const unreferenced: string[] = [];
+    for (const id of folderIds()) {
+      // Every icon renders in the Icons page gallery (IconGallery iterates the module).
+      if (id === "components/Icons") continue;
+      const name = id.split("/")[1]!;
+      const sources = [`${name}.showcase.tsx`, `${name}.guidance.tsx`, `${name}.showcaseParts.tsx`]
+        .map((file) => join(designSystemRoot, id, file)).filter(existsSync).map((file) => readFileSync(file, "utf8")).join("\n");
+      const guidance = existsSync(guidancePath(id)) ? ((await import(guidancePath(id))) as { guidance?: ShowcaseGuidance }).guidance : undefined;
+      for (const key of Object.keys(await import(join(designSystemRoot, id, "index.ts")))) {
+        if (!/^[A-Z][a-z]/u.test(key)) continue;
+        if (new RegExp(`\\b${key}\\b`, "u").test(sources) || guidance?.internalExports?.[key]) continue;
+        unreferenced.push(`${id}: ${key}`);
+      }
+    }
+    expect(unreferenced).toEqual([]);
   });
 
   test("interactive items ship a states matrix whose cells render", async () => {
