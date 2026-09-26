@@ -1,3 +1,4 @@
+use axum::http::HeaderValue;
 use std::{io, sync::Arc};
 
 use axum::{
@@ -28,8 +29,7 @@ pub(super) async fn get(state: Arc<HttpState>, uri: &Uri) -> Result<Response<Bod
                 Phase::Chunks => match state.export.chunks.recv().await {
                     Some(Ok(chunk)) => {
                         state.message_count += chunk.message_count;
-                        let escaped = serde_json::to_string(&chunk.text)
-                            .expect("serializing a Rust string cannot fail");
+                        let escaped = json(&chunk.text);
                         return Some((
                             Ok(Bytes::from(escaped[1..escaped.len() - 1].to_owned())),
                             state,
@@ -53,11 +53,11 @@ pub(super) async fn get(state: Arc<HttpState>, uri: &Uri) -> Result<Response<Bod
     *response.status_mut() = StatusCode::OK;
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        "application/json; charset=utf-8".parse().unwrap(),
+        HeaderValue::from_static("application/json; charset=utf-8"),
     );
     response
         .headers_mut()
-        .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
 
@@ -103,5 +103,5 @@ impl ResponseState {
 }
 
 fn json(value: &str) -> String {
-    serde_json::to_string(value).expect("serializing a Rust string cannot fail")
+    serde_json::Value::from(value).to_string()
 }

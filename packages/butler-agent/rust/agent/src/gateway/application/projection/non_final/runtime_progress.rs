@@ -73,12 +73,10 @@ pub(super) fn row_from_runtime_event(
                 .or_else(|| optional(payload.get("label").or_else(|| payload.get("safeLabel"))))
                 .unwrap_or_else(|| "Working".into());
             let phase = kind.rsplit('.').next()?;
-            let state = if phase == "completed"
-                && matches!(
-                    optional(payload.get("status")).as_deref(),
-                    Some("failed" | "cancelled")
-                ) {
-                optional(payload.get("status")).unwrap()
+            let status = optional(payload.get("status"))
+                .filter(|status| matches!(status.as_str(), "failed" | "cancelled"));
+            let state = if let Some(status) = status.filter(|_| phase == "completed") {
+                status
             } else if phase == "completed" {
                 "delivered".into()
             } else {

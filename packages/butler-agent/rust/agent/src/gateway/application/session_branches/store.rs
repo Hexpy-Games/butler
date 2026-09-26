@@ -226,7 +226,8 @@ pub(super) fn input_digest(request: &AppSessionBranchRequest) -> Result<String, 
     let mut digest = String::with_capacity(64);
     for byte in Sha256::digest(encoded.as_bytes()) {
         use std::fmt::Write as _;
-        write!(&mut digest, "{byte:02x}").expect("writing to a String cannot fail");
+        // Writing to a String cannot fail.
+        let _ = write!(&mut digest, "{byte:02x}");
     }
     Ok(digest)
 }

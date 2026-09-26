@@ -86,13 +86,17 @@ pub(super) fn run(
             continue;
         }
         let staged = if let Some(bytes) = bytes {
-            if staging.0.is_none() {
-                fs::create_dir_all(root).map_err(internal)?;
-                let directory = root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
-                fs::create_dir(&directory).map_err(internal)?;
-                staging.0 = Some(directory);
-            }
-            let path = staging.0.as_ref().unwrap().join(pending.len().to_string());
+            let directory = match &staging.0 {
+                Some(directory) => directory,
+                None => {
+                    fs::create_dir_all(root).map_err(internal)?;
+                    let directory =
+                        root.join(format!(".artifact-staging-{}", uuid::Uuid::new_v4()));
+                    fs::create_dir(&directory).map_err(internal)?;
+                    staging.0.insert(directory)
+                }
+            };
+            let path = directory.join(pending.len().to_string());
             let mut file = File::create(&path).map_err(internal)?;
             file.write_all(&bytes).map_err(internal)?;
             Some(path)

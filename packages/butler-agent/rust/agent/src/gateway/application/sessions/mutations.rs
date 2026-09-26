@@ -1,6 +1,5 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use super::read;
 use crate::gateway::GatewayApplicationError;
@@ -199,10 +198,7 @@ fn mutate_session(
         &tx,
         "session.updated",
         None,
-        json!({"session":session})
-            .as_object()
-            .cloned()
-            .expect("session event is an object"),
+        crate::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;
@@ -230,10 +226,7 @@ fn delete_permanently(
         &tx,
         "session.permanently_deleted",
         None,
-        json!({"session":session})
-            .as_object()
-            .cloned()
-            .expect("session event is an object"),
+        crate::json::json_object!({"session":session}),
         &clock.now_iso(),
     )?;
     tx.commit().map_err(AppStorageError::sqlite)?;

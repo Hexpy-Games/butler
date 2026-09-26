@@ -293,10 +293,12 @@ fn valid_numbered_id(value: &str) -> bool {
     })
 }
 fn next_id(reserved: &HashSet<String>, seen: &HashSet<String>) -> String {
-    (1_u64..)
+    // At most `reserved.len() + seen.len()` ids are taken, so this finds one.
+    let taken = reserved.len() + seen.len();
+    (1..=taken + 1)
         .map(|number| format!("w{number}"))
         .find(|id| !reserved.contains(id) && !seen.contains(id))
-        .expect("unbounded profile id space")
+        .unwrap_or_else(|| format!("w{}", taken + 1))
 }
 fn encoded(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()

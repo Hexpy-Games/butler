@@ -122,17 +122,12 @@ impl AppApplication {
                 .as_ref()
                 .map(|request| request.source_message_id.clone())
         });
-        let source_message_id = if existing.is_some()
-            && source_message_was_omitted
-            && prior
-                .as_ref()
-                .is_some_and(|saved| saved.source_session_id == source_session_id)
-        {
-            prior
-                .as_ref()
-                .expect("checked saved request")
-                .source_message_id
-                .clone()
+        let saved_source = prior
+            .as_ref()
+            .filter(|saved| saved.source_session_id == source_session_id)
+            .filter(|_| existing.is_some() && source_message_was_omitted);
+        let source_message_id = if let Some(saved) = saved_source {
+            saved.source_message_id.clone()
         } else {
             self.resolve_answer(&source_session_id, requested_message.as_deref())
                 .await?

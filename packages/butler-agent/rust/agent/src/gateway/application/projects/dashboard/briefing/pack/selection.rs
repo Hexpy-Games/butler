@@ -100,11 +100,10 @@ pub(super) fn work_fact_parts(
 ) -> (String, String, Vec<String>) {
     let disposition = view.and_then(|view| view.latest_disposition.as_ref());
     let checkpoint = view.and_then(|view| view.latest_checkpoint.as_ref());
-    let disposition_latest = disposition.is_some_and(|disposition| {
+    let latest_disposition = disposition.filter(|disposition| {
         checkpoint.is_none_or(|checkpoint| disposition.created_at >= checkpoint.created_at)
     });
-    if disposition_latest {
-        let disposition = disposition.expect("checked latest disposition");
+    if let Some(disposition) = latest_disposition {
         return (
             disposition.created_at.clone(),
             disposition.summary.clone().unwrap_or_default(),

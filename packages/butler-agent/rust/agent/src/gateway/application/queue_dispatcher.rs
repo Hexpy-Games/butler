@@ -166,9 +166,9 @@ async fn run(
             _ = cancellation.cancelled() => return Ok(()),
             command = receiver.recv() => match command {
                 Some(Command::Initialize(app)) => {
-                    application = Some(app);
-                    if !cycle(&cancellation, application.as_ref().unwrap(), None).await { return Ok(()); }
-                    deadline = next_deadline(application.as_ref().unwrap()).await.ok().flatten();
+                    let app = application.insert(app);
+                    if !cycle(&cancellation, app, None).await { return Ok(()); }
+                    deadline = next_deadline(app).await.ok().flatten();
                 }
                 Some(Command::Wake(chat)) => {
                     if let Some(app) = application.as_ref() {

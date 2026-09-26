@@ -41,12 +41,11 @@ pub(in crate::gateway::application) async fn sync_chat_once(
     if checkpoint.spool_path.is_empty() {
         checkpoint.spool_path = spool_path.to_string_lossy().into_owned();
     }
-    if prior
+    if let Some(stale) = prior
         .as_ref()
-        .is_some_and(|value| value.spool_bytes > 0 && value.spool_path != checkpoint.spool_path)
+        .filter(|value| value.spool_bytes > 0 && value.spool_path != checkpoint.spool_path)
     {
-        let stale = PathBuf::from(&prior.as_ref().unwrap().spool_path);
-        let _ = std::fs::remove_file(stale);
+        let _ = std::fs::remove_file(PathBuf::from(&stale.spool_path));
     }
     let mut read = tokio::task::spawn_blocking(move || {
         super::byte_window::read_record(checkpoint, state.size, state.modified_at_ms)

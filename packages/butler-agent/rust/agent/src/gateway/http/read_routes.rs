@@ -1,6 +1,7 @@
 //! Existing App read routes kept together to leave the HTTP router small.
 
 use super::*;
+use axum::http::HeaderValue;
 
 pub(super) async fn get_messages(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
     let query = query(uri);
@@ -119,13 +120,13 @@ pub(super) async fn get_live_events(
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        "text/event-stream; charset=utf-8".parse().unwrap(),
+        HeaderValue::from_static("text/event-stream; charset=utf-8"),
     );
     headers.insert(
         header::CACHE_CONTROL,
-        "no-store, no-transform".parse().unwrap(),
+        HeaderValue::from_static("no-store, no-transform"),
     );
-    headers.insert(header::CONNECTION, "keep-alive".parse().unwrap());
-    headers.insert("x-accel-buffering", "no".parse().unwrap());
+    headers.insert(header::CONNECTION, HeaderValue::from_static("keep-alive"));
+    headers.insert("x-accel-buffering", HeaderValue::from_static("no"));
     Ok(response)
 }

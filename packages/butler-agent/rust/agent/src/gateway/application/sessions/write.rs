@@ -1,5 +1,4 @@
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::json;
 
 use super::{AppStorageError, contracts::*, read};
 use crate::gateway::application::{AppIdentityClock, EventSubscribers, events};
@@ -109,10 +108,7 @@ pub(super) fn append_created_unpublished(
     clock: &dyn AppIdentityClock,
 ) -> Result<crate::gateway::AppEventEnvelope, AppStorageError> {
     let summary = read::session(db, id)?;
-    let payload = json!({"session":summary})
-        .as_object()
-        .cloned()
-        .expect("session event is an object");
+    let payload = crate::json::json_object!({"session":summary});
     events::append_unpublished(db, "session.created", None, payload, &clock.now_iso())
 }
 
@@ -122,10 +118,7 @@ fn append_created(
     summary: &AppSessionSummary,
     now: &str,
 ) -> Result<(), AppStorageError> {
-    let payload = json!({"session":summary})
-        .as_object()
-        .cloned()
-        .expect("session event is an object");
+    let payload = crate::json::json_object!({"session":summary});
     events::append(db, subscribers, "session.created", None, payload, now)?;
     Ok(())
 }

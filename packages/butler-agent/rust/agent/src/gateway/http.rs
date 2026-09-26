@@ -28,6 +28,7 @@ mod subsessions;
 mod transcript_export;
 mod updates;
 
+use axum::http::HeaderValue;
 use std::{collections::HashMap, error::Error as StdError, path::PathBuf, sync::Arc};
 
 use axum::{
@@ -431,7 +432,7 @@ fn payload_too_large_response() -> Response {
     *response.status_mut() = StatusCode::PAYLOAD_TOO_LARGE;
     response
         .headers_mut()
-        .insert(header::CONNECTION, "close".parse().unwrap());
+        .insert(header::CONNECTION, HeaderValue::from_static("close"));
     response
 }
 

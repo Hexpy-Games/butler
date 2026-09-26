@@ -181,8 +181,10 @@ pub(super) async fn route(
             }
             let pins = object.get("pinnedSourceRefs").map(parse_pins).transpose()?;
             let update = AppProjectDashboardPreferencesUpdate {
-                expected_revision: safe_nonnegative_integer(&object["expectedRevision"])
-                    .expect("validated preferences revision"),
+                expected_revision: object
+                    .get("expectedRevision")
+                    .and_then(safe_nonnegative_integer)
+                    .ok_or_else(|| invalid("Invalid preferences patch."))?,
                 description: object
                     .get("description")
                     .and_then(Value::as_str)

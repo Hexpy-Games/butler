@@ -1,7 +1,6 @@
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::json;
 
 use super::{AppApplication, AppProjectSummary, rows};
 use crate::gateway::GatewayApplicationError;
@@ -267,10 +266,7 @@ fn append_project_event(
         db,
         event_type,
         None,
-        json!({"project":project})
-            .as_object()
-            .cloned()
-            .expect("project event is an object"),
+        crate::json::json_object!({"project":project}),
         &clock.now_iso(),
     )
 }

@@ -50,10 +50,8 @@ pub(super) fn apply(response: &mut Response, origin: Option<&HeaderValue>) {
 }
 
 pub(super) fn preflight(origin: &HeaderValue) -> Response {
-    let mut response = Response::builder()
-        .status(StatusCode::NO_CONTENT)
-        .body(axum::body::Body::empty())
-        .expect("static preflight response");
+    let mut response = Response::new(axum::body::Body::empty());
+    *response.status_mut() = StatusCode::NO_CONTENT;
     apply(&mut response, Some(origin));
     let headers = response.headers_mut();
     headers.insert(

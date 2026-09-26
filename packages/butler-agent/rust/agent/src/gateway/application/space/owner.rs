@@ -245,10 +245,7 @@ fn commit_relocation(
         &tx,
         "session.updated",
         None,
-        serde_json::json!({"session":session,"context_revision":operation_id})
-            .as_object()
-            .cloned()
-            .expect("session event payload is an object"),
+        crate::json::json_object!({"session":session,"context_revision":operation_id}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;
@@ -257,10 +254,7 @@ fn commit_relocation(
         &tx,
         "space.changed",
         None,
-        serde_json::json!({"revision":final_view.revision})
-            .as_object()
-            .cloned()
-            .expect("space event payload is an object"),
+        crate::json::json_object!({"revision":final_view.revision}),
         &clock.now_iso(),
     )
     .map_err(app_error)?;

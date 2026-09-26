@@ -101,7 +101,7 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
                         output.insert(key.into(), Value::Object(patch));
                     }
                 }
-                _ => unreachable!(),
+                _ => {}
             }
         }
     }

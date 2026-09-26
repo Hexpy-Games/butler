@@ -209,7 +209,8 @@ fn unique_id(
             return candidate;
         }
     }
-    unreachable!("all u64 ledger suffixes cannot exist in a finite directory")
+    // Every u64 suffix cannot be taken in a finite directory; stay total anyway.
+    format!("project-ledger-{}", uuid::Uuid::new_v4())
 }
 
 fn key(value: &str) -> String {

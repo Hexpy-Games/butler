@@ -213,11 +213,9 @@ impl Stream for LiveEventStream {
 }
 
 fn format_event(event: &AppEventEnvelope) -> Bytes {
-    Bytes::from(format!(
-        "id: {}\ndata: {}\n\n",
-        event.id,
-        serde_json::to_string(event).expect("App event serialization must succeed")
-    ))
+    // An envelope of strings, an integer and a JSON map always serializes.
+    let data = serde_json::to_string(event).unwrap_or_default();
+    Bytes::from(format!("id: {}\ndata: {data}\n\n", event.id))
 }
 
 fn heartbeat_interval() -> Interval {

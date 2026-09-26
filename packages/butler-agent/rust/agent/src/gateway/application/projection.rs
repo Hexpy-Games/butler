@@ -337,8 +337,15 @@ async fn project_final(
         .artifact_materializer
         .materialize(candidate.materialization.clone())
         .await?;
-    let continuation = if candidate.activates_plan {
-        let plan = candidate.plan.as_ref().expect("validated active plan");
+    let active_plan = candidate.plan.as_ref().filter(|_| candidate.activates_plan);
+    let continuation = if let Some(plan) = active_plan {
+        // Admission validated the active plan's id and title.
+        let (Some(plan_id), Some(plan_title)) = (
+            plan.get("id").and_then(Value::as_str),
+            plan.get("title").and_then(Value::as_str),
+        ) else {
+            return Err(GatewayApplicationError::Internal);
+        };
         let source_client_id = format!("client-plan-activated-{}", candidate.turn_id);
         let client_message_id = super::admission_identity::stable_client_id(
             Some(&Value::String(source_client_id)),
@@ -348,11 +355,8 @@ async fn project_final(
             queued_id: format!("queued-{}", context.dependencies.identity_clock.new_uuid()),
             client_message_id,
             chat_id: candidate.chat_id.clone(),
-            plan_id: plan["id"].as_str().expect("validated plan id").to_owned(),
-            plan_title: plan["title"]
-                .as_str()
-                .expect("validated plan title")
-                .to_owned(),
+            plan_id: plan_id.to_owned(),
+            plan_title: plan_title.to_owned(),
             facts: context.dependencies.settings_facts.snapshot()?,
         })
     } else {

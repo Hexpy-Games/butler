@@ -166,7 +166,8 @@ fn disposition(name: &str) -> String {
             encoded.push(char::from(byte));
         } else {
             use std::fmt::Write;
-            write!(&mut encoded, "%{byte:02X}").expect("writing a String cannot fail");
+            // Writing to a String cannot fail.
+            let _ = write!(&mut encoded, "%{byte:02X}");
         }
     }
     format!("inline; filename=\"{fallback}\"; filename*=UTF-8''{encoded}")
