@@ -2,7 +2,7 @@ export interface ComposerDraftFileSnapshot {
   schema: "butler.composer-draft.v1";
   session_id: string;
   text: string;
-  content_parts?: import("../../../butler-agent/src/foundation/message-content.ts").MessageContent;
+  content_parts?: import("../shared/app-contracts.ts").MessageContent;
   updated_at: string;
 }
 

@@ -1,0 +1,42 @@
+{
+  "input": {
+    "schema": "butler.memory-extract-input.v2",
+    "episode_ref": "episode",
+    "revision": "revision",
+    "window_ref": "window",
+    "bound_project_id": null,
+    "source_units": [
+      {
+        "ref": "source",
+        "text": "Alice likes tea. 🙂",
+        "role": "user",
+        "observed_at": "2026-09-14T00:00:00.000Z",
+        "origin_kind": "user_input"
+      }
+    ],
+    "context_units": [],
+    "candidates": []
+  },
+  "passages": [
+    {
+      "id": 0,
+      "text": "Alice likes tea. ",
+      "quote": {
+        "unit_ref": "source",
+        "quote": "Alice likes tea. ",
+        "occurrence": 0
+      }
+    },
+    {
+      "id": 1,
+      "text": "🙂",
+      "quote": {
+        "unit_ref": "source",
+        "quote": "🙂",
+        "occurrence": 0
+      }
+    }
+  ],
+  "prompt": "{\"speaker\":\"user\",\"observed_at\":\"2026-09-14T00:00:00.000Z\",\"parts\":[{\"id\":0,\"text\":\"Alice likes tea. \"},{\"id\":1,\"text\":\"🙂\"}],\"context\":[]}",
+  "sha256": "490ca9d580ac2e0e4d73fd03f4dccb62bd32fb3da210cbfb86bd0d8859ec5905"
+}

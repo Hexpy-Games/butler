@@ -1,63 +1,20 @@
 ---
 name: persona
-description: View or switch the active butler persona, or customize the active persona directly
+description: Explain Butler personas and guide changes through Profile-owned personalization
 user-invocable: true
 applicability: Use when the model decides the user is asking to inspect, switch, or customize Butler's active persona or tone configuration.
-allowed-tools: persona
+allowed-tools: list_skills
 dispatch: none
 review: none
-reporting: Reply directly with the active persona or applied change.
+reporting: Report known persona facts and do not claim an unapplied change.
 ---
 
 ## Instructions
 
-Handle persona commands directly — do not dispatch a worker.
+Handle persona questions directly. The source Guided tool catalog has no general `persona` executor; a skill frontmatter name alone does not grant one. The first-chat `update_onboarding_profile` tool may set a persona only within its onboarding authority. For later changes, direct the user to Butler App personalization, whose native Profile owner reads the installed presets and writes the active persona. Do not edit DATA files or config through a shell command, or claim a change took effect without a Profile-owned result.
 
-Available presets: `butler` (default), `guardian`, `demon-butler`, `wolf-butler`, `neko-servant`, `think-tank`, `operator`, `archivist`, `dry-wit`
+Preset names are `butler` (default), `guardian`, `demon-butler`, `wolf-butler`, `neko-servant`, `think-tank`, `operator`, `archivist`, and `dry-wit`. Installed `resources/personas/templates/{en,ko}` are read-only. The native Profile owner selects them using the configured language and stores an active document in DATA; the runtime loads that document at session start.
 
-**Architecture:**
-- Preset files (`packages/butler-agent/resources/personas/templates/{en,ko}/*.md`) are read-only templates
-- The active template locale is selected from `butler.config.json` → `user.language`; currently supported locales are `en` and `ko`
-- `$BUTLER_DATA/personas/active.md` is the actual applied persona — always loaded at session start
-- Switching a preset copies its content into `active.md`
-- `active.md` can be freely customized after copying
-
-### Command patterns:
-- "/persona" — show current active persona info and list available presets
-- "/persona butler|guardian|demon-butler|wolf-butler|neko-servant|think-tank|operator|archivist|dry-wit" — switch to preset (copies to active.md)
-- "/persona custom <description>" — overwrite active.md with user's custom persona
-
-### To switch to a preset:
-1. Read `$BUTLER_HOME/packages/butler-agent/resources/personas/templates/{user.language}/{name}.md` (the localized preset template), falling back to `en`
-2. Copy the full content to `$BUTLER_DATA/personas/active.md`, updating the frontmatter:
-   - Set `name: active`
-   - Set `description: Currently active persona. Copied from preset, freely customizable.`
-   - Add `base: {name}` to track which preset it came from
-   - Add `base_locale: {locale}` to track which localized preset was copied
-3. Update `butler.config.json` → `system.activePersona` and `system.activePersonaLocale` for reference only
-4. Apply immediately in this session
-5. Confirm to user with a brief example of the new tone
-
-### To set a custom persona:
-1. Take everything after "custom" as the persona description
-2. Write to `$BUTLER_DATA/personas/active.md`:
-   ```
-   ---
-   name: active
-   description: Currently active persona. User custom.
-   base: custom
-   ---
-
-   {user's description verbatim}
-   ```
-3. Update `butler.config.json` → `system.activePersona` to "custom" (for reference only)
-4. Apply immediately
-5. Confirm: echo back how you'll behave based on their description
-
-### To show current:
-1. Read `$BUTLER_DATA/personas/active.md`
-2. Check frontmatter `base` field to show which preset it's based on
-3. Report current persona + list all available presets
-4. Mention that `active.md` can be directly edited for customization
+For `/persona`, report the active persona only if it is known from the current Turn's trusted context. Otherwise say it is not visible here and point to App personalization. For a preset or custom request, explain how to apply it in App personalization and wait for a confirmed Profile-owned result. Never infer that a requested preset is already active.
 
 Reply directly. No worker needed.

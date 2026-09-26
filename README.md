@@ -32,16 +32,10 @@ workstreams.
 
 ## Quick Start
 
-Download Butler App from the
-[v0.0.21 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.21).
-
-| Platform | Installer |
-| --- | --- |
-| macOS Apple Silicon | `butler-app-0.0.21-darwin-arm64.dmg` |
-| Linux x64 | `butler-app-0.0.21-linux-x64.deb` |
-| Linux ARM64 | `butler-app-0.0.21-linux-arm64.deb` |
-| Arch Linux x64 | `butler-app-0.0.21-archlinux-x64.pkg.tar.zst` |
-| Windows x64 | `butler-app-0.0.21-win32-x64-community-setup.exe` |
+The current native Agent bundle is packaged and verified for macOS Apple Silicon
+(`darwin-arm64`). Use a release that explicitly includes the native Agent, or
+build the local App package using the native release workflow. Earlier release
+assets may contain the retired TypeScript/Bun Agent.
 
 Butler Agent is included in the app. On first launch, setup runs inside the
 Butler App in this order:
@@ -51,78 +45,55 @@ Butler App in this order:
 3. `Butler Agent를 준비합니다`
 4. Model setup
 
-On macOS, drag `Butler.app` from the DMG into Applications. On every supported
-desktop platform, the Agent and tray run only while Butler is open; quitting
-Butler shuts the complete App-owned Agent process tree down.
-
-### Windows: Microsoft Store and GitHub Releases in parallel
-
-The Microsoft Store is Butler's primary Windows distribution path. During Store
-onboarding and review, the GitHub Releases Windows x64 installer remains
-available in parallel. Download
-`butler-app-<version>-win32-x64-community-setup.exe` and its matching `.sha256`
-sidecar from the release assets, then run the Setup executable. Installation,
-first run, runtime, and uninstall use the existing Windows Squirrel package.
-The community path does not publish a Squirrel updater feed; download each new
-version from its GitHub Release (or use the Microsoft Store) when updating.
-
-An ordinary SmartScreen warning can be continued with **More info** and then
-**Run anyway**. This community build is not signed by a public-trust publisher,
-so a warning is expected. Smart App Control enforcement is different: it can
-block the app with no override (there is no user override). On such machines,
-do not disable Smart App Control; use the Microsoft Store or a machine whose
-policy permits the app instead.
+On macOS, drag `Butler.app` from the DMG into Applications. The bundled native
+Agent runs only while Butler is open. Electron UI code and packaging tooling
+for Windows and Linux remain in the repository, but native Agent bundles for
+those platforms are not yet supported or verified.
 
 Use the standalone Agent only when you want the headless runtime without the
 desktop app.
 
 ## Advanced: Butler Agent
 
-```bash
-cd ~
-wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.21/butler-agent-0.0.21-all.tar.gz
-mkdir -p ~/butler
-tar -xzf ~/butler-agent-*-all.tar.gz -C ~/butler
-cd ~/butler
-./install.sh
-butler install --home ~/butler --data ~/.butler
-```
-
-Default paths:
-
-- `BUTLER_HOME=~/butler`
-- `BUTLER_DATA=~/.butler`
-
-Override them when needed:
+Standalone Agent archives currently target Apple Silicon macOS (`darwin-arm64`)
+only. Use a release version that publishes the native archive; it does not run
+on Linux or Intel Macs. Each archive is an immutable installation package.
+Extract each version to a new directory and keep runtime data separate under
+`BUTLER_DATA` (default `~/.butler`). Butler does not replace an installed
+version or move user data when updating.
 
 ```bash
-./install.sh --home ~/Apps/butler --data ~/.butler
-butler install --home ~/butler --data ~/.butler
+set -euo pipefail
+VERSION=0.0.21 # Replace with a release version that has the native Agent archive.
+ARCHIVE="butler-agent-${VERSION}-darwin-arm64.tar.gz"
+RELEASE_URL="https://github.com/Hexpy-Games/butler/releases/download/v${VERSION}"
+DOWNLOAD_DIR="$HOME/Downloads/butler-agent-${VERSION}"
+INSTALL_ROOT="$HOME/.local/opt/butler-agent"
+INSTALL_DIR="$INSTALL_ROOT/$VERSION"
+export BUTLER_DATA="${BUTLER_DATA:-$HOME/.butler}"
+
+mkdir -p "$DOWNLOAD_DIR" "$INSTALL_ROOT" "$BUTLER_DATA"
+cd "$DOWNLOAD_DIR"
+curl -fL --retry 3 -o "$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
+SUMS="butler-${VERSION}-SHA256SUMS"
+curl -fL --retry 3 -o "$SUMS" "$RELEASE_URL/$SUMS"
+EXPECTED_SHA256="$(awk -v name="$ARCHIVE" '$2 == name { print $1 }' "$SUMS")"
+test "${#EXPECTED_SHA256}" -eq 64
+printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | shasum -a 256 -c -
+
+if [ -e "$INSTALL_DIR" ]; then
+  printf 'Installation already exists; choose a new version directory: %s\n' "$INSTALL_DIR" >&2
+  exit 1
+fi
+mkdir "$INSTALL_DIR"
+tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
+"$INSTALL_DIR/butler" --data "$BUTLER_DATA" version --json
+"$INSTALL_DIR/butler" --data "$BUTLER_DATA" doctor --check installation --json
 ```
 
-For scripted installs:
-
-```bash
-./install.sh --non-interactive --no-register-service
-./install.sh --non-interactive --register-service
-```
-
-After install:
-
-```bash
-butler commands
-butler status
-butler ps
-butler logs --service butler-main --lines 100
-butler doctor --check delivery --verbose
-butler context prune --json
-butler start
-butler stop
-butler restart
-```
-
-For the complete user-facing command list, see
-`REF-CLI-REFERENCE - Butler CLI Reference`.
+For an update, repeat with the new release version. It will install beside the
+previous version; select the new directory when launching Butler. Keep both
+installation folders unchanged and continue using the same `BUTLER_DATA`.
 
 ## How Butler Works
 
@@ -179,9 +150,9 @@ Butler has two release shapes:
 
 ## Development
 
-Source checkouts, Docker installer sandboxes, and package scripts are for
-development, not the normal user install path. Public installs use Butler App by
-default or the standalone Butler Agent artifact for headless operators.
+Source checkouts and package scripts are for development, not the normal user
+install path. Use a native Butler App release or the standalone Butler Agent
+artifact for headless operation.
 
 ```bash
 git clone https://github.com/Hexpy-Games/butler.git ~/butler
@@ -196,6 +167,12 @@ bun test tests/unit/*.test.ts
 bun run check
 ```
 
+`bun run check` covers the retained Electron/UI and development TypeScript. The
+Rust Agent has its own checks in `packages/butler-agent/rust/README.md`:
+`cargo fmt --all -- --check` and
+`cargo clippy --workspace --all-targets --locked -- -D warnings` from its
+workspace with the documented native dependency environment.
+
 Useful app commands:
 
 ```bash
@@ -203,20 +180,6 @@ bun run app:client:dev
 bun run app:ui:build
 bun run app:client
 ```
-
-Installer sandboxes:
-
-```bash
-bun run install:docker
-bun run install:docker:readme
-docker exec -it butler-readme-install bash -l
-```
-
-The Docker installer builds or consumes a Butler Agent release artifact, runs the
-interactive `install.sh`, and keeps the container shell open for inspection. The
-README sandbox downloads the Agent artifact into `~/Downloads` and opens a
-dependency-only Docker container for manually running the Advanced Agent install
-commands.
 
 ## Status
 

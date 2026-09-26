@@ -6,7 +6,7 @@ import { Button, ChevronRight, CheckCircle2, FileText, MessageSquare, NavRow, No
 import styles from "./ProjectHistoryPanel.module.css";
 import information from "./ProjectInformation.module.css";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardHistoryPage } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardHistoryPage } from "../../../../shared/app-contracts.ts";
 
 export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { projectId: string; onSelect: (document: ProjectDashboardDocument) => void; onOpenSession: (id: string) => void }) {
   const locale = useAppLocale();

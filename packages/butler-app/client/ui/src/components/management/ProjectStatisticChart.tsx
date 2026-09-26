@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, ChartContainer, ChartTooltip, ChartTooltipContent, Section, Stack, Typo } from "@/butler-ds";
-import type { DashboardStatisticSeries } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardStatisticSeries } from "../../../../shared/app-contracts.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 import styles from "./ProjectStatisticsPanel.module.css";
 

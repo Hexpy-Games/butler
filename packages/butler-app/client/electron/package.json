@@ -8,9 +8,9 @@
   "main": "main.mjs",
   "scripts": {
     "start": "electron .",
-    "package:mac": "electron-packager . Butler --platform=darwin --arch=arm64 --overwrite --out=dist --icon=assets/butler.icns --app-bundle-id=com.hexpy.butler --helper-bundle-id=com.hexpy.butler.helper --ignore=\"^/dist($|/)\" && node scripts/normalize-mac-bundle.mjs dist/Butler-darwin-arm64/Butler.app && node scripts/adhoc-sign-mac.mjs dist/Butler-darwin-arm64/Butler.app",
-    "package:win": "electron-packager . Butler --platform=win32 --arch=x64 --overwrite --out=dist --icon=assets/icon.png --ignore=\"^/dist($|/)\"",
-    "package:linux": "electron-packager . Butler --platform=linux --arch=x64 --overwrite --out=dist --icon=assets/icon.png --ignore=\"^/dist($|/)\""
+    "package:mac": "node scripts/prepare-native-agent.mjs darwin arm64 && electron-packager . Butler --platform=darwin --arch=arm64 --overwrite --out=dist --icon=assets/butler.icns --app-bundle-id=com.hexpy.butler --helper-bundle-id=com.hexpy.butler.helper --ignore=\"^/(dist|.native-agent-payload)($|/)\" --extra-resource=.native-agent-payload/bundled-agent && node scripts/normalize-mac-bundle.mjs dist/Butler-darwin-arm64/Butler.app && node scripts/adhoc-sign-mac.mjs dist/Butler-darwin-arm64/Butler.app",
+    "package:win": "node scripts/prepare-native-agent.mjs win32 x64 && electron-packager . Butler --platform=win32 --arch=x64 --overwrite --out=dist --icon=assets/icon.png --ignore=\"^/(dist|.native-agent-payload)($|/)\" --extra-resource=.native-agent-payload/bundled-agent",
+    "package:linux": "node scripts/prepare-native-agent.mjs linux x64 && electron-packager . Butler --platform=linux --arch=x64 --overwrite --out=dist --icon=assets/icon.png --ignore=\"^/(dist|.native-agent-payload)($|/)\" --extra-resource=.native-agent-payload/bundled-agent"
   },
   "butler": {
     "protocolVersion": "butler.app.v1",

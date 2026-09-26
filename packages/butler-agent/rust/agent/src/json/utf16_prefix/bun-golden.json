@@ -1,0 +1,62 @@
+[
+  {
+    "pad": 2,
+    "suffix": "😀 z",
+    "limit": 3,
+    "promptLimit": 9,
+    "units": 3,
+    "hash": "c6ec173f902141b65837cb6dc112360a2789ae1821257a635c213f764c038d4e",
+    "promptHash": "519538db3a579481d3da6eb5547d3119660c2bc72b0a4f3f99248450432a8270",
+    "literal": "\"xx\\ud83d\""
+  },
+  {
+    "pad": 2,
+    "suffix": " \t😀",
+    "limit": 5,
+    "promptLimit": 9,
+    "units": 5,
+    "hash": "c8d6a3f0234d3a2caf8935347b4ba40786fb38e88f0527195c2d4f016f36a514",
+    "promptHash": "ac817b3d0bbc9931157e66115a77da3200a8c89559bc35155c7f5da4ddc390b5",
+    "literal": "\"xx \\ud83d\""
+  },
+  {
+    "pad": 59999,
+    "suffix": "😀 discarded",
+    "limit": 60000,
+    "promptLimit": 18000,
+    "units": 60000,
+    "hash": "0eecd6bf6997c6fd67c6a59618e1f2df43526f15cd978214ed209f41c63f3fd9",
+    "promptHash": "93642cafd602de5aeada35e54f775118b86b72b6ebddeb0a44b70df48a5ac527",
+    "literal": null
+  },
+  {
+    "pad": 17999,
+    "suffix": "😀 end",
+    "limit": 60000,
+    "promptLimit": 18000,
+    "units": 18005,
+    "hash": "0ff1f0045611b4df0de3746a03aa408ffcabdbe2430ac17eda118c71c380f34a",
+    "promptHash": "5723266b651ff25fe8a678149b7ef6301c970ff4026b59369861794a6a517197",
+    "literal": null
+  },
+  {
+    "pad": 0,
+    "suffix": "﻿ \t😀\n ",
+    "limit": 60000,
+    "promptLimit": 1,
+    "units": 7,
+    "hash": "ec0a944f10c2c2751718b69e965f7655354012c64c160995b44f39502024b744",
+    "promptHash": "2ef39d7e532783c70326bd1414557d41c30b77c9a5293288de1df7eb67575ffc",
+    "literal": "\"\\ud83d\""
+  },
+  {
+    "pad": 0,
+    "suffix": "ab😀cd",
+    "limit": 4,
+    "promptLimit": 3,
+    "units": 4,
+    "hash": "3f081536ae8da48f2006638654672fb6bc6fe7f5917c6332717c030cb21013d5",
+    "promptHash": "eec3797edda21cd8710b1232d3e8d987f4ef0de624d4cd4d1af2972eeb1d2ed6",
+    "literal": "\"ab\\ud83d\""
+  }
+]

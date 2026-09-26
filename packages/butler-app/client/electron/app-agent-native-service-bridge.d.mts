@@ -1,6 +1,8 @@
 export function createAppAgentNativeServiceBridge(options?: {
   butlerData: string;
   platform?: string;
+  resourcesPath?: string;
+  execPath?: string;
   homeDir?: string;
   serviceLabel?: string;
   systemdUnit?: string;

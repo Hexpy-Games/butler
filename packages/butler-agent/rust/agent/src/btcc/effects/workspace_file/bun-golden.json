@@ -1,0 +1,142 @@
+{
+  "source": {
+    "bun": "1.3.11"
+  },
+  "workspacePath": "/tmp/butler-b2c2-workspace-fixture",
+  "cases": [
+    {
+      "input": {
+        "path": "a\\b",
+        "content": "x"
+      },
+      "normalized": {
+        "path": "a/b",
+        "content": "x",
+        "create_parents": false
+      },
+      "target": "workspace:a/b"
+    },
+    {
+      "input": {
+        "path": "a//b",
+        "content": "x",
+        "create_parents": true
+      },
+      "normalized": {
+        "path": "a/b",
+        "content": "x",
+        "create_parents": true
+      },
+      "target": "workspace:a/b"
+    },
+    {
+      "input": {
+        "path": "/tmp/butler-b2c2-workspace-fixture/a",
+        "content": "x"
+      },
+      "normalized": {
+        "path": "a",
+        "content": "x",
+        "create_parents": false
+      },
+      "target": "workspace:a"
+    },
+    {
+      "input": {
+        "path": "../a",
+        "content": "x"
+      },
+      "error": "write_file effect path cannot traverse a parent directory"
+    },
+    {
+      "input": {
+        "path": "a",
+        "content": "x",
+        "overwrite": true
+      },
+      "error": "write_file effect rejects unknown input: overwrite"
+    },
+    {
+      "input": {
+        "path": "a",
+        "content": "x",
+        "create_parents": null
+      },
+      "error": "write_file effect create_parents must be a boolean"
+    },
+    {
+      "input": {
+        "path": "a",
+        "content": 1
+      },
+      "error": "write_file effect content must be a string"
+    },
+    {
+      "input": {
+        "path": "a/",
+        "content": "x"
+      },
+      "normalized": {
+        "path": "a/",
+        "content": "x",
+        "create_parents": false
+      },
+      "target": "workspace:a/"
+    }
+  ],
+  "targets": [
+    {
+      "target": "workspace:a\\b",
+      "normalized": "workspace:a/b"
+    },
+    {
+      "target": "workspace:a//b",
+      "normalized": "workspace:a/b"
+    },
+    {
+      "target": "workspace:../a",
+      "error": "write_file effect path cannot traverse a parent directory"
+    },
+    {
+      "target": "workspace:/a",
+      "error": "write_file effect path must be workspace-relative"
+    },
+    {
+      "target": "bad:a",
+      "error": "write_file effect target must use workspace:<relative-path>"
+    },
+    {
+      "target": "workspace:a/",
+      "normalized": "workspace:a/"
+    }
+  ],
+  "observation": {
+    "dispatch": {
+      "status": "applied",
+      "result": {
+        "ok": true,
+        "effect": "workspace_file_write",
+        "path": "a",
+        "bytes": 12,
+        "after_sha256": "13d88c6c0d70bbff19ed19f9b545ed2919687882f04a10b02ba627cf0144449a",
+        "create_parents": false,
+        "target_observed": true,
+        "created_from_absent": true,
+        "changed_file": {
+          "source": "registered"
+        }
+      }
+    },
+    "zero": {
+      "status": "not_applied"
+    },
+    "once": {
+      "status": "uncertain",
+      "error": {
+        "code": "workspace_file_state_mismatch",
+        "message": "Current target bytes do not prove whether write_file was applied."
+      }
+    },
+    "resultJson": "{\"ok\":true,\"effect\":\"workspace_file_write\",\"path\":\"a\",\"bytes\":12,\"after_sha256\":\"13d88c6c0d70bbff19ed19f9b545ed2919687882f04a10b02ba627cf0144449a\",\"create_parents\":false,\"target_observed\":true,\"created_from_absent\":true,\"changed_file\":{\"source\":\"registered\"}}"
+  }
+}

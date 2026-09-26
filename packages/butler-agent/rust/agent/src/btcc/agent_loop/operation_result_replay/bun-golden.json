@@ -1,0 +1,35 @@
+{
+  "reference": {
+    "version": "butler.operation-result-reference.v1",
+    "kind": "operation_result",
+    "identity": {
+      "kind": "direct",
+      "result_ref": "ref",
+      "tool_name": "read_file"
+    },
+    "integrity": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": null
+    },
+    "outcome": {
+      "status": "completed",
+      "success": false,
+      "verification": "stored_exact_available",
+      "error_code": "failure____"
+    },
+    "availability": {
+      "status": "exact_read_available",
+      "capability": "read_operation_results",
+      "scope": "same_turn"
+    }
+  },
+  "acceptedResponseSha256": "ee609fd20e6aecfac40376ea5732c7db402adf3f14bacfdfe512367ea63a1636",
+  "exactArguments": {
+    "result_ref": "ref",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "revision": null,
+    "work_id": "work",
+    "offset": 0,
+    "length": 4096
+  }
+}

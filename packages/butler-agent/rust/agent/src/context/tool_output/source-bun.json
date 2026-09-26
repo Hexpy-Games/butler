@@ -1,0 +1,175 @@
+[
+  {
+    "name": "early_absent",
+    "input": {
+      "result": {
+        "stdout": "short",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp"
+    },
+    "document": "{\"stdout\":\"short\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false}"
+  },
+  {
+    "name": "early_null",
+    "input": {
+      "result": {
+        "stdout": "short",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": null
+    },
+    "document": "{\"stdout\":\"short\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"auto\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":false,\"truncated\":false}}"
+  },
+  {
+    "name": "always_retain",
+    "input": {
+      "result": {
+        "stdout": "short",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "auto",
+      "retainOriginal": true
+    },
+    "document": "{\"stdout\":\"short\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"auto\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":false,\"truncated\":false},\"butler_tool_artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"raw_tokens\":3,\"compact_tokens\":3,\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\"}}",
+    "artifactDocument": "{\n  \"schema\": \"butler.tool-output.v1\",\n  \"id\": \"<id>\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"command\": \"printf\",\n  \"cwd\": \"/tmp\",\n  \"result\": {\n    \"stdout\": \"short\",\n    \"stderr\": \"\",\n    \"exit_code\": 0,\n    \"timed_out\": false\n  },\n  \"raw_tokens\": 3\n}"
+  },
+  {
+    "name": "silent_success",
+    "input": {
+      "result": {
+        "stdout": "visible",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "silent_on_success"
+    },
+    "document": "{\"stdout\":\"\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"silent_on_success\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":true,\"truncated\":true},\"butler_tool_artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"raw_tokens\":3,\"compact_tokens\":0,\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\"}}",
+    "artifactDocument": "{\n  \"schema\": \"butler.tool-output.v1\",\n  \"id\": \"<id>\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"command\": \"printf\",\n  \"cwd\": \"/tmp\",\n  \"result\": {\n    \"stdout\": \"visible\",\n    \"stderr\": \"\",\n    \"exit_code\": 0,\n    \"timed_out\": false\n  },\n  \"raw_tokens\": 3\n}"
+  },
+  {
+    "name": "validation_success",
+    "input": {
+      "result": {
+        "stdout": "visible",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "auto",
+      "validationSuite": " suite "
+    },
+    "document": "{\"stdout\":\"\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"auto\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":true,\"truncated\":true},\"butler_tool_artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"raw_tokens\":3,\"compact_tokens\":0,\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\"}}",
+    "artifactDocument": "{\n  \"schema\": \"butler.tool-output.v1\",\n  \"id\": \"<id>\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"command\": \"printf\",\n  \"cwd\": \"/tmp\",\n  \"result\": {\n    \"stdout\": \"visible\",\n    \"stderr\": \"\",\n    \"exit_code\": 0,\n    \"timed_out\": false\n  },\n  \"raw_tokens\": 3\n}"
+  },
+  {
+    "name": "failure_absent",
+    "input": {
+      "result": {
+        "stdout": "",
+        "stderr": "err\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\n",
+        "exit_code": 1,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp"
+    },
+    "document": "{\"stdout\":\"\",\"stderr\":\"err\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\n\",\"exit_code\":1,\"timed_out\":false}"
+  },
+  {
+    "name": "failure_null",
+    "input": {
+      "result": {
+        "stdout": "",
+        "stderr": "err\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\n",
+        "exit_code": 1,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": null
+    },
+    "document": "{\"stdout\":\"\",\"stderr\":\"...[output truncated]\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\n\",\"exit_code\":1,\"timed_out\":false,\"output_presentation\":{\"mode\":\"auto\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":false,\"truncated\":true},\"butler_tool_artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"raw_tokens\":62,\"compact_tokens\":44,\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\"}}",
+    "artifactDocument": "{\n  \"schema\": \"butler.tool-output.v1\",\n  \"id\": \"<id>\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"command\": \"printf\",\n  \"cwd\": \"/tmp\",\n  \"result\": {\n    \"stdout\": \"\",\n    \"stderr\": \"err\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\n\",\n    \"exit_code\": 1,\n    \"timed_out\": false\n  },\n  \"raw_tokens\": 62\n}"
+  },
+  {
+    "name": "failure_full",
+    "input": {
+      "result": {
+        "stdout": "",
+        "stderr": "err\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\nerr\n",
+        "exit_code": 1,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "full"
+    },
+    "document": "{\"stdout\":\"\",\"stderr\":\"err\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\nerr\\n\",\"exit_code\":1,\"timed_out\":false,\"output_presentation\":{\"mode\":\"full\",\"requested_max_tokens\":null,\"applied_max_tokens\":1200,\"suppressed\":false,\"truncated\":false}}"
+  },
+  {
+    "name": "clamp_min",
+    "input": {
+      "result": {
+        "stdout": "hello",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "full",
+      "maxModelTokens": 99.9
+    },
+    "document": "{\"stdout\":\"hello\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"full\",\"requested_max_tokens\":99.9,\"applied_max_tokens\":200,\"suppressed\":false,\"truncated\":false}}"
+  },
+  {
+    "name": "clamp_max",
+    "input": {
+      "result": {
+        "stdout": "hello",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "full",
+      "maxModelTokens": 9000
+    },
+    "document": "{\"stdout\":\"hello\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"full\",\"requested_max_tokens\":9000,\"applied_max_tokens\":8000,\"suppressed\":false,\"truncated\":false}}"
+  },
+  {
+    "name": "long_rocket",
+    "input": {
+      "result": {
+        "stdout": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x 🚀 b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b",
+        "stderr": "",
+        "exit_code": 0,
+        "timed_out": false
+      },
+      "command": "printf",
+      "cwd": "/tmp",
+      "outputMode": "full",
+      "maxModelTokens": 205
+    },
+    "document": "{\"stdout\":\"[Butler compacted 759 estimated tool-output tokens into a preview.]\\nArtifact ID: <id>\\nUse read_tool_output_artifact with search or a focused slice for omitted output.\\n\\nstdout preview:\\nx x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x 🚀\",\"stderr\":\"\",\"exit_code\":0,\"timed_out\":false,\"output_presentation\":{\"mode\":\"full\",\"requested_max_tokens\":205,\"applied_max_tokens\":205,\"suppressed\":false,\"truncated\":true},\"butler_tool_artifact\":{\"id\":\"<id>\",\"path\":\"<path>\",\"raw_tokens\":759,\"compact_tokens\":205,\"created_at\":\"2026-09-19T00:00:00.000Z\",\"command\":\"printf\"}}",
+    "artifactDocument": "{\n  \"schema\": \"butler.tool-output.v1\",\n  \"id\": \"<id>\",\n  \"created_at\": \"2026-09-19T00:00:00.000Z\",\n  \"command\": \"printf\",\n  \"cwd\": \"/tmp\",\n  \"result\": {\n    \"stdout\": \"x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x 🚀 b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b b\",\n    \"stderr\": \"\",\n    \"exit_code\": 0,\n    \"timed_out\": false\n  },\n  \"raw_tokens\": 759\n}"
+  }
+]

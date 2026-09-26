@@ -1,0 +1,37 @@
+[
+  {
+    "part_id": "cp_text",
+    "part_index": 0,
+    "pointer": "/text",
+    "text": "  keep \n",
+    "hash": "cac9c50747d8bbae8c8baef4587f2e589d8b299f20c87a228e499c499cd2c205"
+  },
+  {
+    "part_id": "cp_content",
+    "part_index": 1,
+    "pointer": "/0/text",
+    "text": "안녕🙂",
+    "hash": "17f6c94531325e857c919e9a344ebd71b0fea5d84ff3251129a3a086bd3d5275"
+  },
+  {
+    "part_id": "cp_content",
+    "part_index": 1,
+    "pointer": "/3/text",
+    "text": "same",
+    "hash": "0967115f2813a3541eaef77de9d9d5773f1c0c04314b0bbfe4ff3b3b1c55b5d5"
+  },
+  {
+    "part_id": "cp_content",
+    "part_index": 1,
+    "pointer": "/4/text",
+    "text": "same",
+    "hash": "0967115f2813a3541eaef77de9d9d5773f1c0c04314b0bbfe4ff3b3b1c55b5d5"
+  },
+  {
+    "part_id": "cp_content",
+    "part_index": 1,
+    "pointer": "/5/text",
+    "text": " ",
+    "hash": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068"
+  }
+]

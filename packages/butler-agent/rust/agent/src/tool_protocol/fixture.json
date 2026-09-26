@@ -1,0 +1,1291 @@
+{
+  "catalog": [
+    {
+      "id": "native:read_file",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "read_file"
+      }
+    },
+    {
+      "id": "mcp:server:tool",
+      "expected": {
+        "provider": "mcp",
+        "namespace": "server",
+        "name": "tool"
+      }
+    },
+    {
+      "id": "plugin:pack:name",
+      "expected": {
+        "provider": "plugin",
+        "namespace": "pack",
+        "name": "name"
+      }
+    },
+    {
+      "id": "native:",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native",
+      "expected": null
+    },
+    {
+      "id": "native:a:b",
+      "expected": null
+    },
+    {
+      "id": "mcp:a",
+      "expected": null
+    },
+    {
+      "id": "mcp::",
+      "expected": {
+        "provider": "mcp",
+        "namespace": "",
+        "name": ""
+      }
+    },
+    {
+      "id": "other:a",
+      "expected": null
+    },
+    {
+      "id": "Native:a",
+      "expected": null
+    },
+    {
+      "id": "native:%72ead_file",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "read_file"
+      }
+    },
+    {
+      "id": "mcp:a%3Ab:c%3Ad",
+      "expected": {
+        "provider": "mcp",
+        "namespace": "a:b",
+        "name": "c:d"
+      }
+    },
+    {
+      "id": "native:한글+space%20",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "한글+space "
+      }
+    },
+    {
+      "id": "native:%F0%9F%99%82",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "🙂"
+      }
+    },
+    {
+      "id": "native:%",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%2",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%GG",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%C0%AF",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%ED%A0%80",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%F4%90%80%80",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%80",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%E2%82",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": ""
+      }
+    },
+    {
+      "id": "native:%00",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "\u0000"
+      }
+    },
+    {
+      "id": "native:a%2Fb%3Fc",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "a/b?c"
+      }
+    },
+    {
+      "id": "mcp:%GG:valid",
+      "expected": {
+        "provider": "mcp",
+        "namespace": "",
+        "name": "valid"
+      }
+    },
+    {
+      "id": "native:tool_call",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "tool_call"
+      }
+    },
+    {
+      "id": "native:%2572ead_file",
+      "expected": {
+        "provider": "native",
+        "namespace": null,
+        "name": "%72ead_file"
+      }
+    }
+  ],
+  "calls": [
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:read_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:read_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "mcp:server:tool",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "mcp:server:tool",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "mcp:server:tool",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "plugin:pack:name",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "name",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "plugin:pack:name",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "plugin:pack:name",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:a:b",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:a:b",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:a:b",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:a:b",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "mcp:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "mcp:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "mcp:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "mcp:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "mcp::",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "mcp::",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "mcp::",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "mcp::",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "other:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "other:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "other:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "other:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "Native:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "Native:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "Native:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "Native:a",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%72ead_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%72ead_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "mcp:a%3Ab:c%3Ad",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "c:d",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "mcp:a%3Ab:c%3Ad",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "mcp:a%3Ab:c%3Ad",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:한글+space%20",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "한글+space ",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:한글+space%20",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:한글+space%20",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%F0%9F%99%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "🙂",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%F0%9F%99%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%F0%9F%99%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%2",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%2",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%2",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%2",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%GG",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%GG",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%GG",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%GG",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%C0%AF",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%C0%AF",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%C0%AF",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%C0%AF",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%ED%A0%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%ED%A0%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%ED%A0%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%ED%A0%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%F4%90%80%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%F4%90%80%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%F4%90%80%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%F4%90%80%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%80",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%E2%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:%E2%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%E2%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%E2%82",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%00",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "\u0000",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%00",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%00",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:a%2Fb%3Fc",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "a/b?c",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:a%2Fb%3Fc",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:a%2Fb%3Fc",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "mcp:%GG:valid",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "valid",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "mcp:%GG:valid",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "mcp:%GG:valid",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:tool_call",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:tool_call",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:tool_call",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:tool_call",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:%2572ead_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "%72ead_file",
+        "args": {
+          "path": "value"
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "read_file",
+        "args": {
+          "id": "native:%2572ead_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      },
+      "expected": {
+        "name": "read_file",
+        "args": {
+          "id": "native:%2572ead_file",
+          "arguments": {
+            "path": "value"
+          }
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:read_file",
+          "arguments": []
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:read_file",
+          "arguments": []
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": "native:read_file",
+          "arguments": null
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": "native:read_file",
+          "arguments": null
+        }
+      }
+    },
+    {
+      "input": {
+        "toolName": "tool_call",
+        "args": {
+          "id": 12,
+          "arguments": {}
+        }
+      },
+      "expected": {
+        "name": "tool_call",
+        "args": {
+          "id": 12,
+          "arguments": {}
+        }
+      }
+    }
+  ]
+}

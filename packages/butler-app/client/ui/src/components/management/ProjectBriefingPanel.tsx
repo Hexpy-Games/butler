@@ -4,7 +4,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, Card, Section, Stack, Typo } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../shared/app-contracts.ts";
 import { ProjectSourceLinks } from "./ProjectSourceLinks.tsx";
 import styles from "./ProjectInformation.module.css";
 

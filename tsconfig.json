@@ -21,8 +21,6 @@
     "noPropertyAccessFromIndexSignature": false
   },
   "include": [
-    "packages/butler-agent/src/**/*.ts",
-    "packages/butler-agent/scripts/**/*.ts",
     "packages/butler-app/scripts/**/*.ts",
     "tools/**/*.ts",
     "tests/**/*.ts"

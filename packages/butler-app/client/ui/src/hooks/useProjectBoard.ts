@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/projectDashboardState.ts";
-import type { DashboardBoardCard, DashboardBoardPage } from "../../../../../butler-agent/src/gateways/app/interface/protocol/session-dashboard-contract.ts";
+import type { DashboardBoardCard, DashboardBoardPage } from "../../../shared/app-contracts.ts";
 
 export function useProjectBoard(projectId: string, kind: DashboardBoardCard["kind"], parent?: string, sourceRevision?: string, lane?: DashboardBoardCard["lane"]) {
   const [page, setPage] = useState<DashboardBoardPage | null>(null);

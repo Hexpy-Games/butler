@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  chmodSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -10,12 +11,41 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
-  createAppAgentNativeServiceBridge,
+  createAppAgentNativeServiceBridge as createProductionAppAgentNativeServiceBridge,
   listNativeServiceProjections,
   prepareAppManagedEmbedHealthPort,
   prepareAppManagedEmbedSocket,
 } from "../../packages/butler-app/client/electron/app-agent-native-service-bridge.mjs";
-import { APP_MANAGED_RUNTIME_POINTER_SCHEMA } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
+
+function createAppAgentNativeServiceBridge(input: {
+  butlerData: string;
+  platform: string;
+} & NonNullable<Parameters<typeof createProductionAppAgentNativeServiceBridge>[0]>) {
+  if (input.platform !== "darwin" && input.platform !== "linux") {
+    return createProductionAppAgentNativeServiceBridge(input);
+  }
+  const installRoot = input.platform === "darwin"
+    ? join(dirname(input.butlerData), "Butler.app")
+    : join(dirname(input.butlerData), "butler-install");
+  const resourcesPath = input.platform === "darwin"
+    ? join(installRoot, "Contents", "Resources")
+    : join(installRoot, "resources");
+  const execPath = input.platform === "darwin"
+    ? join(installRoot, "Contents", "MacOS", "Butler")
+    : join(installRoot, "Butler");
+  const binary = join(resourcesPath, "bundled-agent", "bin", "butler-agent");
+  mkdirSync(dirname(binary), { recursive: true });
+  mkdirSync(join(resourcesPath, "bundled-agent", "resources"), { recursive: true });
+  mkdirSync(dirname(execPath), { recursive: true });
+  writeFileSync(binary, "native test executable\n");
+  chmodSync(binary, 0o755);
+  writeFileSync(execPath, "Electron test executable\n");
+  return createProductionAppAgentNativeServiceBridge({
+    ...input,
+    resourcesPath,
+    execPath,
+  });
+}
 
 test("App-managed embed socket uses a private per-user directory", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-embed-socket-"));
@@ -77,7 +107,6 @@ test("App Agent native service bridge installs launchd service with App-managed 
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-"));
   try {
     const butlerData = join(tempDir, "data");
-    const runtimeHome = writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -99,10 +128,12 @@ test("App Agent native service bridge installs launchd service with App-managed 
 
     expect(writes).toHaveLength(1);
     expect(writes[0]?.path).toBe("/Users/alice/Library/LaunchAgents/com.hexpy.butler.plist");
-    expect(writes[0]?.body).toContain(runtimeHome);
-    expect(writes[0]?.body).toContain("<key>BUTLER_BUN</key>");
-    expect(writes[0]?.body).toContain("<key>BUTLER_APP_MANAGED_RUNTIME_HOME</key>");
-    expect(writes[0]?.body).toContain("<key>BUTLER_APP_MANAGED_RUNTIME_POINTER</key>");
+    expect(writes[0]?.body).toContain("bundled-agent/bin/butler-agent");
+    expect(writes[0]?.body).toContain("--installation-root");
+    expect(writes[0]?.body).toContain("--resource-root");
+    expect(writes[0]?.body).not.toContain("BUTLER_BUN");
+    expect(writes[0]?.body).not.toContain("MANAGED_RUNTIME_POINTER");
+    expect(writes[0]?.body).not.toContain("FOREGROUND_LEASE");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_SERVER_HOST</key>");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_LOCAL_AUTH_FILE</key>");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_LOCAL_AUTH_REQUIRED</key>");
@@ -133,7 +164,6 @@ test("App Agent native service bridge can isolate launchd service label for test
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-test-label-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -183,7 +213,6 @@ test("App Agent native service bridge starts macOS menu bar helper with Agent se
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-helper-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -246,7 +275,6 @@ test("App Agent native service bridge does not restart menu bar helper on Agent 
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-helper-start-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     mkdirSync(join(butlerData, "app", "runtime"), { recursive: true });
     writeFileSync(join(butlerData, "app", "runtime", "menu-bar-helper.pid"), "4242\n");
     const writes: Array<{ path: string; body: string }> = [];
@@ -298,7 +326,6 @@ test("App Agent native service bridge ensures missing menu bar helper on Agent s
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-helper-ensure-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -348,7 +375,6 @@ test("App Agent native service bridge does not fail Agent install when menu bar 
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-helper-optional-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
       butlerData,
@@ -390,7 +416,6 @@ test("App Agent native service bridge clears previous Agent children before rela
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-relaunch-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     writeServiceState(butlerData, "embed-server", 51_001);
     writeServiceState(butlerData, "app-gateway", 51_002);
     const online = new Set([51_001, 51_002]);
@@ -432,7 +457,6 @@ test("App Agent native service bridge waits for process groups and gateway port 
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-port-release-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     writeServiceState(butlerData, "app-gateway", 52_002);
     const processGroups = new Set([52_002]);
     let portChecks = 0;
@@ -479,159 +503,33 @@ test("App Agent native service bridge waits for process groups and gateway port 
   }
 });
 
-test("App Agent native service bridge ensures App-managed runtime before registration", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-ensure-"));
+test("App Agent native service bridge stop does not resolve an installation", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-stop-"));
   try {
-    const butlerData = join(tempDir, "data");
     const calls: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
-      butlerData,
+      butlerData: join(tempDir, "data"),
       platform: "darwin",
       homeDir: "/Users/alice",
-      getPort: () => 19123,
-      ensureRuntimePointer: () => {
-        calls.push("ensure-runtime-pointer");
-        writeAppManagedRuntime(butlerData, "9.9.9");
-        return {};
-      },
-      prepareLocalAuth: () => {
-        calls.push("prepare-local-auth");
-        return {
-          filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
-        };
-      },
-      writeFile: () => calls.push("write-service-file"),
-      runCommand: (argv) => {
-        if (argv[1] === "bootout") calls.push("bootout");
-        else calls.push(argv[1] === "bootstrap" ? "bootstrap" : "kickstart");
-        return { exitCode: 0 };
-      },
-    });
-
-    await bridge.registration.install();
-
-    expect(calls).toEqual([
-      "ensure-runtime-pointer",
-      "prepare-local-auth",
-      "write-service-file",
-      "bootout",
-      "bootstrap",
-      "kickstart",
-    ]);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
-test("App Agent native service bridge rolls back runtime activation on required command failure", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-rollback-"));
-  try {
-    const butlerData = join(tempDir, "data");
-    const calls: string[] = [];
-    writeAppManagedRuntime(butlerData, "9.9.9");
-    const bridge = createAppAgentNativeServiceBridge({
-      butlerData,
-      platform: "linux",
-      homeDir: "/home/alice",
-      getPort: () => 19123,
-      ensureRuntimePointer: () => ({
-        rollbackActivation: () => calls.push("rollback"),
-      }),
-      prepareLocalAuth: () => ({
-        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
-      }),
-      writeFile: () => calls.push("write"),
       runCommand: (argv) => {
         calls.push(argv.join(" "));
-        return { exitCode: argv.includes("daemon-reload") ? 0 : 1 };
-      },
-    });
-
-    await expect(bridge.registration.install()).rejects.toThrow(
-      "App Agent service command failed",
-    );
-    expect(calls).toEqual([
-      "write",
-      "systemctl --user daemon-reload",
-      "systemctl --user enable --now butler.service",
-      "rollback",
-    ]);
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
-});
-
-test("App Agent native service bridge rolls back runtime activation on invalid prepared runtime", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-invalid-runtime-"));
-  try {
-    const butlerData = join(tempDir, "data");
-    const calls: string[] = [];
-    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
-    const runtimeHome = join(butlerData, runtimeHomeLabel);
-    mkdirSync(join(runtimeHome, "packages", "butler-agent", "scripts"), { recursive: true });
-    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
-    writeFileSync(join(runtimeHome, "packages", "butler-agent", "scripts", "service-daemon.sh"), "");
-    writeFileSync(
-      join(butlerData, "app", "runtime", "agent", "current.json"),
-      `${JSON.stringify({
-        schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
-        product: "butler-app",
-        gateway_profile: "electron",
-        version: "9.9.9",
-        runtime_home: runtimeHomeLabel,
-      }, null, 2)}\n`,
-    );
-    const bridge = createAppAgentNativeServiceBridge({
-      butlerData,
-      platform: "linux",
-      homeDir: "/home/alice",
-      ensureRuntimePointer: () => ({
-        rollbackActivation: () => calls.push("rollback"),
-      }),
-      prepareLocalAuth: () => ({
-        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
-      }),
-      runCommand: () => {
-        calls.push("run");
         return { exitCode: 0 };
       },
     });
 
-    await expect(bridge.registration.install()).rejects.toThrow(
-      "missing App-managed runtime executable",
-    );
-    expect(calls).toEqual(["rollback"]);
+    await bridge.nativeServices.stop();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("launchctl bootout gui/");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
-});
-
-test("App Agent native service bridge stop does not activate runtime", async () => {
-  const calls: string[] = [];
-  const bridge = createAppAgentNativeServiceBridge({
-    butlerData: "/tmp/butler-data",
-    platform: "darwin",
-    homeDir: "/Users/alice",
-    ensureRuntimePointer: () => {
-      calls.push("ensure-runtime-pointer");
-    },
-    runCommand: (argv) => {
-      calls.push(argv.join(" "));
-      return { exitCode: 0 };
-    },
-  });
-
-  await bridge.nativeServices.stop();
-
-  expect(calls).toHaveLength(1);
-  expect(calls[0]).toContain("launchctl bootout gui/");
 });
 
 test("App Agent native service bridge installs systemd service with escaped env", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler app native bridge systemd-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -657,10 +555,12 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[0]?.body).toContain("WorkingDirectory=");
     expect(writes[0]?.body).not.toContain('WorkingDirectory="');
     expect(writes[0]?.body).toContain("butler\\x20app\\x20native\\x20bridge\\x20systemd-");
-    expect(writes[0]?.body).toContain('ExecStart=/bin/bash "');
-    expect(writes[0]?.body).toContain(
-      'Environment=BUTLER_APP_MANAGED_RUNTIME_POINTER="',
-    );
+    expect(writes[0]?.body).toContain("bundled-agent/bin/butler-agent");
+    expect(writes[0]?.body).toContain("--installation-root");
+    expect(writes[0]?.body).toContain("--resource-root");
+    expect(writes[0]?.body).not.toContain("BUTLER_BUN");
+    expect(writes[0]?.body).not.toContain("MANAGED_RUNTIME_POINTER");
+    expect(writes[0]?.body).not.toContain("FOREGROUND_LEASE");
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_SERVER_HOST="127.0.0.1"');
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_LOCAL_AUTH_REQUIRED="1"');
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_GATEWAY_PID_FILE="off"');
@@ -687,7 +587,6 @@ test("App Agent native service bridge can isolate systemd unit for tests", async
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-systemd-test-unit-"));
   try {
     const butlerData = join(tempDir, "data");
-    writeAppManagedRuntime(butlerData, "9.9.9");
     const writes: Array<{ path: string; body: string }> = [];
     const commands: string[] = [];
     const bridge = createAppAgentNativeServiceBridge({
@@ -755,33 +654,6 @@ test("App Agent native service bridge lists native service projections", () => {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
-
-function writeAppManagedRuntime(butlerData: string, version: string): string {
-  const runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
-  const runtimeHome = join(butlerData, runtimeHomeLabel);
-  mkdirSync(join(runtimeHome, "packages", "butler-agent", "scripts"), { recursive: true });
-  mkdirSync(
-    join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin"),
-    { recursive: true },
-  );
-  mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
-  writeFileSync(join(runtimeHome, "packages", "butler-agent", "scripts", "service-daemon.sh"), "");
-  writeFileSync(
-    join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin", "bun"),
-    "",
-  );
-  writeFileSync(
-    join(butlerData, "app", "runtime", "agent", "current.json"),
-    `${JSON.stringify({
-      schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
-      product: "butler-app",
-      gateway_profile: "electron",
-      version,
-      runtime_home: runtimeHomeLabel,
-    }, null, 2)}\n`,
-  );
-  return runtimeHome;
-}
 
 function writeServiceState(butlerData: string, serviceId: string, pid: number): void {
   mkdirSync(join(butlerData, "state", "services"), { recursive: true });

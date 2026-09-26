@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -13,12 +14,15 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { verifyNativeMacBundle, type NativeMacDependencyClosure } from "../../packages/butler-app/scripts/release/native-mac-manifest.ts";
 
 const outDir = resolve(optionValue("--out") ?? "dist/release/app");
+const nativeMac = process.argv.includes("--platform=darwin-arm64") ||
+  process.argv.some((arg, index) => arg === "--platform" && process.argv[index + 1] === "darwin-arm64");
 const macDmg = findOne(/^butler-app-.*-darwin-arm64\.dmg$/u);
 const macZip = findOne(/^butler-app-.*-darwin-arm64\.zip$/u);
-const linuxX64Deb = findOne(/^butler-app-.*-linux-x64\.deb$/u);
-const linuxArm64Deb = findOne(/^butler-app-.*-linux-arm64\.deb$/u);
+const linuxX64Deb = nativeMac ? null : findOne(/^butler-app-.*-linux-x64\.deb$/u);
+const linuxArm64Deb = nativeMac ? null : findOne(/^butler-app-.*-linux-arm64\.deb$/u);
 const releaseManifestPath = join(outDir, "app-release-manifest.json");
 const updateManifestPath = join(outDir, "app-update-manifest.json");
 
@@ -27,10 +31,8 @@ for (const path of [
   `${macDmg}.sha256`,
   macZip,
   `${macZip}.sha256`,
-  linuxX64Deb,
-  `${linuxX64Deb}.sha256`,
-  linuxArm64Deb,
-  `${linuxArm64Deb}.sha256`,
+  ...(linuxX64Deb ? [linuxX64Deb, `${linuxX64Deb}.sha256`] : []),
+  ...(linuxArm64Deb ? [linuxArm64Deb, `${linuxArm64Deb}.sha256`] : []),
   releaseManifestPath,
   updateManifestPath,
 ]) {
@@ -38,11 +40,12 @@ for (const path of [
 }
 verifySha(macDmg);
 verifySha(macZip);
-verifySha(linuxX64Deb);
-verifySha(linuxArm64Deb);
-verifyLinuxDeb(linuxX64Deb, "linux-x64");
-verifyLinuxDeb(linuxArm64Deb, "linux-arm64");
-verifyMacArtifacts(macDmg, macZip);
+if (linuxX64Deb && linuxArm64Deb) {
+  verifySha(linuxX64Deb);
+  verifySha(linuxArm64Deb);
+  verifyLinuxDeb(linuxX64Deb, "linux-x64");
+  verifyLinuxDeb(linuxArm64Deb, "linux-arm64");
+}
 
 const releaseManifest = JSON.parse(readFileSync(releaseManifestPath, "utf8"));
 const updateManifest = JSON.parse(readFileSync(updateManifestPath, "utf8"));
@@ -52,9 +55,35 @@ if (releaseManifest.product !== "butler-app") {
 if (!Array.isArray(updateManifest.artifacts) || updateManifest.artifacts.some((artifact: any) => artifact.product !== "butler-app")) {
   throw new Error("App update manifest includes a non-App artifact");
 }
+let closure: NativeMacDependencyClosure | null = null;
+if (nativeMac) {
+  const item = releaseManifest.artifacts?.[0];
+  if (releaseManifest.schema !== "butler.app-native-mac-release.v1" ||
+      releaseManifest.lifecycleMode !== "app-foreground" ||
+      releaseManifest.registersUserService !== false ||
+      releaseManifest.artifacts?.length !== 1 ||
+      item?.sha256 !== createHash("sha256").update(readFileSync(macDmg)).digest("hex") ||
+      item?.updaterSha256 !== createHash("sha256").update(readFileSync(macZip)).digest("hex") ||
+      item?.version !== releaseManifest.version ||
+      item?.stagingPolicy !== "butler-data-updates" ||
+      item?.activationPolicy !== "user-installs-app-package" ||
+      item?.rollbackPolicy !== "not-managed-by-butler" ||
+      updateManifest.artifacts.length !== 1 ||
+      updateManifest.artifacts[0]?.sha256 !== item.sha256 ||
+      updateManifest.artifacts[0]?.staging_policy !== item.stagingPolicy ||
+      updateManifest.artifacts[0]?.activation_policy !== item.activationPolicy ||
+      updateManifest.artifacts[0]?.rollback_policy !== item.rollbackPolicy) {
+    throw new Error("native mac release manifest does not match its App artifacts");
+  }
+  closure = item.dependencyClosure as NativeMacDependencyClosure;
+  if (!closure || closure.version !== releaseManifest.bundledAgentVersion) {
+    throw new Error("native mac App dependency closure is missing or has the wrong version");
+  }
+}
+verifyMacArtifacts(macDmg, macZip, closure);
 
 console.log(
-  `Butler App release smoke passed: ${basename(macDmg)}, ${basename(macZip)}, ${basename(linuxX64Deb)}, ${basename(linuxArm64Deb)}`,
+  `Butler App release smoke passed: ${[macDmg, macZip, linuxX64Deb, linuxArm64Deb].filter(Boolean).map((path) => basename(path!)).join(", ")}`,
 );
 
 function optionValue(name: string): string | null {
@@ -103,11 +132,11 @@ function verifyLinuxDeb(path: string, platform: "linux-x64" | "linux-arm64"): vo
 
 type MacReleaseSmokeMode = "ad-hoc" | "production";
 
-function verifyMacArtifacts(dmgPath: string, zipPath: string): void {
+function verifyMacArtifacts(dmgPath: string, zipPath: string, closure: NativeMacDependencyClosure | null): void {
   if (process.platform !== "darwin") return;
   const mode = macReleaseSmokeMode();
-  verifyMacDmg(dmgPath, mode);
-  verifyMacZip(zipPath, mode);
+  verifyMacDmg(dmgPath, mode, closure);
+  verifyMacZip(zipPath, mode, closure);
 }
 
 function macReleaseSmokeMode(): MacReleaseSmokeMode {
@@ -139,7 +168,7 @@ function macReleaseSmokeMode(): MacReleaseSmokeMode {
   return mode;
 }
 
-function verifyMacDmg(path: string, mode: MacReleaseSmokeMode): void {
+function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMacDependencyClosure | null): void {
   if (process.platform !== "darwin") return;
   const tempRoot = mkdtempSync(join(tmpdir(), "butler-app-release-smoke-"));
   const mountPoint = join(tempRoot, "mounted");
@@ -177,6 +206,7 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode): void {
       throw new Error("Mac App DMG is missing the Applications link");
     }
     const appPath = join(mountPoint, "Butler.app");
+    if (closure) verifyNativeMacBundle(appPath, closure);
     verifyMacCodeSignature(appPath, "Mac App DMG Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App DMG Butler.app");
@@ -196,7 +226,7 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode): void {
   }
 }
 
-function verifyMacZip(path: string, mode: MacReleaseSmokeMode): void {
+function verifyMacZip(path: string, mode: MacReleaseSmokeMode, closure: NativeMacDependencyClosure | null): void {
   if (process.platform !== "darwin") return;
   const extractDir = mkdtempSync(join(tmpdir(), "butler-app-release-zip-smoke-"));
   try {
@@ -208,12 +238,23 @@ function verifyMacZip(path: string, mode: MacReleaseSmokeMode): void {
     }
     const appPath = join(extractDir, "Butler.app");
     if (!existsSync(appPath)) throw new Error("Mac App zip is missing Butler.app");
+    if (closure) verifyNativeMacBundle(appPath, closure);
     verifyMacCodeSignature(appPath, "Mac App ZIP Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App ZIP Butler.app");
     }
   } finally {
+    makeExtractedDirectoriesRemovable(extractDir);
     rmSync(extractDir, { recursive: true, force: true });
+  }
+}
+
+function makeExtractedDirectoriesRemovable(root: string): void {
+  chmodSync(root, 0o700);
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      makeExtractedDirectoriesRemovable(join(root, entry.name));
+    }
   }
 }
 

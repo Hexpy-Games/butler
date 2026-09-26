@@ -1,0 +1,206 @@
+{
+  "butlerSystem": {
+    "sections": [
+      {
+        "id": "runtime-system-contract",
+        "title": "Runtime System Contract",
+        "content": "runtime contract",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      },
+      {
+        "id": "role",
+        "title": "Butler Role Rules",
+        "content": "butler role",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      }
+    ],
+    "systemPrompt": "## Runtime System Contract\n\nruntime contract\n\n---\n\n## Butler Role Rules\n\nbutler role"
+  },
+  "stewardSystem": {
+    "sections": [
+      {
+        "id": "runtime-system-contract",
+        "title": "Runtime System Contract",
+        "content": "runtime contract",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      },
+      {
+        "id": "role",
+        "title": "Steward Role Rules",
+        "content": "steward role",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      }
+    ],
+    "systemPrompt": "## Runtime System Contract\n\nruntime contract\n\n---\n\n## Steward Role Rules\n\nsteward role"
+  },
+  "butler": {
+    "staticContext": [
+      {
+        "id": "runtime-system-contract",
+        "title": "Runtime System Contract",
+        "content": "runtime contract",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      },
+      {
+        "id": "role",
+        "title": "Butler Role Rules",
+        "content": "butler role",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      }
+    ],
+    "liveConfiguration": [
+      {
+        "id": "eol",
+        "title": "Butler Operating Ethos / EOL",
+        "content": "data ethos",
+        "region": "live_configuration",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      },
+      {
+        "id": "rules",
+        "title": "Active Rules",
+        "content": "### one.md\n\nrule body\n\n---\n\n### one.md\n\nrule body",
+        "region": "live_configuration",
+        "projectionClass": "mandatory_hot_cache",
+        "scopeKind": "user"
+      },
+      {
+        "id": "active-persona-reminder",
+        "title": "Active Persona Reminder",
+        "region": "live_configuration",
+        "projectionClass": "profile",
+        "scopeKind": "user",
+        "content": "Use this current persona for every user-facing answer in this turn.\nUse the configured Assistant Response Language from the Turn Environment by default. Follow the user's explicit request to answer or translate into another language instead.\nPreserve the persona's tone and signature speech patterns; translate or adapt that voice into the configured response language, or the language explicitly requested by the user.\nFor long answers, carry the persona through section bodies and the closing, not only the opening sentence.\nDo not let tool, review, or report formatting instructions erase the persona.\n\n**Language:** Korean\nPersona body"
+      },
+      {
+        "id": "personalization-profile",
+        "title": "Personalization Profile",
+        "content": "# Personalization Profile\n\n- Butler nickname: Bee\n- Principal name: Alex\n- Address the principal as: Captain\n\nUse these naming preferences naturally. Do not force the address into every message.",
+        "region": "live_configuration",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      }
+    ],
+    "runtimeState": [
+      {
+        "id": "runtime-state",
+        "title": "Runtime State",
+        "content": "Live Configuration Hash: a3e358c451ef8015\nSession ID: session-1\nSession Role: butler\n## Turn Environment\nCurrent Time UTC: 2026-09-14T00:00:00.000Z\nCurrent Local Time: Monday, September 14, 2026 at 12:00:00 AM UTC\nUser Timezone: UTC\nInterface Language (app labels only): ko\nAssistant Response Language: ko\nUser Technical Language: Rust\nUser Geo Hint: Seoul KR\nProject ID: proj\nProject Memory Status: present\nWorkspace Path: /workspace",
+        "region": "runtime_state",
+        "projectionClass": "mandatory_hot_cache",
+        "scopeKind": "session"
+      }
+    ],
+    "workingContext": [
+      {
+        "id": "current-attachments",
+        "title": "Current Attachment References",
+        "content": "- pic.png (image, image/png, 4.5 bytes, attachment_id: a1)",
+        "region": "working_context",
+        "projectionClass": "optional_hot_cache",
+        "scopeKind": "project"
+      }
+    ],
+    "retrievedContext": [
+      {
+        "id": "session-continuity",
+        "title": "Session Continuity",
+        "content": "session continuity",
+        "region": "retrieved_context",
+        "projectionClass": "optional_hot_cache",
+        "scopeKind": "session"
+      },
+      {
+        "id": "project-memory",
+        "title": "Project Memory",
+        "content": "project memory\nkept",
+        "region": "retrieved_context",
+        "projectionClass": "optional_hot_cache",
+        "scopeKind": "project"
+      }
+    ],
+    "currentInput": [
+      {
+        "id": "inbound-message",
+        "title": "Current User Input",
+        "content": "Message Text: hello",
+        "region": "current_input",
+        "projectionClass": "optional_hot_cache",
+        "scopeKind": "session"
+      }
+    ],
+    "references": [
+      {
+        "kind": "attachment",
+        "id": "a1",
+        "label": " pic.png ",
+        "metadata": {
+          "kind": "image",
+          "mimeType": " image/png ",
+          "sizeBytes": 4.5
+        }
+      }
+    ],
+    "liveConfigHash": "a3e358c451ef8015"
+  },
+  "steward": {
+    "staticContext": [
+      {
+        "id": "runtime-system-contract",
+        "title": "Runtime System Contract",
+        "content": "runtime contract",
+        "region": "static_context",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      }
+    ],
+    "liveConfiguration": [
+      {
+        "id": "eol",
+        "title": "Butler Operating Ethos / EOL",
+        "content": "data ethos",
+        "region": "live_configuration",
+        "projectionClass": "profile",
+        "scopeKind": "user"
+      },
+      {
+        "id": "rules",
+        "title": "Active Rules",
+        "content": "### one.md\n\nrule body\n\n---\n\n### one.md\n\nrule body",
+        "region": "live_configuration",
+        "projectionClass": "mandatory_hot_cache",
+        "scopeKind": "user"
+      }
+    ],
+    "runtimeState": [
+      {
+        "id": "runtime-state",
+        "title": "Runtime State",
+        "content": "Live Configuration Hash: 2ffd19f88025df07\nSession ID: session-1\nSession Role: steward\n## Turn Environment\nCurrent Time UTC: 2026-09-14T00:00:00.000Z\nCurrent Local Time: Monday, September 14, 2026 at 12:00:00 AM UTC\nUser Timezone: UTC\nInterface Language (app labels only): ko\nAssistant Response Language: ko\nUser Technical Language: Rust\nUser Geo Hint: Seoul KR\nProject ID: proj\nProject Memory Status: present\nWorkspace Path: /workspace",
+        "region": "runtime_state",
+        "projectionClass": "mandatory_hot_cache",
+        "scopeKind": "session"
+      }
+    ],
+    "workingContext": [],
+    "retrievedContext": [],
+    "currentInput": [],
+    "references": [],
+    "liveConfigHash": "2ffd19f88025df07"
+  },
+  "butlerRendered": "Live Configuration Hash: a3e358c451ef8015\n\n---\n\n## Butler Operating Ethos / EOL\n\ndata ethos\n\n---\n\n## Active Rules\n\n### one.md\n\nrule body\n\n---\n\n### one.md\n\nrule body\n\n---\n\n## Active Persona Reminder\n\nUse this current persona for every user-facing answer in this turn.\nUse the configured Assistant Response Language from the Turn Environment by default. Follow the user's explicit request to answer or translate into another language instead.\nPreserve the persona's tone and signature speech patterns; translate or adapt that voice into the configured response language, or the language explicitly requested by the user.\nFor long answers, carry the persona through section bodies and the closing, not only the opening sentence.\nDo not let tool, review, or report formatting instructions erase the persona.\n\n**Language:** Korean\nPersona body\n\n---\n\n## Personalization Profile\n\n# Personalization Profile\n\n- Butler nickname: Bee\n- Principal name: Alex\n- Address the principal as: Captain\n\nUse these naming preferences naturally. Do not force the address into every message.\n\n---\n\n## Runtime State\n\nLive Configuration Hash: a3e358c451ef8015\nSession ID: session-1\nSession Role: butler\n## Turn Environment\nCurrent Time UTC: 2026-09-14T00:00:00.000Z\nCurrent Local Time: Monday, September 14, 2026 at 12:00:00 AM UTC\nUser Timezone: UTC\nInterface Language (app labels only): ko\nAssistant Response Language: ko\nUser Technical Language: Rust\nUser Geo Hint: Seoul KR\nProject ID: proj\nProject Memory Status: present\nWorkspace Path: /workspace\n\n---\n\n## Current Attachment References\n\n- pic.png (image, image/png, 4.5 bytes, attachment_id: a1)\n\n---\n\n## Session Continuity\n\nsession continuity\n\n---\n\n## Project Memory\n\nproject memory\nkept\n\n---\n\n## Current User Input\n\nMessage Text: hello",
+  "stewardRendered": "Live Configuration Hash: 2ffd19f88025df07\n\n---\n\n## Butler Operating Ethos / EOL\n\ndata ethos\n\n---\n\n## Active Rules\n\n### one.md\n\nrule body\n\n---\n\n### one.md\n\nrule body\n\n---\n\n## Runtime State\n\nLive Configuration Hash: 2ffd19f88025df07\nSession ID: session-1\nSession Role: steward\n## Turn Environment\nCurrent Time UTC: 2026-09-14T00:00:00.000Z\nCurrent Local Time: Monday, September 14, 2026 at 12:00:00 AM UTC\nUser Timezone: UTC\nInterface Language (app labels only): ko\nAssistant Response Language: ko\nUser Technical Language: Rust\nUser Geo Hint: Seoul KR\nProject ID: proj\nProject Memory Status: present\nWorkspace Path: /workspace"
+}

@@ -1,0 +1,42 @@
+name: Rust quality
+
+on:
+  push:
+    paths:
+      - "packages/butler-agent/rust/**"
+      - ".github/workflows/rust-quality.yml"
+  pull_request:
+    paths:
+      - "packages/butler-agent/rust/**"
+      - ".github/workflows/rust-quality.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Rust quality (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.91.0
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace --locked
+      - name: Check Rust source sizes
+        run: cargo run --locked -p butler-source-check -- .

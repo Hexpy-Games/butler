@@ -49,22 +49,21 @@ Use this sequence for each phase:
 3. **Tests**: Add or update tests that would fail without the intended behavior.
 4. **Code**: Implement without reverting unrelated user changes.
 5. **Internal review**: Compare the diff against the spec success criteria.
-6. **Validate**: Run targeted tests, `bun run check`, and `git diff --check`
-   unless the phase has a narrower justified gate.
+6. **Validate**: Run targeted checks for the changed Rust or App code and
+   `git diff --check`; do not run obsolete TypeScript Agent checks.
 7. **Docs/report**: Update the governing spec if behavior changed, then update
    plan/report/handoff-style progress docs.
-8. **Commit**: Commit the completed phase with a concise message.
+8. **Commit**: Commit only when the task has authorized a commit.
 
 ## Validation Gates
 
 For Butler repo work, prefer these gates:
 
 ```bash
-bun test <targeted tests>
-bun run lint
-bun run typecheck
+(cd packages/butler-agent/rust && cargo test --locked -p butler-agent <targeted-filter>)
+(cd packages/butler-agent/rust && cargo fmt --all -- --check)
+npm --prefix packages/butler-app/client/ui run typecheck
 git diff --check
-bun run check
 ```
 
 Add feature-specific gates when relevant:
