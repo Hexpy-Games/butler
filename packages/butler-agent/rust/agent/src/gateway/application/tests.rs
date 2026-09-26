@@ -369,7 +369,15 @@ async fn delivered_transcript_final_projects_and_settles_exact_queue_claim() {
         .await
         .unwrap();
     let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
-    assert_eq!(page.messages.last().unwrap().text, "answer");
+    // The queue wake may already have dispatched the plan continuation, whose
+    // user message then follows the answer.
+    let texts = page
+        .messages
+        .iter()
+        .map(|message| message.text.as_str())
+        .collect::<Vec<_>>();
+    let question = texts.iter().position(|text| *text == "question").unwrap();
+    assert_eq!(texts.get(question + 1), Some(&"answer"));
     let settled_turn = turn_id.clone();
     let state = app
         .storage

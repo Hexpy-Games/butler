@@ -2,7 +2,6 @@
 
 use std::{
     collections::{HashSet, VecDeque},
-    path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -52,18 +51,25 @@ impl ProjectionOwner {
     pub(in crate::gateway::application) fn start(
         context: ProjectionContext,
     ) -> Result<Self, GatewayApplicationError> {
-        for path in [
-            context.butler_data.join("transcripts"),
-            context.butler_data.join("runtime/inbound-events/processed"),
-            context.butler_data.join("runtime/inbound-events/failed"),
-        ] {
-            std::fs::create_dir_all(path).map_err(|_| GatewayApplicationError::Internal)?;
-        }
+        // Watch and match canonical roots: FSEvents reports resolved paths, so
+        // a DATA root under a symlink (e.g. /var -> /private/var) would
+        // otherwise never match and every change would be dropped.
+        let watched_root = |relative: &str| {
+            let path = context.butler_data.join(relative);
+            std::fs::create_dir_all(&path)
+                .and_then(|()| std::fs::canonicalize(&path))
+                .map_err(|_| GatewayApplicationError::Internal)
+        };
+        let transcript_root = watched_root("transcripts")?;
+        let processed_root = watched_root("runtime/inbound-events/processed")?;
+        let failed_root = watched_root("runtime/inbound-events/failed")?;
+        let roots = [
+            transcript_root.clone(),
+            processed_root.clone(),
+            failed_root.clone(),
+        ];
         let (sender, receiver) = mpsc::channel(NOTIFICATION_CAPACITY);
         let callback = sender.clone();
-        let transcript_root = context.butler_data.join("transcripts");
-        let processed_root = context.butler_data.join("runtime/inbound-events/processed");
-        let failed_root = context.butler_data.join("runtime/inbound-events/failed");
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 if let Ok(event) = event {
@@ -85,13 +91,9 @@ impl ProjectionOwner {
                 }
             })
             .map_err(|_| GatewayApplicationError::Internal)?;
-        for path in [
-            context.butler_data.join("transcripts"),
-            context.butler_data.join("runtime/inbound-events/processed"),
-            context.butler_data.join("runtime/inbound-events/failed"),
-        ] {
+        for path in &roots {
             watcher
-                .watch(Path::new(&path), RecursiveMode::NonRecursive)
+                .watch(path, RecursiveMode::NonRecursive)
                 .map_err(|_| GatewayApplicationError::Internal)?;
         }
         let task = tokio::spawn(run(context, receiver));
