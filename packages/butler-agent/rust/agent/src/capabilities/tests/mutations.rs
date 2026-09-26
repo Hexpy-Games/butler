@@ -86,29 +86,29 @@ async fn registry_creates_overwrites_and_edits_workspace_files() {
 }
 
 #[tokio::test]
-async fn admitted_parent_creation_matches_source() {
-    let fixture = Fixture::new();
-    let call = json!({"arguments":{"path":"new/deep/file.txt","content":"created",
-        "create_parents":true}});
-    let actual = rust(&fixture, "write_file", &call, None, None).await;
-    assert_eq!(actual["ok"], true);
-    assert_eq!(
-        std::fs::read(fixture.root.join("new/deep/file.txt")).unwrap(),
-        b"created"
-    );
-    fixture.capabilities.mutations.close().await;
-}
-
-#[tokio::test]
-async fn created_empty_file_keeps_direct_change_detail() {
-    let fixture = Fixture::new();
-    let call = json!({"arguments":{"path":"empty.txt","content":""}});
-    let actual = rust(&fixture, "write_file", &call, None, None).await;
-    assert_eq!(actual["ok"], true);
-    assert_eq!(actual["changed_file"]["file_created"], true);
-    assert_eq!(actual["changed_file"]["lines"], json!([]));
-    assert_eq!(std::fs::read(fixture.root.join("empty.txt")).unwrap(), b"");
-    fixture.capabilities.mutations.close().await;
+async fn write_file_creates_empty_files_and_admitted_parent_directories() {
+    {
+        let fixture = Fixture::new();
+        let call = json!({"arguments":{"path":"empty.txt","content":""}});
+        let actual = rust(&fixture, "write_file", &call, None, None).await;
+        assert_eq!(actual["ok"], true);
+        assert_eq!(actual["changed_file"]["file_created"], true);
+        assert_eq!(actual["changed_file"]["lines"], json!([]));
+        assert_eq!(std::fs::read(fixture.root.join("empty.txt")).unwrap(), b"");
+        fixture.capabilities.mutations.close().await;
+    }
+    {
+        let fixture = Fixture::new();
+        let call = json!({"arguments":{"path":"new/deep/file.txt","content":"created",
+            "create_parents":true}});
+        let actual = rust(&fixture, "write_file", &call, None, None).await;
+        assert_eq!(actual["ok"], true);
+        assert_eq!(
+            std::fs::read(fixture.root.join("new/deep/file.txt")).unwrap(),
+            b"created"
+        );
+        fixture.capabilities.mutations.close().await;
+    }
 }
 
 #[tokio::test]

@@ -172,44 +172,44 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_round_trip_uses_source_locations() {
-        let root = root();
-        let environment = CognitionPathEnvironment::default();
-        let checkpoint = Checkpoint::new("cr_roundtrip", "2026-09-23T00:00:00.000Z");
-        assert!(
-            read_checkpoint(&root, &environment, "cr_roundtrip")
-                .unwrap()
-                .is_none()
-        );
-        write_checkpoint(&root, &environment, &checkpoint).unwrap();
-        assert_eq!(
-            checkpoint_path(&root, &environment, "cr_roundtrip").unwrap(),
-            root.join("cognition/consolidation/checkpoints/cr_roundtrip.json")
-        );
-        assert_eq!(
-            summary_path(&root, &environment, "cr_roundtrip")
-                .unwrap()
-                .parent()
-                .unwrap(),
-            root.join("cognition/consolidation/runs")
-        );
-        assert_eq!(
-            read_checkpoint(&root, &environment, "cr_roundtrip").unwrap(),
-            Some(checkpoint)
-        );
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn run_id_cannot_escape_the_consolidation_directories() {
-        let root = root();
-        let environment = CognitionPathEnvironment::default();
-        assert_eq!(
-            checkpoint_path(&root, &environment, "../../outside")
-                .unwrap_err()
-                .code,
-            "memory_consolidation_run_id_invalid"
-        );
-        let _ = fs::remove_dir_all(root);
+    fn checkpoints_round_trip_inside_the_consolidation_directories_only() {
+        {
+            let root = root();
+            let environment = CognitionPathEnvironment::default();
+            let checkpoint = Checkpoint::new("cr_roundtrip", "2026-09-23T00:00:00.000Z");
+            assert!(
+                read_checkpoint(&root, &environment, "cr_roundtrip")
+                    .unwrap()
+                    .is_none()
+            );
+            write_checkpoint(&root, &environment, &checkpoint).unwrap();
+            assert_eq!(
+                checkpoint_path(&root, &environment, "cr_roundtrip").unwrap(),
+                root.join("cognition/consolidation/checkpoints/cr_roundtrip.json")
+            );
+            assert_eq!(
+                summary_path(&root, &environment, "cr_roundtrip")
+                    .unwrap()
+                    .parent()
+                    .unwrap(),
+                root.join("cognition/consolidation/runs")
+            );
+            assert_eq!(
+                read_checkpoint(&root, &environment, "cr_roundtrip").unwrap(),
+                Some(checkpoint)
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+        {
+            let root = root();
+            let environment = CognitionPathEnvironment::default();
+            assert_eq!(
+                checkpoint_path(&root, &environment, "../../outside")
+                    .unwrap_err()
+                    .code,
+                "memory_consolidation_run_id_invalid"
+            );
+            let _ = fs::remove_dir_all(root);
+        }
     }
 }
