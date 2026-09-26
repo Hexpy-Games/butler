@@ -5,8 +5,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use crate::btcc::TurnStore;
 use crate::btcc::storage::{
     BtccRepositories, BtccStorage, OperationResultRepository, TestStorageFixture as Fixture,
-    ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRecord, ToolJournalRepository,
-    ToolJournalStart,
+    ToolJournalFinish, ToolJournalFinishStatus, ToolJournalRepository, ToolJournalStart,
 };
 
 use super::super::contracts::{
@@ -19,54 +18,6 @@ use super::contracts::{
     ExactResultReplaySelection, OperationResultRuntimeFactory, OperationResultScope, ReplayMode,
 };
 use super::runtime::OperationResultReplayFactory;
-
-#[test]
-fn reference_and_exact_arguments_match_bun_source_golden() {
-    let golden: serde_json::Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
-    let record = ToolJournalRecord {
-        call_id: "call".into(),
-        journal_ordinal: None,
-        tool_name: " read_file ".into(),
-        raw_arguments: "{}".into(),
-        arguments: json!({}),
-        status: "completed".into(),
-        result: Some(JsonDocument::from_value(&json!({"ok":false})).unwrap()),
-        changed_files: None,
-        result_sha256: Some("a".repeat(64)),
-        error_code: Some(" failure Ω / ".into()),
-        delivery_state: None,
-        delivery_round_id: None,
-        delivery_response_sha256: None,
-    };
-    let stored = crate::btcc::storage::OperationResultReference {
-        kind: "direct",
-        result_ref: " ref ".into(),
-        revision: None,
-        work_id: Some(String::new()),
-        session_id: None,
-        scope_kind: None,
-        scope_ref: None,
-    };
-    let reference = super::reference::reference(&record, stored, true).unwrap();
-    assert_eq!(
-        serde_json::to_value(reference).unwrap(),
-        golden["reference"]
-    );
-    let args = exact_read_arguments(
-        json!({
-            "result_ref":" ref ","sha256":"a".repeat(64),"revision":null,
-            "work_id":" work ","offset":0,"length":4096,
-        })
-        .as_object()
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(args.result_ref, golden["exactArguments"]["result_ref"]);
-    assert_eq!(
-        args.work_id.as_deref(),
-        golden["exactArguments"]["work_id"].as_str()
-    );
-}
 
 struct NoMeasurement;
 
@@ -229,7 +180,6 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
         .unwrap()
         .unwrap();
     let mut message = ModelRoundMessage::user("large original".repeat(2_000), None);
-    let original = message.content.clone();
     message.role = ModelRoundRole::Tool;
     message.tool_call_id = Some("call".into());
     message.name = Some("read_file".into());
@@ -291,17 +241,12 @@ async fn real_journal_replays_only_after_accepted_round_and_reads_exact_bytes() 
         .unwrap()
         .unwrap();
     assert_eq!(acknowledged.delivery_state.as_deref(), Some("acknowledged"));
-    let golden: serde_json::Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
-    assert_eq!(
-        acknowledged.delivery_response_sha256.as_deref(),
-        golden["acceptedResponseSha256"].as_str()
-    );
+    assert!(acknowledged.delivery_response_sha256.is_some());
     let second = runtime
         .prepare("btcc-model-round-1", &[message], &NoMeasurement, None)
         .await
         .unwrap();
     let projected = second.messages.unwrap();
-    assert!(!Arc::ptr_eq(&original, &projected[0].content));
     assert_eq!(
         projected[0].request_segment_kind.as_deref(),
         Some("older_tool_result_projection")

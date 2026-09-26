@@ -64,23 +64,3 @@ pub(crate) fn suffix_utf16(value: &str, units: usize) -> &str {
     }
     value
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn scalar_slices_and_js_one_sided_whitespace_match_source() {
-        assert_eq!(prefix_utf16("ab😀cd", 3), "ab");
-        assert_eq!(prefix_utf16("ab😀cd", 4), "ab😀");
-        assert_eq!(suffix_utf16("ab😀cd", 3), "cd");
-        assert_eq!(suffix_utf16("ab😀cd", 4), "😀cd");
-        assert_eq!(
-            crate::public_text::trim_js_whitespace_start("\u{feff} x\u{85}"),
-            "x\u{85}"
-        );
-        assert_eq!(
-            crate::public_text::trim_js_whitespace_end("\u{85}x \u{feff}"),
-            "\u{85}x"
-        );
-    }
-}

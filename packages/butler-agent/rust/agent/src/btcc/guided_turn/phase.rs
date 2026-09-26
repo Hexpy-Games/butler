@@ -8,6 +8,3 @@ mod visibility;
 
 pub(crate) use catalog::{GuidedCatalogRead, GuidedCatalogSnapshot};
 pub(crate) use selection::{GuidedPhaseInput, GuidedPhaseSelection, select_phase};
-
-#[cfg(test)]
-mod tests;

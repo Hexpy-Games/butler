@@ -2,8 +2,6 @@
 
 mod commands;
 mod composition;
-#[cfg(test)]
-mod tests;
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 

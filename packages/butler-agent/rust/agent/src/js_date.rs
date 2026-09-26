@@ -141,12 +141,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn persisted_iso_writers_match_bun_golden_and_time_clip() {
-        let fixture: Vec<(i64, String)> =
-            serde_json::from_str(include_str!("js_date/date-fixture.json")).unwrap();
-        for (millis, iso) in fixture {
-            assert_eq!(format_iso_millis(millis).as_deref(), Some(iso.as_str()));
-            assert_eq!(parse_iso_millis(&iso), Some(millis));
+    fn persisted_iso_round_trips_extended_years_and_time_clip() {
+        for (millis, iso) in [
+            (-8_640_000_000_000_000, "-271821-04-20T00:00:00.000Z"),
+            (-62_198_755_200_000, "-000001-01-01T00:00:00.000Z"),
+            (-62_167_219_200_000, "0000-01-01T00:00:00.000Z"),
+            (-1, "1969-12-31T23:59:59.999Z"),
+            (0, "1970-01-01T00:00:00.000Z"),
+            (154_914_213_082_500, "6879-01-13T13:51:22.500Z"),
+            (2_815_675_500_765_368, "+091195-03-16T19:32:45.368Z"),
+        ] {
+            assert_eq!(format_iso_millis(millis).as_deref(), Some(iso));
+            assert_eq!(parse_iso_millis(iso), Some(millis));
         }
         assert_eq!(format_iso_millis(TIME_CLIP + 1), None);
         assert_eq!(format_iso_millis(-TIME_CLIP - 1), None);

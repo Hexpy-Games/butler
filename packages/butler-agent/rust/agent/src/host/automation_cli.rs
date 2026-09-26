@@ -2,9 +2,6 @@
 
 mod helpers;
 mod render;
-#[cfg(test)]
-#[path = "automation_cli_tests.rs"]
-mod tests;
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 

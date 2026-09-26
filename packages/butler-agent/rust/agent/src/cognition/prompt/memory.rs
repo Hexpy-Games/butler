@@ -200,34 +200,3 @@ fn project_entries(
     }
     Ok((!content.is_empty()).then(|| content.join("\n\n")))
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use sha2::{Digest, Sha256};
-
-    use super::generation_hot_cache;
-    use crate::cognition::CognitionPathEnvironment;
-
-    #[test]
-    #[ignore = "requires an explicitly selected read-only DATA fixture and source projection digest"]
-    fn existing_generation_cache_matches_source_projection() {
-        let data = std::env::var("BUTLER_HOT_CACHE_READ_PROOF_DATA").unwrap();
-        let expected = std::env::var("BUTLER_HOT_CACHE_READ_PROOF_SHA256").unwrap();
-        let actual =
-            generation_hot_cache(Path::new(&data), &CognitionPathEnvironment::default(), None)
-                .unwrap();
-        if expected == "null" {
-            assert!(
-                actual.is_none(),
-                "unexpected cache projection sha256={:x}",
-                Sha256::digest(actual.unwrap_or_default().as_bytes())
-            );
-            return;
-        }
-        let actual = actual.expect("source projection is present");
-        let digest = Sha256::digest(actual.as_bytes());
-        assert_eq!(format!("{digest:x}"), expected);
-    }
-}

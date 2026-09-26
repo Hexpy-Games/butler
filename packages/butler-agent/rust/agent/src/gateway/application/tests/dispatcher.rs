@@ -44,12 +44,10 @@ async fn fifo_dispatcher_starts_next_message_after_terminal_wake() {
         .wake_chat("general".into())
         .await
         .unwrap();
-    for _ in 0..50 {
-        if native.0.lock().unwrap().len() == 2 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
+    crate::testing::eventually("second queued message dispatch", || {
+        native.0.lock().unwrap().len() == 2
+    })
+    .await;
     {
         let turns = native.0.lock().unwrap();
         assert_eq!(turns.len(), 2);

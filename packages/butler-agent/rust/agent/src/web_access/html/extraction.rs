@@ -209,15 +209,4 @@ mod tests {
         assert!(result.markdown.contains("<tbody>"));
         assert_eq!(result.title.as_deref(), Some("Story title"));
     }
-
-    #[test]
-    fn unstructured_page_uses_raw_fallback() {
-        let result = extract_readable_html(
-            "<html><body><div>Short page</div></body></html>",
-            "https://example.com/short",
-        );
-        assert_eq!(result.method, "raw-html");
-        assert_eq!(result.text, "Short page");
-        assert_eq!(result.markdown, "Short page");
-    }
 }

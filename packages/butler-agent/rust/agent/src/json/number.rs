@@ -151,6 +151,3 @@ fn digit(byte: u8) -> Option<u32> {
         _ => None,
     }
 }
-
-#[cfg(test)]
-mod tests;

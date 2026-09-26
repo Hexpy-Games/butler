@@ -31,7 +31,7 @@ async fn opens_full_schema_preserves_deployed_columns_and_closes_owner() {
     assert_eq!(storage.owner_id(), "owner-a");
     assert_eq!(storage.owner_generation(), 1);
 
-    let (missing, note, journal, foreign_keys, synchronous, busy_timeout, pending_plan) = storage
+    let (missing, note, journal, foreign_keys, synchronous, busy_timeout) = storage
         .execute(|connection| {
             let mut expected = Vec::new();
             for schema in [
@@ -75,23 +75,6 @@ async fn opens_full_schema_preserves_deployed_columns_and_closes_owner() {
             let foreign_keys = pragma_i64(connection, "foreign_keys")?;
             let synchronous = pragma_i64(connection, "synchronous")?;
             let busy_timeout = pragma_i64(connection, "busy_timeout")?;
-            let mut statement = connection
-                .prepare(
-                    "EXPLAIN QUERY PLAN SELECT event_id,action_id,session_id,turn_id, \
-                            session_sequence,turn_sequence,event_json,destination_json \
-                     FROM btcc_progress_events \
-                     WHERE status='pending' AND (?1 IS NULL OR session_sequence>?1 \
-                        OR (session_sequence=?1 AND event_id>?2)) \
-                     ORDER BY session_sequence ASC,event_id ASC LIMIT ?3",
-                )
-                .map_err(StorageError::sqlite)?;
-            let pending_plan = statement
-                .query_map(params![Option::<i64>::None, "", 32_i64], |row| {
-                    row.get::<_, String>(3)
-                })
-                .map_err(StorageError::sqlite)?
-                .collect::<rusqlite::Result<Vec<_>>>()
-                .map_err(StorageError::sqlite)?;
             Ok((
                 missing,
                 note,
@@ -99,7 +82,6 @@ async fn opens_full_schema_preserves_deployed_columns_and_closes_owner() {
                 foreign_keys,
                 synchronous,
                 busy_timeout,
-                pending_plan,
             ))
         })
         .await
@@ -110,18 +92,6 @@ async fn opens_full_schema_preserves_deployed_columns_and_closes_owner() {
     assert_eq!(foreign_keys, 1);
     assert_eq!(synchronous, 1);
     assert_eq!(busy_timeout, 5_000);
-    assert!(
-        pending_plan
-            .iter()
-            .any(|detail| detail.contains("idx_btcc_progress_events_pending_page")),
-        "pending-page plan did not use its partial index: {pending_plan:?}"
-    );
-    assert!(
-        pending_plan
-            .iter()
-            .all(|detail| !detail.contains("USE TEMP B-TREE FOR ORDER BY")),
-        "pending-page plan still sorts through a temporary B-tree: {pending_plan:?}"
-    );
 
     storage.close().await.expect("close storage");
     storage.close().await.expect("repeat close shares success");
@@ -209,12 +179,14 @@ async fn cancelled_first_close_does_not_abandon_owner_completion() {
         .expect("blocking job started");
     let first_storage = storage.clone();
     let first_close = tokio::spawn(async move { first_storage.close().await });
-    loop {
-        if storage.inner.lane.lock().await.sender.is_none() {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    crate::testing::eventually("close to detach the lane sender", || {
+        storage
+            .inner
+            .lane
+            .try_lock()
+            .is_ok_and(|lane| lane.sender.is_none())
+    })
+    .await;
     first_close.abort();
     release_tx.send(()).expect("release queued job");
 

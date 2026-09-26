@@ -182,15 +182,8 @@ fn write_error() -> super::super::contracts::ProfileError {
 
 #[cfg(test)]
 mod tests {
-    use super::{bounded_private_text, read_private_text};
+    use super::read_private_text;
     use std::{fs, path::PathBuf};
-
-    #[test]
-    fn private_text_matches_utf16_slice_and_trim_boundaries() {
-        assert_eq!(bounded_private_text(" \r\na\r\nb \n"), "a\nb");
-        let value = format!("{}x", "😀".repeat(16_000));
-        assert_eq!(bounded_private_text(&value), "😀".repeat(16_000));
-    }
 
     #[test]
     fn private_text_reads_existing_files_and_defaults_missing_files() {

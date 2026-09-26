@@ -218,42 +218,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn explicit_success_projection_matches_public_source_shape() {
-        let result = crate::cognition::ExplicitMemoryUpdateResult {
-            path: "/private/data/rules/rule.md".into(),
-            record_id: "record".into(),
-            revision: "revision".into(),
-            operation_id: "occurrence".into(),
-            replayed: true,
-            job_id: "internal-job".into(),
-        };
-        let value = explicit_result(result);
-        assert_eq!(value.as_object().unwrap().len(), 5);
-        assert!(value.get("path").is_none());
-        assert!(value.get("job_id").is_none());
-    }
-
-    #[test]
-    fn canonical_binding_failures_keep_source_shape() {
-        assert_eq!(
-            binding_failure("invalid_scope"),
-            json!({"ok":false,"code":"invalid_scope","diagnostics":[]})
-        );
-    }
-
-    #[test]
-    fn task_result_omits_missing_optional_provenance() {
-        let value = task_result(TaskMemoryIngestionResult {
-            task_id: "task".into(),
-            memory_path: "/data/cognition/memory/tasks/task.md".into(),
-            origin_session_id: None,
-            origin_event_id: None,
-            job_id: "internal-job".into(),
-        });
-        assert_eq!(
-            value["provenance"],
-            json!({"task_id":"task","source":"task-result"})
-        );
-        assert!(value.get("job_id").is_none());
+    fn memory_write_results_never_expose_private_paths_or_internal_job_ids() {
+        {
+            let result = crate::cognition::ExplicitMemoryUpdateResult {
+                path: "/private/data/rules/rule.md".into(),
+                record_id: "record".into(),
+                revision: "revision".into(),
+                operation_id: "occurrence".into(),
+                replayed: true,
+                job_id: "internal-job".into(),
+            };
+            let value = explicit_result(result);
+            assert_eq!(value.as_object().unwrap().len(), 5);
+            assert!(value.get("path").is_none());
+            assert!(value.get("job_id").is_none());
+        }
+        {
+            assert_eq!(
+                binding_failure("invalid_scope"),
+                json!({"ok":false,"code":"invalid_scope","diagnostics":[]})
+            );
+        }
+        {
+            let value = task_result(TaskMemoryIngestionResult {
+                task_id: "task".into(),
+                memory_path: "/data/cognition/memory/tasks/task.md".into(),
+                origin_session_id: None,
+                origin_event_id: None,
+                job_id: "internal-job".into(),
+            });
+            assert_eq!(
+                value["provenance"],
+                json!({"task_id":"task","source":"task-result"})
+            );
+            assert!(value.get("job_id").is_none());
+        }
     }
 }

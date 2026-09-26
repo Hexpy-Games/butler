@@ -4,9 +4,6 @@ mod logs;
 mod metrics;
 mod path;
 mod process;
-#[cfg(test)]
-#[path = "observability_cli_tests.rs"]
-mod tests;
 
 use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 

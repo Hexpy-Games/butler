@@ -72,8 +72,7 @@ mod tests {
     use super::extract_pdf_text;
 
     #[test]
-    fn two_page_source_oracle() {
-        // Actual Bun extractPdfText on this PDF: {text:"Alpha PDF\n\n---\n\nBeta PDF",title:"Demo Title"}.
+    fn extracts_page_text_with_separators_and_trimmed_title() {
         let result = extract_pdf_text(include_bytes!("pdf/two-pages.pdf")).unwrap();
         assert_eq!(result.text, "Alpha PDF\n\n---\n\nBeta PDF");
         assert_eq!(result.title.as_deref(), Some("Demo Title"));

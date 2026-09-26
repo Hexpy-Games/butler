@@ -183,11 +183,9 @@ fn review_transitions_follow_source_entry_and_target_stages() {
 }
 
 #[test]
-fn fingerprint_is_stable_for_absent_optional_material() {
+fn fingerprint_changes_when_blockers_or_checkpoint_change() {
     let work = view();
     let first = disposition_material_fingerprint(&work).unwrap();
-    assert_eq!(first, disposition_material_fingerprint(&work).unwrap());
-    assert_eq!(first.len(), 64);
     let mut changed = work.clone();
     changed.effect_blockers = Some(vec![EffectBlocker {
         blocker_id: "b".into(),

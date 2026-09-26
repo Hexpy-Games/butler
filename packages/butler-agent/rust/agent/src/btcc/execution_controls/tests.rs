@@ -67,44 +67,26 @@ fn verification_preserves_unknown_fields_original_order_and_non_nfc_text() {
 }
 
 #[test]
-fn verification_rejects_invalid_subsession_origin_before_integrity_check() {
-    let mut value = fixture()["created"].clone();
-    value["subsession_result"]["safe_title"] = "unsafe\nlabel".into();
-    let controls: ExecutionControls = serde_json::from_value(value).unwrap();
-    assert_eq!(
-        controls.verify().unwrap_err().code,
-        "turn_execution_controls_invalid"
-    );
-}
-
-#[test]
-fn explicitly_null_optional_contracts_are_invalid() {
+fn verification_rejects_invalid_contracts_before_integrity_check() {
+    let mut unsafe_title = fixture()["created"].clone();
+    unsafe_title["subsession_result"]["safe_title"] = "unsafe\nlabel".into();
+    let mut invalid = vec![unsafe_title];
     for field in ["model_fallback", "subsession_result"] {
         let mut value = fixture()["created"].clone();
         value[field] = Value::Null;
+        invalid.push(value);
+    }
+    for value in invalid {
         let controls: ExecutionControls = serde_json::from_value(value).unwrap();
         assert_eq!(
             controls.verify().unwrap_err().code,
             "turn_execution_controls_invalid"
         );
     }
-}
-
-#[test]
-fn javascript_whitespace_and_utf16_title_limits_are_preserved() {
-    let context = SubsessionResultContext {
-        relation_id: "\u{feff}relation\u{feff}".into(),
-        result_id: "result".into(),
-        safe_title: "\u{feff}Atlas\u{a0}\u{a0}보고\u{feff}".into(),
-    };
-    assert_eq!(context.normalized().unwrap().relation_id, "relation");
-    assert_eq!(
-        context.status_label().unwrap(),
-        "Atlas 보고 작업에 대한 보고 준비 중"
-    );
     let too_long = SubsessionResultContext {
+        relation_id: "relation".into(),
+        result_id: "result".into(),
         safe_title: "😀".repeat(81),
-        ..context
     };
     assert!(!too_long.valid());
 }

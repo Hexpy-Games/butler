@@ -290,39 +290,40 @@ mod tests {
     use crate::host::service_instance::RestartIdentity;
 
     #[test]
-    fn intent_id_accepts_opaque_safe_ids_and_rejects_paths() {
-        assert!(validate_intent_id("turn:call-01").is_ok());
-        assert!(validate_intent_id("../../other-data").is_err());
-        assert!(validate_intent_id(&"x".repeat(129)).is_err());
-    }
-
-    #[test]
-    fn handoff_input_round_trips_without_exposing_identity_in_arguments() {
-        let identity = RestartIdentity {
-            pid: 42,
-            process_start: "macos:123:456".into(),
-            nonce: "private-nonce".into(),
-            executable: "/Applications/Butler/butler-agent".into(),
-        };
-        let encoded = encode_input(&identity, "turn:call-01").expect("valid input");
-        let decoded: RestartHandoffInput =
-            serde_json::from_slice(&encoded).expect("serialized input parses");
-        assert_eq!(decoded.identity, identity);
-        assert_eq!(decoded.intent_id, "turn:call-01");
-        assert!(encoded.len() <= MAX_HANDOFF_INPUT_BYTES);
-    }
-
-    #[test]
-    fn handoff_input_rejects_oversized_and_unrecognized_fields() {
-        assert!(
-            serde_json::from_slice::<RestartHandoffInput>(&vec![b' '; MAX_HANDOFF_INPUT_BYTES + 1])
+    fn handoff_input_is_bounded_strict_and_carries_identity_outside_arguments() {
+        {
+            assert!(validate_intent_id("turn:call-01").is_ok());
+            assert!(validate_intent_id("../../other-data").is_err());
+            assert!(validate_intent_id(&"x".repeat(129)).is_err());
+        }
+        {
+            let identity = RestartIdentity {
+                pid: 42,
+                process_start: "macos:123:456".into(),
+                nonce: "private-nonce".into(),
+                executable: "/Applications/Butler/butler-agent".into(),
+            };
+            let encoded = encode_input(&identity, "turn:call-01").expect("valid input");
+            let decoded: RestartHandoffInput =
+                serde_json::from_slice(&encoded).expect("serialized input parses");
+            assert_eq!(decoded.identity, identity);
+            assert_eq!(decoded.intent_id, "turn:call-01");
+            assert!(encoded.len() <= MAX_HANDOFF_INPUT_BYTES);
+        }
+        {
+            assert!(
+                serde_json::from_slice::<RestartHandoffInput>(&vec![
+                    b' ';
+                    MAX_HANDOFF_INPUT_BYTES + 1
+                ])
                 .is_err()
-        );
-        assert!(
-            serde_json::from_str::<RestartHandoffInput>(
-                r#"{"identity":{},"intent_id":"x","extra":1}"#
-            )
-            .is_err()
-        );
+            );
+            assert!(
+                serde_json::from_str::<RestartHandoffInput>(
+                    r#"{"identity":{},"intent_id":"x","extra":1}"#
+                )
+                .is_err()
+            );
+        }
     }
 }

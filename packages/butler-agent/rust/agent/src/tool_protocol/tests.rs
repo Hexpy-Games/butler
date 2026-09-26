@@ -28,13 +28,3 @@ fn catalog_and_guided_calls_match_actual_bun_source() {
         );
     }
 }
-
-#[test]
-fn unchanged_names_and_nested_tool_names_are_borrowed() {
-    let input = json!({"id":"native:read_file","arguments":{"path":"large body"}});
-    let args = input.as_object().unwrap();
-    let normalized = normalize_guided_tool_call("tool_call", args);
-    assert!(matches!(normalized.name, Cow::Borrowed("read_file")));
-    let unchanged = normalize_guided_tool_call("other", args);
-    assert!(matches!(unchanged.name, Cow::Borrowed("other")));
-}

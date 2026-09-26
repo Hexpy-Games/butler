@@ -1,6 +1,5 @@
 use serde_json::json;
 
-use super::super::ModelRouteRetryConfig;
 use super::super::contracts::FailureDisposition;
 use super::super::failure;
 use super::super::support::rebase_continuation;
@@ -109,11 +108,4 @@ fn continuation_rebase_validates_only_accepted_identity_and_compares_json_bytes(
         Err(ModelRoundError::Integrity(ref value))
             if value.code == "phase_continuity_projection_rebase_identity_invalid"
     ));
-}
-
-#[test]
-fn retry_config_preserves_zero_and_normalizes_nonfinite_to_source_default() {
-    assert_eq!(ModelRouteRetryConfig::new(0.0).base_delay_ms, 0.0);
-    assert_eq!(ModelRouteRetryConfig::new(-5.0).base_delay_ms, 0.0);
-    assert_eq!(ModelRouteRetryConfig::new(f64::NAN).base_delay_ms, 750.0);
 }

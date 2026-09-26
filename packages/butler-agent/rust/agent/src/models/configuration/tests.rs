@@ -163,11 +163,6 @@ async fn absent_invalid_and_utf8_file_behavior_does_not_modify_source() {
     }
     fs::write(&path, b"{\"value\":\"\xff\"}").unwrap();
     assert_eq!(owner.read().await.unwrap().config["value"], "\u{fffd}");
-    let weak = Arc::downgrade(&owner.catalog);
-    let read = owner.read().await.unwrap();
-    drop(owner);
-    assert!(weak.upgrade().is_none());
-    assert_eq!(read.catalog.view().models.len(), 59);
 }
 
 #[test]

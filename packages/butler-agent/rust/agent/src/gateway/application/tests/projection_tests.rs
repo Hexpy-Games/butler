@@ -342,27 +342,31 @@ async fn retention_owner_snapshots_terminal_progress_and_joins_on_close() {
         Ok(())
     }).await.unwrap();
     app.retention.as_ref().unwrap().schedule(turn.clone()).await;
-    for _ in 0..50 {
-        let id = turn.clone();
-        let ready = app
-            .storage
-            .execute(move |db| {
-                db.query_row(
-                    "SELECT 1 FROM app_terminal_turn_projections WHERE turn_id=?1",
-                    [id],
-                    |_| Ok(()),
-                )
-                .optional()
-                .map(|v| v.is_some())
-                .map_err(AppStorageError::sqlite)
-            })
-            .await
-            .unwrap();
-        if ready {
-            break;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let id = turn.clone();
+            let ready = app
+                .storage
+                .execute(move |db| {
+                    db.query_row(
+                        "SELECT 1 FROM app_terminal_turn_projections WHERE turn_id=?1",
+                        [id],
+                        |_| Ok(()),
+                    )
+                    .optional()
+                    .map(|v| v.is_some())
+                    .map_err(AppStorageError::sqlite)
+                })
+                .await
+                .unwrap();
+            if ready {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
+    })
+    .await
+    .expect("retention owner must snapshot the terminal projection");
     let page = app.list_messages("general".into(), 0.0, 200).await.unwrap();
     let progress = &page.turn_progress.unwrap()[&turn];
     assert_eq!(progress.safe_progress_rows[0]["safe_label"], "Worked");

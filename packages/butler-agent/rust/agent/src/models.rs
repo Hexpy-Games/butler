@@ -46,8 +46,6 @@ pub(crate) use provider::{
 };
 
 #[cfg(test)]
-use catalog::WorkerModelRule;
-#[cfg(test)]
 pub(crate) use catalog::model_identity_key;
 pub(crate) use catalog::{
     CredentialView, HostedApiShape, ImageProbeEvidence, LocalModelConfig, LocalModelPlatform,
@@ -118,21 +116,6 @@ impl ModelCatalog {
         model_ref: Option<&str>,
     ) -> Result<TokenEstimate, ModelCatalogError> {
         catalog::estimate_tokens(snapshot, &self.tokenizer, input, model_ref)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn default_worker_model_rules(&self) -> Vec<WorkerModelRule> {
-        self.static_catalog
-            .presets
-            .iter()
-            .find(|preset| preset.provider_id == "openai" && preset.runtime_supported)
-            .map(|preset| vec![preset.deep_work.clone(), preset.routine_work.clone()])
-            .unwrap_or_default()
-    }
-
-    #[cfg(test)]
-    fn tokenizer_loaded(&self) -> bool {
-        self.tokenizer.is_loaded()
     }
 }
 

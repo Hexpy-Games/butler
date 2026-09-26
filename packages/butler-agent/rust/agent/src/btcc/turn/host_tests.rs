@@ -25,9 +25,10 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
             })
             .await
     });
-    while harness.stop_calls.load(Ordering::SeqCst) != 2 {
-        tokio::task::yield_now().await;
-    }
+    crate::testing::eventually("both stops persisting", || {
+        harness.stop_calls.load(Ordering::SeqCst) == 2
+    })
+    .await;
     assert_eq!(assembly.btcc.inner.active_stop_count(), 2);
     stopped.abort();
     let host = assembly.host.clone();
@@ -55,9 +56,10 @@ async fn close_drains_caller_aborted_stop_and_panicking_stop_without_retention()
             })
             .await
     });
-    while !panic_harness.stop_started.load(Ordering::SeqCst) {
-        tokio::task::yield_now().await;
-    }
+    crate::testing::eventually("panicking stop started", || {
+        panic_harness.stop_started.load(Ordering::SeqCst)
+    })
+    .await;
     panic_harness.stop_permits.add_permits(1);
     assert_eq!(
         panicking.await.unwrap().unwrap_err().code,
@@ -78,9 +80,10 @@ async fn panicking_owned_turn_settles_duplicates_and_close_without_retention() {
     let duplicate_btcc = assembly.btcc.clone();
     let first =
         tokio::spawn(async move { first_btcc.run_turn(request("turn-1", "session-1")).await });
-    while harness.calls.load(Ordering::SeqCst) == 0 {
-        tokio::task::yield_now().await;
-    }
+    crate::testing::eventually("agent loop entry", || {
+        harness.calls.load(Ordering::SeqCst) > 0
+    })
+    .await;
     let duplicate = tokio::spawn(async move {
         duplicate_btcc
             .run_turn(request("turn-1", "session-1"))

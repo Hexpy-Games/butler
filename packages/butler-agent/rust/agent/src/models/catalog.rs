@@ -24,8 +24,6 @@ pub(crate) use registered::{
     normalize_registered_hosted_model, registered_hosted_model_metadata,
 };
 pub(super) use registered::{hosted_provider, safe_label as normalize_display_label};
-#[cfg(test)]
-pub(crate) use static_data::SOURCE_SHA256 as STATIC_CATALOG_SOURCE_SHA256;
 pub(super) use static_data::StaticCatalog;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

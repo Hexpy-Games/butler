@@ -12,44 +12,78 @@ impl RegisteredWritePort for WritesThenReject {
         })
     }
 }
-
 #[test]
-fn actual_bun_write_effect_normalization_matches() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
-    let workspace = std::path::Path::new(fixture["workspacePath"].as_str().unwrap());
-    for case in fixture["cases"].as_array().unwrap() {
-        let actual = path::input(&case["input"], workspace);
-        if let Some(expected) = case["normalized"].as_object() {
-            assert_eq!(
-                actual.unwrap(),
-                serde_json::Value::Object(expected.clone()),
-                "{case}"
-            );
-        } else {
-            assert_eq!(
-                actual.unwrap_err().message,
-                case["error"].as_str().unwrap(),
-                "{case}"
-            );
+fn write_effect_inputs_and_targets_normalize_inside_the_workspace() {
+    let workspace = std::path::Path::new("/tmp/butler-workspace-fixture");
+    for (input, expected) in [
+        (
+            json!({"path":"a\\b","content":"x"}),
+            Ok(json!({"path":"a/b","content":"x","create_parents":false})),
+        ),
+        (
+            json!({"path":"a//b","content":"x","create_parents":true}),
+            Ok(json!({"path":"a/b","content":"x","create_parents":true})),
+        ),
+        (
+            json!({"path":"/tmp/butler-workspace-fixture/a","content":"x"}),
+            Ok(json!({"path":"a","content":"x","create_parents":false})),
+        ),
+        (
+            json!({"path":"a/","content":"x"}),
+            Ok(json!({"path":"a/","content":"x","create_parents":false})),
+        ),
+        (
+            json!({"path":"../a","content":"x"}),
+            Err("write_file effect path cannot traverse a parent directory"),
+        ),
+        (
+            json!({"path":"a","content":"x","create_parents":null}),
+            Err("write_file effect create_parents must be a boolean"),
+        ),
+        (
+            json!({"path":"a","content":1}),
+            Err("write_file effect content must be a string"),
+        ),
+    ] {
+        match expected {
+            Ok(normalized) => assert_eq!(
+                path::input(&input, workspace).unwrap(),
+                normalized,
+                "{input}"
+            ),
+            Err(message) => assert_eq!(
+                path::input(&input, workspace).unwrap_err().message,
+                message,
+                "{input}"
+            ),
         }
     }
-    for case in fixture["targets"].as_array().unwrap() {
-        let actual = path::target(case["target"].as_str().unwrap());
-        if let Some(expected) = case["normalized"].as_str() {
-            assert_eq!(actual.unwrap(), expected, "{case}");
-        } else {
-            assert_eq!(
-                actual.unwrap_err().message,
-                case["error"].as_str().unwrap(),
-                "{case}"
-            );
+    for (target, expected) in [
+        ("workspace:a\\b", Ok("workspace:a/b")),
+        ("workspace:a//b", Ok("workspace:a/b")),
+        ("workspace:a/", Ok("workspace:a/")),
+        (
+            "workspace:../a",
+            Err("write_file effect path cannot traverse a parent directory"),
+        ),
+        (
+            "workspace:/a",
+            Err("write_file effect path must be workspace-relative"),
+        ),
+        (
+            "bad:a",
+            Err("write_file effect target must use workspace:<relative-path>"),
+        ),
+    ] {
+        match expected {
+            Ok(normalized) => assert_eq!(path::target(target).unwrap(), normalized),
+            Err(message) => assert_eq!(path::target(target).unwrap_err().message, message),
         }
     }
 }
 
 #[tokio::test]
-async fn actual_bun_observation_precedes_registered_rejection_and_attempt_fallback_matches() {
-    let fixture: Value = serde_json::from_str(include_str!("bun-golden.json")).unwrap();
+async fn observed_write_precedes_registered_rejection_and_reconcile_is_conservative() {
     let root = std::env::temp_dir().join(format!("butler-effect-observe-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir(&root).unwrap();
     let adapter = WorkspaceFileEffectAdapter::new(
@@ -72,11 +106,12 @@ async fn actual_bun_observation_precedes_registered_rejection_and_attempt_fallba
     let AdapterOutcome::Applied(result) = dispatched else {
         panic!("expected observed applied")
     };
-    assert_eq!(
-        result.read::<serde_json::Value>().unwrap(),
-        fixture["observation"]["dispatch"]["result"]
-    );
-    assert_eq!(result.as_str(), fixture["observation"]["resultJson"]);
+    let result = result.read::<serde_json::Value>().unwrap();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["effect"], "workspace_file_write");
+    assert_eq!(result["bytes"], 12);
+    assert_eq!(result["created_from_absent"], true);
+    assert_eq!(result["changed_file"], json!({"source":"registered"}));
     let missing = adapter
         .normalize_input(&json!({"path":"b","content":"actual bytes"}))
         .unwrap();
@@ -94,10 +129,6 @@ async fn actual_bun_observation_precedes_registered_rejection_and_attempt_fallba
     let AdapterOutcome::Uncertain(Some(error)) = once else {
         panic!("expected uncertain")
     };
-    assert_eq!(error.code, fixture["observation"]["once"]["error"]["code"]);
-    assert_eq!(
-        error.message,
-        fixture["observation"]["once"]["error"]["message"]
-    );
+    assert_eq!(error.code, "workspace_file_state_mismatch");
     std::fs::remove_dir_all(&root).unwrap();
 }

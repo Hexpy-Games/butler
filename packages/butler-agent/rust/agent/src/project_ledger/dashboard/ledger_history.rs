@@ -218,31 +218,31 @@ mod tests {
     }
 
     #[test]
-    fn reads_metadata_only_events_in_reverse_log_order() {
-        let temp = TemporaryRoot::new();
-        fs::write(
-            temp.path().join("ledger.jsonl"),
-            concat!(
-                "{\"type\":\"work_created\",\"id\":\"w1\",\"ts\":\"2026-09-24T12:00:00.000Z\",\"private\":\"not returned\"}\n",
-                "{\"type\":\"plan_updated\",\"id\":\"p1\",\"ts\":\"2026-09-24T12:01:00.000Z\"}\n"
-            ),
-        )
-        .unwrap();
+    fn history_reads_metadata_only_events_newest_first_and_absent_log_is_empty() {
+        {
+            let temp = TemporaryRoot::new();
+            fs::write(
+                temp.path().join("ledger.jsonl"),
+                concat!(
+                    "{\"type\":\"work_created\",\"id\":\"w1\",\"ts\":\"2026-09-24T12:00:00.000Z\",\"private\":\"not returned\"}\n",
+                    "{\"type\":\"plan_updated\",\"id\":\"p1\",\"ts\":\"2026-09-24T12:01:00.000Z\"}\n"
+                ),
+            )
+            .unwrap();
 
-        let history = read(temp.path()).unwrap();
-        assert_eq!(history.events.len(), 2);
-        assert_eq!(history.events[0].record_id, "p1");
-        assert_eq!(history.events[0].kind, "plan");
-        assert_eq!(history.events[0].action, "updated");
-        assert_eq!(history.events[1].record_id, "w1");
-        assert!(history.events[1].id.ends_with(":0"));
-    }
-
-    #[test]
-    fn absent_history_is_explicit_and_empty() {
-        let temp = TemporaryRoot::new();
-        let history = read(temp.path()).unwrap();
-        assert_eq!(history.revision, "absent");
-        assert!(history.events.is_empty());
+            let history = read(temp.path()).unwrap();
+            assert_eq!(history.events.len(), 2);
+            assert_eq!(history.events[0].record_id, "p1");
+            assert_eq!(history.events[0].kind, "plan");
+            assert_eq!(history.events[0].action, "updated");
+            assert_eq!(history.events[1].record_id, "w1");
+            assert!(history.events[1].id.ends_with(":0"));
+        }
+        {
+            let temp = TemporaryRoot::new();
+            let history = read(temp.path()).unwrap();
+            assert_eq!(history.revision, "absent");
+            assert!(history.events.is_empty());
+        }
     }
 }

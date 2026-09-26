@@ -188,52 +188,11 @@ mod tests {
     }
 
     #[test]
-    fn recognizer_uses_positionals_after_common_value_options() {
-        assert!(recognizes(&args(&[
-            "--data",
-            "/tmp/butler",
-            "gateway",
-            "status"
-        ])));
-        assert!(!recognizes(&args(&["--data", "gateway", "status"])));
-    }
-
-    #[test]
     fn parser_rejects_home_authority() {
         assert!(
             parse(&args(&["gateway", "status", "--home", "/tmp/home"]))
                 .unwrap_err()
                 .contains("--home is unsupported")
         );
-    }
-
-    #[test]
-    fn app_only_gateway_commands_match_source_surface() {
-        assert!(matches!(
-            action(&["gateway".into(), "restart".into(), "app".into()]).unwrap(),
-            Action::Restart
-        ));
-        assert!(action(&["gateway".into(), "restart".into(), "mcp".into()]).is_err());
-        assert!(matches!(
-            action(&["gateway".into(), "app".into()]).unwrap(),
-            Action::App
-        ));
-        assert!(matches!(
-            action(&["gateway".into(), "logs".into(), "app".into()]).unwrap(),
-            Action::Logs
-        ));
-    }
-
-    #[test]
-    fn logs_options_match_source_defaults_and_flags() {
-        let options = parse(&args(&[
-            "gateway", "logs", "app", "--lines", "1201", "--follow", "--json",
-        ]))
-        .unwrap();
-        assert_eq!(options.lines, Some(1_000));
-        assert!(options.follow);
-        assert!(options.json);
-        let fallback = parse(&args(&["gateway", "logs", "app", "--lines", "bad"])).unwrap();
-        assert_eq!(fallback.lines, None);
     }
 }

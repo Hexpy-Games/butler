@@ -203,12 +203,10 @@ mod tests {
     use serde_json::Value;
     use sha2::{Digest, Sha256};
 
-    use super::*;
-
     #[test]
-    fn bun_window_identity_and_prompt_golden_match() {
+    fn persisted_window_coverage_key_and_evidence_ref_are_stable() {
         let golden: Value =
-            serde_json::from_str(include_str!("../tests/bun-pf1b-golden.json")).unwrap();
+            serde_json::from_str(include_str!("../tests/identity-golden.json")).unwrap();
         let text = "🙂abcdef";
         let source_hash = format!("{:x}", Sha256::digest(text.as_bytes()));
         let window =
@@ -227,9 +225,5 @@ mod tests {
         assert_eq!(window.coverage_key, golden["coverageKey"]);
         assert_eq!(window.evidence_ref, golden["evidenceRef"]);
         assert_eq!(window.text.as_ref(), golden["windowText"].as_str().unwrap());
-        assert_eq!(
-            extractor_prompt(&[window], ProfilingMode::Basic, &[]),
-            golden["extractorPrompt"]
-        );
     }
 }

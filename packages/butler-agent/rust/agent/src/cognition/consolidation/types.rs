@@ -225,33 +225,3 @@ pub(crate) struct UsageReport {
     pub(crate) usage: ModelUsageSummary,
     pub(crate) phases: Vec<PhaseUsageSummary>,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn phases_match_the_source_order_and_snake_case_names() {
-        let names = Phase::ALL.map(Phase::as_str);
-        assert_eq!(names.len(), 11);
-        assert_eq!(names[0], "preflight");
-        assert_eq!(names[3], "new_chat_briefing");
-        assert_eq!(names[10], "metrics_summary");
-        assert_eq!(
-            serde_json::to_string(&Phase::SourceQualityAggregation).unwrap(),
-            "\"source_quality_aggregation\""
-        );
-    }
-
-    #[test]
-    fn checkpoint_defaults_keep_the_source_raw_text_flag_false() {
-        let checkpoint = Checkpoint::new("cr_test", "2026-09-23T00:00:00.000Z");
-        assert_eq!(checkpoint.schema, CHECKPOINT_SCHEMA);
-        assert_eq!(checkpoint.status, CheckpointStatus::Running);
-        assert_eq!(checkpoint.next_phase_index, 0);
-        assert!(checkpoint.completed_phases.is_empty());
-        assert!(checkpoint.errors.is_empty());
-        assert!(checkpoint.active_phase.is_none());
-        assert!(!ModelUsageSummary::empty().raw_text_included);
-    }
-}

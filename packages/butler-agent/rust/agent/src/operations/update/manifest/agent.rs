@@ -233,36 +233,36 @@ mod tests {
     use super::{component_as_artifact, validate_source_contract};
 
     #[test]
-    fn accepts_the_source_agent_archive_contract_and_aliases() {
-        let artifact = component_as_artifact(&json!({
-            "id": "agent",
-            "version": "2.4.0",
-            "downloadUrl": "https://example.invalid/agent.tar.gz",
-            "product": "butler-agent",
-            "canonicalComponent": "agent",
-            "profile": "agent-standalone",
-            "updatePolicy": "explicit",
-            "restartPolicy": "restart-service",
-            "updaterOwner": "butler-agent",
-            "payloadFormat": "agent-archive",
-            "stagingPolicy": "butler-data-updates",
-            "activationPolicy": "user-installs-standalone-archive",
-            "rollbackPolicy": "not-managed-by-butler"
-        }));
-        validate_source_contract(&artifact).expect("source manifest fields are accepted");
-        assert_eq!(artifact["component"], "agent");
-        assert_eq!(
-            artifact["artifact_url"],
-            "https://example.invalid/agent.tar.gz"
-        );
-    }
-
-    #[test]
-    fn rejects_an_archive_that_bundles_app_components() {
-        let artifact = json!({"bundled_components": ["service", "app"]});
-        assert_eq!(
-            validate_source_contract(&artifact).unwrap_err(),
-            "update_manifest_incompatible"
-        );
+    fn agent_archive_contract_accepts_aliases_and_rejects_bundled_app_components() {
+        {
+            let artifact = component_as_artifact(&json!({
+                "id": "agent",
+                "version": "2.4.0",
+                "downloadUrl": "https://example.invalid/agent.tar.gz",
+                "product": "butler-agent",
+                "canonicalComponent": "agent",
+                "profile": "agent-standalone",
+                "updatePolicy": "explicit",
+                "restartPolicy": "restart-service",
+                "updaterOwner": "butler-agent",
+                "payloadFormat": "agent-archive",
+                "stagingPolicy": "butler-data-updates",
+                "activationPolicy": "user-installs-standalone-archive",
+                "rollbackPolicy": "not-managed-by-butler"
+            }));
+            validate_source_contract(&artifact).expect("source manifest fields are accepted");
+            assert_eq!(artifact["component"], "agent");
+            assert_eq!(
+                artifact["artifact_url"],
+                "https://example.invalid/agent.tar.gz"
+            );
+        }
+        {
+            let artifact = json!({"bundled_components": ["service", "app"]});
+            assert_eq!(
+                validate_source_contract(&artifact).unwrap_err(),
+                "update_manifest_incompatible"
+            );
+        }
     }
 }

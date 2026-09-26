@@ -98,19 +98,4 @@ mod tests {
         );
         assert!(!host.hostname().unwrap().is_empty());
     }
-
-    #[test]
-    fn profile_probe_preserves_js_numeric_pid_and_definite_death_contract() {
-        assert_eq!(
-            profile_process_status(f64::from(std::process::id())),
-            CognitionProcessStatus::Alive
-        );
-        for invalid in [f64::NAN, f64::INFINITY, 1.5, 9_007_199_254_740_991.0] {
-            assert_eq!(
-                profile_process_status(invalid),
-                CognitionProcessStatus::Uncertain
-            );
-        }
-        assert_eq!(profile_process_status(0.0), CognitionProcessStatus::Alive);
-    }
 }

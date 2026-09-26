@@ -62,8 +62,7 @@ use super::{
 use admission_identity::stringify;
 pub(crate) use automations::*;
 pub(crate) use briefing_snapshot::{
-    read_new_chat_briefing_projects,
-    read_new_chat_briefing_settings,
+    read_new_chat_briefing_projects, read_new_chat_briefing_settings,
 };
 pub(crate) use contracts::*;
 use events::EventSubscribers;

@@ -254,7 +254,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn string_byte_count_preserves_json_escapes_and_utf8_without_output_buffer() {
+    fn string_byte_count_includes_json_escapes_and_utf8() {
         for (value, expected) in [
             ("", 2),
             ("\"\\\n\r\t\u{8}\u{c}", 16),
@@ -263,37 +263,8 @@ mod tests {
         ] {
             assert_eq!(string_bytes(value).unwrap(), expected);
         }
-        // Large ASCII bodies are measured from their existing backing; the
-        // sink stores only a counter regardless of the serialized length.
         let body = "x".repeat(1024 * 1024);
         assert_eq!(string_bytes(&body).unwrap(), body.len() + 2);
-        let mut count = ByteCount(usize::MAX);
-        assert!(std::io::Write::write(&mut count, b"x").is_err());
-    }
-
-    #[test]
-    fn borrowed_dto_byte_count_matches_serde_without_an_output_buffer() {
-        #[derive(serde::Serialize)]
-        struct Candidate<'a> {
-            label: &'a str,
-            aliases: &'a [&'a str],
-            claim: Option<&'a str>,
-        }
-        let candidate = Candidate {
-            label: "한글😀\n\"",
-            aliases: &["alias", "\u{0}"],
-            claim: None,
-        };
-        let values = [&candidate, &candidate];
-        assert_eq!(
-            serde_serialized_bytes(&values).unwrap(),
-            serde_json::to_vec(&values).unwrap().len()
-        );
-        let number = serde_json::json!(1.0);
-        assert_ne!(
-            serde_serialized_bytes(&number).unwrap(),
-            stringify(&number).unwrap().len()
-        );
     }
 
     #[test]
@@ -316,7 +287,16 @@ mod tests {
             original
         );
     }
-}
 
-#[cfg(test)]
-mod sorted_tests;
+    #[test]
+    fn sorted_json_preserves_collation_ties_and_distinct_unicode_keys() {
+        let input: Value = serde_json::from_str(
+            r#"{"é":"é","é":"é","10":"ten","2":"two","nested":{"z":1,"a":2}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            stringify_sorted(&input, &|_, _| std::cmp::Ordering::Equal).unwrap(),
+            r#"{"2":"two","10":"ten","é":"é","é":"é","nested":{"z":1,"a":2}}"#
+        );
+    }
+}

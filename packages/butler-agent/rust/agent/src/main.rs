@@ -286,6 +286,123 @@ fn installation(
     Ok((installation, command))
 }
 
+#[cfg(all(test, unix))]
+mod tests {
+    use std::ffi::OsString;
+
+    type Recognizer = fn(&[OsString]) -> bool;
+
+    /// Mirrors the dispatch order of `main`: the first family that claims argv runs.
+    fn route(args: &[OsString]) -> &'static str {
+        let families: [(&str, Recognizer); 18] = [
+            (
+                "conversation_recovery",
+                butler_agent::native_conversation_recovery_cli_recognizes,
+            ),
+            ("public", butler_agent::native_public_cli_recognizes),
+            ("service", butler_agent::native_service_cli_recognizes),
+            ("doctor", butler_agent::native_doctor_cli_recognizes),
+            ("mcp", butler_agent::native_mcp_cli_recognizes),
+            (
+                "personalization",
+                butler_agent::native_personalization_cli_recognizes,
+            ),
+            ("settings", butler_agent::native_settings_cli_recognizes),
+            (
+                "observability",
+                butler_agent::native_observability_cli_recognizes,
+            ),
+            ("web_access", butler_agent::native_web_access_cli_recognizes),
+            ("automation", butler_agent::native_automation_cli_recognizes),
+            ("update", butler_agent::native_update_cli_recognizes),
+            ("status", butler_agent::native_status_cli_recognizes),
+            ("context", butler_agent::native_context_cli_recognizes),
+            ("transport", butler_agent::native_transport_cli_recognizes),
+            ("gateway", butler_agent::native_gateway_cli_recognizes),
+            ("work", butler_agent::native_work_cli_recognizes),
+            ("skills", super::is_skills_command),
+            ("cognition", super::is_cognition_command),
+        ];
+        families
+            .iter()
+            .find(|(_, recognizes)| recognizes(args))
+            .map_or("none", |(name, _)| name)
+    }
+
+    #[test]
+    fn command_families_claim_their_commands_after_common_options() {
+        for (args, expected) in [
+            (&["automation", "list"][..], "automation"),
+            (
+                &[
+                    "--data",
+                    "/tmp/d",
+                    "automation",
+                    "list",
+                    "--status",
+                    "active",
+                    "--json",
+                ],
+                "automation",
+            ),
+            (&["automation", "future-command"], "automation"),
+            (&["metrics", "tail"], "observability"),
+            (
+                &["--data", "/tmp/d", "metrics", "tail", "--lines"],
+                "observability",
+            ),
+            (&["logs"], "observability"),
+            (&["ps"], "observability"),
+            (&["metrics", "status"], "status"),
+            (&["search", "status", "--json"], "web_access"),
+            (
+                &["--data", "/tmp/d", "search", "test", "rust", "async"],
+                "web_access",
+            ),
+            (
+                &["web", "read", "https://example.com", "--data", "/tmp/d"],
+                "web_access",
+            ),
+            (&["personalization"], "personalization"),
+            (
+                &["--data", "/tmp/d", "personalization", "show"],
+                "personalization",
+            ),
+            (
+                &["personalization", "migrate", "import", "--stdin"],
+                "personalization",
+            ),
+            (&["start", "--dry-run"], "service"),
+            (&["--data", "/tmp/d", "--json"], "service"),
+            (&["service", "run", "--data", "/tmp/d"], "service"),
+            (
+                &["service", "restart-handoff", "--data", "/tmp/d", "--quiet"],
+                "service",
+            ),
+            (&["--data", "/tmp/d", "doctor", "--fix"], "doctor"),
+            (&["--data", "/tmp/d", "gateway", "status"], "gateway"),
+            (&["mcp", "list"], "mcp"),
+            (&["mcp", "serve"], "mcp"),
+            (&["mcp", "--data", "/tmp/d", "serve"], "mcp"),
+            (&["--data", "/tmp/d", "mcp", "serve"], "mcp"),
+            (&["--data", "mcp", "status"], "status"),
+            (&["model", "list"], "settings"),
+            (&["--data", "model", "model", "list"], "settings"),
+            (
+                &["--data", "/tmp/d", "model", "set", "openai/gpt-6-astra"],
+                "settings",
+            ),
+            (&["model", "status"], "status"),
+            (&["--data", "/tmp/d", "work", "list"], "work"),
+            (&["skills", "list"], "skills"),
+            (&["cognition", "memory", "maintain"], "cognition"),
+        ] {
+            let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            assert_eq!(route(&args), expected, "{args:?}");
+        }
+    }
+}
+
 #[cfg(not(unix))]
 fn main() {
     eprintln!("The native service host for this platform is not yet available.");

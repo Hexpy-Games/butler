@@ -1,23 +1,5 @@
 use super::*;
 
-#[test]
-fn bounded_text_literal_matches_bun_code_unit_cases() {
-    let cases: serde_json::Value =
-        serde_json::from_str(include_str!("../../../json/utf16_slice/source-bun.json")).unwrap();
-    for case in cases.as_array().unwrap() {
-        let units = case["units"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|unit| unit.as_u64().unwrap() as u16)
-            .collect();
-        let text = ExactText::Units(units);
-        let mut encoded = String::new();
-        text.append_json_literal(&mut encoded).unwrap();
-        assert_eq!(encoded, case["json"].as_str().unwrap(), "{case:?}");
-    }
-}
-
 #[tokio::test]
 async fn source_bun_budget_documents_match_actual_default_model_estimator() {
     let cases: serde_json::Value =

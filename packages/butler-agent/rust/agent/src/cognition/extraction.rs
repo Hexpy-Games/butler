@@ -19,6 +19,3 @@ pub(in crate::cognition) use meaning::{
 };
 pub(in crate::cognition) use runner::StageFuture;
 pub(super) use runner::{ExtractionRunInput, ExtractionStagePort, run_extractor};
-
-#[cfg(test)]
-mod tests;

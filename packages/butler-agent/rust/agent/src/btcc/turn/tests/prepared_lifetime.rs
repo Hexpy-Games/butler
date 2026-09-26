@@ -102,9 +102,10 @@ async fn cancelled_caller_does_not_drop_live_conversation_until_owned_work_drain
             tokio::spawn(
                 async move { assembly.btcc.run_turn(request("turn-1", "session-1")).await },
             );
-        while harness.calls.load(Ordering::SeqCst) == 0 {
-            tokio::task::yield_now().await;
-        }
+        crate::testing::eventually("agent loop entry", || {
+            harness.calls.load(Ordering::SeqCst) > 0
+        })
+        .await;
         caller.abort();
         assert!(caller.await.unwrap_err().is_cancelled());
         assert_eq!(drops.load(Ordering::SeqCst), 0);

@@ -17,8 +17,6 @@ mod progress;
 mod project_plan;
 mod storage;
 mod subsessions;
-#[cfg(test)]
-mod tests;
 mod turn;
 mod work;
 

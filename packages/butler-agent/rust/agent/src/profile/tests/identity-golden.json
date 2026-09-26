@@ -1,0 +1,10 @@
+{
+  "sourceHash": "a0c96d43d6c60bce6084e8c308ab0a1c219abe969ceb8b82a748ab38c8cf3e11",
+  "coverageKey": "ee0ca136f03ec3768bf21f4a05d940d27581cdbbc32748bd9f902e1ace23947c",
+  "evidenceRef": "profile_window:ee0ca136f03ec3768bf21f4a",
+  "windowText": "🙂abc",
+  "source": "other-assistant",
+  "normalized": "First\nsecond\t🙂",
+  "importHash": "8f1f569ebbf99105",
+  "importId": "third_party_profile_import:other-assistant:8f1f569ebbf99105"
+}

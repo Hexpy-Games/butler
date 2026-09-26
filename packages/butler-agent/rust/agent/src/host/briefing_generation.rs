@@ -405,50 +405,50 @@ mod tests {
     use super::{locale_preference, model_preference, reasoning_preference};
 
     #[test]
-    fn model_locale_and_effort_follow_source_priority() {
-        let config = json!({
-            "language":"en",
-            "user":{"language":"fr"},
-            "model":"openai/config-model",
-            "consolidation_model":"openai/consolidation-model",
-            "reasoning_effort":"low",
-            "consolidation_reasoning_effort":"high",
-            "personalization":{"profiling":{
-                "extractorModel":"openai/extractor-model",
-                "extractorReasoningEffort":"xhigh",
-            }},
-        });
-        let app = json!({
-            "language":"ko", "model":"openai/app-model",
-            "consolidation_model":"openai/app-consolidation-model",
-            "reasoning_effort":"medium", "consolidation_reasoning_effort":"max",
-        });
-        assert_eq!(locale_preference(&config, Some(&app)), "ko");
-        assert_eq!(
-            model_preference(&config, Some(&app)).and_then(Value::as_str),
-            Some("openai/extractor-model")
-        );
-        assert_eq!(
-            reasoning_preference(&config, Some(&app)).and_then(Value::as_str),
-            Some("xhigh")
-        );
-    }
-
-    #[test]
-    fn default_model_sentinels_fall_back_to_app_then_system_default() {
-        let config = json!({
-            "model":"openai/config-model",
-            "consolidation_model":"default",
-            "system":{"butlerModel":"openai/butler-model","defaultModel":"openai/system-model"},
-        });
-        let app = json!({"model":"openai/app-model"});
-        assert_eq!(
-            model_preference(&config, Some(&app)).and_then(Value::as_str),
-            Some("openai/app-model")
-        );
-        assert_eq!(
-            model_preference(&config, None).and_then(Value::as_str),
-            Some("openai/butler-model")
-        );
+    fn briefing_model_locale_and_effort_follow_configured_priority() {
+        {
+            let config = json!({
+                "language":"en",
+                "user":{"language":"fr"},
+                "model":"openai/config-model",
+                "consolidation_model":"openai/consolidation-model",
+                "reasoning_effort":"low",
+                "consolidation_reasoning_effort":"high",
+                "personalization":{"profiling":{
+                    "extractorModel":"openai/extractor-model",
+                    "extractorReasoningEffort":"xhigh",
+                }},
+            });
+            let app = json!({
+                "language":"ko", "model":"openai/app-model",
+                "consolidation_model":"openai/app-consolidation-model",
+                "reasoning_effort":"medium", "consolidation_reasoning_effort":"max",
+            });
+            assert_eq!(locale_preference(&config, Some(&app)), "ko");
+            assert_eq!(
+                model_preference(&config, Some(&app)).and_then(Value::as_str),
+                Some("openai/extractor-model")
+            );
+            assert_eq!(
+                reasoning_preference(&config, Some(&app)).and_then(Value::as_str),
+                Some("xhigh")
+            );
+        }
+        {
+            let config = json!({
+                "model":"openai/config-model",
+                "consolidation_model":"default",
+                "system":{"butlerModel":"openai/butler-model","defaultModel":"openai/system-model"},
+            });
+            let app = json!({"model":"openai/app-model"});
+            assert_eq!(
+                model_preference(&config, Some(&app)).and_then(Value::as_str),
+                Some("openai/app-model")
+            );
+            assert_eq!(
+                model_preference(&config, None).and_then(Value::as_str),
+                Some("openai/butler-model")
+            );
+        }
     }
 }

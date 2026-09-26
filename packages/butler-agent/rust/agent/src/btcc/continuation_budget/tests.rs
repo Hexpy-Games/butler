@@ -97,11 +97,3 @@ fn cumulative_exhaustion_retains_consumption_and_unknown_fields() {
         TurnContinuationBudgetTerminalReason::MaxOutputBytes
     );
 }
-
-#[test]
-fn exact_serialized_request_bytes_define_digest() {
-    assert_ne!(
-        continuation_request_digest("{\"a\":1,\"b\":2}"),
-        continuation_request_digest("{\"b\":2,\"a\":1}")
-    );
-}

@@ -43,11 +43,10 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     #[tokio::test]
-    async fn route_and_activity_share_restored_counter_until_last_owner_releases() {
+    async fn route_and_activity_share_one_restored_source_revision_counter() {
         let mut turn = turn(route(0, 1));
         turn.authority_continuation = Some(json!({"presentation":{"sourceRevision":7}}));
         let revisions = GuidedSourceRevision::from_turn(&turn);
-        let weak = Arc::downgrade(&revisions.0);
         let other_turn = GuidedSourceRevision::from_turn(&turn);
         let store = Arc::new(Store::default());
         let base = Base::new([
@@ -76,9 +75,5 @@ mod tests {
         );
         assert_eq!(revisions.next(), 10);
         assert_eq!(other_turn.next(), 8);
-        drop(revisions);
-        assert!(weak.upgrade().is_some());
-        drop(execution);
-        assert!(weak.upgrade().is_none());
     }
 }

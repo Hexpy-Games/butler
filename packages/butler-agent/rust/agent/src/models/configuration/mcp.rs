@@ -162,49 +162,50 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn reads_worker_and_butler_with_source_fallbacks() {
-        let config = json!({
-            "system": { "workerModel": "gpt-5.4", "defaultModel": "anthropic/claude" }
-        });
-        assert_eq!(details(&config, McpModelTarget::Worker).raw, "gpt-5.4");
-        assert_eq!(
-            details(&config, McpModelTarget::Butler).canonical_ref,
-            "anthropic/claude"
-        );
-        assert_eq!(
-            details(&json!({}), McpModelTarget::Worker).raw,
-            "openai/gpt-5.5-codex"
-        );
-    }
-
-    #[test]
-    fn config_reads_reject_raw_ids_and_apply_source_fallbacks() {
-        let config = json!({
-            "system": {
-                "workerModel": "gpt-5.9",
-                "butlerModel": "o3-pro",
-                "defaultModel": "gpt-5.8"
-            }
-        });
-        assert_eq!(
-            details(&config, McpModelTarget::Worker).raw,
-            "openai/gpt-5.5-codex"
-        );
-        assert_eq!(
-            details(&config, McpModelTarget::Butler).raw,
-            "openai/gpt-5.5-codex"
-        );
-    }
-
-    #[test]
-    fn accepts_source_aliases_namespaced_refs_and_supported_raw_ids() {
-        assert!(valid_model("gpt-6-astra"));
-        assert!(valid_model("gpt-6-sol"));
-        assert!(valid_model("gpt-6-luna"));
-        assert!(valid_model("anthropic/claude-sonnet-5"));
-        assert!(valid_model("GPT-5.9-preview"));
-        assert!(valid_model("o3-pro"));
-        assert!(!valid_model("gpt-4.1"));
-        assert!(!valid_model("/model"));
+    fn mcp_model_targets_accept_supported_refs_and_fall_back_from_unsupported_ids() {
+        // reads worker and butler with source fallbacks
+        {
+            let config = json!({
+                "system": { "workerModel": "gpt-5.4", "defaultModel": "anthropic/claude" }
+            });
+            assert_eq!(details(&config, McpModelTarget::Worker).raw, "gpt-5.4");
+            assert_eq!(
+                details(&config, McpModelTarget::Butler).canonical_ref,
+                "anthropic/claude"
+            );
+            assert_eq!(
+                details(&json!({}), McpModelTarget::Worker).raw,
+                "openai/gpt-5.5-codex"
+            );
+        }
+        // config reads reject raw ids and apply source fallbacks
+        {
+            let config = json!({
+                "system": {
+                    "workerModel": "gpt-5.9",
+                    "butlerModel": "o3-pro",
+                    "defaultModel": "gpt-5.8"
+                }
+            });
+            assert_eq!(
+                details(&config, McpModelTarget::Worker).raw,
+                "openai/gpt-5.5-codex"
+            );
+            assert_eq!(
+                details(&config, McpModelTarget::Butler).raw,
+                "openai/gpt-5.5-codex"
+            );
+        }
+        // accepts source aliases namespaced refs and supported raw ids
+        {
+            assert!(valid_model("gpt-6-astra"));
+            assert!(valid_model("gpt-6-sol"));
+            assert!(valid_model("gpt-6-luna"));
+            assert!(valid_model("anthropic/claude-sonnet-5"));
+            assert!(valid_model("GPT-5.9-preview"));
+            assert!(valid_model("o3-pro"));
+            assert!(!valid_model("gpt-4.1"));
+            assert!(!valid_model("/model"));
+        }
     }
 }

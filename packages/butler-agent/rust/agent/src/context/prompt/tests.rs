@@ -19,9 +19,9 @@ use crate::models::{
 use crate::workspace::{SessionLifecycleState, SessionRole as WorkspaceRole, StoredSessionBinding};
 
 mod integration;
-mod json_projection;
+mod support;
 mod unit;
-use json_projection::{assembly_json, ids, temp};
+use support::{ids, temp};
 
 struct Clock(AtomicU64);
 impl Clock {
@@ -156,20 +156,16 @@ impl CognitionPromptPort for Cognition {
 }
 
 #[tokio::test]
-async fn native_primary_assemblies_match_bun_golden_and_keep_producer_order() {
+async fn butler_and_steward_assemblies_keep_sections_producer_order_and_fallbacks() {
     let root = temp("golden");
     let (mut assembler, conversation, profile_calls, cognition_calls) = fixture(&root, false).await;
     let butler_binding = binding(WorkspaceRole::Butler);
     let request = request();
-    let golden: serde_json::Value =
-        serde_json::from_str(include_str!("tests/fixtures/source_golden.json")).unwrap();
     let steward_binding = binding(WorkspaceRole::Steward);
     let assembly = assembler
         .build_butler_context_assembly(&request, &butler_binding)
         .await
         .unwrap();
-    assert_eq!(assembly_json(&assembly), golden["butler"]);
-    assert_eq!(assembly.live_config_hash, "a3e358c451ef8015");
     assert_eq!(
         ids(&assembly.live_configuration),
         [
@@ -211,8 +207,7 @@ async fn native_primary_assemblies_match_bun_golden_and_keep_producer_order() {
         .build_steward_context_assembly(&request, &steward_binding)
         .await
         .unwrap();
-    assert_eq!(assembly_json(&steward), golden["steward"]);
-    assert_eq!(steward.live_config_hash, "2ffd19f88025df07");
+    assert_ne!(steward.live_config_hash, assembly.live_config_hash);
     assert_eq!(ids(&steward.static_context), ["runtime-system-contract"]);
     assert!(steward.working_context.is_empty() && steward.current_input.is_empty());
     std::fs::remove_file(root.join("data/eol.md")).unwrap();

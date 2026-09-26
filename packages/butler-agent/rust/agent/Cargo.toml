@@ -28,7 +28,7 @@ lancedb = { version = "=0.27.2", default-features = false }
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "api-21"] }
 tokenizers = { version = "=0.22.2", default-features = false, features = ["onig"] }
 webp = { version = "=0.3.1", default-features = false }
-# Compiled ICU4X 1.4 / CLDR 44 data; bounded Bun collation fixtures verify usage.
+# Compiled ICU4X 1.4 / CLDR 44 data.
 icu_collator = "=1.4.0"
 icu_locid = "~1.4.0"
 icu_provider = { version = "~1.4.0", features = ["sync"], default-features = false }

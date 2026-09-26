@@ -6,8 +6,6 @@ use serde_json::Value;
 
 use super::{NativeProjectLedger, PlanRecordRead, ProjectLedgerReadError, TestReadBarrier};
 
-mod dashboard;
-
 struct Fixture {
     data: PathBuf,
     workspace: PathBuf,

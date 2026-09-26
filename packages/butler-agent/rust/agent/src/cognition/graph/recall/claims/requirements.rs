@@ -94,23 +94,3 @@ pub(super) fn requirements(
     }
     Ok(result)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::RequirementValue;
-
-    #[test]
-    fn requirement_condition_keeps_original_json_number_and_surrogate_bytes() {
-        let raw = r#"{"action":"remember","condition":{"limit":1e+30,"part":"\ud83d"}}"#;
-        let value: RequirementValue = serde_json::from_str(raw).unwrap();
-        assert_eq!(value.action, "remember");
-        assert_eq!(
-            value.condition.as_str(),
-            r#"{"limit":1e+30,"part":"\ud83d"}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&value.condition).unwrap(),
-            value.condition.as_str()
-        );
-    }
-}

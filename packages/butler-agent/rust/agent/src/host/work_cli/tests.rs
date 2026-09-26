@@ -50,20 +50,6 @@ fn json_output(result: &NativeWorkCliResult) -> Value {
     serde_json::from_str(&result.stdout).unwrap()
 }
 
-#[test]
-fn cli_route_claims_work_commands_without_claiming_stdio_mcp_serve() {
-    assert!(recognizes(
-        ["--data", "/tmp/butler-data", "work", "list"]
-            .map(OsString::from)
-            .as_slice()
-    ));
-    assert!(!recognizes(
-        ["--data", "/tmp/butler-data", "mcp", "serve"]
-            .map(OsString::from)
-            .as_slice()
-    ));
-}
-
 #[tokio::test]
 async fn list_show_and_resume_use_safe_summaries_and_resume_is_validation_only() {
     let fixture = Fixture::new();

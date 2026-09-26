@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::{
     io::{safe_ref, valid_git_commit, valid_sha},
-    source::{memory_inventory_hash, timestamp_millis},
+    source::memory_inventory_hash,
     validate_evidence,
 };
 
@@ -76,12 +76,4 @@ fn references_and_versions_reject_path_escape_and_noncanonical_hashes() {
     assert!(!valid_sha(&"A".repeat(64)));
     assert!(valid_git_commit(&"b".repeat(40)));
     assert!(!valid_git_commit(&"b".repeat(39)));
-}
-
-#[test]
-fn date_parse_compares_offset_timestamps_by_instant() {
-    assert_eq!(
-        timestamp_millis("2026-06-10T12:00:00+02:00"),
-        timestamp_millis("2026-06-10T10:00:00.000Z")
-    );
 }

@@ -14,8 +14,6 @@ pub(crate) struct GuidedExecutionPolicy {
     pub(crate) workspace_path: String,
     pub(crate) project_id: Option<String>,
     pub(crate) subsession: Option<Value>,
-    #[cfg(test)]
-    pub(crate) raw: Value,
 }
 
 impl GuidedExecutionPolicy {
@@ -108,8 +106,6 @@ impl GuidedExecutionPolicy {
                 .get("subsession")
                 .filter(|value| truthy(value))
                 .cloned(),
-            #[cfg(test)]
-            raw,
         })
     }
 }
