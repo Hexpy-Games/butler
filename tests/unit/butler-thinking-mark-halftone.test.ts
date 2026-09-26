@@ -74,7 +74,7 @@ test("halftone lattices are deterministic and cached per size class", () => {
 });
 
 test("the render path draws the rest logo at M = 0", () => {
-  const sim = new MorphSim({ reducedFade: 0.22, breathePeriod: 5, ease: (t: number) => t });
+  const sim = new MorphSim();
   expect(renderMode(sim, false)).toBe("rest");
   expect(renderMode(sim, true)).toBe("reduced");
   sim.update(1 / 60, true);

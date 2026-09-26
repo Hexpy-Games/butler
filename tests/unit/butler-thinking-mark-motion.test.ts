@@ -6,11 +6,9 @@ import {
   speedOf,
   spring,
 } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/motion.ts";
-import { BREATHE_DEPTH, MORPH_SPRING } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/constants.ts";
+import { MORPH_SPRING } from "../../packages/butler-app/client/ui/src/libs/design-system/components/ButlerThinkingMark/thinking-mark/constants.ts";
 
 const DT = 1 / 60;
-/** Token-shaped timing, as the component reads it: --motion-slow fade, four --pulse-duration breathe. */
-const TIMING = { reducedFade: 0.22, breathePeriod: 5, ease: (t: number) => t };
 
 function step(sim: MorphSim, seconds: number, working: boolean) {
   for (let t = 0; t < seconds; t += DT) sim.update(DT, working);
@@ -28,7 +26,7 @@ test("morph spring converges to its target with under 2% overshoot", () => {
 });
 
 test("MorphSim returns exactly to rest after exit and the motion clock stops", () => {
-  const sim = new MorphSim(TIMING);
+  const sim = new MorphSim();
   expect(sim.idle).toBe(true);
   step(sim, 3, true);
   expect(sim.idle).toBe(false);
@@ -54,7 +52,7 @@ test("MorphSim returns exactly to rest after exit and the motion clock stops", (
 });
 
 test("MorphSim motion runs concurrently with the morph from the first frames", () => {
-  const sim = new MorphSim(TIMING);
+  const sim = new MorphSim();
   step(sim, 0.2, true);
   expect(sim.M.x).toBeGreaterThan(0);
   expect(sim.M.x).toBeLessThan(0.8);
@@ -62,7 +60,7 @@ test("MorphSim motion runs concurrently with the morph from the first frames", (
 });
 
 test("MorphSim restarts the motion phase on each entry", () => {
-  const sim = new MorphSim(TIMING);
+  const sim = new MorphSim();
   step(sim, 2, true);
   step(sim, 6, false);
   expect(sim.idle).toBe(true);
@@ -70,45 +68,13 @@ test("MorphSim restarts the motion phase on each entry", () => {
   expect(sim.T).toBeLessThan(0.01);
 });
 
-test("reduced-motion breathe fades in and out over the token fade duration", () => {
-  const sim = new MorphSim(TIMING);
-  sim.updateReduced(0.11, true);
-  expect(sim.rm).toBeCloseTo(0.5, 5);
-  sim.updateReduced(0.11, true);
-  expect(sim.rm).toBe(1);
-  expect(sim.reducedSettled(true)).toBe(false);
-  for (let t = 0; t < 0.23; t += DT) sim.updateReduced(DT, false);
-  expect(sim.rm).toBe(0);
-  expect(sim.reducedSettled(false)).toBe(true);
-});
-
-test("reduced-motion breathe follows the eased token curve and restarts its cycle on entry", () => {
-  const sim = new MorphSim({ ...TIMING, ease: (t) => t * t });
-  sim.updateReduced(0.11, true);
-  expect(sim.rm).toBeCloseTo(0.25, 5);
-  for (let t = 0; t < 3; t += DT) sim.updateReduced(DT, true);
-  expect(sim.breathe()).toBeGreaterThan(0.5);
-  for (let t = 0; t < 1; t += DT) sim.updateReduced(DT, false);
-  sim.updateReduced(DT, true);
-  expect(sim.breathe()).toBeLessThan(0.01);
-});
-
-test("reduced-motion breathe dims to the Spinner pulse floor over one period", () => {
-  const sim = new MorphSim(TIMING);
-  let low = 1;
-  for (let t = 0; t < TIMING.breathePeriod; t += DT) {
-    sim.updateReduced(DT, true);
-    low = Math.min(low, 1 - sim.rm * BREATHE_DEPTH * sim.breathe());
-  }
-  expect(low).toBeCloseTo(0.45, 2);
-});
-
 test("reduced motion parks the morph at rest so leaving it never replays an exit", () => {
-  const sim = new MorphSim(TIMING);
+  const sim = new MorphSim();
   step(sim, 2, true);
   expect(sim.M.x).toBeGreaterThan(0.9);
-  sim.updateReduced(DT, true);
+  sim.park();
   expect(sim.M.x).toBe(0);
+  expect(sim.M.v).toBe(0);
   expect(sim.idle).toBe(true);
 });
 

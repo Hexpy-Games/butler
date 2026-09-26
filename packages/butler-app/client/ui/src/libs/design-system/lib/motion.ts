@@ -96,17 +96,6 @@ export function motionDuration(name: MotionDurationName): number {
   return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
 }
 
-export type LoopDurationName = "spinner" | "pulse" | "shimmer";
-
-const LOOP_FALLBACK: Record<LoopDurationName, number> = { spinner: 1320, pulse: 1250, shimmer: 1400 };
-
-/** Loop cadence in ms from --spinner-duration, --pulse-duration or --shimmer-duration. */
-export function loopDuration(name: LoopDurationName): number {
-  const match = /^(\d*\.?\d+)(ms|s)$/u.exec(tokenValue(`--${name}-duration`));
-  if (!match) return LOOP_FALLBACK[name];
-  return Number(match[1]) * (match[2] === "s" ? 1000 : 1);
-}
-
 export function motionEasing(name: MotionEasingName): string {
   return tokenValue(`--motion-ease-${name}`).replace(/\s+/gu, " ") || EASING_FALLBACK[name];
 }

@@ -1,15 +1,14 @@
-import { easeProgress, loopDuration, motionDuration, prefersReducedMotion, subscribeReducedMotion } from "../../lib/motion";
 import { type ButlerMarkTheme, type ButlerMarkThemeColors, inkForButlerMarkTheme, RISO_INKS } from "./butlerMarkTheme";
 import { DESIGN_SIZE, FRAME_INTERVAL_MS, MAX_STEP_S } from "./thinking-mark/constants";
 import { createSurface, drawFrame, resizeSurface } from "./thinking-mark/canvas-drawing";
-import { MorphSim, type MorphTiming } from "./thinking-mark/motion";
+import { MorphSim } from "./thinking-mark/motion";
 
 export interface MarkLoopInputs {
   theme?: ButlerMarkTheme;
   themeColors?: ButlerMarkThemeColors;
   isWorking: () => boolean;
-  /** The reducedMotion prop; undefined follows the OS and the DS scope. */
-  forcedReduced: () => boolean | undefined;
+  /** Effective reduced motion (prop, OS setting or DS scope): the still logo, no frame loop. */
+  isReduced: () => boolean;
   sim: { current: MorphSim | null };
 }
 
@@ -26,25 +25,16 @@ function resolveTheme(element: Element): ButlerMarkTheme {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-/** UI timing for the reduced-motion breathe, read from the DS motion tokens. */
-function tokenTiming(): MorphTiming {
-  return {
-    reducedFade: motionDuration("slow") / 1000,
-    breathePeriod: (loopDuration("pulse") * 4) / 1000,
-    ease: (t) => easeProgress("standard", t),
-  };
-}
-
 /**
  * The mark's frame loop: draws only while the mark moves, and pauses when it
- * is offscreen, the document is hidden, or it has settled (idle logo, or the
- * reduced-motion breathe faded out). Layout is read on resize, never per frame.
+ * is offscreen, the document is hidden, or it has settled (idle logo, or
+ * reduced motion). Layout is read on resize, never per frame.
  */
 export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs): MarkLoop | null {
   const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) return null;
 
-  const sim = (inputs.sim.current ??= new MorphSim(tokenTiming()));
+  const sim = (inputs.sim.current ??= new MorphSim());
   const theme = inputs.theme ?? resolveTheme(canvas);
   const surface = createSurface(ctx, inkForButlerMarkTheme(theme, inputs.themeColors), RISO_INKS[theme]);
   let animationFrame = 0;
@@ -52,9 +42,7 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
   let lastRenderTime = 0;
   let stopped = false;
   let inView = true;
-  let osReduced = prefersReducedMotion();
-  const isReduced = () => inputs.forcedReduced() ?? osReduced;
-  const settled = () => (isReduced() ? sim.reducedSettled(inputs.isWorking()) : !inputs.isWorking() && sim.idle);
+  const settled = () => inputs.isReduced() || (!inputs.isWorking() && sim.idle);
   const paused = () => stopped || !inView || document.visibilityState === "hidden";
 
   const resize = () => {
@@ -68,14 +56,18 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
   const render = (time = performance.now()) => {
     const dt = lastRenderTime > 0 ? Math.min((time - lastRenderTime) / 1000, MAX_STEP_S) : 1 / 60;
     lastRenderTime = time;
-    if (isReduced()) sim.updateReduced(dt, inputs.isWorking());
-    else sim.update(dt, inputs.isWorking());
-    drawFrame(surface, sim, isReduced());
+    sim.update(dt, inputs.isWorking());
+    drawFrame(surface, sim, false);
   };
 
   const tick = (time: number) => {
     animationFrame = 0;
     if (paused()) return;
+    if (inputs.isReduced()) {
+      sim.park();
+      drawFrame(surface, sim, true);
+      return;
+    }
     if (time - lastFrame >= FRAME_INTERVAL_MS) {
       render(time);
       lastFrame = time;
@@ -87,7 +79,8 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
   const startLoop = () => {
     if (animationFrame !== 0 || paused()) return;
     if (settled()) {
-      drawFrame(surface, sim, isReduced());
+      if (inputs.isReduced()) sim.park();
+      drawFrame(surface, sim, inputs.isReduced());
       return;
     }
     lastRenderTime = 0;
@@ -101,7 +94,7 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
 
   const resizeAndRender = () => {
     resize();
-    drawFrame(surface, sim, isReduced());
+    drawFrame(surface, sim, inputs.isReduced());
   };
   const resizeObserver = new ResizeObserver(resizeAndRender);
   resizeObserver.observe(canvas);
@@ -116,10 +109,6 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
     if (document.visibilityState === "hidden") stopLoop();
     else startLoop();
   };
-  const unsubscribeReduced = subscribeReducedMotion((reduced) => {
-    osReduced = reduced;
-    startLoop();
-  });
   document.addEventListener("visibilitychange", handleVisibilityChange);
   resizeAndRender();
   startLoop();
@@ -131,7 +120,6 @@ export function startMarkLoop(canvas: HTMLCanvasElement, inputs: MarkLoopInputs)
       stopLoop();
       resizeObserver.disconnect();
       intersectionObserver.disconnect();
-      unsubscribeReduced();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     },
   };

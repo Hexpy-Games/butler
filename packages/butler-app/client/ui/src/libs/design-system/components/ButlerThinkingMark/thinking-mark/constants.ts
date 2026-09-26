@@ -51,12 +51,6 @@ export const RISO_MOTION = {
   lightRate: 1.1,
 } as const;
 
-/**
- * Reduced motion dims the filled logo to the Spinner's reduced-motion pulse
- * floor (opacity 0.45); its fade and cadence come from DS motion tokens.
- */
-export const BREATHE_DEPTH = 0.55;
-
 /*
  * Simulation clock. Intrinsic to the canvas engine (not UI transition timing),
  * allowlisted in lint:motion (CANVAS_MOTION_ENGINES):

@@ -70,8 +70,8 @@ tests excluded) with shrink-only baselines in `motion/baseline/<rule>.json`
   every timing-named constant (`*_MS`, `*_S`, `*PERIOD*`, `*SPRING*`,
   `*MOTION*`, `*RATE*`, ...) must be allowlisted with the reason it is
   intrinsic to the simulation. UI timing (fades, loop cadence) is read from
-  the tokens via `lib/motion.ts` (`motionDuration`, `loopDuration`,
-  `easeProgress`, `subscribeReducedMotion`). Stale allowlist entries fail.
+  the tokens via `lib/motion.ts` (`motionDuration`, `easeProgress`,
+  `subscribeReducedMotion`). Stale allowlist entries fail.
 
 ## Boundaries
 

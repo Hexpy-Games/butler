@@ -31,7 +31,7 @@ export const guidance: ShowcaseGuidance = {
   content: ["Keep the visible status text (Thinking, Worked for 12s) next to the mark; the mark never carries the status alone."],
   accessibility: [
     "Decorative (aria-hidden); announce state through visible text or a status region.",
-    "Reduced motion (OS or the DS scope) replaces the morph with a slow opacity breathe on the Spinner's reduced cadence; offscreen or hidden marks stop drawing.",
+    "Reduced motion (OS or the DS scope) stops the canvas loop; the still logo breathes in CSS on the Spinner's reduced pulse. Offscreen or hidden marks stop drawing.",
   ],
-  tokens: ["--motion-slow", "--motion-ease-standard", "--pulse-duration", "--icon-size-sm", "--icon-size-xl"],
+  tokens: ["--pulse-duration", "--spinner-easing", "--motion-slow", "--motion-ease-standard", "--icon-size-sm", "--icon-size-xl"],
 };

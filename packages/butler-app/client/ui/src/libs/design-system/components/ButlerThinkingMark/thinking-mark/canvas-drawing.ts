@@ -1,5 +1,5 @@
 import type { RisoInk } from "../butlerMarkTheme";
-import { BREATHE_DEPTH, CENTER, GRAIN_TILE, HALFTONE_PRESETS, RHO, RING_R, RING_W, TAU } from "./constants";
+import { CENTER, GRAIN_TILE, HALFTONE_PRESETS, RHO, RING_R, RING_W, TAU } from "./constants";
 import { dotRadius, renderMode, setFrameParams, type FrameParams, type HalftoneLayer } from "./halftone-model";
 import { clamp, ease, type MorphSim } from "./motion";
 import { traceRibbon } from "./ribbon-geometry";
@@ -32,11 +32,6 @@ export function drawRest(s: MarkSurface, alpha = 1) {
   s.ctx.globalAlpha = alpha;
   s.ctx.drawImage(s.rctx.canvas, 0, 0);
   drawRing(s);
-}
-
-/** Reduced motion: the filled logo breathing in opacity while working, like the Spinner's reduced pulse. */
-export function drawReduced(s: MarkSurface, sim: MorphSim) {
-  drawRest(s, 1 - sim.rm * BREATHE_DEPTH * sim.breathe());
 }
 
 function drawHalftoneInk(c: Ctx, L: HalftoneLayer, ink: number, offx: number, offy: number, p: FrameParams) {
@@ -127,7 +122,7 @@ export function renderHalftone(s: MarkSurface, sim: MorphSim) {
 /** Draws one frame; returns nothing and never allocates. */
 export function drawFrame(s: MarkSurface, sim: MorphSim, reduced: boolean) {
   const mode = renderMode(sim, reduced);
-  if (mode === "reduced") drawReduced(s, sim);
-  else if (mode === "rest") drawRest(s);
+  // Reduced motion draws the still logo; the breathe is a CSS opacity loop on the canvas.
+  if (mode === "reduced" || mode === "rest") drawRest(s);
   else renderHalftone(s, sim);
 }

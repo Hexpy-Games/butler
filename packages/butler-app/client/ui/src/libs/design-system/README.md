@@ -26,8 +26,8 @@ Motion lives in DS components and tokens (DS spec Motion Contract). Use the
 `animateMotion()` from `lib/motion.ts` instead of `element.animate()`.
 Reduced motion zeroes `--motion-distance-*` and resets `--motion-scale-*`, so
 token-driven animations become an opacity fade. JS-driven loops read timing
-with `motionDuration()`, `loopDuration()` and `easeProgress()` and follow
-reduced motion with `subscribeReducedMotion()`; canvas engines and their
+with `motionDuration()` and `easeProgress()` and follow reduced motion with
+`subscribeReducedMotion()`; canvas engines and their
 intrinsic simulation constants are allowlisted in `lint:motion`
 (`CANVAS_MOTION_ENGINES`). Product code never declares
 transitions, animations or keyframes (`bun run lint:motion`).

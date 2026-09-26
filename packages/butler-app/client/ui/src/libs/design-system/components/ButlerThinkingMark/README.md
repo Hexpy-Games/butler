@@ -32,13 +32,15 @@ import { ButlerThinkingMark } from "@/butler-ds";
   clock follows the morph and stops as the logo returns. The spring and the
   simulation rates are intrinsic to the engine and allowlisted in
   `lint:motion` (`CANVAS_MOTION_ENGINES`).
-- UI timing comes from tokens through `lib/motion.ts`: under reduced motion
-  the logo fades its breathe in and out over `--motion-slow` on
-  `--motion-ease-standard`, and breathes to opacity 0.45 on the Spinner's
-  reduced-motion cadence (4 x `--pulse-duration`).
+- Reduced motion (the prop, the OS setting or the DS `data-motion="reduced"`
+  scope, via `subscribeReducedMotion()`) stops the frame loop and draws the
+  still logo; while working, the canvas breathes in CSS exactly like the
+  Spinner's reduced pulse (`calc(--pulse-duration * 2)`, `--spinner-easing`,
+  alternate, to opacity 0.45) and settles back from its current opacity over
+  `--motion-slow` on `--motion-ease-standard`.
 - The frame loop runs at most 60fps, only while the mark moves, and pauses
   when the mark is offscreen (IntersectionObserver), the tab is hidden, or it
-  has settled. Canvas is capped at DPR 2; per-frame drawing allocates nothing.
+  has settled, and never runs under reduced motion. Canvas is capped at DPR 2; per-frame drawing allocates nothing.
 
 ## Done state
 Butler finishing a turn is not a task completing: the mark settles back to the

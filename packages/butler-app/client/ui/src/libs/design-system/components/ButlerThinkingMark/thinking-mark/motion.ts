@@ -1,4 +1,4 @@
-import { MORPH_SPRING, SPRING_SUBSTEP_S, TAU, WAVE } from "./constants";
+import { MORPH_SPRING, SPRING_SUBSTEP_S, WAVE } from "./constants";
 
 export interface SpringState {
   x: number;
@@ -51,16 +51,6 @@ export function createRand(seed: number) {
   };
 }
 
-/** UI timing from DS motion tokens (seconds), passed in by the component. */
-export interface MorphTiming {
-  /** Reduced-motion fade in/out (--motion-slow). */
-  reducedFade: number;
-  /** Reduced-motion breathe cycle (the Spinner's reduced pulse: 4 x --pulse-duration). */
-  breathePeriod: number;
-  /** Eased progress for the fade (--motion-ease-standard). */
-  ease: (t: number) => number;
-}
-
 /**
  * One spring M drives the morph; the motion clock th advances at speedOf(M), so motion runs
  * concurrently with the morph from frame one and decays to a stop exactly as M returns to 0.
@@ -70,23 +60,6 @@ export class MorphSim {
   th = 0;
   th0 = 0;
   idle = true;
-  /** Reduced-motion breathe level (0 = still logo), eased from fade progress. */
-  rm = 0;
-  /** Linear fade progress behind rm. */
-  fade = 0;
-  /** Breathe clock, restarted on each entry so the cycle begins at full opacity. */
-  clock = 0;
-
-  readonly timing: MorphTiming;
-
-  constructor(timing: MorphTiming) {
-    this.timing = timing;
-  }
-
-  /** Breathe dip 0..1 (0 at full opacity) on the token cadence. */
-  breathe() {
-    return 0.5 - 0.5 * Math.cos((this.clock * TAU) / this.timing.breathePeriod);
-  }
 
   get T() {
     return this.th - this.th0;
@@ -103,19 +76,13 @@ export class MorphSim {
     }
   }
 
-  updateReduced(dt: number, working: boolean) {
-    // no morph under reduced motion: park it at rest so leaving reduced mode starts from the logo
+  /**
+   * Reduced motion has no morph (the component breathes the logo in CSS on the
+   * DS pulse cadence instead): park at rest so leaving reduced mode starts from the logo.
+   */
+  park() {
     this.M.x = 0;
     this.M.v = 0;
     this.idle = true;
-    if (working && this.fade === 0) this.clock = 0;
-    const step = dt / this.timing.reducedFade;
-    this.fade = clamp(this.fade + (working ? step : -step), 0, 1);
-    this.rm = this.fade === 0 || this.fade === 1 ? this.fade : this.timing.ease(this.fade);
-    this.clock += dt;
-  }
-
-  reducedSettled(working: boolean) {
-    return !working && this.fade === 0;
   }
 }

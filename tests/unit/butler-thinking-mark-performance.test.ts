@@ -62,19 +62,22 @@ test("assistant status animates idle and active in place with one mark", () => {
 
 });
 
-test("thinking mark pauses offscreen, when hidden and once reduced motion settles", () => {
+test("thinking mark pauses offscreen, when hidden and under reduced motion", () => {
   expect(source).toContain("new IntersectionObserver(");
   const tick = source.slice(source.indexOf("const tick ="), source.indexOf("const startLoop ="));
   expect(tick).toContain("if (paused()) return;");
   expect(source).toContain('const paused = () => stopped || !inView || document.visibilityState === "hidden";');
-  expect(source).toContain("subscribeReducedMotion(");
-  expect(source).toContain("prefersReducedMotion()");
+  // Reduced motion never runs the frame loop: the still logo is drawn once.
+  expect(source).toContain("const settled = () => inputs.isReduced() || (!inputs.isWorking() && sim.idle);");
+  expect(component).toContain("subscribeReducedMotion(");
+  expect(component).toContain("useState(prefersReducedMotion)");
 });
 
-test("thinking mark reads UI timing from DS motion tokens, not literals", () => {
-  expect(source).toContain('motionDuration("slow")');
-  expect(source).toContain('loopDuration("pulse")');
-  expect(source).toContain('easeProgress("standard"');
+test("reduced motion breathes in CSS on the Spinner's pulse cadence and settles on motion tokens", () => {
+  const css = readFileSync(join(markDir, "ButlerThinkingMark.module.css"), "utf8").replace(/\s+/gu, " ");
+  expect(css).toContain('.canvas[data-breathe="on"] { animation: thinking-mark-breathe calc(var(--pulse-duration) * 2) var(--spinner-easing) infinite alternate; }');
+  expect(css).toContain('.canvas[data-breathe="settle"] { animation: thinking-mark-settle var(--motion-slow) var(--motion-ease-standard); }');
+  expect(css).toMatch(/@keyframes thinking-mark-breathe \{ to \{ opacity: 0\.45; \} \}/u);
   expect(source).not.toMatch(/1000 \/ 60/u);
   expect(component).not.toContain("requestAnimationFrame");
 });

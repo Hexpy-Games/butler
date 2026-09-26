@@ -3,7 +3,6 @@ import { afterEach, expect, test } from "bun:test";
 import {
   animateMotion,
   easeProgress,
-  loopDuration,
   motionDistance,
   motionDuration,
   motionEasing,
@@ -135,13 +134,6 @@ test("easeProgress samples the token cubic-bezier curves and clamps to 0..1", ()
   expect(easeProgress("decelerate", 0.5)).toBeGreaterThan(easeProgress("decelerate", 0.25));
   expect(easeProgress("linear", 0.5)).toBeCloseTo(0.5, 5);
   restoreGlobals();
-});
-
-test("loop durations come from the loop tokens with fallbacks", () => {
-  installEnvironment({ reduce: false, tokens: { "--pulse-duration": "1250ms", "--spinner-duration": "1.32s" } });
-  expect(loopDuration("pulse")).toBe(1250);
-  expect(loopDuration("spinner")).toBe(1320);
-  expect(loopDuration("shimmer")).toBe(1400);
 });
 
 test("subscribeReducedMotion reports the media query and the data-motion scope", () => {
