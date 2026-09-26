@@ -996,6 +996,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       archives: ["보관", "아카이브"],
       about: ["버전", "앱 정보"],
     },
+    updateComponents: { app: "버틀러", service: "버틀러 에이전트" },
     sectionState: {
       loading: "불러오는 중",
       error: "이 섹션을 불러오지 못했습니다.",

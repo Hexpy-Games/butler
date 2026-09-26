@@ -2360,7 +2360,7 @@ try {
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
-    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .waitFor({ state: "visible" });
   const compactSettingsDetail = await page
     .locator(".settings-detail")
@@ -2377,7 +2377,7 @@ try {
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
-    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .waitFor({ state: "visible" });
   const settingsScrollState = await page
     .locator(testClass("settings-detail-scroll"))
@@ -2539,7 +2539,7 @@ try {
     .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
-    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .waitFor({ state: "visible" });
   await page
     .getByText(appCopy.settings.panels.workerProfiles)
@@ -2570,8 +2570,8 @@ try {
   });
   const [modelSection, workerSection] = settingsSectionGeometry;
   assert(
-    modelSection?.title === appCopy.settings.panels.butlerModel &&
-      workerSection?.title === appCopy.settings.panels.workerProfiles &&
+    modelSection?.title === appCopy.settings.pageSections.butlerModel &&
+      workerSection?.title === appCopy.settings.pageSections.fallbackConsolidation &&
       settingsSectionGeometry.every(
         (section) =>
           section.headerBottom !== null &&
@@ -2648,16 +2648,15 @@ try {
     "context limit setting should accept a lower effective token budget",
   );
   const workerProfilePanel = page.locator(testClass("worker-profile")).first();
-  const workerProfileBorder = await workerProfilePanel.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      borderColor: style.borderTopColor,
-      borderWidth: style.borderTopWidth,
-    };
-  });
+  // One surface per section: worker profiles are rows of the Worker profiles
+  // card (a list card), not nested bordered panels.
+  const workerProfileSurface = await workerProfilePanel.evaluate((element) => ({
+    ownBorder: getComputedStyle(element).borderLeftWidth,
+    cardKind: element.closest('[data-slot="form-section-card"]')?.getAttribute("data-kind") ?? null,
+  }));
   assert(
-    parseFloat(workerProfileBorder.borderWidth) >= 1,
-    `worker profiles should be bordered repeated items: ${JSON.stringify(workerProfileBorder)}`,
+    workerProfileSurface.ownBorder === "0px" && workerProfileSurface.cardKind === "list",
+    `worker profiles should be rows of the Worker profiles list card: ${JSON.stringify(workerProfileSurface)}`,
   );
   const workerEnableField = workerProfilePanel
     .locator(testClass("settings-field"))
@@ -2712,7 +2711,7 @@ try {
   }
   screenshots.push(await screenshot(page, "settings-local-models-detail.png"));
   await page
-    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .scrollIntoViewIfNeeded();
   const settingsModelsText = await page
     .locator(testClass("settings-view"))

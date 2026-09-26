@@ -177,7 +177,7 @@ try {
   await clickSidebarAction(page, appCopy.sidebar.settings);
   await clickButton(page, appCopy.settings.sections.models);
   await page
-    .getByText(appCopy.settings.panels.butlerModel, { exact: true })
+    .getByText(appCopy.settings.pageSections.butlerModel, { exact: true })
     .waitFor({ state: "visible" });
   const rootTitle = await page
     .locator(testClass("settings-detail-title"))

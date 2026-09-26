@@ -964,6 +964,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       archives: ["saved chats", "archive"],
       about: ["version", "app info"],
     },
+    updateComponents: { app: "Butler App", service: "Butler Agent" },
     sectionState: {
       loading: "Loading",
       error: "Could not load this section.",
