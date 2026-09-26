@@ -1,6 +1,5 @@
 {
   "components/conversation/ComposerDecisionSurface.module.css": 1,
-  "components/conversation/UserMessageText.module.css": 1,
   "components/management/ProjectHistoryPanel.module.css": 1,
   "components/management/ProjectWorkBoard.module.css": 1
 }

@@ -264,6 +264,11 @@
   line-clamp: 4;
 }
 
+.typo[data-line-clamp="5"] {
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+
 .typo[data-numeric="tabular"] {
   font-variant-numeric: tabular-nums;
 }

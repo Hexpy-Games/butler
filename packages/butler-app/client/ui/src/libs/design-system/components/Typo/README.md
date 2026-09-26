@@ -31,8 +31,8 @@ Every variant accepts the same text props; none of them change the type scale:
 | `weight` | `regular`, `medium`, `semibold` | `--font-weight-*` token. |
 | `align` | `start`, `center`, `end` | Text alignment. |
 | `truncate` | `boolean` | One line with an ellipsis; the element becomes a block with `min-width: 0`. |
-| `lineClamp` | `2`, `3`, `4` | Clamp to that many lines. |
-| `wrap` | `normal`, `nowrap`, `anywhere` | `anywhere` lets long tokens (URLs, paths) wrap; Korean still keeps words whole. |
+| `lineClamp` | `2`, `3`, `4`, `5` | Clamp to that many lines; `5` is the message-length clamp (a user message before Show more). |
+| `wrap` | `normal`, `nowrap`, `anywhere`, `pre` | `anywhere` lets long tokens (URLs, paths) wrap; Korean still keeps words whole. `pre` keeps typed line breaks and wraps long tokens anywhere (user messages, logs). |
 | `numeric` | `tabular` | Tabular numerals for clocks, counts and columns. |
 
 `Typo.Text` (default `span`) inherits the container's size, weight and

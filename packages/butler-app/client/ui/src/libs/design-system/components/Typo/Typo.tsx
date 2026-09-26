@@ -1,5 +1,5 @@
 import type { DsBaseProps } from "../../lib/dsProps";
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { layoutItemAttributes, splitLayoutItemProps, type LayoutItemProps } from "../Layout/itemProps";
 import styles from "./Typo.module.css";
 
@@ -29,7 +29,8 @@ export type TypoTone =
   | "inherit";
 export type TypoWeight = "regular" | "medium" | "semibold";
 export type TypoAlign = "start" | "center" | "end";
-export type TypoLineClamp = 2 | 3 | 4;
+/** `5`: message-length blocks (a sent or queued user message) before "Show more". */
+export type TypoLineClamp = 2 | 3 | 4 | 5;
 /** `pre`: keep line breaks and spaces, wrap long lines anywhere (logs, raw payloads). */
 export type TypoWrap = "normal" | "nowrap" | "anywhere" | "pre";
 export type TypoNumeric = "tabular";
@@ -54,6 +55,8 @@ export interface TypoProps extends TypoTextProps, Omit<LayoutItemProps, "span">,
   as?: TypoElement;
   htmlFor?: string;
   dateTime?: string;
+  /** DOM ref, e.g. to measure a clamped block before offering "Show more". */
+  ref?: Ref<HTMLElement>;
 }
 
 function classNames(...values: Array<string | undefined>): string {
@@ -74,6 +77,7 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
       wrap,
       numeric,
       alignWith,
+      ref,
       ...props
     }] = splitLayoutItemProps(allProps);
     const { className: itemClassName, ...itemAttributes } = layoutItemAttributes(item);
@@ -90,6 +94,8 @@ function createTypo(defaultAs: TypoElement, variantClassName: string) {
         data-align-with={alignWith}
         {...itemAttributes}
         {...props}
+        // One ref type for every element the variant can render as.
+        ref={ref as Ref<HTMLElement & HTMLLabelElement & HTMLTimeElement & HTMLPreElement & HTMLHeadingElement & HTMLParagraphElement & HTMLDivElement & HTMLSpanElement>}
       >
         {children}
       </Component>

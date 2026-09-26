@@ -117,6 +117,8 @@ export const stories: ShowcaseStory[] = [
       </Stack>
     ),
   },
+  { // UserMessageText: typed line breaks kept, five lines before "Show more".
+    name: "Message clamp", widths: ["320", "375"], render: ({ locale }) => <Typo.Text as="div" wrap="pre" lineClamp={5}>{[labels[locale].long, labels[locale].caption, labels[locale].long, labels[locale].caption, labels[locale].long].join("\n")}</Typo.Text> },
   {
     name: "Wrapping",
     widths: ["320", "375"],

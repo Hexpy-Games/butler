@@ -78,6 +78,15 @@ test("weights, alignment, wrapping, clamp and numerals use tokens or keywords", 
   expect(rule('[data-numeric="tabular"]')).toMatch(/font-variant-numeric:\s*tabular-nums/u);
 });
 
+test("lineClamp 5 clamps a message-length block that keeps its line breaks", () => {
+  const element = render(<Typo.Text as="div" lineClamp={5} wrap="pre">One{"\n"}Two</Typo.Text>);
+  expect(element.tagName).toBe("DIV");
+  expect(element.getAttribute("data-line-clamp")).toBe("5");
+  expect(element.getAttribute("data-wrap")).toBe("pre");
+  expect(rule('[data-line-clamp="5"]')).toMatch(/-webkit-line-clamp:\s*5/u);
+  expect(rule('[data-wrap="pre"]')).toMatch(/white-space:\s*pre-wrap/u);
+});
+
 test("Typo.Text inherits the container type scale", () => {
   const element = render(<Typo.Text>Inline</Typo.Text>);
   expect(element.tagName).toBe("SPAN");
