@@ -13,6 +13,10 @@ macro_rules! wire_codes {
     ) => {
         $(#[$meta])*
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "variant names are derived from the wire codes they spell"
+        )]
         $vis enum $name {
             $(
                 #[doc = concat!("Wire code `", $wire, "`.")]

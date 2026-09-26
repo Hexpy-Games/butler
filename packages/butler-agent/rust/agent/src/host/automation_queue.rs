@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
+use crate::operations::AutomationCode;
 use crate::{
     gateway::NativeInboundQueue,
     json::JsonDocument,
@@ -17,11 +18,12 @@ impl AutomationEnqueue for NativeAutomationQueue {
         metadata: Map<String, Value>,
     ) -> Result<(), AutomationError> {
         let document = JsonDocument::from_value(&envelope).map_err(|error| {
-            AutomationError::new("automation_envelope_invalid", error.to_string())
+            AutomationError::new(AutomationCode::AutomationEnvelopeInvalid, error.to_string())
+                .with_source(error)
         })?;
         self.0
             .enqueue_idempotent_with_metadata(document, metadata)
             .map(|_| ())
-            .map_err(|error| AutomationError::new(error.code, error.message))
+            .map_err(|error| AutomationError::port(error.code, error.message.clone(), error))
     }
 }

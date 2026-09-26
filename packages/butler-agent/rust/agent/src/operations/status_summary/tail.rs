@@ -14,7 +14,7 @@ pub(super) fn tail_events(data_root: &Path, since_ts: Option<f64>, lines: usize)
     let mut events = VecDeque::with_capacity(lines.min(500));
     let path = data_root.join("metrics/operational-events.jsonl");
     let _ = visit_jsonl(&path, |_, parsed| {
-        let Ok(value) = parsed else { return };
+        let Some(value) = parsed else { return };
         let Some(event) = operational_event(&value) else {
             return;
         };

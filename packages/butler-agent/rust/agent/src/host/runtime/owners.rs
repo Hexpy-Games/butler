@@ -40,7 +40,7 @@ impl HostDependencies for RuntimeOwners {
                 .automations
                 .close()
                 .await
-                .map_err(|error| BtccError::relayed(error.code, error.message));
+                .map_err(|error| BtccError::relayed(error.code(), error.message()));
             self.project_tools.close().await;
             self.project_work.close().await;
             self.session_worktrees.close().await;

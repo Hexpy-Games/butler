@@ -36,8 +36,13 @@ pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -
         installation.agent_version(),
     ) {
         Ok(service) => service,
-        Err(code) => {
-            return super::failure(options.json, &code, "Agent updates are unavailable", 1);
+        Err(error) => {
+            return super::failure(
+                options.json,
+                error.code(),
+                "Agent updates are unavailable",
+                1,
+            );
         }
     };
     let Ok(signal_task) = super::super::memory_maintain::signals(service.cancellation_token())
@@ -82,7 +87,7 @@ pub(super) async fn run(installation: ResolvedInstallation, options: &Options) -
             }
             ExitCode::SUCCESS
         }
-        Err(code) => super::failure(options.json, &code, "Agent update failed", 1),
+        Err(error) => super::failure(options.json, error.code(), "Agent update failed", 1),
     }
 }
 

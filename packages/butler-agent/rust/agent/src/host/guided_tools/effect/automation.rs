@@ -136,8 +136,8 @@ impl EffectAdapter for AutomationEffect {
                     .map(AdapterOutcome::Applied)
                     .map_err(|error| EffectFailure::adapter(error.to_string())),
                 Err(error) => Ok(AdapterOutcome::NotApplied(EffectAdapterError::new(
-                    error.code,
-                    error.message,
+                    error.code(),
+                    error.message(),
                 ))),
             }
         })

@@ -1,11 +1,12 @@
 //! App-package update checks and DATA-only staging. Installation stays immutable.
 
 mod agent;
+mod error;
 mod manifest;
 mod stage;
 
 pub(crate) use agent::{AgentArchiveUpdateService, AgentUpdateRequest};
-
+pub(crate) use error::{UpdateCode, UpdateError};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use serde_json::{Value, json};
@@ -42,14 +43,14 @@ impl AppUpdateService {
         data: PathBuf,
         installation: PathBuf,
         version: Option<String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, UpdateError> {
         if data.starts_with(&installation) || installation.starts_with(&data) {
-            return Err("butler_data_overlaps_installation".into());
+            return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()
-            .map_err(|_| "update_http_unavailable")?;
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest = std::env::var("BUTLER_APP_UPDATE_MANIFEST")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -74,7 +75,7 @@ impl AppUpdateService {
         self.shutdown.cancel();
     }
 
-    pub(crate) async fn check(&self, request: UpdateRequest) -> Result<Value, String> {
+    pub(crate) async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact).await?;
@@ -82,7 +83,7 @@ impl AppUpdateService {
         Ok(view)
     }
 
-    pub(crate) async fn apply(&self, request: UpdateRequest) -> Result<Value, String> {
+    pub(crate) async fn apply(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
         validate_request(&request)?;
         let artifact = self.artifact(&request).await?;
         let status = self.status(&request, &artifact).await?;
@@ -118,7 +119,9 @@ impl AppUpdateService {
         } else {
             "up_to_date"
         };
-        let object = status.as_object_mut().ok_or("update_status_invalid")?;
+        let object = status
+            .as_object_mut()
+            .ok_or(UpdateCode::UpdateStatusInvalid)?;
         object.insert("staged".into(), json!(!request.dry_run));
         object.insert("stage_status".into(), json!(stage_status));
         object.insert("activation_status".into(), json!("not_required"));
@@ -143,7 +146,7 @@ impl AppUpdateService {
         &self,
         request: &UpdateRequest,
         status: Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, UpdateError> {
         let view = json!({
             "generated_at": status["checked_at"],
             "components": [status],
@@ -160,8 +163,11 @@ impl AppUpdateService {
         &self,
         request: &UpdateRequest,
         artifact: &AppArtifact,
-    ) -> Result<Value, String> {
-        let current = self.version.as_deref().ok_or("app_version_unavailable")?;
+    ) -> Result<Value, UpdateError> {
+        let current = self
+            .version
+            .as_deref()
+            .ok_or(UpdateCode::AppVersionUnavailable)?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let prior =
             stage::read_json(&self.data, &self.installation, "updates/staged/app.json").await;
@@ -203,9 +209,9 @@ impl AppUpdateService {
         }))
     }
 
-    async fn artifact(&self, request: &UpdateRequest) -> Result<AppArtifact, String> {
+    async fn artifact(&self, request: &UpdateRequest) -> Result<AppArtifact, UpdateError> {
         if self.version.is_none() {
-            return Err("app_version_unavailable".into());
+            return Err(UpdateCode::AppVersionUnavailable.into());
         }
         let source = request.manifest.as_deref().unwrap_or(&self.manifest);
         load_artifact(
@@ -218,7 +224,7 @@ impl AppUpdateService {
     }
 }
 
-fn validate_request(request: &UpdateRequest) -> Result<(), String> {
+fn validate_request(request: &UpdateRequest) -> Result<(), UpdateError> {
     if request
         .component
         .as_deref()
@@ -228,7 +234,7 @@ fn validate_request(request: &UpdateRequest) -> Result<(), String> {
             .as_ref()
             .is_some_and(|values| values.iter().any(|value| value != "app"))
     {
-        return Err("unsupported_component".into());
+        return Err(UpdateCode::UnsupportedComponent.into());
     }
     Ok(())
 }

@@ -1,5 +1,6 @@
 //! The standalone Agent projection of the source update-manifest contract.
 
+use crate::operations::update::{UpdateCode, UpdateError};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
@@ -20,7 +21,7 @@ pub(crate) async fn load_agent_artifact(
     shutdown: &CancellationToken,
     source: &str,
     channel: Option<&str>,
-) -> Result<AgentArtifact, String> {
+) -> Result<AgentArtifact, UpdateError> {
     let resolved_source = if source.starts_with("http://")
         || source.starts_with("https://")
         || source.starts_with("file://")
@@ -29,16 +30,17 @@ pub(crate) async fn load_agent_artifact(
         source.to_owned()
     } else {
         std::env::current_dir()
-            .map_err(|_| "update_manifest_source_invalid")?
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestSourceInvalid, source))?
             .join(source)
             .to_string_lossy()
             .into_owned()
     };
     let bytes = read_manifest(client, shutdown, &resolved_source).await?;
     if bytes.len() > MAX_MANIFEST_BYTES {
-        return Err("update_manifest_too_large".into());
+        return Err(UpdateCode::UpdateManifestTooLarge.into());
     }
-    let manifest: Value = serde_json::from_slice(&bytes).map_err(|_| "update_manifest_invalid")?;
+    let manifest: Value = serde_json::from_slice(&bytes)
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestInvalid, source))?;
     let artifacts = manifest
         .get("artifacts")
         .and_then(Value::as_array)
@@ -50,17 +52,17 @@ pub(crate) async fn load_agent_artifact(
                 .map(|components| components.iter().map(component_as_artifact).collect())
         })
         .filter(|artifacts: &Vec<Value>| !artifacts.is_empty())
-        .ok_or("update_manifest_artifacts_missing")?;
+        .ok_or(UpdateCode::UpdateManifestArtifactsMissing)?;
     let mut candidates = Vec::new();
     for artifact in &artifacts {
         let component = artifact
             .get("component")
             .or_else(|| artifact.get("id"))
             .and_then(Value::as_str)
-            .ok_or("update_manifest_component_invalid")?;
+            .ok_or(UpdateCode::UpdateManifestComponentInvalid)?;
         if !matches!(component, "service" | "agent" | "butler-agent") {
             if !matches!(component, "app" | "butler-app" | "app-server") {
-                return Err("update_manifest_component_invalid".into());
+                return Err(UpdateCode::UpdateManifestComponentInvalid.into());
             }
             continue;
         }
@@ -82,13 +84,13 @@ pub(crate) async fn load_agent_artifact(
                 .copied()
                 .find(|artifact| string(artifact, "platform").is_none())
         })
-        .ok_or("update_manifest_agent_platform_missing")?;
+        .ok_or(UpdateCode::UpdateManifestAgentPlatformMissing)?;
     validate_source_contract(selected)?;
-    let version = required(selected, "version")?;
+    let version = required_version(selected)?;
     let actual_channel = string(selected, "channel").or(channel).unwrap_or("stable");
     let platform = string(selected, "platform").unwrap_or("all");
     if platform != "all" && platform != AGENT_PLATFORM {
-        return Err("update_manifest_agent_platform_missing".into());
+        return Err(UpdateCode::UpdateManifestAgentPlatformMissing.into());
     }
     let url = string_any(selected, &["artifact_url", "downloadUrl", "url"]);
     let sha256 = string(selected, "sha256").map(str::to_ascii_lowercase);
@@ -96,25 +98,25 @@ pub(crate) async fn load_agent_artifact(
         .as_deref()
         .is_some_and(|digest| !valid_sha256(digest))
     {
-        return Err("update_manifest_sha256_invalid".into());
+        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
     }
     if let Some(integrity) = selected.get("integrity") {
         if string(integrity, "digestAlgorithm") != Some("sha256") {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
         if string(integrity, "signature").is_some() {
-            return Err("update_signature_unsupported".into());
+            return Err(UpdateCode::UpdateSignatureUnsupported.into());
         }
         if string(integrity, "digest").is_some_and(|digest| {
             sha256
                 .as_deref()
                 .is_none_or(|sha| !digest.eq_ignore_ascii_case(sha))
         }) {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
     if string(selected, "signature").is_some() {
-        return Err("update_signature_unsupported".into());
+        return Err(UpdateCode::UpdateSignatureUnsupported.into());
     }
     Ok(AgentArtifact {
         version: version.into(),
@@ -161,7 +163,7 @@ fn component_as_artifact(component: &Value) -> Value {
     artifact
 }
 
-fn validate_source_contract(artifact: &Value) -> Result<(), String> {
+fn validate_source_contract(artifact: &Value) -> Result<(), UpdateError> {
     for (field, expected) in [
         ("product", "butler-agent"),
         ("canonical_component", "agent"),
@@ -175,7 +177,7 @@ fn validate_source_contract(artifact: &Value) -> Result<(), String> {
         ("rollback_policy", "not-managed-by-butler"),
     ] {
         if string(artifact, field) != Some(expected) {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
     if let Some(bundled) = artifact
@@ -189,7 +191,7 @@ fn validate_source_contract(artifact: &Value) -> Result<(), String> {
                     .is_some_and(|value| matches!(value, "service" | "agent" | "butler-agent"))
         });
         if !valid {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
     if let Some(protocol) = artifact
@@ -198,17 +200,19 @@ fn validate_source_contract(artifact: &Value) -> Result<(), String> {
     {
         for field in ["protocol", "minimumAgentProtocol", "maximumAgentProtocol"] {
             if protocol.get(field).and_then(Value::as_str) != Some("butler.agent.v1") {
-                return Err("update_manifest_incompatible".into());
+                return Err(UpdateCode::UpdateManifestIncompatible.into());
             }
         }
     }
     Ok(())
 }
 
-fn required<'a>(artifact: &'a Value, field: &str) -> Result<&'a str, String> {
+/// The manifest's required, non-blank `version`.
+fn required_version(artifact: &Value) -> Result<&str, UpdateError> {
+    let field = "version";
     string(artifact, field)
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| format!("update_manifest_{field}_missing"))
+        .ok_or(UpdateCode::UpdateManifestVersionMissing.into())
 }
 
 fn string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -260,7 +264,7 @@ mod tests {
         {
             let artifact = json!({"bundled_components": ["service", "app"]});
             assert_eq!(
-                validate_source_contract(&artifact).unwrap_err(),
+                validate_source_contract(&artifact).unwrap_err().code(),
                 "update_manifest_incompatible"
             );
         }

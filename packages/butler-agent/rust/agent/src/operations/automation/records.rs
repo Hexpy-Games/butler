@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::AutomationError;
+use crate::operations::AutomationCode;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -124,7 +125,7 @@ pub(super) fn envelope(record: &AutomationRecord, run_at: &str) -> Value {
 pub(super) fn format_millis(value: i64) -> Result<String, AutomationError> {
     crate::js_date::format_iso_millis(value).ok_or_else(|| {
         AutomationError::new(
-            "automation_date_invalid",
+            AutomationCode::AutomationDateInvalid,
             "Automation date is outside TimeClip",
         )
     })

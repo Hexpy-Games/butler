@@ -199,10 +199,14 @@ impl PruneMetricObserver for MetricFiles {
         });
         let mut line = serde_json::to_vec(&event).map_err(|error| {
             ContextError::new(ContextCode::ToolOutputJsonError, error.to_string())
+                .with_source(error)
         })?;
         line.push(b'\n');
         self.append(MetricFile::ToolOutputPrune, &line)
-            .map_err(|error| ContextError::new(ContextCode::ToolOutputIoError, error.to_string()))
+            .map_err(|error| {
+                ContextError::new(ContextCode::ToolOutputIoError, error.to_string())
+                    .with_source(error)
+            })
     }
 }
 
@@ -210,11 +214,13 @@ impl ContextCompactionMetricSink for MetricFiles {
     fn append_context_compaction_metric(&self, event: &CompactionMetricEvent) -> ContextResult<()> {
         let mut line = serde_json::to_vec(event).map_err(|error| {
             ContextError::new(ContextCode::ContextMetricWriteError, error.to_string())
+                .with_source(error)
         })?;
         line.push(b'\n');
         self.append(MetricFile::ContextCompaction, &line)
             .map_err(|error| {
                 ContextError::new(ContextCode::ContextMetricWriteError, error.to_string())
+                    .with_source(error)
             })
     }
 }
@@ -297,12 +303,8 @@ impl Drop for TemporaryPath {
     }
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "map_err/iterator adapter taking owned values"
-)]
 fn json_write_error(error: serde_json::Error) -> io::Error {
-    io::Error::other(error.to_string())
+    io::Error::other(error)
 }
 
 fn is_blank_record(record: &[u8]) -> bool {

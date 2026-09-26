@@ -194,7 +194,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
     let result = match command {
         Command::List => store
             .list(options.include_deleted, options.status.as_deref())
-            .map_err(|error| CliError::failed("automation_store_unavailable", error.message))
+            .map_err(|error| CliError::failed("automation_store_unavailable", error.message()))
             .map(|items| {
                 let items: Vec<_> = items.into_iter().map(safe_preview).collect();
                 let human = if items.is_empty() {
@@ -217,7 +217,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             }),
         Command::Show(id) => store
             .show(&id)
-            .map_err(|error| CliError::failed("automation_store_unavailable", error.message))
+            .map_err(|error| CliError::failed("automation_store_unavailable", error.message()))
             .and_then(|item| {
                 let item = item.ok_or_else(|| {
                     CliError::failed("not_found", format!("automation not found: {id}"))
@@ -233,7 +233,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             }),
         Command::Run(id) => store
             .run_now(&id, now_millis())
-            .map_err(|error| CliError::failed("invalid_state", error.message))
+            .map_err(|error| CliError::failed("invalid_state", error.message()))
             .map(|value| {
                 let automation = safe_preview(value["automation"].clone());
                 let envelope = redact_json_strings(value["envelope"].clone());
@@ -249,14 +249,14 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
         Command::Delete(id) => store
             .delete(&id, now_millis())
             .map_err(|error| {
-                let missing = error.message.contains("not found");
+                let missing = error.message().contains("not found");
                 CliError::failed(
                     if missing {
                         "not_found"
                     } else {
                         "automation_store_unavailable"
                     },
-                    error.message,
+                    error.message(),
                 )
             })
             .map(|value| {

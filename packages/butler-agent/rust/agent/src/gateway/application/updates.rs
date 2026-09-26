@@ -1,7 +1,8 @@
 use super::GatewayApplicationError;
 
-pub(super) fn update_error(code: String) -> GatewayApplicationError {
-    let (status, message) = match code.as_str() {
+pub(super) fn update_error(error: &crate::operations::UpdateError) -> GatewayApplicationError {
+    let code = error.code();
+    let (status, message) = match code {
         "unsupported_component" => (400, "Only Butler App package updates are available."),
         "app_version_unavailable" => (503, "Installed Butler App version is unavailable."),
         "update_manifest_incompatible" | "update_signature_unsupported" => (
@@ -19,7 +20,7 @@ pub(super) fn update_error(code: String) -> GatewayApplicationError {
     };
     GatewayApplicationError::Public {
         status,
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

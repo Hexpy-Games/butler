@@ -38,7 +38,7 @@ pub(super) fn read_summary(data_root: &Path, since_ts: Option<f64>, enabled: boo
     let mut total = 0_u64;
     let path = data_root.join("metrics/operational-events.jsonl");
     let parse_errors = visit_jsonl(&path, |_, parsed| {
-        let Ok(value) = parsed else { return };
+        let Some(value) = parsed else { return };
         let Some(event) = operational_event(&value) else {
             return;
         };
@@ -113,7 +113,7 @@ pub(super) fn read_first_visible(data_root: &Path, since_ts: Option<f64>) -> Val
     let mut by_signal = BTreeMap::<String, u64>::new();
     let path = data_root.join("metrics/operational-events.jsonl");
     let _ = visit_jsonl(&path, |_, parsed| {
-        let Ok(value) = parsed else { return };
+        let Some(value) = parsed else { return };
         let Some(event) = operational_event(&value) else {
             return;
         };

@@ -262,7 +262,9 @@ impl McpServer {
     async fn project_list(&self, Parameters(_args): Parameters<EmptyArgs>) -> CallToolResult {
         let projects = match operations::read_mcp_task_projects(&self.data_root, &self.home) {
             Ok(projects) => projects,
-            Err(error) => return CallToolResult::error(vec![ContentBlock::text(error)]),
+            Err(error) => {
+                return CallToolResult::error(vec![ContentBlock::text(error.to_string())]);
+            }
         };
         if projects.is_empty() {
             return text_result("No project tasks found.".into());

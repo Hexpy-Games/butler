@@ -29,7 +29,7 @@ impl GatewayApplication for AppApplication {
             updates
                 .check(request)
                 .await
-                .map_err(super::updates::update_error)
+                .map_err(|error| super::updates::update_error(&error))
         })
     }
     fn apply_app_update(
@@ -40,7 +40,7 @@ impl GatewayApplication for AppApplication {
         Box::pin(async move {
             Box::pin(updates.apply(request))
                 .await
-                .map_err(super::updates::update_error)
+                .map_err(|error| super::updates::update_error(&error))
         })
     }
     fn list_skills(&self) -> ApplicationFuture<SkillSettingsView> {

@@ -7,6 +7,7 @@ use tokio::{
 };
 
 use super::{AutomationDependencies, AutomationError, AutomationFuture, store::AutomationStore};
+use crate::operations::AutomationCode;
 
 enum Command {
     Execute {
@@ -51,20 +52,25 @@ impl NativeAutomationService {
                     reply,
                 })
                 .await
-                .map_err(|_| closed())?;
+                .map_err(|source| closed().with_source(source))?;
             drop(admission);
-            answer.await.map_err(|_| closed())?
+            answer
+                .await
+                .map_err(|source| closed().with_source(source))?
         })
     }
 
     pub(crate) async fn close(&self) -> Result<(), AutomationError> {
         let mut admission = self.admission.lock().await;
         if let Some(sender) = admission.take() {
-            sender.send(Command::Close).await.map_err(|_| closed())?;
+            sender
+                .send(Command::Close)
+                .await
+                .map_err(|source| closed().with_source(source))?;
         }
         drop(admission);
         if let Some(task) = self.task.lock().await.take() {
-            task.await.map_err(|_| closed())?;
+            task.await.map_err(|source| closed().with_source(source))?;
         }
         Ok(())
     }
@@ -100,7 +106,7 @@ async fn run(
                     dispatch_due(&store, &dependencies)
                 }).await.unwrap_or_else(|_| Err(closed()));
                 if let Err(error) = result {
-                    eprintln!("[native-automation] scheduler code={}", error.code);
+                    eprintln!("[native-automation] scheduler code={}", error.code());
                 }
             }
         }
@@ -126,7 +132,7 @@ fn execute(
             let id = args.get("id").and_then(Value::as_str).unwrap_or("").trim();
             if id.is_empty() {
                 return Err(AutomationError::new(
-                    "automation_invalid",
+                    AutomationCode::AutomationInvalid,
                     "delete_automation requires id",
                 ));
             }
@@ -141,7 +147,7 @@ fn execute(
             {
                 Some(value) => (dependencies.parse_date)(value).ok_or_else(|| {
                     AutomationError::new(
-                        "automation_invalid",
+                        AutomationCode::AutomationInvalid,
                         "run_due_automations now must be a valid ISO date",
                     )
                 })?,
@@ -151,7 +157,7 @@ fn execute(
             Ok(json!({"ok":true,"claimed":runs.len(),"runs":runs}))
         }
         _ => Err(AutomationError::new(
-            "automation_tool_unknown",
+            AutomationCode::AutomationToolUnknown,
             "Automation tool is unavailable",
         )),
     }
@@ -178,5 +184,8 @@ fn dispatch_due(
 }
 
 fn closed() -> AutomationError {
-    AutomationError::new("automation_service_closed", "Automation service closed")
+    AutomationError::new(
+        AutomationCode::AutomationServiceClosed,
+        "Automation service closed",
+    )
 }

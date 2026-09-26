@@ -87,12 +87,12 @@ pub(crate) fn read_mcp_task_counts(data_root: &Path) -> McpTaskCounts {
 pub(crate) fn read_mcp_task_projects(
     data_root: &Path,
     home: &Path,
-) -> Result<Vec<McpTaskProject>, String> {
+) -> std::io::Result<Vec<McpTaskProject>> {
     let tasks_root = data_root.join("tasks");
     let entries = match std::fs::read_dir(&tasks_root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(error),
     };
     let excluded = [
         String::new(),
@@ -101,12 +101,8 @@ pub(crate) fn read_mcp_task_projects(
     ];
     let mut groups = indexmap::IndexMap::<String, Vec<McpTaskInfo>>::new();
     for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
-        if !entry
-            .file_type()
-            .map_err(|error| error.to_string())?
-            .is_dir()
-        {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
             continue;
         }
         let task = read_mcp_task(data_root, &entry.file_name().to_string_lossy());
@@ -145,7 +141,7 @@ pub(crate) fn read_mcp_task_projects(
     Ok(projects)
 }
 
-pub(crate) fn cleanup_plan(data_root: &Path, now_ms: f64) -> Result<McpTaskCleanupPlan, String> {
+pub(crate) fn cleanup_plan(data_root: &Path, now_ms: f64) -> std::io::Result<McpTaskCleanupPlan> {
     let tasks_root = data_root.join("tasks");
     let entries = match std::fs::read_dir(&tasks_root) {
         Ok(entries) => entries,
@@ -155,16 +151,12 @@ pub(crate) fn cleanup_plan(data_root: &Path, now_ms: f64) -> Result<McpTaskClean
                 deleted_count: 0,
             });
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(error),
     };
     let mut tasks = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
-        if !entry
-            .file_type()
-            .map_err(|error| error.to_string())?
-            .is_dir()
-        {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();

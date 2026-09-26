@@ -73,7 +73,7 @@ pub(super) fn read_usage(
     let mut missing_retention = 0_u64;
     let prompt_path = data_root.join("metrics/prompt-cache-usage.jsonl");
     let _ = visit_jsonl(&prompt_path, |_, parsed| {
-        let Ok(event) = parsed else { return };
+        let Some(event) = parsed else { return };
         if !valid_prompt_event(&event) {
             return;
         }
@@ -194,7 +194,7 @@ pub(super) fn prompt_cache_telemetry(data_root: &Path, since_ts: Option<f64>) ->
     let mut by_scope = BTreeMap::<String, u64>::new();
     let path = data_root.join("metrics/prompt-cache-usage.jsonl");
     let _ = visit_jsonl(&path, |_, parsed| {
-        let Ok(event) = parsed else { return };
+        let Some(event) = parsed else { return };
         if !valid_prompt_event(&event)
             || since_ts.is_some_and(|since| number(event.get("ts")).unwrap_or(0.0) < since)
         {

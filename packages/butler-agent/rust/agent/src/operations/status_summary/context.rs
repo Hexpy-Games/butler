@@ -36,7 +36,7 @@ pub(super) async fn read_context_for_session(
     let mut latest_turn: Option<Value> = None;
     let path = data_root.join("metrics/context-monitor.jsonl");
     let malformed = visit_jsonl(&path, |_, parsed| {
-        let Ok(value) = parsed else { return };
+        let Some(value) = parsed else { return };
         if !valid_context_metric(&value) {
             parse_errors += 1;
             return;

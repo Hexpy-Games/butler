@@ -8,7 +8,9 @@ use std::{
 
 use serde_json::Value;
 
-pub(super) fn visit_jsonl(path: &Path, mut visit: impl FnMut(&str, Result<Value, ()>)) -> usize {
+/// Visits each non-blank JSONL line with its parsed value (`None` when the
+/// line is not valid JSON); returns the count of unparseable lines.
+pub(super) fn visit_jsonl(path: &Path, mut visit: impl FnMut(&str, Option<Value>)) -> usize {
     let Ok(file) = File::open(path) else { return 0 };
     let mut reader = BufReader::new(file);
     let mut line = Vec::new();
@@ -23,8 +25,8 @@ pub(super) fn visit_jsonl(path: &Path, mut visit: impl FnMut(&str, Result<Value,
                 if text.is_empty() {
                     continue;
                 }
-                let value = serde_json::from_str::<Value>(text).map_err(|_| ());
-                if value.is_err() {
+                let value = serde_json::from_str::<Value>(text).ok();
+                if value.is_none() {
                     parse_errors += 1;
                 }
                 visit(text, value);

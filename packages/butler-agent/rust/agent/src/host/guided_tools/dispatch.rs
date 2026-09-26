@@ -129,7 +129,7 @@ pub(super) async fn execute(
         return encoded(&result.unwrap_or_else(|error| {
             json!({"ok":false,"error":{
                 "code":"tool_error",
-                "message":format!("{} could not complete: {}", call.name, error.code),
+                "message":format!("{} could not complete: {}", call.name, error.code()),
             }})
         }));
     }

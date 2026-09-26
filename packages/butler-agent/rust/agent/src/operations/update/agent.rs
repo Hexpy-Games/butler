@@ -1,5 +1,6 @@
 //! Verified Agent archive handoff; never activates or replaces the running install.
 
+use crate::operations::update::{UpdateCode, UpdateError};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use serde_json::{Value, json};
@@ -34,14 +35,14 @@ impl AgentArchiveUpdateService {
         data: PathBuf,
         installation: PathBuf,
         current_version: Option<String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, UpdateError> {
         if data.starts_with(&installation) || installation.starts_with(&data) {
-            return Err("butler_data_overlaps_installation".into());
+            return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()
-            .map_err(|_| "update_http_unavailable")?;
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateHttpUnavailable, source))?;
         let manifest = std::env::var("BUTLER_UPDATE_MANIFEST")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -65,13 +66,13 @@ impl AgentArchiveUpdateService {
         self.shutdown.clone()
     }
 
-    pub(crate) async fn check(&self, request: &AgentUpdateRequest) -> Result<Value, String> {
+    pub(crate) async fn check(&self, request: &AgentUpdateRequest) -> Result<Value, UpdateError> {
         let (status, _) = self.status(request).await?;
         self.persist_status(request, &status).await?;
         Ok(status)
     }
 
-    pub(crate) async fn apply(&self, request: &AgentUpdateRequest) -> Result<Value, String> {
+    pub(crate) async fn apply(&self, request: &AgentUpdateRequest) -> Result<Value, UpdateError> {
         let (mut status, download_url) = self.status(request).await?;
         self.persist_status(request, &status).await?;
         let available = status["update_available"] == true;
@@ -79,10 +80,10 @@ impl AgentArchiveUpdateService {
         if available && !request.dry_run {
             let url = download_url
                 .as_deref()
-                .ok_or("update_artifact_url_missing")?;
+                .ok_or(UpdateCode::UpdateArtifactUrlMissing)?;
             let sha256 = status["sha256"]
                 .as_str()
-                .ok_or("update_artifact_sha256_missing")?;
+                .ok_or(UpdateCode::UpdateArtifactSha256Missing)?;
             let name = artifact_name(
                 url,
                 status["available_version"].as_str().unwrap_or("unknown"),
@@ -120,7 +121,9 @@ impl AgentArchiveUpdateService {
         } else {
             vec!["Butler Agent is already up to date"]
         };
-        let object = status.as_object_mut().ok_or("update_status_invalid")?;
+        let object = status
+            .as_object_mut()
+            .ok_or(UpdateCode::UpdateStatusInvalid)?;
         object.insert("staged".into(), json!(archive_staged));
         object.insert("dry_run".into(), json!(request.dry_run));
         object.insert("dryRun".into(), json!(request.dry_run));
@@ -142,11 +145,11 @@ impl AgentArchiveUpdateService {
         object.insert("rollback_policy".into(), json!("not-managed-by-butler"));
         if !request.dry_run {
             if self.shutdown.is_cancelled() {
-                return Err("update_cancelled".into());
+                return Err(UpdateCode::UpdateCancelled.into());
             }
             let _write = self.writes.lock().await;
             if self.shutdown.is_cancelled() {
-                return Err("update_cancelled".into());
+                return Err(UpdateCode::UpdateCancelled.into());
             }
             stage::write_json(
                 &self.data,
@@ -163,9 +166,9 @@ impl AgentArchiveUpdateService {
         &self,
         request: &AgentUpdateRequest,
         status: &Value,
-    ) -> Result<(), String> {
+    ) -> Result<(), UpdateError> {
         if self.shutdown.is_cancelled() {
-            return Err("update_cancelled".into());
+            return Err(UpdateCode::UpdateCancelled.into());
         }
         let view = json!({
             "schema": "butler.update-status.v1",
@@ -179,7 +182,7 @@ impl AgentArchiveUpdateService {
         });
         let _write = self.writes.lock().await;
         if self.shutdown.is_cancelled() {
-            return Err("update_cancelled".into());
+            return Err(UpdateCode::UpdateCancelled.into());
         }
         stage::write_json(&self.data, &self.installation, "updates/status.json", &view).await
     }
@@ -187,12 +190,12 @@ impl AgentArchiveUpdateService {
     async fn status(
         &self,
         request: &AgentUpdateRequest,
-    ) -> Result<(Value, Option<String>), String> {
+    ) -> Result<(Value, Option<String>), UpdateError> {
         let current = self
             .current_version
             .as_deref()
             .filter(|version| !version.trim().is_empty())
-            .ok_or("agent_version_unavailable")?;
+            .ok_or(UpdateCode::AgentVersionUnavailable)?;
         let source = request.manifest.as_deref().unwrap_or(&self.manifest);
         let artifact = manifest::load_agent_artifact(
             &self.client,

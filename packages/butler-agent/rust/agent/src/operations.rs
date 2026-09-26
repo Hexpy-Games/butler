@@ -20,8 +20,8 @@ mod update;
 mod web_search_metrics;
 
 pub(crate) use automation::{
-    AutomationDependencies, AutomationEnqueue, AutomationError, NativeAutomationCliStore,
-    NativeAutomationService,
+    AutomationCode, AutomationDependencies, AutomationEnqueue, AutomationError,
+    NativeAutomationCliStore, NativeAutomationService,
 };
 pub(crate) use conversation_metrics::{AdmissionMeasure, ConversationMetrics};
 pub(crate) use cycle_metrics::CycleMetrics;
@@ -44,7 +44,7 @@ pub(crate) use status_summary::{
     read_usage_tool, render_metrics_status, render_status_context, tail_operational_metric_events,
 };
 pub(crate) use update::{
-    AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, UpdateRequest,
+    AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, UpdateError, UpdateRequest,
 };
 pub(crate) use web_search_metrics::WebSearchMetrics;
 

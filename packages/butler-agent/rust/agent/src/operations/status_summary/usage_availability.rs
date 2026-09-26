@@ -24,7 +24,7 @@ pub(super) fn read_web_search(data_root: &Path, since_ts: Option<f64>) -> Value 
     let mut latest = None::<(f64, String, Option<String>)>;
     let path = data_root.join("metrics/web-search-usage.jsonl");
     let _ = visit_jsonl(&path, |_, parsed| {
-        let Ok(event) = parsed else { return };
+        let Some(event) = parsed else { return };
         let Some(ts) = number(event.get("ts")) else {
             return;
         };

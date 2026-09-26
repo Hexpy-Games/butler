@@ -18,6 +18,7 @@ use super::{
 mod claim;
 use claim::claim_record;
 mod persistence;
+use crate::operations::AutomationCode;
 use persistence::{
     ensure_record_id, ensure_store_directory, path_entry_exists, read_record, write_record,
 };
@@ -315,8 +316,12 @@ fn safe_id(value: &str) -> Result<String, AutomationError> {
 }
 
 fn invalid(message: impl Into<String>) -> AutomationError {
-    AutomationError::new("automation_invalid", message)
+    AutomationError::new(AutomationCode::AutomationInvalid, message)
 }
-fn io_error(error: impl std::fmt::Display) -> AutomationError {
-    AutomationError::new("automation_store_unavailable", error.to_string())
+fn io_error(error: impl std::error::Error + Send + Sync + 'static) -> AutomationError {
+    AutomationError::new(
+        AutomationCode::AutomationStoreUnavailable,
+        error.to_string(),
+    )
+    .with_source(error)
 }

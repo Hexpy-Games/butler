@@ -62,7 +62,7 @@ pub(super) fn cleanup_old_tasks(
         .unwrap_or_default()
         .as_secs_f64()
         * 1_000.0;
-    let plan = operations::cleanup_plan(data_root, now_ms)?;
+    let plan = operations::cleanup_plan(data_root, now_ms).map_err(|error| error.to_string())?;
     let mut deleted = 0;
     for directory in plan.directories {
         validate_under_data(data_root, &directory, installation)?;

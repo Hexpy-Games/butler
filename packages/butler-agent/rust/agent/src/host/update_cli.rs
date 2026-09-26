@@ -140,7 +140,7 @@ pub async fn run(installation: ResolvedInstallation, args: Vec<OsString>) -> Exi
             }
             ExitCode::SUCCESS
         }
-        Err(code) => failure(options.json, &code, "App update check failed", 1),
+        Err(error) => failure(options.json, error.code(), "App update check failed", 1),
     }
 }
 
@@ -151,6 +151,7 @@ pub(super) fn open_app_update(
     let data = installation.validate_data_root(data)?;
     let version = installation.app_version();
     AppUpdateService::new(data, installation.root().to_path_buf(), version)
+        .map_err(|error| error.code().to_owned())
 }
 
 fn parse(args: &[OsString]) -> Result<Options, String> {

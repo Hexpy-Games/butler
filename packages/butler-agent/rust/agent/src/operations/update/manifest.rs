@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::operations::update::{UpdateCode, UpdateError};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -24,13 +25,14 @@ pub(super) async fn load_artifact(
     shutdown: &CancellationToken,
     source: &str,
     channel: Option<&str>,
-) -> Result<AppArtifact, String> {
+) -> Result<AppArtifact, UpdateError> {
     let body = read_manifest(client, shutdown, source).await?;
-    let manifest: Value = serde_json::from_slice(&body).map_err(|_| "update_manifest_invalid")?;
+    let manifest: Value = serde_json::from_slice(&body)
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestInvalid, source))?;
     let array = manifest
         .get("artifacts")
         .and_then(Value::as_array)
-        .ok_or("update_manifest_artifacts_missing")?;
+        .ok_or(UpdateCode::UpdateManifestArtifactsMissing)?;
     let os = if std::env::consts::OS == "macos" {
         "darwin"
     } else {
@@ -55,7 +57,7 @@ pub(super) async fn load_artifact(
                 .copied()
                 .find(|value| value.get("platform").is_none())
         })
-        .ok_or("update_manifest_app_platform_missing")?;
+        .ok_or(UpdateCode::UpdateManifestAppPlatformMissing)?;
     for (field, expected) in [
         ("product", "butler-app"),
         ("canonical_component", "app"),
@@ -73,21 +75,21 @@ pub(super) async fn load_artifact(
             .and_then(Value::as_str)
             .is_some_and(|value| value != expected)
         {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
         if matches!(
             field,
             "staging_policy" | "activation_policy" | "rollback_policy"
         ) && selected.get(field).and_then(Value::as_str) != Some(expected)
         {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
     if selected
         .get("bundled_components")
         .is_some_and(|value| value != &json!(["app"]))
     {
-        return Err("update_manifest_incompatible".into());
+        return Err(UpdateCode::UpdateManifestIncompatible.into());
     }
     let signature = selected
         .get("signature")
@@ -100,15 +102,15 @@ pub(super) async fn load_artifact(
                 .filter(|value| !value.is_empty())
         });
     if signature.is_some() {
-        return Err("update_signature_unsupported".into());
+        return Err(UpdateCode::UpdateSignatureUnsupported.into());
     }
     if selected
         .get("integrity")
         .is_some_and(|value| value.get("digestAlgorithm").and_then(Value::as_str) != Some("sha256"))
     {
-        return Err("update_manifest_incompatible".into());
+        return Err(UpdateCode::UpdateManifestIncompatible.into());
     }
-    let version = required(selected, "version")?;
+    let version = required_version(selected)?;
     let url = selected
         .get("artifact_url")
         .and_then(Value::as_str)
@@ -122,7 +124,7 @@ pub(super) async fn load_artifact(
     if sha256.as_deref().is_some_and(|digest| {
         digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
     }) {
-        return Err("update_manifest_sha256_invalid".into());
+        return Err(UpdateCode::UpdateManifestSha256Invalid.into());
     }
     if selected
         .pointer("/integrity/digest")
@@ -133,14 +135,14 @@ pub(super) async fn load_artifact(
                 .is_none_or(|sha| !digest.eq_ignore_ascii_case(sha))
         })
     {
-        return Err("update_manifest_incompatible".into());
+        return Err(UpdateCode::UpdateManifestIncompatible.into());
     }
     let protocol = selected.get("protocol_compatibility").cloned().unwrap_or_else(|| json!({
         "protocol":"butler.app.v1", "minimumAppProtocol":"butler.app.v1", "maximumAppProtocol":"butler.app.v1"
     }));
     for field in ["protocol", "minimumAppProtocol", "maximumAppProtocol"] {
         if protocol.get(field).and_then(Value::as_str) != Some("butler.app.v1") {
-            return Err("update_manifest_incompatible".into());
+            return Err(UpdateCode::UpdateManifestIncompatible.into());
         }
     }
     Ok(AppArtifact {
@@ -165,36 +167,40 @@ pub(super) async fn load_artifact(
     })
 }
 
-fn required<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
+/// The manifest's required, non-blank `version`.
+fn required_version(value: &Value) -> Result<&str, UpdateError> {
+    let field = "version";
     value
         .get(field)
         .and_then(Value::as_str)
         .filter(|item| !item.trim().is_empty())
-        .ok_or_else(|| format!("update_manifest_{field}_missing"))
+        .ok_or(UpdateCode::UpdateManifestVersionMissing.into())
 }
 
 async fn read_manifest(
     client: &reqwest::Client,
     shutdown: &CancellationToken,
     source: &str,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, UpdateError> {
     if source.starts_with("http://") || source.starts_with("https://") {
         let response = tokio::select! {
-            () = shutdown.cancelled() => return Err("update_cancelled".into()),
-            result = client.get(source).send() => result.map_err(|_| "update_manifest_unavailable")?,
+            () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
+            result = client.get(source).send() => result.map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source))?,
         };
         if !response.status().is_success() {
-            return Err("update_manifest_unavailable".into());
+            return Err(UpdateCode::UpdateManifestUnavailable.into());
         }
         let mut stream = response.bytes_stream();
         let mut body = Vec::new();
         while let Some(chunk) = tokio::select! {
-            () = shutdown.cancelled() => return Err("update_cancelled".into()),
+            () = shutdown.cancelled() => return Err(UpdateCode::UpdateCancelled.into()),
             chunk = stream.next() => chunk,
         } {
-            let chunk = chunk.map_err(|_| "update_manifest_unavailable")?;
+            let chunk = chunk.map_err(|source| {
+                UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source)
+            })?;
             if body.len().saturating_add(chunk.len()) > MAX_MANIFEST_BYTES {
-                return Err("update_manifest_too_large".into());
+                return Err(UpdateCode::UpdateManifestTooLarge.into());
             }
             body.extend_from_slice(&chunk);
         }
@@ -204,22 +210,22 @@ async fn read_manifest(
         url::Url::parse(source)
             .ok()
             .and_then(|url| url.to_file_path().ok())
-            .ok_or("update_manifest_source_invalid")?
+            .ok_or(UpdateCode::UpdateManifestSourceInvalid)?
     } else {
         Path::new(source).to_path_buf()
     };
     if !path.is_absolute() {
-        return Err("update_manifest_source_invalid".into());
+        return Err(UpdateCode::UpdateManifestSourceInvalid.into());
     }
     let metadata = tokio::fs::metadata(&path)
         .await
-        .map_err(|_| "update_manifest_unavailable")?;
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source))?;
     if metadata.len() > MAX_MANIFEST_BYTES as u64 {
-        return Err("update_manifest_too_large".into());
+        return Err(UpdateCode::UpdateManifestTooLarge.into());
     }
     tokio::fs::read(path)
         .await
-        .map_err(|_| "update_manifest_unavailable".into())
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestUnavailable, source))
 }
 
 pub(super) fn public_source(source: &str) -> String {

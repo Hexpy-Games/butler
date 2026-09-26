@@ -1,6 +1,7 @@
 //! File-backed agent automation tools and their bounded scheduler owner.
 
 mod actor;
+mod error;
 mod records;
 mod store;
 #[cfg(test)]
@@ -11,6 +12,7 @@ use std::{future::Future, path::Path, pin::Pin, sync::Arc, time::Duration};
 use serde_json::{Map, Value};
 
 pub(crate) use actor::NativeAutomationService;
+pub(crate) use error::{AutomationCode, AutomationError};
 
 /// One-shot DATA store access for the native CLI. It deliberately does not
 /// construct the actor or its scheduler.
@@ -77,32 +79,11 @@ pub(crate) trait AutomationEnqueue: Send + Sync + 'static {
 }
 
 fn preview_value(item: impl serde::Serialize) -> Result<Value, AutomationError> {
-    serde_json::to_value(item)
-        .map_err(|error| AutomationError::new("automation_preview_invalid", error.to_string()))
+    serde_json::to_value(item).map_err(|error| {
+        AutomationError::new(AutomationCode::AutomationPreviewInvalid, error.to_string())
+            .with_source(error)
+    })
 }
-
-#[derive(Clone, Debug)]
-pub(crate) struct AutomationError {
-    pub(crate) code: &'static str,
-    pub(crate) message: String,
-}
-
-impl AutomationError {
-    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for AutomationError {
-    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(output, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for AutomationError {}
 
 pub(crate) type AutomationDateParser = dyn Fn(&str) -> Option<i64> + Send + Sync;
 pub(crate) type AutomationClock = dyn Fn() -> i64 + Send + Sync;
