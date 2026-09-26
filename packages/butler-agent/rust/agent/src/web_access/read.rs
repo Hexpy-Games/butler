@@ -298,7 +298,7 @@ fn bounded_number(value: Option<&Value>, min: usize, max: usize, fallback: usize
     value
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .map(|value| value.trunc().clamp(min as f64, max as f64) as usize)
+        .map(|value| crate::json::saturating_usize(value.trunc().clamp(min as f64, max as f64)))
         .unwrap_or(fallback)
 }
 

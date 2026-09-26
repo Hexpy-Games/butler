@@ -236,7 +236,7 @@ fn insert_windows(
         ])?;
         connection.execute(
             "INSERT INTO memory_projection_windows(window_ref,job_id,ordinal,source_refs_json,state,error_code) VALUES(?1,?2,?3,?4,?5,?6)",
-            params![window,plan.job_id,ordinal as i64,serde_json::to_string(&refs).map_err(json_error)?,"pending",Option::<&str>::None],
+            params![window,plan.job_id,i64::try_from(ordinal).unwrap_or(i64::MAX),serde_json::to_string(&refs).map_err(json_error)?,"pending",Option::<&str>::None],
         ).map_err(db_error)?;
     }
     Ok(())

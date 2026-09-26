@@ -215,7 +215,7 @@ fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, b
         })?;
         let hint = match row.get("start_line") {
             None => None,
-            Some(value) => Some(
+            Some(value) => Some(crate::json::saturating_usize(
                 value
                     .as_f64()
                     .filter(|number| {
@@ -228,8 +228,8 @@ fn decode(args: &Value, owner: &NativeGuidedFileEffects) -> Result<(Vec<Edit>, b
                             "edit_file_invalid_start_line",
                             "edit_file start_line must be positive.",
                         )
-                    })? as usize,
-            ),
+                    })?,
+            )),
         };
         let expected = match row.get("expected_sha256") {
             None => None,
@@ -427,7 +427,8 @@ fn recover(
             let text = prepared_before
                 .entry(path)
                 .or_insert_with(|| state.text.clone());
-            let line = entry["start_line"].as_u64().unwrap_or(0) as usize;
+            let line =
+                usize::try_from(entry["start_line"].as_u64().unwrap_or(0)).unwrap_or(usize::MAX);
             let (after_text, actual_line) =
                 prepare_exact_text(text, &edit.old_text, &edit.new_text, Some(line)).map_err(
                     |_| {

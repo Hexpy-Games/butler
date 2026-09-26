@@ -86,10 +86,13 @@ impl CognitionCoordinationHost for TestHost {
 
     fn now_epoch_millis(&self) -> i64 {
         self.clock_reads.send_modify(|reads| *reads += 1);
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64
+        i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(i64::MAX)
     }
 
     fn now_iso(&self) -> String {

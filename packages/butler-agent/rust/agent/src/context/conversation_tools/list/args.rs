@@ -175,7 +175,7 @@ fn integer(
     if number.fract() != 0.0 || !number.is_finite() || number < min as f64 || number > max as f64 {
         return Err("invalid_integer");
     }
-    Ok(number as usize)
+    Ok(crate::json::saturating_usize(number))
 }
 fn strings(value: Option<&Value>, max: usize) -> Result<Vec<String>, &'static str> {
     let Some(value) = value else {

@@ -274,7 +274,8 @@ pub(crate) async fn compact_transcript(
         snapshot_id: snapshot.snapshot_id.clone(),
         trigger: snapshot.trigger,
         status: snapshot.status,
-        duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX),
         model_ref: snapshot.model_ref.clone(),
         pre_estimated_tokens: pre_tokens,
         post_estimated_tokens: post_tokens,

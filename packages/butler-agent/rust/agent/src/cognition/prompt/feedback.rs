@@ -142,10 +142,13 @@ pub(super) fn read(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(io_error) => return Err(error(&io_error)),
     };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as i64;
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(i64::MAX);
     let mut entries = source
         .split("\n## ")
         .map(|block| block.strip_prefix("## ").unwrap_or(block))

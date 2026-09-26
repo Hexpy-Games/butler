@@ -81,8 +81,10 @@ impl ConfiguredCycleOptions {
                 sub["health"].as_u64().unwrap_or(60_000),
             ],
             activation_decay_d: config["activationDecayD"].as_f64().unwrap_or(0.5),
-            project_capsule_refresh_limit: number("projectCapsuleRefreshLimit", 20)
-                .min(usize::MAX as u64) as usize,
+            project_capsule_refresh_limit: usize::try_from(
+                number("projectCapsuleRefreshLimit", 20).min(usize::MAX as u64),
+            )
+            .unwrap_or(usize::MAX),
         }
     }
 }
@@ -141,7 +143,9 @@ impl ConfiguredCycleService {
             .join("consolidation");
         ensure_data_authority(&self.data_root, &[&root])?;
         let start = Instant::now();
-        let deadline = now_ms().saturating_add(config.total_budget_ms.min(i64::MAX as u64) as i64);
+        let deadline = now_ms().saturating_add(
+            i64::try_from(config.total_budget_ms.min(i64::MAX as u64)).unwrap_or(i64::MAX),
+        );
         let mut result = ConfiguredCycleResult {
             exit_code: 0,
             skipped: false,
@@ -163,7 +167,9 @@ impl ConfiguredCycleService {
             // The source records a soft subphase budget but never enforces or emits it.
             let _phase_soft_budget_ms = config.subphase_budgets_ms[phase_index];
             let output = self.executor.run(phase, deadline, cancellation).await;
-            let duration = phase_start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+            let duration =
+                u64::try_from(phase_start.elapsed().as_millis().min(u128::from(u64::MAX)))
+                    .unwrap_or(u64::MAX);
             let event = match output {
                 Ok(_) if now_ms() >= deadline => {
                     result.aborted = Some("aborted_budget");
@@ -201,11 +207,14 @@ impl ConfiguredCycleService {
 }
 
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX)
 }
 
 async fn append_event(data_root: PathBuf, root: PathBuf, mut event: Value) -> CognitionResult<()> {

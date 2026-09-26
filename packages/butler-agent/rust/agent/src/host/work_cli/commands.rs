@@ -322,5 +322,5 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
 }
 
 fn count(value: &Value, key: &str) -> usize {
-    value.get(key).and_then(Value::as_u64).unwrap_or(0) as usize
+    usize::try_from(value.get(key).and_then(Value::as_u64).unwrap_or(0)).unwrap_or(usize::MAX)
 }

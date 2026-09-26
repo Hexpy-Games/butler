@@ -155,7 +155,7 @@ impl ExecutionControls {
             access_mode: required(fields, "access_mode")?,
             plan_mode: required(fields, "plan_mode")?,
             source: required(fields, "source")?,
-            session_control_revision: revision as u64,
+            session_control_revision: crate::json::saturating_u64(revision),
             catalog_generation: text(fields, "catalog_generation")?,
             resolved_at: text(fields, "resolved_at")?,
             integrity_hash: text(fields, "integrity_hash")?,

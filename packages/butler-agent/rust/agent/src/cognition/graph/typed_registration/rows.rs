@@ -221,7 +221,7 @@ pub(super) fn insert_windows(
                 params![
                     window_ref,
                     plan.job_id,
-                    ordinal as i64,
+                    i64::try_from(ordinal).unwrap_or(i64::MAX),
                     json_string_array(&refs)?,
                 ],
             )

@@ -89,5 +89,5 @@ fn js_nonnegative_offset(raw: &str) -> Option<u64> {
     (parsed.is_finite()
         && parsed.fract() == 0.0
         && (0.0..=9_007_199_254_740_991.0).contains(&parsed))
-    .then_some(parsed as u64)
+    .then_some(crate::json::saturating_u64(parsed))
 }

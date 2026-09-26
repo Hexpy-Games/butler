@@ -15,7 +15,8 @@ pub(super) fn budget(
     input: BudgetToolOutputInput,
 ) -> ContextResult<BudgetedToolOutput> {
     let requested = input.max_model_tokens.filter(|value| value.is_finite());
-    let max_tokens = requested.unwrap_or(1_200.0).trunc().clamp(200.0, 8_000.0) as usize;
+    let max_tokens =
+        crate::json::saturating_usize(requested.unwrap_or(1_200.0).trunc().clamp(200.0, 8_000.0));
     let mode = match &input.output_mode {
         OutputModeInput::Present(serde_json::Value::String(value)) if value == "full" => "full",
         OutputModeInput::Present(serde_json::Value::String(value))
@@ -91,7 +92,7 @@ pub(super) fn budget(
             exit_code: input.result.exit_code,
             timed_out: input.result.timed_out,
         },
-        raw_tokens: raw_tokens as u64,
+        raw_tokens: crate::json::saturating_u64(raw_tokens),
     };
     identity.before_artifact_write();
     std::fs::write(
@@ -125,7 +126,7 @@ pub(super) fn budget(
     let (stdout, stderr) = if needs_fit {
         let notice = format!(
             "[Butler compacted {} estimated tool-output tokens into a preview.]\nArtifact ID: {id}\nUse read_tool_output_artifact with search or a focused slice for omitted output.",
-            comma_count(raw_tokens as u64),
+            comma_count(crate::json::saturating_u64(raw_tokens)),
         );
         fit_preview(estimator, stdout_view, stderr_view, &notice, max_tokens)?
     } else if suppressed {
@@ -309,7 +310,7 @@ fn fit_preview(
             }
             estimate_output(estimator, notice, &stderr_text)
         },
-        (max as f64 * 0.45).floor() as usize,
+        crate::json::saturating_usize((max as f64 * 0.45).floor()),
     )?;
     let stderr_text = if stderr_limit > 0 {
         concat_exact("stderr preview:\n", stderr.prefix(stderr_limit))

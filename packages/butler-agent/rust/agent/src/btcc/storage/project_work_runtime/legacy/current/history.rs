@@ -310,13 +310,16 @@ pub(super) fn dispositions(
             let prior_sequence = checkpoint_index
                 .filter(|index| *index > 0)
                 .map_or(0, |index| {
-                    checkpoints[index - 1].to_result_sequence as usize
+                    usize::try_from(checkpoints[index - 1].to_result_sequence).unwrap_or(usize::MAX)
                 });
             let latest_checkpoint = checkpoint.map(|item| {
                 let mut value = item.checkpoint.clone();
                 value.referenced_result_refs = work
                     .result_refs
-                    .get(prior_sequence..item.to_result_sequence as usize)
+                    .get(
+                        prior_sequence
+                            ..usize::try_from(item.to_result_sequence).unwrap_or(usize::MAX),
+                    )
                     .unwrap_or(&[])
                     .iter()
                     .map(|v| v.result_ref.clone())
@@ -325,8 +328,8 @@ pub(super) fn dispositions(
             });
             let result_refs = work
                 .result_refs
-                .get(..result_sequence as usize)
-                .filter(|refs| refs.len() == result_sequence as usize)
+                .get(..usize::try_from(result_sequence).unwrap_or(usize::MAX))
+                .filter(|refs| refs.len() == usize::try_from(result_sequence).unwrap_or(usize::MAX))
                 .ok_or_else(|| invalid("project_work_legacy_disposition_result_missing"))?
                 .to_vec();
             let review = |subject| {

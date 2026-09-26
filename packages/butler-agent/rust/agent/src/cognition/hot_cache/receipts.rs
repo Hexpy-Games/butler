@@ -27,10 +27,13 @@ pub(super) fn record(
     let stats = db.join("vector-stats.json");
     let log = data_root.join("logs/memory.log");
     ensure_data_authority(data_root, &[memory_root, &db, &provenance, &stats, &log])?;
-    let graph_seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| error("hot_cache_clock_unavailable"))?
-        .as_secs() as i64;
+    let graph_seconds = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| error("hot_cache_clock_unavailable"))?
+            .as_secs(),
+    )
+    .unwrap_or(i64::MAX);
     if let Err(failure) = legacy_graph::extract_and_save(
         data_root,
         memory_root,
@@ -107,10 +110,13 @@ pub(super) fn record_legacy(input: LegacyReceiptInput<'_>) -> CognitionResult<()
         data_root,
         &[memory_root, &db, &provenance, &stats, temp, &log],
     )?;
-    let graph_seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| error("legacy_session_clock_unavailable"))?
-        .as_secs() as i64;
+    let graph_seconds = i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| error("legacy_session_clock_unavailable"))?
+            .as_secs(),
+    )
+    .unwrap_or(i64::MAX);
     let graph = legacy_graph::extract_and_save(
         data_root,
         memory_root,

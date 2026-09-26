@@ -142,7 +142,7 @@ pub(super) fn move_nodes(
             .into_iter()
             .enumerate()
             .map(|(index, mut node)| {
-                node.position = index as i64;
+                node.position = i64::try_from(index).unwrap_or(i64::MAX);
                 node
             })
             .collect::<Vec<_>>()

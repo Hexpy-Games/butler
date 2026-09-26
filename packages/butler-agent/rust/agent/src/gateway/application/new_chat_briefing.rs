@@ -120,7 +120,8 @@ fn local_minute(epoch_ms: i64) -> Result<u16, GatewayApplicationError> {
         0
     };
     let wall = epoch_ms + i64::from(offset) * 1000;
-    Ok((wall.rem_euclid(86_400_000) / 60_000) as u16)
+    // A day has 1440 minutes, so this always fits.
+    Ok(u16::try_from(wall.rem_euclid(86_400_000) / 60_000).unwrap_or_default())
 }
 
 fn generated_view(artifact: &Value, moment: &str, bucket: &str) -> Value {

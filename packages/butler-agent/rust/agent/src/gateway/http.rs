@@ -384,7 +384,7 @@ fn limit_param(value: Option<&String>) -> usize {
         .and_then(|value| javascript_number(value))
         .filter(|value| value.is_finite())
         .map_or(DEFAULT_PAGE_LIMIT, |value| {
-            value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64) as usize
+            crate::json::saturating_usize(value.floor().clamp(1.0, DEFAULT_PAGE_LIMIT as f64))
         })
 }
 

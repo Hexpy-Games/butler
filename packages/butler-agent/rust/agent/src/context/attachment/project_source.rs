@@ -25,7 +25,7 @@ pub(super) fn read(
     if !metadata.is_file() || metadata.len() != size_bytes {
         return Err(unavailable());
     }
-    let mut bytes = Vec::with_capacity(size_bytes as usize);
+    let mut bytes = Vec::with_capacity(usize::try_from(size_bytes).unwrap_or(usize::MAX));
     file.by_ref()
         .take(MAX_SOURCE_BYTES + 1)
         .read_to_end(&mut bytes)

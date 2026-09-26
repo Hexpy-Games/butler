@@ -215,10 +215,10 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
                     .ok_or_else(|| continuation_error("bounded_continuation_watermark_invalid"))
             })
             .transpose()?
-            .map_or(-1_i64, |value| value as i64);
+            .map_or(-1_i64, |value| i64::try_from(value).unwrap_or(i64::MAX));
         let (items, ordinals) =
             messages::bounded_items_with_ordinals(request.messages).map_err(continuation_error)?;
-        if response as i64 <= delivered
+        if i64::try_from(response).unwrap_or(i64::MAX) <= delivered
             || ordinals.iter().any(|value| *value >= response)
             || ordinals.windows(2).any(|pair| pair[1] < pair[0])
         {
@@ -230,7 +230,9 @@ fn openai_input(request: &ModelRoundRequest<'_>) -> Result<Value, crate::btcc::M
             items
                 .into_iter()
                 .zip(ordinals)
-                .filter_map(|(item, ordinal)| ((ordinal as i64) > delivered).then_some(item))
+                .filter_map(|(item, ordinal)| {
+                    (i64::try_from(ordinal).unwrap_or(i64::MAX) > delivered).then_some(item)
+                })
                 .collect(),
         ));
     }

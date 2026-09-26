@@ -242,5 +242,5 @@ fn duration_ms(start: &str, end: &str) -> Option<u64> {
     let end = chrono::DateTime::parse_from_rfc3339(end)
         .ok()?
         .timestamp_millis();
-    Some(end.saturating_sub(start).max(0) as u64)
+    Some(u64::try_from(end.saturating_sub(start).max(0)).unwrap_or_default())
 }

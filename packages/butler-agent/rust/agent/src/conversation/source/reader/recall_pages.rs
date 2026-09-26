@@ -48,21 +48,24 @@ pub(super) fn outcomes(
          ) ORDER BY rowid ASC LIMIT ?2"
     ).map_err(ConversationError::sqlite)?;
     let rows = statement
-        .query_map(params![after_row, capped(limit) as i64], |row| {
-            Ok((
-                RecallOutcomeRow {
-                    id: row.get(1)?,
-                    session_id: row.get(2)?,
-                    turn_id: row.get(3)?,
-                    generation: row.get(4)?,
-                    request_message_id: row.get(5)?,
-                    public_assistant_message_id: row.get(6)?,
-                },
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, Option<String>>(9)?,
-            ))
-        })
+        .query_map(
+            params![after_row, i64::try_from(capped(limit)).unwrap_or(i64::MAX)],
+            |row| {
+                Ok((
+                    RecallOutcomeRow {
+                        id: row.get(1)?,
+                        session_id: row.get(2)?,
+                        turn_id: row.get(3)?,
+                        generation: row.get(4)?,
+                        request_message_id: row.get(5)?,
+                        public_assistant_message_id: row.get(6)?,
+                    },
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                ))
+            },
+        )
         .map_err(ConversationError::sqlite)?;
     let mut output = Vec::new();
     for row in rows {
@@ -111,9 +114,10 @@ pub(super) fn recovered(
         )
         .map_err(ConversationError::sqlite)?;
     let ids = statement
-        .query_map(params![after_row, capped(limit) as i64], |row| {
-            row.get::<_, String>(0)
-        })
+        .query_map(
+            params![after_row, i64::try_from(capped(limit)).unwrap_or(i64::MAX)],
+            |row| row.get::<_, String>(0),
+        )
         .map_err(ConversationError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(ConversationError::sqlite)?;

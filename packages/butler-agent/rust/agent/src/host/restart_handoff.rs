@@ -108,7 +108,8 @@ pub(crate) async fn record_helper_terminal(
             owner_id: uuid::Uuid::new_v4().to_string(),
             host_id: host_id.clone(),
             process_id: std::process::id(),
-            process_started_at_ms: SystemIdentity.now_epoch_millis().max(0) as u64,
+            process_started_at_ms: u64::try_from(SystemIdentity.now_epoch_millis().max(0))
+                .unwrap_or_default(),
         },
         process_liveness: Arc::new(HandoffProcessLiveness { host_id }),
     })

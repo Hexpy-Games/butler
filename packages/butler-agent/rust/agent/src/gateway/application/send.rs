@@ -347,7 +347,7 @@ impl AppApplication {
             reply: None,
             replies: Vec::new(),
             turn: turns.turns.into_iter().find(|item| item.id == turn_id),
-            next_cursor: messages.next_cursor as u64,
+            next_cursor: crate::json::saturating_u64(messages.next_cursor),
         })
     }
 }

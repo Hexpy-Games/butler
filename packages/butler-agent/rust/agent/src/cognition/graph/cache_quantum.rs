@@ -302,11 +302,14 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
     Ok(())
 }
 fn pid_alive(pid: i64) -> bool {
-    if pid <= 0 || pid > i64::from(i32::MAX) {
+    let Ok(raw) = i32::try_from(pid) else {
+        return false;
+    };
+    if raw <= 0 {
         return false;
     }
     matches!(
-        nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(raw), None),
         Ok(()) | Err(nix::errno::Errno::EPERM)
     )
 }

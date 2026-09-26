@@ -21,8 +21,8 @@ fn valid_with_markers(units: &[u16], next_marker: &mut u32, forbidden: &[u16]) -
         match decoded {
             Ok(character) => valid.push(character),
             Err(error) => {
-                while forbidden.contains(&(*next_marker as u16))
-                    || units.contains(&(*next_marker as u16))
+                while forbidden.contains(&u16::try_from(*next_marker).unwrap_or(u16::MAX))
+                    || units.contains(&u16::try_from(*next_marker).unwrap_or(u16::MAX))
                 {
                     *next_marker += 1;
                 }

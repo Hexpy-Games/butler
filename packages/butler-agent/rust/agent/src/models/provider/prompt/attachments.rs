@@ -124,7 +124,9 @@ fn trim_text(text: &str, max_units: usize) -> String {
     }
     let marker = "\n[...attachment content trimmed...]\n";
     let marker_units = marker.encode_utf16().count();
-    let head_units = ((max_units.saturating_sub(marker_units)) as f64 * 0.65).floor() as usize;
+    let head_units = crate::json::saturating_usize(
+        ((max_units.saturating_sub(marker_units)) as f64 * 0.65).floor(),
+    );
     let tail_units = max_units.saturating_sub(marker_units + head_units);
     let head = utf16_prefix(normalized, head_units);
     let tail = utf16_suffix(normalized, tail_units);

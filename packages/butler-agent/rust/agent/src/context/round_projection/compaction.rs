@@ -130,10 +130,12 @@ impl CompactionState {
                 "current_context_exceeds_model_capacity",
             )));
         }
-        let summary_budget = (max_bytes * SUMMARY_RATIO)
-            .min((max_bytes - required_bytes) / 2.0)
-            .floor()
-            .max(0.0) as usize;
+        let summary_budget = crate::json::saturating_usize(
+            (max_bytes * SUMMARY_RATIO)
+                .min((max_bytes - required_bytes) / 2.0)
+                .floor()
+                .max(0.0),
+        );
         let mut boundary = active.map_or(1, |record| record.covered_units);
         let mut upper = units.len().saturating_sub(1);
         while boundary < upper {
@@ -229,11 +231,13 @@ async fn summarize_history(
     current: &mut String,
 ) -> Result<(), ContextProjectionError> {
     let sizing = producer.sizing().map_err(ContextProjectionError::Model)?;
-    let chunk_budget = max_bytes
-        .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
-        .mul_add(0.5, 0.0)
-        .floor()
-        .max(0.0) as usize;
+    let chunk_budget = crate::json::saturating_usize(
+        max_bytes
+            .min(sizing.as_ref().map_or(max_bytes, |sizing| sizing.max_bytes))
+            .mul_add(0.5, 0.0)
+            .floor()
+            .max(0.0),
+    );
     let mut chunks: VecDeque<_> = summary::utf8_ranges(history, chunk_budget).into();
     if chunks.is_empty() {
         chunks.push_back(0..0);

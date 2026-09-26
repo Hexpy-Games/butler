@@ -267,11 +267,14 @@ fn create_private_dir(path: &Path) -> CognitionResult<()> {
 }
 
 fn now_iso() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64;
+    let millis = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX);
     crate::js_date::format_iso_millis(millis)
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_owned())
 }

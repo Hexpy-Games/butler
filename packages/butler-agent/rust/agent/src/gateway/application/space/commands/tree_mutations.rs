@@ -76,7 +76,7 @@ pub(super) fn dissolve_group(
         .into_iter()
         .enumerate()
         .map(|(position, mut node)| {
-            node.position = position as i64;
+            node.position = i64::try_from(position).unwrap_or(i64::MAX);
             node
         })
         .collect::<Vec<_>>();
@@ -138,7 +138,7 @@ pub(super) fn group_sessions(
         .into_iter()
         .enumerate()
         .map(|(position, mut node)| {
-            node.position = position as i64;
+            node.position = i64::try_from(position).unwrap_or(i64::MAX);
             node
         })
         .collect::<Vec<_>>();

@@ -163,7 +163,8 @@ async fn run(
     semantic_tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
     maintenance_tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
-        let latest = cursor_signal.latest.load(Ordering::Relaxed) as i64;
+        let latest =
+            i64::try_from(cursor_signal.latest.load(Ordering::Relaxed)).unwrap_or(i64::MAX);
         if let Some(turn) = cursor_waits
             .iter()
             .find_map(|(turn, wake)| (*wake <= latest).then_some(turn.clone()))

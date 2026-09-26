@@ -109,7 +109,7 @@ pub(super) fn updates(options: &Value, fields: &[&str]) -> Result<Map<String, Va
             }
             let json_number =
                 if number.fract() == 0.0 && number >= i64::MIN as f64 && number < i64::MAX as f64 {
-                    Number::from(number as i64)
+                    Number::from(crate::json::saturating_i64(number))
                 } else {
                     Number::from_f64(number).ok_or_else(|| {
                         CliFailure::new("invalid_arguments", format!("--{field} must be a number"))

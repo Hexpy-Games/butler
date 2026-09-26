@@ -155,8 +155,10 @@ impl SessionWorkRepository {
                         summary: row.get(11)?,
                         action_progress,
                         checkpoint_updated_at: row.get(13)?,
-                        unresolved_blocker_count: row.get::<_, i64>(14)?.max(0) as u64,
-                        effect_count: row.get::<_, i64>(15)?.max(0) as u64,
+                        unresolved_blocker_count: u64::try_from(row.get::<_, i64>(14)?.max(0))
+                            .unwrap_or_default(),
+                        effect_count: u64::try_from(row.get::<_, i64>(15)?.max(0))
+                            .unwrap_or_default(),
                     })
                 })
                 .map_err(StorageError::sqlite)?

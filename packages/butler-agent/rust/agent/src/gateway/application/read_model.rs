@@ -451,7 +451,7 @@ fn require_chat(connection: &Connection, chat_id: &str) -> Result<(), AppStorage
 
 fn message_cursor(value: f64) -> u64 {
     if value.is_finite() && value > 0.0 {
-        value.floor() as u64
+        crate::json::saturating_u64(value.floor())
     } else {
         0
     }

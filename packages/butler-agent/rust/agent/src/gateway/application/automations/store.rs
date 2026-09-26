@@ -65,7 +65,7 @@ impl AppApplication {
         let next = self
             .dependencies
             .identity_clock
-            .iso_after_millis(input.interval_seconds as u64 * 1000);
+            .iso_after_millis(u64::try_from(input.interval_seconds).unwrap_or_default() * 1000);
         let subscribers = self.subscribers.clone();
         self.storage.execute(move |db| {
             let (kind, _) = records::target(db, input.target_session_id.trim())?;
@@ -99,7 +99,7 @@ impl AppApplication {
             if state != "enabled" && state != "paused" {
                 return Err(AppStorageError::new("automation_state_invalid", "Automation state must be enabled or paused."));
             }
-            let next = if state == "enabled" { Some(clock.iso_after_millis(seconds as u64 * 1000)) } else { old.next };
+            let next = if state == "enabled" { Some(clock.iso_after_millis(u64::try_from(seconds).unwrap_or_default() * 1000)) } else { old.next };
             db.execute(
                 "UPDATE app_automations SET title=?1,prompt_body=?2,target_kind=?3,target_session_id=?4,interval_seconds=?5,state=?6,next_run_at=?7,updated_at=?8 WHERE id=?9",
                 params![title,prompt,kind,target_id,seconds,state,next,now,id],

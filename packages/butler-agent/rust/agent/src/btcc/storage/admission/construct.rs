@@ -138,10 +138,13 @@ fn insert_initial_turn(
         == Some("cancelled_before_admission");
     let mut admitted_model = model.clone();
     let route = admitted_model.shift_remove("modelRoute");
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| StorageError::new("clock_before_epoch", error.to_string()))?
-        .as_millis() as u64;
+    let now_ms = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| StorageError::new("clock_before_epoch", error.to_string()))?
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
     let budget = limits
         .map(|limits| {
             let context_window = model.get("contextWindowTokens").and_then(Value::as_f64);

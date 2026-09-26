@@ -168,7 +168,7 @@ fn relocation_request(value: &Value) -> Result<AppRelocateSessionRequest, HttpEr
         .filter(|value| {
             value.is_finite() && value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0
         })
-        .map(|value| value as i64)
+        .map(crate::json::saturating_i64)
         .ok_or_else(invalid_relocation)?;
     let target_key = match object.get("targetKey") {
         Some(Value::Null) => None,

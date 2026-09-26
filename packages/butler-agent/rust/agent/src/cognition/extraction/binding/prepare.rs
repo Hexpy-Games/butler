@@ -35,7 +35,11 @@ pub(in crate::cognition) async fn prepare(
         let subject = item
             .get("subject")
             .and_then(Value::as_u64)
-            .and_then(|i| meaning.entities.get(i as usize))
+            .and_then(|i| {
+                meaning
+                    .entities
+                    .get(usize::try_from(i).unwrap_or(usize::MAX))
+            })
             .map(|e| e.name.as_str())
             .unwrap_or("");
         let cue = [
@@ -109,7 +113,7 @@ pub(in crate::cognition) async fn prepare(
         let mut evidence = Vec::new();
         for id in &target.evidence {
             let passage = passages
-                .get(*id as usize)
+                .get(crate::json::saturating_usize(*id))
                 .ok_or_else(|| error("memory_extract_invalid_ref"))?;
             let reference = format!("{}u{id}", target.local_ref);
             current_refs.insert(reference.clone());

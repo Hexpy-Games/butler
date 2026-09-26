@@ -52,7 +52,8 @@ impl ProfileHostFacts for Host {
         format!("id-{}", self.sequence.fetch_add(1, Ordering::SeqCst))
     }
     fn now_epoch_millis(&self) -> i64 {
-        1_700_000_000_000 + self.sequence.fetch_add(1, Ordering::SeqCst) as i64
+        1_700_000_000_000
+            + i64::try_from(self.sequence.fetch_add(1, Ordering::SeqCst)).unwrap_or(i64::MAX)
     }
     fn now_iso(&self) -> String {
         "2023-11-14T22:13:20.000Z".into()
@@ -125,8 +126,8 @@ impl CanonicalProfileSourceReader for Reader {
                     .as_ref()
                     .is_none_or(|since| message.created_at >= *since)
             })
-            .skip(scan.offset.max(0.0).floor() as usize)
-            .take(scan.limit.max(0.0).floor() as usize)
+            .skip(crate::json::saturating_usize(scan.offset.max(0.0).floor()))
+            .take(crate::json::saturating_usize(scan.limit.max(0.0).floor()))
             .collect())
     }
     fn read_message(&mut self, id: &str) -> ProfileResult<Option<CanonicalProfileMessage>> {

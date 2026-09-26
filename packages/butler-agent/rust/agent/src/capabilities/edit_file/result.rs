@@ -45,7 +45,7 @@ fn single_result(result: Result<EditedFile, EditFailure>, elapsed: Duration) -> 
                 "start_line":file.start_line,"replacements":1,"bytes":committed.bytes,
                 "before_sha256":committed.before_sha256,"after_sha256":committed.after_sha256,
                 "atomic_write":true,
-                "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+                "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("edit_file",
                     &format!("Edited workspace file {}", committed.path),&reference),
@@ -201,7 +201,7 @@ fn batch_result(result: &BatchResult, elapsed: Duration) -> Value {
         .collect();
     json!({"ok":true,"changed":!applied.is_empty(),"unchanged":unchanged,
         "files":applied,"applied":applied,"changed_files":changed_files,
-        "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+        "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
             "files_written":result.applied.len(),"bytes_written":bytes},
         "evidence_receipts":if applied.is_empty(){Vec::new()}else{
             mutation_evidence::execution("edit_file",

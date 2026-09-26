@@ -109,7 +109,9 @@ pub(super) fn read(
         diagnostics.push("graph memory has no indexed associations yet".into());
     }
     if ingestion_lag_ms.is_some_and(|lag| lag > 60 * 60 * 1_000) {
-        let minutes = (ingestion_lag_ms.unwrap_or_default() as f64 / 60_000.0).round() as i64;
+        let minutes = crate::json::saturating_i64(
+            (ingestion_lag_ms.unwrap_or_default() as f64 / 60_000.0).round(),
+        );
         diagnostics.push(format!("memory ingestion lag is {minutes} minute(s)"));
     }
     diagnostics.extend(maintenance.diagnostics.iter().cloned());
@@ -272,8 +274,12 @@ fn scan_files(
 fn system_time_millis(time: Option<std::time::SystemTime>) -> Option<i64> {
     let time = time?;
     match time.duration_since(std::time::UNIX_EPOCH) {
-        Ok(duration) => Some(duration.as_millis().min(i64::MAX as u128) as i64),
-        Err(error) => Some(-(error.duration().as_millis().min(i64::MAX as u128) as i64)),
+        Ok(duration) => {
+            Some(i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX))
+        }
+        Err(error) => Some(
+            -i64::try_from(error.duration().as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX),
+        ),
     }
 }
 

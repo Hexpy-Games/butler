@@ -135,10 +135,13 @@ pub(crate) fn extract_legacy_import_transcript(
     project: &str,
 ) -> CognitionResult<usize> {
     let memory_root = paths.memory_root(data_root);
-    let timestamp = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| error("memory_graph_unavailable"))?
-        .as_secs() as i64;
+    let timestamp = i64::try_from(
+        SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| error("memory_graph_unavailable"))?
+            .as_secs(),
+    )
+    .unwrap_or(i64::MAX);
     legacy_graph::extract_and_save(
         data_root,
         &memory_root,

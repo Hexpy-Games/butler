@@ -255,7 +255,8 @@ async fn operation(
             vector.code = Some("embedding_not_configured".into());
         } else if let Some(port) = vector_port {
             let vector_deadline = deadline_at.min(clock() + 750);
-            let remaining = vector_deadline.saturating_sub(clock()) as u64;
+            let remaining =
+                u64::try_from(vector_deadline.saturating_sub(clock())).unwrap_or_default();
             let result = tokio::select! {
                 ()=shutdown.cancelled()=>return Err(closed()),
                 result=tokio::time::timeout(std::time::Duration::from_millis(remaining),

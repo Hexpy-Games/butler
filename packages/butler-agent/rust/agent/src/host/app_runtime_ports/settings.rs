@@ -250,7 +250,7 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
         context_window_tokens: source
             .context_window_tokens
             .filter(|value| value.is_finite() && *value > 0.0)
-            .map(|value| value.trunc() as u64),
+            .map(|value| crate::json::saturating_u64(value.trunc())),
         aliases: source.aliases.clone().unwrap_or_default().into(),
         runtime_supported: source.runtime_supported,
         registered: source.registered == Some(true),

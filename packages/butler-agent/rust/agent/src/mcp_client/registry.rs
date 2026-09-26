@@ -84,7 +84,7 @@ pub(super) fn now_iso() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     chrono::DateTime::<chrono::Utc>::from_timestamp(
-        elapsed.as_secs() as i64,
+        i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
         elapsed.subsec_nanos(),
     )
     .map(|date| date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))

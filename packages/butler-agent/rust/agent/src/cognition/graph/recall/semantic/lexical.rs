@@ -34,13 +34,15 @@ pub(super) fn select(
     );
     let mut scope_args = claim.args.clone();
     scope_args.extend(source.args.iter().cloned());
-    let corpus_size = db
-        .query_row(
+    let corpus_size = usize::try_from(
+        db.query_row(
             &corpus_sql,
             params_from_iter(scope_args.iter().cloned()),
             |row| row.get::<_, i64>(0),
         )
-        .map_err(db_error)? as usize;
+        .map_err(db_error)?,
+    )
+    .unwrap_or_default();
 
     let posting_sql = format!(
         "SELECT DISTINCT p.node_id,p.source_id,p.surface_original
@@ -111,7 +113,7 @@ pub(super) fn select(
             .map_err(db_error)?
         {
             let (gram, count) = row.map_err(db_error)?;
-            df.insert(gram, count as usize);
+            df.insert(gram, usize::try_from(count).unwrap_or_default());
         }
     }
     if query_grams.iter().any(|gram| !df.contains_key(gram)) {

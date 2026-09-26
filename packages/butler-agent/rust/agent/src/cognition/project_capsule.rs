@@ -219,11 +219,14 @@ pub(crate) fn check_active(
 }
 
 fn now_epoch_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128),
+    )
+    .unwrap_or(i64::MAX)
 }
 
 fn unavailable_lease(cancellation: &CancellationToken, deadline: i64) -> CognitionError {

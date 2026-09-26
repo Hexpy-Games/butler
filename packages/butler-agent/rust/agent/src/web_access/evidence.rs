@@ -327,7 +327,7 @@ pub(super) fn now_iso() -> String {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| {
-            duration.as_millis().min(i64::MAX as u128) as i64
+            i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
         });
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
         .map(|value| value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))

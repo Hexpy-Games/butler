@@ -32,12 +32,15 @@ pub(super) fn read(
         .offset_chars
         .filter(|value| value.is_finite())
         .map(nonnegative_trunc);
-    let limit_lines = input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0) as usize;
-    let max_tokens = input
-        .max_tokens
-        .unwrap_or(1_200.0)
-        .trunc()
-        .clamp(50.0, 8_000.0) as usize;
+    let limit_lines =
+        crate::json::saturating_usize(input.limit_lines.unwrap_or(80.0).trunc().clamp(1.0, 500.0));
+    let max_tokens = crate::json::saturating_usize(
+        input
+            .max_tokens
+            .unwrap_or(1_200.0)
+            .trunc()
+            .clamp(50.0, 8_000.0),
+    );
     let stdout_has_text = !trim_js_whitespace(stdout).is_empty();
     let stderr_has_text = !trim_js_whitespace(stderr).is_empty();
     let stdout_tokens = if input.stream == ArtifactStream::Both && stderr_has_text {
@@ -134,7 +137,7 @@ fn failure(error: &'static str) -> FocusedToolOutputArtifactRead {
 }
 
 fn nonnegative_trunc(value: f64) -> usize {
-    value.trunc().max(0.0) as usize
+    crate::json::saturating_usize(value.trunc().max(0.0))
 }
 
 fn read_artifact(path: &Path) -> Option<Value> {

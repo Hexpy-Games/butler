@@ -230,7 +230,7 @@ fn non_negative_integer(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|value| value.is_finite() && *value >= 0.0)
-    .map(|value| value.round() as u64)
+    .map(|value| crate::json::saturating_u64(value.round()))
 }
 
 fn decision_key(key: &str) -> bool {

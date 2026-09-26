@@ -253,11 +253,14 @@ fn stage(
             .map_err(io_error)?;
         let canonical_bytes = fs::metadata(&snapshot_path).map_err(io_error)?.len();
         let canonical_sha256 = hash_file(&snapshot_path)?;
-        let duration_ms = start
-            .elapsed()
-            .unwrap_or_default()
-            .as_millis()
-            .min(u128::from(u64::MAX)) as u64;
+        let duration_ms = u64::try_from(
+            start
+                .elapsed()
+                .unwrap_or_default()
+                .as_millis()
+                .min(u128::from(u64::MAX)),
+        )
+        .unwrap_or(u64::MAX);
         let _ = generation_id;
         Ok(Staged {
             source_inventory_hash: live.hash,

@@ -18,7 +18,7 @@ pub(super) fn project(
 ) -> Result<Value, WorkRecordReadError> {
     let limit = match limit {
         Some(value) if value.is_nan() => 0,
-        Some(value) => value.trunc().clamp(1.0, 25.0) as usize,
+        Some(value) => crate::json::saturating_usize(value.trunc().clamp(1.0, 25.0)),
         None => 10,
     };
     let tasks = tasks::summaries(tasks_root, collation)?;

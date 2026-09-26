@@ -109,7 +109,7 @@ pub(super) async fn run(
         .unwrap_or_else(|| "unavailable".into());
     let human = format!(
         "Context estimate for {model_ref}: budget={} messages={messages_text} total={}; threshold={}.",
-        budget.context_window_tokens as u64,
+        crate::json::saturating_u64(budget.context_window_tokens),
         total
             .map(|value| value.to_string())
             .unwrap_or_else(|| "unavailable".into()),

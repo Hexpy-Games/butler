@@ -210,7 +210,7 @@ pub(super) fn clear(data_root: &Path) -> ProfileResult<ClearProfilingResult> {
         db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get::<_, i64>(0)
         })
-        .map(|value| value.max(0) as usize)
+        .map(|value| usize::try_from(value.max(0)).unwrap_or_default())
         .map_err(db_error)
     };
     let result = ClearProfilingResult {
@@ -236,7 +236,7 @@ pub(super) fn write_projection(
         "INSERT INTO runtime_projection(id,version,mode,payload_json,updated_at)
          VALUES('active',?1,?2,?3,?4) ON CONFLICT(id) DO UPDATE SET
          version=excluded.version,mode=excluded.mode,payload_json=excluded.payload_json,updated_at=excluded.updated_at",
-        params![value.version as i64, value.mode, serde_json::to_string(value).map_err(json_error)?, value.updated_at],
+        params![crate::json::saturating_i64(value.version), value.mode, serde_json::to_string(value).map_err(json_error)?, value.updated_at],
     ).map_err(db_error)?;
     Ok(())
 }

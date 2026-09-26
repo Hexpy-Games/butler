@@ -101,7 +101,13 @@ impl CognitionWriteCoordinator {
             let wait = if remaining.is_nan() {
                 Duration::ZERO
             } else {
-                Duration::from_millis(remaining.min(20.0) as u64)
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "clamped to (0, 20] milliseconds above"
+                )]
+                let millis = remaining.min(20.0) as u64;
+                Duration::from_millis(millis)
             };
             if let Some(cancellation) = &request.cancellation {
                 tokio::select! {

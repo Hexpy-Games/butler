@@ -146,7 +146,7 @@ fn decode(cursor: &str) -> CognitionResult<WireCursor> {
     Ok(WireCursor {
         schema: schema.into(),
         key: key.into(),
-        offset: offset as u64,
+        offset: crate::json::saturating_u64(offset),
     })
 }
 
@@ -167,7 +167,7 @@ impl CursorStore {
         state.touch(&wire.key);
         Ok(Page {
             key: wire.key,
-            offset: wire.offset as usize,
+            offset: usize::try_from(wire.offset).unwrap_or(usize::MAX),
             inventory,
         })
     }

@@ -51,7 +51,7 @@ pub(super) fn unsigned_count(value: Option<&Value>) -> Option<u64> {
                 && number >= 0.0
                 && number.fract() == 0.0
                 && number < u64::MAX as f64)
-                .then_some(number as u64)
+                .then_some(crate::json::saturating_u64(number))
         })
     })
 }

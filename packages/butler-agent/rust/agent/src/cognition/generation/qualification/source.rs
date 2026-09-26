@@ -135,7 +135,7 @@ pub(super) fn valid_source_read_evidence(binding: &SourceBinding, evidence: &Sou
         return false;
     }
     row.byte_start >= 0
-        && row.byte_end <= canonical.bytes as i64
+        && row.byte_end <= i64::try_from(canonical.bytes).unwrap_or(i64::MAX)
         && row.byte_start < row.byte_end
         && evidence.returned_text == canonical.text
 }

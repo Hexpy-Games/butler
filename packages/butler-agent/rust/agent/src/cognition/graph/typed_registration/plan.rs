@@ -47,8 +47,8 @@ pub(super) fn validate(input: &TypedRegistrationInput<'_>) -> CognitionResult<()
         {
             return Err(source_changed());
         }
-        let start = row.byte_start as usize;
-        let end = row.byte_end as usize;
+        let start = crate::json::saturating_usize(row.byte_start);
+        let end = crate::json::saturating_usize(row.byte_end);
         if start != expected_start {
             return Err(source_changed());
         }

@@ -17,7 +17,7 @@ pub(super) fn normalize_limit(value: Option<f64>, fallback: u64, max: u64) -> u6
     let Some(value) = value.filter(|value| value.is_finite()) else {
         return fallback;
     };
-    value.floor().clamp(1.0, max as f64) as u64
+    crate::json::saturating_u64(value.floor().clamp(1.0, max as f64))
 }
 
 pub(super) fn next_seq(

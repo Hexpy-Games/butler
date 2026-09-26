@@ -191,7 +191,7 @@ fn normalized_limit(limit: Option<f64>) -> usize {
     if value.is_nan() {
         0
     } else {
-        value.clamp(1.0, 10.0) as usize
+        crate::json::saturating_usize(value.clamp(1.0, 10.0))
     }
 }
 

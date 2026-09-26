@@ -121,10 +121,11 @@ pub(super) fn deadline_instant(epoch_ms: Option<i64>) -> CognitionResult<Option<
         .duration_since(UNIX_EPOCH)
         .map_err(|_| error("embed_request_deadline"))?
         .as_millis();
-    if epoch_ms <= 0 || epoch_ms as u128 <= now_ms {
+    if epoch_ms <= 0 || u128::try_from(epoch_ms).unwrap_or_default() <= now_ms {
         return Err(error("embed_request_deadline"));
     }
-    let remaining = (epoch_ms as u128 - now_ms).min(u128::from(u64::MAX)) as u64;
+    let remaining =
+        u64::try_from(u128::try_from(epoch_ms).unwrap_or_default() - now_ms).unwrap_or(u64::MAX);
     Ok(Instant::now().checked_add(Duration::from_millis(remaining)))
 }
 

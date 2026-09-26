@@ -85,7 +85,8 @@ impl SearchProvider for TavilyWebSearchProvider {
             Ok(SearchOutput::direct(
                 self.id(),
                 results,
-                started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+                u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
+                    .unwrap_or(u64::MAX),
             ))
         }
         .boxed()

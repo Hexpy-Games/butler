@@ -275,7 +275,7 @@ fn schedule(
                 .ok_or_else(|| {
                     invalid("create_automation interval schedule requires interval_minutes")
                 })?;
-            let interval_minutes = number.trunc() as i64;
+            let interval_minutes = crate::json::saturating_i64(number.trunc());
             if !number.is_finite() || interval_minutes < 1 {
                 return Err(invalid("automation interval_minutes must be at least 1"));
             }

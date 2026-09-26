@@ -144,7 +144,7 @@ fn numeric_option(args: &[String], option: &str, fallback: usize, max: usize) ->
     if !value.is_finite() || value < 0.0 {
         return fallback;
     }
-    (value.trunc() as usize).min(max)
+    crate::json::saturating_usize(value.trunc()).min(max)
 }
 
 fn string(value: &Value, key: &str) -> String {

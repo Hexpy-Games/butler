@@ -328,8 +328,10 @@ fn validate_quotes(
             .find(|unit| unit.ref_id == quote.unit_ref)
             && let Some(span) = &context.source_span
             && current.contains(span.source_ref.as_str())
-            && start < span.prefix_bytes as usize + (span.focus_end - span.focus_start) as usize
-            && end > span.prefix_bytes as usize
+            && start
+                < crate::json::saturating_usize(span.prefix_bytes)
+                    + crate::json::saturating_usize(span.focus_end - span.focus_start)
+            && end > crate::json::saturating_usize(span.prefix_bytes)
         {
             has_current = true;
         }

@@ -353,7 +353,7 @@ fn integer_value(value: Option<&Value>) -> Option<u64> {
         _ => None,
     }
     .filter(|value| value.is_finite() && *value >= 0.0)
-    .map(|value| value.floor() as u64)
+    .map(|value| crate::json::saturating_u64(value.floor()))
 }
 fn optional(value: Option<&Value>) -> Option<String> {
     let value = value?;

@@ -137,5 +137,5 @@ fn http_error(provider: &str, status: u16) -> WebAccessError {
 }
 
 fn elapsed_ms(started: Instant) -> u64 {
-    started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+    u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX)
 }

@@ -225,7 +225,7 @@ impl AppApplication {
             Some(
                 self.dependencies
                     .identity_clock
-                    .iso_after_millis(row.interval as u64 * 1000),
+                    .iso_after_millis(u64::try_from(row.interval).unwrap_or_default() * 1000),
             )
         } else {
             row.next.clone()

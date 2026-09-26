@@ -382,7 +382,8 @@ fn data(frame: &str) -> Option<String> {
 
 fn merge_tool_calls(output: &mut Vec<Value>, deltas: &[Value]) {
     for delta in deltas {
-        let index = delta.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let index = usize::try_from(delta.get("index").and_then(Value::as_u64).unwrap_or(0))
+            .unwrap_or(usize::MAX);
         while output.len() <= index {
             output.push(serde_json::json!({"id":"","type":"function","function":{"name":"","arguments":""}}));
         }

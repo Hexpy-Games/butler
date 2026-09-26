@@ -142,7 +142,7 @@ impl SearchProvider for CodexSubscriptionWebSearchProvider {
                     .is_empty()
                     .then(|| bounded_overview(&answer))
                     .flatten(),
-                duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+                duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX),
                 provider: self.id().to_owned(),
                 search_requests: 1,
                 search_warnings: Vec::new(),

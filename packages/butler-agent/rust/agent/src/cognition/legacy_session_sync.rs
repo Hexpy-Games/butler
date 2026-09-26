@@ -62,9 +62,11 @@ impl LegacySessionOffsets {
                     key.clone(),
                     LegacySessionOffset {
                         session_id: session_id.to_owned(),
-                        last_line: last_line as usize,
-                        byte_offset: item.get("byteOffset").and_then(Value::as_u64).unwrap_or(0)
-                            as usize,
+                        last_line: usize::try_from(last_line).unwrap_or(usize::MAX),
+                        byte_offset: usize::try_from(
+                            item.get("byteOffset").and_then(Value::as_u64).unwrap_or(0),
+                        )
+                        .unwrap_or(usize::MAX),
                     },
                 );
             }

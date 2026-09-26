@@ -397,7 +397,8 @@ mod tests {
             let time = if millis < 0 {
                 SystemTime::UNIX_EPOCH - Duration::from_millis(millis.unsigned_abs())
             } else {
-                SystemTime::UNIX_EPOCH + Duration::from_millis(millis as u64)
+                SystemTime::UNIX_EPOCH
+                    + Duration::from_millis(u64::try_from(millis).unwrap_or_default())
             };
             assert_eq!(iso_timestamp(time), expected);
         }

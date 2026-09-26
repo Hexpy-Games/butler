@@ -131,7 +131,8 @@ pub(super) fn read_first_visible(data_root: &Path, since_ts: Option<f64>) -> Val
             if durations.len() < DURATION_SAMPLE_LIMIT {
                 durations.push(duration);
             } else {
-                durations[(events as usize) % DURATION_SAMPLE_LIMIT] = duration;
+                durations[usize::try_from(events).unwrap_or(usize::MAX) % DURATION_SAMPLE_LIMIT] =
+                    duration;
             }
         }
         if let Some(signal) = event.pointer("/dimensions/signal").and_then(Value::as_str) {

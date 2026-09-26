@@ -145,7 +145,7 @@ fn legacy_schema() -> SchemaRef {
             "vector",
             DataType::FixedSizeList(
                 Arc::new(Field::new("item", DataType::Float32, true)),
-                VECTOR_DIMENSION as i32,
+                i32::try_from(VECTOR_DIMENSION).unwrap_or(i32::MAX),
             ),
             true,
         ),
@@ -168,7 +168,7 @@ fn record_batch(rows: &[LegacyVectorRow], schema: &SchemaRef) -> CognitionResult
     let vectors = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
         rows.iter()
             .map(|row| Some(row.vector.iter().copied().map(Some).collect::<Vec<_>>())),
-        VECTOR_DIMENSION as i32,
+        i32::try_from(VECTOR_DIMENSION).unwrap_or(i32::MAX),
     );
     let arrays: Vec<ArrayRef> = vec![
         strings(|row| &row.id),

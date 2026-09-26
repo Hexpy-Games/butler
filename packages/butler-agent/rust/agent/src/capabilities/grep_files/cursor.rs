@@ -56,7 +56,7 @@ pub(super) fn decode(value: &Value) -> Option<GrepCursor> {
             if !number.is_finite() || number < 1.0 || number.fract() != 0.0 {
                 return None;
             }
-            number as usize
+            crate::json::saturating_usize(number)
         })),
     }?;
     let window_start = optional_path("window_start_path")?;

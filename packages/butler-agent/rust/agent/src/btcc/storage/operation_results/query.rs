@@ -95,7 +95,7 @@ LIMIT ?11"
         .map_err(StorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-    let limit = input.limit.max(0.0) as usize;
+    let limit = crate::json::saturating_usize(input.limit.max(0.0));
     let has_more = entries.len() > limit;
     entries.truncate(limit);
     let next_cursor = has_more

@@ -246,7 +246,7 @@ pub(super) async fn execute(
         result.get("ok") == Some(&Value::Bool(true))
             && result.get("skipped") != Some(&Value::Bool(true))
     });
-    let elapsed = started.elapsed().as_millis() as u64;
+    let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let capability_receipts = evidence::read_capability(ok, truncated, &results);
     let mut result = json!({ "ok": ok, "files_requested": requests.len(), "files_read": files_read,
         "bytes_read": total_input, "output_bytes": total_output, "truncated": truncated,

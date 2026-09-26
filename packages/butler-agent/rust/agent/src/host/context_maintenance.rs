@@ -249,7 +249,9 @@ fn write_state(path: &std::path::Path, state: &Value) -> std::io::Result<()> {
 fn current_epoch_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |time| time.as_millis() as i64)
+        .map_or(0, |time| {
+            i64::try_from(time.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 fn iso_at(now_ms: i64) -> String {

@@ -329,7 +329,7 @@ impl PublicMemorySnapshot {
         } else {
             " ORDER BY m.created_at ASC,m.id ASC LIMIT ?"
         });
-        values.push((limit as i64).into());
+        values.push(i64::try_from(limit).unwrap_or(i64::MAX).into());
         let mut statement = self
             .reader
             .connection()?

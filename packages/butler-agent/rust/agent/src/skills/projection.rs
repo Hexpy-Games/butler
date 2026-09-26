@@ -18,15 +18,11 @@ const MAX_SKILL_NAMES: usize = 48;
 pub(super) fn loaded_names(data: &Path, session: &str, turn: Option<&str>) -> Option<Vec<String>> {
     let safe: String = session
         .encode_utf16()
-        .map(|unit| {
-            if unit <= 0x7f
-                && ((unit as u8).is_ascii_alphanumeric()
-                    || [b'.', b'_', b'-'].contains(&(unit as u8)))
-            {
-                char::from_u32(unit.into()).unwrap_or('_')
-            } else {
-                '_'
+        .map(|unit| match u8::try_from(unit) {
+            Ok(byte) if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-') => {
+                char::from(byte)
             }
+            _ => '_',
         })
         .collect();
     let path = data.join("transcripts").join(format!("{safe}.jsonl"));
@@ -41,7 +37,7 @@ fn latest_names(path: &Path, turn: Option<&str>) -> Option<Vec<String>> {
     let mut ended_with_newline = false;
     let mut chunk = [0_u8; 32 * 1024];
     while remaining > 0 {
-        let count = remaining.min(chunk.len() as u64) as usize;
+        let count = usize::try_from(remaining.min(chunk.len() as u64)).unwrap_or(usize::MAX);
         remaining -= count as u64;
         file.seek(SeekFrom::Start(remaining)).ok()?;
         file.read_exact(&mut chunk[..count]).ok()?;

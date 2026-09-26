@@ -265,11 +265,14 @@ fn stage_snapshot(
     }
     let bytes = fs::metadata(&canonical).map_err(io_error)?.len();
     let sha256 = hash_file(&canonical)?;
-    let duration_ms = started
-        .elapsed()
-        .unwrap_or_default()
-        .as_millis()
-        .min(u128::from(u64::MAX)) as u64;
+    let duration_ms = u64::try_from(
+        started
+            .elapsed()
+            .unwrap_or_default()
+            .as_millis()
+            .min(u128::from(u64::MAX)),
+    )
+    .unwrap_or(u64::MAX);
     Ok(Snapshot {
         path: published,
         sha256,

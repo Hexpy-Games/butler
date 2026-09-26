@@ -53,7 +53,7 @@ fn integer(value: Option<&Value>, fallback: usize, min: usize, max: usize) -> us
         return fallback;
     };
     if number.is_finite() {
-        number.floor().max(min as f64).min(max as f64) as usize
+        crate::json::saturating_usize(number.floor().max(min as f64).min(max as f64))
     } else {
         fallback
     }

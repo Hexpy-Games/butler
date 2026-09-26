@@ -39,7 +39,7 @@ pub(super) fn canonicalize(
         .get("max_simultaneous_workers")
         .and_then(|value| value.as_f64())
         .filter(|value| value.fract() == 0.0 && (1.0..=10.0).contains(value))
-        .map(|value| value as u64)
+        .map(crate::json::saturating_u64)
         .unwrap_or(DEFAULT_MAX_WORKERS);
     let profiles_value = Value::Array(profiles);
     let changed = has_legacy

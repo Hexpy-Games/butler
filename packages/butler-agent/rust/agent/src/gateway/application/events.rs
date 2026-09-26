@@ -103,7 +103,7 @@ pub(super) fn append_unpublished(
             params![event_type, turn_id, payload_json, created_at],
         )
         .map_err(AppStorageError::sqlite)?;
-    let id = connection.last_insert_rowid() as u64;
+    let id = u64::try_from(connection.last_insert_rowid()).unwrap_or_default();
     let event = AppEventEnvelope {
         protocol_version: APP_PROTOCOL_VERSION.to_owned(),
         id,

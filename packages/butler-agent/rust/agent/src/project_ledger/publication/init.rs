@@ -269,7 +269,12 @@ fn process_started_ms(pid: u32) -> Option<i64> {
 fn process_alive(pid: u32) -> bool {
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
-    kill(Pid::from_raw(pid as i32), None).is_ok()
+    // A pid outside 1..=i32::MAX names no single process (0 and negative
+    // values address process groups).
+    let Ok(pid) = i32::try_from(pid) else {
+        return false;
+    };
+    pid > 0 && kill(Pid::from_raw(pid), None).is_ok()
 }
 #[cfg(not(unix))]
 fn process_alive(_pid: u32) -> bool {
@@ -281,8 +286,11 @@ fn now_iso() -> Result<String, ProjectWorkPublicationError> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| io())?;
-    let date = DateTime::from_timestamp(elapsed.as_secs() as i64, elapsed.subsec_nanos())
-        .ok_or_else(io)?;
+    let date = DateTime::from_timestamp(
+        i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+        elapsed.subsec_nanos(),
+    )
+    .ok_or_else(io)?;
     Ok(date.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
 }
 

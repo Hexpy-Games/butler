@@ -62,7 +62,7 @@ pub(super) async fn get(
                 db.query_row("SELECT COALESCE(MAX(rowid),0) FROM messages", [], |row| {
                     row.get::<_, i64>(0)
                 })
-                .map(|rowid| rowid.max(0) as u64)
+                .map(|rowid| u64::try_from(rowid.max(0)).unwrap_or_default())
                 .map_err(AppStorageError::sqlite)
             })
             .await
@@ -259,7 +259,13 @@ fn read_public_messages(
         .map_err(AppStorageError::sqlite)?;
     statement
         .query_map(
-            params![project_id, watermark as i64, before_at, before_id, limit],
+            params![
+                project_id,
+                i64::try_from(watermark).unwrap_or(i64::MAX),
+                before_at,
+                before_id,
+                limit
+            ],
             |row| {
                 let id: String = row.get(0)?;
                 let chat_id: String = row.get(1)?;

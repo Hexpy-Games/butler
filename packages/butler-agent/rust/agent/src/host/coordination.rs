@@ -68,7 +68,7 @@ pub(super) fn profile_process_status(pid: f64) -> CognitionProcessStatus {
     {
         return CognitionProcessStatus::Uncertain;
     }
-    probe_result(kill(Pid::from_raw(pid as i32), None))
+    probe_result(kill(Pid::from_raw(crate::json::saturating_i32(pid)), None))
 }
 
 #[cfg(test)]

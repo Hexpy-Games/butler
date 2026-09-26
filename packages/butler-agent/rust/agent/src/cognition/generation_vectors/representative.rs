@@ -211,7 +211,7 @@ fn valid_identity(
         || keys
             .iter()
             .any(|item| item.as_str().is_none_or(str::is_empty))
-        || receipt["row_count"].as_u64()? as usize != unique.len()
+        || usize::try_from(receipt["row_count"].as_u64()?).unwrap_or(usize::MAX) != unique.len()
         || !unique.contains(key.as_str())
     {
         return None;

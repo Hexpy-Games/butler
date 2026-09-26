@@ -194,7 +194,7 @@ fn integer_byte_offset(value: f64) -> CognitionResult<i64> {
     if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > i64::MAX as f64 {
         Err(source_changed())
     } else {
-        Ok(value as i64)
+        Ok(crate::json::saturating_i64(value))
     }
 }
 

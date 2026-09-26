@@ -116,7 +116,7 @@ pub(super) fn decode_buffer_base64url(raw: &str) -> Vec<u8> {
         count += 6;
         if count >= 8 {
             count -= 8;
-            decoded.push((bits >> count) as u8);
+            decoded.push(u8::try_from(bits >> count).unwrap_or(u8::MAX));
             bits &= (1 << count) - 1;
         }
     }
@@ -125,5 +125,6 @@ pub(super) fn decode_buffer_base64url(raw: &str) -> Vec<u8> {
 
 fn nonnegative_integer(value: &Value) -> Option<usize> {
     let number = value.as_f64()?;
-    (number.is_finite() && number >= 0.0 && number.fract() == 0.0).then_some(number as usize)
+    (number.is_finite() && number >= 0.0 && number.fract() == 0.0)
+        .then_some(crate::json::saturating_usize(number))
 }

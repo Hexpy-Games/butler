@@ -43,9 +43,9 @@ impl BudgetedToolOutput {
             output.push_str(",\"path\":");
             append_path(&mut output, &artifact.path)?;
             output.push_str(",\"raw_tokens\":");
-            output.push_str(&(artifact.raw_tokens as u64).to_string());
+            output.push_str(&crate::json::saturating_u64(artifact.raw_tokens).to_string());
             output.push_str(",\"compact_tokens\":");
-            output.push_str(&(artifact.compact_tokens as u64).to_string());
+            output.push_str(&crate::json::saturating_u64(artifact.compact_tokens).to_string());
             output.push_str(",\"created_at\":");
             append_string(&mut output, &artifact.created_at)?;
             if let Some(command) = &artifact.command {
@@ -121,7 +121,7 @@ pub(super) fn append_slice(
     output.push_str(",\"total_lines\":");
     output.push_str(&slice.total_lines.to_string());
     output.push_str(",\"estimated_tokens\":");
-    output.push_str(&(slice.estimated_tokens as u64).to_string());
+    output.push_str(&crate::json::saturating_u64(slice.estimated_tokens).to_string());
     output.push_str(",\"truncated_by_lines\":");
     output.push_str(if slice.truncated_by_lines {
         "true"

@@ -94,7 +94,7 @@ pub(super) async fn request(record: &InstanceRecord, command: &str) -> Result<Va
             .await
             .map_err(|_| "gateway_control_unavailable".to_owned())?;
         stream
-            .write_u32(payload.len() as u32)
+            .write_u32(u32::try_from(payload.len()).unwrap_or(u32::MAX))
             .await
             .map_err(|_| "gateway_control_request_failed".to_owned())?;
         stream

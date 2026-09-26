@@ -29,7 +29,8 @@ pub(super) fn object(value: &Value) -> Map<String, Value> {
 }
 pub(super) fn integer(value: &Value) -> Option<u64> {
     let number = value.as_f64()?;
-    (number.is_finite() && number.fract() == 0.0 && number >= 0.0).then_some(number as u64)
+    (number.is_finite() && number.fract() == 0.0 && number >= 0.0)
+        .then_some(crate::json::saturating_u64(number))
 }
 pub(super) fn enum_value(value: Option<&Value>, allowed: &[&str], fallback: &str) -> String {
     value

@@ -37,10 +37,13 @@ impl CognitionCoordinationHost for TestHost {
         uuid::Uuid::new_v4().to_string()
     }
     fn now_epoch_millis(&self) -> i64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64
+        i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap_or(i64::MAX)
     }
     fn now_iso(&self) -> String {
         crate::js_date::format_iso_millis(self.now_epoch_millis()).unwrap()

@@ -118,8 +118,10 @@ fn render_event(event: &Value) -> String {
 }
 
 fn format_iso_timestamp(timestamp_ms: f64) -> String {
-    let seconds = (timestamp_ms / 1_000.0).floor() as i64;
-    let nanos = ((timestamp_ms - seconds as f64 * 1_000.0).max(0.0) * 1_000_000.0) as u32;
+    let seconds = crate::json::saturating_i64((timestamp_ms / 1_000.0).floor());
+    let nanos = crate::json::saturating_u32(
+        (timestamp_ms - seconds as f64 * 1_000.0).max(0.0) * 1_000_000.0,
+    );
     chrono::DateTime::from_timestamp(seconds, nanos)
         .map(|time| time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
         .unwrap_or_else(|| "unknown-time".into())

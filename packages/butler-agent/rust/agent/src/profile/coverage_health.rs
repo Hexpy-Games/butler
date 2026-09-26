@@ -76,7 +76,7 @@ fn read_open(data_root: &Path, sources: &dyn CanonicalProfileSourceFactory) -> O
         let current = scalar.is_some_and(|scalar| {
             row.byte_start >= 0
                 && row.byte_end > row.byte_start
-                && row.byte_end <= scalar.text.len() as i64
+                && row.byte_end <= i64::try_from(scalar.text.len()).unwrap_or(i64::MAX)
         });
         if row.failure_code.as_deref() == Some("source_stale") || !current {
             counts[3] += 1;

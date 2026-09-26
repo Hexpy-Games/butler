@@ -290,7 +290,7 @@ fn schema() -> SchemaRef {
         "vector",
         DataType::FixedSizeList(
             Arc::new(Field::new("item", DataType::Float32, true)),
-            DIMENSION as i32,
+            i32::try_from(DIMENSION).unwrap_or(i32::MAX),
         ),
         false,
     ));
@@ -342,7 +342,7 @@ fn batch(rows: &[GenerationVectorRow], schema: SchemaRef) -> CognitionResult<Rec
             FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
                 rows.iter()
                     .map(|r| Some(r.vector.iter().copied().map(Some).collect::<Vec<_>>())),
-                DIMENSION as i32,
+                i32::try_from(DIMENSION).unwrap_or(i32::MAX),
             ),
         ),
     ];

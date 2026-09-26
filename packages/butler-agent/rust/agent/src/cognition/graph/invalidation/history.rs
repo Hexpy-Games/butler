@@ -202,7 +202,7 @@ fn binding_current(
     Ok(hydrated
         .text
         .as_bytes()
-        .get(start as usize..end as usize)
+        .get(crate::json::saturating_usize(start)..crate::json::saturating_usize(end))
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
         == Some(quote))
 }

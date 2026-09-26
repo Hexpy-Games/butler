@@ -224,7 +224,7 @@ pub(super) fn config_edit(
         Err(_) => return ExitCode::FAILURE,
     };
     if !status.success() {
-        return ExitCode::from(status.code().unwrap_or(1) as u8);
+        return ExitCode::from(u8::try_from(status.code().unwrap_or(1)).unwrap_or(1));
     }
     if let Err(error) = safe_data_file(installation, data_root, &file) {
         return report_error(command.name(), options.json, &error);

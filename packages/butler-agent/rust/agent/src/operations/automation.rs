@@ -6,13 +6,7 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-use std::{
-    future::Future,
-    path::{Path, PathBuf},
-    pin::Pin,
-    sync::Arc,
-    time::Duration,
-};
+use std::{future::Future, path::Path, pin::Pin, sync::Arc, time::Duration};
 
 use serde_json::{Map, Value};
 

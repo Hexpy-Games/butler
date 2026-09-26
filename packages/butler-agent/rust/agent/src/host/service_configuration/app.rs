@@ -100,7 +100,7 @@ impl NativeAppServiceConfiguration {
             local_auth: local_auth(),
             dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
             message_rate_limit_max: if max.is_finite() && max > 0.0 {
-                max.ceil() as u64
+                crate::json::saturating_u64(max.ceil())
             } else {
                 60
             },
@@ -158,7 +158,9 @@ fn number_value(value: Option<&Value>) -> Option<f64> {
 
 fn normalize_port(value: Option<f64>) -> u16 {
     match value {
-        Some(value) if value.is_finite() && (1.0..=65_535.0).contains(&value) => value as u16,
+        Some(value) if value.is_finite() && (1.0..=65_535.0).contains(&value) => {
+            crate::json::saturating_u16(value)
+        }
         _ => 18_765,
     }
 }

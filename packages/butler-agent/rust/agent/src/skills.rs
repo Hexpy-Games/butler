@@ -178,7 +178,7 @@ impl NativeSkills {
             .inner
             .jobs
             .clone()
-            .acquire_many_owned(MAX_BLOCKING_SKILL_JOBS as u32)
+            .acquire_many_owned(u32::try_from(MAX_BLOCKING_SKILL_JOBS).unwrap_or(u32::MAX))
             .await;
         self.inner.jobs.close();
         drop(permits);

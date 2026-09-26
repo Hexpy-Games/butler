@@ -271,7 +271,8 @@ async fn execute_planned(
     let mut output = SearchOutput {
         results,
         provider_overview: None,
-        duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        duration_ms: u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX),
         provider: if providers.len() == 1 {
             providers.remove(0)
         } else {
@@ -338,5 +339,5 @@ fn optional_number(value: Option<&Value>, min: usize, max: usize) -> Option<usiz
     value
         .and_then(Value::as_f64)
         .filter(|number| number.is_finite())
-        .map(|number| number.trunc().clamp(min as f64, max as f64) as usize)
+        .map(|number| crate::json::saturating_usize(number.trunc().clamp(min as f64, max as f64)))
 }

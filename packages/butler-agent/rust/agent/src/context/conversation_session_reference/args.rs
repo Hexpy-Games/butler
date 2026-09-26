@@ -112,7 +112,7 @@ pub(super) fn integer(
                 && *number <= maximum as f64
         })
         .ok_or_else(|| ContextError::new("invalid_integer", "Integer is outside source range"))?;
-    Ok(number as usize)
+    Ok(crate::json::saturating_usize(number))
 }
 
 pub(super) fn failure(code: &str, diagnostics: &[&str]) -> Value {

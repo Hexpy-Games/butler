@@ -96,7 +96,8 @@ impl WebAccess {
             }
             _ => {}
         }
-        page.duration_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        page.duration_ms = u64::try_from(started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX);
         if cancellation.is_cancelled() {
             return Err(WebAccessError::cancelled());
         }
@@ -260,8 +261,9 @@ fn should_use_rendered(lightweight: &PageRead, rendered: &PageRead) -> bool {
     }
     let score = |page: &PageRead| {
         let mut score = if page.ok { 40_i32 } else { 0 };
-        score += (page.text.encode_utf16().count() / 100).min(40) as i32;
-        score += (page.chunks.len() * 3).min(15) as i32;
+        score +=
+            i32::try_from((page.text.encode_utf16().count() / 100).min(40)).unwrap_or(i32::MAX);
+        score += i32::try_from((page.chunks.len() * 3).min(15)).unwrap_or(i32::MAX);
         if page.method == "readability" {
             score += 8;
         }

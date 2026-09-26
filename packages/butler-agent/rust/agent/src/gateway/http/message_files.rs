@@ -184,7 +184,7 @@ fn decode_file_id(encoded: &str) -> Result<String, HttpError> {
             let low = char::from(input.next().ok_or(HttpError::Internal)?)
                 .to_digit(16)
                 .ok_or(HttpError::Internal)?;
-            decoded.push((high * 16 + low) as u8);
+            decoded.push(u8::try_from(high * 16 + low).unwrap_or(u8::MAX));
         } else {
             decoded.push(byte);
         }

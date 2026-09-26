@@ -31,7 +31,9 @@ pub(crate) async fn search(
         .get("limit")
         .and_then(Value::as_f64)
         .filter(|value| value.is_finite())
-        .map_or(20, |value| (value.floor() as usize).clamp(1, 50));
+        .map_or(20, |value| {
+            crate::json::saturating_usize(value.floor()).clamp(1, 50)
+        });
     let disabled_reason = (!call_available).then_some(MCP_DISABLED);
     let recovery_hint = disabled_reason.map(|_| MCP_RECOVERY);
     let mut ranked = Vec::new();

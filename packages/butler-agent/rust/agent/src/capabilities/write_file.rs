@@ -101,7 +101,7 @@ pub(super) async fn execute(
                 "overwritten":!committed.created,"bytes":committed.bytes,
                 "after_sha256":committed.after_sha256,"atomic_write":true,
                 "create_parents":create_parents,
-                "metrics":{"elapsed_ms":elapsed.as_millis() as u64,
+                "metrics":{"elapsed_ms":u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
                     "files_written":1,"bytes_written":committed.bytes},
                 "evidence_receipts":mutation_evidence::execution("write_file",
                     &format!("{} workspace file {}", if committed.created {"Created"} else {"Overwrote"}, committed.path),

@@ -231,7 +231,7 @@ fn iso_timestamp_now() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let seconds = duration.as_secs();
-    let days = (seconds / 86_400) as i64;
+    let days = i64::try_from(seconds / 86_400).unwrap_or(i64::MAX);
     let seconds_of_day = seconds % 86_400;
     let (year, month, day) = civil_date(days);
     format!(

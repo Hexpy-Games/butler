@@ -274,7 +274,8 @@ fn project(row: SessionRow) -> Result<AppSessionSummary, AppStorageError> {
         unread_count: 0,
         pinned: row.pinned == 1,
         archived: row.archived == 1,
-        automation_target_count: row.automation_target_count.max(0) as u64,
+        automation_target_count: u64::try_from(row.automation_target_count.max(0))
+            .unwrap_or_default(),
     })
 }
 

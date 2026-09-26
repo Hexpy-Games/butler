@@ -67,7 +67,7 @@ fn register_episodes(
             Ok(chunks) => {
                 let mut byte_start = source.byte_start;
                 for text in chunks {
-                    let byte_end = byte_start + text.len() as i64;
+                    let byte_end = byte_start + i64::try_from(text.len()).unwrap_or(i64::MAX);
                     let chunk_revision = digest(vec![
                         json!("episode-vector-chunk"),
                         json!(episode_id),
@@ -109,7 +109,8 @@ fn register_episodes(
                 ])?;
                 let unit_id = vector_unit_id(job_id, "episode", episode_id, &chunk_revision)?;
                 desired.insert(unit_id.clone());
-                let byte_end = source.byte_start + source.text.len() as i64;
+                let byte_end =
+                    source.byte_start + i64::try_from(source.text.len()).unwrap_or(i64::MAX);
                 tx.execute(
                         "INSERT OR IGNORE INTO memory_vector_units                      (unit_id,job_id,record_kind,owner_id,owner_revision,project_id,origin_kind,projection_text,state,error_code,source_ids_json,source_byte_start,source_byte_end,source_role)                      VALUES(?1,?2,'episode',?3,?4,?5,?6,'','failed',?7,?8,?9,?10,?11)",
                     params![

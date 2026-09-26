@@ -171,7 +171,8 @@ struct Walk<'a> {
 
 impl Walk<'_> {
     fn elapsed(&self) -> u64 {
-        self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+        u64::try_from(self.started.elapsed().as_millis().min(u128::from(u64::MAX)))
+            .unwrap_or(u64::MAX)
     }
 
     fn stop(&mut self, reason: &'static str) {

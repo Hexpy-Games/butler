@@ -102,7 +102,11 @@ pub(super) fn closeout_page(
         .map_err(StorageError::sqlite)?;
     let rows = statement
         .query_map(
-            rusqlite::params![turn_id, after_rowid, limit.min(8) as i64],
+            rusqlite::params![
+                turn_id,
+                after_rowid,
+                i64::try_from(limit.min(8)).unwrap_or(i64::MAX)
+            ],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,

@@ -151,7 +151,9 @@ fn read_follow_state(state: &mut FollowState, output: &mut Vec<LogEntry>) -> io:
     let mut remaining = metadata.len().saturating_sub(state.offset);
     let mut buffer = [0_u8; 64 * 1024];
     while remaining > 0 {
-        let requested = buffer.len().min(remaining as usize);
+        let requested = buffer
+            .len()
+            .min(usize::try_from(remaining).unwrap_or(usize::MAX));
         let count = state.file.read(&mut buffer[..requested])?;
         if count == 0 {
             break;

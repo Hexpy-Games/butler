@@ -294,7 +294,7 @@ async fn write_frame<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<
         return Err("gateway_control_response_invalid".into());
     }
     stream
-        .write_u32(bytes.len() as u32)
+        .write_u32(u32::try_from(bytes.len()).unwrap_or(u32::MAX))
         .await
         .map_err(|_| "gateway_control_response_failed".to_owned())?;
     stream

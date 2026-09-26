@@ -255,7 +255,7 @@ pub(super) fn operation_output(
         .map_err(|_| {
             AppStorageError::new("operation_output_chunk_invalid", "contentBase64 invalid")
         })?;
-    if decoded.len() as i64 != values[3] - values[2]
+    if i64::try_from(decoded.len()).unwrap_or(i64::MAX) != values[3] - values[2]
         || format!("{:x}", Sha256::digest(&decoded)) != content_digest
     {
         return Err(AppStorageError::new(

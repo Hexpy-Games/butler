@@ -41,8 +41,8 @@ pub(super) fn register(
                 window.part_id,
                 window.part_index,
                 window.scalar_pointer,
-                window.byte_start as i64,
-                window.byte_end as i64,
+                i64::try_from(window.byte_start).unwrap_or(i64::MAX),
+                i64::try_from(window.byte_end).unwrap_or(i64::MAX),
                 EXTRACTOR_VERSION,
                 window.timestamp,
                 window.evidence_ref,
@@ -239,8 +239,8 @@ pub(super) fn replace_parent(
         || hash != parent.source_hash
         || part != parent.part_id
         || pointer != parent.scalar_pointer
-        || start != parent.byte_start as i64
-        || end != parent.byte_end as i64
+        || start != i64::try_from(parent.byte_start).unwrap_or(i64::MAX)
+        || end != i64::try_from(parent.byte_end).unwrap_or(i64::MAX)
         || version != EXTRACTOR_VERSION
     {
         return Ok(false);
@@ -250,7 +250,7 @@ pub(super) fn replace_parent(
     {
         return Ok(false);
     }
-    let removed=tx.execute("DELETE FROM profile_source_coverage WHERE coverage_key=?1 AND message_id=?2 AND source_hash=?3 AND part_id=?4 AND scalar_pointer=?5 AND byte_start=?6 AND byte_end=?7 AND extractor_version=?8 AND disposition IN ('pending','failed') AND COALESCE(owner_pid,-1)=COALESCE(?9,-1) AND COALESCE(owner_nonce,'')=COALESCE(?10,'')",params![parent.coverage_key,parent.message_id,parent.source_hash,parent.part_id,parent.scalar_pointer,parent.byte_start as i64,parent.byte_end as i64,EXTRACTOR_VERSION,pid,nonce]).map_err(storage::db_error)?;
+    let removed=tx.execute("DELETE FROM profile_source_coverage WHERE coverage_key=?1 AND message_id=?2 AND source_hash=?3 AND part_id=?4 AND scalar_pointer=?5 AND byte_start=?6 AND byte_end=?7 AND extractor_version=?8 AND disposition IN ('pending','failed') AND COALESCE(owner_pid,-1)=COALESCE(?9,-1) AND COALESCE(owner_nonce,'')=COALESCE(?10,'')",params![parent.coverage_key,parent.message_id,parent.source_hash,parent.part_id,parent.scalar_pointer,i64::try_from(parent.byte_start).unwrap_or(i64::MAX),i64::try_from(parent.byte_end).unwrap_or(i64::MAX),EXTRACTOR_VERSION,pid,nonce]).map_err(storage::db_error)?;
     if removed != 1 {
         return Ok(false);
     }

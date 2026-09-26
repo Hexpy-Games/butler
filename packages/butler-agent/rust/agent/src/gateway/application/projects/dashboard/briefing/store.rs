@@ -50,7 +50,7 @@ pub(super) async fn request(
                     [project_id],
                     |row| row.get::<_, i64>(0),
                 )
-                .map(|value| value.max(0) as u64)
+                .map(|value| u64::try_from(value.max(0)).unwrap_or_default())
                 .map_err(AppStorageError::sqlite)
             }
         })
@@ -253,7 +253,7 @@ async fn finish_generation(
                         db.execute(
                             "UPDATE projects SET description=?1,dashboard_preferences_revision=dashboard_preferences_revision+1 \
                              WHERE id=?2 AND description IS NULL AND dashboard_preferences_revision=?3",
-                            params![description, project_id, preferences_revision as i64],
+                            params![description, project_id, i64::try_from(preferences_revision).unwrap_or(i64::MAX)],
                         )
                         .map(|changed| changed == 1)
                         .map_err(AppStorageError::sqlite)

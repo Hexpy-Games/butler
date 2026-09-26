@@ -389,5 +389,5 @@ pub(super) fn guided_timeout(value: Option<f64>) -> Duration {
     if value <= 1.0 || value > f64::from(i32::MAX) {
         return Duration::from_millis(1);
     }
-    Duration::from_millis(value.trunc() as u64)
+    Duration::from_millis(crate::json::saturating_u64(value.trunc()))
 }

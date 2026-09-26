@@ -282,7 +282,7 @@ fn read_metrics(
             .query_map(params![project_id, first_day], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?.max(0) as usize,
+                    usize::try_from(row.get::<_, i64>(1)?.max(0)).unwrap_or_default(),
                 ))
             })
             .map_err(AppStorageError::sqlite)?
@@ -294,12 +294,12 @@ fn read_metrics(
             "SELECT COUNT(*) FROM messages m JOIN chats c ON c.id=m.chat_id \
              WHERE c.project_id=?1 AND m.created_at>=?2",
             params![project_id, since],
-            |row| Ok(row.get::<_, i64>(0)?.max(0) as usize),
+            |row| Ok(usize::try_from(row.get::<_, i64>(0)?.max(0)).unwrap_or_default()),
         )
         .map_err(AppStorageError::sqlite)
     };
     Ok(DatabaseMetrics {
-        archived_sessions: archived.max(0) as usize,
+        archived_sessions: usize::try_from(archived.max(0)).unwrap_or_default(),
         daily_messages: rows,
         recent_messages_7d: count(seven_day)?,
         recent_messages_30d: count(first_day)?,

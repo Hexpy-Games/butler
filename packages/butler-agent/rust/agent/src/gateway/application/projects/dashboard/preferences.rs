@@ -109,7 +109,7 @@ pub(super) async fn update(
                 )
                 .optional()
                 .map_err(AppStorageError::sqlite)?;
-            if current.map(|value| value.max(0) as u64) != Some(expected) {
+            if current.map(|value| u64::try_from(value.max(0)).unwrap_or_default()) != Some(expected) {
                 return Err(AppStorageError::new(
                     "preferences_changed",
                     "Preferences changed. Reload them.",
@@ -118,7 +118,7 @@ pub(super) async fn update(
             tx.execute(
                 "UPDATE projects SET description=?1,dashboard_preferences_json=?2,\
                  dashboard_preferences_revision=?3 WHERE id=?4 AND dashboard_preferences_revision=?5",
-                params![description, preferences_json, (expected + 1) as i64, project_key, expected as i64],
+                params![description, preferences_json, i64::try_from(expected + 1).unwrap_or(i64::MAX), project_key, i64::try_from(expected).unwrap_or(i64::MAX)],
             )
             .map_err(AppStorageError::sqlite)?;
             let row = super::super::rows::any_by_id(&tx, &project_key)?

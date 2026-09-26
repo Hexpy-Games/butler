@@ -119,7 +119,7 @@ pub(super) fn hydrate(row: CandidateRow) -> Option<ProfileCandidateRecord> {
     payload.insert(
         "evidence_count".into(),
         if evidence_count.fract() == 0.0 && evidence_count <= u64::MAX as f64 {
-            Value::from(evidence_count as u64)
+            Value::from(crate::json::saturating_u64(evidence_count))
         } else {
             Value::from(evidence_count)
         },

@@ -85,7 +85,9 @@ pub(super) fn integer(
     if !number.is_finite() {
         return Ok(fallback);
     }
-    Ok(number.floor().max(min as f64).min(max as f64) as usize)
+    Ok(crate::json::saturating_usize(
+        number.floor().max(min as f64).min(max as f64),
+    ))
 }
 pub(super) fn parse_args(call: &Value) -> Result<Value, (&'static str, String)> {
     let object = call.as_object().ok_or((

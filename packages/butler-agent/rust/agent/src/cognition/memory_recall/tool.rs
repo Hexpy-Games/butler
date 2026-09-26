@@ -56,10 +56,12 @@ pub(super) fn prepare(
     crate::cognition::resolve_active_generation(data_root, environment)?;
     let limit = match args.get("limit") {
         None => 6,
-        Some(value) => value
-            .as_f64()
-            .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))
-            .ok_or_else(|| failure("invalid_arguments"))? as usize,
+        Some(value) => crate::json::saturating_usize(
+            value
+                .as_f64()
+                .filter(|v| v.fract() == 0.0 && (1.0..=20.0).contains(v))
+                .ok_or_else(|| failure("invalid_arguments"))?,
+        ),
     };
     let scope = match args.get("scope") {
         None if binding

@@ -344,8 +344,8 @@ async fn next_deadline(app: &AppApplication) -> Result<Option<Duration>, Gateway
         let value: Option<String> = db.query_row("SELECT MIN(lease_expires_at) FROM session_queued_messages WHERE state='dispatching' AND lease_expires_at IS NOT NULL AND lease_expires_at>?1 AND (claim_owner IS NULL OR claim_owner<>?2)", params![now, owner], |row| row.get(0)).map_err(AppStorageError::sqlite)?;
         let current = DateTime::parse_from_rfc3339(&now).ok();
         Ok(value.and_then(|value| {
-            let millis = (DateTime::parse_from_rfc3339(&value).ok()? - current?)
-                .num_milliseconds().max(0) as u64;
+            let millis = u64::try_from((DateTime::parse_from_rfc3339(&value).ok()? - current?)
+                .num_milliseconds().max(0)).unwrap_or_default();
             Some(Duration::from_millis(millis))
         }))
     }).await.map_err(app_error)

@@ -431,7 +431,7 @@ impl RoutedRound<'_> {
             max,
         )
         .await;
-        let multiplier = 2_f64.powi(attempt.saturating_sub(1) as i32);
+        let multiplier = 2_f64.powi(i32::try_from(attempt.saturating_sub(1)).unwrap_or(i32::MAX));
         let delay =
             Duration::from_secs_f64((self.retry.base_delay_ms * multiplier).min(5_000.0) / 1_000.0);
         tokio::select! {

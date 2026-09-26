@@ -54,7 +54,10 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
         && value.is_finite()
         && value > 0.0
     {
-        output.insert("context_window_tokens".into(), json!(value.trunc() as u64));
+        output.insert(
+            "context_window_tokens".into(),
+            json!(crate::json::saturating_u64(value.trunc())),
+        );
     }
     for key in ["worker_profiles", "desktop_notifications", "web_search"] {
         if let Some(value) = input.get(key) {
@@ -112,7 +115,10 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
         && value.fract() == 0.0
         && (1.0..=10.0).contains(&value)
     {
-        output.insert("max_simultaneous_workers".into(), json!(value as u64));
+        output.insert(
+            "max_simultaneous_workers".into(),
+            json!(crate::json::saturating_u64(value)),
+        );
     }
     if input
         .get("access_mode")

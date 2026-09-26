@@ -201,12 +201,12 @@ fn remaining(deadline_at_epoch_ms: i64) -> CognitionResult<Duration> {
         .duration_since(UNIX_EPOCH)
         .map_err(|_| error("memory_write_busy"))?
         .as_millis();
-    let millis = i128::from(deadline_at_epoch_ms) - (now as i128);
+    let millis = i128::from(deadline_at_epoch_ms) - i128::try_from(now).unwrap_or(i128::MAX);
     if millis <= 0 {
         return Err(error("memory_write_busy"));
     }
     Ok(Duration::from_millis(
-        millis.min(i128::from(u64::MAX)) as u64
+        u64::try_from(millis).unwrap_or(u64::MAX),
     ))
 }
 

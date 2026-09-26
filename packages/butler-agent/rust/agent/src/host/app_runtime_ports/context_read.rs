@@ -68,7 +68,7 @@ impl AppContextReadPort for NativeAppContextRead {
             let max_output = metadata
                 .max_output_tokens
                 .filter(|value| value.is_finite() && *value > 0.0)
-                .map(|value| value.trunc() as u64);
+                .map(|value| crate::json::saturating_u64(value.trunc()));
             let telemetry_query = query.clone();
             let telemetry =
                 tokio::task::spawn_blocking(move || read_usage(&root, &telemetry_query))
@@ -88,13 +88,18 @@ impl AppContextReadPort for NativeAppContextRead {
                 usage: telemetry.usage,
                 compaction_summary: summary,
                 budget: AppContextBudgetFacts {
-                    context_window_tokens: config.context_window_tokens.max(0.0).trunc() as u64,
-                    reserved_output_tokens: config.reserved_output_tokens.max(0.0).trunc() as u64,
-                    reserved_tool_tokens: config.reserved_tool_tokens.max(0.0).trunc() as u64,
-                    compaction_prompt_reserve_tokens: evaluated
-                        .compaction_prompt_reserve_tokens
-                        .max(0.0)
-                        .trunc() as u64,
+                    context_window_tokens: crate::json::saturating_u64(
+                        config.context_window_tokens.max(0.0).trunc(),
+                    ),
+                    reserved_output_tokens: crate::json::saturating_u64(
+                        config.reserved_output_tokens.max(0.0).trunc(),
+                    ),
+                    reserved_tool_tokens: crate::json::saturating_u64(
+                        config.reserved_tool_tokens.max(0.0).trunc(),
+                    ),
+                    compaction_prompt_reserve_tokens: crate::json::saturating_u64(
+                        evaluated.compaction_prompt_reserve_tokens.max(0.0).trunc(),
+                    ),
                     max_output_tokens: max_output,
                 },
             })
@@ -213,7 +218,7 @@ fn read_usage(root: &Path, query: &AppContextReadQuery) -> Telemetry {
 
 fn positive_tokens(value: Option<&Value>) -> Option<u64> {
     let value = value?.as_f64()?;
-    (value.is_finite() && value > 0.0).then_some(value.round() as u64)
+    (value.is_finite() && value > 0.0).then_some(crate::json::saturating_u64(value.round()))
 }
 
 fn bounded_summary(value: &str) -> String {

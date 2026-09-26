@@ -371,7 +371,9 @@ impl NativeAgentRuntime {
                 ),
                 budget: Arc::new(GuidedContinuationBudgetFactory::new(
                     Some(repositories.clone()),
-                    Arc::new(|| SystemIdentity.now_epoch_millis().max(0) as u64),
+                    Arc::new(|| {
+                        u64::try_from(SystemIdentity.now_epoch_millis().max(0)).unwrap_or_default()
+                    }),
                 )),
                 default_workspace: paths.workspace_root.to_string_lossy().into_owned(),
                 phase_surface_flag: environment.phase_surface_flag,

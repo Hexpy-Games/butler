@@ -62,7 +62,7 @@ fn uptime(data_root: &Path) -> String {
     if seconds < 0 {
         return "unknown".into();
     }
-    let seconds = seconds as u64;
+    let seconds = u64::try_from(seconds).unwrap_or_default();
     if seconds < 60 {
         format!("{seconds}s")
     } else {

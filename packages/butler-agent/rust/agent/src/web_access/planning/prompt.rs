@@ -157,7 +157,7 @@ fn current_date(timezone: &str) -> String {
     let epoch_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0_i64, |duration| {
-            duration.as_millis().min(i64::MAX as u128) as i64
+            i64::try_from(duration.as_millis().min(i64::MAX as u128)).unwrap_or(i64::MAX)
         });
     let zone = zone(timezone).unwrap_or_else(TimeZone::utc);
     let seconds = epoch_ms.div_euclid(1_000);

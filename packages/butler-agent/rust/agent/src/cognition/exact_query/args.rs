@@ -78,7 +78,7 @@ pub(super) fn parse(
                 .as_f64()
                 .filter(|n| n.is_finite() && n.fract() == 0.0 && (1.0..=50.0).contains(n))
                 .ok_or("invalid_limit")?;
-            n as usize
+            crate::json::saturating_usize(n)
         }
     };
     let project_id = project_id.map(str::trim).filter(|value| !value.is_empty());

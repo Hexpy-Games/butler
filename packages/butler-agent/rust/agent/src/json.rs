@@ -16,6 +16,11 @@ pub(crate) use document::{
 };
 mod number;
 pub(crate) use number::{coerce_number, number_from_string};
+mod saturating;
+pub(crate) use saturating::{
+    saturating_i32, saturating_i64, saturating_u16, saturating_u32, saturating_u64,
+    saturating_usize,
+};
 
 /// Builds a JSON object literal as a `serde_json::Map`, so callers can insert
 /// or remove keys without unwrapping `Value::as_object_mut`.

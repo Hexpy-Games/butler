@@ -206,8 +206,11 @@ fn now_iso() -> Result<String, ProjectWorkPublicationError> {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| io())?;
-    let date = DateTime::<Utc>::from_timestamp(elapsed.as_secs() as i64, elapsed.subsec_nanos())
-        .ok_or_else(io)?;
+    let date = DateTime::<Utc>::from_timestamp(
+        i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+        elapsed.subsec_nanos(),
+    )
+    .ok_or_else(io)?;
     Ok(date.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
 }
 

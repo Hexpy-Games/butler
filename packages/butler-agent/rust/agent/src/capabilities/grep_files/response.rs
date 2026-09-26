@@ -150,7 +150,7 @@ pub(super) fn success(
         None
     };
     let metrics = json!({
-        "elapsed_ms":started.elapsed().as_millis() as u64,
+        "elapsed_ms":u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         "files_considered":listed.files_considered,"files_searched":files_searched,
         "files_skipped":files_skipped,
         "candidate_reads":searched.reads.iter().filter(|candidate| candidate.read.attempted_read).count(),

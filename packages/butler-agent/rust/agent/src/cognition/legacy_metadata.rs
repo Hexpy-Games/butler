@@ -329,9 +329,13 @@ fn stream_refs(
         .map_err(|_| metadata_error())?;
     for offset in (0..SOURCE_CHUNK_LIMIT).step_by(PAGE_SIZE) {
         let ids = chunk_query
-            .query_map(params![PAGE_SIZE as i64, offset as i64], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                params![
+                    i64::try_from(PAGE_SIZE).unwrap_or(i64::MAX),
+                    i64::try_from(offset).unwrap_or(i64::MAX)
+                ],
+                |row| row.get::<_, String>(0),
+            )
             .map_err(|_| metadata_error())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| metadata_error())?;
