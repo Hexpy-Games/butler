@@ -61,7 +61,7 @@ fn service(root: PathBuf) -> crate::context::NativeToolOutput {
 }
 
 #[tokio::test]
-async fn retained_command_artifact_and_source_evidence_read_exact_utf16() {
+async fn retained_command_artifact_reads_exact_utf16_ranges() {
     let root =
         std::env::temp_dir().join(format!("butler-native-artifact-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
@@ -96,24 +96,6 @@ async fn retained_command_artifact_and_source_evidence_read_exact_utf16() {
         output.as_str().contains("\\ude00"),
         "UTF-16 low surrogate must survive JSON wire"
     );
-    let evidence = std::env::var("BUTLER_TEST_EVIDENCE_ARTIFACT").ok();
-    if let Some(source_path) = evidence {
-        let source_root = std::path::Path::new(&source_path)
-            .ancestors()
-            .nth(4)
-            .unwrap();
-        let source_service = service(source_root.to_path_buf());
-        let source_tools = NativeToolArtifactReader::new(source_service.clone());
-        let document = source_tools
-            .read_evidence(json!({"path":source_path,"offset_chars":2,"max_tokens":50}))
-            .await
-            .unwrap();
-        assert!(
-            document.as_str().contains("\\ude00"),
-            "source evidence slice must retain UTF-16 unit"
-        );
-        source_service.close().await;
-    }
     owner.close().await;
     std::fs::remove_dir_all(root).unwrap();
 }

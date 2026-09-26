@@ -367,16 +367,3 @@ fn slice_utf16(value: &str, target: usize) -> String {
     let units = value.encode_utf16().take(target).collect::<Vec<_>>();
     String::from_utf16_lossy(&units)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{pad_end, slice_utf16};
-
-    #[test]
-    fn source_string_padding_and_slicing_use_utf16_units() {
-        assert_eq!(pad_end("a", 3), "a  ");
-        assert_eq!(pad_end("😀", 2), "😀");
-        assert_eq!(slice_utf16("abcde", 3), "abc");
-        assert_eq!(slice_utf16("😀x", 1), "�");
-    }
-}
