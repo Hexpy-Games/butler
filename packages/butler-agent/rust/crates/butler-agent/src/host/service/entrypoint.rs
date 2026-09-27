@@ -220,7 +220,7 @@ async fn serve(
         runtime.bindings.clone(),
         config.data_root.clone(),
         config.data_root.clone(),
-        Arc::new(AppDelivery::new(writer)),
+        Arc::new(AppDelivery::new(writer, progress.clone())),
         runtime.subsessions.clone(),
         restart_handoff,
     );
