@@ -10,7 +10,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +19,15 @@ import {
   type AppReleasePlatform,
   readAppComponentVersions,
 } from "./manifest.ts";
+import { createMacDmg } from "./mac-dmg.ts";
+import {
+  macNotaryConfigFromEnv,
+  macSigningConfigFromEnv,
+  signMacCodeInsideOut,
+  submitMacNotarization,
+  verifyMacProductionCodeSignatures,
+  verifyMacProductionContainerSignature,
+} from "./mac-signing.ts";
 import {
   closureFromNativeMacBundle,
   createNativeMacReleaseManifest,
@@ -62,7 +70,6 @@ export interface BundledAgentResource {
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
-const MAC_SIGN_SCRIPT = join(ELECTRON_ROOT, "scripts", "adhoc-sign-mac.mjs");
 const MAC_NORMALIZE_SCRIPT = join(ELECTRON_ROOT, "scripts", "normalize-mac-bundle.mjs");
 const MAC_APP_BUNDLE_IDENTIFIER = "com.hexpy.butler";
 const MAC_HELPER_BUNDLE_IDENTIFIER = "com.hexpy.butler.helper";
@@ -98,6 +105,9 @@ export function createAppReleasePackage(
 function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppReleasePackageResult {
   const root = resolve(options.root);
   const outDir = resolve(options.outDir);
+  // Fail before the long build when production signing is required but unset.
+  macSigningConfigFromEnv(process.env);
+  macNotaryConfigFromEnv(process.env);
   const manifest = createNativeMacReleaseManifest(root);
   const issues = validateNativeMacReleaseManifest(root, manifest);
   if (issues.length) throw new Error(`native mac release manifest is invalid: ${issues.join("; ")}`);
@@ -182,7 +192,7 @@ function packagePlatform(input: {
   if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
   normalizeMacBundle(input.root, appBundle);
   verifyMacBundleIcon(input.root, appBundle);
-  signMacBundle(input.root, appBundle);
+  signMacBundle(appBundle);
   const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
   verifyNativeMacBundle(appBundle, nativeClosure);
   notarizeMacAppIfConfigured(appBundle);
@@ -388,38 +398,15 @@ function normalizeMacBundle(root: string, appBundle: string): void {
   }
 }
 
-function signMacBundle(root: string, appBundle: string): void {
-  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
-  if (identity) {
-    const result = spawnSync("codesign", [
-      "--force",
-      "--deep",
-      "--options",
-      "runtime",
-      "--timestamp",
-      "--sign",
-      identity,
-      appBundle,
-    ], { encoding: "utf8" });
-    if (result.status !== 0) {
-      throw new Error(`mac Developer ID signing failed: ${result.stderr.trim() || result.stdout.trim()}`);
-    }
-    verifyMacCodeSignature(appBundle);
-    return;
-  }
-  if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
-    throw new Error("BUTLER_APP_SIGN_IDENTITY is required for production macOS releases");
-  }
-  const result = spawnSync("node", [join(root, MAC_SIGN_SCRIPT), appBundle], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `mac ad-hoc signing failed: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
-      }`,
-    );
+// Signs nested code inside-out (see mac-signing.ts). Production releases use
+// the Developer ID identity with the hardened runtime and a secure timestamp;
+// local and fork builds without an identity stay ad-hoc signed.
+function signMacBundle(appBundle: string): void {
+  const config = macSigningConfigFromEnv(process.env);
+  signMacCodeInsideOut(appBundle, config);
+  verifyMacCodeSignature(appBundle);
+  if (config.mode === "production") {
+    verifyMacProductionCodeSignatures(appBundle, process.env.BUTLER_APP_TEAM_ID?.trim() || null);
   }
 }
 
@@ -429,39 +416,6 @@ function verifyMacCodeSignature(path: string): void {
   });
   if (result.status !== 0) {
     throw new Error(`mac code signature verification failed: ${result.stderr.trim() || result.stdout.trim()}`);
-  }
-}
-
-function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-dmg-"));
-  try {
-    const staging = join(workDir, "Butler");
-    mkdirSync(staging, { recursive: true });
-    cpSync(input.appBundle, join(staging, "Butler.app"), {
-      dereference: false,
-      errorOnExist: false,
-      force: true,
-      recursive: true,
-    });
-    symlinkSync("/Applications", join(staging, "Applications"));
-    rmSync(input.artifactPath, { force: true });
-    const result = spawnSync("hdiutil", [
-      "create",
-      "-volname",
-      "Butler",
-      "-srcfolder",
-      staging,
-      "-ov",
-      "-format",
-      "UDZO",
-      input.artifactPath,
-    ], { encoding: "utf8" });
-    if (result.status !== 0) {
-      throw new Error(`mac app DMG creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
-    }
-  } finally {
-    makeTreeRemovable(workDir);
-    rmSync(workDir, { recursive: true, force: true });
   }
 }
 
@@ -481,18 +435,13 @@ function createMacZip(appBundle: string, artifactPath: string): void {
 }
 
 function notarizeMacAppIfConfigured(appBundle: string): void {
-  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
-  if (!keychainProfile) {
-    if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
-      throw new Error("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is required for production macOS releases");
-    }
-    return;
-  }
+  const notary = macNotaryConfigFromEnv(process.env);
+  if (!notary) return;
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-notary-"));
   try {
     const submission = join(workDir, "Butler.zip");
     createMacZip(appBundle, submission);
-    submitMacNotarization(submission, keychainProfile);
+    submitMacNotarization(submission, notary);
     stapleMacArtifact(appBundle);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
@@ -500,29 +449,22 @@ function notarizeMacAppIfConfigured(appBundle: string): void {
 }
 
 function signAndNotarizeMacContainerIfConfigured(artifactPath: string): void {
-  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
-  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
-  if (!identity || !keychainProfile) return;
-  const sign = spawnSync("codesign", ["--force", "--timestamp", "--sign", identity, artifactPath], {
-    encoding: "utf8",
-  });
-  if (sign.status !== 0) throw new Error(`mac DMG signing failed: ${sign.stderr.trim() || sign.stdout.trim()}`);
-  submitMacNotarization(artifactPath, keychainProfile);
-  stapleMacArtifact(artifactPath);
-}
-
-function submitMacNotarization(artifactPath: string, keychainProfile: string): void {
-  const submit = spawnSync("xcrun", [
-    "notarytool",
-    "submit",
+  const signing = macSigningConfigFromEnv(process.env);
+  if (signing.mode !== "production") return;
+  const sign = spawnSync("codesign", [
+    "--force",
+    "--timestamp",
+    "--sign",
+    signing.identity,
+    ...(signing.keychain ? ["--keychain", signing.keychain] : []),
     artifactPath,
-    "--keychain-profile",
-    keychainProfile,
-    "--wait",
   ], { encoding: "utf8" });
-  if (submit.status !== 0) {
-    throw new Error(`mac notarization failed: ${submit.stderr.trim() || submit.stdout.trim()}`);
-  }
+  if (sign.status !== 0) throw new Error(`mac DMG signing failed: ${sign.stderr.trim() || sign.stdout.trim()}`);
+  verifyMacProductionContainerSignature(artifactPath, process.env.BUTLER_APP_TEAM_ID?.trim() || null);
+  const notary = macNotaryConfigFromEnv(process.env);
+  if (!notary) return;
+  submitMacNotarization(artifactPath, notary);
+  stapleMacArtifact(artifactPath);
 }
 
 function stapleMacArtifact(artifactPath: string): void {

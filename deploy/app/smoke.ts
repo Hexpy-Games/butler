@@ -14,6 +14,11 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import {
+  assessMacGatekeeper,
+  verifyMacProductionCodeSignatures,
+  verifyMacProductionContainerSignature,
+} from "../../packages/butler-app/scripts/release/mac-signing.ts";
 import { verifyNativeMacBundle, type NativeMacDependencyClosure } from "../../packages/butler-app/scripts/release/native-mac-manifest.ts";
 
 const outDir = resolve(optionValue("--out") ?? "dist/release/app");
@@ -23,6 +28,7 @@ const macDmg = findOne(/^butler-app-.*-darwin-arm64\.dmg$/u);
 const macZip = findOne(/^butler-app-.*-darwin-arm64\.zip$/u);
 const linuxX64Deb = nativeMac ? null : findOne(/^butler-app-.*-linux-x64\.deb$/u);
 const linuxArm64Deb = nativeMac ? null : findOne(/^butler-app-.*-linux-arm64\.deb$/u);
+const releaseTeamId = process.env.BUTLER_APP_TEAM_ID?.trim() || null;
 const releaseManifestPath = join(outDir, "app-release-manifest.json");
 const updateManifestPath = join(outDir, "app-update-manifest.json");
 
@@ -177,7 +183,9 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
   try {
     if (mode === "production") {
       verifyMacCodeSignature(path, "Mac App DMG container");
+      verifyMacProductionContainerSignature(path, releaseTeamId);
       verifyMacStapling(path, "Mac App DMG container");
+      assessMacGatekeeper(path, "open");
     }
     const attach = spawnSync("hdiutil", [
       "attach",
@@ -205,11 +213,16 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     ) {
       throw new Error("Mac App DMG is missing the Applications link");
     }
+    for (const layoutFile of [".DS_Store", join(".background", "background.tiff")]) {
+      if (!existsSync(join(mountPoint, layoutFile))) {
+        throw new Error(`Mac App DMG is missing its Finder window layout: ${layoutFile}`);
+      }
+    }
     const appPath = join(mountPoint, "Butler.app");
     if (closure) verifyNativeMacBundle(appPath, closure);
     verifyMacCodeSignature(appPath, "Mac App DMG Butler.app");
     if (mode === "production") {
-      verifyMacStapling(appPath, "Mac App DMG Butler.app");
+      verifyMacProductionRelease(appPath, "Mac App DMG Butler.app");
     }
     const detach = spawnSync("hdiutil", ["detach", mountPoint], { encoding: "utf8" });
     if (detach.status !== 0) {
@@ -241,7 +254,7 @@ function verifyMacZip(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     if (closure) verifyNativeMacBundle(appPath, closure);
     verifyMacCodeSignature(appPath, "Mac App ZIP Butler.app");
     if (mode === "production") {
-      verifyMacStapling(appPath, "Mac App ZIP Butler.app");
+      verifyMacProductionRelease(appPath, "Mac App ZIP Butler.app");
     }
   } finally {
     makeExtractedDirectoriesRemovable(extractDir);
@@ -271,6 +284,14 @@ function verifyMacCodeSignature(appPath: string, label = "Mac App"): void {
       `${label} codesign verification failed: ${verify.stderr.trim() || verify.stdout.trim() || "unknown error"}`,
     );
   }
+}
+
+// Production artifacts must be Developer ID signed inside-out with the hardened
+// runtime, carry a stapled notarization ticket, and pass Gatekeeper.
+function verifyMacProductionRelease(appPath: string, label: string): void {
+  verifyMacProductionCodeSignatures(appPath, releaseTeamId);
+  verifyMacStapling(appPath, label);
+  assessMacGatekeeper(appPath, "execute");
 }
 
 function verifyMacStapling(path: string, label: string): void {

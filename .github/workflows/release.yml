@@ -136,6 +136,112 @@ jobs:
       - name: Run the native App release gate
         run: bun run release:app:gate -- --platform=darwin-arm64
 
+      # Production signing turns on only when every Developer ID and notary
+      # secret is present. Forks and repositories without the secrets keep
+      # building an ad-hoc signed App; a partial set fails instead of silently
+      # publishing an ad-hoc release.
+      - name: Detect macOS signing credentials
+        id: macos-signing
+        env:
+          MACOS_DEVELOPER_ID_P12_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_P12_BASE64 }}
+          MACOS_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          required=(
+            MACOS_DEVELOPER_ID_P12_BASE64
+            MACOS_DEVELOPER_ID_P12_PASSWORD
+            APPLE_API_KEY_P8_BASE64
+            APPLE_API_KEY_ID
+            APPLE_API_ISSUER_ID
+            APPLE_TEAM_ID
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -eq "${#required[@]}" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=macOS signing::No Developer ID secrets are configured; packaging an ad-hoc signed App."
+          elif [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=macOS signing::Missing macOS signing secrets: ${missing[*]}"
+            exit 1
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import Developer ID and notarization credentials
+        if: steps.macos-signing.outputs.enabled == 'true'
+        env:
+          MACOS_DEVELOPER_ID_P12_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_P12_BASE64 }}
+          MACOS_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          signing_dir="$RUNNER_TEMP/butler-macos-signing"
+          keychain="$signing_dir/butler-release.keychain-db"
+          notary_profile="butler-release-notary"
+          mkdir -p "$signing_dir"
+          chmod 700 "$signing_dir"
+          umask 077
+
+          # Temporary keychain with a random password; removed in the last step.
+          keychain_password="$(openssl rand -hex 32)"
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          search_list=()
+          while IFS= read -r entry; do
+            entry="$(printf '%s' "$entry" | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
+            if [ -n "$entry" ] && [ "$entry" != "$keychain" ]; then
+              search_list+=("$entry")
+            fi
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${search_list[@]}"
+
+          # Developer ID Application certificate and private key.
+          p12_path="$signing_dir/developer-id-application.p12"
+          printf '%s' "$MACOS_DEVELOPER_ID_P12_BASE64" | tr -d '\r\n ' | base64 --decode > "$p12_path"
+          security import "$p12_path" -k "$keychain" -f pkcs12 -P "$MACOS_DEVELOPER_ID_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security > /dev/null
+          rm -f "$p12_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          # The exported .p12 carries only the leaf certificate. Apple's Developer ID
+          # G2 intermediate lets codesign build the chain to the Apple Root CA.
+          curl -fsSL --retry 3 -o "$signing_dir/DeveloperIDG2CA.cer" \
+            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          security import "$signing_dir/DeveloperIDG2CA.cer" -k "$keychain" > /dev/null
+          identity="$(bun run --silent packages/butler-app/scripts/release/mac-signing.ts select-identity \
+            --keychain "$keychain" --team-id "$APPLE_TEAM_ID")"
+
+          # App Store Connect API key, stored as a notarytool profile in the same keychain.
+          key_path="$signing_dir/AuthKey_${APPLE_API_KEY_ID}.p8"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | tr -d '\r\n ' | base64 --decode > "$key_path"
+          xcrun notarytool store-credentials "$notary_profile" \
+            --key "$key_path" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --keychain "$keychain"
+          rm -f "$key_path"
+
+          {
+            echo "BUTLER_APP_SIGN_IDENTITY=$identity"
+            echo "BUTLER_APP_SIGN_KEYCHAIN=$keychain"
+            echo "BUTLER_APP_NOTARY_KEYCHAIN_PROFILE=$notary_profile"
+            echo "BUTLER_APP_NOTARY_KEYCHAIN=$keychain"
+            echo "BUTLER_APP_TEAM_ID=$APPLE_TEAM_ID"
+            echo "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING=1"
+          } >> "$GITHUB_ENV"
+
       - name: Package the native App release
         run: |
           bun run release:app:package -- \
@@ -145,7 +251,7 @@ jobs:
 
       - name: Verify the native App release artifacts
         env:
-          BUTLER_APP_RELEASE_SMOKE_MODE: ad-hoc
+          BUTLER_APP_RELEASE_SMOKE_MODE: ${{ steps.macos-signing.outputs.enabled == 'true' && 'production' || 'ad-hoc' }}
         run: bun run release:app:smoke -- --platform=darwin-arm64 --out dist/release/app
 
       - name: Publish native App GitHub Release files
@@ -169,6 +275,17 @@ jobs:
             exit 1
           fi
           gh release upload "$tag" "${files[@]}" --clobber
+
+      - name: Remove macOS signing credentials
+        if: always()
+        run: |
+          set -uo pipefail
+          signing_dir="$RUNNER_TEMP/butler-macos-signing"
+          keychain="$signing_dir/butler-release.keychain-db"
+          if [ -f "$keychain" ]; then
+            security delete-keychain "$keychain" || true
+          fi
+          rm -rf "$signing_dir"
 
   release-checksums:
     name: Publish consolidated release checksums

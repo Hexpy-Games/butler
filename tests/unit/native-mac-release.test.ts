@@ -27,9 +27,19 @@ test("native mac release gate rejects missing real package input", () => {
   const manifest = createNativeMacReleaseManifest(root);
   expect(manifest.version).toBe("1.2.3");
   expect(manifest.bundledAgentVersion).toBe("9.8.7");
-  expect(validateNativeMacReleaseManifest(root, manifest)).toContain(
+  const issues = validateNativeMacReleaseManifest(root, manifest);
+  expect(issues).toContain(
     "native mac release input missing: packages/butler-app/client/electron/main.mjs",
   );
+  for (const signingInput of ["electron.entitlements.plist", "dmg-background.tiff", "dmg-file-reference.c"]) {
+    expect(issues).toContain(`native mac release input missing: packages/butler-app/scripts/release/macos/${signingInput}`);
+  }
+});
+
+test("native mac release gate accepts the repository signing and DMG inputs", () => {
+  const root = join(import.meta.dir, "..", "..");
+  const issues = validateNativeMacReleaseManifest(root, createNativeMacReleaseManifest(root));
+  expect(issues.filter((issue) => issue.includes("scripts/release/macos/"))).toEqual([]);
 });
 
 test("native mac bundle closure follows binary, resources, manifest and App renderer", () => {

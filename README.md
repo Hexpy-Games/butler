@@ -148,6 +148,10 @@ Butler has two release shapes:
 - **Butler App:** the Electron desktop experience.
 - **Butler Agent:** the standalone/headless runtime for advanced operators.
 
+Maintainers: macOS Developer ID signing, notarization, the required GitHub
+secrets and local production-signed builds are documented in
+[`packages/butler-app/scripts/README.md`](packages/butler-app/scripts/README.md#macos-release-signing-and-notarization).
+
 ## Development
 
 Source checkouts and package scripts are for development, not the normal user
