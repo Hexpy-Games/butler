@@ -1,11 +1,11 @@
 {
-  "scenario": "MEM-01",
+  "scenario": "ACC-01",
   "provider": "openai-subscription",
   "model": "openai/gpt-6-luna",
   "effort": "max",
   "wire_shape": "openai_responses",
   "butler_git_sha": "29e68beab996",
-  "recorded_at": "2026-09-27T23:04:25Z",
+  "recorded_at": "2026-09-27T22:59:21Z",
   "recorder": "butler-e2e record proxy",
   "sanitization": [
     "per-run values -> {{W}}, {{D}}, {{SANDBOX}}, scenario nonces",
@@ -17,11 +17,11 @@
   "files": [
     {
       "file": "000.json",
-      "sha256": "74dfe28186d3bbca07a665e7711056aeb5832c268522ab7bc26ed957402b2470"
+      "sha256": "049e6feb870c6c5b770e6e5750a65249368de1894a8a7d12a229dfa453e57bdb"
     },
     {
       "file": "001.json",
-      "sha256": "c3f6a20dbbc6006e1a82475cac1080aad1707ecd0ea0b3b09474442cc17d1be9"
+      "sha256": "5d74ba05b8260e6360ac22cb71e853de75db64884aa077889131aaf783784254"
     }
   ],
   "fingerprint": [
