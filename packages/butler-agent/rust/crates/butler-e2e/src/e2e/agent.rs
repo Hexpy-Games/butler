@@ -260,9 +260,32 @@ impl Agent {
     /// runtime, so a blocking wait would starve it until the command's own
     /// provider timeout.
     pub async fn cli_async(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
+        self.cli_async_input(args, None).await
+    }
+
+    /// [`Agent::cli_async`] with `input` written to the command's stdin.
+    pub async fn cli_async_input(
+        &self,
+        args: &[&str],
+        input: Option<&str>,
+    ) -> Result<CliOutput, HarnessError> {
+        use tokio::io::AsyncWriteExt;
         let mut command = tokio::process::Command::from(self.launch.command());
-        command.args(args).stdin(Stdio::null()).kill_on_drop(true);
-        let output = command.output().await?;
+        command
+            .args(args)
+            .stdin(if input.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        let mut child = command.spawn()?;
+        if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+            stdin.write_all(input.as_bytes()).await?;
+        }
+        let output = child.wait_with_output().await?;
         Ok(CliOutput {
             code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),

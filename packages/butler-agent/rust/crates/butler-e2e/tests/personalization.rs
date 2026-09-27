@@ -7,12 +7,9 @@
 )]
 
 use butler_e2e::e2e::HarnessError;
+use butler_e2e::e2e::fixtures::PROFILE_EXPORT as EXPORT;
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::json;
-
-/// A third-party assistant export as the owner would paste it (input text,
-/// not a provider response).
-const EXPORT: &str = "## Identity\n[unknown] - Name: Sam Rivera; prefers to be called Sam.\n[unknown] - Lives in Lisbon.\n\n## Career\n[2024-03-01] - Works as a landscape architect.\n\n## Preferences\n[unknown] - Prefers short, direct answers.\n";
 
 /// PRO-02 — Profile import is safe and idempotent.
 #[tokio::test]
