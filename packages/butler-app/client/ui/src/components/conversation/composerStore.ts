@@ -73,7 +73,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   setAccessMenuOpen: (accessMenuOpen) => set({ accessMenuOpen }),
   contextPopoverOpen: false,
   setContextPopoverOpen: (contextPopoverOpen) => set({ contextPopoverOpen }),
-  accessMode: "full_access",
+  accessMode: "ask_first",
   planMode: false,
   model: "",
   modelState: "loading",

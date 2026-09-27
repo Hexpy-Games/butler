@@ -61,7 +61,7 @@ const firstRun = {
     safetyItems: [
       "File changes, commands, and network requests stay within your instructions.",
       "Review requests that include sensitive paths or tokens before running them.",
-      "Automation results are visible in App history and diagnostics logs.",
+      "Schedule results are visible in App history and diagnostics logs.",
     ],
     accept: "Accept",
     installTitle: "Prepare Butler Agent",
@@ -125,7 +125,7 @@ function englishProjectFallbackSuggestions(
 function englishSkillFallbackSuggestions(projectName: string): NewChatBriefingSuggestion[] {
   return [
     { id: "recent-skill", title: "Find repeated requests", description: "Identify procedures and preferences repeated in recent conversations.", text: "What would be useful to turn into a skill from our recent conversations?" },
-    { id: "useful-skill", title: "Choose a useful form", description: "Decide whether to create a small automation or a reusable skill.", text: "What skills would be useful?" },
+    { id: "useful-skill", title: "Choose a useful form", description: "Decide whether to create a small schedule or a reusable skill.", text: "What skills would be useful?" },
     { id: "skill-candidates", title: "Turn candidates into tasks", description: "Gather repeated work into a list ready for review.", text: "Find skill candidates from my recent repeated work." },
     { id: "project-skill", title: projectName ? "Save project conventions" : "Save my workflow", description: projectName ? `Capture recurring practices in ${projectName}.` : "Make frequent tasks easy to reuse next time.", text: projectName ? "Turn recurring project tasks into a skill." : "Turn my frequent tasks into a skill." },
   ];
@@ -278,8 +278,8 @@ export const enUsCopy: AppCopy = {
     generalChat: "General chat",
     projectDocumentsFailed: "Project documents failed",
     customProvider: "Custom OpenAI-compatible",
-    automationDetailFailed: "Automation detail failed",
-    automationLoadFailed: "Automation load failed",
+    automationDetailFailed: "Schedule detail failed",
+    automationLoadFailed: "Schedule load failed",
     contextDetails: "Context details",
     contextWindow: "Context window",
     workingContext: "Working context",
@@ -463,7 +463,7 @@ export const enUsCopy: AppCopy = {
     createGroup: "Create group",
     menu: "Space menu",
     newProject: "New project",
-    automations: "Automations",
+    automations: "Schedules",
     archives: "Archive",
     favoritesDescription: "Your pinned conversations and projects.",
     moveDestination: "Move to",
@@ -719,7 +719,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     newChat: "New chat",
     newSessionStarting: "Starting new session...",
     search: "Search",
-    automations: "Automations",
+    automations: "Schedules",
     projects: "Projects",
     chats: "Chats",
     settings: "Settings",
@@ -845,12 +845,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     readOnlyDesc: "Can only read files",
   },
   automations: {
-    title: "Automations",
+    title: "Schedules",
     scheduledCount: (count) => `${count} scheduled prompts`,
-    empty: "No automations yet",
-    new: "New automation",
+    empty: "No schedules yet",
+    new: "New schedule",
     detailFallback: "Details",
-    backLabel: "Back to automations",
+    backLabel: "Back to schedules",
     runNow: "Run now",
     resume: "Resume",
     pause: "Pause",
@@ -865,7 +865,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       runs: "Runs",
     },
     placeholders: {
-      title: "Automation title",
+      title: "Schedule title",
       prompt: "Prompt body",
     },
     runs: {
@@ -879,7 +879,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       notRun: "Not run yet",
     },
     inspector: {
-      empty: "No automations target this session",
+      empty: "No schedules target this session",
     },
   },
   artifacts: {
@@ -900,7 +900,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       activity: "Activity",
       context: "Context",
       artifacts: "Artifacts",
-      automations: "Automations",
+      automations: "Schedules",
       workers: "Workers",
     },
     workers: {
@@ -1570,12 +1570,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
   },
   commandPalette: {
     label: "Command palette",
-    placeholder: "Search chats, projects, automations, and settings",
+    placeholder: "Search chats, projects, schedules, and settings",
     close: "Close command palette",
     loading: "Searching…",
     empty: "No matches. Try another name or title.",
     failed: "Could not search. Check your connection and try again.",
-    kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Automation", settings: "Settings" },
+    kindLabels: { chat: "Chat", project: "Project", project_session: "Project chat", group: "Space", automation: "Schedule", settings: "Settings" },
     settingsSections: { general: "General", appearance: "Appearance", "server-bridge": "Server", "models-access": "Models and access", "privacy-data": "Privacy and data", diagnostics: "Diagnostics", "system-events": "System events", archived: "Archived" },
   },
   feedback: {
