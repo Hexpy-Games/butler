@@ -1,0 +1,29 @@
+[package]
+name = "butler-e2e"
+description = "Dev-only end-to-end harness: drives the real butler-agent binary through its public surface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The harness never links product crates: the system under test is the built
+# `butler-agent` executable, driven through gateway HTTP, CLI and the data dir.
+[dependencies]
+axum.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+[lints]
+workspace = true

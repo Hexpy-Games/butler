@@ -750,6 +750,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-e2e"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "nix",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "butler-gateway"
 version = "0.0.0"
 dependencies = [
