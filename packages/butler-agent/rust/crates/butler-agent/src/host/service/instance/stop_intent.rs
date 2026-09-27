@@ -3,8 +3,12 @@
 //! A controller that stops the instance on purpose (`butler stop`, `butler
 //! restart`, MCP `restart_butler`, the service-owned restart handoff) writes
 //! this file atomically before it signals the process. A supervisor that sees
-//! the process exit reads it to tell an intended stop from a crash. The next
-//! instance removes it, whatever it says, when it reaches `ready`.
+//! the process exit reads it in its exit handling, before it awaits anything or
+//! starts a process, and honors it only when both `instance_id` and `pid` name
+//! the exited instance. The next instance removes it, whatever it says, when it
+//! reaches `ready`; the replacement of an App-supervised instance is started by
+//! the App itself (`respawn_by: app`), so it cannot remove the file before the
+//! App has read it.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -53,6 +57,17 @@ impl StopRequester {
     }
 }
 
+/// Who starts the instance that replaces a restarted one.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Respawner {
+    /// The App supervised the stopped instance: it starts the replacement with
+    /// its own environment and the controller waits for that instance.
+    App,
+    /// The controller that wrote the intent starts the replacement itself.
+    Controller,
+}
+
 /// What a controller asks for when it stops the instance.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct StopRequest {
@@ -70,6 +85,9 @@ pub(crate) struct StopIntent {
     pub(crate) reason: StopReason,
     /// Who asked.
     pub(crate) requested_by: StopRequester,
+    /// Who starts the replacement: set for [`StopReason::Restart`], `null` for
+    /// [`StopReason::Stop`].
+    pub(crate) respawn_by: Option<Respawner>,
     /// The nonce of the instance record being stopped.
     pub(crate) instance_id: String,
     /// The PID of the instance being stopped.
@@ -79,12 +97,19 @@ pub(crate) struct StopIntent {
 }
 
 impl StopIntent {
-    /// The intent to stop the instance `record` describes, stamped now.
+    /// The intent to stop the instance `record` describes, stamped now. The
+    /// App restarts an instance it supervises; a controller restarts any other.
     pub(crate) fn new(request: StopRequest, record: &InstanceRecord) -> Self {
+        let respawn_by = match request.reason {
+            StopReason::Stop => None,
+            StopReason::Restart if record.app_supervised => Some(Respawner::App),
+            StopReason::Restart => Some(Respawner::Controller),
+        };
         Self {
             schema: STOP_INTENT_SCHEMA.to_owned(),
             reason: request.reason,
             requested_by: request.requested_by,
+            respawn_by,
             instance_id: record.nonce.clone(),
             pid: record.pid,
             requested_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
@@ -182,7 +207,7 @@ fn write_new_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{STOP_INTENT_SCHEMA, StopIntent, StopReason, StopRequester};
+    use super::{Respawner, STOP_INTENT_SCHEMA, StopIntent, StopReason, StopRequester};
 
     /// Pins the wire format the App supervisor parses.
     #[test]
@@ -191,6 +216,7 @@ mod tests {
             schema: STOP_INTENT_SCHEMA.to_owned(),
             reason: StopReason::Restart,
             requested_by: StopRequester::Mcp,
+            respawn_by: Some(Respawner::App),
             instance_id: "3f1c9a52-4a0e-4a8e-9a57-0d9a3e1f7b21".to_owned(),
             pid: 4242,
             requested_at: "2026-09-28T01:02:03.456Z".to_owned(),
@@ -201,10 +227,23 @@ mod tests {
                 "schema": "butler.agent-stop-intent.v1",
                 "reason": "restart",
                 "requested_by": "mcp",
+                "respawn_by": "app",
                 "instance_id": "3f1c9a52-4a0e-4a8e-9a57-0d9a3e1f7b21",
                 "pid": 4242,
                 "requested_at": "2026-09-28T01:02:03.456Z",
             })
+        );
+        let stop = StopIntent {
+            reason: StopReason::Stop,
+            respawn_by: None,
+            ..intent.clone()
+        };
+        let stop = serde_json::to_value(&stop).unwrap();
+        assert_eq!(stop["reason"], "stop");
+        assert_eq!(stop["respawn_by"], serde_json::Value::Null);
+        assert_eq!(
+            serde_json::to_value(Respawner::Controller).unwrap(),
+            "controller"
         );
         // The `--requested-by` spelling is the wire spelling.
         for requester in [StopRequester::Cli, StopRequester::App, StopRequester::Mcp] {

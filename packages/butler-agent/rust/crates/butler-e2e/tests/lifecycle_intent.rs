@@ -1,8 +1,9 @@
-//! L. Intentional stop signal (#223, SVC-02..SVC-05): `butler stop`,
+//! L. Intentional stop signal (#223, SVC-02..SVC-06): `butler stop`,
 //! `butler restart` and MCP `restart_butler` announce the exit in
 //! `D/state/agent-stop-intent.json` before they signal the service, so the
-//! App's supervisor can tell it from a crash; the next instance removes the
-//! announcement when it is ready.
+//! App's supervisor can tell it from a crash; the App starts the replacement
+//! of an instance it supervises; the next instance removes the announcement
+//! when it is ready.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -19,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::gateway::Gateway;
-use butler_e2e::e2e::scenario::Setup;
+use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, harness_error};
 use serde_json::{Value, json};
 
@@ -79,6 +80,12 @@ fn assert_intent(intent: &Value, reason: &str, requested_by: &str, record: &Valu
     assert_eq!(intent["schema"], INTENT_SCHEMA, "{intent}");
     assert_eq!(intent["reason"], reason, "{intent}");
     assert_eq!(intent["requested_by"], requested_by, "{intent}");
+    let respawn_by = match (reason, record["app_supervised"] == true) {
+        ("restart", true) => json!("app"),
+        ("restart", false) => json!("controller"),
+        _ => Value::Null,
+    };
+    assert_eq!(intent["respawn_by"], respawn_by, "{intent}");
     assert_eq!(intent["instance_id"], record["nonce"], "{intent}");
     assert_eq!(intent["pid"], record["pid"], "{intent}");
     let requested_at = intent["requested_at"].as_str().unwrap_or_default();
@@ -178,6 +185,8 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
     let before = ready_record(&data, Duration::from_secs(30)).await;
+    // Started without the App's foreground lease: the controller restarts it.
+    assert_eq!(before["app_supervised"], false, "{before}");
 
     let started = Instant::now();
     let mut watch = RestartWatch::default();
@@ -214,19 +223,31 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     s.finish().await
 }
 
-/// SVC-04 — next to an agent the App started (its gateway token only in the
-/// App's file in D), `butler start`, `butler restart` and MCP
-/// `restart_butler` from an environment without that token report success
-/// truthfully instead of `native_service_app_health_auth_unavailable`.
+/// SVC-04 — restarting an agent the App supervises keeps the App's instance.
+/// The agent runs with the App's environment: foreground lease, gateway token
+/// only in the App's file in D, App gateway forced on although
+/// `gateways/app.json` disables it. From a terminal without the App's
+/// variables, `butler start` reports it running (not
+/// `native_service_app_health_auth_unavailable`); MCP `restart_butler` and
+/// `butler restart` announce a restart the App carries out, report success
+/// once it is ready, and each replacement is again the App's child with local
+/// auth and the App gateway on the App's port.
 #[tokio::test]
-async fn svc_04_controls_report_success_without_the_app_token() -> Result<(), HarnessError> {
+async fn svc_04_restart_keeps_the_app_supervised_instance() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let _serial = SERIAL.lock().await;
-    let mut s = Setup::new("SVC-04")?.app_local_auth().start().await?;
+    let setup = Setup::new("SVC-04")?.app_supervisor();
+    let gateways = setup.sandbox.data.join("gateways");
+    std::fs::create_dir_all(&gateways)?;
+    std::fs::write(
+        gateways.join("app.json"),
+        json!({"enabled": false}).to_string(),
+    )?;
+    let mut s = setup.start().await?;
     let cleanup = StopOnDrop(s.agent.launch.clone());
     let data = s.sandbox.data.clone();
     let first = ready_record(&data, Duration::from_secs(30)).await;
-    assert_eq!(first["app_auth_required"], true, "{first}");
+    assert_app_instance(&first, &s);
 
     let mut command = s.agent.launch.command_without_local_auth();
     command.args(["start", "--json"]);
@@ -236,6 +257,66 @@ async fn svc_04_controls_report_success_without_the_app_token() -> Result<(), Ha
     assert_eq!(start["data"]["alreadyRunning"], true, "{start}");
     assert_eq!(start["data"]["pid"], first["pid"], "{start}");
 
+    let (reply, intent) = restart_butler_over_mcp(&mut s, &first).await?;
+    assert_ne!(reply["result"]["isError"], true, "{reply}");
+    assert_intent(&intent, "restart", "mcp", &first);
+    let second = ready_record(&data, Duration::from_secs(30)).await;
+    assert_ne!(second["nonce"], first["nonce"]);
+    assert_app_instance(&second, &s);
+    let text = reply["result"]["content"][0]["text"].as_str().unwrap_or("");
+    assert!(
+        text.contains(&format!("restarted (pid={})", second["pid"])),
+        "{reply}"
+    );
+    assert!(read_intent(&data).is_none(), "intent survived the restart");
+    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
+
+    let started = Instant::now();
+    let mut watch = RestartWatch::default();
+    let mut command = s.agent.launch.command_without_local_auth();
+    command.args(["restart", "--json"]);
+    let restart = s
+        .agent
+        .command_reaping(command, || {
+            watch.observe(&data, &second["nonce"], started);
+        })
+        .await?;
+    assert_eq!(restart.code, Some(0), "{restart:?}");
+    let restart = restart.json()?;
+    let (intent, _) = watch.intent.expect("restart wrote no intent");
+    assert_intent(&intent, "restart", "cli", &second);
+    let third = ready_record(&data, Duration::from_secs(30)).await;
+    assert_ne!(third["nonce"], second["nonce"]);
+    assert_app_instance(&third, &s);
+    assert_eq!(restart["data"]["pid"], third["pid"], "{restart}");
+    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
+    drop(cleanup);
+    s.finish().await
+}
+
+/// Asserts that `record` is the instance the App started (the harness's
+/// child) and that it runs with the App's environment.
+fn assert_app_instance(record: &Value, s: &Scenario) {
+    let child = s.agent.pid().expect("the App's child is running");
+    assert_eq!(record["pid"], child, "not the App's child: {record}");
+    assert_eq!(record["app_supervised"], true, "{record}");
+    assert_eq!(record["app_enabled"], true, "App gateway lost: {record}");
+    assert_eq!(
+        record["app_auth_required"], true,
+        "local auth lost: {record}"
+    );
+    let endpoint = format!("http://127.0.0.1:{}", s.agent.launch.port);
+    assert_eq!(record["app_endpoint"], endpoint.as_str(), "{record}");
+}
+
+/// Calls MCP `restart_butler` from a terminal environment while the harness
+/// supervises the agent; returns the reply and the intent seen meanwhile.
+async fn restart_butler_over_mcp(
+    s: &mut Scenario,
+    before: &Value,
+) -> Result<(Value, Value), HarnessError> {
+    let data = s.sandbox.data.clone();
+    let nonce = before["nonce"].clone();
     let started = Instant::now();
     let mut watch = RestartWatch::default();
     let mut command = s.agent.launch.command_without_local_auth();
@@ -245,28 +326,53 @@ async fn svc_04_controls_report_success_without_the_app_token() -> Result<(), Ha
         .agent
         .while_reaping(
             move || mcp_tool_call(command, &mcp_log, "restart_butler"),
-            || watch.observe(&data, &first["nonce"], started),
+            || watch.observe(&data, &nonce, started),
         )
         .await??;
-    assert_ne!(reply["result"]["isError"], true, "{reply}");
-    let text = reply["result"]["content"][0]["text"].as_str().unwrap_or("");
-    assert!(text.contains("restarted"), "{reply}");
-    let (intent, _) = watch.intent.expect("restart_butler wrote no intent");
-    assert_intent(&intent, "restart", "mcp", &first);
-    let second = ready_record(&data, Duration::from_secs(30)).await;
-    assert_ne!(second["nonce"], first["nonce"]);
-    assert!(read_intent(&data).is_none(), "intent survived the restart");
-    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
+    let (intent, _) = watch
+        .intent
+        .ok_or_else(|| harness_error("restart_butler wrote no intent"))?;
+    Ok((reply, intent))
+}
 
-    let mut command = s.agent.launch.command_without_local_auth();
-    command.args(["restart", "--json"]);
-    let restart = s.agent.command_reaping(command, || {}).await?;
-    assert_eq!(restart.code, Some(0), "{restart:?}");
-    assert_eq!(restart.json()?["ok"], true, "{restart:?}");
-    let third = ready_record(&data, Duration::from_secs(30)).await;
-    assert_ne!(third["nonce"], second["nonce"]);
-    assert!(reachable(&s.gw, Duration::from_secs(30)).await);
-    drop(cleanup);
+/// SVC-06 — a stop whose announcement cannot be written is not delivered:
+/// the service keeps running with its record `ready`, so gateway control and
+/// `butler start` still accept it. Once the intent can be written, `stop`
+/// works.
+#[tokio::test]
+async fn svc_06_undeliverable_stop_leaves_the_service_ready() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let _serial = SERIAL.lock().await;
+    let mut s = Setup::new("SVC-06")?.start().await?;
+    let data = s.sandbox.data.clone();
+    let record = ready_record(&data, Duration::from_secs(30)).await;
+    // A directory where the intent goes: its atomic rename into place fails.
+    std::fs::create_dir_all(intent_path(&data).join("occupied"))?;
+
+    let refused = s.agent.cli_reaping(&["stop", "--json"]).await?;
+    assert_ne!(refused.code, Some(0), "{refused:?}");
+    assert!(
+        format!("{}{}", refused.stdout, refused.stderr)
+            .contains("native_service_stop_intent_unavailable"),
+        "{refused:?}"
+    );
+    assert!(
+        s.agent.is_running(),
+        "an undelivered stop ended the service"
+    );
+    let after = instance_record(&data).expect("the instance record is gone");
+    assert_eq!(after["nonce"], record["nonce"], "{after}");
+    assert_eq!(after["state"], "ready", "record left half stopped: {after}");
+    let test = s.agent.cli(&["gateway", "test", "app", "--json"])?.json()?;
+    assert_eq!(test["data"]["status"], "online", "{test}");
+    let start = s.agent.cli(&["start", "--json"])?.json()?;
+    assert_eq!(start["data"]["alreadyRunning"], true, "{start}");
+
+    std::fs::remove_dir_all(intent_path(&data))?;
+    let stopped = s.agent.cli_reaping(&["stop", "--json"]).await?;
+    assert_eq!(stopped.code, Some(0), "{stopped:?}");
+    let intent = read_intent(&data).expect("stop wrote no intent");
+    assert_intent(&intent, "stop", "cli", &record);
     s.finish().await
 }
 

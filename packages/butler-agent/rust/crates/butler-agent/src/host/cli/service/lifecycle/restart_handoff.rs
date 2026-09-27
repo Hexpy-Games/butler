@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    acquire_admission, active_service, log_file, resolve_data_root, service_configuration,
-    start_service_admitted, stop_service_admitted,
+    StopReport, acquire_admission, active_service, log_file, resolve_data_root,
+    service_configuration, start_replacement, stop_service_admitted,
 };
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance as service_instance;
@@ -191,14 +191,14 @@ async fn restart_once(
     )
     .await
     .map_err(|error| (stop_failure_state(&error), error.to_string()))?;
-    if stopped["alreadyStopped"] == true {
+    if matches!(stopped, StopReport::AlreadyStopped) {
         drop(admission);
         return Err((
             "target_gone",
             "native_service_restart_handoff_target_gone".into(),
         ));
     }
-    let started = start_service_admitted(installation, &config, admission)
+    let started = start_replacement(installation, &config, admission, &stopped)
         .await
         .map_err(|error| ("start_failed", error.to_string()))?;
     let active = match active_service(data_root) {

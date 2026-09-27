@@ -50,7 +50,7 @@ pub struct Setup {
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
-    app_local_auth: bool,
+    app_supervisor: bool,
     replay_only: bool,
     extends: Option<String>,
 }
@@ -82,7 +82,7 @@ impl Setup {
             model: None,
             stub_credential: true,
             record_into: None,
-            app_local_auth: false,
+            app_supervisor: false,
             replay_only: false,
             extends: None,
         })
@@ -144,10 +144,12 @@ impl Setup {
         self
     }
 
-    /// Keeps the gateway token in the data dir's App local-auth file, the
-    /// layout of an agent the Butler App started.
-    pub fn app_local_auth(mut self) -> Self {
-        self.app_local_auth = true;
+    /// Starts and supervises the agent as the Butler App does: gateway token
+    /// in the data dir's App local-auth file, foreground lease, App gateway
+    /// forced on, and a restart the intent hands to the App carried out by
+    /// the harness ([`Launch::use_app_supervisor`]).
+    pub fn app_supervisor(mut self) -> Self {
+        self.app_supervisor = true;
         self
     }
 
@@ -167,13 +169,13 @@ impl Setup {
             model,
             stub_credential,
             record_into,
-            app_local_auth,
+            app_supervisor,
             replay_only,
             extends,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
-        if app_local_auth {
-            launch.use_app_local_auth_file()?;
+        if app_supervisor {
+            launch.use_app_supervisor()?;
         }
         let default_model = ModelChoice {
             model: "openai/gpt-6-sol".into(),

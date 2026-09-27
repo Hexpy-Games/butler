@@ -27,7 +27,7 @@ use crate::host::{
     ServiceConfiguration, SystemIdentity, require_model_ref,
 };
 use maintenance::{maintenance_join_result, run_service_maintenance, unexpected_maintenance_exit};
-use support::{close_runtime, failure, io, process_locale};
+use support::{close_runtime, failure, holds_foreground_lease, io, process_locale};
 
 const INBOUND_QUEUE_FALLBACK_POLL: Duration = Duration::from_millis(500);
 
@@ -108,6 +108,7 @@ async fn run(
         &config.data_root,
         &executable,
         &config.installation,
+        holds_foreground_lease(foreground_lease),
     )
     .map_err(|message| {
         failure("native_service_instance_unavailable", message.to_string()).with_source(message)
@@ -155,7 +156,6 @@ async fn run(
         &config,
         writer.clone(),
         &mut instance,
-        foreground_lease,
         logs,
     )
     .await;
@@ -195,7 +195,6 @@ async fn serve(
     config: &ServiceConfiguration,
     writer: Arc<TranscriptWriter>,
     instance: &mut crate::host::service::instance::InstanceGuard,
-    foreground_lease_override: Option<bool>,
     logs: ServiceLogMode,
 ) -> Result<String, BtccError> {
     let bootstrap = config
@@ -248,9 +247,7 @@ async fn serve(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(io)?;
-    let use_foreground_lease = foreground_lease_override
-        .unwrap_or_else(|| std::env::var("BUTLER_APP_FOREGROUND_LEASE").as_deref() == Ok("1"));
-    let foreground_lease = if use_foreground_lease {
+    let foreground_lease = if instance.app_supervised() {
         Some(ForegroundLease::capture().map_err(io)?)
     } else {
         None

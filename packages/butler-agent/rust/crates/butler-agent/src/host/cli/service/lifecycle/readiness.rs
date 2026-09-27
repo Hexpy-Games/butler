@@ -9,7 +9,9 @@ use nix::unistd::Pid;
 use serde::Deserialize;
 
 use super::probe_auth::{is_loopback_endpoint, probe_tokens};
-use super::{INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service};
+use super::{
+    APP_RESPAWN_TIMEOUT, INSTANCE_PUBLISH_TIMEOUT, POLL_INTERVAL, START_TIMEOUT, active_service,
+};
 use crate::host::ServiceConfiguration;
 use crate::host::service::instance::{InstanceRecord, instance_is_locked, read_record};
 
@@ -108,6 +110,33 @@ pub(super) async fn wait_until_registered(
         }
         if Instant::now() >= deadline {
             return Err("native_service_start_timeout: ownership record was not published".into());
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+/// Waits for the App to start the instance that replaces the one with
+/// `previous_nonce` (restart of an App-supervised instance) and returns the
+/// replacement's record once it is published.
+pub(super) async fn wait_for_app_respawn(
+    data_root: &Path,
+    previous_nonce: &str,
+) -> Result<InstanceRecord, crate::host::HostError> {
+    let deadline = Instant::now() + APP_RESPAWN_TIMEOUT;
+    loop {
+        match active_service(data_root) {
+            Ok(Some(record)) if record.nonce != previous_nonce => return Ok(record),
+            Ok(_) => {}
+            Err(error)
+                if error.message()
+                    == "native_service_instance_ambiguous: DATA lock has no record" => {}
+            Err(error) => return Err(error),
+        }
+        if Instant::now() >= deadline {
+            return Err(
+                "native_service_app_respawn_timeout: the Butler App did not start the service again"
+                    .into(),
+            );
         }
         tokio::time::sleep(POLL_INTERVAL).await;
     }

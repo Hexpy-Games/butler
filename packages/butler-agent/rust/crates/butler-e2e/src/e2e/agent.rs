@@ -11,6 +11,8 @@ use super::gateway::Gateway;
 use super::sandbox::Sandbox;
 use super::{HarnessError, harness_error};
 
+mod app_supervisor;
+
 /// Environment and layout needed to (re)start the agent.
 #[derive(Clone)]
 pub struct Launch {
@@ -24,6 +26,9 @@ pub struct Launch {
     pub port: u16,
     pub token: String,
     pub env: Vec<(String, String)>,
+    /// The harness starts and supervises the agent as the Butler App does
+    /// (see [`Launch::use_app_supervisor`]).
+    pub app_supervisor: bool,
 }
 
 impl Launch {
@@ -53,6 +58,7 @@ impl Launch {
                     auth_file.display().to_string(),
                 ),
             ],
+            app_supervisor: false,
         })
     }
 
@@ -128,6 +134,8 @@ pub struct Agent {
     pub launch: Launch,
     child: Option<Child>,
     starts: u32,
+    /// The instance-record nonce of the running child, once it is published.
+    instance_nonce: Option<String>,
 }
 
 impl Agent {
@@ -136,6 +144,7 @@ impl Agent {
             launch,
             child: None,
             starts: 0,
+            instance_nonce: None,
         };
         let gateway = agent.spawn().await?;
         Ok((agent, gateway))
@@ -143,13 +152,13 @@ impl Agent {
 
     async fn spawn(&mut self) -> Result<Gateway, HarnessError> {
         self.starts += 1;
+        self.instance_nonce = None;
         let log = self.launch.logs.join(format!("agent-{}.log", self.starts));
         let stdout = File::create(&log)?;
         let stderr = stdout.try_clone()?;
         let child = self
             .launch
-            .command()
-            .stdin(Stdio::null())
+            .service_command()
             .stdout(stdout)
             .stderr(stderr)
             .spawn()?;
@@ -161,6 +170,7 @@ impl Agent {
         let deadline = Instant::now() + Duration::from_secs(90);
         loop {
             if gateway.healthy().await {
+                self.remember_instance();
                 return Ok(gateway);
             }
             if let Some(status) = self
@@ -286,7 +296,8 @@ impl Agent {
 
     /// Runs blocking `work` to completion while reaping the service child
     /// when it exits, as a supervisor would; `observe` runs about every 25 ms
-    /// while `work` runs.
+    /// while `work` runs. As the App's supervisor, the harness starts the
+    /// child again when the exit was an announced restart the App carries out.
     pub async fn while_reaping<T: Send + 'static>(
         &mut self,
         work: impl FnOnce() -> T + Send + 'static,
@@ -298,7 +309,11 @@ impl Agent {
             if let Some(child) = self.child.as_mut()
                 && matches!(child.try_wait(), Ok(Some(_)))
             {
+                let pid = child.id();
                 self.child = None;
+                if self.app_restart_requested(pid) {
+                    self.spawn().await?;
+                }
             }
             if task.is_finished() {
                 break;
