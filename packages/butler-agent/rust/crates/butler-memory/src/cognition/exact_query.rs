@@ -62,7 +62,7 @@ impl ExactMemoryQuery {
             self.jobs.spawn(async move {
                 let result = tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    run::query(&path, &binding, &args)
+                    run::query(&path, &binding, &crate::lenient::view(&args))
                 })
                 .await
                 .unwrap_or_else(|error| {
