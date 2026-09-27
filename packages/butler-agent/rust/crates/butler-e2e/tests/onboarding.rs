@@ -18,6 +18,7 @@ use serde_json::json;
 /// ONB-01 — Fresh install boots to a usable, empty state.
 #[tokio::test]
 async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let setup = Setup::new("ONB-01")?.fixture(Fixture::Empty);
     let installation = setup.sandbox.installation_fingerprint()?;
     let mut s = setup.start().await?;
@@ -67,6 +68,7 @@ async fn onb_01_fresh_install_boots_empty() -> Result<(), HarnessError> {
 /// ONB-01 (inject) — unusable data dirs are refused before any write.
 #[tokio::test]
 async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let setup = Setup::new("ONB-01-INJECT")?.fixture(Fixture::Empty);
     // (a) data dir not writable.
     let locked = setup.sandbox.root.join("locked-data");
@@ -115,6 +117,7 @@ async fn onb_01_unusable_data_dirs_are_refused() -> Result<(), HarnessError> {
 /// ONB-02 — First message without any provider credential.
 #[tokio::test]
 async fn onb_02_first_message_without_credential_fails_clearly() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("ONB-02")?
         .cassette("ONB-02")
         .without_credential()
@@ -170,6 +173,7 @@ async fn onb_02_first_message_without_credential_fails_clearly() -> Result<(), H
 /// ONB-04 — The gateway requires its token.
 #[tokio::test]
 async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("ONB-04")?
         .env("BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX", "3")
         .start()
@@ -255,6 +259,7 @@ async fn onb_04_gateway_requires_its_token() -> Result<(), HarnessError> {
 /// 401: same user-facing class, bounded, no retry storm.
 #[tokio::test]
 async fn onb_02_provider_401_fails_without_retry_storm() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     use butler_e2e::e2e::faults::{Fault, Transform};
     let s = Setup::new("ONB-02-401")?.cassette("ONB-02").start().await?;
     if s.recording() {

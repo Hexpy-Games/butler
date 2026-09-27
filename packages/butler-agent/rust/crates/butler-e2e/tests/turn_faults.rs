@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 /// TURN-05 — Broken stream: truncation, reset, stall.
 #[tokio::test]
 async fn turn_05_broken_stream_never_delivers_partial_text() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("TURN-05")?
         .cassette("TURN-05")
         .env("BUTLER_MODEL_API_RETRY_DELAY_MS", "50")

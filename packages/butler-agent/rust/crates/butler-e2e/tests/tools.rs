@@ -20,6 +20,7 @@ use butler_e2e::e2e::{HarnessError, nonce};
 /// TOOL-01 — Read tool is really executed and shown.
 #[tokio::test]
 async fn tool_01_read_tool_is_executed_and_shown() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let secret = nonce();
     let setup = Setup::new("TOOL-01")?
         .cassette("TOOL-01")
@@ -74,6 +75,7 @@ const MAKE: &str =
 /// TOOL-03 — Malformed tool calls go back to the model, not the crash handler:
 /// no side effect, a terminal turn, and no service restart.
 async fn malformed_call(case: &str, mutation: ArgsMutation) -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let name = format!("TOOL-03-{case}");
     let mut s = Setup::new(&name)?.cassette(&name).start().await?;
     // The model's first write_file call is malformed; its real reaction to the
@@ -130,22 +132,26 @@ async fn malformed_call(case: &str, mutation: ArgsMutation) -> Result<(), Harnes
 
 #[tokio::test]
 async fn tool_03_truncated_arguments() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     malformed_call("truncated", ArgsMutation::Truncate).await
 }
 
 #[tokio::test]
 async fn tool_03_wrong_argument_types() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     malformed_call("wrong-types", ArgsMutation::WrongTypes).await
 }
 
 #[tokio::test]
 async fn tool_03_unknown_tool_name() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     malformed_call("unknown-tool", ArgsMutation::UnknownTool).await
 }
 
 /// TOOL-04 — Shell tool environment is scrubbed.
 #[tokio::test]
 async fn tool_04_shell_environment_is_scrubbed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     // OPENAI_API_KEY is not used as a canary: it switches OpenAI to API-key
     // mode and away from the recorded subscription endpoint.
     let canaries: Vec<(String, String)> = [
@@ -214,6 +220,7 @@ const INSIDE: &str =
 /// installation dir unchanged, the refusal visible, the turn terminal and the
 /// service not replaced.
 async fn escape(case: &str) -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let name = format!("TOOL-05-{case}");
     let setup = Setup::new(&name)?.cassette(&name);
     let root = setup.sandbox.root.clone();
@@ -281,20 +288,24 @@ async fn escape(case: &str) -> Result<(), HarnessError> {
 
 #[tokio::test]
 async fn tool_05_parent_directory_escape() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     escape("parent").await
 }
 
 #[tokio::test]
 async fn tool_05_absolute_path_escape() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     escape("absolute").await
 }
 
 #[tokio::test]
 async fn tool_05_symlink_escape() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     escape("symlink").await
 }
 
 #[tokio::test]
 async fn tool_05_installation_dir_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     escape("installation").await
 }

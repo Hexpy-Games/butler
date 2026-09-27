@@ -10,9 +10,14 @@ Spec: `SCENARIOS.md`, `PROVIDER_CONFIG.md` (E2E strategy notes).
 
 ## Run
 
+Scenarios are opt-in: without `BUTLER_E2E_TIER` every scenario returns
+immediately (so `cargo test --workspace` in the unit-test CI does not run
+the stub tier twice; the `e2e` workflow runs it). Only the cassette lint
+always runs.
+
 ```sh
-# stub tier (default): replays committed cassettes, live tests show as ignored
-cargo test -p butler-e2e
+# stub tier: replays committed cassettes, live tests show as ignored
+BUTLER_E2E_TIER=stub cargo test -p butler-e2e
 
 # live tier against the owner's ChatGPT subscription (Codex auth.json, read-only)
 BUTLER_E2E_TIER=live cargo test -p butler-e2e --test live -- --ignored --test-threads=1
@@ -26,7 +31,7 @@ The harness builds `butler-agent` itself (`cargo build -p butler-agent`) unless
 
 | Variable | Meaning |
 |----------|---------|
-| `BUTLER_E2E_TIER` | `stub` (default), `live` (missing credentials fail), `all` (missing credentials: `SKIPPED (no credentials: …)`) |
+| `BUTLER_E2E_TIER` | unset: scenarios skipped; `stub`, `live` (missing credentials fail), `all` (missing credentials: `SKIPPED (no credentials: …)`) |
 | `BUTLER_E2E_PROVIDER` | `openai-subscription` (default), `openai`, `opencode-go`, … |
 | `BUTLER_E2E_MODEL` / `BUTLER_E2E_MODEL_MATRIX` | `provider/model@effort`; defaults `openai/gpt-6-sol@low` and `openai/gpt-6-sol@low,openai/gpt-6-luna@max` |
 | `BUTLER_E2E_CODEX_PROFILE` | Butler OAuth test profile (default `~/.butler-e2e-auth/auth/openai-codex.json`, optional; needed only for LIVE-10) |

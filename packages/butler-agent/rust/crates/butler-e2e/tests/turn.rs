@@ -67,6 +67,7 @@ async fn new_session(s: &Scenario, title: &str) -> Result<String, HarnessError> 
 /// TURN-01 — Reply is delivered, persisted and survives restart.
 #[tokio::test]
 async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("TURN-01")?.cassette("TURN-01").start().await?;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let client_id = uuid::Uuid::new_v4().to_string();
@@ -166,6 +167,7 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
 #[tokio::test]
 #[ignore = "product gap: TURN-01-STREAM — the Rust runtime emits no model.stream.text_delta / message.final.delta events; the UI gets the answer only as one message.created"]
 async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("TURN-01-STREAM")?
         .cassette("TURN-01")
         .start()
@@ -190,6 +192,7 @@ async fn turn_01_reply_is_streamed_incrementally() -> Result<(), HarnessError> {
 /// TURN-02 — Duplicate submit is idempotent.
 #[tokio::test]
 async fn turn_02_duplicate_submit_is_idempotent() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("TURN-02")?.cassette("TURN-02").start().await?;
     let client_id = uuid::Uuid::new_v4().to_string();
     let body = json!({"chat_id": "general", "text": "Reply with exactly the word: once", "client_message_id": client_id});
@@ -244,6 +247,7 @@ async fn turn_02_duplicate_submit_is_idempotent() -> Result<(), HarnessError> {
 /// TURN-03 — Stop mid-stream (owner: keep partial text, mark the turn stopped).
 #[tokio::test]
 async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("TURN-03")?.cassette("TURN-03").start().await?;
     if s.recording() {
         s.turn("general", NUMBERS).await?;
@@ -324,6 +328,7 @@ async fn turn_03_stop_mid_stream() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "product gap: TURN-03-PARTIAL — after Stop mid-stream no partial assistant text is kept; the owner decided partial text stays, marked stopped"]
 async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("TURN-03-PARTIAL")?
         .cassette("TURN-03")
         .start()
@@ -356,6 +361,7 @@ async fn turn_03_stop_keeps_partial_text_marked_stopped() -> Result<(), HarnessE
 /// TURN-07 — Parallel sessions stay isolated.
 #[tokio::test]
 async fn turn_07_parallel_sessions_stay_isolated() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("TURN-07")?.cassette("TURN-07").start().await?;
     let words = ["alpha", "bravo", "charlie"];
     let mut sessions = Vec::new();

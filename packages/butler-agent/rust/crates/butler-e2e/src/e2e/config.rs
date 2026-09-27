@@ -188,6 +188,18 @@ fn existing(path: &Path) -> Option<PathBuf> {
     path.is_file().then(|| path.to_owned())
 }
 
+/// True when `BUTLER_E2E_TIER` is set; see [`crate::gate`].
+pub fn tier_selected() -> bool {
+    let selected = nonempty("BUTLER_E2E_TIER").is_some();
+    if !selected {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            eprintln!("butler-e2e: SKIPPED (BUTLER_E2E_TIER unset; run with BUTLER_E2E_TIER=stub)");
+        });
+    }
+    selected
+}
+
 pub fn nonempty(key: &str) -> Option<String> {
     env::var(key)
         .ok()

@@ -63,6 +63,7 @@ fn db_dump(scenario: &Scenario) -> String {
 }
 
 async fn assert_manifest(s: &Scenario, manifest: &Value) -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let chats = s.gw.get("/chats").await?;
     for chat in manifest["chats"].as_array().unwrap() {
         let id = chat["id"].as_str().unwrap();
@@ -95,6 +96,7 @@ async fn assert_manifest(s: &Scenario, manifest: &Value) -> Result<(), HarnessEr
 #[tokio::test]
 #[ignore = "product gap: MIG-01-PRE-BTCC — a data dir whose App DB predates the BTCC runtime store (no agent-runtime/btcc.sqlite) is refused at start: `storage_bootstrap_failed: legacy Agent BTCC migration is unsupported`"]
 async fn mig_01_legacy_data_dir_opens_with_all_content() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let manifest = legacy_manifest()?;
     let mut s = Setup::new("MIG-01")?
         .fixture(Fixture::Legacy)
@@ -125,6 +127,7 @@ async fn mig_01_legacy_data_dir_opens_with_all_content() -> Result<(), HarnessEr
 /// the refusal names the problem.
 #[tokio::test]
 async fn mig_01_unsupported_legacy_dir_is_refused_without_writes() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let setup = Setup::new("MIG-01-REFUSE")?;
     let data = setup.sandbox.data.clone();
     butler_e2e::e2e::fixtures::legacy(&data, "openai/gpt-6-sol")?;
@@ -178,6 +181,7 @@ fn tree(root: &std::path::Path) -> Vec<(String, String)> {
 /// and the unknown column, and a second start writes nothing more.
 #[tokio::test]
 async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("MIG-01B")?.start().await?;
     let mut ids = Vec::new();
     for title in ["Garden planning", "Tomato varieties"] {

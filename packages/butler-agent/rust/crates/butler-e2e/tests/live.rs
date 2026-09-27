@@ -47,6 +47,7 @@ async fn answer(s: &Scenario, chat: &str, turn_id: &str) -> Result<String, Harne
 }
 
 fn done(id: &str) -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     live::report(id, "PASSED");
     Ok(())
 }
@@ -55,6 +56,7 @@ fn done(id: &str) -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_01_round_trip() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let _ = IGNORE;
     let Some((s, _)) = start("LIVE-01").await? else {
         return Ok(());
@@ -91,6 +93,7 @@ async fn live_01_round_trip() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_02_multi_turn_context() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-02").await? else {
         return Ok(());
     };
@@ -117,6 +120,7 @@ async fn live_02_multi_turn_context() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_03_tool_read() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-03").await? else {
         return Ok(());
     };
@@ -143,6 +147,7 @@ async fn live_03_tool_read() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_04_tool_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-04").await? else {
         return Ok(());
     };
@@ -163,6 +168,7 @@ async fn live_04_tool_write() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-05").await? else {
         return Ok(());
     };
@@ -223,6 +229,7 @@ async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_06_image_understanding() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-06").await? else {
         return Ok(());
     };
@@ -257,6 +264,7 @@ async fn live_06_image_understanding() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_07_model_matrix() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, provider)) = start("LIVE-07").await? else {
         return Ok(());
     };
@@ -291,6 +299,7 @@ async fn live_07_model_matrix() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_08_cancel_real_stream() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some((s, _)) = start("LIVE-08").await? else {
         return Ok(());
     };
@@ -322,6 +331,7 @@ async fn live_08_cancel_real_stream() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_09_cassette_drift() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some(provider) = live::gate("LIVE-09")? else {
         return Ok(());
     };
@@ -372,6 +382,7 @@ async fn live_09_cassette_drift() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "LIVE tier"]
 async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let Some(provider) = live::gate("LIVE-10")? else {
         return Ok(());
     };

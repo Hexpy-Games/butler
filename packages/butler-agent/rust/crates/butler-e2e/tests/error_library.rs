@@ -18,6 +18,7 @@ use butler_e2e::e2e::scenario::Setup;
 /// token written into the scenario's own Codex auth file).
 #[tokio::test]
 async fn error_library_codex_401() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     if !flag("BUTLER_E2E_RECORD") {
         let entry = Cassette::load("_errors/codex-401")?;
         assert_eq!(entry.exchanges[0].response.status, 401);

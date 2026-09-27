@@ -9,3 +9,16 @@
 //! Scenarios live in `tests/`; the catalog and rules are in `README.md`.
 
 pub mod e2e;
+
+/// Opt-in gate: E2E scenarios run only when `BUTLER_E2E_TIER` is set
+/// (`stub`, `live` or `all`). A plain `cargo test --workspace` (unit-test
+/// CI) therefore does not run the stub tier a second time; it reports each
+/// scenario as skipped and returns. The `e2e` workflow sets the tier.
+#[macro_export]
+macro_rules! gate {
+    () => {
+        if !$crate::e2e::config::tier_selected() {
+            return Ok(());
+        }
+    };
+}

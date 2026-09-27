@@ -70,6 +70,7 @@ fn event_ids(events: &[Value]) -> Vec<u64> {
 /// REC-02 — Crash (SIGKILL) while the provider stream is open.
 #[tokio::test]
 async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("REC-02")?.cassette("REC-02").start().await?;
     if s.recording() {
         s.turn("general", LONG).await?;
@@ -137,6 +138,7 @@ async fn rec_02_crash_during_streaming_recovers_without_duplicates() -> Result<(
 #[tokio::test]
 #[ignore = "product gap: REC-02-AUTORESUME — after SIGKILL mid-stream the restarted service re-runs the interrupted turn to delivered; the owner decided such turns end failed with retry available"]
 async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("REC-02-OWNER")?
         .cassette("REC-02")
         .start()
@@ -195,6 +197,7 @@ async fn crash_after_effect(id: &str) -> Result<(Scenario, String, String), Harn
 /// and the service comes back.
 #[tokio::test]
 async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let (mut s, turn_id, marker) = crash_after_effect("REC-03").await?;
     let log = s.sandbox.data.join("log.txt");
     let until = Instant::now() + Duration::from_secs(if s.recording() { 60 } else { 20 });
@@ -223,6 +226,7 @@ async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), Harn
 #[tokio::test]
 #[ignore = "product gap: REC-03-STUCK — after SIGKILL following a run_command effect, the restarted service resumes the turn, fails with bounded_continuation_item_identity_invalid, exits for process replacement, and the App turn stays `thinking` indefinitely"]
 async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let (mut s, turn_id, marker) = crash_after_effect("REC-03-OWNER").await?;
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
@@ -245,6 +249,7 @@ async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), Ha
 /// terminal, never stuck, with zero or one answer.
 #[tokio::test]
 async fn rec_01_graceful_stop_during_turn() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("REC-01")?.cassette("REC-01").start().await?;
     if !s.recording() {
         s.provider()?.set_pacing(butler_e2e::e2e::provider::Pacing {
@@ -273,6 +278,7 @@ async fn rec_01_graceful_stop_during_turn() -> Result<(), HarnessError> {
 /// REC-05 — Stale lock of a dead process; second concurrent start refused.
 #[tokio::test]
 async fn rec_05_stale_instance_and_second_start() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("REC-05")?.start().await?;
     // A second service on the same data dir is refused while one runs.
     let mut second = s.agent.launch.clone();

@@ -21,6 +21,7 @@ const LONG: &str = "Write the numbers from one to twelve as English words, separ
 /// PRO-01 — Profile read/write through HTTP and CLI, persisted.
 #[tokio::test]
 async fn pro_01_personalization_read_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("PRO-01")?.start().await?;
     let marker = butler_e2e::e2e::nonce();
     let reply = s
@@ -76,6 +77,7 @@ async fn pro_01_personalization_read_write() -> Result<(), HarnessError> {
 /// PRJ-01 — Project lifecycle: create, pin, archive, navigation, restart.
 #[tokio::test]
 async fn prj_01_project_lifecycle() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("PRJ-01")?.start().await?;
     let name = format!("E2E {}", &butler_e2e::e2e::nonce()[..6]);
     let created =
@@ -149,6 +151,7 @@ fn s_archives(reply: &butler_e2e::e2e::gateway::Reply) -> Value {
 /// uploads rejected without orphan files.
 #[tokio::test]
 async fn att_01_upload_and_attach() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("ATT-01")?.start().await?;
     let png = media::digits_png("2718", 6);
     let text = format!("attachment {}\n", butler_e2e::e2e::nonce()).into_bytes();
@@ -296,6 +299,7 @@ async fn start_slow_turn(s: &Scenario) -> Result<String, HarnessError> {
 /// Q-01 — Queue while busy: edit, delete, then in-order exactly-once runs.
 #[tokio::test]
 async fn q_01_queue_while_busy() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("Q-01")?.cassette("Q-01").start().await?;
     let running = start_slow_turn(&s).await?;
     let first = enqueue(&s, "Reply with exactly the word: first").await?;
@@ -360,6 +364,7 @@ async fn q_01_queue_while_busy() -> Result<(), HarnessError> {
 /// restart and runs exactly once.
 #[tokio::test]
 async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("Q-02")?.cassette("Q-02").start().await?;
     let running = start_slow_turn(&s).await?;
     let client = uuid::Uuid::new_v4().to_string();
@@ -419,6 +424,7 @@ async fn q_02_queue_durability_and_conflicts() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "product gap: Q-02-CANCEL — after POST /turns/{id}/cancel the next queued message is dispatched immediately; the owner decided a cancel pauses the queue"]
 async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("Q-02-CANCEL")?
         .cassette("Q-02-CANCEL")
         .start()
@@ -450,6 +456,7 @@ async fn q_02_cancel_pauses_the_queue() -> Result<(), HarnessError> {
 #[tokio::test]
 #[ignore = "product gap: ATT-01-IMAGE — POST /messages with a PNG attachment for openai/gpt-6-sol (catalog: image input supported) answers 409 image_model_unsupported; the public error does not say which admission check failed"]
 async fn att_01_image_attachment_admitted_for_image_model() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("ATT-01-IMAGE")?.start().await?;
     let png = media::digits_png("4821", 12);
     let upload =

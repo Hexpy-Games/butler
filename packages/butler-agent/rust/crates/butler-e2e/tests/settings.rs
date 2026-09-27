@@ -27,6 +27,7 @@ fn controls(turn: &Value) -> (&str, &str) {
 /// SET-01 — Changing the model in Settings applies to the next turn.
 #[tokio::test]
 async fn set_01_model_change_applies_to_next_turn() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("SET-01")?.cassette("SET-01").start().await?;
     assert_eq!(s.gw.settings().await?["model"], "openai/gpt-6-sol");
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -70,6 +71,7 @@ async fn set_01_model_change_applies_to_next_turn() -> Result<(), HarnessError> 
 #[tokio::test]
 #[ignore = "product gap: SET-01-CLI — PATCH /settings stores the model in the App DB; `butler model status` reads system.defaultModel from butler.config.json and keeps reporting the old model"]
 async fn set_01_cli_model_status_agrees_with_settings() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("SET-01-CLI")?.start().await?;
     let reply =
         s.gw.patch(
@@ -86,6 +88,7 @@ async fn set_01_cli_model_status_agrees_with_settings() -> Result<(), HarnessErr
 /// SET-02 — Unavailable model and malformed settings are rejected.
 #[tokio::test]
 async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("SET-02")?.cassette("SET-02").start().await?;
     let before = s.gw.get("/settings").await?.text;
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
@@ -186,6 +189,7 @@ fn count_settings_updates(live: &LiveEvents) -> usize {
 /// SET-03 — Per-message model override does not change settings.
 #[tokio::test]
 async fn set_03_per_message_override_leaves_settings() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("SET-03")?.cassette("SET-03").start().await?;
     let before = s.gw.settings().await?;
     let accepted =
@@ -247,6 +251,7 @@ async fn set_03_per_message_override_leaves_settings() -> Result<(), HarnessErro
 #[tokio::test]
 #[ignore = "product gap: SET-03-STICKY — a per-message model override is persisted as the session's controls (source session_override), so the next plain message in that session keeps the override instead of the Settings model; needs an owner decision"]
 async fn set_03_override_does_not_stick_to_next_message() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let s = Setup::new("SET-03-STICKY")?
         .cassette("SET-03-STICKY")
         .start()
@@ -273,6 +278,7 @@ async fn set_03_override_does_not_stick_to_next_message() -> Result<(), HarnessE
 /// SET-05 — Concurrent settings edits do not lose updates.
 #[tokio::test]
 async fn set_05_concurrent_settings_edits_keep_every_write() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     let mut s = Setup::new("SET-05")?.start().await?;
     let patches = vec![
         json!({"language": "ko"}),
