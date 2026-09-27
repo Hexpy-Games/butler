@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::TokenEstimateInput;
+use butler_models::models::TokenEstimateInput;
 
 pub(crate) fn token_budget_to_chars(tokens: f64) -> usize {
     butler_core::json::saturating_usize(tokens.trunc().max(0.0) * 4.0)

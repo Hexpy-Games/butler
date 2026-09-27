@@ -22,7 +22,7 @@ pub(crate) fn read(data_root: &Path) -> ProfilingExtractorModelSnapshot {
     }
     .and_then(Value::as_str)
     .and_then(valid_model)
-    .unwrap_or_else(|| crate::models::DEFAULT_MODEL_REF.to_owned());
+    .unwrap_or_else(|| butler_models::models::DEFAULT_MODEL_REF.to_owned());
     let reasoning = config
         .pointer("/personalization/profiling/extractorReasoningEffort")
         .and_then(Value::as_str)
@@ -105,6 +105,6 @@ fn normalize_model(value: &str) -> Option<String> {
     valid_model(value).or_else(|| Some(DEFAULT_SETTING.into()))
 }
 fn valid_model(value: &str) -> Option<String> {
-    let parsed = crate::models::parse_model_ref(value);
+    let parsed = butler_models::models::parse_model_ref(value);
     (!parsed.model_id.is_empty()).then_some(parsed.canonical_ref)
 }

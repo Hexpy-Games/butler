@@ -26,8 +26,8 @@ struct WebAccessInner {
     data_root: PathBuf,
     client: Client,
     search_endpoint: Url,
-    configuration: Option<Arc<crate::models::ModelConfiguration>>,
-    prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
+    configuration: Option<Arc<butler_models::models::ModelConfiguration>>,
+    prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
     metrics: Arc<crate::operations::WebSearchMetrics>,
     /// Search-test commands run searches without the prompt planner.
     planning_disabled: bool,
@@ -52,8 +52,8 @@ struct WebSessionState {
 impl WebAccess {
     pub(crate) fn new(
         data_root: PathBuf,
-        configuration: Arc<crate::models::ModelConfiguration>,
-        prompt: Arc<dyn crate::models::ProviderPromptPort>,
+        configuration: Arc<butler_models::models::ModelConfiguration>,
+        prompt: Arc<dyn butler_models::models::ProviderPromptPort>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
     ) -> Result<Self, WebAccessError> {
         Self::configured(
@@ -86,7 +86,7 @@ impl WebAccess {
     /// Search-test commands compose provider auth without a prompt planner.
     pub(crate) fn new_search(
         data_root: PathBuf,
-        configuration: Arc<crate::models::ModelConfiguration>,
+        configuration: Arc<butler_models::models::ModelConfiguration>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
     ) -> Result<Self, WebAccessError> {
         Self::configured(
@@ -103,8 +103,8 @@ impl WebAccess {
     pub(crate) fn configured(
         data_root: PathBuf,
         endpoint: &str,
-        configuration: Option<Arc<crate::models::ModelConfiguration>>,
-        prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
+        configuration: Option<Arc<butler_models::models::ModelConfiguration>>,
+        prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
         metrics: Arc<crate::operations::WebSearchMetrics>,
         planning_disabled: bool,
         page_route: Arc<dyn PageRoute>,
@@ -195,11 +195,11 @@ impl WebAccess {
             .filter(|value| !value.is_empty()))
     }
 
-    pub(super) fn configuration(&self) -> Option<&Arc<crate::models::ModelConfiguration>> {
+    pub(super) fn configuration(&self) -> Option<&Arc<butler_models::models::ModelConfiguration>> {
         self.inner.configuration.as_ref()
     }
 
-    pub(super) fn prompt(&self) -> Option<&Arc<dyn crate::models::ProviderPromptPort>> {
+    pub(super) fn prompt(&self) -> Option<&Arc<dyn butler_models::models::ProviderPromptPort>> {
         self.inner.prompt.as_ref()
     }
 

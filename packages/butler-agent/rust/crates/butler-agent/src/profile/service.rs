@@ -14,10 +14,10 @@ use tokio_util::task::TaskTracker;
 use super::contracts::*;
 use super::{candidates, extractor_config, naming, onboarding, projection, storage};
 use crate::coordination::{CognitionWriteAcquire, CognitionWriteCoordinator};
-use crate::models::ProviderPromptPort;
 use crate::profile::ProfileCode;
 use crate::profile::presets::{PersonaLocale, PersonaPresets};
 use butler_core::configuration::ConfigurationWrites;
+use butler_models::models::ProviderPromptPort;
 
 const LOCAL_OPERATION_LIMIT: usize = 4;
 

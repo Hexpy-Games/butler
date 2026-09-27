@@ -11,8 +11,8 @@ use crate::gateway::AppBranchSummary;
 use crate::gateway::AppBranchSummaryInput;
 use crate::gateway::ApplicationFuture;
 use crate::gateway::GatewayApplicationError;
-use crate::models::ModelCatalog;
-use crate::models::TokenEstimateInput;
+use butler_models::models::ModelCatalog;
+use butler_models::models::TokenEstimateInput;
 use butler_turn::btcc::ModelRoundMessage;
 use butler_turn::btcc::ModelRoundPort;
 use butler_turn::btcc::ModelRoundRequest;
@@ -191,8 +191,8 @@ impl AppBranchConversationReader for AppBranchConversations {
 }
 
 pub(crate) struct AppBranchSummarizerAdapter {
-    provider: Arc<crate::models::ModelProvider>,
-    configuration: Arc<crate::models::ModelConfiguration>,
+    provider: Arc<butler_models::models::ModelProvider>,
+    configuration: Arc<butler_models::models::ModelConfiguration>,
     catalog: Arc<ModelCatalog>,
 }
 
@@ -306,7 +306,7 @@ struct BoundedContext {
 fn bound_context(
     text: &str,
     model_ref: &str,
-    snapshot: &crate::models::ModelCatalogSnapshot,
+    snapshot: &butler_models::models::ModelCatalogSnapshot,
     catalog: &ModelCatalog,
 ) -> Result<BoundedContext, ()> {
     let total = text.encode_utf16().count();
@@ -333,7 +333,7 @@ fn context_tokens(
     excerpt: &str,
     truncated: bool,
     model_ref: &str,
-    snapshot: &crate::models::ModelCatalogSnapshot,
+    snapshot: &butler_models::models::ModelCatalogSnapshot,
     catalog: &ModelCatalog,
 ) -> Result<f64, ()> {
     let serialized = serde_json::json!({

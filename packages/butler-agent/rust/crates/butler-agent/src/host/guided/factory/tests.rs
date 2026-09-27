@@ -14,14 +14,23 @@ use url::Url;
 
 use super::*;
 use crate::host::{AcceptedPlanProducer, GuidedCatalog, SystemIdentity};
-use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
-    PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
-    ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
-    ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
-    ProviderRoundPolicy,
-};
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelCatalogSnapshot;
+use butler_models::models::ModelCatalogSnapshotInput;
+use butler_models::models::ModelProvider;
+use butler_models::models::PromptUsageMetricInput;
+use butler_models::models::PromptUsageMetricSink;
+use butler_models::models::ProviderAuth;
+use butler_models::models::ProviderClock;
+use butler_models::models::ProviderConfigFuture;
+use butler_models::models::ProviderConfigRequest;
+use butler_models::models::ProviderObservation;
+use butler_models::models::ProviderObservationSink;
+use butler_models::models::ProviderPromptCachePolicy;
+use butler_models::models::ProviderRequestConfig;
+use butler_models::models::ProviderRequestConfigPort;
+use butler_models::models::ProviderRoundPolicy;
 use butler_turn::btcc::AgentLoop;
 use butler_turn::btcc::AgentLoopProgress;
 use butler_turn::btcc::BtccStorage;

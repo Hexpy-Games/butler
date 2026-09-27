@@ -13,10 +13,10 @@ use crate::cognition::ProjectionModelPolicyInput;
 use crate::cognition::set_extractor_memory_generation;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::{ProcessEnvironment, ProcessModels};
-use crate::models::ModelConfigurationClock;
-use crate::models::ReasoningEffort;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ReasoningEffort;
 
 pub(super) async fn run(
     data: &Path,

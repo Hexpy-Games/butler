@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use crate::{gateway::InboundQueue, operations::AutomationService};
 
 use crate::host::{AutomationQueue, DateParser, SystemIdentity};
-use crate::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationClock;
 
 pub(crate) fn open_automation_service(
     data_root: &Path,

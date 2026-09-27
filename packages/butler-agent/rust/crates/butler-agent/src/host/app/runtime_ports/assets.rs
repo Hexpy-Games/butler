@@ -14,15 +14,15 @@ use crate::gateway::ClaimedNativeSnapshot;
 use crate::gateway::GatewayApplicationError;
 use crate::gateway::ResolvedNativeAssets;
 use crate::gateway::resolve_session_references;
-use crate::models::ModelConfiguration;
-use crate::models::VisualImageAdmissionResult;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::VisualImageAdmissionResult;
 use butler_turn::conversation::AgentConversationStore;
 
 pub(crate) struct AppAssets {
     conversations: Arc<AgentConversationStore>,
     images: Arc<AppImageFiles>,
     models: Arc<ModelConfiguration>,
-    mcp: Arc<crate::mcp_client::McpClient>,
+    mcp: Arc<butler_models::mcp_client::McpClient>,
     files_root: PathBuf,
 }
 
@@ -31,7 +31,7 @@ impl AppAssets {
         conversations: Arc<AgentConversationStore>,
         images: Arc<AppImageFiles>,
         models: Arc<ModelConfiguration>,
-        mcp: Arc<crate::mcp_client::McpClient>,
+        mcp: Arc<butler_models::mcp_client::McpClient>,
         data_root: &Path,
     ) -> Self {
         Self {

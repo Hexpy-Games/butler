@@ -49,7 +49,7 @@ pub(crate) struct AgentRuntime {
     pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<WorkStreams>,
     pub skills: Arc<Skills>,
-    pub mcp_client: Arc<crate::mcp_client::McpClient>,
+    pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub context_maintenance: Arc<ContextMaintenance>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub(super) host: BtccHost,

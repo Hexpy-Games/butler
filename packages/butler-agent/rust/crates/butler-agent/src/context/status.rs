@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use super::{ContextBudgetEnvironment, ContextBudgetOverrides, ContextBudgetOwner};
-use crate::models::{ModelCatalog, ModelConfiguration};
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
 
 /// The context budget for status views could not be evaluated.
 #[derive(Debug, thiserror::Error)]

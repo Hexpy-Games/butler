@@ -35,7 +35,7 @@ use crate::coordination::CognitionWaitClass;
 use crate::coordination::CognitionWriteAcquire;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::coordination::CognitionWriteLease;
-use crate::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptPort;
 use butler_turn::conversation::ConversationSourceReader;
 
 type ProjectionWindowOwnerKey = (String, String, String);

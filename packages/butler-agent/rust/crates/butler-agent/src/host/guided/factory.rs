@@ -58,7 +58,7 @@ pub(crate) struct GuidedTurnFactoryAdapter {
     pub subsessions: Arc<butler_turn::btcc::SubsessionService>,
     pub work_streams: Arc<crate::host::WorkStreams>,
     pub automations: Arc<crate::operations::AutomationService>,
-    pub mcp_client: Arc<crate::mcp_client::McpClient>,
+    pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub profile: Arc<crate::profile::ProfileService>,
     pub monitoring: Arc<crate::host::MonitoringReaders>,
     pub session_worktrees: butler_turn::workspace::SessionWorktrees,
@@ -148,7 +148,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                 Arc::new(butler_turn::btcc::EffectService::new(
                     self.effects.clone(),
                     Arc::new(|| {
-                        crate::models::ModelConfigurationClock::now_iso(
+                        butler_models::models::ModelConfigurationClock::now_iso(
                             &crate::host::SystemIdentity,
                         )
                     }),

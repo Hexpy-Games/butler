@@ -3,10 +3,11 @@ use std::sync::{Arc, Mutex};
 
 use super::super::support::{Root, service_with_parts};
 use super::super::*;
-use crate::models::{
-    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-    ProviderPromptResult,
-};
+use butler_models::models::ProviderPromptFuture;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ProviderPromptResult;
 
 struct ImportProvider;
 impl ProviderPromptPort for ImportProvider {

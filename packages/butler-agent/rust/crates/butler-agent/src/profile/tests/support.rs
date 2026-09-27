@@ -9,8 +9,8 @@ use crate::coordination::{
     CognitionCoordinationHost, CognitionProcessStatus, CognitionWriteCoordinator,
     CoordinationResult,
 };
-use crate::models::ProviderPromptPort;
 use butler_core::configuration::ConfigurationWrites;
+use butler_models::models::ProviderPromptPort;
 
 pub(super) struct Root(pub(super) PathBuf);
 impl Root {

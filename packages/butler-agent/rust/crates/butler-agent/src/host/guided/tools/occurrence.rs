@@ -34,7 +34,7 @@ pub(super) fn occurrence(
         .and_then(Value::as_object);
     let target = catalog_id
         .and_then(|id| {
-            if crate::mcp_client::parse_mcp_catalog_id(id).is_some() {
+            if butler_models::mcp_client::parse_mcp_catalog_id(id).is_some() {
                 Some("call_mcp_tool")
             } else {
                 id.split(':').nth(1)

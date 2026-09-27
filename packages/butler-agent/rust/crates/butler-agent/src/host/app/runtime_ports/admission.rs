@@ -2,21 +2,26 @@
 
 use std::sync::Arc;
 
-use crate::{
-    gateway::{
-        AppAdmissionAuthority, AppImageFiles, AppLedgerSourceRequest, AppMessageFiles,
-        AppSourceDocument, AppSourceSnapshotRequest, ApplicationFuture, GatewayApplicationError,
-        MaterializedResponderFile, VisualAdmissionRequest,
-    },
-    models::ModelConfiguration,
-    project_ledger::{ProjectLedger, ProjectLedgerBinding, ProjectLedgerReadError},
-};
+use crate::gateway::AppAdmissionAuthority;
+use crate::gateway::AppImageFiles;
+use crate::gateway::AppLedgerSourceRequest;
+use crate::gateway::AppMessageFiles;
+use crate::gateway::AppSourceDocument;
+use crate::gateway::AppSourceSnapshotRequest;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::gateway::MaterializedResponderFile;
+use crate::gateway::VisualAdmissionRequest;
+use crate::project_ledger::ProjectLedger;
+use crate::project_ledger::ProjectLedgerBinding;
+use crate::project_ledger::ProjectLedgerReadError;
+use butler_models::models::ModelConfiguration;
 
 pub(crate) struct AppAdmission {
     ledger: ProjectLedger,
     images: Arc<AppImageFiles>,
     models: Arc<ModelConfiguration>,
-    mcp: Arc<crate::mcp_client::McpClient>,
+    mcp: Arc<butler_models::mcp_client::McpClient>,
     artifacts: Arc<AppMessageFiles>,
 }
 
@@ -25,7 +30,7 @@ impl AppAdmission {
         ledger: ProjectLedger,
         images: Arc<AppImageFiles>,
         models: Arc<ModelConfiguration>,
-        mcp: Arc<crate::mcp_client::McpClient>,
+        mcp: Arc<butler_models::mcp_client::McpClient>,
         artifacts: Arc<AppMessageFiles>,
     ) -> Self {
         Self {

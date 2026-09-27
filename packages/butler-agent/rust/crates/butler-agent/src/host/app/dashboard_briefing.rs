@@ -4,17 +4,19 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    gateway::{
-        AppProjectDashboardBriefingPort, AppProjectDashboardBriefingPrompt, ApplicationFuture,
-        GatewayApplicationError,
-    },
-    models::{
-        ModelCatalog, ModelConfiguration, ModelProvider, PromptUsageAttribution,
-        ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ReasoningEffort,
-        TokenEstimateInput,
-    },
-};
+use crate::gateway::AppProjectDashboardBriefingPort;
+use crate::gateway::AppProjectDashboardBriefingPrompt;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelProvider;
+use butler_models::models::PromptUsageAttribution;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ReasoningEffort;
+use butler_models::models::TokenEstimateInput;
 
 pub(crate) struct AppDashboardBriefing {
     catalog: Arc<ModelCatalog>,

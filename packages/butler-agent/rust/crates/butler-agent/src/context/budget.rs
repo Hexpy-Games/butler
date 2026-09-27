@@ -10,9 +10,11 @@ use serde_json::{Map, Value};
 
 use crate::context::ContextCode;
 use crate::context::{ContextError, ContextResult};
-use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelConfiguration, TokenEstimate, TokenEstimateInput,
-};
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelCatalogSnapshot;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::TokenEstimate;
+use butler_models::models::TokenEstimateInput;
 
 pub(crate) const WORKING_CONTEXT_AUTO_COMPACT_RATIO: f64 = 0.94;
 pub(crate) const WORKING_CONTEXT_HARD_PRESSURE_RATIO: f64 = 0.985;
@@ -64,7 +66,7 @@ pub(crate) struct ContextBudgetEvaluation {
     pub provider_id: String,
     pub model_id: String,
     pub input_tokens: f64,
-    pub token_estimator: crate::models::TokenEstimatorKind,
+    pub token_estimator: butler_models::models::TokenEstimatorKind,
     pub used_ratio: f64,
     pub free_tokens: f64,
     pub free_tokens_after_reserve: f64,
@@ -81,7 +83,7 @@ pub(crate) struct WorkingContextBudgetEvaluation {
     pub model_ref: String,
     pub provider_id: String,
     pub model_id: String,
-    pub token_estimator: crate::models::TokenEstimatorKind,
+    pub token_estimator: butler_models::models::TokenEstimatorKind,
     pub working_context_tokens: f64,
     pub static_context_tokens: f64,
     pub live_configuration_tokens: f64,

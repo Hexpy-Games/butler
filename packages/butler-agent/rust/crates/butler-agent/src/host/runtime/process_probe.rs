@@ -39,7 +39,7 @@ impl CognitionCoordinationHost for SystemIdentity {
     }
 
     fn now_epoch_millis(&self) -> i64 {
-        crate::models::ModelConfigurationClock::now_epoch_millis(self)
+        butler_models::models::ModelConfigurationClock::now_epoch_millis(self)
     }
 
     fn now_iso(&self) -> String {

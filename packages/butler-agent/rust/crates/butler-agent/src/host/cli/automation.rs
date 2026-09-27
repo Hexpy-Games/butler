@@ -10,7 +10,8 @@ use serde_json::json;
 
 use crate::host::ResolvedInstallation;
 use crate::host::cli::settings as settings_cli;
-use crate::{models::ModelConfigurationClock, operations};
+use crate::operations;
+use butler_models::models::ModelConfigurationClock;
 use helpers::{command_id, command_name, command_name_os, required_value, valid_id};
 use render::{redact_json_strings, report_error, report_success, safe_preview};
 

@@ -248,7 +248,7 @@ pub(crate) struct VisualAdmissionRequest {
 pub(crate) struct AppApplicationDependencies {
     pub updates: Arc<crate::operations::AppUpdateService>,
     pub skills: Arc<crate::skills::Skills>,
-    pub mcp_client: Arc<crate::mcp_client::McpClient>,
+    pub mcp_client: Arc<butler_models::mcp_client::McpClient>,
     pub native_ingress: Arc<dyn AppNativeIngress>,
     pub native_assets: Arc<dyn AppNativeAssetResolver>,
     pub executor_readiness: Arc<dyn AppExecutorReadiness>,

@@ -10,9 +10,10 @@ use tokio_util::sync::CancellationToken;
 use super::super::contracts::*;
 use super::super::{candidates, extractor_config, storage};
 use super::{Dependencies, parser, prompt, runtime};
-use crate::models::{ProviderPromptLifecycle, ProviderPromptRequest};
 use crate::profile::ProfileCode;
 use butler_core::json::Utf16Prefix;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptRequest;
 
 pub(super) async fn run(
     dependencies: Dependencies,
@@ -55,7 +56,7 @@ pub(super) async fn run(
         .as_deref()
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
-        .map(|value| crate::models::parse_model_ref(value).canonical_ref)
+        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
         .unwrap_or_else(|| model_config.effective_model.clone());
     model_config.effective_model = model.clone();
     let imported_at = match options.now_epoch_millis {

@@ -5,9 +5,9 @@ use std::{collections::HashMap, ffi::OsString, path::PathBuf, process::ExitCode,
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::mcp_client::McpClient;
-use crate::mcp_client::RegistryPathGuard;
 use butler_core::configuration::ConfigurationWrites;
+use butler_models::mcp_client::McpClient;
+use butler_models::mcp_client::RegistryPathGuard;
 
 use super::super::ResolvedInstallation;
 

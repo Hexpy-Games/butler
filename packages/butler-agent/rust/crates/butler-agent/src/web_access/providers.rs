@@ -11,10 +11,9 @@ use futures_util::FutureExt;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    models::ProviderAuth,
-    web_access::service::{WebAccess, WebAccessError},
-};
+use crate::web_access::service::WebAccess;
+use crate::web_access::service::WebAccessError;
+use butler_models::models::ProviderAuth;
 
 use self::{
     brave::BraveWebSearchProvider,

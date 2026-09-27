@@ -7,10 +7,11 @@ use serde_json::json;
 
 use super::*;
 use crate::context::{ContextBudgetEnvironment, ContextConversation, ContextError};
-use crate::models::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-};
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationEnvironment;
 use butler_turn::btcc::AttachmentKind;
 use butler_turn::btcc::AttachmentRef;
 use butler_turn::btcc::Peer;
@@ -285,7 +286,7 @@ pub(super) async fn fixture(
             Arc::new(Clock::new()),
             catalog.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
-            crate::models::provider_http_client().unwrap(),
+            butler_models::models::provider_http_client().unwrap(),
             Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),

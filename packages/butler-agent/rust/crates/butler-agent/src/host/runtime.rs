@@ -37,13 +37,13 @@ use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::memory_jobs::recall_metrics::RecallMetrics;
 use crate::host::runtime::environment::ProcessEnvironment;
 use crate::host::runtime::stores::RuntimeStores;
-use crate::models::ModelConfigurationClock;
 use crate::operations::MetricFiles;
 use crate::profile::{PersonaPresets, ProfileService};
 use crate::project_ledger::{ProjectLedger, ProjectWork};
 use boundary::{setup, validate_data_installation_boundary};
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
 use butler_turn::btcc;
 use butler_turn::btcc::BtccError;
 use butler_turn::btcc::BtccRepositories;
@@ -356,7 +356,7 @@ impl AgentRuntime {
             Arc::new(SubsessionQueue(inbound_queue.clone())),
             worker_profiles,
             work_service.clone(),
-            Arc::new(|| crate::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
+            Arc::new(|| butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
         ));
         let restart_tool_journal =
             Arc::new(ToolJournalRepository::new(stores.btcc.clone(), now.clone()));

@@ -1,4 +1,4 @@
-pub(crate) use crate::models::VisualAttachmentManifest;
+pub(crate) use butler_models::models::VisualAttachmentManifest;
 
 /// Optional caller limits retain JavaScript number comparison semantics.
 #[derive(Clone, Copy, Debug, Default)]

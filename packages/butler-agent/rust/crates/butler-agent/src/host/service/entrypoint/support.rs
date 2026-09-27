@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationClock;
 use butler_turn::btcc::BtccError;
 
 use crate::host::{AgentRuntime, SystemIdentity};

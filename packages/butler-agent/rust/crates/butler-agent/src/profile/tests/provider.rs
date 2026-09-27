@@ -1,7 +1,8 @@
-use crate::models::{
-    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-    ProviderPromptResult,
-};
+use butler_models::models::ProviderPromptFuture;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ProviderPromptResult;
 
 pub(super) struct Provider;
 

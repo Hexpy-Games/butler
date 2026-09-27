@@ -8,7 +8,8 @@ use super::{
     CognitionCandidateSearch, ExtractInput, ExtractOutput, ExtractionContractData, binding,
     meaning_prompt, meaning_to_output, source_passages, validate_meaning,
 };
-use crate::{cognition::CognitionResult, models::ProviderPromptPort};
+use crate::cognition::CognitionResult;
+use butler_models::models::ProviderPromptPort;
 use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, time::Instant};
 use tokio_util::sync::CancellationToken;

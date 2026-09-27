@@ -11,10 +11,10 @@ use crate::gateway::AppModelMetadata;
 use crate::gateway::AppSettingsFacts;
 use crate::gateway::AppSettingsFactsProvider;
 use crate::gateway::GatewayApplicationError;
-use crate::models::ModelConfiguration;
-use crate::models::ModelProviderMetadata;
-use crate::models::ReasoningEffort as ModelReasoningEffort;
 use crate::profile::ProfileService;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelProviderMetadata;
+use butler_models::models::ReasoningEffort as ModelReasoningEffort;
 use butler_turn::btcc::ReasoningEffort as BtccReasoningEffort;
 
 pub(crate) struct AppSettingsFactsAdapter {

@@ -7,8 +7,8 @@ use serde_json::json;
 use crate::cognition::CognitionPathEnvironment;
 use crate::cognition::initialize_empty_memory_generation;
 use crate::coordination::CognitionWriteCoordinator;
-use crate::models::ModelConfigurationClock;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
 
 use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::{ResolvedInstallation, SystemIdentity};

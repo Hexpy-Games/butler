@@ -28,7 +28,7 @@ pub(super) async fn search(
     } else {
         filtered.remove("category");
     }
-    match Box::pin(crate::mcp_client::search_mcp_tool_catalog(
+    match Box::pin(butler_models::mcp_client::search_mcp_tool_catalog(
         &owner.mcp_client,
         &filtered,
         call_available,
@@ -49,11 +49,11 @@ pub(super) async fn describe(
     id: &str,
     signal: &CancellationToken,
 ) -> Result<Option<Value>, ToolExecutionError> {
-    let Some(parsed) = crate::mcp_client::parse_mcp_catalog_id(id) else {
+    let Some(parsed) = butler_models::mcp_client::parse_mcp_catalog_id(id) else {
         return Ok(None);
     };
     let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
-    Box::pin(crate::mcp_client::describe_mcp_tool(
+    Box::pin(butler_models::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
         &parsed.server_id,

@@ -5,8 +5,10 @@ use super::super::storage;
 use super::types::{self, CorrectionTargets, SourceWindow, add_usage};
 use super::{Dependencies, coverage, parser, prompt};
 use crate::coordination::{CognitionWaitClass, CognitionWriteAcquire};
-use crate::models::{ProviderPromptLifecycle, ProviderPromptRequest, ReasoningEffort};
 use crate::profile::ProfileCode;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ReasoningEffort;
 
 pub(super) struct BatchInput<'a> {
     pub(super) windows: &'a [SourceWindow],
@@ -26,7 +28,7 @@ pub(super) async fn run_batch(
     called: &mut bool,
 ) -> ProfileResult<(
     Vec<types::ExtractedCandidate>,
-    Option<crate::models::PromptUsageReport>,
+    Option<butler_models::models::PromptUsageReport>,
 )> {
     let BatchInput {
         windows,

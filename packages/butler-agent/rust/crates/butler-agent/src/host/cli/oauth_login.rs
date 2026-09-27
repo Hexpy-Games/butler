@@ -7,11 +7,11 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::models::ModelCatalog;
-use crate::models::ModelConfiguration;
-use crate::models::provider_http_client;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::provider_http_client;
 
 use crate::host::installation::realpath_or_nearest;
 use crate::host::{ProcessEnvironment, ResolvedInstallation, SystemIdentity};
@@ -119,8 +119,8 @@ async fn run_native_oauth_login_with_data(
     let listener = TcpListener::bind((bind_host, port))
         .await
         .map_err(|error| format!("OAuth callback listener failed: {error}"))?;
-    let verifier = crate::models::generate_pkce_verifier();
-    let challenge = crate::models::pkce_challenge(&verifier);
+    let verifier = butler_models::models::generate_pkce_verifier();
+    let challenge = butler_models::models::pkce_challenge(&verifier);
     let state = uuid::Uuid::new_v4().simple().to_string();
     let authorize_url = models
         .openai_authorize_url(&redirect_uri, &challenge, &state, None)

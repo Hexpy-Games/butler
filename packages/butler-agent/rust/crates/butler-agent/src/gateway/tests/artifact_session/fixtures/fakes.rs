@@ -74,7 +74,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
             .unwrap(),
         ),
         skills: Arc::new(crate::skills::Skills::new(root.clone(), root)),
-        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
+        mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             std::env::temp_dir().join(format!("butler-artifact-mcp-{}", uuid::Uuid::new_v4())),
             Default::default(),
         )),

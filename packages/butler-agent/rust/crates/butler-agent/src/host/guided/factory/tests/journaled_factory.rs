@@ -238,7 +238,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
         subsessions,
         work_streams: work_streams.clone(),
         automations: automations.clone(),
-        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
+        mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             scratch.0.clone(),
             HashMap::new(),
         )),
@@ -292,7 +292,7 @@ async fn factory_reads_physical_file_journals_result_and_continues_provider() {
             .unwrap(),
     );
     let model = Arc::new(ModelProvider::new(
-        crate::models::provider_http_client().unwrap(),
+        butler_models::models::provider_http_client().unwrap(),
         Arc::new(Config { snapshot, endpoint }),
         Arc::new(Observations),
         model_catalog,

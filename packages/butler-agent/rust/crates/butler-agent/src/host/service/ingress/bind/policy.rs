@@ -160,7 +160,9 @@ pub(super) async fn upsert_app_binding(
         let onboarding_active = butler_role
             && !crate::profile::first_chat_onboarding_complete(
                 data_root,
-                &crate::models::ModelConfigurationClock::now_iso(&crate::host::SystemIdentity),
+                &butler_models::models::ModelConfigurationClock::now_iso(
+                    &crate::host::SystemIdentity,
+                ),
             );
         let mut selected = Vec::new();
         if onboarding_active || selected_memory_write {

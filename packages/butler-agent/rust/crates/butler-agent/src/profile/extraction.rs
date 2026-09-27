@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use super::contracts::*;
 use super::{extractor_config, storage};
 use crate::coordination::CognitionWriteCoordinator;
-use crate::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptPort;
 use result::{CaptureResultInput, empty_result, interruption, result, safe_error};
 
 pub(super) struct Dependencies {
@@ -97,7 +97,7 @@ pub(super) async fn capture(
         .as_deref()
         .map(butler_core::public_text::trim_js_whitespace)
         .filter(|value| !value.is_empty())
-        .map(|value| crate::models::parse_model_ref(value).canonical_ref)
+        .map(|value| butler_models::models::parse_model_ref(value).canonical_ref)
         .unwrap_or_else(|| extractor_model.effective_model.clone());
     extractor_model.effective_model = model.clone();
     let raw_max_batches = options.max_model_batches.unwrap_or(8.0);

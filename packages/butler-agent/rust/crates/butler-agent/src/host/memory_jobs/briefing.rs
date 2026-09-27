@@ -18,10 +18,6 @@ use crate::cognition::CognitionPathEnvironment;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::gateway::read_new_chat_briefing_projects;
 use crate::gateway::read_new_chat_briefing_settings;
-use crate::models::ModelConfiguration;
-use crate::models::ModelProvider;
-use crate::models::ProviderAuthMethod;
-use crate::models::ReasoningEffort;
 use crate::profile::PersonaPresets;
 use crate::profile::ProfileService;
 use crate::profile::active_briefing_persona;
@@ -29,6 +25,10 @@ use crate::project_ledger::ProjectBriefingTarget;
 use crate::project_ledger::ProjectLedger;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelProvider;
+use butler_models::models::ProviderAuthMethod;
+use butler_models::models::ReasoningEffort;
 use butler_turn::btcc::BtccError;
 
 use crate::cognition::BriefingGenerationCode;
@@ -292,7 +292,7 @@ impl BriefingInputSource for BriefingSource {
 fn settings(
     config: &Value,
     app_settings: Option<&Value>,
-    catalog: &crate::models::ModelCatalogSnapshot,
+    catalog: &butler_models::models::ModelCatalogSnapshot,
 ) -> BriefingSettings {
     let locale = locale_preference(config, app_settings);
     let selected = model_preference(config, app_settings);
@@ -303,7 +303,7 @@ fn settings(
     else {
         return unavailable(locale, "missing_model");
     };
-    let selected = crate::models::parse_model_ref(selected);
+    let selected = butler_models::models::parse_model_ref(selected);
     if selected.model_id.is_empty() {
         return unavailable(locale, "missing_model");
     }

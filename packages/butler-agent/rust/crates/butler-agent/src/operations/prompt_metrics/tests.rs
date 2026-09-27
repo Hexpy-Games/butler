@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::*;
+use butler_models::models::*;
 use std::sync::Mutex;
 
 mod support;

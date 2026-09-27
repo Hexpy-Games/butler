@@ -4,18 +4,20 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    gateway::{
-        AppPersonalizationCommand, AppPersonalizationEvent, AppPersonalizationPort,
-        AppPersonalizationResult, ApplicationFuture, GatewayApplicationError,
-    },
-    host::ResolvedInstallation,
-    models::ModelConfiguration,
-    profile::{
-        ClearProfilingResult, PersonalizationProfileUpdate, ProfileService,
-        ProfileThirdPartyImportOptions, ProfilingMode, third_party_migration_prompt,
-    },
-};
+use crate::gateway::AppPersonalizationCommand;
+use crate::gateway::AppPersonalizationEvent;
+use crate::gateway::AppPersonalizationPort;
+use crate::gateway::AppPersonalizationResult;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::host::ResolvedInstallation;
+use crate::profile::ClearProfilingResult;
+use crate::profile::PersonalizationProfileUpdate;
+use crate::profile::ProfileService;
+use crate::profile::ProfileThirdPartyImportOptions;
+use crate::profile::ProfilingMode;
+use crate::profile::third_party_migration_prompt;
+use butler_models::models::ModelConfiguration;
 
 mod errors;
 mod paths;

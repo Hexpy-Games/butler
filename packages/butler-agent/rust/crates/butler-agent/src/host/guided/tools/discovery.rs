@@ -45,7 +45,7 @@ pub(super) fn effective(call: &ModelRoundToolCall) -> (String, Value, Option<Str
             .map(str::trim)
             .filter(|id| !id.is_empty())
     {
-        let name = if crate::mcp_client::parse_mcp_catalog_id(id).is_some() {
+        let name = if butler_models::mcp_client::parse_mcp_catalog_id(id).is_some() {
             "call_mcp_tool"
         } else {
             id.strip_prefix("native:")

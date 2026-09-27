@@ -37,7 +37,7 @@ impl AppApplication {
                 .map_err(|error| {
                     let status = if matches!(
                         error,
-                        crate::mcp_client::McpRegistryError::ServerNotFound(_)
+                        butler_models::mcp_client::McpRegistryError::ServerNotFound(_)
                     ) {
                         404
                     } else {

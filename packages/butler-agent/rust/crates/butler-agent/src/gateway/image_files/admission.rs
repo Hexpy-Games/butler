@@ -9,7 +9,8 @@ use crate::context::{
     admit_visual_image_request, assert_visual_carrier_matches_catalog,
     image_admission_for_catalog_entry, sanitize_image, verify_visual_manifest_source,
 };
-use crate::models::{HostedApiShape, ModelProviderMetadata};
+use butler_models::models::HostedApiShape;
+use butler_models::models::ModelProviderMetadata;
 
 use super::files::{self, Stage};
 use super::{AppMessageFileSnapshot, GatewayApplicationError, image_error, public};

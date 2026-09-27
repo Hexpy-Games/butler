@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
-use crate::{
-    gateway::{AppSettingsMutationPort, ApplicationFuture, GatewayApplicationError},
-    host::ResolvedInstallation,
-    models::ModelConfiguration,
-    profile::ProfileService,
-};
+use crate::gateway::AppSettingsMutationPort;
+use crate::gateway::ApplicationFuture;
+use crate::gateway::GatewayApplicationError;
+use crate::host::ResolvedInstallation;
+use crate::profile::ProfileService;
+use butler_models::models::ModelConfiguration;
 
 pub(crate) struct AppSettingsMutation {
     configuration: Arc<ModelConfiguration>,

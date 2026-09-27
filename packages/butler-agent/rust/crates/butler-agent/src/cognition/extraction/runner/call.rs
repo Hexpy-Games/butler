@@ -1,13 +1,17 @@
 use super::ExtractionStagePort;
 use crate::cognition::CognitionCode;
-use crate::{
-    cognition::{CognitionError, CognitionResult, extraction::ExtractInput},
-    models::{
-        PromptAdapterEntry, PromptCallbackFuture, PromptInvocationIntent, PromptJsonSchema,
-        ProviderPromptError, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-        ReasoningEffort,
-    },
-};
+use crate::cognition::CognitionError;
+use crate::cognition::CognitionResult;
+use crate::cognition::extraction::ExtractInput;
+use butler_models::models::PromptAdapterEntry;
+use butler_models::models::PromptCallbackFuture;
+use butler_models::models::PromptInvocationIntent;
+use butler_models::models::PromptJsonSchema;
+use butler_models::models::ProviderPromptError;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ReasoningEffort;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::time::Instant;

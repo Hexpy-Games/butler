@@ -12,8 +12,8 @@ use super::super::{candidates, projection, storage};
 use super::discovery;
 use super::targets::{normalized_conditions, revision};
 use super::types::{CorrectionTarget, ExtractedCandidate, SourceWindow};
-use crate::models::PromptUsageReport;
 use crate::profile::ProfileCode;
+use butler_models::models::PromptUsageReport;
 
 pub(super) struct CommitInput<'a> {
     pub(super) root: &'a Path,

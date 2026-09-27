@@ -15,7 +15,7 @@ use tokio::sync::{Semaphore, oneshot};
 use tokio_util::task::TaskTracker;
 
 use super::{AppMessageFileSnapshot, GatewayApplicationError};
-use crate::models::ModelProviderMetadata;
+use butler_models::models::ModelProviderMetadata;
 
 pub(crate) struct AppImageFiles {
     root: PathBuf,

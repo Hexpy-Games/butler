@@ -11,10 +11,11 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 
 use super::*;
-use crate::{
-    coordination::{CognitionCoordinationHost, CognitionProcessStatus, CoordinationResult},
-    models::{ProviderPromptFuture, ProviderPromptResult},
-};
+use crate::coordination::CognitionCoordinationHost;
+use crate::coordination::CognitionProcessStatus;
+use crate::coordination::CoordinationResult;
+use butler_models::models::ProviderPromptFuture;
+use butler_models::models::ProviderPromptResult;
 
 struct Facts;
 impl CognitionCoordinationHost for Facts {

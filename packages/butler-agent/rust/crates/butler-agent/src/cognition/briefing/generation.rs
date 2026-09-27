@@ -13,10 +13,13 @@ use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    coordination::{CognitionWaitClass, CognitionWriteAcquire, CognitionWriteCoordinator},
-    models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ReasoningEffort},
-};
+use crate::coordination::CognitionWaitClass;
+use crate::coordination::CognitionWriteAcquire;
+use crate::coordination::CognitionWriteCoordinator;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ReasoningEffort;
 
 pub(crate) use contracts::{
     BriefingGenerationCode, BriefingGenerationError, BriefingInputFuture, BriefingInputSnapshot,

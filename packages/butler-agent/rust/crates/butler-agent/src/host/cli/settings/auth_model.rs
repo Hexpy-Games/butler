@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::{CliError, Command, Options, ResolvedInstallation, path, report_error, report_success};
 use crate::host::cli::oauth_login;
-use crate::models;
+use butler_models::models;
 
 pub(super) fn auth_status(
     options: &Options,

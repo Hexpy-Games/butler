@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
-use crate::models::ProviderPromptError;
+use butler_models::models::ProviderPromptError;
 
 struct CancelledProvider {
     entered: Arc<Notify>,

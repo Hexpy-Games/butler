@@ -165,7 +165,9 @@ impl AppServer {
             authority_handoff: Arc::new(AuthorityHandoff::new(
                 runtime.authority.clone(),
                 queue,
-                Arc::new(|| crate::models::ModelConfigurationClock::now_iso(&SystemIdentity)),
+                Arc::new(|| {
+                    butler_models::models::ModelConfigurationClock::now_iso(&SystemIdentity)
+                }),
             )),
             session_workspaces: session_workspaces.clone(),
             relocation_host: session_workspaces,

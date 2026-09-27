@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::*;
-use crate::models::parse_model_ref;
+use butler_models::models::parse_model_ref;
 
 const DEFAULT_CONTEXT_WINDOW_TOKENS: f64 = 200_000.0;
 const WARNING_THRESHOLD_RATIO: f64 = 0.70;

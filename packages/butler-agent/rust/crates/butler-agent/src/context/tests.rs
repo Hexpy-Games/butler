@@ -6,10 +6,11 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use serde_json::{Map, json};
 
 use super::*;
-use crate::models::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationClock, ModelConfigurationEnvironment,
-};
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationEnvironment;
 use butler_turn::btcc::ContextAssembly;
 use butler_turn::conversation::*;
 
@@ -317,7 +318,7 @@ async fn real_store_read_compile_and_recent_use_one_bounded_owner() {
             Arc::new(Clock::new()),
             catalog.clone(),
             locale,
-            crate::models::provider_http_client().unwrap(),
+            butler_models::models::provider_http_client().unwrap(),
             Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),
@@ -405,7 +406,7 @@ async fn budget_precedence_numeric_strings_metadata_and_thresholds_match_source(
             Arc::new(Clock::new()),
             catalog.clone(),
             locale,
-            crate::models::provider_http_client().unwrap(),
+            butler_models::models::provider_http_client().unwrap(),
             Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         )
         .unwrap(),

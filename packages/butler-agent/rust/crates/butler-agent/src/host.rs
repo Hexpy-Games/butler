@@ -92,9 +92,9 @@ use butler_turn::workspace::WorkspaceResult;
 
 pub(crate) struct SystemIdentity;
 
-impl crate::models::ProviderClock for SystemIdentity {
+impl butler_models::models::ProviderClock for SystemIdentity {
     fn now_epoch_millis(&self) -> i64 {
-        crate::models::ModelConfigurationClock::now_epoch_millis(self)
+        butler_models::models::ModelConfigurationClock::now_epoch_millis(self)
     }
 }
 
@@ -107,7 +107,7 @@ impl crate::profile::ProfileHostFacts for SystemIdentity {
         Uuid::new_v4().to_string()
     }
     fn now_epoch_millis(&self) -> i64 {
-        crate::models::ModelConfigurationClock::now_epoch_millis(self)
+        butler_models::models::ModelConfigurationClock::now_epoch_millis(self)
     }
     fn now_iso(&self) -> String {
         date::iso_from_system_time(SystemTime::now())
@@ -117,7 +117,7 @@ impl crate::profile::ProfileHostFacts for SystemIdentity {
     }
 }
 
-impl crate::models::ModelConfigurationClock for SystemIdentity {
+impl butler_models::models::ModelConfigurationClock for SystemIdentity {
     fn now_iso(&self) -> String {
         date::iso_from_system_time(SystemTime::now())
     }

@@ -698,6 +698,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "butler-core",
+ "butler-models",
  "butler-test-support",
  "butler-turn",
  "bytes",
@@ -765,6 +766,35 @@ dependencies = [
  "unicode-normalization",
  "unicode-segmentation",
  "uuid",
+]
+
+[[package]]
+name = "butler-models"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "butler-core",
+ "butler-test-support",
+ "butler-turn",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "http",
+ "parking_lot",
+ "regex",
+ "reqwest 0.12.28",
+ "rmcp",
+ "ryu-js",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "webp",
 ]
 
 [[package]]

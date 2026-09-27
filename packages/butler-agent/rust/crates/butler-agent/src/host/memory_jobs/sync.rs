@@ -22,7 +22,8 @@ use crate::cognition::{
 use crate::coordination::CognitionWriteCoordinator;
 #[cfg(unix)]
 use crate::host::EmbeddingOwner;
-use crate::models::{ModelConfigurationClock, ModelProvider};
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ModelProvider;
 use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;

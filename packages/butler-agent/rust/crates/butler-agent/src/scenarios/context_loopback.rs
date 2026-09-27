@@ -10,14 +10,23 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::context::ContextPortAdapter;
-use crate::models::{
-    ModelCatalog, ModelCatalogSnapshot, ModelCatalogSnapshotInput, ModelProvider,
-    PromptUsageMetricInput, PromptUsageMetricSink, ProviderAuth, ProviderClock,
-    ProviderConfigFuture, ProviderConfigRequest, ProviderObservation, ProviderObservationSink,
-    ProviderPromptCachePolicy, ProviderRequestConfig, ProviderRequestConfigPort,
-    ProviderRoundPolicy,
-};
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelCatalogSnapshot;
+use butler_models::models::ModelCatalogSnapshotInput;
+use butler_models::models::ModelProvider;
+use butler_models::models::PromptUsageMetricInput;
+use butler_models::models::PromptUsageMetricSink;
+use butler_models::models::ProviderAuth;
+use butler_models::models::ProviderClock;
+use butler_models::models::ProviderConfigFuture;
+use butler_models::models::ProviderConfigRequest;
+use butler_models::models::ProviderObservation;
+use butler_models::models::ProviderObservationSink;
+use butler_models::models::ProviderPromptCachePolicy;
+use butler_models::models::ProviderRequestConfig;
+use butler_models::models::ProviderRequestConfigPort;
+use butler_models::models::ProviderRoundPolicy;
 use butler_turn::btcc::ContextMessages;
 use butler_turn::btcc::ContextPort;
 use butler_turn::btcc::ContextProjectionInput;
@@ -200,7 +209,7 @@ fn provider(endpoint: Url) -> Arc<ModelProvider> {
             .unwrap(),
     );
     Arc::new(ModelProvider::new(
-        crate::models::provider_http_client().unwrap(),
+        butler_models::models::provider_http_client().unwrap(),
         Arc::new(Config { snapshot, endpoint }),
         Arc::new(Observations),
         catalog,

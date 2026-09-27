@@ -3,7 +3,8 @@ use std::{future::Future, pin::Pin};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{models::ReasoningEffort, profile::RuntimeProfileProjection};
+use crate::profile::RuntimeProfileProjection;
+use butler_models::models::ReasoningEffort;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) enum BriefingSettings {

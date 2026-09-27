@@ -5,7 +5,8 @@ use std::path::Path;
 use rmcp::model::{CallToolResult, ContentBlock};
 
 use super::super::ResolvedInstallation;
-use crate::models::{self, McpModelTarget};
+use butler_models::models;
+use butler_models::models::McpModelTarget;
 
 pub(super) fn list() -> CallToolResult {
     let lines = [

@@ -6,14 +6,17 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use crate::mcp_client::McpClient;
-use crate::models::{
-    ModelCatalog, ModelConfiguration, ModelConfigurationEnvironment, ModelProvider,
-    ProviderObservation, ProviderObservationSink, provider_http_client,
-};
 use crate::operations::PromptUsageMetrics;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::mcp_client::McpClient;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelConfigurationEnvironment;
+use butler_models::models::ModelProvider;
+use butler_models::models::ProviderObservation;
+use butler_models::models::ProviderObservationSink;
+use butler_models::models::provider_http_client;
 use butler_turn::btcc::BtccError;
 
 use crate::host::SystemIdentity;
@@ -55,7 +58,7 @@ impl ProcessModels {
         environment: ModelConfigurationEnvironment,
         writes: Arc<ConfigurationWrites>,
         collation: Arc<LocaleCollation>,
-        visual_capability: Option<Arc<dyn crate::models::ProviderVisualCapabilityPort>>,
+        visual_capability: Option<Arc<dyn butler_models::models::ProviderVisualCapabilityPort>>,
     ) -> Result<Self, BtccError> {
         let client = provider_http_client().map_err(|error| {
             BtccError::relayed("provider_client_unavailable", error.to_string()).with_source(error)

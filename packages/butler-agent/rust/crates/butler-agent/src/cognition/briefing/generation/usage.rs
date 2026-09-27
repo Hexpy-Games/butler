@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::models::PromptUsageReport;
+use butler_models::models::PromptUsageReport;
 
 #[derive(Default)]
 pub(super) struct Usage {

@@ -5,12 +5,12 @@ use super::{
     super::{ContextBudgetEnvironment, ContextConversation},
     ConversationTools,
 };
-use crate::models::ModelCatalog;
-use crate::models::ModelConfiguration;
-use crate::models::ModelConfigurationClock;
-use crate::models::ModelConfigurationEnvironment;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationEnvironment;
 use butler_turn::conversation::AgentConversationStore;
 use butler_turn::conversation::AppendMessageInput;
 use butler_turn::conversation::BeginTurnInput;
@@ -105,7 +105,7 @@ async fn canonical_write_lists_and_reads_legacy_context() {
             Arc::new(Clock),
             catalog.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
-            crate::models::provider_http_client().unwrap(),
+            butler_models::models::provider_http_client().unwrap(),
             Arc::new(ConfigurationWrites::new()),
         )
         .unwrap(),

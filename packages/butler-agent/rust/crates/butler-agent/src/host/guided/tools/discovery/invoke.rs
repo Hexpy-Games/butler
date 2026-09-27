@@ -169,13 +169,13 @@ async fn run_mcp(
     id: &str,
     args: &serde_json::Map<String, Value>,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    let Some(parsed) = crate::mcp_client::parse_mcp_catalog_id(id) else {
+    let Some(parsed) = butler_models::mcp_client::parse_mcp_catalog_id(id) else {
         let mut error = bridge_error("unknown_tool_catalog_id", "Unknown tool catalog id.");
         error["error"]["id"] = Value::String(id.into());
         return encoded(&error);
     };
     let call_available = owner.binding.authorized_names.contains("call_mcp_tool");
-    let description = match Box::pin(crate::mcp_client::describe_mcp_tool(
+    let description = match Box::pin(butler_models::mcp_client::describe_mcp_tool(
         &owner.mcp_client,
         id,
         &parsed.server_id,

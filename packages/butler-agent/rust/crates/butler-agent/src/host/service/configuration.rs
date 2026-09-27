@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::host::installation::ResolvedInstallation;
-use crate::models::{DEFAULT_MODEL_REF, parse_model_ref};
+use butler_models::models::DEFAULT_MODEL_REF;
+use butler_models::models::parse_model_ref;
 use butler_turn::btcc::BtccError;
 use butler_turn::workspace::StoredSessionBinding;
 

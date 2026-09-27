@@ -11,8 +11,9 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
-use crate::models::StatusModels;
-use crate::models::{ModelCatalog, ModelConfiguration};
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::StatusModels;
 use std::sync::Arc;
 
 pub(crate) async fn read_context_tool(

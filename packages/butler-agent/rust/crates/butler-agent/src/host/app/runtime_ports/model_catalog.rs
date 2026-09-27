@@ -9,10 +9,12 @@ use crate::gateway::{
     AppModelCatalogCommand, AppModelCatalogPort, ApplicationFuture, GatewayApplicationError,
 };
 use crate::host::ResolvedInstallation;
-use crate::models::{
-    HostedModelMutation, LocalModelMutation, ModelCatalogError, ModelConfiguration,
-    ProviderAuthMethod, ProviderCredentialMutation,
-};
+use butler_models::models::HostedModelMutation;
+use butler_models::models::LocalModelMutation;
+use butler_models::models::ModelCatalogError;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ProviderAuthMethod;
+use butler_models::models::ProviderCredentialMutation;
 
 use super::AppSettingsFactsAdapter;
 
@@ -208,7 +210,7 @@ impl AppModelCatalog {
 
     async fn read_catalog(
         &self,
-    ) -> Result<crate::models::ModelConfigurationRead, GatewayApplicationError> {
+    ) -> Result<butler_models::models::ModelConfigurationRead, GatewayApplicationError> {
         self.configuration
             .read()
             .await
@@ -269,20 +271,20 @@ struct LocalDiscoveryInput {
     model_ref: Option<String>,
     api_key: Option<String>,
     server_url: String,
-    platform: crate::models::LocalModelPlatform,
+    platform: butler_models::models::LocalModelPlatform,
 }
 
 #[derive(Deserialize)]
 struct LocalInput {
     api_key: Option<String>,
     server_url: String,
-    platform: crate::models::LocalModelPlatform,
+    platform: butler_models::models::LocalModelPlatform,
     model_id: String,
     display_name: Option<String>,
     context_window_tokens: f64,
     max_output_tokens: Option<f64>,
     reasoning_budget_ratio: Option<f64>,
-    source: Option<crate::models::LocalModelSource>,
+    source: Option<butler_models::models::LocalModelSource>,
 }
 
 fn local_mutation(input: LocalInput) -> Result<LocalModelMutation, GatewayApplicationError> {
@@ -297,14 +299,14 @@ fn local_mutation(input: LocalInput) -> Result<LocalModelMutation, GatewayApplic
         reasoning_budget_ratio: input.reasoning_budget_ratio,
         source: input
             .source
-            .unwrap_or(crate::models::LocalModelSource::Discovered),
+            .unwrap_or(butler_models::models::LocalModelSource::Discovered),
     })
 }
 
 fn discovered_model(
-    model: &crate::models::DiscoveredLocalModel,
+    model: &butler_models::models::DiscoveredLocalModel,
 ) -> Result<Value, GatewayApplicationError> {
-    serde_json::to_value(crate::models::ModelProviderMetadata::from(model))
+    serde_json::to_value(butler_models::models::ModelProviderMetadata::from(model))
         .map_err(GatewayApplicationError::internal_from)
 }
 

@@ -123,6 +123,7 @@ similar_names = "allow"
 assigning_clones = "allow"
 # Internal crate: `#[must_use]`/`# Errors` docs on every fn add noise, not safety.
 must_use_candidate = "allow"
+return_self_not_must_use = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # Backticks in prose docs are cosmetic.
@@ -134,6 +135,8 @@ default_trait_access = "allow"
 # 25 functions keep fallible signatures that mirror their sibling adapters
 # (see the P2c notes); unwrapping them is a follow-up, not an error-type issue.
 unnecessary_wraps = "allow"
+# Internal crates: every map is built with the default hasher.
+implicit_hasher = "allow"
 # Methods keep their receiver for symmetry with sibling methods on the owner.
 unused_self = "allow"
 # `Option<Option<T>>` models JSON tri-state fields: absent, explicit null, value.

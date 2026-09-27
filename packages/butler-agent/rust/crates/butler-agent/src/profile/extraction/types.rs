@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::models::PromptUsageReport;
+use butler_models::models::PromptUsageReport;
 
 use super::super::contracts::ProfileModelUsageSummary;
 

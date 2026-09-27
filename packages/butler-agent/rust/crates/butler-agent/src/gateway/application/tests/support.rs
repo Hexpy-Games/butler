@@ -390,7 +390,7 @@ pub(super) fn dependencies(native: Arc<Native>, clock: u64) -> AppApplicationDep
     AppApplicationDependencies {
         updates: test_updates(),
         skills: test_skills(),
-        mcp_client: Arc::new(crate::mcp_client::McpClient::new(
+        mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
             std::env::temp_dir().join(format!("butler-test-mcp-{}", uuid::Uuid::new_v4())),
             Default::default(),
         )),

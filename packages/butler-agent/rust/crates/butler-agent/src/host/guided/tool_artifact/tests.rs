@@ -9,12 +9,12 @@ use crate::context::ContextBudgetOwner;
 use crate::context::OutputModeInput;
 use crate::context::ShellCommandResult;
 use crate::context::ToolOutputIdentity;
-use crate::models::ModelCatalog;
-use crate::models::ModelConfiguration;
-use crate::models::ModelConfigurationClock;
-use crate::models::ModelConfigurationEnvironment;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::ModelConfigurationClock;
+use butler_models::models::ModelConfigurationEnvironment;
 
 struct Clock;
 impl ModelConfigurationClock for Clock {
@@ -43,7 +43,7 @@ fn service(root: PathBuf) -> crate::context::ToolOutput {
             Arc::new(Clock),
             catalog.clone(),
             Arc::new(LocaleCollation::new("en-US").unwrap()),
-            crate::models::provider_http_client().unwrap(),
+            butler_models::models::provider_http_client().unwrap(),
             Arc::new(ConfigurationWrites::new()),
         )
         .unwrap(),

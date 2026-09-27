@@ -19,11 +19,11 @@ use crate::cognition::ensure_data_authority;
 use crate::coordination::CognitionWaitClass;
 use crate::coordination::CognitionWriteAcquire;
 use crate::coordination::CognitionWriteCoordinator;
-use crate::models::ModelProvider;
-use crate::models::ProviderPromptLifecycle;
-use crate::models::ProviderPromptPort;
-use crate::models::ProviderPromptRequest;
 use butler_core::public_text::trim_js_whitespace;
+use butler_models::models::ModelProvider;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
 
 pub(super) struct LegacyHot {
     data_root: PathBuf,

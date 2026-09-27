@@ -26,7 +26,7 @@ pub(crate) fn access(data_root: PathBuf, search_endpoint: &str) -> WebAccess {
 fn access_with_prompt(
     data_root: PathBuf,
     search_endpoint: &str,
-    prompt: Arc<dyn crate::models::ProviderPromptPort>,
+    prompt: Arc<dyn butler_models::models::ProviderPromptPort>,
 ) -> WebAccess {
     configured(
         data_root,
@@ -60,7 +60,7 @@ fn configure_lightpanda(data_root: &std::path::Path, binary: &std::path::Path) {
 fn configured(
     data_root: PathBuf,
     search_endpoint: &str,
-    prompt: Option<Arc<dyn crate::models::ProviderPromptPort>>,
+    prompt: Option<Arc<dyn butler_models::models::ProviderPromptPort>>,
     route: Arc<dyn PageRoute>,
 ) -> WebAccess {
     let metrics = Arc::new(crate::operations::WebSearchMetrics::new(data_root.clone()));

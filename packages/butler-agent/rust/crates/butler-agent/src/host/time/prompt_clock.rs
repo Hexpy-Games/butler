@@ -95,7 +95,9 @@ impl SystemPromptClock {
 
 impl PromptClock for SystemPromptClock {
     fn now_epoch_millis(&self) -> i64 {
-        crate::models::ModelConfigurationClock::now_epoch_millis(&crate::host::SystemIdentity)
+        butler_models::models::ModelConfigurationClock::now_epoch_millis(
+            &crate::host::SystemIdentity,
+        )
     }
 
     fn parse_timestamp(&self, value: &str) -> Option<i64> {

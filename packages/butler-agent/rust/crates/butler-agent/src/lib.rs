@@ -7,8 +7,6 @@ mod context;
 mod coordination;
 pub(crate) mod gateway;
 
-mod mcp_client;
-mod models;
 mod operations;
 mod profile;
 mod project_ledger;

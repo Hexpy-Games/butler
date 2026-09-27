@@ -10,8 +10,8 @@ use tokio::{
 };
 use url::Url;
 
-use crate::models::*;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::*;
 use butler_turn::btcc::ProviderRequestError;
 
 mod lifecycle;

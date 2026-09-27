@@ -7,7 +7,8 @@ use nix::{
     fcntl::{Flock, FlockArg},
 };
 
-use crate::{models, operations};
+use crate::operations;
+use butler_models::models;
 
 use crate::host::service::instance as service_instance;
 

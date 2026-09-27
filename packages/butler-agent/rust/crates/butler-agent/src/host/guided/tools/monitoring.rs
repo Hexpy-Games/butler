@@ -14,8 +14,8 @@ use super::GuidedTools;
 
 pub(crate) struct MonitoringReaders {
     data_root: PathBuf,
-    configuration: Arc<crate::models::ModelConfiguration>,
-    catalog: Arc<crate::models::ModelCatalog>,
+    configuration: Arc<butler_models::models::ModelConfiguration>,
+    catalog: Arc<butler_models::models::ModelCatalog>,
     memory_health: Arc<crate::cognition::MemoryHealthService>,
     profile: Arc<crate::profile::ProfileService>,
     metrics: Arc<crate::operations::CycleMetrics>,
@@ -24,8 +24,8 @@ pub(crate) struct MonitoringReaders {
 impl MonitoringReaders {
     pub(in crate::host) fn new(
         data_root: PathBuf,
-        configuration: Arc<crate::models::ModelConfiguration>,
-        catalog: Arc<crate::models::ModelCatalog>,
+        configuration: Arc<butler_models::models::ModelConfiguration>,
+        catalog: Arc<butler_models::models::ModelCatalog>,
         memory_health: Arc<crate::cognition::MemoryHealthService>,
         profile: Arc<crate::profile::ProfileService>,
         metrics: Arc<crate::operations::CycleMetrics>,

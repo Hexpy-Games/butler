@@ -4,10 +4,10 @@ use std::{fs, path::Path};
 
 use serde_json::{Value, json};
 
-use crate::{
-    context,
-    models::{ModelCatalog, ModelConfiguration, StatusModels},
-};
+use crate::context;
+use butler_models::models::ModelCatalog;
+use butler_models::models::ModelConfiguration;
+use butler_models::models::StatusModels;
 use std::sync::Arc;
 
 use super::stream::{number, visit_jsonl};

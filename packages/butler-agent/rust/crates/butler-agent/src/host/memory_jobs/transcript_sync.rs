@@ -17,7 +17,7 @@ use crate::cognition::normalize_session_id_for_storage;
 use crate::cognition::prepare_legacy_transcript;
 use crate::cognition::read_legacy_new_lines;
 use crate::coordination::CognitionWriteCoordinator;
-use crate::models::ModelProvider;
+use butler_models::models::ModelProvider;
 use butler_turn::workspace::SessionBindingStore;
 use butler_turn::workspace::SessionLifecycleState;
 use butler_turn::workspace::SessionRole;

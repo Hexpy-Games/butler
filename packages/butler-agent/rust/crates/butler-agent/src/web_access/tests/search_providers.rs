@@ -13,10 +13,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::models::{
-    ProviderPromptFuture, ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest,
-    ProviderPromptResult,
-};
+use butler_models::models::ProviderPromptFuture;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
+use butler_models::models::ProviderPromptResult;
 
 use super::super::WebAccess;
 
@@ -224,7 +225,7 @@ async fn auto_uses_data_openai_key_without_process_environment() {
     );
     let models = crate::host::ProcessModels::new(
         root.clone(),
-        crate::models::ModelConfigurationEnvironment::default(),
+        butler_models::models::ModelConfigurationEnvironment::default(),
         Arc::new(butler_core::configuration::ConfigurationWrites::new()),
         Arc::new(butler_core::locale::LocaleCollation::new("en-US").unwrap()),
     )

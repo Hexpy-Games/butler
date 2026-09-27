@@ -15,7 +15,8 @@ use serde_json::{Value, json};
 
 use crate::host::ResolvedInstallation;
 use crate::host::service::instance as service_instance;
-use crate::{models, operations};
+use crate::operations;
+use butler_models::models;
 
 #[derive(Default)]
 struct Options {
@@ -98,7 +99,7 @@ pub(crate) async fn run_native_status_cli(
         }
         Command::MetricsStatus | Command::Status => {
             let since_ts = options.since_hours.map(|hours| {
-                crate::models::ModelConfigurationClock::now_epoch_millis(
+                butler_models::models::ModelConfigurationClock::now_epoch_millis(
                     &crate::host::SystemIdentity,
                 ) as f64
                     - hours * 3_600_000.0

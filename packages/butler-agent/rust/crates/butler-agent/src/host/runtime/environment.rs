@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cognition::CognitionPathEnvironment;
 use crate::context::{ContextBudgetEnvironment, PromptEnvironment};
-use crate::models::ModelConfigurationEnvironment;
+use butler_models::models::ModelConfigurationEnvironment;
 
 pub(crate) struct ProcessEnvironment {
     pub model: ModelConfigurationEnvironment,

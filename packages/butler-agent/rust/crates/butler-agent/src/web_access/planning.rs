@@ -5,13 +5,12 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::web_access::WebAccessCode;
-use crate::{
-    models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest},
-    web_access::{
-        providers::contracts::SearchInput,
-        service::{WebAccess, WebAccessError},
-    },
-};
+use crate::web_access::providers::contracts::SearchInput;
+use crate::web_access::service::WebAccess;
+use crate::web_access::service::WebAccessError;
+use butler_models::models::ProviderPromptLifecycle;
+use butler_models::models::ProviderPromptPort;
+use butler_models::models::ProviderPromptRequest;
 
 pub(super) struct PlanningResult {
     pub plan: Option<SearchPlan>,
@@ -239,7 +238,7 @@ async fn run_planner(
         )
         .await
         .map_err(|error| {
-            if matches!(error, crate::models::ProviderPromptError::Cancelled) {
+            if matches!(error, butler_models::models::ProviderPromptError::Cancelled) {
                 return WebAccessError::cancelled();
             }
             WebAccessError::new(

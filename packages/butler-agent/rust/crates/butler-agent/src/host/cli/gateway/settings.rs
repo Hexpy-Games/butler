@@ -69,7 +69,7 @@ impl Settings {
         next.insert("config".into(), Value::Object(config));
         next.insert(
             "updatedAt".into(),
-            Value::String(crate::models::ModelConfigurationClock::now_iso(
+            Value::String(butler_models::models::ModelConfigurationClock::now_iso(
                 &crate::host::SystemIdentity,
             )),
         );

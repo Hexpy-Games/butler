@@ -94,7 +94,7 @@ impl CognitionRegistrationService {
         environment: CognitionPathEnvironment,
         coordinator: Arc<CognitionWriteCoordinator>,
         clock: Clock,
-        provider: Arc<dyn crate::models::ProviderPromptPort>,
+        provider: Arc<dyn butler_models::models::ProviderPromptPort>,
         candidates: Arc<dyn crate::cognition::extraction::CognitionVectorSearch>,
         host: Arc<dyn crate::coordination::CognitionCoordinationHost>,
     ) -> Self {

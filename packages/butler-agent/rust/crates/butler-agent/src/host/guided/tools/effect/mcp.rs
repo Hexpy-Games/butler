@@ -49,7 +49,7 @@ pub(super) fn prepare(
 }
 
 struct McpToolEffect {
-    client: Arc<crate::mcp_client::McpClient>,
+    client: Arc<butler_models::mcp_client::McpClient>,
     server_id: String,
     tool_name: String,
     target: String,

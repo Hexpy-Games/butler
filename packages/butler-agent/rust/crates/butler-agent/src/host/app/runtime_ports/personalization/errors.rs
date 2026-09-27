@@ -13,7 +13,7 @@ pub(super) fn profile_error(error: crate::profile::ProfileError) -> GatewayAppli
     }
 }
 
-pub(super) fn model_error(_error: crate::models::SettingsError) -> GatewayApplicationError {
+pub(super) fn model_error(_error: butler_models::models::SettingsError) -> GatewayApplicationError {
     GatewayApplicationError::Public {
         status: 500,
         code: "personalization_settings_unavailable".into(),

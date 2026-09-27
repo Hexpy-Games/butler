@@ -81,7 +81,7 @@ async fn extractor_model_uses_nullish_but_not_invalid_butler_model_fallback() {
             .await
             .unwrap()
             .effective_model,
-        crate::models::DEFAULT_MODEL_REF
+        butler_models::models::DEFAULT_MODEL_REF
     );
 }
 

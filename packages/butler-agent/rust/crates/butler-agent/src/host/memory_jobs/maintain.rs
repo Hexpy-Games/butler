@@ -22,9 +22,9 @@ use crate::cognition::VectorOptimizeService;
 use crate::cognition::active_memory_descriptor_exists;
 use crate::cognition::resolve_active_generation;
 use crate::coordination::CognitionWriteCoordinator;
-use crate::models::ModelConfigurationClock;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
 
 use crate::host::cli::consolidation::ConsolidationCliResult;
 use crate::host::memory_jobs::maintain_phase::ConfiguredPhases;

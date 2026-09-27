@@ -17,9 +17,9 @@ use crate::cognition::inspect_memory_rebuild;
 use crate::cognition::rollback_memory_rebuild;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
-use crate::models::ModelConfigurationClock;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
 
 pub(super) async fn run(
     data_root: &Path,

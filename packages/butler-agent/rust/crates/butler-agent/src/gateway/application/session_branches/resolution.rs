@@ -11,7 +11,7 @@ use crate::gateway::{
     application::AppApplication,
 };
 
-const SUMMARY_MODEL_FALLBACK: &str = crate::models::DEFAULT_MODEL_REF;
+const SUMMARY_MODEL_FALLBACK: &str = butler_models::models::DEFAULT_MODEL_REF;
 
 impl AppApplication {
     pub(super) async fn resolve_request(

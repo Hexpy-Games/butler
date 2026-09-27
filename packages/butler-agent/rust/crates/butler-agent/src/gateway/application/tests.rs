@@ -30,7 +30,7 @@ async fn admission_persists_claimed_message_turn_and_signed_native_input() {
         AppApplicationDependencies {
             updates: test_updates(),
             skills: test_skills(),
-            mcp_client: Arc::new(crate::mcp_client::McpClient::new(
+            mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
                 path.parent().unwrap().into(),
                 Default::default(),
             )),
@@ -100,7 +100,7 @@ async fn stable_client_replay_rejects_changed_input_without_second_enqueue() {
         AppApplicationDependencies {
             updates: test_updates(),
             skills: test_skills(),
-            mcp_client: Arc::new(crate::mcp_client::McpClient::new(
+            mcp_client: Arc::new(butler_models::mcp_client::McpClient::new(
                 path.parent().unwrap().into(),
                 Default::default(),
             )),

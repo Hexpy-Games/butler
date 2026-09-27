@@ -26,9 +26,9 @@ use crate::cognition::refresh_memory_rebuild_snapshot;
 use crate::cognition::resolve_generation;
 use crate::coordination::CognitionWriteCoordinator;
 use crate::host::{EmbeddingOwner, ProcessEnvironment, ProcessModels, SystemIdentity};
-use crate::models::ModelConfigurationClock;
 use butler_core::configuration::ConfigurationWrites;
 use butler_core::locale::LocaleCollation;
+use butler_models::models::ModelConfigurationClock;
 
 const MAX_CATCHUP_QUANTA: usize = 4096;
 const MAX_TYPED_QUANTA: usize = 4096;
