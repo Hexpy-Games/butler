@@ -29,16 +29,16 @@ pub(super) fn read(
     locators: &[&HistoricalOriginCandidate],
     started: Instant,
     cancellation: &CancellationToken,
-) -> ConversationResult<QueueEvidence> {
+) -> QueueEvidence {
     let mut matches = HashMap::new();
     if locators.is_empty() {
-        return Ok(QueueEvidence {
+        return QueueEvidence {
             complete: true,
             matches,
-        });
+        };
     }
     let complete = scan(data_root, locators, started, cancellation, &mut matches).is_ok();
-    Ok(QueueEvidence { complete, matches })
+    QueueEvidence { complete, matches }
 }
 
 /// Scans the durable inbound queue for the candidates' events, in the

@@ -369,6 +369,15 @@ pub(super) fn guarded_directory(
     })
 }
 
+/// The shell invocation of a guided command: sandboxed read-only on macOS;
+/// other hosts only run fully accessible commands.
+#[cfg_attr(
+    target_os = "macos",
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "only macOS can sandbox every access mode; other hosts refuse read-only commands"
+    )
+)]
 fn invocation(input: &GuidedCommandInput) -> Result<(String, Vec<String>), CommandError> {
     #[cfg(target_os = "macos")]
     {

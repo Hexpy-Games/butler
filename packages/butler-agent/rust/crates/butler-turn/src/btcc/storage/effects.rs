@@ -142,9 +142,6 @@ fn terminal_restart_state(state: &str) -> bool {
             | "precondition_failed"
     )
 }
-fn inner<T: Send + 'static>(result: EffectResult<T>) -> super::StorageResult<EffectResult<T>> {
-    Ok(result)
-}
 
 impl EffectJournal for StorageEffectJournal {
     fn prepare(
@@ -156,7 +153,14 @@ impl EffectJournal for StorageEffectJournal {
         let clock = self.clock.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(write::prepare(db, &identity, recovery.as_ref(), &*clock)))
+                .execute(move |db| {
+                    Ok::<_, super::StorageError>(write::prepare(
+                        db,
+                        &identity,
+                        recovery.as_ref(),
+                        &*clock,
+                    ))
+                })
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -165,7 +169,7 @@ impl EffectJournal for StorageEffectJournal {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(row::find(db, &effect_id)))
+                .execute(move |db| Ok::<_, super::StorageError>(row::find(db, &effect_id)))
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -178,7 +182,9 @@ impl EffectJournal for StorageEffectJournal {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(row::list_for_work(db, &work_id, limit)))
+                .execute(move |db| {
+                    Ok::<_, super::StorageError>(row::list_for_work(db, &work_id, limit))
+                })
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -187,7 +193,7 @@ impl EffectJournal for StorageEffectJournal {
         let storage = self.storage.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(blocker::list(db, &work_id)))
+                .execute(move |db| Ok::<_, super::StorageError>(blocker::list(db, &work_id)))
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -203,7 +209,7 @@ impl EffectJournal for StorageEffectJournal {
         Box::pin(async move {
             storage
                 .execute(move |db| {
-                    inner(blocker::resolve(
+                    Ok::<_, super::StorageError>(blocker::resolve(
                         db,
                         &work_id,
                         &occurrence,
@@ -224,7 +230,9 @@ impl EffectJournal for StorageEffectJournal {
         let clock = self.clock.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(write::claim(db, &effect_id, revision, &*clock)))
+                .execute(move |db| {
+                    Ok::<_, super::StorageError>(write::claim(db, &effect_id, revision, &*clock))
+                })
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -238,7 +246,11 @@ impl EffectJournal for StorageEffectJournal {
         let clock = self.clock.clone();
         Box::pin(async move {
             storage
-                .execute(move |db| inner(write::return_prepared(db, &effect_id, revision, &*clock)))
+                .execute(move |db| {
+                    Ok::<_, super::StorageError>(write::return_prepared(
+                        db, &effect_id, revision, &*clock,
+                    ))
+                })
                 .await
                 .map_err(EffectFailure::from)?
         })
@@ -254,7 +266,7 @@ impl EffectJournal for StorageEffectJournal {
         Box::pin(async move {
             storage
                 .execute(move |db| {
-                    inner(write::record_applied(
+                    Ok::<_, super::StorageError>(write::record_applied(
                         db, &effect_id, revision, &result, &receipt,
                     ))
                 })
@@ -273,7 +285,7 @@ impl EffectJournal for StorageEffectJournal {
         Box::pin(async move {
             storage
                 .execute(move |db| {
-                    inner(write::record_error(
+                    Ok::<_, super::StorageError>(write::record_error(
                         db, &effect_id, revision, &error, false, &*clock,
                     ))
                 })
@@ -292,7 +304,7 @@ impl EffectJournal for StorageEffectJournal {
         Box::pin(async move {
             storage
                 .execute(move |db| {
-                    inner(write::record_error(
+                    Ok::<_, super::StorageError>(write::record_error(
                         db, &effect_id, revision, &error, true, &*clock,
                     ))
                 })
