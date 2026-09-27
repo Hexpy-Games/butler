@@ -94,6 +94,9 @@ export function VisualHarness() {
   );
   const worktreeSurface =
     new URLSearchParams(window.location.search).get("surface") === "worktree";
+  // `developer=1` turns on developer mode (context and worker tabs, Git details).
+  const developerMode =
+    new URLSearchParams(window.location.search).get("developer") === "1";
   const harnessNavigation = ss03Surface
     ? HARNESS_SS03_NAVIGATION
     : HARNESS_NAVIGATION;
@@ -131,14 +134,15 @@ export function VisualHarness() {
     // `?locale=ko` renders the harness in Korean.
     const language = new URLSearchParams(window.location.search).get("locale") === "ko" ? "ko" : EMPTY_SETTINGS.language;
     return visualTheme === EMPTY_SETTINGS.appearance_theme
-      ? { ...EMPTY_SETTINGS, language, worker_profiles: workerProfiles }
+      ? { ...EMPTY_SETTINGS, language, diagnostics_enabled: developerMode, worker_profiles: workerProfiles }
       : {
           ...EMPTY_SETTINGS,
           appearance_theme: visualTheme,
           language,
+          diagnostics_enabled: developerMode,
           worker_profiles: workerProfiles,
         };
-  }, [visualTheme]);
+  }, [developerMode, visualTheme]);
   const systemPrefersDark = useSystemThemePreference();
   usePortalThemeClasses(harnessSettings, systemPrefersDark);
   const rightAvailable =

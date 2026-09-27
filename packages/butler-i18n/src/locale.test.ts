@@ -12,7 +12,7 @@ test("English and Korean catalogs have complete recursive key and formatter pari
   expect(shape(getAppCopy("en-US"))).toEqual(shape(getAppCopy("ko-KR")));
   expect(getAppCopy("en-US").conversation.work.collapsedSummary("Read file", 2)).toBe("Read file and 1 more activities");
   expect(getAppCopy("ko-KR").space.general).toBe("일반");
-  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Worth a short look today");
+  expect(getAppCopy("en-US").briefing.general.suggestions[0].title).toBe("Summarize a document");
 });
 
 test("Korean catalog uses Korean for generic UI words", () => {
@@ -49,7 +49,7 @@ test("Korean copy keeps the Work, Task, Worker and Custom product terms consiste
   expect(ko.interfaceStatus.task).toBe("Task");
   expect(ko.inspector.tabs.workers).toBe("Worker");
   expect(ko.interfaceStatus.workerCall).toBe("Worker 호출");
-  expect(ko.projectSignpost.work).toBe("Work");
+  expect(ko.projectSignpost.work).toBe("작업");
   expect(ko.projectSignpost.parentWork).toBe("상위 Work");
   expect(ko.projectSignpost.tasks).toBe("하위 Task");
   expect(ko.projectStatistics.labels.work).toBe("Work 변경");
