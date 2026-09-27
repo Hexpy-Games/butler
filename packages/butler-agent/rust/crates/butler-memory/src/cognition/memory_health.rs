@@ -76,14 +76,22 @@ pub struct MemoryHealthReport {
 
 impl MemoryHealthReport {
     /// The dimensions to record with the `health` metric, as JSON.
-    pub fn metric_dimensions(&self) -> Value {
-        serde_json::to_value(&self.dimensions).unwrap_or(Value::Null)
+    pub fn metric_dimensions(&self) -> CognitionResult<Value> {
+        serde_json::to_value(&self.dimensions).map_err(encode_failed)
     }
 
     /// The operator summary (the `memory_health` tool result), as JSON.
-    pub fn summary(&self) -> Value {
-        serde_json::to_value(&self.summary).unwrap_or(Value::Null)
+    pub fn summary(&self) -> CognitionResult<Value> {
+        serde_json::to_value(&self.summary).map_err(encode_failed)
     }
+}
+
+fn encode_failed(source: serde_json::Error) -> CognitionError {
+    CognitionError::new(
+        CognitionCode::MemoryHealthReadFailed,
+        "memory_health_read_failed",
+    )
+    .with_source(source)
 }
 
 /// Reads memory health without taking the writer lock.

@@ -233,7 +233,7 @@ fn refresh_stage_states(tx: &Transaction<'_>, job_id: &str, now: &str) -> Cognit
                 "UPDATE memory_projection_jobs SET {}=?1,last_served_at=?2 WHERE job_id=?3",
                 stage.column()
             ),
-            params![state.json(), now, job_id],
+            params![state.json()?, now, job_id],
         )
         .map_err(db_error)?;
     }

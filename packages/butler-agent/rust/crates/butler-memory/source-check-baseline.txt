@@ -11,7 +11,6 @@ src/cognition/graph/recall/semantic/tests.rs	fixture	148
 src/cognition/graph/recall/vectors/tests.rs	episode_vector_receipt_and_finite_distance_are_required	82
 src/cognition/graph/recall/vectors/tests.rs	node_vector_second_filter_requires_complete_current_unit_and_scoped_source	87
 src/cognition/knowhow_store/tests.rs	aggregation_builds_index_and_revision_resolves_each_target_without_holding_lock	95
-src/cognition/memory_health/tests.rs	vector_snapshot_and_maintenance_status_drive_source_diagnostics	81
 src/cognition/recall/tests.rs	graph_expansion_matches_unchanged_bun_source	104
 src/cognition/registration/tests.rs	Fixture::seed_pair_with_origin	100
 src/cognition/registration/tests/cases.rs	claimed_window_meaning_and_bound_apply_are_durable	123

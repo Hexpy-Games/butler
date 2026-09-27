@@ -171,7 +171,7 @@ impl Capture<'_> {
             move || targets::read(&root, sources.as_ref(), mode, &salt, now_ms)
         })
         .await?;
-        let prepared = prompt::prepare(&self.pending, self.consent.mode, &correction);
+        let prepared = prompt::prepare(&self.pending, self.consent.mode, &correction)?;
         if prepared.windows.is_empty() {
             let failure = "profile source grapheme exceeds prompt budget";
             runtime::with_gate(dependencies, Some(self.cancellation.clone()), {

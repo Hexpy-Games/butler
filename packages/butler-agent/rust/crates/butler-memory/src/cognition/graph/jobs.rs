@@ -182,7 +182,13 @@ pub(super) fn replay(
         ids.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
         tx.execute(
             "UPDATE memory_projection_jobs SET observed_completion_job_ids=?1 WHERE job_id=?2",
-            params![serde_json::to_string(&ids).unwrap_or_default(), job_id],
+            params![
+                serde_json::to_string(&ids).map_err(|error| {
+                    CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+                        .with_source(error)
+                })?,
+                job_id
+            ],
         )
         .map_err(db_error)?;
     }
@@ -281,7 +287,7 @@ pub(super) fn refresh_semantic_state(
     } else {
         StageWrite::pending()
     };
-    connection.execute("UPDATE memory_projection_jobs SET semantic_graph_state=?1,last_served_at=?2 WHERE job_id=?3",params![state.json(),now,job_id]).map_err(db_error)?;
+    connection.execute("UPDATE memory_projection_jobs SET semantic_graph_state=?1,last_served_at=?2 WHERE job_id=?3",params![state.json()?,now,job_id]).map_err(db_error)?;
     if complete + warnings == total {
         let nodes: i64 = connection
             .query_row(
@@ -308,7 +314,7 @@ pub(super) fn refresh_semantic_state(
                 connection
                     .execute(
                         "UPDATE memory_projection_jobs SET node_vectors_state=?1 WHERE job_id=?2",
-                        params![StageWrite::complete(0).json(), job_id],
+                        params![StageWrite::complete(0).json()?, job_id],
                     )
                     .map_err(db_error)?;
             }

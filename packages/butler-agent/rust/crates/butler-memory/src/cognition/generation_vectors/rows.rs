@@ -57,23 +57,27 @@ impl GenerationVectorRow {
         text: &str,
         version: &str,
     ) -> (String, String) {
-        let chunk = digest(&("embedding-chunk", revision, 0, text));
-        let key = digest(&(
-            "memory-vector",
-            generation,
-            kind,
-            owner,
-            revision,
-            &chunk,
-            version,
-        ));
+        let chunk = digest(&json!(["embedding-chunk", revision, 0, text]).to_string());
+        let key = digest(
+            &json!([
+                "memory-vector",
+                generation,
+                kind,
+                owner,
+                revision,
+                chunk,
+                version
+            ])
+            .to_string(),
+        );
         (chunk, key)
     }
 }
 
-/// SHA-256 of the compact JSON array of `parts`.
-fn digest(parts: &impl serde::Serialize) -> String {
-    let json = serde_json::to_string(parts).unwrap_or_default();
+/// SHA-256 of an identity's compact JSON array. The array is encoded with
+/// `Value`'s `Display`, which cannot fail, so the hash always covers every
+/// part.
+fn digest(json: &str) -> String {
     format!("{:x}", Sha256::digest(json.as_bytes()))
 }
 

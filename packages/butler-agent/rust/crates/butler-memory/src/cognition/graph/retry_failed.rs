@@ -87,7 +87,7 @@ pub(super) fn retry_failed(
     now: &str,
 ) -> CognitionResult<RetryFailedCounts> {
     let recovery_revision = recovery_revision(generation_id, now)?;
-    let cache_state = StageWrite::blocked("memory_retry_requested").json();
+    let cache_state = StageWrite::blocked("memory_retry_requested").json()?;
 
     let tx = connection.transaction().map_err(db_error)?;
     let semantic_windows = tx
@@ -171,7 +171,7 @@ pub(super) fn repair_selected_invalid_vectors(
                 "UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2 AND generation=?3"
             ),
             params![
-                StageWrite::blocked("memory_vector_repair_requested").json(),
+                StageWrite::blocked("memory_vector_repair_requested").json()?,
                 snapshot.job_id,
                 current_generation,
             ],

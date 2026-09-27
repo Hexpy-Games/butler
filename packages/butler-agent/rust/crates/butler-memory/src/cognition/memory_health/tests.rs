@@ -121,15 +121,10 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
     assert_eq!(missing_vector.maintenance_status.as_str(), "failed");
     assert_eq!(missing_vector.metric_status, "error");
     assert_eq!(missing_vector.diagnostics_count, 4);
-    assert_eq!(missing_vector.metric_dimensions()["queue_backlog_count"], 1);
-    assert_eq!(
-        missing_vector.metric_dimensions()["maintenance_failed_phases_count"],
-        2
-    );
-    assert_eq!(
-        missing_vector.metric_dimensions()["serving_available"],
-        false
-    );
+    let dimensions = missing_vector.metric_dimensions().unwrap();
+    assert_eq!(dimensions["queue_backlog_count"], 1);
+    assert_eq!(dimensions["maintenance_failed_phases_count"], 2);
+    assert_eq!(dimensions["serving_available"], false);
 
     fs::create_dir_all(memory.join("hot")).expect("create hot dir");
     fs::write(memory.join("hot/current.md"), "projection\n").expect("write hot cache file");
@@ -163,9 +158,9 @@ async fn vector_snapshot_and_maintenance_status_drive_source_diagnostics() {
     assert_eq!(present_vector.maintenance_status.as_str(), "repaired");
     assert_eq!(present_vector.metric_status, "ok");
     assert_eq!(present_vector.diagnostics_count, 2);
-    assert_eq!(present_vector.metric_dimensions()["stale"], false);
+    assert_eq!(present_vector.metric_dimensions().unwrap()["stale"], false);
     assert_eq!(
-        present_vector.metric_dimensions()["maintenance_failed_phases_count"],
+        present_vector.metric_dimensions().unwrap()["maintenance_failed_phases_count"],
         0
     );
     fs::remove_dir_all(root).expect("remove fixture");
@@ -182,7 +177,7 @@ async fn active_generation_serving_health_reads_populated_graph_without_writing(
         Arc::new(CognitionWriteCoordinator::new(Arc::new(TestHost)).unwrap()),
     );
     let report = service.read_tool(no_profile_coverage()).await.unwrap();
-    let summary = report.summary();
+    let summary = report.summary().unwrap();
     let serving = &summary["serving"];
     assert_eq!(serving["available"], true, "{serving}");
     assert_eq!(serving["sources"]["registered_current"], 1);

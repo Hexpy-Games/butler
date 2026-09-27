@@ -95,7 +95,7 @@ impl GraphRepository {
         job.owner_nonce = uuid::Uuid::new_v4().to_string();
         job.attempt += 1;
         let changed = tx.execute("UPDATE memory_projection_jobs SET hot_cache_attempt_count=?1,hot_cache_owner_pid=?2,hot_cache_owner_nonce=?3,hot_cache_started_at=?4,hot_cache_state=?5 WHERE job_id=?6 AND json_extract(hot_cache_state,'$.state')='pending'",
-            params![job.attempt,i64::from(std::process::id()),job.owner_nonce,now,StageWrite::Running { attempt: job.attempt, owner_pid: std::process::id(), started_at: now.to_owned() }.json(),job.job_id]).map_err(db_error)?;
+            params![job.attempt,i64::from(std::process::id()),job.owner_nonce,now,StageWrite::Running { attempt: job.attempt, owner_pid: std::process::id(), started_at: now.to_owned() }.json()?,job.job_id]).map_err(db_error)?;
         if changed != 1 {
             return Err(error(CognitionCode::MemoryCacheJobChanged));
         }
@@ -166,7 +166,7 @@ impl GraphRepository {
                 params![outcome.entry_id,job.generation,i64::from(outcome.admitted),outcome.reason.map(ExclusionReason::as_str),to_json(&outcome.receipt)?]).map_err(db_error)?;
         }
         if tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=?2,hot_cache_next_attempt_at=NULL,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?3 AND hot_cache_owner_nonce=?4 AND json_extract(hot_cache_state,'$.state')='running'",
-            params![StageWrite::complete(1).json(),to_json(receipt)?,job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
+            params![StageWrite::complete(1).json()?,to_json(receipt)?,job.job_id,job.owner_nonce]).map_err(db_error)? != 1 { return Err(error(CognitionCode::MemoryCacheJobChanged)); }
         tx.commit().map_err(db_error)
     }
 
@@ -183,7 +183,7 @@ impl GraphRepository {
             .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         });
         self.connection_mut()?.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=?2,hot_cache_next_attempt_at=?3,hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?4 AND hot_cache_owner_nonce=?5",
-            params![if retry {StageWrite::blocked(code)} else {StageWrite::failed(code)}.json(),json!({"outcome":"failed","code":code,"retry_at":retry_at}).to_string(),retry_at,job.job_id,job.owner_nonce]).map_err(db_error)?;
+            params![if retry {StageWrite::blocked(code)} else {StageWrite::failed(code)}.json()?,json!({"outcome":"failed","code":code,"retry_at":retry_at}).to_string(),retry_at,job.job_id,job.owner_nonce]).map_err(db_error)?;
         Ok(())
     }
 }
@@ -388,7 +388,7 @@ fn recover(connection: &Connection) -> CognitionResult<()> {
             pid.is_none_or(|pid| pid == i64::from(std::process::id()) || !pid_alive(pid));
         if abandoned {
             connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_attempt_count=MAX(0,hot_cache_attempt_count-1),hot_cache_owner_pid=NULL,hot_cache_owner_nonce=NULL,hot_cache_started_at=NULL WHERE job_id=?2",
-            params![StageWrite::pending().json(),job]).map_err(db_error)?;
+            params![StageWrite::pending().json()?,job]).map_err(db_error)?;
         }
     }
     Ok(())

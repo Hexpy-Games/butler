@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::cognition::{CognitionCode, CognitionError, CognitionResult};
 use crate::lenient;
 
 /// The lifecycle of one projection stage.
@@ -108,8 +109,11 @@ impl StageWrite {
     }
 
     /// The column value.
-    pub(in crate::cognition) fn json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+    pub(in crate::cognition) fn json(&self) -> CognitionResult<String> {
+        serde_json::to_string(self).map_err(|error| {
+            CognitionError::new(CognitionCode::MemoryGraphUnavailable, error.to_string())
+                .with_source(error)
+        })
     }
 }
 

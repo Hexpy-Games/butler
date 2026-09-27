@@ -7,6 +7,7 @@ pub(in crate::cognition) use readiness::{CacheReadinessRow, StageReadiness, Vect
 mod candidates;
 mod consolidate;
 mod failure;
+mod identity_decision;
 pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
 pub(in crate::cognition) mod index;
 mod input;

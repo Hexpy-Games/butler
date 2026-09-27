@@ -64,9 +64,14 @@ impl MonitoringReaders {
             .read_tool(profile)
             .await
             .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
+        let dimensions = report
+            .metric_dimensions()
+            .map_err(|error| BtccError::relayed(error.code(), error.message()))?;
         self.metrics
-            .record("health", report.metric_status, &report.metric_dimensions());
-        Ok(report.summary())
+            .record("health", report.metric_status, &dimensions);
+        report
+            .summary()
+            .map_err(|error| BtccError::relayed(error.code(), error.message()))
     }
 }
 

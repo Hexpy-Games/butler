@@ -343,6 +343,6 @@ fn io_error(_: std::io::Error) -> ProfileError {
         "Profile store is unavailable.",
     )
 }
-fn json_error(_: serde_json::Error) -> ProfileError {
+pub(super) fn json_error(_: serde_json::Error) -> ProfileError {
     ProfileError::new(ProfileCode::ProfileDataInvalid, "Profile data is invalid.")
 }

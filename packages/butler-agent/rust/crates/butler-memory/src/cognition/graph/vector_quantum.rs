@@ -135,7 +135,7 @@ pub(super) fn claim(
         };
         tx.execute(
             &format!("UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2"),
-            params![running.json(), first.job_id],
+            params![running.json()?, first.job_id],
         )
         .map_err(db_error)?;
     }
@@ -390,7 +390,7 @@ fn refresh(connection: &Connection, job: &str, now: &str) -> CognitionResult<()>
     ] {
         let (total,complete,failed): (i64,i64,i64)=connection.query_row("SELECT COUNT(*),COALESCE(SUM(state='complete'),0),COALESCE(SUM(state='failed'),0) FROM memory_vector_units WHERE job_id=?1 AND record_kind=?2 AND state!='superseded'",params![job,kind],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).map_err(db_error)?;
         let state = StageWrite::vector_progress(complete, total, failed);
-        connection.execute(&format!("UPDATE memory_projection_jobs SET {column}=?1,last_served_at=?2 WHERE job_id=?3"),params![state.json(),now,job]).map_err(db_error)?;
+        connection.execute(&format!("UPDATE memory_projection_jobs SET {column}=?1,last_served_at=?2 WHERE job_id=?3"),params![state.json()?,now,job]).map_err(db_error)?;
     }
     Ok(())
 }

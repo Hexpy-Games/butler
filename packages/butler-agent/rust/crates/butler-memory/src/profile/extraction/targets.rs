@@ -23,7 +23,7 @@ pub(super) fn read(
     let mut public = Vec::new();
     let mut private = HashMap::new();
     for (index, entry) in entries.into_iter().take(4).enumerate() {
-        let entry_revision = revision(&entry);
+        let entry_revision = revision(&entry)?;
         let digest = format!(
             "{:x}",
             Sha256::digest(format!("{salt}\0{}", entry.id).as_bytes())
@@ -75,7 +75,7 @@ struct RevisionFields<'a> {
     updated_at: &'a str,
 }
 
-pub(super) fn revision(entry: &storage::StoredEntry) -> String {
+pub(super) fn revision(entry: &storage::StoredEntry) -> ProfileResult<String> {
     let understanding = &entry.understanding;
     let missing_summary = Arg::Valid(String::new());
     let fields = RevisionFields {
@@ -93,8 +93,8 @@ pub(super) fn revision(entry: &storage::StoredEntry) -> String {
         evidence_observed_at: &understanding.evidence_observed_at,
         updated_at: &entry.updated_at,
     };
-    let text = serde_json::to_string(&fields).unwrap_or_default();
-    format!("{:x}", Sha256::digest(text.as_bytes()))
+    let text = serde_json::to_string(&fields).map_err(storage::json_error)?;
+    Ok(format!("{:x}", Sha256::digest(text.as_bytes())))
 }
 
 pub(super) fn normalized_conditions(mut values: Vec<String>) -> Vec<String> {

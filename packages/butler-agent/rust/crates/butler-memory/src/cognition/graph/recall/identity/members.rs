@@ -15,6 +15,7 @@ use crate::cognition::{
 };
 
 use super::{super::db_error, records, resolve};
+use crate::cognition::graph::identity_decision::DecisionOperation;
 
 /// Index rows read per page.
 const PAGE: usize = 64;
@@ -174,7 +175,7 @@ where
             }
             let merged_here = record.literal_canonical.as_deref() == Some(indexed_target)
                 || record.resolved_target.as_deref() == Some(indexed_target);
-            if record.operation == "apply" && merged_here {
+            if record.operation == DecisionOperation::Apply && merged_here {
                 self.admit(record.literal_loser)?;
             }
         }

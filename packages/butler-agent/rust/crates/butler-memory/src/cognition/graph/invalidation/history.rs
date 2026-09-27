@@ -5,102 +5,190 @@ use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, value::RawValue};
 
 use super::{db_error, redirect_chain, source};
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::identity_decision::DecisionOperation;
 use crate::cognition::{CognitionError, CognitionResult, hydrate_conversation_source};
+use crate::lenient::{self, Arg, Obj};
 use butler_turn::conversation::ConversationSourceReader;
 
-/// Passthrough: one identity decision record as stored, including fields
-/// written by earlier implementations; an invalidation copies it and
-/// overwrites only the fields it owns.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub(super) struct DecisionRecord(Map<String, Value>);
+/// One identity decision (`butler.memory-identity-decision.v1`) as stored in
+/// `identity_decisions_json`.
+///
+/// Fields are declared in the order the decision writer stored them, so an
+/// invalidation that copies a decision keeps its key order. The fields an
+/// invalidation copies without reading (`Arg`) keep a missing key, an
+/// explicit `null` or a value of another type exactly as stored.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub(super) struct DecisionRecord {
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub schema: Arg<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub decision_ref: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub operation_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub payload_digest: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub operation: Option<DecisionOperation>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub decision_origin: Option<DecisionOrigin>,
+    /// The node the decision redirected.
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub literal_loser: Arg<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub reason: Option<DecisionReason>,
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub review_note: Arg<String>,
+    /// The node an apply redirected the loser to.
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub literal_canonical: Arg<String>,
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub resolved_target: Arg<String>,
+    /// The loser's decision before this one.
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub previous_head: Option<DecisionPointer>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub previous_direct_redirect: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub previous_owner: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub resulting_direct_redirect: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub resulting_owner: Option<String>,
+    /// The sources the decision rests on.
+    #[serde(default, deserialize_with = "lenient::string_list")]
+    pub source_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub node_type: Arg<String>,
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub identity_scope: Arg<String>,
+    #[serde(default, skip_serializing_if = "Arg::is_missing")]
+    pub project_id: Arg<String>,
+    #[serde(default)]
+    pub decision_source: Arg<Obj<DecisionSource>>,
+    #[serde(default)]
+    pub loser_source: Arg<Obj<DecisionSource>>,
+    #[serde(default)]
+    pub canonical_source: Arg<Obj<DecisionSource>>,
+    /// The decision a revoke or invalidation undid.
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub target_decision: Option<DecisionPointer>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub source_revision: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub source_observed_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub recorded_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub recorded_outcome: Option<RecordedOutcome>,
+    /// Passthrough: keys no decision writer here knows, kept after the known
+    /// fields when a decision is copied.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
 
-impl DecisionRecord {
-    /// A string field, when present as a string.
-    pub(super) fn string(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(Value::as_str)
-    }
+/// Who made a decision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DecisionOrigin {
+    /// An operator command.
+    OperatorCli,
+    /// A new source revision.
+    SourceRevision,
+}
 
-    /// The string items of an array field.
-    pub(super) fn strings(&self, key: &str) -> Vec<String> {
-        self.0
-            .get(key)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect()
-    }
+/// Why a decision was made.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DecisionReason {
+    /// The user named an alias.
+    ExplicitAlias,
+    /// The user corrected an identity.
+    ExplicitIdentityCorrection,
+    /// An operator reviewed a duplicate.
+    ReviewedDuplicate,
+    /// An operator revoked an apply.
+    OperatorRevoke,
+    /// A new revision superseded the decision's sources.
+    SourceRevision,
+}
 
-    /// A reference `{job_ref, decision_ref}` field.
-    fn decision(&self, key: &str) -> Option<DecisionPointer> {
-        DecisionPointer::deserialize(self.0.get(key)?).ok()
-    }
-
-    /// The source bindings the decision rests on.
-    fn source_bindings(&self) -> Vec<SourceBinding> {
-        ["decision_source", "loser_source", "canonical_source"]
-            .into_iter()
-            .filter_map(|key| self.0.get(key))
-            .filter(|value| !value.is_null())
-            .map(|value| SourceBinding::deserialize(value).unwrap_or_default())
-            .collect()
-    }
-
-    /// Sets a field, keeping its position when it already exists.
-    pub(super) fn set(&mut self, key: &str, value: impl Serialize) {
-        self.0.insert(
-            key.into(),
-            serde_json::to_value(value).unwrap_or(Value::Null),
-        );
-    }
+/// What a decision left behind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum RecordedOutcome {
+    /// The redirect was applied.
+    Applied,
+    /// A revoke restored the redirect before the apply.
+    RestoredPrevious,
+    /// A revoke left the node independent.
+    RestoredIndependent,
+    /// A source revision invalidated the decision.
+    Invalidated,
 }
 
 /// A `{job_ref, decision_ref}` pointer to another decision.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct DecisionPointer {
-    #[serde(default, deserialize_with = "crate::lenient::option")]
+    #[serde(default, deserialize_with = "lenient::option")]
     pub job_ref: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
+    #[serde(default, deserialize_with = "lenient::option")]
     pub decision_ref: Option<String>,
 }
 
-/// A source a decision quoted, as recorded.
-#[derive(Debug, Default, Deserialize)]
-struct SourceBinding {
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    source_ref: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    episode_id: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    revision: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    content_hash: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    origin_kind: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    role: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    observed_at: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    byte_start: Option<f64>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    byte_end: Option<f64>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    session_id: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    project_id: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    quote: Option<String>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    quote_byte_start: Option<f64>,
-    #[serde(default, deserialize_with = "crate::lenient::option")]
-    quote_byte_end: Option<f64>,
+/// A source a decision quoted, fields in the stored order.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub(super) struct DecisionSource {
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub source_ref: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub episode_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub revision: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub content_hash: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub byte_start: Option<f64>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub byte_end: Option<f64>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub quote: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub quote_byte_start: Option<f64>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub quote_byte_end: Option<f64>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub session_id: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub origin_kind: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub role: Option<String>,
+    #[serde(default, deserialize_with = "lenient::option")]
+    pub observed_at: Option<String>,
+}
+
+impl DecisionRecord {
+    /// The decision's recorded sources; a binding of another shape reads as
+    /// one that can never be current.
+    fn source_bindings(&self) -> Vec<Option<&DecisionSource>> {
+        [
+            &self.decision_source,
+            &self.loser_source,
+            &self.canonical_source,
+        ]
+        .into_iter()
+        .filter_map(|binding| match binding {
+            Arg::Missing | Arg::Null => None,
+            Arg::Valid(Obj(source)) => Some(Some(source)),
+            Arg::Invalid(_) => Some(None),
+        })
+        .collect()
+    }
 }
 
 pub(super) struct Node {
@@ -137,8 +225,8 @@ pub(super) fn valid_preimage(
     record: &DecisionRecord,
 ) -> CognitionResult<bool> {
     let (Some(previous), Some(head)) = (
-        record.string("previous_direct_redirect"),
-        record.decision("previous_head"),
+        record.previous_direct_redirect.as_deref(),
+        record.previous_head.clone(),
     ) else {
         return Ok(false);
     };
@@ -151,7 +239,7 @@ pub(super) fn valid_preimage(
     Ok(!redirect_chain(connection, previous)
         .unwrap_or_default()
         .iter()
-        .any(|id| Some(id.as_str()) == record.string("literal_loser")))
+        .any(|id| Some(id) == record.literal_loser.valid()))
 }
 
 /// Follows `previous_head` pointers (through revokes and invalidations of
@@ -176,8 +264,8 @@ fn find_owning_apply(
         let Some(record) = find_record(connection, &job, &reference)? else {
             return Ok(None);
         };
-        if record.string("operation") == Some("apply")
-            && record.string("resulting_direct_redirect") == Some(direct)
+        if record.operation == Some(DecisionOperation::Apply)
+            && record.resulting_direct_redirect.as_deref() == Some(direct)
         {
             return Ok(Some(record));
         }
@@ -193,7 +281,7 @@ fn find_record(
 ) -> CognitionResult<Option<DecisionRecord>> {
     Ok(records_for_job(connection, job)?
         .into_iter()
-        .find(|row| row.string("decision_ref") == Some(reference)))
+        .find(|row| row.decision_ref.as_deref() == Some(reference)))
 }
 
 fn next_head(
@@ -201,19 +289,18 @@ fn next_head(
     record: &DecisionRecord,
     direct: &str,
 ) -> CognitionResult<Option<DecisionPointer>> {
-    if !(matches!(record.string("operation"), Some("revoke" | "invalidate"))
-        && record.string("resulting_direct_redirect") == Some(direct))
+    if !(record.operation.is_some_and(DecisionOperation::undoes)
+        && record.resulting_direct_redirect.as_deref() == Some(direct))
     {
-        return Ok(record.decision("previous_head"));
+        return Ok(record.previous_head.clone());
     }
-    let Some(target) = record.decision("target_decision") else {
+    let Some(target) = &record.target_decision else {
         return Ok(None);
     };
-    let (Some(job), Some(reference)) = (target.job_ref, target.decision_ref) else {
+    let (Some(job), Some(reference)) = (&target.job_ref, &target.decision_ref) else {
         return Ok(None);
     };
-    Ok(find_record(connection, &job, &reference)?
-        .and_then(|target| target.decision("previous_head")))
+    Ok(find_record(connection, job, reference)?.and_then(|target| target.previous_head))
 }
 
 fn record_sources_current(
@@ -225,7 +312,10 @@ fn record_sources_current(
     if bindings.is_empty() {
         return Ok(false);
     }
-    for binding in &bindings {
+    for binding in bindings {
+        let Some(binding) = binding else {
+            return Ok(false);
+        };
         if !binding_current(connection, canonical, binding)? {
             return Ok(false);
         }
@@ -238,7 +328,7 @@ fn record_sources_current(
 fn binding_current(
     connection: &Connection,
     canonical: &ConversationSourceReader,
-    binding: &SourceBinding,
+    binding: &DecisionSource,
 ) -> CognitionResult<bool> {
     let Some(reference) = binding.source_ref.as_deref() else {
         return Ok(false);
@@ -303,12 +393,10 @@ fn binding_current(
         == Some(quote))
 }
 
-/// The job's stored decision records; a job without history has none.
-pub(super) fn records_for_job(
-    connection: &Connection,
-    job: &str,
-) -> CognitionResult<Vec<DecisionRecord>> {
-    let value = connection
+/// The job's stored decisions, each kept as stored; `None` when the job has
+/// no row.
+fn stored_items(connection: &Connection, job: &str) -> CognitionResult<Option<Vec<Box<RawValue>>>> {
+    let stored = connection
         .query_row(
             "SELECT identity_decisions_json FROM memory_projection_jobs WHERE job_id=?1",
             [job],
@@ -316,36 +404,61 @@ pub(super) fn records_for_job(
         )
         .optional()
         .map_err(db_error)?;
-    match value {
-        None => Ok(Vec::new()),
-        Some(value) => serde_json::from_str(&value).map_err(|error| {
-            CognitionError::new(
-                CognitionCode::MemoryIdentityHistoryInvalid,
-                error.to_string(),
-            )
-            .with_source(error)
-        }),
-    }
+    stored
+        .map(|text| serde_json::from_str(&text).map_err(history_invalid))
+        .transpose()
 }
 
-/// Appends `record` unless the job already has its decision.
+/// One stored decision. Every field reads leniently, so only an item that
+/// is not an object fails; it reads as a decision without fields, as the
+/// legacy reader saw it.
+fn read_item(item: &RawValue) -> DecisionRecord {
+    serde_json::from_str(item.get()).unwrap_or_default()
+}
+
+/// The job's stored decision records; a job without history has none.
+pub(super) fn records_for_job(
+    connection: &Connection,
+    job: &str,
+) -> CognitionResult<Vec<DecisionRecord>> {
+    Ok(stored_items(connection, job)?
+        .unwrap_or_default()
+        .iter()
+        .map(|item| read_item(item))
+        .collect())
+}
+
+/// Appends `record` unless the job already has its decision. The job's
+/// earlier decisions are rewritten exactly as stored.
 pub(super) fn append_record(
     connection: &Connection,
     job: &str,
     record: &DecisionRecord,
 ) -> CognitionResult<()> {
-    let mut records = records_for_job(connection, job)?;
-    if !records
+    let Some(mut items) = stored_items(connection, job)? else {
+        return Ok(());
+    };
+    if items
         .iter()
-        .any(|value| value.string("decision_ref") == record.string("decision_ref"))
+        .any(|item| read_item(item).decision_ref == record.decision_ref)
     {
-        records.push(record.clone());
-        connection
-            .execute(
-                "UPDATE memory_projection_jobs SET identity_decisions_json=?1 WHERE job_id=?2",
-                params![serde_json::to_string(&records).unwrap_or_default(), job],
-            )
-            .map_err(db_error)?;
+        return Ok(());
     }
+    items.push(serde_json::value::to_raw_value(record).map_err(history_invalid)?);
+    let text = serde_json::to_string(&items).map_err(history_invalid)?;
+    connection
+        .execute(
+            "UPDATE memory_projection_jobs SET identity_decisions_json=?1 WHERE job_id=?2",
+            params![text, job],
+        )
+        .map_err(db_error)?;
     Ok(())
+}
+
+fn history_invalid(error: serde_json::Error) -> CognitionError {
+    CognitionError::new(
+        CognitionCode::MemoryIdentityHistoryInvalid,
+        error.to_string(),
+    )
+    .with_source(error)
 }

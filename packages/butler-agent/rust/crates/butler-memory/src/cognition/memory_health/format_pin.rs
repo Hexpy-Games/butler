@@ -107,12 +107,12 @@ async fn health_summary_and_dimensions_keep_their_shape() {
     let with_serving = service.read_at(now).await.unwrap();
     let pinned = json!({
         "without_serving": {
-            "dimensions": without_serving.metric_dimensions(),
-            "summary": without_serving.summary(),
+            "dimensions": without_serving.metric_dimensions().unwrap(),
+            "summary": without_serving.summary().unwrap(),
         },
         "with_serving": {
-            "dimensions": with_serving.metric_dimensions(),
-            "summary": with_serving.summary(),
+            "dimensions": with_serving.metric_dimensions().unwrap(),
+            "summary": with_serving.summary().unwrap(),
         },
     });
     let text = butler_core::json::pretty(&pinned).replace(&root.display().to_string(), "<root>");

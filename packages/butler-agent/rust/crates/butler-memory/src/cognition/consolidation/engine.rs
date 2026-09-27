@@ -284,9 +284,11 @@ impl CycleService {
             phases,
             None,
         )?;
+        let event = result_event(&result.run_id, &result, &checkpoint)?;
         self.commit_checkpoint(&previous, &checkpoint, Some(&result))
             .await?;
-        self.record_result(&result.run_id, &result, &checkpoint, "skipped");
+        self.events
+            .record("consolidation_cycle_result", "skipped", event);
         Ok(result)
     }
 
@@ -389,6 +391,7 @@ impl CycleService {
             phases,
             Some(self.host.now_iso()),
         )?;
+        let event = result_event(&run_id, &result, &checkpoint)?;
         // Final summary and checkpoint are serialized under the same claim authority.
         self.commit_checkpoint(&previous, &checkpoint, Some(&result))
             .await?;
@@ -397,29 +400,33 @@ impl CycleService {
         } else {
             "skipped"
         };
-        self.record_result(&run_id, &result, &checkpoint, outcome);
+        self.events
+            .record("consolidation_cycle_result", outcome, event);
         Ok(result)
     }
+}
 
-    fn record_result(
-        &self,
-        run_id: &str,
-        result: &CycleResult,
-        checkpoint: &Checkpoint,
-        outcome: &str,
-    ) {
-        let event = CycleResultEvent {
-            run_id,
-            phase_count: result.phases.len(),
-            error_count: checkpoint.errors.len(),
-            raw_text_included: false,
-        };
-        self.events.record(
-            "consolidation_cycle_result",
-            outcome,
-            serde_json::to_value(event).unwrap_or_default(),
-        );
-    }
+/// The `consolidation_cycle_result` event dimensions, encoded before the
+/// checkpoint commits so an encoding failure fails the cycle instead of
+/// recording empty dimensions.
+fn result_event(
+    run_id: &str,
+    result: &CycleResult,
+    checkpoint: &Checkpoint,
+) -> CognitionResult<Value> {
+    let event = CycleResultEvent {
+        run_id,
+        phase_count: result.phases.len(),
+        error_count: checkpoint.errors.len(),
+        raw_text_included: false,
+    };
+    serde_json::to_value(event).map_err(|source| {
+        CognitionError::new(
+            CognitionCode::MemoryConsolidationStateWriteFailed,
+            "memory_consolidation_state_write_failed",
+        )
+        .with_source(source)
+    })
 }
 
 /// A cycle in progress: its identity, the phase results so far and the

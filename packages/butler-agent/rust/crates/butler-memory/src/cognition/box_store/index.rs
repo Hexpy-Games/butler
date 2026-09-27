@@ -230,10 +230,12 @@ pub(super) fn list_indexed(root: &Path, limit: usize) -> CognitionResult<Vec<Val
         .map_err(invalid)?
         .collect::<rusqlite::Result<Vec<_>>>()
         .map_err(invalid)?;
-    Ok(rows
-        .iter()
-        .map(|row| serde_json::to_value(row).unwrap_or(Value::Null))
-        .collect())
+    rows.iter()
+        .map(|row| {
+            serde_json::to_value(row)
+                .map_err(|source| error(CognitionCode::MemoryBoxIndexInvalid).with_source(source))
+        })
+        .collect()
 }
 
 fn create_schema(database: &Connection) -> CognitionResult<()> {

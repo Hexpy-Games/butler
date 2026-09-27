@@ -154,7 +154,7 @@ fn complete_coverage(
     usage: Option<&PromptUsageReport>,
     nonce: &str,
 ) -> ProfileResult<()> {
-    let usage_json = usage_json(usage);
+    let usage_json = usage_json(usage)?;
     let now = host.now_iso();
     let mut complete=tx.prepare("UPDATE profile_source_coverage SET disposition='complete',failure_code=NULL,usage_json=?1,owner_pid=NULL,owner_nonce=NULL,claimed_at=NULL,updated_at=?2 WHERE coverage_key=?3 AND owner_pid=?4 AND owner_nonce=?5").map_err(storage::db_error)?;
     for window in windows {
@@ -190,11 +190,9 @@ fn validate_targets(
             let Some(target) = offered.values().find(|value| value.stable_id == *id) else {
                 return Err(interruption("profile correction target changed"));
             };
-            let current = eligible.get(id);
+            let current_revision = eligible.get(id).map(revision).transpose()?;
             let conditions = normalized_conditions(candidate.draft.applies_when.clone());
-            if current
-                .as_ref()
-                .is_none_or(|value| revision(value) != target.revision)
+            if current_revision.is_none_or(|value| value != target.revision)
                 || candidate.source_type != SourceType::Explicit
                 || candidate.category != target.category
                 || candidate.draft.facet != target.facet
@@ -253,14 +251,14 @@ struct StoredUsage<'a> {
     total_tokens: Option<f64>,
 }
 
-pub(super) fn usage_json(usage: Option<&PromptUsageReport>) -> String {
+pub(super) fn usage_json(usage: Option<&PromptUsageReport>) -> ProfileResult<String> {
     let usage = usage.map(|value| StoredUsage {
         model: &value.model,
         prompt_tokens: value.prompt_tokens,
         cached_tokens: value.cached_tokens,
         total_tokens: value.total_tokens,
     });
-    serde_json::to_string(&usage).unwrap_or_else(|_| "null".into())
+    serde_json::to_string(&usage).map_err(storage::json_error)
 }
 fn interruption(message: &str) -> ProfileError {
     ProfileError::new(ProfileCode::ProfileCommitInterrupted, message)

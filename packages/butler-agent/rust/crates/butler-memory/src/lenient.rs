@@ -76,6 +76,12 @@ pub(crate) enum Arg<T> {
 }
 
 impl<T> Arg<T> {
+    /// Whether the key was absent; with `skip_serializing_if` a rewritten
+    /// record keeps it absent.
+    pub(crate) fn is_missing(&self) -> bool {
+        matches!(self, Self::Missing)
+    }
+
     /// The value when it was readable.
     pub(crate) fn valid(&self) -> Option<&T> {
         match self {
@@ -137,6 +143,13 @@ impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Obj<T> {
         serde_json::from_value(value)
             .map(Obj)
             .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Serializes the record itself.
+impl<T: serde::Serialize> serde::Serialize for Obj<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
     }
 }
 

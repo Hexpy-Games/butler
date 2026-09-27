@@ -194,8 +194,8 @@ struct PersistedPayload<'a> {
 }
 
 impl PersistedPayload<'_> {
-    fn text(&self) -> String {
-        serde_json::to_string(self).unwrap_or_else(|_| "null".into())
+    fn text(&self) -> ProfileResult<String> {
+        serde_json::to_string(self).map_err(storage::json_error)
     }
 }
 
@@ -209,7 +209,7 @@ pub(super) fn write_candidate(
         understanding: &candidate.understanding,
         sensitive_domain: None,
     };
-    db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at)VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,source_type=excluded.source_type,confidence=excluded.confidence,sensitive_domain=excluded.sensitive_domain,updated_at=excluded.updated_at,last_seen_at=excluded.last_seen_at,expires_or_decay=excluded.expires_or_decay,status=excluded.status,promoted_at=excluded.promoted_at",params![candidate.id,candidate.category,payload.text(),candidate.source_type.as_str(),candidate.confidence.as_str(),i64::from(candidate.sensitive_domain),candidate.created_at,candidate.updated_at,candidate.last_seen_at,candidate.expires_or_decay.map(Expiry::as_str),candidate.status.as_str(),candidate.promoted_at]).map_err(storage::db_error)?;
+    db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at)VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,source_type=excluded.source_type,confidence=excluded.confidence,sensitive_domain=excluded.sensitive_domain,updated_at=excluded.updated_at,last_seen_at=excluded.last_seen_at,expires_or_decay=excluded.expires_or_decay,status=excluded.status,promoted_at=excluded.promoted_at",params![candidate.id,candidate.category,payload.text()?,candidate.source_type.as_str(),candidate.confidence.as_str(),i64::from(candidate.sensitive_domain),candidate.created_at,candidate.updated_at,candidate.last_seen_at,candidate.expires_or_decay.map(Expiry::as_str),candidate.status.as_str(),candidate.promoted_at]).map_err(storage::db_error)?;
     Ok(())
 }
 
@@ -275,7 +275,7 @@ pub(super) fn write_stable(db: &Connection, entry: &StableWrite<'_>) -> ProfileR
         understanding: &understanding,
         sensitive_domain: Some(candidate.sensitive_domain),
     };
-    db.execute("INSERT INTO stable_profile_entries(id,category,payload_json,confidence,source_type,created_at,updated_at)VALUES(?1,?2,?3,?4,?5,?6,?7)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,confidence=excluded.confidence,source_type=excluded.source_type,updated_at=excluded.updated_at",params![entry.id,candidate.category,payload.text(),confidence,source,created,entry.now]).map_err(storage::db_error)?;
+    db.execute("INSERT INTO stable_profile_entries(id,category,payload_json,confidence,source_type,created_at,updated_at)VALUES(?1,?2,?3,?4,?5,?6,?7)ON CONFLICT(id)DO UPDATE SET category=excluded.category,payload_json=excluded.payload_json,confidence=excluded.confidence,source_type=excluded.source_type,updated_at=excluded.updated_at",params![entry.id,candidate.category,payload.text()?,confidence,source,created,entry.now]).map_err(storage::db_error)?;
     Ok(())
 }
 

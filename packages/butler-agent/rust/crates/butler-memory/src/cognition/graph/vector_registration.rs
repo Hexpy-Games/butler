@@ -157,7 +157,7 @@ pub(super) fn mark_vector_registration_failure(
     connection
         .execute(
             &format!("UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2"),
-            params![next.json(), job_id],
+            params![next.json()?, job_id],
         )
         .map_err(db_error)?;
     Ok(())

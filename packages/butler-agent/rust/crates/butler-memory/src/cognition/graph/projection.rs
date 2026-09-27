@@ -91,7 +91,7 @@ pub(super) fn claim(
     };
     tx.execute(
         "UPDATE memory_projection_jobs SET semantic_graph_state=?1 WHERE job_id=?2",
-        params![running.json(), row.job_id],
+        params![running.json()?, row.job_id],
     )
     .map_err(db_error)?;
     tx.commit().map_err(db_error)?;

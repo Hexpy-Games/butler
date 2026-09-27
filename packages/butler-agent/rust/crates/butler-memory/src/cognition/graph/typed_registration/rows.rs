@@ -178,8 +178,8 @@ pub(super) fn insert_job(
                 input.extraction_model,
                 input.reasoning_effort,
                 json_string_array(&ids)?,
-                complete.json(),
-                pending.json(),
+                complete.json()?,
+                pending.json()?,
                 now,
             ],
         )

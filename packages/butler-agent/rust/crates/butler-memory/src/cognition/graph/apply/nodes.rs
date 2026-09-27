@@ -177,7 +177,7 @@ pub(super) fn update_summary(
     )
     .map_err(db_error)?;
     if joined != prior {
-        tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=NULL,hot_cache_next_attempt_at=NULL WHERE job_id=?2",params![crate::cognition::graph::StageWrite::pending().json(),job]).map_err(db_error)?;
+        tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_receipt_json=NULL,hot_cache_next_attempt_at=NULL WHERE job_id=?2",params![crate::cognition::graph::StageWrite::pending().json()?,job]).map_err(db_error)?;
     }
     Ok(())
 }

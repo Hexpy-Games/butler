@@ -2,7 +2,8 @@
 
 use serde::Serialize;
 
-use super::super::contracts::ProfilingMode;
+use super::super::contracts::{ProfileResult, ProfilingMode};
+use super::super::storage;
 use super::types::{CorrectionTargets, MAX_OBSERVATIONS, PROMPT_BYTES, PublicTarget, SourceWindow};
 use butler_core::segmentation::split_grapheme_utf8_spans;
 
@@ -18,7 +19,7 @@ pub(super) fn prepare(
     source: &[SourceWindow],
     mode: ProfilingMode,
     targets: &CorrectionTargets,
-) -> PreparedBatch {
+) -> ProfileResult<PreparedBatch> {
     let mut windows = Vec::new();
     let mut consumed = 0;
     let mut remainders = Vec::new();
@@ -28,22 +29,23 @@ pub(super) fn prepare(
     {
         let mut candidate = next.clone();
         windows.push(candidate.clone());
-        let exceeds_budget = extractor_prompt(&windows, mode, &targets.public).len() > PROMPT_BYTES;
+        let exceeds_budget =
+            extractor_prompt(&windows, mode, &targets.public)?.len() > PROMPT_BYTES;
         windows.pop();
         if exceeds_budget {
             if !windows.is_empty() {
                 break;
             }
-            let split = split_window(&candidate, mode, &targets.public);
+            let split = split_window(&candidate, mode, &targets.public)?;
             let Some((first, rest)) = split.as_deref().and_then(<[SourceWindow]>::split_first)
             else {
-                return PreparedBatch {
+                return Ok(PreparedBatch {
                     windows: Vec::new(),
                     prompt: String::new(),
                     consumed: 0,
                     remainders: Vec::new(),
                     replaced_parent: None,
-                };
+                });
             };
             candidate = first.clone();
             remainders = rest.to_vec();
@@ -59,13 +61,13 @@ pub(super) fn prepare(
         .and_then(|parent| source.get(parent))
         .filter(|_| !remainders.is_empty())
         .cloned();
-    PreparedBatch {
-        prompt: extractor_prompt(&windows, mode, &targets.public),
+    Ok(PreparedBatch {
+        prompt: extractor_prompt(&windows, mode, &targets.public)?,
         windows,
         consumed,
         remainders,
         replaced_parent,
-    }
+    })
 }
 
 /// The extractor request: the rules, the correction targets on offer and the
@@ -91,7 +93,7 @@ pub(super) fn extractor_prompt(
     windows: &[SourceWindow],
     mode: ProfilingMode,
     targets: &[PublicTarget],
-) -> String {
+) -> ProfileResult<String> {
     let prompt = ExtractorPrompt {
         task: "extract_profile_candidates",
         mode: mode.as_str(),
@@ -110,7 +112,7 @@ pub(super) fn extractor_prompt(
             })
             .collect(),
     };
-    serde_json::to_string(&prompt).unwrap_or_default()
+    serde_json::to_string(&prompt).map_err(storage::json_error)
 }
 
 pub(super) fn instructions(mode: ProfilingMode) -> String {
@@ -153,22 +155,25 @@ fn split_window(
     window: &SourceWindow,
     mode: ProfilingMode,
     targets: &[PublicTarget],
-) -> Option<Vec<SourceWindow>> {
+) -> ProfileResult<Option<Vec<SourceWindow>>> {
     let spans =
         split_grapheme_utf8_spans(window.text.as_ref(), (window.text.len() / 2).max(1) as f64);
     if spans.len() <= 1 {
-        return None;
+        return Ok(None);
     }
     let mut output = Vec::new();
     for span in spans {
         let child = slice(window, span.start, span.end);
-        if extractor_prompt(std::slice::from_ref(&child), mode, targets).len() <= PROMPT_BYTES {
+        if extractor_prompt(std::slice::from_ref(&child), mode, targets)?.len() <= PROMPT_BYTES {
             output.push(child);
         } else {
-            output.extend(split_window(&child, mode, targets)?);
+            let Some(parts) = split_window(&child, mode, targets)? else {
+                return Ok(None);
+            };
+            output.extend(parts);
         }
     }
-    Some(output)
+    Ok(Some(output))
 }
 
 fn slice(window: &SourceWindow, start: usize, end: usize) -> SourceWindow {
