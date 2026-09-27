@@ -20,7 +20,10 @@ pub(super) fn result_message(
     if turn.turn_id != owner.binding.turn_id {
         return Err(error("guided_tool_turn_mismatch"));
     }
-    if !GuidedTools::supports(&result.name) {
+    // A call to a tool Butler does not provide (a model hallucination) has a
+    // failed result; it goes back to the model as a tool error instead of
+    // interrupting the turn (E2E TOOL-03).
+    if !GuidedTools::supports(&result.name) && result.ok {
         return Err(error("guided_tool_provider_projection_unavailable"));
     }
     let mut content = String::from("{\"ok\":");

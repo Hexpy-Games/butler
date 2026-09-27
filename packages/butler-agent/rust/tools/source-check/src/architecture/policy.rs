@@ -32,6 +32,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "coordination" | "work_records" => &[],
         // butler-gateway and the host binary are single-domain crates.
         "gateway" | "host" => &[],
+        // butler-e2e: dev-only harness around the built binary; one domain.
+        "e2e" => &[],
         _ => return None,
     })
 }
