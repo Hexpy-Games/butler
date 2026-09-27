@@ -1,5 +1,6 @@
+use crate::cognition::graph::StageWrite;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::super::db_error;
 use super::{TypedRegistrationInput, source_changed};
@@ -160,12 +161,8 @@ pub(super) fn insert_job(
     if let Some(id) = input.completion_id.filter(|value| !value.is_empty()) {
         ids.push(id.to_owned());
     }
-    let complete = json!({
-        "state":"complete",
-        "completed_units":source_count,
-        "total_units":source_count
-    });
-    let pending = json!({"state":"pending","blocked_by":null});
+    let complete = StageWrite::complete(i64::try_from(source_count).unwrap_or(i64::MAX));
+    let pending = StageWrite::pending();
     connection
         .execute(
             "INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) \
@@ -179,8 +176,8 @@ pub(super) fn insert_job(
                 input.extraction_model,
                 input.reasoning_effort,
                 json_string_array(&ids)?,
-                butler_core::json::stringify(&complete).map_err(json_error)?,
-                butler_core::json::stringify(&pending).map_err(json_error)?,
+                complete.json(),
+                pending.json(),
                 now,
             ],
         )

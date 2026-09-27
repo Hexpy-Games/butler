@@ -51,7 +51,7 @@ impl GraphRepository {
         let mut changed = 0;
         for job in jobs {
             changed += tx.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1,hot_cache_next_attempt_at=NULL,hot_cache_attempt_count=0 WHERE job_id=?2 AND generation=?3 AND json_extract(hot_cache_state,'$.state')='complete'",
-                params![serde_json::json!({"state":"pending","blocked_by":"hot_cache_evidence_missing"}).to_string(),job,generation]).map_err(db_error)?;
+                params![crate::cognition::graph::StageWrite::blocked("hot_cache_evidence_missing").json(),job,generation]).map_err(db_error)?;
         }
         tx.commit().map_err(db_error)?;
         Ok(changed)

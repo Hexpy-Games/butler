@@ -4,8 +4,9 @@
 mod tests;
 mod units;
 
+use crate::cognition::graph::{StageState, StageStatus, StageWrite};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 
 use super::db_error;
@@ -142,20 +143,22 @@ pub(super) fn mark_vector_registration_failure(
     let Some(current) = current else {
         return Ok(());
     };
-    let current: Value = serde_json::from_str(&current).map_err(json_error)?;
-    let current_state = current.get("state").and_then(Value::as_str);
-    if matches!(current_state, Some("complete" | "not_configured")) {
+    serde_json::from_str::<serde::de::IgnoredAny>(&current).map_err(json_error)?;
+    if matches!(
+        StageState::parse(&current).state,
+        Some(StageStatus::Complete | StageStatus::NotConfigured)
+    ) {
         return Ok(());
     }
     let next = if code == "memory_write_busy" {
-        json!({"state":"pending","blocked_by":code})
+        StageWrite::blocked(code)
     } else {
-        json!({"state":"failed","code":code,"retryable":false,"next_attempt_at":null})
+        StageWrite::failed(code)
     };
     connection
         .execute(
             &format!("UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2"),
-            params![stringify(&next)?, job_id],
+            params![next.json(), job_id],
         )
         .map_err(db_error)?;
     Ok(())

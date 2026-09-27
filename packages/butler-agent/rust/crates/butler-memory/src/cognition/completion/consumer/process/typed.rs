@@ -94,7 +94,7 @@ async fn process_current(
             cancellation: input.shutdown.child_token(),
         })
         .await?;
-    if progress.source["state"] != "complete" {
+    if !progress.source.is_complete() {
         return Ok(false);
     }
     super::super::super::queue::ack(root, job_id)

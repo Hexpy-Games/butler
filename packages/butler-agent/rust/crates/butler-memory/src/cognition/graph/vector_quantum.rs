@@ -1,6 +1,7 @@
 //! Durable claim and receipt transitions for current vector units.
 
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -167,9 +168,12 @@ pub(super) fn claim(
         tx.execute(
             &format!("UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2"),
             params![
-                json!({"state":"running","attempt":first.attempt_count,
-                "owner_pid":std::process::id(),"started_at":now})
-                .to_string(),
+                StageWrite::Running {
+                    attempt: first.attempt_count,
+                    owner_pid: std::process::id(),
+                    started_at: now.to_owned(),
+                }
+                .json(),
                 first.job_id
             ],
         )
@@ -408,15 +412,8 @@ fn refresh(connection: &Connection, job: &str, now: &str) -> CognitionResult<()>
         ("episode", "episode_vectors_state"),
     ] {
         let (total,complete,failed): (i64,i64,i64)=connection.query_row("SELECT COUNT(*),COALESCE(SUM(state='complete'),0),COALESCE(SUM(state='failed'),0) FROM memory_vector_units WHERE job_id=?1 AND record_kind=?2 AND state!='superseded'",params![job,kind],|row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).map_err(db_error)?;
-        let pending = total - complete - failed;
-        let state = if failed > 0 || (complete > 0 && pending > 0) {
-            json!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed})
-        } else if complete == total {
-            json!({"state":"complete","completed_units":complete,"total_units":total})
-        } else {
-            json!({"state":"pending","blocked_by":null})
-        };
-        connection.execute(&format!("UPDATE memory_projection_jobs SET {column}=?1,last_served_at=?2 WHERE job_id=?3"),params![state.to_string(),now,job]).map_err(db_error)?;
+        let state = StageWrite::vector_progress(complete, total, failed);
+        connection.execute(&format!("UPDATE memory_projection_jobs SET {column}=?1,last_served_at=?2 WHERE job_id=?3"),params![state.json(),now,job]).map_err(db_error)?;
     }
     Ok(())
 }

@@ -21,6 +21,7 @@ mod recall_index;
 mod registration;
 mod retry_failed;
 mod schema;
+mod stage_state;
 mod stages;
 mod typed_lifecycle;
 mod typed_registration;
@@ -42,7 +43,10 @@ pub(in crate::cognition) use cache_quantum::{CacheWindow, ClaimedCacheJob};
 pub(in crate::cognition) use candidates::VectorHit;
 pub(in crate::cognition) use consolidate::GraphConsolidateMetrics;
 pub(in crate::cognition) use internal_supersession::InternalSupersessionInput;
-pub use jobs::GraphProgress;
+pub use jobs::{GraphProgress, JobOutcome};
+pub(in crate::cognition) use stage_state::StageWrite;
+pub use stage_state::{StageState, StageStatus};
+
 pub(in crate::cognition) use jobs::{CatchupCursors, PendingSemanticJob};
 pub(in crate::cognition) use operator_repair::CandidateInputRepairRequest;
 pub use operator_repair::{

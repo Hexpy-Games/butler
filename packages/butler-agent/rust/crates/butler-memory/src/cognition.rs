@@ -104,8 +104,9 @@ pub use generation::{
 };
 pub use generation_vectors::GenerationVectorAdapter;
 pub use graph::{
-    CandidateInputRepairResult, GraphProgress, ProjectionModelPolicy, ProjectionModelPolicyInput,
-    ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
+    CandidateInputRepairResult, GraphProgress, JobOutcome, ProjectionModelPolicy,
+    ProjectionModelPolicyInput, ProjectionModelSlot, RepairMode, RepairReceipt, RetryFailedCounts,
+    StageState, StageStatus,
 };
 pub use graph_consolidation::GraphConsolidationService;
 pub use hot_cache::{LegacyIndexService, extract_legacy_import_transcript};

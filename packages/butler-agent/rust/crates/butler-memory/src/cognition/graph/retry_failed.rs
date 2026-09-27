@@ -1,6 +1,7 @@
 //! Source-compatible recovery for failed graph projection work.
 
 use crate::cognition::CognitionCode;
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -87,10 +88,7 @@ pub(super) fn retry_failed(
     now: &str,
 ) -> CognitionResult<RetryFailedCounts> {
     let recovery_revision = recovery_revision(generation_id, now)?;
-    let cache_state = stringify(&json!({
-        "state": "pending",
-        "blocked_by": "memory_retry_requested"
-    }))?;
+    let cache_state = StageWrite::blocked("memory_retry_requested").json();
 
     let tx = connection.transaction().map_err(db_error)?;
     let semantic_windows = tx
@@ -207,10 +205,7 @@ pub(super) fn repair_selected_invalid_vectors(
                 "UPDATE memory_projection_jobs SET {column}=?1 WHERE job_id=?2 AND generation=?3"
             ),
             params![
-                stringify(&json!({
-                    "state": "pending",
-                    "blocked_by": "memory_vector_repair_requested"
-                }))?,
+                StageWrite::blocked("memory_vector_repair_requested").json(),
                 snapshot.job_id,
                 current_generation,
             ],

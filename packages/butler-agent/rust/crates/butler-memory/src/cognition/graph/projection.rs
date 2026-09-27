@@ -1,9 +1,10 @@
 //! Durable semantic-window claim and replay authority.
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::{db_error, jobs};
 use crate::cognition::CognitionCode;
@@ -77,11 +78,14 @@ pub(super) fn claim(
         return Err(changed());
     }
     let attempt = row.attempt_count + 1;
-    let running = json!({"state":"running","attempt":attempt-row.recovery_base_attempt_count,
-        "owner_pid":input.owner_pid,"started_at":input.now});
+    let running = StageWrite::Running {
+        attempt: attempt - row.recovery_base_attempt_count,
+        owner_pid: input.owner_pid,
+        started_at: input.now.to_owned(),
+    };
     tx.execute(
         "UPDATE memory_projection_jobs SET semantic_graph_state=?1 WHERE job_id=?2",
-        params![stringify(&running)?, row.job_id],
+        params![running.json(), row.job_id],
     )
     .map_err(db_error)?;
     tx.commit().map_err(db_error)?;

@@ -177,7 +177,7 @@ async fn process_entry(
             return super::super::queue::ack(root, job_id);
         }
     };
-    if progress.source["state"] != "complete" {
+    if !progress.source.is_complete() {
         return Ok(false);
     }
     super::super::queue::ack(root, job_id)

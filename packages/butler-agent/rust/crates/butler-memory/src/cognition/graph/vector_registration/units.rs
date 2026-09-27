@@ -1,5 +1,6 @@
 mod nodes;
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, Transaction, params};
@@ -8,7 +9,6 @@ use serde_json::{Value, json};
 use super::{
     CognitionError, CognitionResult, EPISODE_CHUNK_BYTES, EpisodeProjectionSource,
     OVERSIZED_GRAPHEME, VectorRegistrationStage, db_error, digest, json_array, json_error,
-    stringify,
 };
 use butler_core::segmentation::grapheme_segments;
 
@@ -202,25 +202,20 @@ fn refresh_stage_states(tx: &Transaction<'_>, job_id: &str, now: &str) -> Cognit
                 },
             )
             .map_err(db_error)?;
-        let pending = total - complete - failed;
         let state = if total == 0
             && stage == VectorRegistrationStage::Node
             && semantic.get("state").and_then(Value::as_str) != Some("complete")
         {
-            json!({"state":"pending","blocked_by":"semantic_graph"})
-        } else if failed > 0 || (complete > 0 && pending > 0) {
-            json!({"state":"partial","completed_units":complete,"total_units":total,"pending_units":pending,"failed_units":failed})
-        } else if complete == total {
-            json!({"state":"complete","completed_units":complete,"total_units":total})
+            StageWrite::blocked("semantic_graph")
         } else {
-            json!({"state":"pending","blocked_by":null})
+            StageWrite::vector_progress(complete, total, failed)
         };
         tx.execute(
             &format!(
                 "UPDATE memory_projection_jobs SET {}=?1,last_served_at=?2 WHERE job_id=?3",
                 stage.column()
             ),
-            params![stringify(&state)?, now, job_id],
+            params![state.json(), now, job_id],
         )
         .map_err(db_error)?;
     }

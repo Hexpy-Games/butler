@@ -1,5 +1,6 @@
 mod history;
 
+use crate::cognition::graph::StageWrite;
 use std::collections::HashSet;
 
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
@@ -335,7 +336,7 @@ fn mark_derivatives(connection: &Connection, node: &str, canonical: &str) -> Cog
     for id in unique_sorted([node.to_owned(), canonical.to_owned()]) {
         connection.execute("UPDATE memory_vector_units SET state='pending',error_code=NULL,next_attempt_at=NULL WHERE record_kind='node' AND owner_id=?1",[id]).map_err(db_error)?;
     }
-    let pending = r#"{"state":"pending","blocked_by":null}"#;
+    let pending = StageWrite::pending().json();
     connection.execute("UPDATE memory_projection_jobs SET hot_cache_state=?1 WHERE job_id IN (SELECT DISTINCT job_id FROM memory_vector_units WHERE owner_id IN (?2,?3))",params![pending,node,canonical]).map_err(db_error)?;
     Ok(())
 }

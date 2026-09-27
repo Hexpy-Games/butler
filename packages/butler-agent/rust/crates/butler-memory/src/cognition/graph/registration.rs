@@ -1,7 +1,8 @@
+use crate::cognition::graph::StageWrite;
 use std::collections::HashMap;
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::{db_error, index, invalidation, jobs};
 use crate::cognition::CognitionCode;
@@ -198,14 +199,13 @@ fn insert_job(
     source_count: usize,
     now: &str,
 ) -> CognitionResult<()> {
-    let complete =
-        json!({"state":"complete","completed_units":source_count,"total_units":source_count});
-    let pending = json!({"state":"pending","blocked_by":null});
+    let complete = StageWrite::complete(i64::try_from(source_count).unwrap_or(i64::MAX));
+    let pending = StageWrite::pending();
     connection.execute(
         "INSERT INTO memory_projection_jobs(job_id,episode_id,revision,extraction_version,generation,extraction_model,reasoning_effort,observed_completion_job_ids,source_state,semantic_graph_state,episode_vectors_state,node_vectors_state,hot_cache_state,created_at) \
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?10,?10,?11) \
          ON CONFLICT(episode_id,revision,extraction_version) DO UPDATE SET observed_completion_job_ids=excluded.observed_completion_job_ids",
-        params![input.plan.job_id,input.plan.episode_id,input.plan.revision,input.plan.extraction_version,input.generation_id,input.extraction_model,input.reasoning_effort,butler_core::json::stringify(&serde_json::to_value(completion_ids).map_err(json_error)?).map_err(json_error)?,butler_core::json::stringify(&complete).map_err(json_error)?,butler_core::json::stringify(&pending).map_err(json_error)?,now],
+        params![input.plan.job_id,input.plan.episode_id,input.plan.revision,input.plan.extraction_version,input.generation_id,input.extraction_model,input.reasoning_effort,butler_core::json::stringify(&serde_json::to_value(completion_ids).map_err(json_error)?).map_err(json_error)?,complete.json(),pending.json(),now],
     ).map_err(db_error)?;
     Ok(())
 }
