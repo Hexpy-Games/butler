@@ -1,0 +1,31 @@
+[package]
+name = "butler-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+regex.workspace = true
+icu_collator.workspace = true
+icu_locid.workspace = true
+# Not used directly: its "sync" feature makes the ICU collator Send + Sync.
+icu_provider.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ryu-js.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
+unicode-segmentation.workspace = true
+
+[dev-dependencies]
+butler-test-support = { path = "../butler-test-support" }
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

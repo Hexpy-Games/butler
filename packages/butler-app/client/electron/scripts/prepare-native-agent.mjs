@@ -78,7 +78,7 @@ const uiDistRoot = resolve(
 );
 requireFile(join(uiDistRoot, "index.html"));
 cpSync(uiDistRoot, join(payloadRoot, "resources", "app-client", "dist"), { recursive: true });
-const version = readCargoVersion(join(rustRoot, "agent", "Cargo.toml"));
+const version = readCargoVersion(join(rustRoot, "crates", "butler-agent", "Cargo.toml"));
 const appVersion = process.env.BUTLER_PACKAGED_APP_VERSION?.trim() ||
   JSON.parse(readFileSync(join(electronRoot, "package.json"), "utf8")).version?.trim();
 if (!appVersion) throw new Error("Packaged App version is required for the native Agent payload.");

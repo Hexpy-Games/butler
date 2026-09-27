@@ -12,11 +12,13 @@ jobs:
   native-release:
     name: Build and publish native macOS arm64 artifacts
     runs-on: macos-15
-    env:
-      BUTLER_NATIVE_AGENT_PAYLOAD: ${{ runner.temp }}/butler-native-agent-payload
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      # The runner context is not available in job-level env.
+      - name: Select the native Agent payload directory
+        run: echo "BUTLER_NATIVE_AGENT_PAYLOAD=$RUNNER_TEMP/butler-native-agent-payload" >> "$GITHUB_ENV"
 
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64

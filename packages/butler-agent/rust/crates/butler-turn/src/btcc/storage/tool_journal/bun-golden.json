@@ -1,0 +1,139 @@
+{
+  "steps": [
+    {
+      "callId": "call",
+      "toolName": "read_file",
+      "rawArguments": "original raw",
+      "arguments": {
+        "2": "two",
+        "10": "ten",
+        "label": "é",
+        "nested": {
+          "a": true,
+          "z": 1
+        }
+      },
+      "status": "completed",
+      "result": {
+        "2": 2,
+        "10": 10,
+        "z": "é",
+        "ok": true,
+        "nil": null
+      },
+      "changedFiles": [
+        {
+          "path": "source.txt",
+          "before": null,
+          "after": "hash"
+        }
+      ],
+      "resultSha256": "a5e210b2d0ade325c5173307957c5c544eefbaa33fe6372f45f2114048eeebcb"
+    },
+    {
+      "callId": "call",
+      "toolName": "read_file",
+      "rawArguments": "original raw",
+      "arguments": {
+        "2": "two",
+        "10": "ten",
+        "label": "é",
+        "nested": {
+          "a": true,
+          "z": 1
+        }
+      },
+      "status": "completed",
+      "result": {
+        "2": 2,
+        "10": 10,
+        "z": "é",
+        "ok": true,
+        "nil": null
+      },
+      "changedFiles": [
+        {
+          "path": "source.txt",
+          "before": null,
+          "after": "hash"
+        }
+      ],
+      "resultSha256": "a5e210b2d0ade325c5173307957c5c544eefbaa33fe6372f45f2114048eeebcb",
+      "deliveryState": "pending_delivery"
+    },
+    {
+      "callId": "call",
+      "toolName": "read_file",
+      "rawArguments": "original raw",
+      "arguments": {
+        "2": "two",
+        "10": "ten",
+        "label": "é",
+        "nested": {
+          "a": true,
+          "z": 1
+        }
+      },
+      "status": "completed",
+      "result": {
+        "2": 2,
+        "10": 10,
+        "z": "é",
+        "ok": true,
+        "nil": null
+      },
+      "changedFiles": [
+        {
+          "path": "source.txt",
+          "before": null,
+          "after": "hash"
+        }
+      ],
+      "resultSha256": "a5e210b2d0ade325c5173307957c5c544eefbaa33fe6372f45f2114048eeebcb",
+      "deliveryState": "acknowledged",
+      "deliveryRoundId": "round-2",
+      "deliveryResponseSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "callId": "call",
+      "toolName": "read_file",
+      "rawArguments": "original raw",
+      "arguments": {
+        "2": "two",
+        "10": "ten",
+        "label": "é",
+        "nested": {
+          "a": true,
+          "z": 1
+        }
+      },
+      "status": "completed",
+      "result": {
+        "2": 2,
+        "10": 10,
+        "z": "é",
+        "ok": true,
+        "nil": null
+      },
+      "changedFiles": [
+        {
+          "path": "source.txt",
+          "before": null,
+          "after": "hash"
+        }
+      ],
+      "resultSha256": "a5e210b2d0ade325c5173307957c5c544eefbaa33fe6372f45f2114048eeebcb",
+      "deliveryState": "reference_only",
+      "deliveryRoundId": "round-2",
+      "deliveryResponseSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "failures": {
+    "startConflict": "Guided tool call identity conflict",
+    "finishConflict": "Guided tool result identity conflict",
+    "wrongRelease": "operation_result_delivery_release_conflict",
+    "differentAck": "operation_result_delivery_acknowledgement_conflict",
+    "ackAfterPromote": "operation_result_delivery_acknowledgement_conflict",
+    "tampered": "operation_result_body_hash_mismatch"
+  }
+}
