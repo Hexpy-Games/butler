@@ -58,7 +58,7 @@ fn read_open(
     data_root: &Path,
     sources: &dyn CanonicalProfileSourceFactory,
 ) -> Option<ProfileCoverageHealth> {
-    let db = storage::open(data_root, false).ok()?;
+    let db = storage::open(data_root, storage::Access::Read).ok()?;
     let consent = storage::read_consent(data_root);
     let rows = coverage_rows(&db)?;
     let mut reader = sources.open().ok()?;

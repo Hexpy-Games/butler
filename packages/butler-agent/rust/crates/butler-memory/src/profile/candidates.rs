@@ -25,7 +25,7 @@ pub(super) fn upsert(
     if !category_allowed(&input.category, consent.mode) {
         return Ok(None);
     }
-    let db = storage::open(data_root, true)?;
+    let db = storage::open(data_root, storage::Access::Write)?;
     upsert_in_db(&db, input, now)
 }
 
@@ -205,7 +205,7 @@ pub(super) fn consolidate(
             raw_text_included: false,
         });
     }
-    let db = storage::open(data_root, true)?;
+    let db = storage::open(data_root, storage::Access::Write)?;
     let candidates = pending_rows(&db)?
         .into_iter()
         .filter_map(hydrate)

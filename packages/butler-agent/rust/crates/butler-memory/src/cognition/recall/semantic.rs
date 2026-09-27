@@ -110,8 +110,8 @@ pub(in crate::cognition) fn select_semantic_seeds(
     channels: impl IntoIterator<Item = RankedCandidate>,
     options: SeedOptions,
 ) -> SemanticSelection {
-    let by_node = best_per_channel(channels, options.context_only);
-    let all_seeds = fused_order(&by_node, options.context_only)
+    let by_node = best_per_channel(channels, options);
+    let all_seeds = fused_order(&by_node, options)
         .into_iter()
         .take(options.max_seeds)
         .collect::<Vec<_>>();
@@ -163,8 +163,9 @@ pub(in crate::cognition) fn select_semantic_seeds(
 /// admitted, context candidates only join nodes another lane found.
 fn best_per_channel(
     channels: impl IntoIterator<Item = RankedCandidate>,
-    context_only: bool,
+    options: SeedOptions,
 ) -> HashMap<String, HashMap<Channel, RankedCandidate>> {
+    let context_only = options.context_only;
     let mut by_node = HashMap::<String, HashMap<Channel, RankedCandidate>>::new();
     for candidate in channels {
         if candidate.channel == Channel::Context
@@ -188,8 +189,9 @@ fn best_per_channel(
 /// Node ids by fused score, then context rank, then id.
 fn fused_order(
     by_node: &HashMap<String, HashMap<Channel, RankedCandidate>>,
-    context_only: bool,
+    options: SeedOptions,
 ) -> Vec<String> {
+    let context_only = options.context_only;
     let mut ranked = by_node
         .iter()
         .map(|(node_id, channels)| {

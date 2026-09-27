@@ -47,7 +47,7 @@ pub(super) fn commit(input: CommitInput<'_>) -> ProfileResult<HashSet<String>> {
         offered_corrections: offered,
         nonce,
     } = input;
-    let mut db = storage::open(root, true)?;
+    let mut db = storage::open(root, storage::Access::Write)?;
     let tx = db.transaction().map_err(storage::db_error)?;
     let consent = consent_from_db(&tx)?;
     if consent.mode == ProfilingMode::Off

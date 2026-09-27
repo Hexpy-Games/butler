@@ -156,7 +156,7 @@ fn incomplete_windows(
             stale: Vec::new(),
         });
     }
-    let db = storage::open(root, false)?;
+    let db = storage::open(root, storage::Access::Read)?;
     let query_limit = MAX_SCAN_MESSAGES.min(limit.saturating_mul(4).saturating_add(1));
     let since = since_ms
         .and_then(chrono::DateTime::from_timestamp_millis)
@@ -302,7 +302,7 @@ fn normalized_since(value: Option<&str>) -> Option<String> {
 }
 
 fn scan_offset(root: &Path) -> usize {
-    let Ok(db) = storage::open(root, false) else {
+    let Ok(db) = storage::open(root, storage::Access::Read) else {
         return 0;
     };
     db.query_row(
@@ -318,7 +318,7 @@ fn scan_offset(root: &Path) -> usize {
 }
 
 fn span_registered(root: &Path, window: &SourceWindow) -> bool {
-    let Ok(db) = storage::open(root, false) else {
+    let Ok(db) = storage::open(root, storage::Access::Read) else {
         return false;
     };
     if db

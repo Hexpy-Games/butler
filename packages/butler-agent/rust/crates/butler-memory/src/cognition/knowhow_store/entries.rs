@@ -31,7 +31,7 @@ const ENTRY_STATUSES: [&str; 6] = [
 ];
 
 pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(Vec::new());
     };
     let rows = fs::read_dir(&directory).map_err(|source| {
@@ -55,7 +55,7 @@ pub(super) fn list_paths(root: &Path) -> CognitionResult<Vec<EntryPath>> {
 }
 
 pub(super) fn read_one(root: &Path, entry: &EntryPath) -> CognitionResult<KnowHowDocument> {
-    let directory = entries_directory(root, false)?
+    let directory = entries_directory(root, Presence::Existing)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntryNotFound))?;
     if entry.path.parent() != Some(directory.as_path()) {
         return Err(error(CognitionCode::MemoryKnowhowEntryPathUnsafe));
@@ -67,7 +67,7 @@ pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<KnowHowDo
     if !safe_id(id) {
         return Err(error(CognitionCode::MemoryKnowhowEntryIdInvalid));
     }
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(None);
     };
     let path = directory.join(format!("{id}.json"));
@@ -79,7 +79,7 @@ pub(super) fn read_id(root: &Path, id: &str) -> CognitionResult<Option<KnowHowDo
 }
 
 pub(super) fn count_files(root: &Path) -> CognitionResult<usize> {
-    let Some(directory) = entries_directory(root, false)? else {
+    let Some(directory) = entries_directory(root, Presence::Existing)? else {
         return Ok(0);
     };
     let rows = fs::read_dir(directory).map_err(|source| {
@@ -133,7 +133,7 @@ pub(super) fn write(root: &Path, document: &KnowHowDocument) -> CognitionResult<
         return Err(error(CognitionCode::MemoryKnowhowEntryInvalid));
     }
     let id = KnowHowEntry::required(&entry.knowhow_id)?;
-    let directory = entries_directory(root, true)?
+    let directory = entries_directory(root, Presence::Created)?
         .ok_or_else(|| error(CognitionCode::MemoryKnowhowEntriesWriteFailed))?;
     let path = directory.join(format!("{id}.json"));
     match fs::symlink_metadata(&path) {
@@ -225,7 +225,19 @@ pub(super) fn validate(entry: &KnowHowEntry) -> Vec<&'static str> {
     issues
 }
 
-fn entries_directory(root: &Path, create: bool) -> CognitionResult<Option<PathBuf>> {
+/// Whether the entries directory is created when missing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Presence {
+    /// Create it (and the know-how root) when missing.
+    Created,
+    /// Only use it when it already exists.
+    Existing,
+}
+
+/// The entries directory, checked to stay inside the know-how root; `None`
+/// when it does not exist and may not be created.
+fn entries_directory(root: &Path, presence: Presence) -> CognitionResult<Option<PathBuf>> {
+    let create = presence == Presence::Created;
     if create {
         ensure_private_dir(root)?;
     } else {

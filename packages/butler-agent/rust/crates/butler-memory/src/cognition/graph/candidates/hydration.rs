@@ -82,13 +82,13 @@ pub(super) fn hydrate(
     source_root: &std::path::Path,
     input: &ExtractInput,
     id: &str,
-    source_only: bool,
+    sources: super::AliasSources,
 ) -> CognitionResult<Option<ExtractCandidate>> {
     let Some((node_type, scope, project_id)) = node_in_scope(db, input, id)? else {
         return Ok(None);
     };
     let identity = node_type == "entity" || node_type == "project";
-    let aliases = eligible_aliases(db, input, id, source_only)?;
+    let aliases = eligible_aliases(db, input, id, sources)?;
     let Some(label) = aliases.first().map(|(surface, _)| surface.clone()) else {
         return Ok(None);
     };
@@ -163,9 +163,9 @@ fn eligible_aliases(
     db: &Connection,
     input: &ExtractInput,
     id: &str,
-    source_only: bool,
+    sources: super::AliasSources,
 ) -> CognitionResult<Vec<(String, String)>> {
-    let source_filter = if source_only {
+    let source_filter = if sources == super::AliasSources::Conversation {
         "s.origin_kind IN ('user_input', 'assistant_public')"
     } else {
         "(s.origin_kind IN ('user_input', 'assistant_public') \

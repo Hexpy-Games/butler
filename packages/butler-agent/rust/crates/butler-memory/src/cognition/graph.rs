@@ -7,6 +7,7 @@ pub(in crate::cognition) use readiness::{CacheReadinessRow, StageReadiness, Vect
 mod candidates;
 mod consolidate;
 mod failure;
+pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
 pub(in crate::cognition) mod index;
 mod input;
 mod internal_supersession;
@@ -193,7 +194,7 @@ impl GraphRepository {
         disposition: &str,
         revised: Option<&crate::cognition::extraction::ExtractInput>,
         now: &str,
-        provider_invoked: bool,
+        provider: ProviderCall,
     ) -> CognitionResult<()> {
         failure::disposition(
             self.connection_mut()?,
@@ -201,7 +202,7 @@ impl GraphRepository {
             disposition,
             revised,
             now,
-            provider_invoked,
+            provider,
         )
     }
     pub(in crate::cognition) fn source_window_candidates(
@@ -237,17 +238,10 @@ impl GraphRepository {
         owner: ProjectionWindowOwner<'_>,
         code: &str,
         now: &str,
-        provider_invoked: bool,
-        repair_exhausted: bool,
+        provider: ProviderCall,
+        repair: RepairBudget,
     ) -> CognitionResult<()> {
-        failure::settle(
-            self.connection_mut()?,
-            owner,
-            code,
-            now,
-            provider_invoked,
-            repair_exhausted,
-        )
+        failure::settle(self.connection_mut()?, owner, code, now, provider, repair)
     }
     pub(in crate::cognition) fn commit_meaning(
         &mut self,

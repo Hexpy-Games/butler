@@ -25,7 +25,7 @@ pub(super) fn eligible_sources(
     now_ms: i64,
 ) -> ProfileResult<Vec<StoredEntry>> {
     let db = if refs_required(&entries) {
-        Some(storage::open(data_root, false)?)
+        Some(storage::open(data_root, storage::Access::Read)?)
     } else {
         None
     };

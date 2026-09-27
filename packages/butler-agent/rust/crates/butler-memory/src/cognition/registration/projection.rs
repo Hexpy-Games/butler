@@ -3,6 +3,7 @@
 mod notice;
 mod recovery;
 mod stages;
+use crate::cognition::graph::{ProviderCall, RepairBudget};
 pub(crate) use notice::ProjectionSourceNotice;
 use notice::assert_notice_current;
 use parking_lot::Mutex;
@@ -266,13 +267,21 @@ async fn settle_failure(
     error: &CognitionError,
     adapter_entered: &AtomicBool,
 ) -> CognitionResult<GraphProgress> {
-    let invoked = adapter_entered.load(Ordering::Acquire);
+    let provider = if adapter_entered.load(Ordering::Acquire) {
+        ProviderCall::Made
+    } else {
+        ProviderCall::NotMade
+    };
     let settlement = operation.settlement(deps.host.now_epoch_millis().saturating_add(5_000));
     let job = claim.job_id.clone();
     let window = claim.window_ref.clone();
     let nonce = claim.owner_nonce.clone();
     let code = error.code();
-    let repair_exhausted = error.message().starts_with("repair_exhausted:");
+    let repair = if error.message().starts_with("repair_exhausted:") {
+        RepairBudget::Exhausted
+    } else {
+        RepairBudget::Remaining
+    };
     let clock = operation.clock.clone();
     settlement
         .write(move |state| {
@@ -305,16 +314,12 @@ async fn settle_failure(
                     },
                     revised.as_ref(),
                     &clock(),
-                    invoked,
+                    provider,
                 )?;
             } else {
-                state.graph.settle_window_failure(
-                    owner,
-                    code,
-                    &clock(),
-                    invoked,
-                    repair_exhausted,
-                )?;
+                state
+                    .graph
+                    .settle_window_failure(owner, code, &clock(), provider, repair)?;
             }
             state.graph.progress(&job)
         })

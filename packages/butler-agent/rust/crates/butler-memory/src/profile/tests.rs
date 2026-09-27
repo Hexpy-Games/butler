@@ -135,7 +135,7 @@ async fn off_reenable_and_clear_preserve_consent_but_remove_source_rows() {
         .set_profiling_mode(ProfilingMode::Deep)
         .await
         .unwrap();
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute("INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,status)VALUES('c','communication','{\"summary\":\"Concise\"}','explicit','high',0,'t','t','t','candidate')",[]).unwrap();
     db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES('k','m','h','p',0,'/text',0,1,'v','t','e','complete','t')",[]).unwrap();
     drop(db);
@@ -147,7 +147,7 @@ async fn off_reenable_and_clear_preserve_consent_but_remove_source_rows() {
         .set_profiling_mode(ProfilingMode::Basic)
         .await
         .unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let retained_candidates: i64 = db
         .query_row("SELECT COUNT(*) FROM profile_candidates", [], |row| {
             row.get(0)
@@ -187,7 +187,7 @@ async fn generated_projection_requires_current_canonical_evidence_and_closes_rea
         .set_profiling_mode(ProfilingMode::Basic)
         .await
         .unwrap();
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES('k','m','h','p',0,'/text',0,5,'v','2023-11-14T22:13:20.000Z','e','complete','t')",[]).unwrap();
     drop(db);
     candidates::upsert(
@@ -276,7 +276,7 @@ async fn candidate_duplicate_and_promoted_stable_merge_preserve_source_history()
         "2023-11-15T22:13:20.000Z",
     )
     .unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let (updated_at, sensitive_domain, payload_json): (String, i64, String) = db
         .query_row(
             "SELECT updated_at,sensitive_domain,payload_json FROM profile_candidates ORDER BY id LIMIT 1",

@@ -157,7 +157,7 @@ fn table(db: &rusqlite::Connection, sql: &str) -> Value {
 }
 
 fn snapshot(root: &Root) -> Value {
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     json!({
         "candidates": table(&db, "SELECT * FROM profile_candidates ORDER BY id"),
         "stable": table(&db, "SELECT * FROM stable_profile_entries ORDER BY id"),
@@ -166,7 +166,7 @@ fn snapshot(root: &Root) -> Value {
 }
 
 fn seed_legacy_rows(root: &Root) {
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute(
         "INSERT INTO profile_candidates(id,category,payload_json,source_type,confidence,sensitive_domain,created_at,updated_at,last_seen_at,expires_or_decay,status,promoted_at) VALUES('pc_legacy','communication',?1,'user_confirmed','odd',1,'2023-11-01T00:00:00.000Z','2023-11-02T00:00:00.000Z','2023-11-03T00:00:00.000Z','never','candidate',NULL)",
         [r#"{"summary":"  Explain   tradeoffs ","facet":"not_a_facet","layer":"bogus","applies_when":["x",1," x "],"butler_should":[],"evidence_refs":["legacy:a","legacy:a",""],"evidence_count":2.5,"evidence_observed_at":{"legacy:a":"2023-11-01T00:00:00+02:00","legacy:b":7," ":null},"extra":{"k":1}}"#],

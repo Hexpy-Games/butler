@@ -71,6 +71,13 @@ pub struct RecoveryCandidateView {
     pub body_sha256: String,
 }
 
+/// Whether a manifest is applied or rolled back.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Apply,
+    Rollback,
+}
+
 /// The manifest after an apply or rollback.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContinuityRecoveryAction {
@@ -184,7 +191,7 @@ impl ContinuityRecoveryService {
         manifest_id: &str,
         workspace: &Path,
     ) -> CognitionResult<ContinuityRecoveryAction> {
-        self.mutate(manifest_id, workspace, false).await
+        self.mutate(manifest_id, workspace, Direction::Apply).await
     }
 
     /// Restores the hot cache to its state before the manifest was applied.
@@ -193,14 +200,15 @@ impl ContinuityRecoveryService {
         manifest_id: &str,
         workspace: &Path,
     ) -> CognitionResult<ContinuityRecoveryAction> {
-        self.mutate(manifest_id, workspace, true).await
+        self.mutate(manifest_id, workspace, Direction::Rollback)
+            .await
     }
 
     async fn mutate(
         &self,
         manifest_id: &str,
         workspace: &Path,
-        rollback: bool,
+        direction: Direction,
     ) -> CognitionResult<ContinuityRecoveryAction> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
@@ -211,7 +219,9 @@ impl ContinuityRecoveryService {
             let paths = paths.clone();
             let manifest_id = manifest_id.clone();
             let workspace = workspace.clone();
-            move || hot_cache::replay_result(&data_root, &paths, &manifest_id, &workspace, rollback)
+            move || {
+                hot_cache::replay_result(&data_root, &paths, &manifest_id, &workspace, direction)
+            }
         })
         .await
         .map_err(|source| {
@@ -232,7 +242,7 @@ impl ContinuityRecoveryService {
             .map_err(CognitionError::from)?
             .ok_or_else(|| error(CognitionCode::MemoryWriteBusy))?;
         tokio::task::spawn_blocking(move || {
-            let result = if rollback {
+            let result = if direction == Direction::Rollback {
                 hot_cache::rollback(
                     &data_root,
                     &paths,

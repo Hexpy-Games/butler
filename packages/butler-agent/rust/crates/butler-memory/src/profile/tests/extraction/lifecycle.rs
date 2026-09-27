@@ -104,7 +104,7 @@ async fn provider_failure_marks_claim_failed_and_clears_owner() {
         result.model_error.as_deref(),
         Some("profile extractor response failed validation")
     );
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let owner: (String, Option<f64>, Option<String>) = db
         .query_row(
             "SELECT disposition,owner_pid,owner_nonce FROM profile_source_coverage",
@@ -171,7 +171,7 @@ async fn source_mutation_interrupts_commit_without_failed_receipt() {
         Some("profile source changed")
     );
     assert_eq!(result.coverage_pending_count, Some(1));
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let owner: (String, Option<f64>, Option<String>) = db
         .query_row(
             "SELECT disposition,owner_pid,owner_nonce FROM profile_source_coverage",
@@ -198,7 +198,7 @@ impl ProviderPromptPort for CorrectionMutatingProvider {
             let prompt: serde_json::Value = serde_json::from_str(&prompt).unwrap();
             let target = &prompt["correction_targets"][0];
             let reference = prompt["observations"][0]["ref"].as_str().unwrap();
-            storage::open(&root, true)
+            storage::open(&root, storage::Access::Write)
                 .unwrap()
                 .execute(
                     "UPDATE stable_profile_entries SET updated_at='changed-after-offer'",
@@ -265,7 +265,7 @@ async fn correction_target_revision_is_revalidated_after_provider() {
         .await
         .unwrap();
     let (key, evidence) = coverage_identity(&target);
-    let db = storage::open(&root.0, true).unwrap();
+    let db = storage::open(&root.0, storage::Access::Write).unwrap();
     db.execute("INSERT INTO profile_source_coverage(coverage_key,message_id,source_hash,part_id,part_index,scalar_pointer,byte_start,byte_end,extractor_version,observed_at,evidence_ref,disposition,updated_at)VALUES(?1,?2,?3,?4,0,'/text',0,?5,'profile-scalar-v1',?6,?7,'complete',?6)",rusqlite::params![key,target.id,target.parts[0].scalars[0].source_hash,target.parts[0].part_id,i64::try_from(target.parts[0].scalars[0].text.len()).unwrap_or(i64::MAX),target.created_at,evidence]).unwrap();
     drop(db);
     candidates::upsert(
@@ -356,7 +356,7 @@ async fn dropped_caller_keeps_claim_owned_until_close_drains_provider() {
     assert!(!close.is_finished());
     release.notify_one();
     close.await.unwrap();
-    let db = storage::open(&root.0, false).unwrap();
+    let db = storage::open(&root.0, storage::Access::Read).unwrap();
     let owner: (Option<f64>, Option<String>) = db
         .query_row(
             "SELECT owner_pid,owner_nonce FROM profile_source_coverage",

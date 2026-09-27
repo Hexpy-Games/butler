@@ -38,14 +38,14 @@ pub(super) fn replay_result(
     paths: &CognitionPathEnvironment,
     manifest_id: &str,
     workspace: &Path,
-    rollback: bool,
+    direction: super::Direction,
 ) -> CognitionResult<Option<ContinuityRecoveryAction>> {
     let Some(manifest) = manifest::read(data_root, paths, manifest_id)? else {
         return Err(error(CognitionCode::ContinuityRecoveryManifestNotFound));
     };
     validate_manifest_cache(&manifest, workspace)?;
     let current_hash = sha256(read_text(Path::new(&manifest.before.path))?.as_bytes());
-    let replayed = if rollback {
+    let replayed = if direction == super::Direction::Rollback {
         manifest.status == "rolled_back" && current_hash == manifest.before.sha256
     } else {
         manifest.status == "applied"
