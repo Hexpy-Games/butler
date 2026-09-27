@@ -347,6 +347,13 @@ await server.api("/sessions", {
     title: "Desktop client polish",
   }),
 });
+// The layout smoke measures every inspector panel, including the Context and
+// Workers tabs, which only developer mode shows: turn it on for the gateway
+// (app info) and the harness (`developer=1`).
+await server.api("/settings", {
+  method: "PATCH",
+  body: JSON.stringify({ diagnostics_enabled: true }),
+});
 // Space sidebar session rows expose their title as the row's aria-label.
 const smokeSessionRowSelector = `${testClass("tree-row")}[aria-label="Desktop client polish"]`;
 
@@ -365,7 +372,7 @@ await page.addInitScript(
 const screenshots: string[] = [];
 
 try {
-  await page.goto(`${server.url}?visual=components`, {
+  await page.goto(`${server.url}?visual=components&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
@@ -2363,7 +2370,7 @@ try {
     `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
   );
   screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
-  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(240);
   await page
@@ -2534,8 +2541,12 @@ try {
   await page
     .getByRole("heading", { name: appCopy.settings.pageSections.butlerModel })
     .waitFor({ state: "visible" });
+  // Memory cleanup and worker profiles sit in the page's collapsed Advanced disclosure.
   await page
-    .getByText(appCopy.settings.panels.workerProfiles)
+    .locator(`${testClass("settings-models-advanced")} [aria-expanded="false"]`)
+    .click();
+  await page
+    .getByRole("heading", { name: appCopy.settings.panels.workerProfiles })
     .waitFor({ state: "visible" });
   // Grouped settings: each section header sits above its card (outside the
   // surface, no divider), close to it, and far from the previous card.
@@ -2564,7 +2575,7 @@ try {
   const [modelSection, workerSection] = settingsSectionGeometry;
   assert(
     modelSection?.title === appCopy.settings.pageSections.butlerModel &&
-      workerSection?.title === appCopy.settings.pageSections.fallbackConsolidation &&
+      workerSection?.title === appCopy.settings.pageSections.backupModels &&
       settingsSectionGeometry.every(
         (section) =>
           section.headerBottom !== null &&
@@ -2724,7 +2735,7 @@ try {
     `unsupported provider preset leaked into settings: ${settingsModelsText}`,
   );
   screenshots.push(await screenshot(page, "settings-models.png"));
-  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.getByRole("button", { name: appCopy.settings.back, exact: true }).click();
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
   await page.getByRole("button", { name: appCopy.sidebar.settings }).click();
   await page.locator(testClass("settings-view")).waitFor({ state: "visible" });
@@ -2765,7 +2776,7 @@ try {
     `select-liquid-glass-tokenized failed: ${JSON.stringify(settingsSelectGlass)}`,
   );
 
-  await page.goto(`${server.url}?visual=components&theme=dark`, {
+  await page.goto(`${server.url}?visual=components&theme=dark&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
@@ -4008,7 +4019,7 @@ try {
   await page.waitForTimeout(400);
 
   await page.setViewportSize({ width: 1180, height: 820 });
-  await page.goto(`${server.url}?visual=components`, {
+  await page.goto(`${server.url}?visual=components&developer=1`, {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });

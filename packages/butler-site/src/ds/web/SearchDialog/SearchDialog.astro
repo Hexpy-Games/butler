@@ -1,0 +1,44 @@
+---
+import { Kbd } from "../../components/Kbd";
+import { Search } from "../../components/Icons";
+import styles from "./SearchDialog.module.css";
+
+interface Props {
+  /** Site base path; the Pagefind bundle lives at <base>pagefind/. */
+  base: string;
+}
+
+const { base } = Astro.props;
+---
+<dialog aria-label="문서 검색" class={styles.dialog} data-base={base} data-search-dialog>
+  <div class={styles.field}>
+    <Search />
+    <input
+      aria-controls="search-results"
+      aria-label="문서 검색"
+      autocomplete="off"
+      class={styles.input}
+      data-search-input
+      placeholder="문서 검색"
+      spellcheck="false"
+      type="search"
+    />
+  </div>
+  <div class={styles.results} data-scroll-fade="y" id="search-results">
+    <p aria-live="polite" class={styles.status} data-search-status></p>
+    <ul class={styles.list} data-search-list></ul>
+  </div>
+  <div class={styles.footer} aria-hidden="true">
+    <span class={styles.hint}><Kbd keys={["↑", "↓"]} size="sm" /> 이동</span>
+    <span class={styles.hint}><Kbd keys={["↵"]} size="sm" /> 열기</span>
+    <span class={styles.hint}><Kbd keys={["esc"]} size="sm" /> 닫기</span>
+  </div>
+  <template data-search-item>
+    <li>
+      <a class={styles.result}>
+        <span class={styles.resultTitle}></span>
+        <span class={styles.resultExcerpt}></span>
+      </a>
+    </li>
+  </template>
+</dialog>
