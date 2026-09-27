@@ -154,15 +154,7 @@ pub(super) fn from_model<'a>(
     };
     let mut suggestions = suggestions(parsed.suggestions.unwrap_or_default(), scope);
     if let Some(project) = project {
-        suggestions.retain(|suggestion| {
-            let serialized = serde_json::to_string(suggestion)
-                .unwrap_or_default()
-                .to_lowercase();
-            !project
-                .excluded_topics
-                .iter()
-                .any(|topic| serialized.contains(&topic.to_lowercase()))
-        });
+        suggestions = without_excluded_topics(suggestions, &project.excluded_topics)?;
     }
     if suggestions.len() < 4 {
         return Err(invalid("at least four valid suggestions"));
@@ -179,7 +171,7 @@ pub(super) fn from_model<'a>(
         )?),
     };
     Ok(BriefingArtifact {
-        schema: "butler.cognition.new-chat-briefing.v1",
+        schema: super::super::stored::NEW_CHAT_BRIEFING_SCHEMA,
         briefing_id: format!("ncb_{}", uuid::Uuid::new_v4()),
         scope,
         project_id: project.map(|value| value.id.as_str()),
@@ -280,6 +272,27 @@ fn suggestions(items: Vec<Option<RawSuggestion>>, scope: &str) -> Vec<Suggestion
         }
     }
     out
+}
+
+/// Drops suggestions whose JSON mentions an excluded project topic,
+/// case-insensitively.
+fn without_excluded_topics(
+    suggestions: Vec<Suggestion>,
+    excluded: &[String],
+) -> Result<Vec<Suggestion>, BriefingGenerationError> {
+    let mut kept = Vec::with_capacity(suggestions.len());
+    for suggestion in suggestions {
+        let serialized = serde_json::to_string(&suggestion)
+            .map_err(|source| invalid("encodable suggestions").with_source(source))?
+            .to_lowercase();
+        if !excluded
+            .iter()
+            .any(|topic| serialized.contains(&topic.to_lowercase()))
+        {
+            kept.push(suggestion);
+        }
+    }
+    Ok(kept)
 }
 
 fn safe_id(value: &str) -> String {

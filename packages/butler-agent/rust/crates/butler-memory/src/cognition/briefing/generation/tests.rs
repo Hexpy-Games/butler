@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 
 use super::*;
+use crate::cognition::BriefingScope;
 use crate::coordination::{CognitionCoordinationHost, CognitionProcessStatus, CoordinationResult};
 use butler_models::models::{ProviderPromptFuture, ProviderPromptResult};
 
@@ -120,6 +121,15 @@ fn input() -> BriefingInputSnapshot {
     }
 }
 
+/// The stored briefing file `relative` of 2026-09-23, as written.
+fn stored_briefing(root: &Path, relative: &str) -> String {
+    fs::read_to_string(
+        root.join("cognition/consolidation/briefings/2026-09-23")
+            .join(relative),
+    )
+    .unwrap()
+}
+
 fn root() -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "butler-briefing-generation-{}",
@@ -161,57 +171,64 @@ async fn generates_durable_general_and_project_artifacts_from_model() {
     assert_eq!(result["failed_count"], 0);
     assert_eq!(result["model_usage"]["request_count"], 2);
     assert_eq!(provider.calls.load(Ordering::SeqCst), 2);
-    let general =
-        super::super::read_new_chat_briefing(&root, Some("2026-09-23"), "general", None, "en")
-            .unwrap();
-    assert_eq!(general["title_variants"]["morning"], "Good morning");
-    assert_eq!(general["source"]["consolidation_run_id"], "cr_test");
-    assert!(!general.to_string().contains("Project One"));
+    let general = super::super::read_new_chat_briefing(
+        &root,
+        Some("2026-09-23"),
+        BriefingScope::General,
+        None,
+        "en",
+    )
+    .unwrap();
+    assert_eq!(
+        general.title_variants.as_ref().map(|v| v.morning.as_str()),
+        Some("Good morning")
+    );
+    assert_eq!(
+        general.source.consolidation_run_id.as_deref(),
+        Some("cr_test")
+    );
+    assert!(!stored_briefing(&root, "general.json").contains("Project One"));
     let project = super::super::read_new_chat_briefing(
         &root,
         Some("2026-09-23"),
-        "project",
+        BriefingScope::Project,
         Some("project-1"),
         "en",
     )
     .unwrap();
-    assert_eq!(project["project_name"], "Project One");
-    assert!(project.get("title_variants").is_none());
+    assert_eq!(project.project_name.as_deref(), Some("Project One"));
+    assert!(!stored_briefing(&root, "projects/project-1.json").contains("\"title_variants\""));
+    assert!(project.title_variants.is_none());
     fs::remove_dir_all(root).unwrap();
+}
+
+/// Project `index`; only project 0 has a summary, recent sessions, open and
+/// completed work and an excluded topic.
+fn project_signal(index: usize) -> BriefingProjectSignal {
+    let first = |text: &str| {
+        if index == 0 {
+            vec![text.to_owned()]
+        } else {
+            vec![]
+        }
+    };
+    BriefingProjectSignal {
+        id: format!("project-{index}"),
+        display_name: format!("Project {index}"),
+        summary: (index == 0).then(|| "A useful project summary".into()),
+        recent_session_titles: first("Recent topic"),
+        ledger_event_summary: vec!["work.updated:in_progress x1".into()],
+        open_work_titles: first("Open implementation"),
+        completed_work_titles: first("Completed review"),
+        excluded_topics: first("topic 0"),
+    }
 }
 
 #[tokio::test]
 async fn project_briefing_keeps_source_context_filters_exclusions_and_has_no_project_cap() {
     let root = root();
     let mut snapshot = input();
-    snapshot.projects = (0..13)
-        .map(|index| BriefingProjectSignal {
-            id: format!("project-{index}"),
-            display_name: format!("Project {index}"),
-            summary: (index == 0).then(|| "A useful project summary".into()),
-            recent_session_titles: if index == 0 {
-                vec!["Recent topic".into()]
-            } else {
-                vec![]
-            },
-            ledger_event_summary: vec!["work.updated:in_progress x1".into()],
-            open_work_titles: if index == 0 {
-                vec!["Open implementation".into()]
-            } else {
-                vec![]
-            },
-            completed_work_titles: if index == 0 {
-                vec!["Completed review".into()]
-            } else {
-                vec![]
-            },
-            excluded_topics: if index == 0 {
-                vec!["topic 0".into()]
-            } else {
-                vec![]
-            },
-        })
-        .collect();
+    snapshot.projects = (0..13).map(project_signal).collect();
     let source = Arc::new(Source(Mutex::new(snapshot)));
     let provider = Arc::new(Provider {
         calls: AtomicUsize::new(0),
@@ -258,13 +275,17 @@ async fn project_briefing_keeps_source_context_filters_exclusions_and_has_no_pro
     let project = super::super::read_new_chat_briefing(
         &root,
         Some("2026-09-23"),
-        "project",
+        BriefingScope::Project,
         Some("project-0"),
         "en",
     )
     .unwrap();
-    assert_eq!(project["suggestions"].as_array().unwrap().len(), 4);
-    assert!(!project.to_string().to_lowercase().contains("topic 0"));
+    assert_eq!(project.suggestions.len(), 4);
+    assert!(
+        !stored_briefing(&root, "projects/project-0.json")
+            .to_lowercase()
+            .contains("topic 0")
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -284,8 +305,14 @@ async fn changed_source_prevents_commit_and_unconfigured_source_skips_model() {
     assert_eq!(result["generated_count"], 0);
     assert_eq!(result["failed_count"], 2);
     assert!(
-        super::super::read_new_chat_briefing(&root, Some("2026-09-23"), "general", None, "en")
-            .is_none()
+        super::super::read_new_chat_briefing(
+            &root,
+            Some("2026-09-23"),
+            BriefingScope::General,
+            None,
+            "en"
+        )
+        .is_none()
     );
     source.0.lock().unwrap().settings = BriefingSettings::Unavailable {
         locale: "en".into(),

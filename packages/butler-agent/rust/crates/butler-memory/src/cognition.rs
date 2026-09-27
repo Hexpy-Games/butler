@@ -64,7 +64,10 @@ pub use briefing::{
     BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
     BriefingProjectSignal, BriefingSettings,
 };
-pub use briefing::{latest_completed_briefing_run_id, read_new_chat_briefing};
+pub use briefing::{
+    BriefingScope, BriefingSource, BriefingSuggestion, BriefingTitleVariants, NewChatBriefing,
+    latest_completed_briefing_run_id, read_new_chat_briefing,
+};
 pub use completion::{
     CompletionNotice, CompletionPublisher, MemorySyncConsumer, MemorySyncPoll,
     TypedMemorySourceNotice,

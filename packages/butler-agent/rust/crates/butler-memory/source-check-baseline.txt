@@ -1,7 +1,6 @@
 # Functions over 80 lines, ratcheted by tools/source-check.
 # Split a function and regenerate: cargo run -p butler-source-check -- --bless .
 # Entries may only shrink or disappear; new entries need review.
-src/cognition/briefing/generation/tests.rs	project_briefing_keeps_source_context_filters_exclusions_and_has_no_project_cap	86
 src/cognition/feedback_buffer/tests.rs	counts_apply_source_defaults_expiry_and_active_profile_filter	83
 src/cognition/generation/rebuild/tests.rs	readiness_rejects_candidate_change_while_waiting_for_commit_gate	86
 src/cognition/generation/rebuild/tests.rs	representative_commit_rejects_changed_candidate_after_gate_wait	95
