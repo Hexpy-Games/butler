@@ -141,6 +141,7 @@ async fn rec_02_crash_interrupted_turn_is_failed_not_resumed() -> Result<(), Har
     butler_e2e::gate!();
     let mut s = Setup::new("REC-02-OWNER")?
         .cassette("REC-02")
+        .replay_only()
         .start()
         .await?;
     let exchange = s.provider()?.exchange_for("one to twelve", 0)?;
@@ -168,11 +169,14 @@ const REC03: &str = "Use the run_command tool to run exactly `echo {marker} >> l
 async fn crash_after_effect(id: &str) -> Result<(Scenario, String, String), HarnessError> {
     let marker = nonce();
     let prompt = REC03.replace("{marker}", &marker);
-    let mut s = Setup::new(id)?
+    let mut setup = Setup::new(id)?
         .cassette("REC-03")
-        .placeholder("NONCE", &marker)
-        .start()
-        .await?;
+        .placeholder("NONCE", &marker);
+    // Only the main REC-03 scenario records the cassette.
+    if id != "REC-03" {
+        setup = setup.replay_only();
+    }
+    let mut s = setup.start().await?;
     let log = s.sandbox.data.join("log.txt");
     // Hold the model round that follows the command so the crash lands after
     // the effect and before the turn completes. (Record mode crashes at the

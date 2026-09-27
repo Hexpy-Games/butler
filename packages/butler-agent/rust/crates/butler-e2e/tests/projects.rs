@@ -72,56 +72,126 @@ fn overview_works(dashboard: &Value) -> Vec<(String, String, String)> {
         .collect()
 }
 
+/// The dashboard's view of the project's one Work: its execution status,
+/// read from the overview's progress counts (they cover every Work), and its
+/// overview card `(id, title, status)` (only open and blocked Works have one).
+type DashboardWork = (String, Option<(String, String, String)>);
+
+fn dashboard_work(view: &Value) -> DashboardWork {
+    let overview = &view["overview"];
+    assert_eq!(overview["status"], "ready", "{overview}");
+    assert_eq!(overview["totalWorks"], 1, "{overview}");
+    let counted: Vec<(String, u64)> = overview["progress"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(status, count)| Some((status.clone(), count.as_u64()?)))
+        .filter(|(_, count)| *count > 0)
+        .collect();
+    let [(status, 1)] = counted.as_slice() else {
+        panic!("progress does not count the one Work once: {overview}");
+    };
+    let mut cards = overview_works(view);
+    assert!(cards.len() <= 1, "{cards:?}");
+    (status.clone(), cards.pop())
+}
+
+/// The `/work-status` state of the Work of project session `chat`; the
+/// counts agree with the items.
+async fn work_status_state(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
+    let reply = s.gw.get("/work-status").await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let sessions = s.gw.get("/sessions").await?;
+    let hint = sessions.data()["sessions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|session| session["id"] == chat)
+        .and_then(|session| session["session_hint"].as_str())
+        .unwrap_or(chat)
+        .to_owned();
+    let items = reply.data()["items"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mine: Vec<&Value> = items
+        .iter()
+        .filter(|item| item["session_id"] == chat || item["session_id"] == hint.as_str())
+        .collect();
+    let [item] = mine.as_slice() else {
+        panic!(
+            "the project session's Work is not in /work-status once: {}",
+            reply.text
+        );
+    };
+    let state = item["state"].as_str().unwrap_or_default().to_owned();
+    let same = items
+        .iter()
+        .filter(|other| other["state"] == state.as_str())
+        .count();
+    assert_eq!(
+        reply.data()["counts"][state.as_str()].as_u64(),
+        Some(same as u64),
+        "counts disagree with the items: {}",
+        reply.text
+    );
+    Ok(state)
+}
+
+/// Whether a `/work-status` state says the same as a dashboard status.
+fn agrees(dashboard_status: &str, work_status_state: &str) -> bool {
+    matches!(
+        (dashboard_status, work_status_state),
+        ("completed", "completed") | ("blocked", "attention") | ("open", "running" | "attention")
+    )
+}
+
 /// PRJ-02 — The Work a project session starts, plans, reviews and settles
-/// is on the project dashboard (overview card and its plan in materials)
-/// with the status the turn left it in, the same after a restart.
+/// is on the project dashboard (its status, its overview card while it is
+/// open or blocked, and its plan in materials); `/work-status` agrees with
+/// the dashboard, and both say the same after a restart. (Which status the
+/// turn leaves is the PRJ-02-LEDGER test's concern.)
 #[tokio::test]
 async fn prj_02_project_work_shows_on_dashboard() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, project, _) = prj_02_turn("PRJ-02").await?;
-    let view = dashboard(&s, &project).await?;
-    assert_eq!(view["overview"]["status"], "ready", "{}", view["overview"]);
-    assert_eq!(view["overview"]["totalWorks"], 1, "{}", view["overview"]);
-    let works = overview_works(&view);
-    assert_eq!(works.len(), 1, "{works:?}");
-    let (work_id, title, status) = works[0].clone();
-    assert!(work_id.starts_with("guided-work-"), "{work_id}");
-    assert!(title.contains("Build three raised garden beds"), "{title}");
-    // The recorded turn settles its Work as blocked (see the PRJ-02-LEDGER gap).
-    assert_eq!(status, "blocked");
-    assert_eq!(
-        view["overview"]["progress"]["blocked"], 1,
-        "{}",
-        view["overview"]
-    );
-    let materials =
-        s.gw.get(&format!("/projects/{project}/dashboard/materials"))
-            .await?;
-    assert_eq!(materials.data()["status"], "ready", "{}", materials.text);
+    let (mut s, project, chat) = prj_02_turn("PRJ-02").await?;
+    let work = dashboard_work(&dashboard(&s, &project).await?);
+    match (work.0.as_str(), &work.1) {
+        ("open" | "blocked", Some((id, title, status))) => {
+            assert!(id.starts_with("guided-work-"), "{id}");
+            assert!(title.contains("Build three raised garden beds"), "{title}");
+            assert_eq!(status, &work.0, "card and progress disagree");
+        }
+        ("completed", None) => {}
+        _ => panic!("the Work's status and overview card disagree: {work:?}"),
+    }
+    let documents = materials(&s, &project).await?;
+    assert_eq!(documents["status"], "ready", "{documents}");
     assert!(
-        materials.data()["documents"]
+        documents["documents"]
             .as_array()
             .into_iter()
             .flatten()
             .any(|document| document["kind"] == "plan"),
-        "the Work's plan is not in the dashboard materials: {}",
-        materials.text
+        "the Work's plan is not in the dashboard materials: {documents}"
     );
-    let status_view = s.gw.get("/work-status").await?;
-    assert_eq!(status_view.status, 200, "{}", status_view.text);
-    assert_eq!(
-        status_view.data()["counts"]["attention"],
-        1,
-        "{}",
-        status_view.text
+    let state = work_status_state(&s, &chat).await?;
+    assert!(
+        agrees(&work.0, &state),
+        "the dashboard says {}, /work-status says {state}",
+        work.0
     );
 
     s.restart().await?;
-    let after = dashboard(&s, &project).await?;
     assert_eq!(
-        overview_works(&after),
-        works,
+        dashboard_work(&dashboard(&s, &project).await?),
+        work,
         "dashboard Work changed across restart"
+    );
+    assert_eq!(
+        work_status_state(&s, &chat).await?,
+        state,
+        "/work-status changed across restart"
     );
     s.finish().await
 }

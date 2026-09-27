@@ -6,6 +6,5 @@ src/e2e/provider/replay.rs	replay	81
 tests/migration.rs	mig_01b_older_app_schema_is_upgraded_in_place	87
 tests/onboarding.rs	onb_04_gateway_requires_its_token	82
 tests/settings.rs	set_02_unavailable_and_malformed_settings_are_rejected	91
-tests/tools_effects.rs	tool_07_authority_allow_restart_and_revoke	89
 tests/turn.rs	turn_01_reply_is_delivered_persisted_and_survives_restart	96
 tests/turn_faults.rs	turn_05_broken_stream_never_delivers_partial_text	91

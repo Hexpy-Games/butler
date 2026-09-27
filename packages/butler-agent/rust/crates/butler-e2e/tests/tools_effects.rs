@@ -7,6 +7,7 @@
 )]
 
 use std::fs;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::gateway::{TERMINAL, tool_rows, turn_state};
@@ -165,7 +166,7 @@ fn request_ref(request: &Value) -> String {
 /// Waits for `path`, supervising the agent; returns (found, restarts).
 async fn wait_file(
     s: &mut Scenario,
-    path: &std::path::Path,
+    path: &Path,
     within: Duration,
 ) -> Result<(bool, u32), HarnessError> {
     let deadline = Instant::now() + within;
@@ -182,63 +183,51 @@ async fn wait_file(
     Ok((false, restarts))
 }
 
-/// TOOL-07 (pending part) — ask-first: the effect waits for approval and the
-/// request is listed; nothing runs before a decision.
-#[tokio::test]
-async fn tool_07_ask_first_waits_for_approval() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let s = Setup::new("TOOL-07-PENDING")?
-        .cassette("TOOL-07")
-        .start()
-        .await?;
-    let target = s.sandbox.data.join("approved.txt");
-    let turn_id = send(
-        &s,
-        "Create approved.txt in your workspace containing exactly: approved-by-user",
-        "ask_first",
-    )
-    .await?;
-    let request = wait_request(&s).await?;
-    assert!(!request_ref(&request).is_empty(), "{request}");
+/// Waits for the ask-first request of `turn_id` and checks that nothing ran
+/// before a decision: the effect's file is absent and the turn is not
+/// delivered. Returns the request reference.
+async fn pending_request(
+    s: &Scenario,
+    turn_id: &str,
+    target: &Path,
+) -> Result<String, HarnessError> {
+    let request = wait_request(s).await?;
+    let reference = request_ref(&request);
+    assert!(!reference.is_empty(), "{request}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     assert!(!target.exists(), "effect ran before approval");
-    let turn = s.gw.turn("general", &turn_id).await?.unwrap_or_default();
+    let turn = s.gw.turn("general", turn_id).await?.unwrap_or_default();
     assert_ne!(
         turn_state(&turn),
         "delivered",
         "turn finished without approval: {turn}"
     );
-    assert!(s.gw.healthy().await);
-    s.finish().await
+    Ok(reference)
 }
 
-/// TOOL-07 — ask-first: the effect waits for approval, survives a restart,
-/// runs once after Allow; a revoked grant asks again.
-#[tokio::test]
-#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn (after Allow/Deny, or on restart with a pending request) is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
-async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let mut s = Setup::new("TOOL-07")?.cassette("TOOL-07").start().await?;
-    let target = s.sandbox.data.join("approved.txt");
-    let prompt = "Create approved.txt in your workspace containing exactly: approved-by-user";
-    let turn_id = send(&s, prompt, "ask_first").await?;
-    let request = wait_request(&s).await?;
-    let reference = request_ref(&request);
-    assert!(!reference.is_empty(), "{request}");
-    assert!(!target.exists(), "effect ran before approval");
-    let turn = s.gw.turn("general", &turn_id).await?.unwrap_or_default();
-    assert!(
-        !matches!(turn_state(&turn), "delivered"),
-        "turn finished without approval: {turn}"
-    );
+/// Waits until every turn of the general chat is terminal.
+async fn all_turns_terminal(s: &Scenario, context: &str) -> Result<(), HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout());
+    loop {
+        let turns = s.gw.turns("general").await?;
+        if turns
+            .iter()
+            .all(|turn| TERMINAL.contains(&turn_state(turn)))
+        {
+            return Ok(());
+        }
+        assert!(Instant::now() < deadline, "{context}: {turns:?}");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
 
-    s.restart().await?;
-    let pending = authority_requests(&s).await?;
-    assert!(
-        pending.to_string().contains(&reference),
-        "pending request lost on restart: {pending}"
-    );
-
+/// Allows `reference` for the conversation: the effect runs once with the
+/// requested content, the service does not exit, and the turn settles.
+async fn allow_and_settle(
+    s: &mut Scenario,
+    reference: &str,
+    target: &Path,
+) -> Result<(), HarnessError> {
     let allow =
         s.gw.post(
             &format!("/authority-requests/{reference}/allow?session_id=general"),
@@ -247,37 +236,27 @@ async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError
         .await?;
     assert_eq!(allow.status, 202, "{}", allow.text);
     let (found, restarts) = wait_file(
-        &mut s,
-        &target,
+        s,
+        target,
         Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout()),
     )
     .await?;
     eprintln!(
         "TOOL-07 allow: found {found} restarts {restarts}; {}",
-        interrupts(&s)
+        interrupts(s)
     );
     assert!(found, "effect did not run after Allow");
     assert_eq!(
         restarts, 0,
         "the service exited while resuming the approved turn"
     );
-    assert_eq!(fs::read_to_string(&target)?.trim_end(), "approved-by-user");
-    let deadline = Instant::now() + Duration::from_secs(butler_e2e::e2e::scenario::turn_timeout());
-    loop {
-        let turns = s.gw.turns("general").await?;
-        if turns
-            .iter()
-            .all(|turn| TERMINAL.contains(&turn_state(turn)))
-        {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "turn did not finish after Allow: {turns:?}"
-        );
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
-    let permissions = authority_requests(&s).await?["permissions"].clone();
+    assert_eq!(fs::read_to_string(target)?.trim_end(), "approved-by-user");
+    all_turns_terminal(s, "turn did not finish after Allow").await
+}
+
+/// Revokes the conversation grant that Allow created; it is no longer listed.
+async fn revoke_conversation_grant(s: &Scenario) -> Result<(), HarnessError> {
+    let permissions = authority_requests(s).await?["permissions"].clone();
     let grant = permissions
         .as_array()
         .and_then(|list| list.first())
@@ -299,10 +278,56 @@ async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError
         .await?;
     assert_eq!(revoked.status, 200, "{}", revoked.text);
     assert!(
-        !authority_requests(&s).await?["permissions"]
+        !authority_requests(s).await?["permissions"]
             .to_string()
             .contains(&grant)
     );
+    Ok(())
+}
+
+const TOOL_07_PROMPT: &str =
+    "Create approved.txt in your workspace containing exactly: approved-by-user";
+
+/// TOOL-07 (pending part) — ask-first: the effect waits for approval and the
+/// request is listed; nothing runs before a decision.
+#[tokio::test]
+async fn tool_07_ask_first_waits_for_approval() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    // Replays the start of the TOOL-07 recording; only the full TOOL-07
+    // scenario records that cassette.
+    let s = Setup::new("TOOL-07-PENDING")?
+        .cassette("TOOL-07")
+        .replay_only()
+        .start()
+        .await?;
+    let target = s.sandbox.data.join("approved.txt");
+    let turn_id = send(&s, TOOL_07_PROMPT, "ask_first").await?;
+    pending_request(&s, &turn_id, &target).await?;
+    assert!(s.gw.healthy().await);
+    s.finish().await
+}
+
+/// TOOL-07 — ask-first: the effect waits for approval, the request survives
+/// a restart, the effect runs once after Allow, and the conversation grant
+/// Allow created can be revoked.
+#[tokio::test]
+#[ignore = "product gap: TOOL-07-RESUME — resuming an ask-first turn (after Allow/Deny, or on restart with a pending request) is interrupted with turn_replay_conflict; the service exits and crash-loops on every restart"]
+async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut s = Setup::new("TOOL-07")?.cassette("TOOL-07").start().await?;
+    let target = s.sandbox.data.join("approved.txt");
+    let turn_id = send(&s, TOOL_07_PROMPT, "ask_first").await?;
+    let reference = pending_request(&s, &turn_id, &target).await?;
+
+    s.restart().await?;
+    let pending = authority_requests(&s).await?;
+    assert!(
+        pending.to_string().contains(&reference),
+        "pending request lost on restart: {pending}"
+    );
+
+    allow_and_settle(&mut s, &reference, &target).await?;
+    revoke_conversation_grant(&s).await?;
     s.finish().await
 }
 
