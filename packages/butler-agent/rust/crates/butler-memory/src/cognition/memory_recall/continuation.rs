@@ -1,256 +1,319 @@
 //! Revalidate a metadata-only cursor against a fresh pinned graph snapshot.
+//!
+//! [`run`] reloads the page's episodes and sources from the current graph,
+//! rebinds every candidate whose revision still matches, then fits the page
+//! into the envelope: minimum bundles first, then full bundles where they fit.
 
 mod result;
 
 use std::{
-    cmp::Ordering,
     collections::{HashMap, HashSet},
     path::Path,
 };
 
 use crate::cognition::{
     CognitionError, CognitionResult, CognitionSourceRow,
-    feedback::{FeedbackSourceRow, excluded_source_ids},
-    graph::{GraphRecallReader, RecallMention},
+    graph::{GraphRecallReader, RecallEpisodeRow, RecallMention},
     recall::{RecallRequest, RecallResponse, RecallResultItem},
     sources::{RecallSourceHydration, RecallSourceResolution, hydrate_recall_sources},
 };
 use butler_turn::conversation::ConversationSourceReader;
 
 use super::{
-    cursor::{CursorStore, Page},
+    Clocks, binding,
+    cursor::{Candidate, CursorStore, Page},
     envelope,
 };
 use crate::cognition::CognitionCode;
+use result::{BindInput, Delivery, PageFrame};
 
-#[allow(clippy::too_many_arguments)]
+/// What one continuation reads.
+#[derive(Clone, Copy)]
+pub(super) struct ContinuationInput<'a> {
+    pub graph: &'a GraphRecallReader,
+    pub canonical: Option<&'a ConversationSourceReader>,
+    pub source_root: &'a Path,
+    pub memory_root: &'a Path,
+    pub generation_id: &'a str,
+    pub input: &'a RecallRequest,
+    pub page: &'a Page,
+    pub deadline_at: i64,
+    pub now_iso: &'a str,
+}
+
+/// The page's episodes and their current, not-excluded, hydrated sources.
+struct PageSources {
+    rows: HashMap<String, RecallEpisodeRow>,
+    raw: HashSet<String>,
+    mentions: Vec<RecallMention>,
+    projections: Vec<CognitionSourceRow>,
+    hydrated: HashMap<String, RecallSourceResolution>,
+}
+
+/// Candidates rebound on the fresh snapshot, with their page offsets.
+struct Bound {
+    full: Vec<RecallResultItem>,
+    offsets: Vec<usize>,
+    source_partial: bool,
+}
+
+/// Minimum bundles that fit the envelope, with their page offsets.
+struct Fitted {
+    results: Vec<RecallResultItem>,
+    included: Vec<usize>,
+    budget_trimmed: bool,
+}
+
 pub(super) fn run(
-    graph: &GraphRecallReader,
-    canonical: Option<&ConversationSourceReader>,
-    source_root: &Path,
-    memory_root: &Path,
-    generation_id: &str,
-    input: &RecallRequest,
-    page: &Page,
+    request: ContinuationInput<'_>,
     cursors: &CursorStore,
-    deadline_at: i64,
-    now_iso: &str,
-    now_millis: &impl Fn() -> i64,
-    parse_date: &impl Fn(&str) -> f64,
-    compare_locale: &impl Fn(&str, &str) -> Ordering,
+    clocks: Clocks<'_>,
 ) -> CognitionResult<RecallResponse> {
-    if graph.revision() != page.inventory.graph_revision {
+    let page = request.page;
+    if request.graph.revision() != page.inventory.graph_revision {
         return Err(stale());
     }
     let slice_end = page
         .offset
-        .saturating_add(input.limit)
+        .saturating_add(request.input.limit)
         .min(page.inventory.candidates.len());
     let slice = page
         .inventory
         .candidates
         .get(page.offset..slice_end)
         .unwrap_or(&[]);
-    let ids = slice
-        .iter()
-        .map(|item| item.episode_ref.clone())
-        .collect::<Vec<_>>();
-    let raw = slice
-        .iter()
-        .filter(|item| item.qualifications.iter().any(|q| q == "raw_source_match"))
-        .map(|item| item.episode_ref.clone())
-        .collect::<HashSet<_>>();
-    let rows = graph
-        .episode_rows(input, &ids, &raw)?
-        .into_iter()
-        .map(|row| (row.episode_id.clone(), row))
-        .collect::<HashMap<_, _>>();
-    let mut mentions = graph.mentions_for_episodes(input, &ids)?;
-    mentions.extend(graph.episode_sources(input, &ids)?);
-    let source_ids = mentions
-        .iter()
-        .map(|row| row.source_id.clone())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let all_rows = graph.source_rows(&source_ids)?;
-    let feedback = all_rows
-        .iter()
-        .map(|row| FeedbackSourceRow {
-            source_id: &row.source_id,
-            episode_id: &row.episode_id,
-            revision: &row.revision,
-            content_hash: &row.content_hash,
+    let sources = PageSources::load(&request, slice, clocks)?;
+    let bound = bind_page(&request, slice, &sources, clocks)?;
+    let frame = PageFrame {
+        inventory: &page.inventory,
+        key: &page.key,
+        offset: page.offset,
+        page_len: slice.len(),
+    };
+    let fitted = fit_minimum(&request, &frame, &sources, &bound, clocks)?;
+    let delivery = Delivery {
+        included: &fitted.included,
+        source_partial: bound.source_partial,
+        budget_trimmed: fitted.budget_trimmed,
+    };
+    let results = upgrade_to_full(&frame, fitted.results, &delivery, &bound)?;
+    let response = result::view(&frame, &results, &delivery).into_owned();
+    if response.next_cursor.is_none() {
+        cursors.remove(&page.key);
+    }
+    Ok(response)
+}
+
+impl PageSources {
+    fn load(
+        request: &ContinuationInput<'_>,
+        slice: &[Candidate],
+        clocks: Clocks<'_>,
+    ) -> CognitionResult<Self> {
+        let (graph, input) = (request.graph, request.input);
+        let ids = slice
+            .iter()
+            .map(|item| item.episode_ref.clone())
+            .collect::<Vec<_>>();
+        let raw = slice
+            .iter()
+            .filter(|item| item.qualifications.iter().any(|q| q == "raw_source_match"))
+            .map(|item| item.episode_ref.clone())
+            .collect::<HashSet<_>>();
+        let rows = graph
+            .episode_rows(input, &ids, &raw)?
+            .into_iter()
+            .map(|row| (row.episode_id.clone(), row))
+            .collect::<HashMap<_, _>>();
+        let mut mentions = graph.mentions_for_episodes(input, &ids)?;
+        mentions.extend(graph.episode_sources(input, &ids)?);
+        let source_ids = mentions
+            .iter()
+            .map(|row| row.source_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let projections = binding::current_source_rows(graph, request.source_root, &source_ids)?;
+        let episodes = binding::source_episodes(rows.values());
+        let hydrated = hydrate_recall_sources(RecallSourceHydration {
+            data_root: request.source_root,
+            memory_root: request.memory_root,
+            reader: request.canonical,
+            rows: &projections,
+            episodes: &episodes,
+            max_graphemes: 480,
+            deadline_at: request.deadline_at,
+            now_millis: clocks.now_millis,
+            compare_locale: clocks.compare_locale,
+        });
+        Ok(Self {
+            rows,
+            raw,
+            mentions,
+            projections,
+            hydrated,
         })
-        .collect::<Vec<_>>();
-    let excluded = excluded_source_ids(
-        &source_root.join("cognition/feedback"),
-        &feedback,
-        |operation| graph.quality_receipt_json(operation),
-    )?;
-    let projections = all_rows
-        .into_iter()
-        .filter(|row| !excluded.contains(&row.source_id))
-        .collect::<Vec<CognitionSourceRow>>();
-    let source_by_id = projections
+    }
+
+    fn episode_mentions(&self, episode_id: &str) -> Vec<RecallMention> {
+        self.mentions
+            .iter()
+            .filter(|mention| mention.episode_id == episode_id)
+            .cloned()
+            .collect()
+    }
+}
+
+/// Rebinds every candidate whose episode revision is unchanged and that is
+/// not newly superseded; anything missing marks the page source-partial.
+fn bind_page(
+    request: &ContinuationInput<'_>,
+    slice: &[Candidate],
+    sources: &PageSources,
+    clocks: Clocks<'_>,
+) -> CognitionResult<Bound> {
+    let source_by_id = sources
+        .projections
         .iter()
         .map(|row| (row.source_id.as_str(), row))
         .collect::<HashMap<_, _>>();
-    let episode_info = rows
-        .values()
-        .map(|row| crate::cognition::recall::RecallSourceEpisode {
-            episode_id: row.episode_id.clone(),
-            revision: row.revision.clone(),
-            session_id: row.session_id.clone().unwrap_or_default(),
-            turn_id: row.turn_id.clone(),
-        })
-        .collect::<Vec<_>>();
-    let hydrated = hydrate_recall_sources(RecallSourceHydration {
-        data_root: source_root,
-        memory_root,
-        reader: canonical,
-        rows: &projections,
-        episodes: &episode_info,
-        max_graphemes: 480,
-        deadline_at,
-        now_millis,
-        compare_locale,
-    });
-    let mut full = Vec::new();
-    let mut offsets = Vec::new();
-    let mut source_partial = false;
+    let mut bound = Bound {
+        full: Vec::new(),
+        offsets: Vec::new(),
+        source_partial: false,
+    };
     for (index, metadata) in slice.iter().enumerate() {
-        let Some(row) = rows
+        let Some(row) = sources
+            .rows
             .get(&metadata.episode_ref)
             .filter(|row| row.revision == metadata.revision)
         else {
-            source_partial = true;
+            bound.source_partial = true;
             continue;
         };
-        let relationship = graph.relationship_state(input, &row.episode_id, now_iso)?;
-        if relationship.superseded && !raw.contains(&row.episode_id) {
-            source_partial = true;
+        let relationship =
+            request
+                .graph
+                .relationship_state(request.input, &row.episode_id, request.now_iso)?;
+        if relationship.superseded && !sources.raw.contains(&row.episode_id) {
+            bound.source_partial = true;
             continue;
         }
-        let episode_mentions = mentions
-            .iter()
-            .filter(|mention| mention.episode_id == row.episode_id)
-            .cloned()
-            .collect::<Vec<_>>();
+        let episode_mentions = sources.episode_mentions(&row.episode_id);
         if episode_mentions.iter().any(|mention| {
             !matches!(
-                hydrated.get(&mention.source_id),
+                sources.hydrated.get(&mention.source_id),
                 Some(RecallSourceResolution::Value(_))
             )
         }) {
-            source_partial = true;
+            bound.source_partial = true;
         }
-        let candidate = result::bind(
-            graph,
-            input,
-            generation_id,
+        let bind = BindInput {
+            graph: request.graph,
+            input: request.input,
+            generation_id: request.generation_id,
             row,
             metadata,
-            &episode_mentions,
-            &relationship,
-            &source_by_id,
-            &hydrated,
-            now_iso,
-            parse_date,
-        )?;
-        match candidate {
-            Some(item) => {
-                full.push(item);
-                offsets.push(index);
-            }
-            None => source_partial = true,
+            mentions: &episode_mentions,
+            relationship: &relationship,
+            sources: &source_by_id,
+            hydrated: &sources.hydrated,
+            now_iso: request.now_iso,
+        };
+        if let Some(item) = result::bind(&bind, clocks.parse_date)? {
+            bound.full.push(item);
+            bound.offsets.push(index);
+        } else {
+            bound.source_partial = true;
         }
     }
-    let mut results = Vec::<RecallResultItem>::new();
-    let mut included = Vec::new();
-    let mut budget_trimmed = false;
-    for (index, item) in full.iter().enumerate() {
+    Ok(bound)
+}
+
+/// Minimum bundles in page order until the envelope is full.
+fn fit_minimum(
+    request: &ContinuationInput<'_>,
+    frame: &PageFrame<'_>,
+    sources: &PageSources,
+    bound: &Bound,
+    clocks: Clocks<'_>,
+) -> CognitionResult<Fitted> {
+    let mut fitted = Fitted {
+        results: Vec::new(),
+        included: Vec::new(),
+        budget_trimmed: false,
+    };
+    for (item, offset) in bound.full.iter().zip(&bound.offsets) {
         let minimum = envelope::minimum(
             item,
             |evidence| {
-                let Some(row) = rows.get(&item.episode_ref) else {
+                let Some(row) = sources.rows.get(&item.episode_ref) else {
                     return Err(CognitionError::new(
                         CognitionCode::MemoryRecallUnavailable,
                         "memory_recall_unavailable",
                     ));
                 };
-                let episode_mentions = mentions
-                    .iter()
-                    .filter(|m| m.episode_id == row.episode_id)
-                    .cloned()
-                    .collect::<Vec<RecallMention>>();
+                let episode_mentions = sources.episode_mentions(&row.episode_id);
                 result::rebind(
-                    graph,
-                    input,
+                    request.graph,
+                    request.input,
                     row,
                     &episode_mentions,
                     item,
                     evidence,
-                    parse_date,
+                    clocks.parse_date,
                 )
             },
-            compare_locale,
+            clocks.compare_locale,
         )?;
-        results.push(minimum);
-        included.push(offsets[index]);
-        if envelope::bytes(&result::view(
-            &page.inventory,
-            &results,
-            &page.key,
-            page.offset,
-            slice.len(),
-            &included,
-            source_partial,
-            budget_trimmed,
-        ))? > envelope::MAX_BYTES
+        fitted.results.push(minimum);
+        fitted.included.push(*offset);
+        let delivery = Delivery {
+            included: &fitted.included,
+            source_partial: bound.source_partial,
+            budget_trimmed: fitted.budget_trimmed,
+        };
+        if envelope::bytes(&result::view(frame, &fitted.results, &delivery))? > envelope::MAX_BYTES
         {
-            results.pop();
-            included.pop();
-            budget_trimmed = true;
-            if !results.is_empty() {
+            fitted.results.pop();
+            fitted.included.pop();
+            fitted.budget_trimmed = true;
+            if !fitted.results.is_empty() {
                 break;
             }
         }
     }
-    for (index, offset) in included.iter().copied().enumerate() {
-        let Some(full_index) = offsets.iter().position(|value| *value == offset) else {
+    Ok(fitted)
+}
+
+/// Replaces each minimum bundle with its full bundle where the envelope
+/// still fits.
+fn upgrade_to_full(
+    frame: &PageFrame<'_>,
+    mut results: Vec<RecallResultItem>,
+    delivery: &Delivery<'_>,
+    bound: &Bound,
+) -> CognitionResult<Vec<RecallResultItem>> {
+    for (index, offset) in delivery.included.iter().enumerate() {
+        let Some(full) = bound
+            .offsets
+            .iter()
+            .position(|value| value == offset)
+            .and_then(|position| bound.full.get(position))
+        else {
             continue;
         };
-        let minimum = std::mem::replace(&mut results[index], full[full_index].clone());
-        if envelope::bytes(&result::view(
-            &page.inventory,
-            &results,
-            &page.key,
-            page.offset,
-            slice.len(),
-            &included,
-            source_partial,
-            budget_trimmed,
-        ))? > envelope::MAX_BYTES
+        let Some(slot) = results.get_mut(index) else {
+            continue;
+        };
+        let minimum = std::mem::replace(slot, full.clone());
+        if envelope::bytes(&result::view(frame, &results, delivery))? > envelope::MAX_BYTES
+            && let Some(slot) = results.get_mut(index)
         {
-            results[index] = minimum;
+            *slot = minimum;
         }
     }
-    let response = result::view(
-        &page.inventory,
-        &results,
-        &page.key,
-        page.offset,
-        slice.len(),
-        &included,
-        source_partial,
-        budget_trimmed,
-    )
-    .into_owned();
-    if response.next_cursor.is_none() {
-        cursors.remove(&page.key)?;
-    }
-    Ok(response)
+    Ok(results)
 }
 
 pub(super) fn stale() -> CognitionError {

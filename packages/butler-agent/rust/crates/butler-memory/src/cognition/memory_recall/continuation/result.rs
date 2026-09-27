@@ -8,9 +8,8 @@ use crate::cognition::{
     CognitionResult, CognitionSourceRow,
     graph::{GraphRecallReader, RecallEpisodeRow, RecallMention, RelationshipState},
     recall::{
-        RecallCoverage, RecallCoverageLane, RecallCoverageState, RecallEvidence,
-        RecallEvidenceRelation, RecallEvidenceSupport, RecallRequest, RecallResponse,
-        RecallResultItem, RecallStatus,
+        RecallCoverage, RecallCoverageLane, RecallCoverageState, RecallEvidence, RecallRequest,
+        RecallResponse, RecallResultItem, RecallStatus,
     },
     sources::RecallSourceResolution,
 };
@@ -21,61 +20,34 @@ use super::super::{
     evidence,
 };
 
-#[allow(clippy::too_many_arguments)]
+/// One cursor candidate and the fresh reads it is rebound from.
+pub(super) struct BindInput<'a> {
+    pub graph: &'a GraphRecallReader,
+    pub input: &'a RecallRequest,
+    pub generation_id: &'a str,
+    pub row: &'a RecallEpisodeRow,
+    pub metadata: &'a Candidate,
+    pub mentions: &'a [RecallMention],
+    pub relationship: &'a RelationshipState,
+    pub sources: &'a HashMap<&'a str, &'a CognitionSourceRow>,
+    pub hydrated: &'a HashMap<String, RecallSourceResolution>,
+    pub now_iso: &'a str,
+}
+
+/// The candidate's result from up to three hydrated sources, or `None` when
+/// none is left or it has no summary.
 pub(super) fn bind(
-    graph: &GraphRecallReader,
-    input: &RecallRequest,
-    generation_id: &str,
-    row: &RecallEpisodeRow,
-    metadata: &Candidate,
-    mentions: &[RecallMention],
-    relationship: &RelationshipState,
-    sources: &HashMap<&str, &CognitionSourceRow>,
-    hydrated: &HashMap<String, RecallSourceResolution>,
-    now_iso: &str,
-    parse_date: &impl Fn(&str) -> f64,
+    request: &BindInput<'_>,
+    parse_date: &dyn Fn(&str) -> f64,
 ) -> CognitionResult<Option<RecallResultItem>> {
-    let mut ordered = mentions.iter().collect::<Vec<_>>();
-    ordered.sort_by(|a, b| {
-        binding::compare_handles(
-            sources.get(a.source_id.as_str()).copied(),
-            sources.get(b.source_id.as_str()).copied(),
-            &relationship.priority_source_ids,
-            parse_date,
-        )
-    });
-    let mut seen = HashSet::new();
-    let mut delivered = Vec::new();
-    for mention in ordered {
-        if !seen.insert(mention.source_id.as_str()) {
-            continue;
-        }
-        let Some(RecallSourceResolution::Value(source)) = hydrated.get(&mention.source_id) else {
-            continue;
-        };
-        let source_ref = evidence::handle(generation_id, &source.source_ref);
-        delivered.push(RecallEvidence {
-            source_ref: source_ref.clone(),
-            basis: source.basis.clone(),
-            source_kind: binding::source_kind(&source.source_kind),
-            excerpt: source.excerpt.clone(),
-            source_resolved: true,
-            conversation_session_id: source.conversation_session_id.clone(),
-            conversation_message_id: source.conversation_message_id.clone(),
-            support: RecallEvidenceSupport {
-                node_ref: mention.node_id.clone(),
-                relation: if mention.supports {
-                    RecallEvidenceRelation::Supports
-                } else {
-                    RecallEvidenceRelation::Mentions
-                },
-            },
-            read_args: binding::read_args(input, source_ref),
-        });
-        if delivered.len() >= 3 {
-            break;
-        }
-    }
+    let BindInput {
+        graph,
+        input,
+        row,
+        metadata,
+        ..
+    } = *request;
+    let delivered = delivered(request, parse_date);
     if delivered.is_empty() {
         return Ok(None);
     }
@@ -88,7 +60,7 @@ pub(super) fn bind(
             input,
             &row.episode_id,
             metadata.matched_node_ref.as_deref(),
-            mentions,
+            request.mentions,
             &surviving,
         )?
     } else {
@@ -108,18 +80,9 @@ pub(super) fn bind(
         .collect::<Vec<_>>();
     let interpretations = graph.result_interpretations(input, &refs, parse_date)?;
     let requirements = graph.result_requirements(input, &refs)?;
-    let historical = graph.historical_claim(input, &row.episode_id, now_iso, parse_date)?;
-    let mut qualifications = Vec::new();
-    if historical {
-        qualifications.push("historical".into());
-    }
-    qualifications.extend(relationship.qualifications.iter().cloned());
-    if surviving.iter().any(|id| {
-        sources
-            .get(id.as_str())
-            .is_some_and(|source| source.origin_kind == "unknown")
-    }) {
-        qualifications.push("uncertain".into());
+    let mut historical = Vec::new();
+    if graph.historical_claim(input, &row.episode_id, request.now_iso, parse_date)? {
+        historical.push("historical".into());
     }
     Ok(Some(RecallResultItem {
         episode_ref: row.episode_id.clone(),
@@ -134,8 +97,67 @@ pub(super) fn bind(
         requirements,
         interpretations,
         current_state_requires_verification: true,
-        qualifications,
+        qualifications: qualifications(request, &surviving, historical),
     }))
+}
+
+/// Up to three distinct hydrated sources in handle order.
+fn delivered(request: &BindInput<'_>, parse_date: &dyn Fn(&str) -> f64) -> Vec<RecallEvidence> {
+    let mut ordered = request.mentions.iter().collect::<Vec<_>>();
+    ordered.sort_by(|a, b| {
+        binding::compare_handles(
+            request.sources.get(a.source_id.as_str()).copied(),
+            request.sources.get(b.source_id.as_str()).copied(),
+            &request.relationship.priority_source_ids,
+            parse_date,
+        )
+    });
+    let mut seen = HashSet::new();
+    let mut delivered = Vec::new();
+    for mention in ordered {
+        if !seen.insert(mention.source_id.as_str()) {
+            continue;
+        }
+        let Some(RecallSourceResolution::Value(source)) = request.hydrated.get(&mention.source_id)
+        else {
+            continue;
+        };
+        let source_ref = evidence::handle(request.generation_id, &source.source_ref);
+        delivered.push(RecallEvidence {
+            source_ref: source_ref.clone(),
+            basis: source.basis.clone(),
+            source_kind: binding::source_kind(&source.source_kind),
+            excerpt: source.excerpt.clone(),
+            source_resolved: true,
+            conversation_session_id: source.conversation_session_id.clone(),
+            conversation_message_id: source.conversation_message_id.clone(),
+            support: binding::support(mention),
+            read_args: binding::read_args(request.input, source_ref),
+        });
+        if delivered.len() >= 3 {
+            break;
+        }
+    }
+    delivered
+}
+
+/// Appends the relationship's qualifications, and `uncertain` for an
+/// unknown-origin source.
+fn qualifications(
+    request: &BindInput<'_>,
+    surviving: &HashSet<String>,
+    mut qualifications: Vec<String>,
+) -> Vec<String> {
+    qualifications.extend(request.relationship.qualifications.iter().cloned());
+    if surviving.iter().any(|id| {
+        request
+            .sources
+            .get(id.as_str())
+            .is_some_and(|source| source.origin_kind == "unknown")
+    }) {
+        qualifications.push("uncertain".into());
+    }
+    qualifications
 }
 
 pub(super) fn rebind(
@@ -145,7 +167,7 @@ pub(super) fn rebind(
     mentions: &[RecallMention],
     original: &RecallResultItem,
     evidence: Vec<RecallEvidence>,
-    parse_date: &impl Fn(&str) -> f64,
+    parse_date: &dyn Fn(&str) -> f64,
 ) -> CognitionResult<Option<RecallResultItem>> {
     let surviving = evidence
         .iter()
@@ -202,37 +224,41 @@ impl View<'_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The cursor page being continued.
+pub(super) struct PageFrame<'a> {
+    pub inventory: &'a Inventory,
+    pub key: &'a str,
+    pub offset: usize,
+    pub page_len: usize,
+}
+
+/// Which candidates of the page were delivered and why some were not.
+pub(super) struct Delivery<'a> {
+    /// Page offsets of the delivered results.
+    pub included: &'a [usize],
+    /// A candidate or source could not be rebound.
+    pub source_partial: bool,
+    /// The envelope budget cut the page short.
+    pub budget_trimmed: bool,
+}
+
+/// The response for `results`; a budget-trimmed page continues after its
+/// last delivered candidate.
 pub(super) fn view<'a>(
-    inventory: &Inventory,
+    frame: &PageFrame<'_>,
     results: &'a [RecallResultItem],
-    key: &str,
-    offset: usize,
-    page_len: usize,
-    included: &[usize],
-    source_partial: bool,
-    budget_trimmed: bool,
+    delivery: &Delivery<'_>,
 ) -> View<'a> {
-    let next_offset = if budget_trimmed && !included.is_empty() {
-        offset + included[included.len() - 1] + 1
-    } else {
-        offset + page_len
+    let inventory = frame.inventory;
+    let next_offset = match delivery.included.last() {
+        Some(last) if delivery.budget_trimmed => frame.offset + last + 1,
+        _ => frame.offset + frame.page_len,
     };
     let next_cursor =
-        (next_offset < inventory.candidates.len()).then(|| cursor::encode(key, next_offset));
-    let prior = inventory.coverage.as_ref();
-    let mut source_codes = prior.map_or_else(Vec::new, |coverage| coverage.source.codes.clone());
-    for (condition, code) in [
-        (source_partial, "source_resolution_failed"),
-        (budget_trimmed, "serialization_budget"),
-    ] {
-        if condition && !source_codes.iter().any(|value| value == code) {
-            source_codes.push(code.into());
-        }
-    }
+        (next_offset < inventory.candidates.len()).then(|| cursor::encode(frame.key, next_offset));
     let partial = matches!(inventory.status, Some(RecallStatus::Partial))
-        || source_partial
-        || budget_trimmed
+        || delivery.source_partial
+        || delivery.budget_trimmed
         || next_cursor.is_some();
     View {
         status: if matches!(inventory.status, Some(RecallStatus::Unavailable)) && results.is_empty()
@@ -244,34 +270,50 @@ pub(super) fn view<'a>(
             RecallStatus::Complete
         },
         results,
-        coverage: RecallCoverage {
-            graph: prior.map_or_else(
-                || RecallCoverageLane {
-                    state: RecallCoverageState::Ok,
-                    candidates: inventory.candidates.len(),
-                    codes: vec![],
-                },
-                |value| value.graph.clone(),
-            ),
-            vectors: prior.map_or_else(
-                || RecallCoverageLane {
-                    state: RecallCoverageState::DisabledByRequest,
-                    candidates: 0,
-                    codes: vec![],
-                },
-                |value| value.vectors.clone(),
-            ),
-            source: RecallCoverageLane {
-                state: if source_codes.is_empty() {
-                    prior.map_or(RecallCoverageState::Ok, |value| value.source.state)
-                } else {
-                    RecallCoverageState::Partial
-                },
-                candidates: results.len(),
-                codes: source_codes,
-            },
-        },
+        coverage: coverage(inventory, results.len(), delivery),
         next_cursor,
         diagnostics: inventory.diagnostics.clone().unwrap_or_default(),
+    }
+}
+
+/// The first page's coverage, with the source lane marked partial for what
+/// this page could not deliver.
+fn coverage(inventory: &Inventory, delivered: usize, delivery: &Delivery<'_>) -> RecallCoverage {
+    let prior = inventory.coverage.as_ref();
+    let mut source_codes = prior.map_or_else(Vec::new, |coverage| coverage.source.codes.clone());
+    for (condition, code) in [
+        (delivery.source_partial, "source_resolution_failed"),
+        (delivery.budget_trimmed, "serialization_budget"),
+    ] {
+        if condition && !source_codes.iter().any(|value| value == code) {
+            source_codes.push(code.into());
+        }
+    }
+    RecallCoverage {
+        graph: prior.map_or_else(
+            || RecallCoverageLane {
+                state: RecallCoverageState::Ok,
+                candidates: inventory.candidates.len(),
+                codes: vec![],
+            },
+            |value| value.graph.clone(),
+        ),
+        vectors: prior.map_or_else(
+            || RecallCoverageLane {
+                state: RecallCoverageState::DisabledByRequest,
+                candidates: 0,
+                codes: vec![],
+            },
+            |value| value.vectors.clone(),
+        ),
+        source: RecallCoverageLane {
+            state: if source_codes.is_empty() {
+                prior.map_or(RecallCoverageState::Ok, |value| value.source.state)
+            } else {
+                RecallCoverageState::Partial
+            },
+            candidates: delivered,
+            codes: source_codes,
+        },
     }
 }

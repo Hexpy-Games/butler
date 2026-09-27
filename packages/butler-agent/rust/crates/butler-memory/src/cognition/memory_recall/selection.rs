@@ -93,17 +93,7 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     let vector_current = vector_matches
         .map(|matches| graph.current_vector_matches(input, generation, matches, parse_date))
         .transpose()?;
-    let recent = canonical
-        .map(|reader| reader.read_recent_public_message_ids(&input.runtime.session_id))
-        .transpose()
-        .map_err(|error| {
-            crate::cognition::CognitionError::new(
-                CognitionCode::CanonicalSourceUnavailable,
-                error.to_string(),
-            )
-            .with_source(error)
-        })?
-        .unwrap_or_default();
+    let recent = recent_message_ids(canonical, input)?;
     let semantic = graph.semantic_seeds(
         input,
         &recent,
@@ -145,4 +135,23 @@ pub(super) fn run(request: RecallSelectionInput<'_>) -> CognitionResult<Selectio
     )?;
     selected.vector_current = vector_current;
     Ok(selected)
+}
+
+/// The caller session's recent public message ids (none without a canonical
+/// snapshot).
+fn recent_message_ids(
+    canonical: Option<&ConversationSourceReader>,
+    input: &RecallRequest,
+) -> CognitionResult<Vec<String>> {
+    Ok(canonical
+        .map(|reader| reader.read_recent_public_message_ids(&input.runtime.session_id))
+        .transpose()
+        .map_err(|error| {
+            crate::cognition::CognitionError::new(
+                CognitionCode::CanonicalSourceUnavailable,
+                error.to_string(),
+            )
+            .with_source(error)
+        })?
+        .unwrap_or_default())
 }

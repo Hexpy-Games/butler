@@ -171,12 +171,7 @@ async fn claimed_window_meaning_and_bound_apply_are_durable() {
         )
         .unwrap();
     graph
-        .pin_projection_input(
-            &claim.window_ref,
-            &claim.owner_nonce,
-            &input,
-            None,
-        )
+        .pin_projection_input(&claim.window_ref, &claim.owner_nonce, &input, None)
         .unwrap();
     let output = ExtractOutput {
         schema: "butler.memory-extract-output.v3".into(),

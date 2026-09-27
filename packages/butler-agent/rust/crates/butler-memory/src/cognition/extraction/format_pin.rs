@@ -94,17 +94,21 @@ struct Candidates;
 impl CognitionCandidateSearch for Candidates {
     fn search<'a>(&'a self, input: CandidateSearchInput<'a>) -> CandidateSearchFuture<'a> {
         let found = if input.cue == "Alice" {
-            vec![candidate(json!({"ref":"node-alice","type":"entity","label":"Alice",
+            vec![candidate(
+                json!({"ref":"node-alice","type":"entity","label":"Alice",
                 "aliases":["Al"],"scope":"user","project_id":null,
                 "evidence":[{"ref":"src-1","text":"Alice said hi. Then left.",
-                    "observed_at":"2026-01-01T00:00:00.000Z","basis":"user_statement"}]}))]
+                    "observed_at":"2026-01-01T00:00:00.000Z","basis":"user_statement"}]}),
+            )]
         } else if input.cue.contains("deadline") {
-            vec![candidate(json!({"ref":"claim-deadline","type":"memory_atom",
+            vec![candidate(
+                json!({"ref":"claim-deadline","type":"memory_atom",
                 "label":"deadline 2026","aliases":[],"scope":"user","project_id":null,
                 "claim":{"statement":"Atlas deadline 2026 is firm","subject_ref":null,
                     "object_ref":null,"relation":null,"polarity":"positive","condition":null},
                 "evidence":[{"ref":"src-2","text":"The deadline 2026 is firm.",
-                    "observed_at":"2026-01-02T00:00:00.000Z","basis":"user_statement"}]}))]
+                    "observed_at":"2026-01-02T00:00:00.000Z","basis":"user_statement"}]}),
+            )]
         } else {
             Vec::new()
         };

@@ -185,7 +185,10 @@ fn raw_files<'a>(
         .collect()
 }
 
-fn remove_box_owned_files(manifest: &manifest::BoxManifest, item_dir: &Path) -> CognitionResult<()> {
+fn remove_box_owned_files(
+    manifest: &manifest::BoxManifest,
+    item_dir: &Path,
+) -> CognitionResult<()> {
     for entry in box_owned_files(manifest, item_dir) {
         let (_, _, path) = entry?;
         match fs::remove_file(path) {

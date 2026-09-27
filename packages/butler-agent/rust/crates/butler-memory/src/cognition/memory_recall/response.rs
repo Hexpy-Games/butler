@@ -1,7 +1,11 @@
 //! Coverage, complete-bundle envelope and first-page cursor publication.
+//!
+//! [`initial`] registers the bound candidates as a cursor inventory, fits
+//! minimum bundles into the envelope (up to the limit), upgrades them to
+//! full bundles where they fit, and records the page's status and coverage
+//! on the cursor. [`empty`] answers a search with no seeds at all.
 
 use serde::Serialize;
-use std::cmp::Ordering;
 
 use crate::cognition::{
     CognitionResult,
@@ -13,12 +17,15 @@ use crate::cognition::{
 };
 
 use super::{
+    Clocks,
     binding::{self, Binding},
     cursor::{self, CursorStore},
     envelope,
     selection::Selection,
 };
 
+/// What the vector lane contributed to a first page.
+#[derive(Default)]
 pub(super) struct VectorFacts {
     pub code: Option<String>,
     pub diagnostics: Vec<String>,
@@ -49,23 +56,59 @@ impl ResponseView<'_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// How complete a recall's execution was.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Complete,
+    /// Some lane or source was cut short.
+    Partial,
+    /// Execution itself failed; with no results the recall is unavailable.
+    Failed,
+}
+
+/// The reads a first page is published from.
+#[derive(Clone, Copy)]
+pub(super) struct FirstPage<'a> {
+    pub graph: &'a GraphRecallReader,
+    pub input: &'a RecallRequest,
+    pub generation_id: &'a str,
+    pub selection: &'a Selection,
+    pub binding: &'a Binding,
+    pub vector: &'a VectorFacts,
+    pub deadline_at: i64,
+    pub now_iso: &'a str,
+}
+
+/// Where the page stands against the envelope and the deadline.
+#[derive(Clone, Copy)]
+struct PageLimits {
+    next_offset: usize,
+    candidate_count: usize,
+    /// A result was dropped to fit the envelope.
+    budget_hit: bool,
+    /// The operation deadline passed.
+    deadline_hit: bool,
+}
+
 pub(super) fn initial(
-    graph: &GraphRecallReader,
-    input: &RecallRequest,
-    generation_id: &str,
-    selection: &Selection,
-    binding: &Binding,
-    vector: &VectorFacts,
+    request: &FirstPage<'_>,
     cursors: &CursorStore,
-    deadline_at: i64,
-    now_iso: &str,
-    now_millis: &impl Fn() -> i64,
-    parse_date: &impl Fn(&str) -> f64,
-    compare_locale: &impl Fn(&str, &str) -> Ordering,
+    clocks: Clocks<'_>,
 ) -> CognitionResult<RecallResponse> {
+    let FirstPage {
+        input,
+        selection,
+        binding,
+        vector,
+        ..
+    } = *request;
     if selection.empty_search {
-        return Ok(empty(input, selection, vector, now_millis() >= deadline_at));
+        return Ok(empty(
+            input,
+            selection,
+            vector,
+            (clocks.now_millis)() >= request.deadline_at,
+        ));
     }
     let metadata = binding
         .candidates
@@ -84,113 +127,162 @@ pub(super) fn initial(
         .collect();
     let page = cursors.insert(
         input,
-        generation_id,
-        graph.revision(),
+        request.generation_id,
+        request.graph.revision(),
         metadata,
-        now_millis(),
+        (clocks.now_millis)(),
     )?;
+    let candidate_count = page.inventory.candidates.len();
+    let (results, offsets, mut limits) = fit_minimum(request, &page.key, candidate_count, clocks)?;
+    let results = upgrade_to_full(request, &page.key, results, &offsets, &mut limits, clocks)?;
+    limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
+    let response = build(request, &results, &page.key, limits).into_owned();
+    cursors.update(&page.key, &response);
+    Ok(response)
+}
+
+/// Minimum bundles in rank order until the envelope is full or the limit is
+/// reached, with their candidate offsets.
+fn fit_minimum(
+    request: &FirstPage<'_>,
+    key: &str,
+    candidate_count: usize,
+    clocks: Clocks<'_>,
+) -> CognitionResult<(Vec<RecallResultItem>, Vec<usize>, PageLimits)> {
+    let binding = request.binding;
     let mut results = Vec::<RecallResultItem>::new();
-    let mut result_offsets = Vec::<usize>::new();
-    let mut next_offset = 0usize;
-    let mut budget_hit = false;
+    let mut offsets = Vec::<usize>::new();
+    let mut limits = PageLimits {
+        next_offset: 0,
+        candidate_count,
+        budget_hit: false,
+        deadline_hit: false,
+    };
     for (index, candidate) in binding.candidates.iter().enumerate() {
         let minimum = envelope::minimum(
             &candidate.item,
             |evidence| {
                 binding::rebind(binding::RecallRebindInput {
-                    graph,
-                    input,
-                    selection,
+                    graph: request.graph,
+                    input: request.input,
+                    selection: request.selection,
                     binding,
                     original: &candidate.item,
                     evidence,
-                    now_iso,
-                    parse_date,
+                    now_iso: request.now_iso,
+                    parse_date: clocks.parse_date,
                 })
             },
-            compare_locale,
+            clocks.compare_locale,
         )?;
         results.push(minimum);
-        result_offsets.push(index);
-        next_offset = index + 1;
-        if envelope::bytes(&build(
-            input,
-            selection,
-            binding,
-            vector,
-            &results,
-            &page.key,
-            next_offset,
-            page.inventory.candidates.len(),
-            budget_hit,
-            now_millis() >= deadline_at,
-        ))? > envelope::MAX_BYTES
-        {
+        offsets.push(index);
+        limits.next_offset = index + 1;
+        limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
+        if envelope::bytes(&build(request, &results, key, limits))? > envelope::MAX_BYTES {
             results.pop();
-            result_offsets.pop();
-            budget_hit = true;
+            offsets.pop();
+            limits.budget_hit = true;
             if !results.is_empty() {
-                next_offset = index;
+                limits.next_offset = index;
                 break;
             }
             continue;
         }
-        if results.len() >= input.limit {
+        if results.len() >= request.input.limit {
             break;
         }
     }
-    for (index, offset) in result_offsets.iter().copied().enumerate() {
-        let minimum =
-            std::mem::replace(&mut results[index], binding.candidates[offset].item.clone());
-        if envelope::bytes(&build(
-            input,
-            selection,
-            binding,
-            vector,
-            &results,
-            &page.key,
-            next_offset,
-            page.inventory.candidates.len(),
-            budget_hit,
-            now_millis() >= deadline_at,
-        ))? > envelope::MAX_BYTES
+    Ok((results, offsets, limits))
+}
+
+/// Replaces each minimum bundle with its full bundle where the envelope
+/// still fits.
+fn upgrade_to_full(
+    request: &FirstPage<'_>,
+    key: &str,
+    mut results: Vec<RecallResultItem>,
+    offsets: &[usize],
+    limits: &mut PageLimits,
+    clocks: Clocks<'_>,
+) -> CognitionResult<Vec<RecallResultItem>> {
+    for (index, offset) in offsets.iter().enumerate() {
+        let Some(full) = request.binding.candidates.get(*offset) else {
+            continue;
+        };
+        let Some(slot) = results.get_mut(index) else {
+            continue;
+        };
+        let minimum = std::mem::replace(slot, full.item.clone());
+        limits.deadline_hit = (clocks.now_millis)() >= request.deadline_at;
+        if envelope::bytes(&build(request, &results, key, *limits))? > envelope::MAX_BYTES
+            && let Some(slot) = results.get_mut(index)
         {
-            results[index] = minimum;
+            *slot = minimum;
         }
     }
-    let response = build(
+    Ok(results)
+}
+
+fn build<'a>(
+    request: &FirstPage<'_>,
+    results: &'a [RecallResultItem],
+    key: &str,
+    limits: PageLimits,
+) -> ResponseView<'a> {
+    let FirstPage {
         input,
         selection,
         binding,
         vector,
-        &results,
-        &page.key,
-        next_offset,
-        page.inventory.candidates.len(),
-        budget_hit,
-        now_millis() >= deadline_at,
-    )
-    .into_owned();
-    cursors.update(&page.key, &response)?;
-    Ok(response)
+        ..
+    } = *request;
+    let next_cursor = (limits.next_offset < limits.candidate_count)
+        .then(|| cursor::encode(key, limits.next_offset));
+    let vector_partial =
+        vector.partial || selection.vector_current.as_ref().is_some_and(|v| v.partial);
+    let partial = selection.coverage.pending
+        || !selection.coverage.codes.is_empty()
+        || !binding.failed_sources.is_empty()
+        || binding.source_deadline_hit
+        || limits.budget_hit
+        || !selection.selection_codes.is_empty()
+        || !selection.expansion.coverage_codes.is_empty()
+        || vector_partial
+        || selection.candidate_limit
+        || limits.deadline_hit
+        || vector.code.is_some();
+    ResponseView {
+        status: derive_status(
+            results.len(),
+            if partial {
+                Outcome::Failed
+            } else {
+                Outcome::Complete
+            },
+        ),
+        results,
+        coverage: RecallCoverage {
+            graph: graph_lane(input, selection, limits.deadline_hit),
+            vectors: vector_lane(input, selection, vector, vector_partial),
+            source: source_lane(selection, binding, limits.budget_hit),
+        },
+        next_cursor,
+        diagnostics: vector.diagnostics.clone(),
+    }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build<'a>(
+/// Graph coverage: partial while projection is pending or with any selection
+/// or expansion code.
+fn graph_lane(
     input: &RecallRequest,
     selection: &Selection,
-    binding: &Binding,
-    vector: &VectorFacts,
-    results: &'a [RecallResultItem],
-    key: &str,
-    next_offset: usize,
-    candidate_count: usize,
-    budget_hit: bool,
     deadline_hit: bool,
-) -> ResponseView<'a> {
-    let admitted = input.admitted_channels.clone().unwrap_or_default();
-    let next_cursor = (next_offset < candidate_count).then(|| cursor::encode(key, next_offset));
-    let graph_codes = selection
+) -> RecallCoverageLane {
+    if !input.admitted_channels.clone().unwrap_or_default().graph {
+        return disabled();
+    }
+    let codes = selection
         .coverage
         .codes
         .iter()
@@ -204,97 +296,84 @@ fn build<'a>(
         )
         .chain(deadline_hit.then_some("operation_deadline".into()))
         .collect::<Vec<_>>();
-    let mut source_codes = selection.coverage.codes.clone();
-    if !binding.failed_sources.is_empty() {
-        source_codes.push("source_resolution_failed".into());
-    }
-    if binding.source_deadline_hit {
-        source_codes.push("operation_deadline".into());
-    }
-    if budget_hit {
-        source_codes.push("serialization_budget".into());
-    }
-    let vector_partial =
-        vector.partial || selection.vector_current.as_ref().is_some_and(|v| v.partial);
-    let partial = selection.coverage.pending
-        || !selection.coverage.codes.is_empty()
-        || !binding.failed_sources.is_empty()
-        || binding.source_deadline_hit
-        || budget_hit
-        || !selection.selection_codes.is_empty()
-        || !selection.expansion.coverage_codes.is_empty()
-        || vector_partial
-        || selection.candidate_limit
-        || deadline_hit
-        || vector.code.is_some();
-    let execution_incomplete = partial;
-    ResponseView {
-        status: derive_status(results.len(), partial, execution_incomplete),
-        results,
-        coverage: RecallCoverage {
-            graph: if admitted.graph {
-                RecallCoverageLane {
-                    state: if selection.coverage.pending || !graph_codes.is_empty() {
-                        RecallCoverageState::Partial
-                    } else {
-                        RecallCoverageState::Ok
-                    },
-                    candidates: selection.ranked.len(),
-                    codes: graph_codes,
-                }
-            } else {
-                disabled()
-            },
-            vectors: if input.include_vector {
-                if vector.searched {
-                    RecallCoverageLane {
-                        state: if vector_partial {
-                            RecallCoverageState::Partial
-                        } else {
-                            RecallCoverageState::Ok
-                        },
-                        candidates: selection
-                            .vector_current
-                            .as_ref()
-                            .map_or(vector.candidates, |current| {
-                                current.nodes.len() + current.episodes.len()
-                            }),
-                        codes: if vector_partial {
-                            vec!["vector_current_rows_missing".into()]
-                        } else {
-                            vec![]
-                        },
-                    }
-                } else {
-                    RecallCoverageLane {
-                        state: RecallCoverageState::Unavailable,
-                        candidates: 0,
-                        codes: vec![
-                            vector
-                                .code
-                                .clone()
-                                .unwrap_or_else(|| "embedding_not_configured".into()),
-                        ],
-                    }
-                }
-            } else {
-                disabled()
-            },
-            source: RecallCoverageLane {
-                state: if source_codes.is_empty() {
-                    RecallCoverageState::Ok
-                } else {
-                    RecallCoverageState::Partial
-                },
-                candidates: binding.hydrated_count,
-                codes: source_codes,
-            },
+    RecallCoverageLane {
+        state: if selection.coverage.pending || !codes.is_empty() {
+            RecallCoverageState::Partial
+        } else {
+            RecallCoverageState::Ok
         },
-        next_cursor,
-        diagnostics: vector.diagnostics.clone(),
+        candidates: selection.ranked.len(),
+        codes,
     }
 }
 
+/// Vector coverage: the searched candidates, or why the lane is unavailable.
+fn vector_lane(
+    input: &RecallRequest,
+    selection: &Selection,
+    vector: &VectorFacts,
+    vector_partial: bool,
+) -> RecallCoverageLane {
+    if !input.include_vector {
+        return disabled();
+    }
+    if !vector.searched {
+        return RecallCoverageLane {
+            state: RecallCoverageState::Unavailable,
+            candidates: 0,
+            codes: vec![
+                vector
+                    .code
+                    .clone()
+                    .unwrap_or_else(|| "embedding_not_configured".into()),
+            ],
+        };
+    }
+    RecallCoverageLane {
+        state: if vector_partial {
+            RecallCoverageState::Partial
+        } else {
+            RecallCoverageState::Ok
+        },
+        candidates: selection
+            .vector_current
+            .as_ref()
+            .map_or(vector.candidates, |current| {
+                current.nodes.len() + current.episodes.len()
+            }),
+        codes: if vector_partial {
+            vec!["vector_current_rows_missing".into()]
+        } else {
+            vec![]
+        },
+    }
+}
+
+/// Source coverage: hydrated sources, partial for failed or deadline-cut
+/// sources and for an envelope-trimmed page.
+fn source_lane(selection: &Selection, binding: &Binding, budget_hit: bool) -> RecallCoverageLane {
+    let mut codes = selection.coverage.codes.clone();
+    if !binding.failed_sources.is_empty() {
+        codes.push("source_resolution_failed".into());
+    }
+    if binding.source_deadline_hit {
+        codes.push("operation_deadline".into());
+    }
+    if budget_hit {
+        codes.push("serialization_budget".into());
+    }
+    RecallCoverageLane {
+        state: if codes.is_empty() {
+            RecallCoverageState::Ok
+        } else {
+            RecallCoverageState::Partial
+        },
+        candidates: binding.hydrated_count,
+        codes,
+    }
+}
+
+/// The response of a search without any seed, temporal, vector or raw hit.
 pub(super) fn empty(
     input: &RecallRequest,
     selection: &Selection,
@@ -319,7 +398,6 @@ pub(super) fn empty(
         || deadline_hit;
     let vector_execution =
         vector_requested && (code != Some("no_hits") || vector_partial || vector.partial);
-    let partial = graph_execution || vector_execution;
     let execution = deadline_hit
         || selection
             .coverage
@@ -327,64 +405,24 @@ pub(super) fn empty(
             .iter()
             .any(|code| code == "canonical_source_unavailable")
         || (vector_execution && !admitted.graph && !admitted.lexical);
-    let mut graph_codes = selection.coverage.codes.clone();
-    graph_codes.extend(selection.selection_codes.iter().cloned());
-    if deadline_hit {
-        graph_codes.push("operation_deadline".into());
-    }
+    let outcome = if execution {
+        Outcome::Failed
+    } else if graph_execution || vector_execution {
+        Outcome::Partial
+    } else {
+        Outcome::Complete
+    };
     RecallResponse {
-        status: derive_status(0, partial, execution),
+        status: derive_status(0, outcome),
         results: vec![],
         coverage: RecallCoverage {
             graph: if admitted.graph {
-                graph_codes.push("no_hits".into());
-                RecallCoverageLane {
-                    state: if graph_codes.len() > 1 {
-                        RecallCoverageState::Partial
-                    } else {
-                        RecallCoverageState::Ok
-                    },
-                    candidates: 0,
-                    codes: graph_codes,
-                }
+                empty_graph_lane(selection, deadline_hit)
             } else {
                 disabled()
             },
             vectors: if vector_requested {
-                if code == Some("no_hits") {
-                    RecallCoverageLane {
-                        state: if vector_partial || vector.partial {
-                            RecallCoverageState::Partial
-                        } else {
-                            RecallCoverageState::Ok
-                        },
-                        candidates: 0,
-                        codes: vector
-                            .diagnostics
-                            .iter()
-                            .cloned()
-                            .chain(
-                                vector
-                                    .partial
-                                    .then_some("vector_current_rows_missing".into()),
-                            )
-                            .chain(std::iter::once("no_hits".into()))
-                            .collect(),
-                    }
-                } else {
-                    RecallCoverageLane {
-                        state: RecallCoverageState::Unavailable,
-                        candidates: 0,
-                        codes: std::iter::once(
-                            vector
-                                .code
-                                .clone()
-                                .unwrap_or_else(|| "embedding_not_configured".into()),
-                        )
-                        .chain(vector.diagnostics.iter().cloned())
-                        .collect(),
-                    }
-                }
+                empty_vector_lane(vector, code, vector_partial)
             } else {
                 disabled()
             },
@@ -403,6 +441,67 @@ pub(super) fn empty(
     }
 }
 
+/// Graph coverage of an empty search: its codes plus `no_hits`.
+fn empty_graph_lane(selection: &Selection, deadline_hit: bool) -> RecallCoverageLane {
+    let mut codes = selection.coverage.codes.clone();
+    codes.extend(selection.selection_codes.iter().cloned());
+    if deadline_hit {
+        codes.push("operation_deadline".into());
+    }
+    codes.push("no_hits".into());
+    RecallCoverageLane {
+        state: if codes.len() > 1 {
+            RecallCoverageState::Partial
+        } else {
+            RecallCoverageState::Ok
+        },
+        candidates: 0,
+        codes,
+    }
+}
+
+/// Vector coverage of an empty search: `no_hits` after a clean search, or
+/// why the lane is unavailable.
+fn empty_vector_lane(
+    vector: &VectorFacts,
+    code: Option<&str>,
+    vector_partial: bool,
+) -> RecallCoverageLane {
+    if code != Some("no_hits") {
+        return RecallCoverageLane {
+            state: RecallCoverageState::Unavailable,
+            candidates: 0,
+            codes: std::iter::once(
+                vector
+                    .code
+                    .clone()
+                    .unwrap_or_else(|| "embedding_not_configured".into()),
+            )
+            .chain(vector.diagnostics.iter().cloned())
+            .collect(),
+        };
+    }
+    RecallCoverageLane {
+        state: if vector_partial || vector.partial {
+            RecallCoverageState::Partial
+        } else {
+            RecallCoverageState::Ok
+        },
+        candidates: 0,
+        codes: vector
+            .diagnostics
+            .iter()
+            .cloned()
+            .chain(
+                vector
+                    .partial
+                    .then_some("vector_current_rows_missing".into()),
+            )
+            .chain(std::iter::once("no_hits".into()))
+            .collect(),
+    }
+}
+
 fn disabled() -> RecallCoverageLane {
     RecallCoverageLane {
         state: RecallCoverageState::DisabledByRequest,
@@ -410,12 +509,11 @@ fn disabled() -> RecallCoverageLane {
         codes: vec![],
     }
 }
-fn derive_status(results: usize, partial: bool, execution: bool) -> RecallStatus {
-    if results == 0 && execution {
-        RecallStatus::Unavailable
-    } else if partial {
-        RecallStatus::Partial
-    } else {
-        RecallStatus::Complete
+
+fn derive_status(results: usize, outcome: Outcome) -> RecallStatus {
+    match outcome {
+        Outcome::Failed if results == 0 => RecallStatus::Unavailable,
+        Outcome::Failed | Outcome::Partial => RecallStatus::Partial,
+        Outcome::Complete => RecallStatus::Complete,
     }
 }

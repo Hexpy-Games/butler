@@ -337,9 +337,10 @@ fn endpoint_available(id: &str, output: &ExtractOutput, input: &ExtractInput) ->
         .nodes
         .iter()
         .any(|n| matches!(&n.resolution, NodeResolution::Reuse { node_ref, .. } if node_ref == id))
-        || input.candidates.iter().any(|n| {
-            n.ref_id == id && n.is_identity_node() && historical_quote(n).is_some()
-        })
+        || input
+            .candidates
+            .iter()
+            .any(|n| n.ref_id == id && n.is_identity_node() && historical_quote(n).is_some())
 }
 
 /// The claim cites the decision's quotes and states the past statement with

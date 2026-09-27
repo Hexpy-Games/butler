@@ -61,6 +61,44 @@ pub(crate) fn object<T: serde::de::DeserializeOwned>(raw: &str) -> Option<T> {
         .flatten()
 }
 
+/// A tool argument as the caller sent it: missing, readable as `T`, or
+/// present with another shape (`null` included). Use with
+/// `#[serde(default)]` so a missing key reads as [`Arg::Missing`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) enum Arg<T> {
+    #[default]
+    Missing,
+    Valid(T),
+    Invalid,
+}
+
+impl<T> Arg<T> {
+    /// The value when it was readable.
+    pub(crate) fn valid(&self) -> Option<&T> {
+        match self {
+            Self::Valid(value) => Some(value),
+            Self::Missing | Self::Invalid => None,
+        }
+    }
+}
+
+impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Arg<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(deserializer)?;
+        Ok(serde_json::from_value(value).map_or(Self::Invalid, Self::Valid))
+    }
+}
+
+/// Reads tool arguments into `T`; arguments that are not an object read as
+/// no arguments at all.
+pub(crate) fn arguments<T: serde::de::DeserializeOwned + Default>(args: &Value) -> T {
+    if args.is_object() {
+        serde_json::from_value(args.clone()).unwrap_or_default()
+    } else {
+        T::default()
+    }
+}
+
 /// Reads the string items of an array, skipping items of other types;
 /// `None` when the value is not an array.
 pub(crate) fn strings<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>

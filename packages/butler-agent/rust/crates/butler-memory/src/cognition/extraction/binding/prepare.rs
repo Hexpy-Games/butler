@@ -324,7 +324,5 @@ fn empty_batch() -> BindingBatch {
 }
 
 fn bytes(prompt: &BindingPrompt) -> CognitionResult<usize> {
-    Ok(crate::js_json::stringify(prompt)
-        .map_err(json_error)?
-        .len())
+    Ok(crate::js_json::stringify(prompt).map_err(json_error)?.len())
 }

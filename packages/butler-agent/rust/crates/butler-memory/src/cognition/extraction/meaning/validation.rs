@@ -64,7 +64,9 @@ fn validate_entity(index: usize, entity: &Value, bounds: &Bounds<'_>) -> Cogniti
     if size > 256 {
         return Err(CognitionError::new(
             CognitionCode::MemoryExtractInvalidOutput,
-            format!("memory_extract_invalid_output entity={index} field=name graphemes={size} limit=256"),
+            format!(
+                "memory_extract_invalid_output entity={index} field=name graphemes={size} limit=256"
+            ),
         ));
     }
     evidence(object.get("evidence"), bounds.passages)
@@ -92,9 +94,7 @@ fn validate_item(item: &Value, bounds: &Bounds<'_>) -> CognitionResult<()> {
             let predicate = o.get("predicate").and_then(Value::as_str);
             if !matches!(
                 predicate,
-                Some(
-                    "likes" | "dislikes" | "decided" | "belongs_to" | "depends_on" | "related_to"
-                )
+                Some("likes" | "dislikes" | "decided" | "belongs_to" | "depends_on" | "related_to")
             ) {
                 return Err(invalid_meaning());
             }
