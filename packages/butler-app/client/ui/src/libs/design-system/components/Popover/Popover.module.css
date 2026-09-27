@@ -14,6 +14,11 @@
   transform-origin: var(--radix-popover-content-transform-origin, center top);
 }
 
+.content[data-popover-width="narrow"] {
+  width: min(280px, calc(100vw - 32px));
+  max-width: min(280px, calc(100vw - 32px));
+}
+
 .content[data-menu-size] {
   gap: 0;
   padding: var(--space-1);

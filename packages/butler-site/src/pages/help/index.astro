@@ -1,0 +1,31 @@
+---
+import { Typo } from "../../ds/components/Typo";
+import { BrandMark } from "../../ds/web/BrandMark/BrandMark";
+import pageStyles from "../../ds/web/DocPage/DocPage.module.css";
+import DocsLayout from "../../ds/web/DocsLayout/DocsLayout.astro";
+import { DocsHome } from "../../ds/web/DocsHome/DocsHome";
+import styles from "../../ds/web/DocsHome/DocsHome.module.css";
+import { alternates, loadNav } from "../../site/docs";
+import { docsRoot } from "../../site/nav";
+
+const title = "Butler 사용 설명서";
+const description = "설치부터 모델, 확장, 문제 해결까지 Butler 앱을 쓰는 방법을 정리합니다.";
+const nav = await loadNav("ko", "");
+---
+<DocsLayout
+  alternates={await alternates(null)}
+  description={description}
+  homeHref={docsRoot(import.meta.env.BASE_URL, "ko")}
+  locale="ko"
+  nav={nav}
+  title={title}
+>
+  <article class={pageStyles.article}>
+    <header class={styles.hero} data-mark-hover>
+      <span class={styles.heroMark}><BrandMark client:load intro size="hero" /></span>
+      <Typo.H1>{title}</Typo.H1>
+      <p class={pageStyles.lead}>{description}</p>
+    </header>
+    <DocsHome plannedBadge="예정" plannedReason="준비 중인 문서" sections={nav} />
+  </article>
+</DocsLayout>

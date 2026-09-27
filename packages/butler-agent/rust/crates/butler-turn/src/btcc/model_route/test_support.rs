@@ -22,6 +22,8 @@ use crate::btcc::{
 #[derive(Default)]
 pub(super) struct Store {
     pub(super) events: Mutex<Vec<ModelRouteEvent>>,
+    /// The route each event write persists (`None`: route left as stored).
+    pub(super) routes: Mutex<Vec<Option<u32>>>,
     pub(super) histories: Mutex<VecDeque<AttemptHistory>>,
     pub(super) accepted: Mutex<VecDeque<Option<Value>>>,
     acceptances: Mutex<Vec<Value>>,
@@ -61,6 +63,10 @@ impl TurnStore for Store {
     ) -> PortFuture<'_, RouteEventStatus> {
         Box::pin(async move {
             self.events.lock().unwrap().push(write.event);
+            self.routes
+                .lock()
+                .unwrap()
+                .push(write.binding.route.map(|route| route.active_cursor));
             Ok(RouteEventStatus::Recorded)
         })
     }

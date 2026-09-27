@@ -14,7 +14,12 @@ pub(super) struct TurnProgressScope<'a> {
 impl AgentLoopProgress for TurnProgressScope<'_> {
     fn emit(&self, event: RuntimeTurnEventInput) -> PortFuture<'_, ()> {
         Box::pin(async move {
-            self.conversation.record_event(&event).await?;
+            // Provider stream frames (streamed answer text) are display only:
+            // the conversation never admits them, so they skip its store and
+            // each frame is written once, to the progress repository.
+            if !event.kind.starts_with("model.stream.") {
+                self.conversation.record_event(&event).await?;
+            }
             self.repository
                 .append(ProgressWrite {
                     session_id: self.session_id.into(),

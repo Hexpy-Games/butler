@@ -17,14 +17,24 @@ pub(crate) struct FreshStorageBootstrap {
 
 #[derive(Debug)]
 pub(crate) enum FreshStorageError {
-    ExistingData,
+    /// A data folder from a release that predates the BTCC runtime store:
+    /// an App DB without `agent-runtime/btcc.sqlite`. Not migrated (owner
+    /// decision); the folder is left untouched.
+    ExistingData(PathBuf),
     Storage(StorageError),
 }
 
 impl fmt::Display for FreshStorageError {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ExistingData => write!(out, "legacy Agent BTCC migration is unsupported"),
+            Self::ExistingData(root) => write!(
+                out,
+                "legacy data folder is unsupported: {} was created by an older Butler release \
+                 (it has app-server/butler-client.sqlite but no agent-runtime/btcc.sqlite) and \
+                 was left unchanged. Move this folder aside, or set BUTLER_DATA to a new folder, \
+                 and start Butler again.",
+                root.display()
+            ),
             Self::Storage(error) => write!(out, "{error}"),
         }
     }
@@ -39,7 +49,7 @@ pub(crate) fn prepare_fresh_btcc_storage(
     runtime_version: &str,
 ) -> Result<FreshStorageBootstrap, FreshStorageError> {
     if butler_data.join("app-server/butler-client.sqlite").exists() {
-        return Err(FreshStorageError::ExistingData);
+        return Err(FreshStorageError::ExistingData(butler_data.to_owned()));
     }
     let path = butler_data.join("agent-runtime/btcc.sqlite");
     let fence = format!("native-service-pre-readiness:{}", std::process::id());

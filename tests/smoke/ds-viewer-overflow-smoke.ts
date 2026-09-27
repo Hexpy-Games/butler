@@ -12,8 +12,11 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 // Portaled overlays render outside the cell and are not checked here. A Grid
 // (`[data-columns]`) must never be wider than itself: its tracks shrink with
 // the container whatever the content. A keyboard-focused NativeSelect rings
-// its control box only, never the chevron.
-// `bun tests/smoke/ds-viewer-overflow-smoke.ts [ItemName...]` narrows the run.
+// its control box only, never the chevron. No item page scrolls sideways (a
+// positioned part escaping a scrolling cell widens the page scroller).
+// Foundations chapters are audited the same way (specimens, theme panes) plus
+// page-level sideways scroll, at the run width and at 375.
+// `bun tests/smoke/ds-viewer-overflow-smoke.ts [ItemName|foundations/<chapter>...]` narrows the run.
 
 const uiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-ds-viewer-overflow-"));
@@ -22,6 +25,11 @@ const runs = [
   { width: 1440, colorScheme: "dark" },
   { width: 900, colorScheme: "light" },
 ] as const;
+
+const FOUNDATION_PAGES = [
+  "foundations/color", "foundations/typography", "foundations/spacing", "foundations/sizing", "foundations/radius",
+  "foundations/iconography", "foundations/focus", "motion", "foundations/z-index", "foundations/layout",
+];
 
 type Offender = { item: string; run: string; cell: string; element: string; overflow: string };
 
@@ -42,7 +50,7 @@ async function itemIds(page: Page, baseUrl: string): Promise<Map<string, string>
 }
 
 /** Runs in the page: cells whose content paints past the cell, and theme scopes with a foreign text color. */
-function auditPage(tolerance: number) {
+function auditPage({ tolerance, pageScroll }: { tolerance: number; pageScroll: boolean }) {
   type Box = { left: number; top: number; right: number; bottom: number };
   const px = (value: string) => Number.parseFloat(value) || 0;
   const clips = (style: CSSStyleDeclaration) =>
@@ -76,7 +84,13 @@ function auditPage(tolerance: number) {
       const theme = canvas.closest("[data-ds-theme]")?.getAttribute("data-ds-theme") ?? "?";
       return [canvas.parentElement!, `example "${story}" (${theme})`];
     }),
+    // Foundations guidebook specimens: type ladder samples, swatches, role panes, ramps.
+    ...[...document.querySelectorAll("[data-ds-specimen]")].map((specimen): [Element, string] =>
+      [specimen, `specimen "${specimen.getAttribute("data-ds-specimen") || specimen.tagName.toLowerCase()}"`]),
   ];
+  // The page itself never scrolls sideways.
+  const main = document.querySelector("main");
+  const sideways = main ? main.scrollWidth - main.clientWidth : 0;
   const offenders: Array<{ cell: string; element: string; overflow: string }> = [];
   for (const [cell, label] of cells) {
     const bounds = cell.getBoundingClientRect();
@@ -125,7 +139,8 @@ function auditPage(tolerance: number) {
     const actual = getComputedStyle(scope).color;
     return actual === expected ? [] : [{ cell: `theme scope ${scope.className}`, element: "color", overflow: `${actual} != ${expected}` }];
   });
-  return [...offenders, ...foreignScopes];
+  const page = pageScroll && sideways > tolerance ? [{ cell: "page", element: "main", overflow: `scrolls sideways by ${sideways}px` }] : [];
+  return [...offenders, ...foreignScopes, ...page];
 }
 
 /** Keyboard-focuses each NativeSelect: the ring belongs on the trigger box, never on the chevron. */
@@ -173,11 +188,23 @@ try {
       await page.goto(viewerUrl(server.url, { page: id, theme: "side-by-side", motion: "reduced" }), { waitUntil: "networkidle" });
       await page.locator(`[data-ds-detail="${name}"] [data-ds-examples]`).waitFor({ state: "visible" });
       await waitForLayout(page);
-      for (const found of await page.evaluate(auditPage, TOLERANCE)) offenders.push({ item: name, run: runLabel, ...found });
+      for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: name, run: runLabel, ...found });
       if (name === "NativeSelect") {
         for (const found of await auditNativeSelectFocus(page)) offenders.push({ item: name, run: runLabel, ...found });
       }
       checkedPages += 1;
+    }
+    // Foundations chapters (guidebook specimens and their light/dark panes), at this width and at 375.
+    for (const width of [run.width, 375]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const chapter of FOUNDATION_PAGES) {
+        if (only.size && !only.has(chapter)) continue;
+        await page.goto(viewerUrl(server.url, { page: chapter, motion: "reduced", locale: width === 375 ? "ko" : "en" }), { waitUntil: "networkidle" });
+        await page.locator("[data-ds-chapter-head]").first().waitFor({ state: "visible" });
+        await waitForLayout(page);
+        for (const found of await page.evaluate(auditPage, { tolerance: TOLERANCE, pageScroll: true })) offenders.push({ item: chapter, run: `${runLabel} @${width}`, ...found });
+        checkedPages += 1;
+      }
     }
     await page.close();
   }

@@ -51,6 +51,8 @@ export function DesignSystemViewer() {
   // A deep link may carry an in-page anchor: page=components/Button#states.
   const [pageId = "overview", initialAnchor] = state.page.split("#");
   const page = resolveViewerPage(pageId, showcaseEntries, PATTERN_IDS);
+  // The anchor of the latest navigation: pages open what it points at (a collapsed token table).
+  const [anchor, setAnchor] = useState(initialAnchor);
   const activeId = page.kind === "item" ? page.entry.id : pageId;
   useEffect(() => {
     if (!initialAnchor) return undefined;
@@ -66,11 +68,12 @@ export function DesignSystemViewer() {
   useSlashFocus(focusSearch);
 
   const open = useCallback((target: string) => {
-    const [id, anchor] = target.split("#");
+    const [id, next] = target.split("#");
     update({ page: id });
+    setAnchor(next);
     setMenuOpen(false);
     requestAnimationFrame(() => {
-      if (!scrollToAnchor(mainRef.current, anchor)) mainRef.current?.scrollTo({ top: 0 });
+      if (!scrollToAnchor(mainRef.current, next)) mainRef.current?.scrollTo({ top: 0 });
     });
   }, [update]);
 
@@ -92,7 +95,7 @@ export function DesignSystemViewer() {
         </div>
         <div className={styles.content}>
           <div className={styles.page} key={pageId}>
-            <ViewerContent entries={showcaseEntries} onChange={update} onOpen={open} page={page} state={state} themes={theme.frames} />
+            <ViewerContent anchor={anchor} entries={showcaseEntries} onChange={update} onOpen={open} page={page} state={state} themes={theme.frames} />
           </div>
         </div>
       </main>

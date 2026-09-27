@@ -74,6 +74,32 @@ pub(super) fn actions(
     Ok(projected)
 }
 
+/// The App action reporting a turn that a crashed process was running.
+pub(super) fn crash_interrupted(
+    item: &ClaimedInboundEvent,
+    envelope: &Envelope,
+    binding: &StoredSessionBinding,
+) -> Result<Value, IngressError> {
+    let target = app_target(binding, envelope).ok_or_else(|| {
+        IngressError::new(
+            "inbound_app_target_missing",
+            "App delivery target unavailable",
+        )
+    })?;
+    Ok(terminal::action(
+        item,
+        envelope,
+        target,
+        terminal::crash_interrupted(bind::routed_turn_id(envelope)),
+        terminal::RichTerminal {
+            artifacts: Vec::new(),
+            changed_files: Vec::new(),
+            plan: None,
+            no_visible: false,
+        },
+    ))
+}
+
 fn base_metadata(item: &ClaimedInboundEvent, envelope: &Envelope) -> Map<String, Value> {
     let mut metadata = Map::new();
     metadata.insert(

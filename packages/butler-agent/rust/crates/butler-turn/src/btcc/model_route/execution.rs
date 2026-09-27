@@ -64,13 +64,7 @@ impl ModelExecutionFactory for TurnModelExecutionFactory {
                         "model route has no active candidate",
                     )
                 })?;
-            let hooks = RouteHooks::new(
-                store,
-                input.turn,
-                input.claim,
-                route.clone(),
-                route.route_digest.clone(),
-            );
+            let hooks = RouteHooks::new(store, input.turn, input.claim, route.route_digest.clone());
             Ok(Box::new(RoutedExecution {
                 base: input.base,
                 runner: RoutedRound {

@@ -15,6 +15,8 @@ mod tool_result;
 #[cfg(test)]
 mod boundary_tests;
 #[cfg(test)]
+mod disposition_cas_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::Arc;

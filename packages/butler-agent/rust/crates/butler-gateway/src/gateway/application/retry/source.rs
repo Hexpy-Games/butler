@@ -23,6 +23,32 @@ pub(super) struct RetrySnapshot {
     pub input_identity_digest: String,
 }
 
+/// The queue row a retry dispatches: the turn's snapshotted input under a
+/// client id of the next attempt.
+pub(super) fn reservation(
+    snapshot: &RetrySnapshot,
+    queue_id: &str,
+    now: &str,
+) -> crate::gateway::application::queue::QueueReservation {
+    crate::gateway::application::queue::QueueReservation {
+        id: queue_id.to_owned(),
+        chat_id: snapshot.chat_id.clone(),
+        text: snapshot.text.clone(),
+        client_message_id: format!(
+            "retry-{}-{}",
+            snapshot.turn_id,
+            snapshot.attempt.saturating_add(1)
+        ),
+        input_identity_digest: snapshot.input_identity_digest.clone(),
+        control_resolution_json: snapshot.control_resolution_json.clone(),
+        controls_json: snapshot.controls_json.clone(),
+        attachments_json: snapshot.attachments_json.clone(),
+        content_parts_json: snapshot.content_parts_json.clone(),
+        project_source_refs_json: snapshot.project_source_refs_json.clone(),
+        created_at: now.to_owned(),
+    }
+}
+
 pub(super) struct CurrentControlsRetrySource {
     pub chat_id: String,
     pub user_message_id: String,
@@ -36,8 +62,8 @@ pub(super) fn retry_snapshot(
 ) -> Result<RetrySnapshot, AppStorageError> {
     let turn = db
         .query_row(
-            "SELECT chat_id,user_message_id,state,retryable,attempt,execution_controls_json \
-             FROM turns WHERE id=?1",
+            "SELECT chat_id,user_message_id,state,retryable,attempt,execution_controls_json,\
+             safe_error_code FROM turns WHERE id=?1",
             [turn_id],
             |row| {
                 Ok((
@@ -47,15 +73,14 @@ pub(super) fn retry_snapshot(
                     row.get::<_, i64>(3)?,
                     row.get::<_, u64>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
                 ))
             },
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    if turn.2 != "runtime_fault" || turn.3 != 1 || !runtime_fault_retryable(db, turn_id)? {
-        return Err(not_retryable_error());
-    }
+    ensure_retryable(db, turn_id, &turn.2, turn.3, turn.6.as_deref())?;
     let user_message_id = turn.1.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -165,18 +190,31 @@ pub(super) fn current_controls_retry_source(
     db: &Connection,
     turn_id: &str,
 ) -> Result<CurrentControlsRetrySource, AppStorageError> {
-    let (chat_id, user_message_id, state, retryable): (String, Option<String>, String, i64) = db
+    let (chat_id, user_message_id, state, retryable_flag, code): (
+        String,
+        Option<String>,
+        String,
+        i64,
+        Option<String>,
+    ) = db
         .query_row(
-            "SELECT chat_id,user_message_id,state,retryable FROM turns WHERE id=?1",
+            "SELECT chat_id,user_message_id,state,retryable,safe_error_code FROM turns WHERE id=?1",
             [turn_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )
         .optional()
         .map_err(AppStorageError::sqlite)?
         .ok_or_else(|| AppStorageError::new(AppStorageCode::TurnNotFound, "Turn not found."))?;
-    if state != "runtime_fault" || retryable != 1 || !runtime_fault_retryable(db, turn_id)? {
-        return Err(not_retryable_error());
-    }
+    ensure_retryable(db, turn_id, &state, retryable_flag, code.as_deref())?;
+    ensure_fresh_retry_allowed(code.as_deref())?;
     let user_message_id = user_message_id.ok_or_else(|| {
         AppStorageError::new(
             AppStorageCode::TurnMissingUserMessage,
@@ -220,6 +258,39 @@ pub(super) fn current_controls_retry_source(
         text,
         attachment_ids,
     })
+}
+
+/// Refuses all but a retryable runtime fault or a turn interrupted by a
+/// service crash.
+fn ensure_retryable(
+    db: &Connection,
+    turn_id: &str,
+    state: &str,
+    retryable: i64,
+    safe_error_code: Option<&str>,
+) -> Result<(), AppStorageError> {
+    let allowed = retryable == 1
+        && match state {
+            "runtime_fault" => runtime_fault_retryable(db, turn_id)?,
+            "failed" => safe_error_code == Some(super::INTERRUPTED_TURN_CODE),
+            _ => false,
+        };
+    if allowed {
+        Ok(())
+    } else {
+        Err(not_retryable_error())
+    }
+}
+
+/// `/retry-current` starts a fresh turn. A crash-interrupted turn may have run
+/// tool effects that a fresh turn would run again, so only its resume
+/// (`/retry`, which replays the recorded results) is offered.
+fn ensure_fresh_retry_allowed(safe_error_code: Option<&str>) -> Result<(), AppStorageError> {
+    if safe_error_code == Some(super::INTERRUPTED_TURN_CODE) {
+        Err(not_retryable_error())
+    } else {
+        Ok(())
+    }
 }
 
 fn runtime_fault_retryable(db: &Connection, turn_id: &str) -> Result<bool, AppStorageError> {

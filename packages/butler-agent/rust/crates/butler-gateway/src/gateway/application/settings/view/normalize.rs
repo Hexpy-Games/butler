@@ -1,5 +1,7 @@
 use serde_json::{Map, Value, json};
 
+use crate::gateway::ui_language::UiLanguage;
+
 pub(super) fn ui_defaults() -> Value {
     json!({
         "bridge_mode":"local", "gateway_profile":"electron", "server_url":"",
@@ -39,14 +41,13 @@ pub(super) fn enum_value(value: Option<&Value>, allowed: &[&str], fallback: &str
         .unwrap_or(fallback)
         .to_owned()
 }
-pub(super) fn language(stored: Option<&Value>, configured: Option<&Value>) -> &'static str {
+pub(super) fn language(stored: Option<&Value>, configured: Option<&Value>) -> UiLanguage {
     [stored, configured]
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .find(|value| matches!(*value, "en" | "ko"))
-        .map(|value| if value == "ko" { "ko" } else { "en" })
-        .unwrap_or("en")
+        .find_map(UiLanguage::parse)
+        .unwrap_or_default()
 }
 pub(super) fn timezone(stored: Option<&Value>, local: Option<&Value>) -> String {
     stored

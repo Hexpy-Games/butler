@@ -1,0 +1,31 @@
+.article {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2xl);
+}
+
+.header {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.lead {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--typo-h5-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+}
+
+.inlineToc {
+  display: block;
+}
+
+@media (width >= 1180px) {
+  .inlineToc {
+    display: none;
+  }
+}

@@ -1,8 +1,11 @@
 //! On-demand App image derivatives and verified provider payloads.
 
 mod admission;
+mod errors;
 mod files;
 mod payload;
+
+pub(crate) use errors::{ImageErrorCode, localize_image_error};
 
 use parking_lot::Mutex;
 use std::{
@@ -131,36 +134,6 @@ impl AppImageFiles {
         receiver
             .await
             .map_err(GatewayApplicationError::internal_from)?
-    }
-}
-
-fn image_error(code: &str) -> GatewayApplicationError {
-    let status = match code {
-        "image_payload_invalid" => 413,
-        "image_manifest_invalid" => 422,
-        _ => 409,
-    };
-    let message = match code {
-        "image_model_unsupported" => {
-            "현재 모델은 이미지를 읽을 수 없습니다. 이미지 지원 모델을 선택하거나 이미지를 제거하세요."
-        }
-        "image_capability_unknown" => {
-            "현재 모델의 이미지 지원 여부를 확인할 수 없습니다. 모델 설정을 확인하거나 이미지를 제거하세요."
-        }
-        "image_carrier_unavailable" => {
-            "현재 모델로 이미지를 전송할 수 있는 어댑터가 없습니다. 모델 연결 설정을 확인하세요."
-        }
-        "image_route_incompatible" => {
-            "현재 모델 연결 경로는 이미지 입력과 호환되지 않습니다. 연결 설정을 확인하세요."
-        }
-        "image_carrier_unverified" => "이미지 전송 경로를 확인할 수 없습니다.",
-        _ => "이미지 첨부를 확인할 수 없습니다.",
-    };
-    GatewayApplicationError::Public {
-        status,
-        code: code.into(),
-        message: message.into(),
-        source: None,
     }
 }
 

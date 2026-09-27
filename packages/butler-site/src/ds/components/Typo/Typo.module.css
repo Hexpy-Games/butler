@@ -1,0 +1,232 @@
+/* Forked from the app DS Typo.module.css (web subset of variants). */
+.h1 {
+  font-size: var(--typo-h1-size);
+  font-weight: var(--typo-h1-weight);
+  line-height: var(--typo-h1-line-height);
+  letter-spacing: var(--typo-h1-letter-spacing);
+  margin: 0;
+}
+
+.h2 {
+  font-size: var(--typo-h2-size);
+  font-weight: var(--typo-h2-weight);
+  line-height: var(--typo-h2-line-height);
+  letter-spacing: var(--typo-h2-letter-spacing);
+  margin: 0;
+}
+
+.h3 {
+  font-size: var(--typo-h3-size);
+  font-weight: var(--typo-h3-weight);
+  line-height: var(--typo-h3-line-height);
+  letter-spacing: var(--typo-h3-letter-spacing);
+  margin: 0;
+}
+
+.h4 {
+  font-size: var(--typo-h4-size);
+  font-weight: var(--typo-h4-weight);
+  line-height: var(--typo-h4-line-height);
+  letter-spacing: var(--typo-h4-letter-spacing);
+  margin: 0;
+}
+
+.h5 {
+  font-size: var(--typo-h5-size);
+  font-weight: var(--typo-h5-weight);
+  line-height: var(--typo-h5-line-height);
+  letter-spacing: var(--typo-h5-letter-spacing);
+  margin: 0;
+}
+
+.h6 {
+  font-size: var(--typo-h6-size);
+  font-weight: var(--typo-h6-weight);
+  line-height: var(--typo-h6-line-height);
+  letter-spacing: var(--typo-h6-letter-spacing);
+  margin: 0;
+}
+
+.body {
+  font-size: var(--typo-body-size);
+  font-weight: var(--typo-body-weight);
+  line-height: var(--typo-body-line-height);
+  letter-spacing: var(--typo-body-letter-spacing);
+  margin: 0;
+}
+
+.caption {
+  font-size: var(--typo-caption-size);
+  font-weight: var(--typo-caption-weight);
+  line-height: var(--typo-caption-line-height);
+  letter-spacing: var(--typo-caption-letter-spacing);
+  margin: 0;
+}
+
+.label {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  line-height: var(--typo-label-line-height);
+  letter-spacing: var(--typo-label-letter-spacing);
+  margin: 0;
+}
+
+.code {
+  font: var(--typo-code-font);
+  letter-spacing: var(--typo-code-letter-spacing);
+  margin: 0;
+}
+
+.app-title {
+  font-size: var(--typo-app-title-size);
+  font-weight: var(--typo-app-title-weight);
+  line-height: var(--typo-app-title-line-height);
+  letter-spacing: var(--typo-app-title-letter-spacing);
+  margin: 0;
+}
+
+
+
+.section-title {
+  font-size: var(--typo-section-title-size);
+  font-weight: var(--typo-section-title-weight);
+  line-height: var(--typo-section-title-line-height);
+  letter-spacing: var(--typo-section-title-letter-spacing);
+  margin: 0;
+}
+
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.app-title,
+.section-title {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.text {
+  margin: 0;
+}
+
+/* .typo is shared by every variant and scopes the text props. They never change the type scale; without a tone the element
+   keeps inheriting color from its container. */
+.typo[data-tone="primary"] {
+  color: var(--color-text-primary);
+}
+
+.typo[data-tone="secondary"] {
+  color: var(--color-text-secondary);
+}
+
+.typo[data-tone="tertiary"] {
+  color: var(--color-text-tertiary);
+}
+
+.typo[data-tone="disabled"] {
+  color: var(--color-text-disabled);
+}
+
+.typo[data-tone="danger"] {
+  color: var(--color-danger-text);
+}
+
+.typo[data-tone="success"] {
+  color: var(--color-success-text);
+}
+
+.typo[data-tone="warning"] {
+  color: var(--color-warning-text);
+}
+
+.typo[data-tone="inherit"] {
+  color: inherit;
+}
+
+.typo[data-weight="regular"] {
+  font-weight: var(--font-weight-regular);
+}
+
+.typo[data-weight="medium"] {
+  font-weight: var(--font-weight-medium);
+}
+
+.typo[data-weight="semibold"] {
+  font-weight: var(--font-weight-semibold);
+}
+
+.typo[data-align="start"] {
+  text-align: start;
+}
+
+.typo[data-align="center"] {
+  text-align: center;
+}
+
+.typo[data-align="end"] {
+  text-align: end;
+}
+
+.typo[data-wrap="normal"] {
+  white-space: normal;
+}
+
+.typo[data-wrap="nowrap"] {
+  white-space: nowrap;
+}
+
+.typo[data-wrap="pre"] {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+
+/* Korean keep-all comes from the locale base styles; long tokens still wrap. */
+.typo[data-wrap="anywhere"] {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.typo[data-truncate="true"] {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.typo[data-line-clamp] {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.typo[data-line-clamp="2"] {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.typo[data-line-clamp="3"] {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.typo[data-line-clamp="4"] {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.typo[data-line-clamp="5"] {
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+
+.typo[data-numeric="tabular"] {
+  font-variant-numeric: tabular-nums;
+}

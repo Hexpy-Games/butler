@@ -9,7 +9,7 @@ import styles from "../DesignSystemViewer.module.css";
 let layerUsers = 0;
 
 /** Injects the forced-state stylesheet while at least one matrix is on screen. */
-function useForceStateLayer() {
+export function useForceStateLayer() {
   useEffect(() => {
     layerUsers += 1;
     if (layerUsers === 1) {

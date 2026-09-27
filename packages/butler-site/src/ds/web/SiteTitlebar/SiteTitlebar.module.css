@@ -1,0 +1,99 @@
+/*
+ * Glass titlebar over the content column (the app's TitlebarShell look):
+ * translucent titlebar background with the tinted-glass blur; a hairline
+ * edge appears once content scrolls beneath it.
+ */
+.titlebar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  min-height: var(--titlebar-height);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--web-gutter);
+  border-bottom: var(--border-hairline) solid transparent;
+  background: var(--titlebar-bg);
+  -webkit-backdrop-filter: var(--tinted-glass-filter);
+  backdrop-filter: var(--tinted-glass-filter);
+  transition: border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.titlebar[data-scrolled="true"] {
+  border-bottom-color: var(--line);
+}
+
+.compact {
+  display: none;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.search {
+  display: flex;
+  width: min(100%, 320px);
+  min-width: 0;
+  height: var(--control-height-md);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 var(--space-xs) 0 var(--space-sm);
+  border: var(--border-hairline) solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-3);
+  text-align: left;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    border-color var(--motion-fast) var(--motion-ease-standard);
+}
+
+.search:hover {
+  border-color: var(--line-strong);
+  background: var(--control-hover-bg);
+}
+
+.search:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.searchLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.searchIcon {
+  display: none;
+}
+
+@media (width < 900px) {
+  .titlebar {
+    padding: 0 var(--space-sm);
+  }
+
+  .compact {
+    display: flex;
+  }
+
+  .search,
+  .actions {
+    display: none;
+  }
+
+  .searchIcon {
+    display: inline-flex;
+  }
+}

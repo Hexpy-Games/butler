@@ -212,7 +212,7 @@ final class MenuBarHelperApp: NSObject, NSApplicationDelegate {
         }
         let alert = NSAlert()
         alert.messageText = "Stop Butler Agent?"
-        alert.informativeText = "Stopping Butler Agent will stop automations and any background sessions currently running."
+        alert.informativeText = "Stopping Butler Agent will stop schedules and any background sessions currently running."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Stop Butler Agent")
         alert.addButton(withTitle: "Cancel")

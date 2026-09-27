@@ -36,6 +36,9 @@ interface RenderOptions {
   componentNames: string[];
   viewports: ViewportName[];
   themes: ThemeName[];
+  locale: "en" | "ko";
+  /** Viewer pages only: capture the whole scrolled page, not the viewport. */
+  fullPage: boolean;
 }
 
 function parseThemes(value: string): ThemeName[] {
@@ -63,10 +66,22 @@ function parseRenderOptions(args: string[]): RenderOptions {
   const names: string[] = [];
   let viewports: ViewportName[] = ["desktop"];
   let themes: ThemeName[] = ["light"];
+  let locale: RenderOptions["locale"] = "en";
+  let fullPage = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (!arg || arg === "--") continue;
+    if (arg === "--full-page") {
+      fullPage = true;
+      continue;
+    }
+    if (arg.startsWith("--locale=")) {
+      const value = arg.slice("--locale=".length);
+      if (value !== "en" && value !== "ko") throw new Error(`Unknown locale: ${value}. Use en or ko.`);
+      locale = value;
+      continue;
+    }
     if (arg === "--iphone") {
       viewports = ["iphone-390"];
       continue;
@@ -111,6 +126,8 @@ function parseRenderOptions(args: string[]): RenderOptions {
     componentNames: componentNames.flatMap((name) => (name.toLowerCase() === "all" ? ["*"] : [name])),
     viewports: [...new Set(viewports)],
     themes: [...new Set(themes)],
+    locale,
+    fullPage,
   };
 }
 
@@ -160,6 +177,7 @@ async function renderViewport(
   requestedNames: string[],
   themes: ThemeName[],
   useViewportSubdir: boolean,
+  { locale, fullPage }: Pick<RenderOptions, "locale" | "fullPage">,
 ): Promise<string[]> {
   const page = await browser.newPage({
     viewport: viewportPresets[viewportName],
@@ -193,12 +211,19 @@ async function renderViewport(
     const writtenPaths: string[] = [];
     for (const pageId of pageIds) {
       for (const theme of themes) {
-        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, motion: "reduced" }), { waitUntil: "networkidle" });
+        await page.goto(viewerUrl(serverUrl, { page: pageId, theme, locale, motion: "reduced" }), { waitUntil: "networkidle" });
         await page.locator(`[data-ds-page="${pageId}"] main > *`).first().waitFor({ state: "visible" });
         if (await page.locator("[data-ds-not-found]").count()) throw new Error(`Unknown DS Viewer page: ${pageId}`);
-        const suffix = themes.length > 1 ? `-${theme}` : "";
+        const suffix = `${themes.length > 1 ? `-${theme}` : ""}${locale === "ko" ? "-ko" : ""}${fullPage ? "-full" : ""}`;
         const outputPath = join(outputDir, `page-${safeFileName(pageId)}${suffix}.png`);
+        // The viewer scrolls inside <main>; a full-page capture grows the viewport to its content.
+        const viewport = viewportPresets[viewportName];
+        if (fullPage) {
+          const height = await page.evaluate(() => document.querySelector("main")?.scrollHeight ?? 0);
+          await page.setViewportSize({ width: viewport.width, height: Math.min(Math.max(height, viewport.height), 32000) });
+        }
         await page.screenshot({ path: outputPath, animations: "disabled" });
+        if (fullPage) await page.setViewportSize(viewport);
         writtenPaths.push(outputPath);
       }
     }
@@ -240,7 +265,7 @@ if (!existsSync(join(uiRoot, "index.html"))) {
 
 mkdirSync(outputRoot, { recursive: true });
 
-const { componentNames: requestedNames, viewports, themes } = parseRenderOptions(
+const { componentNames: requestedNames, viewports, themes, locale, fullPage } = parseRenderOptions(
   Bun.argv.slice(2),
 );
 const server = await createNativeAppServer({ uiRoot });
@@ -257,6 +282,7 @@ try {
         requestedNames,
         themes,
         viewports.length > 1 || viewportName !== "desktop",
+        { locale, fullPage },
       )),
     );
   }

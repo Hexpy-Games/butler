@@ -9,10 +9,31 @@ use super::{
 };
 mod normalize;
 use crate::gateway::application::storage::AppStorageError;
+use crate::gateway::ui_language::UiLanguage;
 use normalize::{
     access, enum_value, integer, language, main_colors, main_preset, main_theme, multiline,
     native_value, notifications, object, timezone, ui_defaults, workspace_label,
 };
+
+/// The language the App shows (`language` of the settings view): Settings,
+/// else `user.language` of butler.config.json, else English.
+pub(in crate::gateway::application) fn ui_language(
+    db: &Connection,
+    facts: &AppSettingsFacts,
+) -> Result<UiLanguage, AppStorageError> {
+    let stored = read_json(db, SETTINGS_KEY)?
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let native = facts
+        .native_settings
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    Ok(language(
+        stored.get("language"),
+        native_value(&native, "config_user").get("language"),
+    ))
+}
 
 pub(super) fn read(
     db: &Connection,
@@ -126,10 +147,7 @@ pub(super) fn read(
     );
     output.insert(
         "language".into(),
-        json!(language(
-            stored.get("language"),
-            config_user.get("language")
-        )),
+        json!(language(stored.get("language"), config_user.get("language")).as_str()),
     );
     output.insert(
         "timezone".into(),

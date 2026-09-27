@@ -164,10 +164,14 @@ pub trait ProviderBodyAdmissionPort: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), ModelRoundError>> + Send + '_>>;
 }
 
-/// Observes raw provider stream events (diagnostic only).
+/// Observes raw provider stream events.
 pub trait ProviderStreamObserver: Send + Sync {
     /// Observes one stream event (provider passthrough JSON).
     fn event(&self, event: &Value);
+
+    /// The text streamed in the latest model round is not the answer: the
+    /// round called tools, or its answer candidate was sent back or replaced.
+    fn round_text_discarded(&self) {}
 }
 
 pub trait ProviderIdentityObserver: Send + Sync {

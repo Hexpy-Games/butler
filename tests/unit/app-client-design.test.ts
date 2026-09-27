@@ -1423,7 +1423,6 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("ConversationShell");
   expect(renderer).toContain('message.role === "assistant"');
   expect(renderer).toContain('message.status === "failed"');
-  expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
   expect(renderer).not.toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");
@@ -2218,7 +2217,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("prompt_body");
   expect(renderer).toContain("copy.queued");
   expect(appCopySource()).toContain(
-    'title: "자동화"',
+    'title: "예약 작업"',
   );
   expect(read("packages/butler-app/client/ui/src/app/utils.ts")).toContain(
     "return { title: appCopy.automations.title }",

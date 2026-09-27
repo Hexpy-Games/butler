@@ -19,11 +19,11 @@ export const meta: ShowcaseMeta = {
 const labels = {
   "en-US": {
     summary: "Summary", files: "Files", activity: "Activity", workers: "Workers", branch: "Branch details",
-    gateway: "Gateway", ready: "Ready", artifacts: "Artifacts", automations: "Automations", nightly: "Nightly release notes", every: "Every day 07:00",
+    gateway: "Gateway", ready: "Ready", artifacts: "Artifacts", automations: "Schedules", nightly: "Nightly release notes", every: "Every day 07:00",
   },
   "ko-KR": {
     summary: "요약", files: "파일", activity: "활동", workers: "작업자", branch: "브랜치 정보",
-    gateway: "게이트웨이", ready: "준비됨", artifacts: "산출물", automations: "자동화", nightly: "야간 릴리스 노트", every: "매일 07:00",
+    gateway: "게이트웨이", ready: "준비됨", artifacts: "산출물", automations: "예약 작업", nightly: "야간 릴리스 노트", every: "매일 07:00",
   },
 } as const;
 

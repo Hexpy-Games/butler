@@ -965,7 +965,21 @@ function capTurnProgressSnapshots(
   );
 }
 
-export function isRuntimeFaultRetryableMessage(
+/** A retryable runtime fault, or a reply a Butler crash interrupted. */
+export function isRetryableFailureMessage(
+  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+): boolean {
+  return message.retryable === true &&
+    (message.safe_error_code === "runtime_fault" ||
+      message.safe_error_code === "turn_interrupted");
+}
+
+/**
+ * Whether a failed reply also offers "Retry with current settings". That
+ * starts a fresh turn, so a crash-interrupted reply (whose finished tool steps
+ * a fresh turn could run again) only offers Retry, which resumes it.
+ */
+export function canRetryWithCurrentControls(
   message: Pick<MessageRecord, "retryable" | "safe_error_code">,
 ): boolean {
   return message.retryable === true && message.safe_error_code === "runtime_fault";
@@ -1064,6 +1078,7 @@ function mergeMessageRecord(
   previous: MessageRecord,
   incoming: MessageRecord,
 ): MessageRecord {
+  if (isStaleMessageRecord(previous, incoming)) return previous;
   let next = incoming;
   if (previous.work_blocks?.length && !next.work_blocks) {
     next = { ...next, work_blocks: previous.work_blocks };
@@ -1076,6 +1091,31 @@ function mergeMessageRecord(
   }
   const sanitized = freezeMessageActivity(next, undefined);
   return messageRecordEqual(previous, sanitized) ? previous : sanitized;
+}
+
+const LIVE_MESSAGE_STATUSES = new Set(["pending", "thinking", "streaming", "retrying"]);
+
+/**
+ * A snapshot requested while a reply streamed can resolve after the final
+ * message event: its copy of the same id is older (earlier `updated_at`, or a
+ * live status at the same instant) and must not roll the settled message back.
+ * Only assistant records qualify: their timestamps are all gateway-issued,
+ * while optimistic user rows carry the client clock.
+ */
+function isStaleMessageRecord(
+  previous: MessageRecord,
+  incoming: MessageRecord,
+): boolean {
+  if (previous.role !== "assistant" || incoming.role !== "assistant") return false;
+  const previousAt = Date.parse(previous.updated_at ?? "");
+  const incomingAt = Date.parse(incoming.updated_at ?? "");
+  if (!Number.isFinite(previousAt) || !Number.isFinite(incomingAt)) return false;
+  if (incomingAt < previousAt) return true;
+  return (
+    incomingAt === previousAt &&
+    LIVE_MESSAGE_STATUSES.has(incoming.status ?? "") &&
+    !LIVE_MESSAGE_STATUSES.has(previous.status ?? "")
+  );
 }
 
 function mergeProgressRows(
