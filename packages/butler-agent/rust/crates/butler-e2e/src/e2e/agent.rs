@@ -254,7 +254,25 @@ impl Agent {
         })
     }
 
-    /// Runs `butler-agent <args>` (the `butler` CLI) against the same data dir.
+    /// Like [`Agent::cli`], without blocking the test's runtime: use it for
+    /// commands that call the model provider (memory ingest, consolidation,
+    /// automation runs). The record/replay provider is served on the test's
+    /// runtime, so a blocking wait would starve it until the command's own
+    /// provider timeout.
+    pub async fn cli_async(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
+        let mut command = tokio::process::Command::from(self.launch.command());
+        command.args(args).stdin(Stdio::null()).kill_on_drop(true);
+        let output = command.output().await?;
+        Ok(CliOutput {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
+    /// Runs `butler-agent <args>` (the `butler` CLI) against the same data
+    /// dir, blocking the calling thread. Only for commands that never reach
+    /// the model provider; otherwise use [`Agent::cli_async`].
     pub fn cli(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
         let output = self
             .launch
