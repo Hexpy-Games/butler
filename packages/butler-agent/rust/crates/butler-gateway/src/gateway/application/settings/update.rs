@@ -26,7 +26,7 @@ pub(super) fn prepare(
     if !validation::is_request(input) {
         return Err(invalid_settings());
     }
-    let patch = patch::sanitize(input, facts);
+    let patch = patch::sanitize(input, facts)?;
     let workspace_root = input
         .get("default_project_folder_selection_token")
         .and_then(Value::as_str)
@@ -60,6 +60,17 @@ pub(super) fn invalid_settings() -> GatewayApplicationError {
         status: 400,
         code: "invalid_settings_request".into(),
         message: "Settings update contains unsupported fields.".into(),
+        source: None,
+    }
+}
+
+/// A settings patch named a model (`field`) that is unknown, not runtime
+/// supported, or explicitly disabled.
+pub(super) fn model_unavailable(field: &str) -> GatewayApplicationError {
+    GatewayApplicationError::Public {
+        status: 400,
+        code: "settings_model_unavailable".into(),
+        message: format!("The selected {field} is not an available model."),
         source: None,
     }
 }

@@ -255,7 +255,8 @@ fn model(source: &ModelProviderMetadata) -> AppModelMetadata {
         aliases: source.aliases.clone().unwrap_or_default().into(),
         runtime_supported: source.runtime_supported,
         registered: source.registered == Some(true),
-        enabled: source.enabled == Some(true),
+        // Like the source, only an explicit `enabled: false` disables a model.
+        enabled: source.enabled != Some(false),
         reasoning_efforts: source
             .reasoning_efforts
             .iter()

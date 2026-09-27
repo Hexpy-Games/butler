@@ -13,6 +13,6 @@ pub(super) fn project(
 pub(super) fn sanitize(
     input: &serde_json::Value,
     facts: &super::super::AppSettingsFacts,
-) -> serde_json::Value {
+) -> Result<serde_json::Value, crate::gateway::GatewayApplicationError> {
     sanitize::sanitize(input, facts)
 }

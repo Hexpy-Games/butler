@@ -1,11 +1,18 @@
 use serde_json::{Map, Value, json};
 
 use super::super::super::{AppSettingsFacts, validation};
+use crate::gateway::GatewayApplicationError;
 use butler_core::public_text::trim_js_whitespace;
 
-pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
+/// The accepted subset of a settings patch. A requested model that is not a
+/// runtime-supported, enabled model is rejected rather than dropped, so the
+/// caller never reports success for a change that was not applied.
+pub(super) fn sanitize(
+    input: &Value,
+    facts: &AppSettingsFacts,
+) -> Result<Value, GatewayApplicationError> {
     let Some(input) = input.as_object() else {
-        return Value::Object(Map::new());
+        return Ok(Value::Object(Map::new()));
     };
     let mut output = Map::new();
     if let Some(value) = input.get("server_url").and_then(Value::as_str) {
@@ -22,9 +29,9 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
     {
         output.insert("timezone".into(), json!(value.trim()));
     }
-    if let Some(value) = input.get("model").and_then(Value::as_str)
-        && let Some(value) = super::super::available_model_ref(value, facts)
-    {
+    if let Some(value) = input.get("model").and_then(Value::as_str) {
+        let value = super::super::available_model_ref(value, facts)
+            .ok_or_else(|| super::super::model_unavailable("model"))?;
         output.insert("model".into(), json!(value));
     }
     if let Some(value) = input.get("reasoning_effort").and_then(Value::as_str)
@@ -36,7 +43,9 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
         let value = trim_js_whitespace(value);
         if value == "default" {
             output.insert("consolidation_model".into(), json!(value));
-        } else if let Some(value) = super::super::available_model_ref(value, facts) {
+        } else {
+            let value = super::super::available_model_ref(value, facts)
+                .ok_or_else(|| super::super::model_unavailable("consolidation_model"))?;
             output.insert("consolidation_model".into(), json!(value));
         }
     }
@@ -219,7 +228,7 @@ pub(super) fn sanitize(input: &Value, facts: &AppSettingsFacts) -> Value {
         }
         output.insert("model_fallback".into(), Value::Object(fallback));
     }
-    Value::Object(output)
+    Ok(Value::Object(output))
 }
 
 fn valid_server_url(value: &str) -> bool {
