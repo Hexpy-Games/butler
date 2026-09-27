@@ -80,12 +80,16 @@ pub trait PhaseExecutor: Send + Sync {
     ) -> crate::cognition::PhaseExecutionFuture<'a>;
 }
 
+/// Receives consolidation cycle events.
 pub trait CycleEventSink: Send + Sync {
+    /// Passthrough: metric dimensions are recorded as given, like every
+    /// other cycle metric.
     fn record(&self, name: &str, status: &str, dimensions: Value);
 }
 
 /// Consolidation events land in the operations cycle metrics.
 impl CycleEventSink for butler_runtime::operations::CycleMetrics {
+    /// Passthrough: the dimensions go to the cycle metrics unchanged.
     fn record(&self, name: &str, status: &str, dimensions: Value) {
         Self::record(self, name, status, &dimensions);
     }
@@ -142,51 +146,29 @@ impl CycleService {
         }
     }
 
+    /// Runs (or resumes) a consolidation cycle phase by phase, pausing when
+    /// the rate budget runs low and stopping when another writer holds the
+    /// lock.
     pub async fn run(&self, input: RunCycle) -> CognitionResult<CycleResult> {
         let run_id = input
             .run_id
+            .clone()
             .unwrap_or_else(|| format!("cr_{}", uuid::Uuid::new_v4()));
         // Check path safety before touching any durable state.
         checkpoint::checkpoint_path(&self.data_root, &self.environment(), &run_id)?;
         let started_at = self.host.now_iso();
-        let existing = checkpoint::read_checkpoint(&self.data_root, &self.environment(), &run_id)?;
-        if !input.resume && existing.is_some() {
-            return Err(CognitionError::new(
-                CognitionCode::ConsolidationCheckpointChanged,
-                "Run already exists; use --resume",
-            ));
-        }
-        let mut checkpoint = if input.resume {
-            existing.unwrap_or_else(|| Checkpoint::new(&run_id, &started_at))
-        } else {
-            Checkpoint::new(&run_id, &started_at)
+        let checkpoint = self.starting_checkpoint(&run_id, &started_at, input.resume)?;
+        let mut cycle = Cycle {
+            run_id,
+            started_at,
+            phases: Vec::new(),
+            checkpoint,
         };
-        let mut phases = Vec::new();
-        if let Some(budget) = (input.rate_budget)()
-            && budget.remaining_ratio < 0.1
-        {
-            phases.push(rate_phase(
-                Phase::Preflight,
-                PhaseResultStatus::DeferredRateLimited,
-                &budget,
-            ));
-            let result = result::build_result(
-                &self.data_root,
-                &self.environment(),
-                run_id,
-                started_at,
-                CycleStatus::DeferredRateLimited,
-                phases,
-                None,
-            )?;
-            self.with_lease(Some(&input.cancellation), || {
-                result::write_summary(&self.data_root, &self.environment(), &result)
-            })
-            .await?;
-            return Ok(result);
+        if let Some(budget) = low_budget(&input) {
+            return self.defer(cycle, &budget, &input.cancellation).await;
         }
         for (index, phase) in Phase::ALL.iter().copied().enumerate() {
-            if checkpoint.completed_phases.contains(&phase) {
+            if cycle.checkpoint.completed_phases.contains(&phase) {
                 continue;
             }
             if input.cancellation.is_cancelled() {
@@ -195,119 +177,181 @@ impl CycleService {
                     "Consolidation was cancelled",
                 ));
             }
-            if let Some(budget) = (input.rate_budget)()
-                && budget.remaining_ratio < 0.1
-            {
-                let previous = checkpoint.clone();
-                checkpoint.status = CheckpointStatus::PausedRateLimited;
-                checkpoint.next_phase_index = index;
-                checkpoint.rate_limit_reset_at = budget.reset_at.clone();
-                checkpoint.updated_at = self.host.now_iso();
-                phases.push(rate_phase(
-                    phase,
-                    PhaseResultStatus::PausedRateLimited,
-                    &budget,
-                ));
-                let result = result::build_result(
-                    &self.data_root,
-                    &self.environment(),
-                    run_id,
-                    started_at,
-                    CycleStatus::PausedRateLimited,
-                    phases,
-                    None,
-                )?;
-                self.commit_checkpoint(&previous, &checkpoint, Some(&result))
-                    .await?;
-                self.events.record(
-                    "consolidation_cycle_result",
-                    "skipped",
-                    serde_json::json!({"run_id":result.run_id,"phase_count":result.phases.len(),
-                            "error_count":checkpoint.errors.len(),"raw_text_included":false}),
-                );
-                return Ok(result);
+            if let Some(budget) = low_budget(&input) {
+                return self.pause(cycle, phase, index, &budget).await;
             }
-            let nonce = uuid::Uuid::new_v4().to_string();
-            let claimed = match self
-                .claim(
-                    &checkpoint,
-                    phase,
-                    index,
-                    &nonce,
-                    input.resume,
-                    &input.cancellation,
-                )
-                .await
-            {
-                Ok(value) => value,
-                Err(error) if error.code() == "memory_write_busy" => {
-                    phases.push(PhaseResult {
-                        phase,
-                        status: PhaseResultStatus::Error,
-                        metrics: butler_core::json::json_object!({"lock_held": true}),
-                        error: Some("consolidation lock is held".into()),
-                    });
-                    return result::build_result(
-                        &self.data_root,
-                        &self.environment(),
-                        run_id,
-                        started_at,
-                        CycleStatus::LockHeld,
-                        phases,
-                        None,
-                    );
-                }
-                Err(error) => return Err(error),
-            };
-            self.active_claims.lock().insert(nonce.clone());
-            let execution = self
-                .executor
-                .execute(phase, &run_id, &input.cancellation)
-                .await;
-            let now = self.host.now_iso();
-            let mut committed = claimed.clone();
-            committed.updated_at = now.clone();
-            committed.next_phase_index = index + 1;
-            committed.status = CheckpointStatus::Running;
-            committed.active_phase = None;
-            match execution {
-                Ok(metrics) => {
-                    phases.push(PhaseResult {
-                        phase,
-                        status: PhaseResultStatus::Ok,
-                        metrics,
-                        error: None,
-                    });
-                    committed.completed_phases.push(phase);
-                    for error in &mut committed.errors {
-                        if error.phase == phase && error.resolved_at.is_none() {
-                            error.resolved_at = Some(now.clone());
-                        }
-                    }
-                }
-                Err(error) => {
-                    let safe_message = if error.message == error.code {
-                        error.code.to_owned()
-                    } else {
-                        format!("{}: {}", error.code, error.message)
-                    };
-                    phases.push(PhaseResult {
-                        phase,
-                        status: PhaseResultStatus::Error,
-                        metrics: *error.metrics,
-                        error: Some(safe_message.clone()),
-                    });
-                    committed
-                        .errors
-                        .push(CheckpointError::new(phase, safe_message));
-                }
+            if self.run_phase(&mut cycle, phase, index, &input).await? == Step::LockHeld {
+                return self.lock_held(cycle, phase);
             }
-            let commit = self.commit_checkpoint(&claimed, &committed, None).await;
-            self.active_claims.lock().remove(&nonce);
-            commit?;
-            checkpoint = committed;
         }
-        let status = if checkpoint
+        self.complete(cycle).await
+    }
+
+    /// The checkpoint to start from: the stored one when resuming, a fresh
+    /// one otherwise (refused when the run already exists).
+    fn starting_checkpoint(
+        &self,
+        run_id: &str,
+        started_at: &str,
+        resume: bool,
+    ) -> CognitionResult<Checkpoint> {
+        let existing = checkpoint::read_checkpoint(&self.data_root, &self.environment(), run_id)?;
+        if !resume && existing.is_some() {
+            return Err(CognitionError::new(
+                CognitionCode::ConsolidationCheckpointChanged,
+                "Run already exists; use --resume",
+            ));
+        }
+        Ok(if resume {
+            existing.unwrap_or_else(|| Checkpoint::new(run_id, started_at))
+        } else {
+            Checkpoint::new(run_id, started_at)
+        })
+    }
+
+    /// The whole cycle is deferred before its first phase.
+    async fn defer(
+        &self,
+        cycle: Cycle,
+        budget: &RateBudget,
+        cancellation: &CancellationToken,
+    ) -> CognitionResult<CycleResult> {
+        let mut phases = cycle.phases;
+        phases.push(rate_phase(
+            Phase::Preflight,
+            PhaseResultStatus::DeferredRateLimited,
+            budget,
+        ));
+        let result = result::build_result(
+            &self.data_root,
+            &self.environment(),
+            cycle.run_id,
+            cycle.started_at,
+            CycleStatus::DeferredRateLimited,
+            phases,
+            None,
+        )?;
+        self.with_lease(Some(cancellation), || {
+            result::write_summary(&self.data_root, &self.environment(), &result)
+        })
+        .await?;
+        Ok(result)
+    }
+
+    /// The cycle pauses before `phase`, to resume there once the rate
+    /// budget recovers.
+    async fn pause(
+        &self,
+        cycle: Cycle,
+        phase: Phase,
+        index: usize,
+        budget: &RateBudget,
+    ) -> CognitionResult<CycleResult> {
+        let Cycle {
+            run_id,
+            started_at,
+            mut phases,
+            checkpoint: previous,
+        } = cycle;
+        let mut checkpoint = previous.clone();
+        checkpoint.status = CheckpointStatus::PausedRateLimited;
+        checkpoint.next_phase_index = index;
+        checkpoint.rate_limit_reset_at = budget.reset_at.clone();
+        checkpoint.updated_at = self.host.now_iso();
+        phases.push(rate_phase(
+            phase,
+            PhaseResultStatus::PausedRateLimited,
+            budget,
+        ));
+        let result = result::build_result(
+            &self.data_root,
+            &self.environment(),
+            run_id,
+            started_at,
+            CycleStatus::PausedRateLimited,
+            phases,
+            None,
+        )?;
+        self.commit_checkpoint(&previous, &checkpoint, Some(&result))
+            .await?;
+        self.record_result(&result.run_id, &result, &checkpoint, "skipped");
+        Ok(result)
+    }
+
+    /// Claims, executes and commits one phase.
+    async fn run_phase(
+        &self,
+        cycle: &mut Cycle,
+        phase: Phase,
+        index: usize,
+        input: &RunCycle,
+    ) -> CognitionResult<Step> {
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let claimed = match self
+            .claim(
+                &cycle.checkpoint,
+                phase,
+                index,
+                &nonce,
+                input.resume,
+                &input.cancellation,
+            )
+            .await
+        {
+            Ok(value) => value,
+            Err(error) if error.code() == "memory_write_busy" => return Ok(Step::LockHeld),
+            Err(error) => return Err(error),
+        };
+        self.active_claims.lock().insert(nonce.clone());
+        let execution = self
+            .executor
+            .execute(phase, &cycle.run_id, &input.cancellation)
+            .await;
+        let now = self.host.now_iso();
+        let mut committed = claimed.clone();
+        committed.updated_at = now.clone();
+        committed.next_phase_index = index + 1;
+        committed.status = CheckpointStatus::Running;
+        committed.active_phase = None;
+        cycle
+            .phases
+            .push(record_execution(&mut committed, phase, execution, &now));
+        let commit = self.commit_checkpoint(&claimed, &committed, None).await;
+        self.active_claims.lock().remove(&nonce);
+        commit?;
+        cycle.checkpoint = committed;
+        Ok(Step::Committed)
+    }
+
+    /// The result when another writer holds the consolidation lock.
+    fn lock_held(&self, cycle: Cycle, phase: Phase) -> CognitionResult<CycleResult> {
+        let mut phases = cycle.phases;
+        phases.push(PhaseResult {
+            phase,
+            status: PhaseResultStatus::Error,
+            metrics: butler_core::json::json_object!({"lock_held": true}),
+            error: Some("consolidation lock is held".into()),
+        });
+        result::build_result(
+            &self.data_root,
+            &self.environment(),
+            cycle.run_id,
+            cycle.started_at,
+            CycleStatus::LockHeld,
+            phases,
+            None,
+        )
+    }
+
+    /// Commits the final checkpoint and summary once every phase ran.
+    async fn complete(&self, cycle: Cycle) -> CognitionResult<CycleResult> {
+        let Cycle {
+            run_id,
+            started_at,
+            phases,
+            checkpoint: previous,
+        } = cycle;
+        let status = if previous
             .errors
             .iter()
             .any(|error| error.resolved_at.is_none())
@@ -316,7 +360,7 @@ impl CycleService {
         } else {
             CycleStatus::Completed
         };
-        let previous = checkpoint.clone();
+        let mut checkpoint = previous.clone();
         checkpoint.status = if status == CycleStatus::Completed {
             CheckpointStatus::Completed
         } else {
@@ -336,17 +380,107 @@ impl CycleService {
         // Final summary and checkpoint are serialized under the same claim authority.
         self.commit_checkpoint(&previous, &checkpoint, Some(&result))
             .await?;
+        let outcome = if status == CycleStatus::Completed {
+            "ok"
+        } else {
+            "skipped"
+        };
+        self.record_result(&run_id, &result, &checkpoint, outcome);
+        Ok(result)
+    }
+
+    fn record_result(
+        &self,
+        run_id: &str,
+        result: &CycleResult,
+        checkpoint: &Checkpoint,
+        outcome: &str,
+    ) {
+        let event = CycleResultEvent {
+            run_id,
+            phase_count: result.phases.len(),
+            error_count: checkpoint.errors.len(),
+            raw_text_included: false,
+        };
         self.events.record(
             "consolidation_cycle_result",
-            if status == CycleStatus::Completed {
-                "ok"
-            } else {
-                "skipped"
-            },
-            serde_json::json!({"run_id":run_id,"phase_count":result.phases.len(),
-                "error_count":checkpoint.errors.len(),"raw_text_included":false}),
+            outcome,
+            serde_json::to_value(event).unwrap_or_default(),
         );
-        Ok(result)
+    }
+}
+
+/// A cycle in progress: its identity, the phase results so far and the
+/// checkpoint as last committed.
+struct Cycle {
+    run_id: String,
+    started_at: String,
+    phases: Vec<PhaseResult>,
+    checkpoint: Checkpoint,
+}
+
+/// How a phase attempt ended.
+#[derive(PartialEq, Eq)]
+enum Step {
+    Committed,
+    LockHeld,
+}
+
+/// Dimensions of the `consolidation_cycle_result` event.
+#[derive(serde::Serialize)]
+struct CycleResultEvent<'a> {
+    run_id: &'a str,
+    phase_count: usize,
+    error_count: usize,
+    raw_text_included: bool,
+}
+
+/// The rate budget, when it is too low to start another phase.
+fn low_budget(input: &RunCycle) -> Option<RateBudget> {
+    (input.rate_budget)().filter(|budget| budget.remaining_ratio < 0.1)
+}
+
+/// Records a phase's outcome in the checkpoint about to be committed; the
+/// phase result to report.
+fn record_execution(
+    committed: &mut Checkpoint,
+    phase: Phase,
+    execution: Result<Map<String, Value>, PhaseError>,
+    now: &str,
+) -> PhaseResult {
+    match execution {
+        Ok(metrics) => {
+            committed.completed_phases.push(phase);
+            for error in committed
+                .errors
+                .iter_mut()
+                .filter(|error| error.phase == phase && error.resolved_at.is_none())
+            {
+                error.resolved_at = Some(now.to_owned());
+            }
+            PhaseResult {
+                phase,
+                status: PhaseResultStatus::Ok,
+                metrics,
+                error: None,
+            }
+        }
+        Err(error) => {
+            let safe_message = if error.message == error.code {
+                error.code.to_owned()
+            } else {
+                format!("{}: {}", error.code, error.message)
+            };
+            committed
+                .errors
+                .push(CheckpointError::new(phase, safe_message.clone()));
+            PhaseResult {
+                phase,
+                status: PhaseResultStatus::Error,
+                metrics: *error.metrics,
+                error: Some(safe_message),
+            }
+        }
     }
 }
 
