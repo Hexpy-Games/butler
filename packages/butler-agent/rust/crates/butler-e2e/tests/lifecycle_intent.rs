@@ -194,7 +194,10 @@ async fn svc_03_restart_is_announced_until_the_new_instance_is_ready() -> Result
     assert_eq!(restart["data"]["pid"], after["pid"]);
     assert!(read_intent(&data).is_none(), "intent survived the restart");
     assert!(reachable(&s.gw, Duration::from_secs(30)).await);
-    eprintln!(
+    // Written to the process stderr directly, not through the captured
+    // `eprintln!`, so the timing shows in the log of a passing run too.
+    let _ = writeln!(
+        std::io::stderr(),
         "SVC-03 timing: intent written {announced:?}, new instance ready {:?}, restart returned {returned:?}",
         watch.ready
     );
