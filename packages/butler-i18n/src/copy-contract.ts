@@ -635,6 +635,7 @@ export interface AppCopy {
     attachFile: string;
     attachImage: string;
     imagesUnsupported: string;
+    imageSupportUnknown: string;
     imageTypeUnsupported: string;
     imageTooLarge: string;
     featureDrawer: string;

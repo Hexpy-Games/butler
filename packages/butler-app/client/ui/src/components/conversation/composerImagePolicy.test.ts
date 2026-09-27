@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
+import { setAppCopyLanguage } from "@/app/copy.ts";
 import type { AppModelSummary } from "@/app/types.ts";
 import {
   attachmentPickerFilter,
   blockedImageAttachmentIds,
   composerImagePolicy,
   imageRefusal,
+  imageRefusalLabel,
   isImageFile,
 } from "./composerImagePolicy";
 
@@ -28,15 +30,27 @@ test("image kinds follow the gateway: png/jpeg/webp/gif by MIME, or by extension
   expect(isImageFile({ name: "a.pdf", type: "application/pdf" })).toBe(false);
 });
 
-test("unsupported blocks images; supported and unknown allow them", () => {
-  expect(composerImagePolicy(model({ image_input_support: "unsupported" })).accepts).toBe(false);
+test("only supported allows images; unsupported and unknown/missing block them", () => {
   expect(composerImagePolicy(model({ image_input_support: "supported" })).accepts).toBe(true);
-  // Unknown or absent metadata is allowed: the catalog declares text-only models
-  // explicitly, most models carry no image metadata, and the gateway's visual
-  // admission remains the authority at send time.
-  expect(composerImagePolicy(model({ image_input_support: "unknown" })).accepts).toBe(true);
-  expect(composerImagePolicy(model()).accepts).toBe(true);
-  expect(composerImagePolicy(null).accepts).toBe(true);
+  expect(composerImagePolicy(model({ image_input_support: "unsupported" }))).toEqual({
+    accepts: false, blockedBy: "model", mimeTypes: [],
+  });
+  // Unknown capability matches the gateway, which rejects images at admission.
+  for (const unknown of [model({ image_input_support: "unknown" }), model(), null, undefined]) {
+    expect(composerImagePolicy(unknown)).toEqual({ accepts: false, blockedBy: "unknown", mimeTypes: [] });
+  }
+});
+
+test("unknown capability refuses images with its own short reason", () => {
+  setAppCopyLanguage("en-US");
+  const unknown = composerImagePolicy(model({ image_input_support: "unknown" }));
+  expect(imageRefusal(png, unknown)).toBe("unknown");
+  expect(imageRefusal({ name: "a.pdf", type: "application/pdf", size: 10 }, unknown)).toBeNull();
+  expect(imageRefusalLabel("unknown")).toBe("Image support unknown for this model");
+  expect(imageRefusalLabel("model")).toBe("Model doesn't accept images");
+  setAppCopyLanguage("ko-KR");
+  expect(imageRefusalLabel("unknown")).toBe("이미지 지원 여부를 확인할 수 없는 모델");
+  setAppCopyLanguage("en-US");
 });
 
 test("refusal reasons: model, catalog MIME list (gif counts as png), inline byte limit", () => {
@@ -54,11 +68,11 @@ test("refusal reasons: model, catalog MIME list (gif counts as png), inline byte
   expect(imageRefusal({ name: "a.webp", type: "image/webp", size: 10 }, limited)).toBe("type");
   expect(imageRefusal({ ...png, size: 101 }, limited)).toBe("size");
 
-  const unknown = composerImagePolicy(model());
-  expect(imageRefusal({ name: "a.webp", type: "image/webp", size: 10 ** 9 }, unknown)).toBeNull();
+  const unlimited = composerImagePolicy(model({ image_input_support: "supported" }));
+  expect(imageRefusal({ name: "a.webp", type: "image/webp", size: 10 ** 9 }, unlimited)).toBeNull();
 });
 
-test("picker accept excludes image MIME types only for text-only models", () => {
+test("picker accept excludes image MIME types unless the model supports images", () => {
   const allowed = composerImagePolicy(model({ image_input_support: "supported" }));
   expect(attachmentPickerFilter("files", allowed)).toEqual({ filter: "all-files" });
 
@@ -79,9 +93,13 @@ test("picker accept excludes image MIME types only for text-only models", () => 
   expect(attachmentPickerFilter("images", limited)).toEqual({
     filter: "images", accept: "image/png,image/jpeg,image/gif",
   });
-  expect(attachmentPickerFilter("images", composerImagePolicy(model()))).toEqual({
+  expect(attachmentPickerFilter("images", composerImagePolicy(model({ image_input_support: "supported" })))).toEqual({
     filter: "images", accept: "image/png,image/jpeg,image/webp,image/gif",
   });
+  for (const blocked of [textOnly, composerImagePolicy(model())]) {
+    expect(attachmentPickerFilter("files", blocked).filter).toBe("non-image");
+    expect(attachmentPickerFilter("images", blocked).filter).toBe("non-image");
+  }
 });
 
 test("already attached images are marked blocked after switching to a model that refuses them", () => {
@@ -91,6 +109,8 @@ test("already attached images are marked blocked after switching to a model that
   ];
   const textOnly = composerImagePolicy(model({ image_input_support: "unsupported" }));
   expect(blockedImageAttachmentIds(attachments, textOnly)).toEqual(new Map([["img", "model"]]));
+  const unknown = composerImagePolicy(model({ image_input_support: "unknown" }));
+  expect(blockedImageAttachmentIds(attachments, unknown)).toEqual(new Map([["img", "unknown"]]));
   const capable = composerImagePolicy(model({ image_input_support: "supported" }));
   expect(blockedImageAttachmentIds(attachments, capable).size).toBe(0);
 });

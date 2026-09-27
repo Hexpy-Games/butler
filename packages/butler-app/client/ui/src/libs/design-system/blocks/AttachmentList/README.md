@@ -20,7 +20,7 @@ keeps the thumbnail (or icon), name, remove action, and optional size metadata
 in that priority order; the size metadata hides first in narrow containers.
 
 Set `blockedReason` on an item the current context cannot send (an image after
-switching to a text-only model). The chip stays and stays removable; it dims
+switching to a text-only model, or one whose image support is unknown). The chip stays and stays removable; it dims
 and its name tooltip shows the few-word reason.
 
 ## Who can use this component

@@ -53,6 +53,7 @@ function model(fields: Partial<AppModelSummary> = {}): AppModelSummary {
   };
 }
 const TEXT_ONLY = model({ model_ref: "openai/text", image_input_support: "unsupported" });
+const UNKNOWN = model({ model_ref: "openai/unknown", image_input_support: "unknown" });
 const VISION = model({ model_ref: "openai/vision", image_input_support: "supported",
   image_accepted_mime_types: ["image/png", "image/jpeg"], image_max_inline_bytes: 100 });
 
@@ -237,4 +238,55 @@ test("switching to a text-only model keeps attached images but blocks send with 
   expect(chips.map((chip) => chip.getAttribute("data-blocked"))).toEqual(["true", null]);
   expect(chips[0]?.querySelector('[data-slot="attachment-name"]')?.getAttribute("aria-label"))
     .toBe(`shot.png, ${appCopy.composer.imagesUnsupported}`);
+});
+
+test("unknown image capability blocks images like text-only, with its own short reason", async () => {
+  const container = mount();
+  const openAttachmentPicker = mock((_kind?: "files" | "images") => undefined);
+  useButlerStore.setState({ activeChatId: "draft:chat", navigation: EMPTY_NAVIGATION, settings: EMPTY_SETTINGS });
+  useComposerStore.setState({ uploadingCount: 0, activeModel: UNKNOWN, openAttachmentPicker });
+  await act(async () => root!.render(<ComposerAttachmentMenu />));
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('[data-test-class="attachment-button"]')!
+      .dispatchEvent(new dom!.window.MouseEvent("click", { bubbles: true }));
+  });
+  const item = () => Array.from(dom!.window.document.querySelectorAll<HTMLButtonElement>('[data-slot="option-menu-item"]'))
+    .find((node) => node.textContent?.includes(appCopy.composer.attachImage));
+  expect(item()?.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => item()!.dispatchEvent(new dom!.window.MouseEvent("click", { bubbles: true })));
+  expect(openAttachmentPicker).not.toHaveBeenCalled();
+  await act(async () => item()!.dispatchEvent(new dom!.window.MouseEvent("pointerover", { bubbles: true })));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 700)));
+  expect(dom!.window.document.querySelector('[role="tooltip"]')?.textContent).toBe("Image support unknown for this model");
+  await act(async () => root!.render(null));
+
+  const uploads = installUploads();
+  setAppCopyLanguage("ko-KR");
+  markToasts();
+  let state!: ReturnType<typeof useFileAttachments>;
+  await act(async () => root!.render(<AttachmentHarness chatId="draft:unknown" policy={composerImagePolicy(UNKNOWN)} onState={(next) => { state = next; }} />));
+  await act(async () => state.addFiles(files(["photo.png", "image/png"], ["notes.pdf", "application/pdf"])));
+  expect(uploads).toEqual(["notes.pdf"]);
+  expect(toastTitles()).toContain("이미지 지원 여부를 확인할 수 없는 모델");
+  const refusal = newToasts().find((item) => "title" in item && item.title === "이미지 지원 여부를 확인할 수 없는 모델");
+  expect(refusal && "description" in refusal ? refusal.description : undefined).toBeUndefined();
+  setAppCopyLanguage("en-US");
+
+  const attachments = [attachment("shot", "image", "image/png")];
+  let composer!: ReturnType<typeof useComposerState>;
+  const catalog = { models: [UNKNOWN, VISION] } as never;
+  function Harness({ modelRef }: { modelRef: string }) {
+    composer = useComposerState(null, {}, EMPTY_SETTINGS, catalog, modelRef, "ready", "hi", attachments, false, 0);
+    return null;
+  }
+  await act(async () => root!.render(<Harness modelRef={UNKNOWN.model_ref} />));
+  expect(composer.canSend).toBe(false);
+  expect([...composer.blockedAttachments.entries()]).toEqual([["shot", "unknown"]]);
+  await act(async () => {
+    useComposerStore.setState({ attachments, blockedAttachments: composer.blockedAttachments, canSend: false, text: "hi" });
+    root!.render(<><ComposerAttachments /><ComposerToolbar /></>);
+  });
+  expect(container.querySelector('[data-slot="attachment-name"]')?.getAttribute("aria-label"))
+    .toBe("shot.png, Image support unknown for this model");
+  expect(container.querySelector('[data-test-class="composer-send-button"]')?.getAttribute("aria-disabled")).toBe("true");
 });

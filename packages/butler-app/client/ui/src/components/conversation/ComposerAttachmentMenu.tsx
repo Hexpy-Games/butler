@@ -20,7 +20,7 @@ import {
 import { activeProjectId } from "./composerProjectContext";
 import { useComposerStore } from "./composerStore";
 import { ComposerProjectDocumentMenu } from "./ComposerProjectDocumentMenu";
-import { composerImagePolicy } from "./composerImagePolicy";
+import { composerImagePolicy, imageRefusalLabel } from "./composerImagePolicy";
 
 export function ComposerAttachmentMenu() {
   useAppLocale();
@@ -36,7 +36,7 @@ export function ComposerAttachmentMenu() {
   const openAttachmentPicker = useComposerStore(
     (store) => store.openAttachmentPicker,
   );
-  const imagesAccepted = useComposerStore((store) => composerImagePolicy(store.activeModel).accepts);
+  const imagesBlockedBy = useComposerStore((store) => composerImagePolicy(store.activeModel).blockedBy);
   const [open, setOpen] = useState(false);
   const theme = appShellTheme(settings);
 
@@ -86,7 +86,7 @@ export function ComposerAttachmentMenu() {
             <OptionMenuItem
               icon={<ImageIcon size="md" />}
               label={appCopy.composer.attachImage}
-              disabledReason={imagesAccepted ? undefined : appCopy.composer.imagesUnsupported}
+              disabledReason={imagesBlockedBy ? imageRefusalLabel(imagesBlockedBy) : undefined}
               onClick={() => {
                 openAttachmentPicker("images");
                 setOpen(false);
