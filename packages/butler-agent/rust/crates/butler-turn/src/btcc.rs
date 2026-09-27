@@ -80,8 +80,8 @@ pub use continuation_budget::{TurnContinuationBudgetLimits, select_turn_continua
 pub use effects::contracts::{
     Access as EffectAccess, AdapterOutcome, BlockerRelation, EffectAdapter, EffectAdapterError,
     EffectBlocker, EffectError, EffectFailure, EffectFuture, EffectJournal, EffectOutcome,
-    EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedWrite, RecoveryHint,
-    RegisteredEditPort, RegisteredWritePort,
+    EffectRecord, EffectStatus, ExecuteEffect, PlanBinding, PreparedEdit, PreparedEditEntry,
+    PreparedWrite, RecoveryHint, RegisteredEditPort, RegisteredWritePort,
 };
 pub use effects::workspace_edit::{
     WorkspaceFileEditEffectAdapter, batch_target as workspace_edit_batch_target,
