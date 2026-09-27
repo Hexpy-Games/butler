@@ -64,6 +64,30 @@ async fn new_session(s: &Scenario, title: &str) -> Result<String, HarnessError> 
         .to_owned())
 }
 
+/// The turn's states only move forward and end in exactly one terminal
+/// state, `delivered`.
+fn assert_delivered_once_in_order(events: &[Value], turn_id: &str) {
+    let states = turn_states(events, turn_id);
+    assert_eq!(
+        states.last().map(String::as_str),
+        Some("delivered"),
+        "{states:?}"
+    );
+    let ranks: Vec<u8> = states.iter().map(|state| state_rank(state)).collect();
+    assert!(
+        ranks.windows(2).all(|pair| pair[0] <= pair[1]),
+        "non-monotonic states {states:?}"
+    );
+    assert_eq!(
+        states
+            .iter()
+            .filter(|state| TERMINAL.contains(&state.as_str()))
+            .count(),
+        1,
+        "{states:?}"
+    );
+}
+
 /// TURN-01 — Reply is delivered, persisted and survives restart.
 #[tokio::test]
 async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(), HarnessError> {
@@ -91,26 +115,7 @@ async fn turn_01_reply_is_delivered_persisted_and_survives_restart() -> Result<(
         })
         .await?;
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let events = live.snapshot();
-    let states = turn_states(&events, &turn_id);
-    assert_eq!(
-        states.last().map(String::as_str),
-        Some("delivered"),
-        "{states:?}"
-    );
-    let ranks: Vec<u8> = states.iter().map(|state| state_rank(state)).collect();
-    assert!(
-        ranks.windows(2).all(|pair| pair[0] <= pair[1]),
-        "non-monotonic states {states:?}"
-    );
-    assert_eq!(
-        states
-            .iter()
-            .filter(|state| TERMINAL.contains(&state.as_str()))
-            .count(),
-        1,
-        "{states:?}"
-    );
+    assert_delivered_once_in_order(&live.snapshot(), &turn_id);
 
     let messages = s.gw.messages("general").await?;
     let users = by_role(&messages, "user");

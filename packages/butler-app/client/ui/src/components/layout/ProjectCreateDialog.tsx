@@ -77,13 +77,13 @@ export function ProjectCreateDialog({
         else close();
       }}
     >
-      <DialogContent
+      <DialogContent closeLabel={appCopy.common.close}
         aria-describedby={undefined}
         data-test-class="modal-card"
         glassRadius="composer"
         showCloseButton={!pending}
       >
-        <DialogTitle className="sr-only">
+        <DialogTitle visuallyHidden>
           {appCopy.sidebar.projectCreateTitle}
         </DialogTitle>
         <DialogForm

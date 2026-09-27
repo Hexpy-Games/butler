@@ -31,8 +31,8 @@ to each other.
 
 - Do not place adjacent buttons directly in `Stack`.
 - Do not mix `sm` and `default` buttons in the same container.
-- For row action clusters that need row-click propagation isolation, use
-  `RowActionCluster`; it delegates spacing to `ButtonContainer`.
+- For row actions inside a clickable row, stop click propagation on the
+  `ButtonContainer` (`onClick={(event) => event.stopPropagation()}`).
 
 ## Tags
 

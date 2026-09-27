@@ -6,6 +6,10 @@ import {
   normalizeRightPanelWidth,
   clampPanelWidth,
 } from "./panelSizing.ts";
+import {
+  restoreAdaptivePanelState,
+  type AdaptiveMode,
+} from "../libs/design-system/responsive.ts";
 
 const APP_UI_STATE_SCHEMA = "butler.app-ui-state.v1";
 const APP_UI_STATE_KEY = "butler:app-ui-state:v1";
@@ -64,7 +68,7 @@ export function snapshotForAppUiState(
     schema: APP_UI_STATE_SCHEMA,
     cached_at: new Date().toISOString(),
     active_session_id: normalizeString(input.active_session_id, "draft:chat"),
-    left_open: input.left_open ?? false,
+    left_open: input.left_open ?? true,
     right_open: input.right_open ?? true,
     right_tab: normalizeString(input.right_tab, "summary"),
     left_panel_width: clampPanelWidth(
@@ -83,6 +87,21 @@ export function snapshotForAppUiState(
     space_tab: input.space_tab === "recent" || input.space_tab === "running" ? input.space_tab : "all",
     space_collapsed_keys: normalizeStringArray(input.space_collapsed_keys),
   };
+}
+
+/**
+ * Panel state for a completed setup with no saved app UI state: the sidebar
+ * opens at expanded widths only. A saved snapshot always wins over this.
+ */
+export function freshAppUiPanelState(
+  mode: AdaptiveMode,
+  rightOpen: boolean,
+): { leftOpen: boolean; rightOpen: boolean } {
+  return restoreAdaptivePanelState({
+    mode,
+    leftOpen: snapshotForAppUiState({}).left_open,
+    rightOpen,
+  });
 }
 
 function normalizeAppUiState(value: unknown): AppUiStateSnapshot | null {

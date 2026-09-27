@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
+import { readRepoOrLedgerFile, repoOrLedgerExists, ledgerTest } from "../support/project-ledger-root.ts";
 
-test("context management has a dedicated governing spec and phased plan", () => {
+ledgerTest("context management has a dedicated governing spec and phased plan", () => {
   const specPath = "project-ledger/projects/butler/specs/context-management-optimization.md";
   const planPath = "project-ledger/projects/butler/plans/plan-context-management-optimization.md";
 
@@ -25,7 +25,7 @@ test("context management has a dedicated governing spec and phased plan", () => 
   }
 });
 
-test("context management research records RTK decision and cache policy", () => {
+ledgerTest("context management research records RTK decision and cache policy", () => {
   const reportPath = "project-ledger/projects/butler/reports/context-management-research.md";
 
   expect(repoOrLedgerExists(reportPath)).toBe(true);
@@ -49,7 +49,7 @@ test("context management research records RTK decision and cache policy", () => 
   expect(report).toContain("artifact retention");
 });
 
-test("context management research cites external memory and provider references", () => {
+ledgerTest("context management research cites external memory and provider references", () => {
   const spec = readRepoOrLedgerFile(
     "project-ledger/projects/butler/specs/context-management-optimization.md",
   );

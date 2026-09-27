@@ -1,0 +1,36 @@
+.frame {
+  display: block;
+  max-width: 100%;
+  aspect-ratio: 1;
+  contain: layout paint size;
+}
+
+.frame > :is(canvas, img, video, svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.frame[data-size="xs"] {
+  width: var(--icon-size-xs);
+}
+
+.frame[data-size="sm"] {
+  width: var(--icon-size-sm);
+}
+
+.frame[data-size="md"] {
+  width: var(--icon-size-md);
+}
+
+.frame[data-size="lg"] {
+  width: var(--icon-size-lg);
+}
+
+.frame[data-size="xl"] {
+  width: var(--icon-size-xl);
+}
+
+.frame[data-size="2xl"] {
+  width: var(--icon-size-2xl);
+}

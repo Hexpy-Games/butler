@@ -60,7 +60,7 @@ export function WorkersPanel({
       </Button>
     ) : null;
     const detailBlocks = expanded && blocks.length > 0 ? (
-      <Stack gap="1" id={detailsId}>
+      <Stack gap="xs" id={detailsId}>
         {blocks.map((block, index) => (
           <WorkActivityBlock
             data-work-block-id={block.id}
@@ -88,11 +88,12 @@ export function WorkersPanel({
     if (detailAction) actions.unshift(detailAction);
     return {
       id: worker.worker_id,
-      icon: <span className={`worker-dot ${worker.phase}`} />,
+      icon: <span aria-hidden="true" data-worker-phase={worker.phase} />,
       title: workerActivityDisplayName(worker),
       description: workerActivityDescription(worker),
       meta: workerActivityMeta(worker),
       phase: worker.semantic_phase ?? worker.phase,
+      phaseRailLabel: appCopy.interfaceStatus.workerPhase,
       depth,
       details: detailBlocks,
       actions,
@@ -107,7 +108,7 @@ export function WorkersPanel({
   return (
     <InspectorPanel
       title={appCopy.inspector.tabs.workers}
-      icon={<Activity size={15} />}
+      icon={<Activity size="md" />}
     >
       {workers.length > 0 ? (
         <WorkerActivityPanel items={items} />

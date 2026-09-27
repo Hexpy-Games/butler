@@ -1,11 +1,13 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import { Children, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { Card } from "../../components/Card";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
 import styles from "./CardList.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface CardListProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+export interface CardListProps extends Omit<DsBaseProps<HTMLAttributes<HTMLElement>>, "title"> {
   title?: ReactNode;
   actions?: ReactNode;
   empty?: ReactNode;
@@ -13,7 +15,7 @@ export interface CardListProps extends Omit<HTMLAttributes<HTMLElement>, "title"
   children: ReactNode;
 }
 
-export interface CardListItemProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+export interface CardListItemProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title"> {
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -44,7 +46,7 @@ export function CardList({
     <section className={cn(styles.cardList, className)} style={listStyle} {...props}>
       {(title || actions) && (
         <div className={styles.header}>
-          {title && <Typo.Body className={styles.heading}>{title}</Typo.Body>}
+          {title && <Typo.Body className={dsClass(styles.heading)}>{title}</Typo.Body>}
           {actions}
         </div>
       )}
@@ -65,20 +67,20 @@ export function CardListItem({
 }: CardListItemProps) {
   return (
     <Card
-      className={cn(styles.item, className)}
+      className={dsClass(styles.item, className)}
       data-has-icon={icon ? "true" : undefined}
       padding="md"
       selected={selected}
       {...props}
     >
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
-      <Stack gap="xs" className={styles.content}>
+      <Stack gap="xs" className={dsClass(styles.content)}>
         <div className={styles.titleRow}>
-          <Typo.Body className={styles.title}>{title}</Typo.Body>
-          {meta && <Typo.Caption className={styles.meta}>{meta}</Typo.Caption>}
+          <Typo.Body className={dsClass(styles.title)}>{title}</Typo.Body>
+          {meta && <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>}
         </div>
         {description && (
-          <Typo.Caption className={styles.description}>{description}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.description)}>{description}</Typo.Caption>
         )}
       </Stack>
       {actions && <div className={styles.actions}>{actions}</div>}

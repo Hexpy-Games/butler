@@ -19,7 +19,11 @@ Import from the public design-system alias:
 import { Input } from "@/butler-ds";
 ```
 
-Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
+Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
+
+`compact` makes a short inline field (5.5rem, small control height; the
+touch target still applies on coarse pointers) for a number in a toolbar,
+such as the Worker profiles header's max simultaneous Workers.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

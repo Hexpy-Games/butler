@@ -1,11 +1,44 @@
 .tag {
   width: fit-content;
-  min-height: 20px;
-  padding: 0 var(--space-1);
-  border: 1px solid var(--line);
+  min-height: var(--tag-height-sm);
+  padding-block: var(--tag-padding-block);
+  padding-inline: var(--tag-padding-inline-sm);
+  border: var(--border-hairline) solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--text-secondary);
+}
+
+.tag[data-size="md"] {
+  min-height: var(--tag-height-md);
+  padding-inline: var(--tag-padding-inline-md);
+}
+
+.tag[data-removable="true"] {
+  padding-inline-end: var(--space-xs);
+}
+
+.tag[data-tone="accent"] {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  color: var(--accent);
+}
+
+.tag[data-tone="success"] {
+  border-color: var(--color-success-border);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.tag[data-tone="warning"] {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.tag[data-tone="danger"] {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .icon {
@@ -15,12 +48,20 @@
 }
 
 .icon svg {
-  width: 11px;
-  height: 11px;
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
 }
 
 .label {
   color: inherit;
   font-size: var(--font-size-1);
-  line-height: 1;
+  line-height: var(--line-height-tight);
+}
+
+.tag[data-size="md"] .label {
+  font-size: var(--font-size-2);
+}
+
+.remove {
+  color: inherit;
 }

@@ -50,6 +50,9 @@ export function useAppBootstrap() {
   const setTurnProgress = useButlerStore((state) => state.setTurnProgress);
   const setStatus = useButlerStore((state) => state.setStatus);
   const hydrateUiState = useButlerStore((state) => state.hydrateUiState);
+  const hydrateFreshUiState = useButlerStore(
+    (state) => state.hydrateFreshUiState,
+  );
   const messageCacheTimerRef = useRef<
     ReturnType<typeof setTimeout> | undefined
   >(undefined);
@@ -70,6 +73,8 @@ export function useAppBootstrap() {
         if (!cancelled && snapshot) {
           hydrateUiState(snapshot);
           useOrganization.setState({ tab: snapshot.space_tab, collapsed: snapshot.space_collapsed_keys });
+        } else if (!cancelled) {
+          hydrateFreshUiState();
         }
       } finally {
         if (!cancelled) uiStateHydratedRef.current = true;
@@ -122,7 +127,7 @@ export function useAppBootstrap() {
       unsubscribeOrganization();
       if (uiStateTimerRef.current) clearTimeout(uiStateTimerRef.current);
     };
-  }, [hydrateUiState]);
+  }, [hydrateFreshUiState, hydrateUiState]);
 
   useEffect(() => {
     const abortController = new AbortController();

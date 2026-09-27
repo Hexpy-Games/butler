@@ -4,10 +4,10 @@ import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import type { DeveloperLogListView } from "@/app/types.ts";
-import { Button, Input, NativeSelect, Stack, Typo } from "@/butler-ds";
+import { Button, Input, NativeSelect } from "@/butler-ds";
 import { DeveloperLogRow } from "./DeveloperLogRow";
 import type { DeveloperLogTab } from "./developerLogViewerTypes";
-import { SettingsSection } from "./SettingsSection";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 
 const PAGE_SIZE = 30;
 type DeveloperLogKindFilter = "all" | "model_turn" | "model_turn_error";
@@ -21,6 +21,7 @@ export function DeveloperLogsSettings() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [tab, setTab] = useState<DeveloperLogTab>("context");
   const [loading, setLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const copy = appCopy.settings;
   const logCopy = copy.developerLogViewer;
 
@@ -36,6 +37,7 @@ export function DeveloperLogsSettings() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     try {
       const next = await loadPage();
       setView(next);
@@ -45,10 +47,8 @@ export function DeveloperLogsSettings() {
         }
         return next.entries[0]?.id ?? null;
       });
-    } catch (error) {
-      notifyError(error, copy.errors.loadDeveloperLogs, {
-        id: "settings-developer-logs",
-      });
+    } catch {
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -64,9 +64,7 @@ export function DeveloperLogsSettings() {
         entries: [...view.entries, ...next.entries],
       });
     } catch (error) {
-      notifyError(error, copy.errors.loadDeveloperLogs, {
-        id: "settings-developer-logs-more",
-      });
+      notifyError(error, copy.errors.loadDeveloperLogs, { id: "settings-developer-logs-more" });
     } finally {
       setLoading(false);
     }
@@ -83,12 +81,15 @@ export function DeveloperLogsSettings() {
   );
 
   return (
-    <SettingsSection
-      title={copy.panels.developerLogs}
-      description={copy.descriptions.developerLogs}
-    >
-      <Stack gap="md">
-        <Stack align="row" gap="sm" wrap>
+    <SettingsPage>
+      <SettingsSection
+        id="developer-logs"
+        kind="list"
+        state={view === null ? (loadFailed ? "error" : "loading") : entries.length === 0 ? "empty" : "ready"}
+        errorMessage={copy.errors.loadDeveloperLogs}
+        emptyMessage={copy.descriptions.developerLogsEmpty}
+        onRetry={() => void refresh()}
+        actions={<>
           <Input
             value={query}
             placeholder={copy.placeholders.developerLogSearch}
@@ -107,47 +108,28 @@ export function DeveloperLogsSettings() {
             <option value="model_turn">{logCopy.filters.modelTurn}</option>
             <option value="model_turn_error">{logCopy.filters.modelTurnError}</option>
           </NativeSelect>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void refresh()}
-          >
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void refresh()}>
             {appCopy.common.refresh}
           </Button>
-        </Stack>
-
-        {entries.length === 0 ? (
-          <Typo.Body>{copy.descriptions.developerLogsEmpty}</Typo.Body>
-        ) : (
-          <Stack gap="sm">
-            {entries.map((entry) => (
-              <DeveloperLogRow
-                key={entry.id}
-                entry={entry}
-                open={entry.id === openEntry?.id}
-                tab={tab}
-                copy={logCopy}
-                onTabChange={setTab}
-                onToggle={() => setOpenId((current) => current === entry.id ? null : entry.id)}
-              />
-            ))}
-          </Stack>
-        )}
-
+        </>}
+      >
+        {entries.map((entry) => (
+          <DeveloperLogRow
+            key={entry.id}
+            entry={entry}
+            open={entry.id === openEntry?.id}
+            tab={tab}
+            copy={logCopy}
+            onTabChange={setTab}
+            onToggle={() => setOpenId((current) => current === entry.id ? null : entry.id)}
+          />
+        ))}
         {view?.pagination.has_more && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void loadMore()}
-          >
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void loadMore()}>
             {appCopy.common.more}
           </Button>
         )}
-      </Stack>
-    </SettingsSection>
+      </SettingsSection>
+    </SettingsPage>
   );
 }

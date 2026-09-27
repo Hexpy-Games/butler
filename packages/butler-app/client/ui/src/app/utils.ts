@@ -1,6 +1,10 @@
 import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy, interfaceText } from "./copy.ts";
 import {
+  adaptiveShellThemeClasses,
+  type AdaptiveShellTheme,
+} from "../libs/design-system/blocks/AdaptiveShell/theme.ts";
+import {
   progressRowFromSharedTurnEvent,
 } from "../../../../../butler-progress-projection/src/index.ts";
 import {
@@ -1763,20 +1767,22 @@ export function resolveAppearanceTheme(
   return prefersDark ? "dark" : "light";
 }
 
+export function appShellTheme(
+  settings: SettingsView,
+  prefersDark?: boolean,
+): AdaptiveShellTheme {
+  return {
+    appearance: resolveAppearanceTheme(settings?.appearance_theme, prefersDark),
+    sidebar: settings?.translucent_sidebar === false ? "solid" : "translucent",
+    mainScreen: settings?.main_screen_theme ?? "bloom",
+  };
+}
+
 export function appThemeClasses(
   settings: SettingsView,
   prefersDark?: boolean,
 ): string {
-  const theme = `theme-${resolveAppearanceTheme(
-    settings?.appearance_theme,
-    prefersDark,
-  )}`;
-  const sidebar =
-    settings?.translucent_sidebar === false
-      ? "sidebar-solid"
-      : "sidebar-translucent";
-  const mainScreenTheme = `main-screen-theme-${settings?.main_screen_theme ?? "bloom"}`;
-  return `${theme} ${sidebar} ${mainScreenTheme}`;
+  return adaptiveShellThemeClasses(appShellTheme(settings, prefersDark));
 }
 
 export function normalizeSettingsSectionId(value: unknown): SettingsSectionId {

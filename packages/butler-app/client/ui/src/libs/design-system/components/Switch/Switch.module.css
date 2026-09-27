@@ -1,7 +1,3 @@
-.fixture {
-  min-width: 0;
-}
-
 .switch {
   display: inline-flex;
   width: 34px;
@@ -31,7 +27,7 @@
 }
 
 .switch:focus-visible {
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: var(--focus-ring);
 }
 
 .thumb {
@@ -40,7 +36,7 @@
   border-radius: 50%;
   background: var(--switch-thumb);
   box-shadow: var(--shadow-control);
-  transition: transform 140ms ease;
+  transition: transform var(--motion-base) var(--motion-ease-spring);
 }
 
 .switch[data-size="sm"] .thumb {
@@ -54,6 +50,12 @@
 
 .switch[data-size="sm"][data-state="checked"] .thumb {
   transform: translateX(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb {
+    transition: none;
+  }
 }
 
 @media (width <= 640px), (pointer: coarse) {

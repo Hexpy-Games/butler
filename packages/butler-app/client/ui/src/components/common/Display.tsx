@@ -3,7 +3,7 @@ import { Circle, Clickable, EmptyLine, FileText, ListRow } from "@/butler-ds";
 import type { IconElement, SessionArtifactSummary } from "@/app/types.ts";
 
 export function EmptyPanelLine({ label }: { label: string }) {
-  return <EmptyLine icon={<Circle size={15} />} message={label} />;
+  return <EmptyLine icon={<Circle size="md" />} message={label} />;
 }
 
 export function Suggestion({
@@ -19,7 +19,7 @@ export function Suggestion({
 }) {
   return (
     <Clickable disabled={disabled} onClick={onClick} aria-label={text}>
-      {React.cloneElement(icon, { size: 17 })}
+      {React.cloneElement(icon, { size: "md" })}
       <span>{text}</span>
     </Clickable>
   );
@@ -44,9 +44,9 @@ export function Artifact({
         onClick={onClick}
         aria-label={title}
       >
-        <ListRow icon={<FileText size={17} />} title={title} />
+        <ListRow icon={<FileText size="md" />} title={title} />
       </Clickable>
     );
   }
-  return <ListRow icon={<FileText size={17} />} title={title} />;
+  return <ListRow icon={<FileText size="md" />} title={title} />;
 }

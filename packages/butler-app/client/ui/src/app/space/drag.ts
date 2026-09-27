@@ -5,6 +5,8 @@ type DropTarget = {
   key: string | null;
   instance: string;
   position: DropPosition;
+  /** The target row header box inside its tree item (layout px), for the group ring. */
+  indicator?: { top: number; height: number };
 };
 export const SESSION_REFERENCE_MIME = "application/x-butler-session-reference";
 export const useSpaceDrag = create<{

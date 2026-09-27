@@ -14,6 +14,7 @@ import { ComposerContextControl } from "./ComposerContextControl";
 import { ModelMenu } from "./ModelMenu";
 import { ComposerCompactPreview } from "./ComposerCompactPreview";
 import { ComposerPlanModeBadge } from "./ComposerPlanModeBadge";
+import { ComposerWorkspaceSelect } from "./ComposerWorkspaceSelect";
 
 export function ComposerToolbar() {
   useAppLocale();
@@ -30,6 +31,7 @@ export function ComposerToolbar() {
       <ComposerCompactPreview />
       <ComposerCardExpandedControls>
         <AccessModeMenu />
+        <ComposerWorkspaceSelect />
         <ComposerPlanModeBadge />
         <ComposerCardToolbarSpacer />
         <ComposerContextControl />

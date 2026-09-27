@@ -4,6 +4,7 @@ import { SettingsField } from "@/butler-ds";
 
 export function SettingsInput({
   label,
+  settingId,
   description,
   id,
   value,
@@ -11,6 +12,7 @@ export function SettingsInput({
   onBlur,
 }: {
   label: string;
+  settingId?: string;
   description?: string;
   id?: string;
   value: string;
@@ -23,6 +25,7 @@ export function SettingsInput({
 
   return (
     <SettingsField
+      settingId={settingId}
       data-test-class="settings-field"
       id={controlId}
       label={label}

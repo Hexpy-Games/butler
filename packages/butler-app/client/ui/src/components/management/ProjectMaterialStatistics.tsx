@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { Tabs, TabsList, TabsTrigger, Stack, Typo } from "@/butler-ds";
+import { SegmentedControl, Stack, Typo } from "@/butler-ds";
 import { useProjectStatistics } from "./projectStatisticsContext.ts";
 import { ProjectStatisticChart } from "./ProjectStatisticChart.tsx";
 
@@ -12,10 +12,8 @@ export function ProjectMaterialStatistics() {
   return <Stack gap="sm">
     <ProjectStatisticChart key={mode} title={copy.materials} description={copy.materialsHelp}
       series={mode === "types" ? data.materialTypes : data.materials} stacked
-      actions={<Tabs value={mode} onValueChange={setMode}><TabsList>
-        <TabsTrigger value="types">{copy.labels.types}</TabsTrigger>
-        <TabsTrigger value="changes">{copy.labels.changes}</TabsTrigger>
-      </TabsList></Tabs>} />
+      actions={<SegmentedControl size="sm" ariaLabel={appCopy.projectSignpost.materialsView} value={mode} onValueChange={setMode}
+        options={[{ value: "types", label: copy.labels.types }, { value: "changes", label: copy.labels.changes }]} />} />
     {!data.ledgerHistoryAvailable && <Typo.Caption>{copy.historyUnavailable}</Typo.Caption>}
     {!data.sessionHistoryAvailable && <Typo.Caption>{copy.sessionUnavailable}</Typo.Caption>}
   </Stack>;

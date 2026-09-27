@@ -1,25 +1,31 @@
-.fixture {
-  min-width: 0;
-}
-
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: var(--z-overlay);
   background: var(--dialog-overlay-bg);
 }
 
+/* Enters run on the standard curve: the decelerate curve front-loads over
+   half the change into the first frame, so a dialog read as appearing
+   instantly while its accelerating exit stayed visible. */
 .overlay[data-state="open"] {
-  animation: dialog-fade-open 90ms ease-out;
+  animation: dialog-overlay-enter var(--motion-base) var(--motion-ease-standard);
+}
+
+.overlay[data-state="closed"] {
+  animation: dialog-overlay-exit var(--motion-exit-fast)
+    var(--motion-ease-accelerate) forwards;
 }
 
 .content {
   position: fixed;
   top: calc(var(--adaptive-viewport-block-size) / 2);
   left: 50%;
-  z-index: 90;
+  z-index: var(--z-dialog);
   display: grid;
-  width: min(380px, calc(100% - var(--space-4) * 2));
+  --dialog-width: var(--dialog-width-sm);
+
+  width: min(var(--dialog-width), calc(100% - var(--space-4) * 2));
   max-width: calc(
     100% - 2 *
       max(var(--space-4), var(--safe-area-left), var(--safe-area-right))
@@ -45,7 +51,62 @@
 }
 
 .content[data-state="open"] {
-  animation: dialog-open 90ms ease-out;
+  animation: dialog-enter var(--motion-base) var(--motion-ease-standard);
+}
+
+.content[data-state="closed"] {
+  animation: dialog-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
+    forwards;
+}
+
+/* Command palette (Cmd+K): a crisper open than a dialog, a faster exit. */
+.overlay[data-motion="palette"][data-state="open"] {
+  animation: dialog-overlay-enter var(--motion-palette)
+    var(--motion-ease-standard);
+}
+
+.content[data-motion="palette"][data-state="open"] {
+  animation: palette-enter var(--motion-palette) var(--motion-ease-standard);
+}
+
+.content[data-motion="palette"][data-state="closed"] {
+  animation: palette-exit var(--motion-exit-fast) var(--motion-ease-accelerate)
+    forwards;
+}
+
+.content[data-size="md"] {
+  --dialog-width: var(--dialog-width-md);
+}
+
+.content[data-size="lg"] {
+  --dialog-width: var(--dialog-width-lg);
+}
+
+.content[data-size="xl"] {
+  --dialog-width: var(--dialog-width-xl);
+}
+
+.content[data-size="full"] {
+  --dialog-width: 100%;
+}
+
+/* Header, one scrolling body and footer; the dialog itself never scrolls. */
+.content[data-layout="scroll-body"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
+}
+
+.content[data-layout="scroll-body"] > .header {
+  padding-bottom: var(--space-3);
+}
+
+.content[data-layout="scroll-body"] > .footer {
+  padding-top: var(--space-4);
+}
+
+.content[data-max-height="3/5"] {
+  max-height: 60%;
 }
 
 .content[data-project-ledger-modal="true"] {
@@ -102,31 +163,43 @@
   background-clip: content-box;
 }
 
-@keyframes dialog-fade-open {
+@keyframes dialog-overlay-enter {
   from {
     opacity: 0;
   }
+}
 
+@keyframes dialog-overlay-exit {
   to {
-    opacity: 1;
+    opacity: 0;
   }
 }
 
-@keyframes dialog-open {
+@keyframes dialog-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -48%) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, calc(-50% + var(--motion-distance-sm)))
+      scale(var(--motion-scale-dialog));
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .overlay[data-state="open"],
-  .content[data-state="open"] {
-    animation: none;
+@keyframes dialog-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-dialog));
+  }
+}
+
+@keyframes palette-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-palette));
+  }
+}
+
+@keyframes palette-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(var(--motion-scale-palette));
   }
 }

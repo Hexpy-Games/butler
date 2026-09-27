@@ -1,13 +1,15 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../Stack";
 import { Typo } from "../Typo";
 import styles from "./Section.module.css";
+import { dsClass, type DsClassName } from "../../lib/internal";
 
 type SpacingToken = "none" | "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 type TitleLevel = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
 
 export interface SectionProps extends Omit<
-  HTMLAttributes<HTMLElement>,
+  DsBaseProps<HTMLAttributes<HTMLElement>>,
   "title"
 > {
   children: ReactNode;
@@ -20,12 +22,13 @@ export interface SectionProps extends Omit<
   titleAs?: TitleLevel;
   fill?: boolean;
   contentFill?: boolean;
-  contentClassName?: string;
+  /** DS-internal: class for the content stack. */
+  contentClassName?: DsClassName;
 }
 
 function renderTitle(title: ReactNode, titleAs: TitleLevel) {
   return (
-    <Typo.PanelSectionTitle as={titleAs} className={styles.title}>
+    <Typo.PanelSectionTitle as={titleAs} className={dsClass(styles.title)}>
       {title}
     </Typo.PanelSectionTitle>
   );
@@ -59,23 +62,23 @@ export function Section({
   const hasHeader = Boolean(title || icon || description || actions);
 
   return (
-    <Stack as="section" className={sectionClasses} gap="lg" {...props}>
+    <Stack as="section" className={dsClass(sectionClasses)} gap="lg" {...props}>
       {hasHeader && (
-        <Stack className={styles.header} gap={headerGap}>
+        <Stack className={dsClass(styles.header)} gap={headerGap}>
           {(title || icon || actions) && (
             <Stack
               align="row"
               justify="between"
               cross="center"
               gap="md"
-              className={styles["title-row"]}
+              className={dsClass(styles["title-row"])}
             >
               {(title || icon) && (
                 <Stack
                   align="row"
                   cross="center"
                   gap="sm"
-                  className={styles["title-group"]}
+                  className={dsClass(styles["title-group"])}
                 >
                   {icon && (
                     <span className={styles.icon} aria-hidden="true">
@@ -90,7 +93,7 @@ export function Section({
                   align="row"
                   cross="center"
                   gap="sm"
-                  className={styles.actions}
+                  className={dsClass(styles.actions)}
                 >
                   {actions}
                 </Stack>
@@ -98,11 +101,11 @@ export function Section({
             </Stack>
           )}
           {description && (
-            <Typo.Body className={styles.description}>{description}</Typo.Body>
+            <Typo.Body className={dsClass(styles.description)}>{description}</Typo.Body>
           )}
         </Stack>
       )}
-      <Stack className={contentClasses} gap={gap}>
+      <Stack className={dsClass(contentClasses)} gap={gap}>
         {children}
       </Stack>
     </Stack>

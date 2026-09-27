@@ -17,7 +17,7 @@ Use ListRow for document lists, artifact lists, file browsers, or any non-naviga
 ## Similar blocks
 
 - Use **NavRow** for navigation items with active state and click handling
-- Use **ResourceTile** for card-like resource displays
+- Use **DocumentTile** for card-like resource displays
 - Use simple Stack for basic content lists
 
 ## Usage

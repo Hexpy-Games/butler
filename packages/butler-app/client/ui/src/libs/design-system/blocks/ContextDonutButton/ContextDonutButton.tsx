@@ -1,8 +1,9 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { ButtonHTMLAttributes, CSSProperties } from "react";
 import styles from "./ContextDonutButton.module.css";
 
 export interface ContextDonutButtonProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+  extends Omit<DsBaseProps<ButtonHTMLAttributes<HTMLButtonElement>>, "children"> {
   ratio: number;
 }
 

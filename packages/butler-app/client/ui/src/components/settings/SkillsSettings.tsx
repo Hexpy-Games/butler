@@ -17,13 +17,12 @@ import {
   TabsTrigger,
 } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSection } from "./SettingsFormComponents";
+import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SkillActions } from "./SkillActions";
 import { SkillGroup } from "./SkillGroup";
 
 export function SkillsSettings() {
   useAppLocale();
-  const copy = appCopy.settings;
   const openSession = useButlerStore((state) => state.openSession);
   const closeSettings = useButlerStore((state) => state.closeSettings);
   const nickname = useSettingsUIStore(
@@ -34,6 +33,7 @@ export function SkillsSettings() {
   const [tab, setTab] = useState("default");
   const [projectId, setProjectId] = useState<string>("");
   const [importProjectId, setImportProjectId] = useState<string | undefined>();
+  const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     void refresh();
   }, []);
@@ -41,7 +41,12 @@ export function SkillsSettings() {
     if (!projectId && view?.projects[0]) setProjectId(view.projects[0].id);
   }, [view, projectId]);
   async function refresh() {
-    setView(await api<SkillSettingsView>("/skills"));
+    setLoadFailed(false);
+    try {
+      setView(await api<SkillSettingsView>("/skills"));
+    } catch {
+      setLoadFailed(true);
+    }
   }
   async function importSkill(project?: string) {
     setImportProjectId(project);
@@ -70,10 +75,13 @@ export function SkillsSettings() {
     view?.projects.find((project) => project.id === projectId) ??
     view?.projects[0];
   return (
-    <SettingsSection
-      title={copy.panels.skills}
-      description={copy.descriptions.skills}
-    >
+    <SettingsPage>
+      <SettingsSection
+        id="skills"
+        kind="list"
+        state={view === null ? (loadFailed ? "error" : "loading") : "ready"}
+        onRetry={() => void refresh()}
+      >
       <Stack gap="md">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
@@ -106,7 +114,7 @@ export function SkillsSettings() {
                   />
                 ))}
               </Stack>
-              <Stack gap="md" style={{ flex: 1 }}>
+              <Stack gap="md" grow basis="0">
                 <SkillActions
                   onImport={() => void importSkill(selectedProject?.id)}
                   onCreate={() => void createSkillChat(selectedProject)}
@@ -127,6 +135,7 @@ export function SkillsSettings() {
           onChange={(event) => void onFile(event.target.files?.[0])}
         />
       </Stack>
-    </SettingsSection>
+      </SettingsSection>
+    </SettingsPage>
   );
 }

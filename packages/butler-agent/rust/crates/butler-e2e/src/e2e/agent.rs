@@ -225,6 +225,35 @@ impl Agent {
         read_all(&self.launch.logs)
     }
 
+    /// Runs a CLI command that replaces the service process (`restart`,
+    /// `stop`) while reaping the exiting child, as a supervisor would; an
+    /// unreaped child stays a zombie that the product's identity probe cannot
+    /// read.
+    pub async fn cli_reaping(&mut self, args: &[&str]) -> Result<CliOutput, HarnessError> {
+        let mut command = self.launch.command();
+        command.args(args).stdin(Stdio::null());
+        let task = tokio::task::spawn_blocking(move || command.output());
+        loop {
+            if let Some(child) = self.child.as_mut()
+                && matches!(child.try_wait(), Ok(Some(_)))
+            {
+                self.child = None;
+            }
+            if task.is_finished() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let output = task
+            .await
+            .map_err(|error| harness_error(error.to_string()))??;
+        Ok(CliOutput {
+            code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
+    }
+
     /// Runs `butler-agent <args>` (the `butler` CLI) against the same data dir.
     pub fn cli(&self, args: &[&str]) -> Result<CliOutput, HarnessError> {
         let output = self

@@ -35,6 +35,30 @@
   stroke: currentColor;
 }
 
+.control[data-tone="danger"],
+.control[data-tone="danger"] .label {
+  color: var(--danger);
+}
+
+/* Permission tones (access modes): control and icon colors. */
+.control[data-permission-tone="full"] {
+  --composer-control-icon-color: var(--access-full);
+
+  color: var(--access-full);
+}
+
+.control[data-permission-tone="ask"] {
+  --composer-control-icon-color: var(--access-ask);
+
+  color: var(--access-ask);
+}
+
+.control[data-permission-tone="read"] {
+  --composer-control-icon-color: var(--access-read-icon);
+
+  color: var(--access-read);
+}
+
 .active {
   background: var(--selection-strong);
 }
@@ -61,15 +85,33 @@
   color: var(--text-tertiary);
 }
 
+/*
+ * Touch widths: the pill keeps its visual control height (Button would grow
+ * to --control-hit-target); a transparent ::after extends only the hit area.
+ */
+@media (width <= 640px), (pointer: coarse) {
+  .control[data-slot="button"][data-compact] {
+    position: relative;
+    min-height: var(--control-height-md);
+    overflow: visible;
+  }
+
+  .control::after {
+    position: absolute;
+    inset-block: calc((var(--control-hit-target) - 100%) / -2);
+    inset-inline: min(0px, calc((var(--control-hit-target) - 100%) / -2));
+    content: "";
+  }
+}
+
 @container composer (width <= 520px) {
   .control {
-    min-width: var(--control-hit-target);
-    min-height: var(--control-hit-target);
+    min-width: var(--control-height-md);
     padding-inline: var(--space-sm);
   }
 
   .control[data-compact="icon"][data-slot="button"] {
-    width: var(--control-hit-target);
+    width: var(--control-height-md);
     padding-inline: 0;
   }
 

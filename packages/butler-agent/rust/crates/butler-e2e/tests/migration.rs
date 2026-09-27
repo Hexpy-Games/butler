@@ -159,31 +159,7 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
         .await?;
     assert!(pin.status < 500, "{}", pin.text);
     s.agent.terminate().await?;
-    let dump = |s: &Scenario| {
-        let db = rusqlite::Connection::open_with_flags(
-            s.sandbox.data.join("app-server/butler-client.sqlite"),
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .unwrap();
-        let mut statement = db
-            .prepare("SELECT id, title, legacy_note, pinned, archived FROM chats ORDER BY id")
-            .unwrap();
-        statement
-            .query_map([], |row| {
-                Ok(format!(
-                    "{}|{}|{:?}|{}|{}",
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?
-                ))
-            })
-            .unwrap()
-            .map(Result::unwrap)
-            .collect::<Vec<_>>()
-    };
-    let first = dump(&s);
+    let first = chat_rows(&s);
     assert!(
         first
             .iter()
@@ -194,7 +170,33 @@ async fn mig_01b_older_app_schema_is_upgraded_in_place() -> Result<(), HarnessEr
     );
     s.gw = s.agent.start_again().await?;
     s.agent.terminate().await?;
-    assert_eq!(dump(&s), first, "second start rewrote chats");
+    assert_eq!(chat_rows(&s), first, "second start rewrote chats");
     s.gw = s.agent.start_again().await?;
     s.finish().await
+}
+
+/// The App DB chat rows MIG-01b checks, including the unknown column.
+fn chat_rows(s: &Scenario) -> Vec<String> {
+    let db = rusqlite::Connection::open_with_flags(
+        s.sandbox.data.join("app-server/butler-client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let mut statement = db
+        .prepare("SELECT id, title, legacy_note, pinned, archived FROM chats ORDER BY id")
+        .unwrap();
+    statement
+        .query_map([], |row| {
+            Ok(format!(
+                "{}|{}|{:?}|{}|{}",
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?
+            ))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>()
 }

@@ -4,15 +4,40 @@
   vertical-align: middle;
 }
 
+/* Indeterminate arc with two offset rhythms: the dash grows to most of the
+   ring and its tail then catches up (spinner-orbit, eased), while the whole
+   arc rotates at a different, linear period (spinner-rotate), so the pattern
+   never repeats in lockstep. The dash period (arc + 150 gap) is longer than
+   the ring (pathLength 100), so each cycle ends on the one-unit dot it starts
+   from. The static 79/21 arc (SVG attribute) shows when not animating. */
 .orbit {
   transform-box: view-box;
   transform-origin: center;
   transform: rotate(-90deg);
-  animation: spinner-orbit var(--spinner-duration) var(--spinner-easing)
-    infinite;
+  animation:
+    spinner-orbit var(--spinner-duration) var(--spinner-easing) infinite,
+    spinner-rotate var(--spinner-rotate-duration) var(--motion-ease-linear)
+      infinite;
 }
 
 @keyframes spinner-orbit {
+  0% {
+    stroke-dasharray: 1 150;
+    stroke-dashoffset: 0;
+  }
+
+  50% {
+    stroke-dasharray: 70 150;
+    stroke-dashoffset: -18;
+  }
+
+  100% {
+    stroke-dasharray: 70 150;
+    stroke-dashoffset: -99;
+  }
+}
+
+@keyframes spinner-rotate {
   from {
     transform: rotate(-90deg);
   }
@@ -22,8 +47,24 @@
   }
 }
 
+@keyframes spinner-pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* Reduced motion: the static arc only breathes, slowly. */
 @media (prefers-reduced-motion: reduce) {
   .orbit {
     animation: none;
+  }
+
+  .spinner {
+    animation: spinner-pulse calc(var(--pulse-duration) * 2)
+      var(--spinner-easing) infinite alternate;
   }
 }

@@ -50,7 +50,7 @@
 
 .titlebarDragOverlay {
   position: absolute;
-  z-index: 100;
+  z-index: var(--z-drag);
   top: 0;
   right: 0;
   left: 0;
@@ -60,10 +60,11 @@
   app-region: drag;
 }
 
+/* Header and content are start-aligned narrow PageContainers (760px reading
+   width, no gutter: .detail pads the pane). */
 .detailContent {
   display: grid;
-  max-width: 760px;
-  gap: var(--space-lg);
+  gap: var(--settings-section-gap);
   padding-bottom: 60px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -72,7 +73,6 @@
 .detailHeader {
   position: relative;
   z-index: 10;
-  max-width: 760px;
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -138,11 +138,67 @@
   }
 
   .detailContent {
-    max-width: none;
-    padding-bottom: max(60px, calc(var(--safe-area-bottom) + 24px));
+    padding-bottom: max(60px, calc(var(--safe-area-bottom) + var(--space-2xl)));
   }
 
   .titlebarDragOverlay {
     height: var(--titlebar-safe-area-top);
+  }
+}
+
+/* Page transition (M3): the page that replaces the previous one re-enters
+   from the direction of travel in the navigation. Distance tokens are 0
+   under reduced motion, so this becomes a fade. */
+.detailHeader[data-page-motion="forward"],
+.detailContent[data-page-motion="forward"] {
+  animation: settings-page-forward var(--motion-base)
+    var(--motion-ease-decelerate) both;
+}
+
+.detailHeader[data-page-motion="backward"],
+.detailContent[data-page-motion="backward"] {
+  animation: settings-page-backward var(--motion-base)
+    var(--motion-ease-decelerate) both;
+}
+
+@keyframes settings-page-forward {
+  from {
+    opacity: 0;
+    translate: 0 var(--motion-distance-md);
+  }
+}
+
+@keyframes settings-page-backward {
+  from {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--motion-distance-md));
+  }
+}
+
+/* Compact widths show one pane: the detail slides in from the inline end,
+   the list returns from the inline start. */
+@media (width <= 760px) {
+  .shell[data-compact-pane="detail"] .detail {
+    animation: settings-pane-from-end var(--motion-base)
+      var(--motion-ease-decelerate) both;
+  }
+
+  .shell[data-compact-pane="master"] .sidebar {
+    animation: settings-pane-from-start var(--motion-base)
+      var(--motion-ease-decelerate) both;
+  }
+}
+
+@keyframes settings-pane-from-end {
+  from {
+    opacity: 0;
+    translate: var(--motion-distance-lg) 0;
+  }
+}
+
+@keyframes settings-pane-from-start {
+  from {
+    opacity: 0;
+    translate: calc(-1 * var(--motion-distance-lg)) 0;
   }
 }

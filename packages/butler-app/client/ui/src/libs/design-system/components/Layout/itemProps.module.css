@@ -1,0 +1,100 @@
+/* Layout item props, shared by Stack, Stack.Item, Grid.Item, Typo and Box. */
+.item[data-grow="true"] {
+  flex-grow: 1;
+}
+
+.item[data-shrink="true"] {
+  flex-shrink: 1;
+}
+
+.item[data-shrink="false"] {
+  flex-shrink: 0;
+}
+
+.item[data-basis="auto"] {
+  flex-basis: auto;
+}
+
+.item[data-basis="content"] {
+  flex-basis: content;
+}
+
+.item[data-basis="0"] {
+  flex-basis: 0%;
+}
+
+.item[data-basis="xs"] {
+  flex-basis: var(--layout-basis-xs);
+}
+
+.item[data-basis="sm"] {
+  flex-basis: var(--layout-basis-sm);
+}
+
+.item[data-basis="md"] {
+  flex-basis: var(--layout-basis-md);
+}
+
+.item[data-basis="lg"] {
+  flex-basis: var(--layout-basis-lg);
+}
+
+.item[data-min-width="0"] {
+  min-width: 0;
+}
+
+.item[data-min-width="auto"] {
+  min-width: auto;
+}
+
+.item[data-max-width="full"] {
+  max-width: 100%;
+}
+
+.item[data-max-width="3/5"] {
+  max-width: 60%;
+}
+
+.item[data-max-width="1/2"] {
+  max-width: 50%;
+}
+
+.item[data-align-self="start"] {
+  align-self: flex-start;
+}
+
+.item[data-align-self="center"] {
+  align-self: center;
+}
+
+.item[data-align-self="end"] {
+  align-self: flex-end;
+}
+
+.item[data-align-self="stretch"] {
+  align-self: stretch;
+}
+
+.item[data-align-self="baseline"] {
+  align-self: baseline;
+}
+
+.item[data-span="1"] {
+  grid-column: span 1;
+}
+
+.item[data-span="2"] {
+  grid-column: span 2;
+}
+
+.item[data-span="3"] {
+  grid-column: span 3;
+}
+
+.item[data-span="full"] {
+  grid-column: 1 / -1;
+}
+
+.item[data-invisible="true"] {
+  visibility: hidden;
+}

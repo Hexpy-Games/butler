@@ -1,4 +1,4 @@
-import { Field, FieldDescription, FieldLabel, Textarea } from "@/butler-ds";
+import { SettingsField, Textarea } from "@/butler-ds";
 import type { PersonalizationDraft, SettingsCopy } from "./settingsTypes";
 
 export function PersonalizationTextFields({
@@ -22,9 +22,13 @@ export function PersonalizationTextFields({
 }) {
   return (
     <>
-      <Field data-test-class="settings-field">
-        <FieldLabel htmlFor="personalization-persona">{fields.persona}</FieldLabel>
-        <Textarea
+      <SettingsField
+        id="personalization-persona"
+        settingId="persona"
+        data-test-class="settings-field"
+        label={fields.persona}
+        controlWidth="full"
+        control={<Textarea
           id="personalization-persona"
           value={personalizationDraft.persona}
           onChange={(event) =>
@@ -36,11 +40,18 @@ export function PersonalizationTextFields({
           }
           placeholder={placeholders.persona}
           rows={8}
-        />
-      </Field>
-      <Field data-test-class="settings-field">
-        <FieldLabel htmlFor="personalization-eol">{fields.eol}</FieldLabel>
-        <Textarea
+        />}
+      />
+      <SettingsField
+        id="personalization-eol"
+        settingId="eol"
+        data-test-class="settings-field"
+        label={fields.eol}
+        controlWidth="full"
+        meta={personalizationUpdatedAt
+          ? descriptions.eolLastLoaded(new Date(personalizationUpdatedAt).toLocaleString())
+          : undefined}
+        control={<Textarea
           id="personalization-eol"
           value={personalizationDraft.eol}
           onChange={(event) =>
@@ -51,15 +62,8 @@ export function PersonalizationTextFields({
           }
           placeholder={placeholders.eol}
           rows={8}
-        />
-        {personalizationUpdatedAt && (
-          <FieldDescription>
-            {descriptions.eolLastLoaded(
-              new Date(personalizationUpdatedAt).toLocaleString(),
-            )}
-          </FieldDescription>
-        )}
-      </Field>
+        />}
+      />
     </>
   );
 }

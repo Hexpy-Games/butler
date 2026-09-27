@@ -9,7 +9,7 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import type { ReasoningEffort } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appThemeClasses } from "@/app/utils.ts";
+import { appShellTheme } from "@/app/utils.ts";
 import { useComposerStore } from "./composerStore";
 import { ComposerControlButton } from "./ComposerControlButton";
 import {
@@ -107,7 +107,7 @@ export function ModelMenu() {
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className={appThemeClasses(settings)}
+        theme={appShellTheme(settings)}
         data-menu-size="fit"
         side="top"
         sideOffset={10}

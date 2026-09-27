@@ -1,12 +1,14 @@
+import type { DsPrivateStyleProps, DsBaseProps } from "../../lib/dsProps";
 import { useId, type HTMLAttributes, type ReactNode } from "react";
 import { Field } from "../../components/Field";
 import { Label } from "../../components/Label";
-import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
-import { cn } from "../../lib/utils";
+import { isDevBuild } from "../../lib/devBuild";
+import { useSettingsFieldScope } from "./settingsFieldScope";
 import styles from "./SettingsField.module.css";
+import { dsClass } from "../../lib/internal";
 
-export interface SettingsFieldProps extends HTMLAttributes<HTMLDivElement> {
+export interface SettingsFieldProps extends DsPrivateStyleProps, DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   id?: string;
   label: ReactNode;
   description?: ReactNode;
@@ -14,7 +16,8 @@ export interface SettingsFieldProps extends HTMLAttributes<HTMLDivElement> {
   meta?: ReactNode;
   descriptionId?: string;
   controlWidth?: "default" | "full";
-  className?: string;
+  /** Stable setting id (`data-setting-id`); settings pages declare it in their schema. */
+  settingId?: string;
 }
 
 export function SettingsField({
@@ -25,35 +28,42 @@ export function SettingsField({
   control,
   meta,
   controlWidth = "default",
+  settingId,
   className,
   ...props
 }: SettingsFieldProps) {
+  const scope = useSettingsFieldScope();
+  if (!scope && isDevBuild()) {
+    throw new Error("SettingsField must render inside a SettingsSection (or FormSection / DialogForm).");
+  }
   const generatedDescriptionId = useId();
   const effectiveDescriptionId = descriptionId ?? generatedDescriptionId;
 
   return (
     <Field
-      className={cn(styles.field, className)}
+      className={dsClass(styles.field, className)}
       data-control-width={controlWidth}
+      data-settings-field=""
+      data-setting-id={settingId}
       {...props}
     >
-      <Stack gap="xs" className={styles.copy}>
+      <div className={styles.copy}>
         <Label htmlFor={id}>{label}</Label>
         {description ? (
           <Typo.Caption
-            className={styles.description}
+            className={dsClass(styles.description)}
             id={effectiveDescriptionId}
           >
             {description}
           </Typo.Caption>
         ) : null}
-      </Stack>
-      <Stack gap="xs" className={styles.control}>
+      </div>
+      <div className={styles.control}>
         {control}
         {meta ? (
-          <Typo.Caption className={styles.meta}>{meta}</Typo.Caption>
+          <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>
         ) : null}
-      </Stack>
+      </div>
     </Field>
   );
 }

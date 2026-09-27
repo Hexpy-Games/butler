@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, selectProjectFolder } from "../app/api.ts";
+import { api, apiErrorCode, selectProjectFolder } from "../app/api.ts";
 import {
   DEFAULT_WEB_SEARCH_SETTINGS,
   EMPTY_SETTINGS,
@@ -11,7 +11,9 @@ import {
   notifyStatus,
 } from "../app/notifications.ts";
 import { profileMigrationFeedbackFromResult } from "../app/profileMigrationFeedback.ts";
+import { useButlerStore } from "../app/store.ts";
 import type {
+  ModelCatalogView,
   PersonalizationProfileMigrationResultView,
   PersonalizationProfileView,
   PersonalizationView,
@@ -238,6 +240,11 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
       notifyError(error, appCopy.settings.errors.updateSettings, {
         id: "settings-update",
       });
+      if (apiErrorCode(error) === "settings_model_unavailable") {
+        // The draft keeps the previous model; refresh the catalog so the
+        // model pickers stop offering the one the gateway rejected.
+        await refreshModelCatalogAfterRejection();
+      }
     } finally {
       set({ saving: false });
     }
@@ -612,4 +619,14 @@ function canLeaveModelRoute(guard: (() => boolean | Promise<boolean>) | null) {
 function personaFrontmatter(text: string): string | null {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
   return match?.[1] ?? null;
+}
+
+async function refreshModelCatalogAfterRejection(): Promise<void> {
+  try {
+    const catalog = await api<ModelCatalogView>("/model-catalog");
+    useButlerStore.getState().setModelCatalog(catalog);
+  } catch {
+    // The localized rejection toast already told the user what to do; a stale
+    // catalog only means the next pick may be rejected the same way.
+  }
 }

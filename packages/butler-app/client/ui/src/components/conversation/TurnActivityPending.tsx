@@ -7,8 +7,6 @@ import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
 
 const SESSION_STARTING_STATE = "session_starting";
 const SKELETON_WIDTH = "min(420px, 100%)";
-const SKELETON_LINE_HEIGHT = "0.75rem";
-const SKELETON_LINE_WIDTHS = ["86%", "68%", "46%"] as const;
 
 export function TurnActivityPending({
   readModels,
@@ -29,8 +27,8 @@ export function TurnActivityPending({
         aria-label={pendingLabel}
         aria-live="polite"
         data-test-class="turn-activity-panel turn-activity-pending-skeleton"
-        gap="2"
-        style={{ width: SKELETON_WIDTH }}
+        gap="sm"
+        UNSAFE_style={{ width: SKELETON_WIDTH }}
       >
         <AssistantStatusLabel
           label={pendingLabel}
@@ -41,21 +39,13 @@ export function TurnActivityPending({
             as="p"
             data-test-class="turn-activity-pending"
             data-turn-state={state}
-            style={{
-              margin: 0,
-              color: "var(--text-secondary)",
-              fontWeight: "var(--font-weight-regular)",
-            }}
+            tone="secondary"
+            weight="regular"
           >
             {pendingLabel}
           </Typo.Body>
         </AssistantStatusLabel>
-        {SKELETON_LINE_WIDTHS.map((width) => (
-          <Skeleton
-            key={width}
-            style={{ height: SKELETON_LINE_HEIGHT, width }}
-          />
-        ))}
+        <Skeleton lines={3} height="line" />
       </Stack>
     );
   }
@@ -70,11 +60,8 @@ export function TurnActivityPending({
         as="p"
         data-test-class="turn-activity-panel turn-activity-pending"
         data-turn-state={state ?? "unknown"}
-        style={{
-          margin: 0,
-          color: "var(--text-secondary)",
-          fontWeight: "var(--font-weight-regular)",
-        }}
+        tone="secondary"
+        weight="regular"
       >
         {pendingLabel}
       </Typo.Body>

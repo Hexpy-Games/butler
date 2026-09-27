@@ -15,6 +15,7 @@ import {
   OptionMenuItem,
   Popover,
   PopoverContent,
+  type AdaptiveShellTheme,
   PopoverTrigger,
 } from "@/butler-ds";
 import { useComposerStore } from "./composerStore";
@@ -24,11 +25,11 @@ import {
 } from "./ComposerProjectDocumentGroups";
 
 export function ComposerProjectDocumentMenu({
-  className,
+  theme,
   onClose,
   projectId,
 }: {
-  className: string;
+  theme: AdaptiveShellTheme;
   onClose: () => void;
   projectId: string | null;
 }) {
@@ -38,14 +39,14 @@ export function ComposerProjectDocumentMenu({
       <PopoverTrigger asChild>
         <OptionMenuItem
           disabled={!projectId}
-          icon={<FileText size={15} />}
+          icon={<FileText size="md" />}
           label={appCopy.interfaceDetails.projectDocuments}
-          description={<ChevronRight size={14} />}
+          description={<ChevronRight size="sm" />}
         />
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className={className}
+        theme={theme}
         data-glint="composer"
         data-menu-size="content"
         data-nested-menu-align="attachment-bottom"

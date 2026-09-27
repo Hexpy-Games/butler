@@ -1,9 +1,15 @@
 /// <reference types="bun" />
 
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
+import { getAppLocale, setAppCopyLanguage } from "@/app/copy.ts";
+
+// These expectations are the Korean copy; pin the locale instead of inheriting it.
+const previousLocale = getAppLocale();
+beforeAll(() => setAppCopyLanguage("ko-KR"));
+afterAll(() => setAppCopyLanguage(previousLocale));
 
 test("current phase activity keeps the latest model-authored intent visible", () => {
   const html = renderToStaticMarkup(

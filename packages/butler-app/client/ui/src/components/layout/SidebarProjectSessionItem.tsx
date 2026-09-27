@@ -25,13 +25,11 @@ export function SidebarProjectSessionItem({
   return (
     <div
       data-test-class="project-session-gesture"
-      style={{ WebkitTouchCallout: "none", userSelect: "none" }}
       {...longPress}
     >
       <SidebarItem
         active={active}
         badge={<time>{relativeAge(session.last_activity_at)}</time>}
-        className="project-session-row"
         dataTestClass="project-session-row"
         right={
           <SidebarSessionActions

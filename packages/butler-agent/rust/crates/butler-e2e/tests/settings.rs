@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::events::LiveEvents;
+use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::scenario::Setup;
 use serde_json::{Value, json};
 
@@ -115,42 +116,7 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
         }
     }
 
-    let reply =
-        s.gw.patch("/settings", json!({"no_such_setting": true}))
-            .await?;
-    assert_eq!(
-        (reply.status, reply.error_code()),
-        (400, Some("invalid_settings_request")),
-        "{}",
-        reply.text
-    );
-    let reply =
-        s.gw.patch("/settings", json!({"consolidation_reasoning_effort": 7}))
-            .await?;
-    assert_eq!(
-        (reply.status, reply.error_code()),
-        (400, Some("invalid_settings_request")),
-        "{}",
-        reply.text
-    );
-    let reply =
-        s.gw.send(
-            reqwest::Method::PATCH,
-            "/settings",
-            Some("{not json".into()),
-        )
-        .await?;
-    assert_eq!(
-        (reply.status, reply.error_code()),
-        (400, Some("invalid_json")),
-        "{}",
-        reply.text
-    );
-    let oversize = format!("{{\"language\":\"{}\"}}", "x".repeat(1024 * 1024 + 1024));
-    let reply =
-        s.gw.send(reqwest::Method::PATCH, "/settings", Some(oversize))
-            .await?;
-    assert_eq!(reply.status, 413, "{}", reply.text);
+    assert_malformed_settings_rejected(&s.gw).await?;
 
     assert_eq!(
         s.gw.get("/settings").await?.text,
@@ -176,6 +142,48 @@ async fn set_02_unavailable_and_malformed_settings_are_rejected() -> Result<(), 
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert_eq!(controls(&turn), ("openai/gpt-6-sol", "low"));
     s.finish().await
+}
+
+/// SET-02: unknown fields, wrong types, invalid JSON and an oversize body
+/// are rejected with their public error codes.
+async fn assert_malformed_settings_rejected(gw: &Gateway) -> Result<(), HarnessError> {
+    let reply = gw
+        .patch("/settings", json!({"no_such_setting": true}))
+        .await?;
+    assert_eq!(
+        (reply.status, reply.error_code()),
+        (400, Some("invalid_settings_request")),
+        "{}",
+        reply.text
+    );
+    let reply = gw
+        .patch("/settings", json!({"consolidation_reasoning_effort": 7}))
+        .await?;
+    assert_eq!(
+        (reply.status, reply.error_code()),
+        (400, Some("invalid_settings_request")),
+        "{}",
+        reply.text
+    );
+    let reply = gw
+        .send(
+            reqwest::Method::PATCH,
+            "/settings",
+            Some("{not json".into()),
+        )
+        .await?;
+    assert_eq!(
+        (reply.status, reply.error_code()),
+        (400, Some("invalid_json")),
+        "{}",
+        reply.text
+    );
+    let oversize = format!("{{\"language\":\"{}\"}}", "x".repeat(1024 * 1024 + 1024));
+    let reply = gw
+        .send(reqwest::Method::PATCH, "/settings", Some(oversize))
+        .await?;
+    assert_eq!(reply.status, 413, "{}", reply.text);
+    Ok(())
 }
 
 fn count_settings_updates(live: &LiveEvents) -> usize {

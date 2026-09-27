@@ -10,6 +10,7 @@ import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 import { useComposerStore } from "../composerStore";
 import { useButlerStore } from "@/app/store.ts";
+import { recordSendOrigin } from "@/butler-ds";
 import { readLocalComposerDraft, writeCachedComposerDraft } from "@/app/composerDraftCache";
 
 interface UseComposerSubmitProps {
@@ -65,6 +66,8 @@ export function useComposerSubmit({
       const contentParts = submitted.contentParts;
       setModelMenuOpen(false);
       setAccessMenuOpen(false);
+      // The sent bubble flies from where the text sat (DS send flight).
+      recordSendOrigin(submitted.textAreaRef?.current);
       onSend(contentParts ? text : value, { ...composerControlsForSubmit({
         model,
         reasoning,

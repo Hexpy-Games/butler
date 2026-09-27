@@ -1,15 +1,17 @@
-import type {
-  HTMLAttributes,
-  KeyboardEvent,
-  PointerEvent,
-  ReactNode,
-  Ref,
-} from "react";
+import { withUnsafeStyle, type DsBaseProps, type UnsafeStyleProps } from "../../lib/dsProps";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { useRef } from "react";
+import { useComposedRefs } from "../../lib/composeRefs";
 import { cn } from "../../lib/utils";
 import { useAdaptiveDrawer } from "../../responsive";
 import styles from "./AdaptiveShell.module.css";
+import { adaptiveShellThemeClasses, type AdaptiveShellTheme } from "./theme";
+import { useSidebarTrackMotion } from "./useSidebarTrackMotion";
+import { useInspectorTrackMotion } from "./useInspectorTrackMotion";
 
-export interface AdaptiveShellProps extends HTMLAttributes<HTMLDivElement> {
+export interface AdaptiveShellProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>>, UnsafeStyleProps {
+  /** Applies the theme token classes to the shell root. */
+  theme?: AdaptiveShellTheme;
   ref?: Ref<HTMLDivElement>;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -29,16 +31,38 @@ export function AdaptiveShell({
   chromeEnvironment = "browser",
   platform = "browser",
   compactSidebarFullWidth = false,
+  theme,
   className,
+  style,
+  UNSAFE_style,
   children,
+  ref,
   ...props
 }: AdaptiveShellProps) {
   const drawer = useAdaptiveDrawer(chromeEnvironment);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const composedRef = useComposedRefs(rootRef, ref);
+  const { leftTrack, switching } = useSidebarTrackMotion({
+    rootRef,
+    leftOpen,
+    animate: !resizing && !settingsActive,
+    drawer,
+  });
+  const { rightTrack, switching: rightSwitching } = useInspectorTrackMotion({
+    rootRef,
+    rightOpen,
+    animate: !drawer && !resizing && !settingsActive,
+  });
   return (
     <div
-      className={cn(styles.root, className)}
+      ref={composedRef}
+      className={cn(styles.root, theme && adaptiveShellThemeClasses(theme), className)}
+      data-theme={theme?.appearance}
       data-left-open={leftOpen}
+      data-left-track={leftTrack}
+      data-track-switching={switching || rightSwitching || undefined}
       data-right-open={rightOpen}
+      data-right-track={rightTrack}
       data-settings-active={settingsActive}
       data-resizing={resizing}
       data-transparent-workspace={transparentWorkspace}
@@ -46,6 +70,7 @@ export function AdaptiveShell({
       data-panel-layout={drawer ? "drawer" : "docked"}
       data-platform={platform}
       data-compact-sidebar-full-width={compactSidebarFullWidth || undefined}
+      style={withUnsafeStyle(style, UNSAFE_style)}
       {...props}
     >
       {children}
@@ -58,9 +83,14 @@ export function AdaptiveShellSidebar({
   className,
   open,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
+}: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
   return (
-    <div className={cn(styles.sidebar, className)} data-open={open} {...props}>
+    <div
+      className={cn(styles.sidebar, className)}
+      data-open={open}
+      data-slot="adaptive-shell-sidebar"
+      {...props}
+    >
       {children}
     </div>
   );
@@ -70,9 +100,13 @@ export function AdaptiveShellWorkspace({
   children,
   className,
   ...props
-}: HTMLAttributes<HTMLElement>) {
+}: DsBaseProps<HTMLAttributes<HTMLElement>>) {
   return (
-    <main className={cn(styles.workspace, className)} {...props}>
+    <main
+      className={cn(styles.workspace, className)}
+      data-slot="adaptive-shell-workspace"
+      {...props}
+    >
       {children}
     </main>
   );
@@ -83,9 +117,9 @@ export function AdaptiveShellInspector({
   className,
   open,
   ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
+}: DsBaseProps<HTMLAttributes<HTMLDivElement>> & { open: boolean }) {
   return (
-    <div className={cn(styles.inspector, className)} data-open={open} {...props}>
+    <div className={cn(styles.inspector, className)} data-open={open} data-slot="adaptive-shell-inspector" {...props}>
       {children}
     </div>
   );
@@ -93,62 +127,4 @@ export function AdaptiveShellInspector({
 
 export function AdaptiveShellChrome({ children }: { children: ReactNode }) {
   return <div className={styles.chrome}>{children}</div>;
-}
-export function AdaptivePanelResizeHandle({
-  side,
-  ...props
-}: Omit<HTMLAttributes<HTMLDivElement>, "onKeyDown" | "onPointerDown"> & {
-  side: "left" | "right";
-  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
-  onPointerDown: (event: PointerEvent<HTMLDivElement>) => void;
-}) {
-  return (
-    <div
-      className={styles.resizeHandle}
-      data-side={side}
-      role="separator"
-      tabIndex={0}
-      {...props}
-    />
-  );
-}
-
-export function AdaptiveShellScrim({
-  open,
-  onDismiss,
-  label,
-}: {
-  open: boolean;
-  onDismiss: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      aria-hidden={!open}
-      aria-label={label}
-      className={styles.scrim}
-      data-open={open}
-      data-slot="adaptive-shell-scrim"
-      onClick={onDismiss}
-      tabIndex={open ? 0 : -1}
-      type="button"
-    />
-  );
-}
-
-export function AdaptivePanelTitlebar({
-  children,
-  open,
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement> & { open: boolean }) {
-  return (
-    <div
-      className={cn(styles.panelTitlebar, className)}
-      data-open={open}
-      {...props}
-    >
-      {children}
-    </div>
-  );
 }

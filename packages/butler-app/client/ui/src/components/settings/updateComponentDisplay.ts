@@ -7,10 +7,6 @@ export const UPDATE_COMPONENTS: UpdateComponentId[] = [
   "app",
 ];
 
-export const COMPONENT_LABELS: Record<UpdateComponentId, string> = {
-  app: "Butler App",
-  service: "Butler Agent",
-};
 
 export function bundledAgentVersionLabel(
   status: ComponentUpdateStatus,

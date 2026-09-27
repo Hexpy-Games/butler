@@ -24,11 +24,11 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
     <Dialog
       open={Boolean(dialog)}
       onOpenChange={(open) => {
-        if (!open) useOrganization.getState().setDialog(null);
+        if (!open && !useOrganization.getState().pending) useOrganization.getState().setDialog(null);
       }}
     >
-      <DialogContent>
-        {dialog?.kind === "create" || dialog?.kind === "rename" ? (
+      <DialogContent closeLabel={appCopy.common.close}>
+        {dialog?.kind === "create" || dialog?.kind === "rename" || dialog?.kind === "group" ? (
           <SpaceGroupForm key={JSON.stringify(dialog)} dialog={dialog} />
         ) : dialog?.kind === "move" ? (
           <SpaceMoveForm
@@ -39,7 +39,7 @@ export function SpaceDialogs({ rows }: { rows: Map<string, SpaceRowData> }) {
         ) : dialog?.kind === "relocate" ? (
           <SpaceRelocationForm dialog={dialog} rows={rows} />
         ) : dialog?.kind === "favorites" ? (
-          <Stack gap="4">
+          <Stack gap="lg">
             <DialogHeader>
               <DialogTitle>{appCopy.space.favorites}</DialogTitle>
               <DialogDescription>

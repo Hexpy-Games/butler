@@ -1,7 +1,7 @@
 .moduleScope {
-  width: var(--icon-button-size, 30px);
-  height: var(--icon-button-size, 30px);
-  min-height: var(--icon-button-size, 30px);
+  width: var(--icon-button-size, var(--control-height-md));
+  height: var(--icon-button-size, var(--control-height-md));
+  min-height: var(--icon-button-size, var(--control-height-md));
   overflow: hidden;
   border-radius: var(--icon-button-radius, var(--radius-pill));
   color: var(--text-secondary);
@@ -10,10 +10,25 @@
   border: 0;
   place-items: center;
   display: inline-grid;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard),
+    scale var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* `scale`, not transform: GlyphToggle centres the button with translate. */
+.moduleScope:active:not(:disabled) {
+  scale: var(--motion-scale-press);
+  transition-duration: var(--motion-instant);
 }
 .moduleScope:hover:not(:disabled) {
   background: var(--icon-button-surface, var(--selection));
   color: var(--text-primary);
+}
+
+.moduleScope:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .moduleScope.selected {
@@ -31,8 +46,34 @@
 
 @media (width <= 640px), (pointer: coarse) {
   .moduleScope {
-    width: max(var(--icon-button-size, 30px), var(--control-hit-target));
-    height: max(var(--icon-button-size, 30px), var(--control-hit-target));
+    width: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
+    height: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
     min-height: var(--control-hit-target);
+  }
+}
+
+/* Optical alignment: the icon, not the hit area, meets the top-end corner. */
+.moduleScope[data-optical-align="top-end"] {
+  --icon-button-optical-hit: var(--icon-button-size, var(--control-height-md));
+  --icon-button-optical-offset: calc(
+    (var(--icon-button-optical-hit) - var(--icon-size-md)) / 2
+  );
+
+  translate: var(--icon-button-optical-offset)
+    calc(-1 * var(--icon-button-optical-offset));
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .moduleScope[data-optical-align="top-end"] {
+    --icon-button-optical-hit: max(
+      var(--icon-button-size, var(--control-height-md)),
+      var(--control-hit-target)
+    );
   }
 }

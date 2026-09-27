@@ -31,11 +31,11 @@ export function Inspector({ id }: InspectorProps = {}) {
   const isOpen = useButlerStore(selectEffectiveRightOpen);
 
   const tabs: Array<[string, string, ReactElement]> = [
-    ["summary", appCopy.inspector.tabs.summary, <ListFilter size={16} />],
-    ["context", appCopy.inspector.tabs.context, <Command size={16} />],
-    ["artifacts", appCopy.inspector.tabs.artifacts, <FileText size={16} />],
-    ["automations", appCopy.inspector.tabs.automations, <Clock3 size={16} />],
-    ["workers", appCopy.inspector.tabs.workers, <Blocks size={16} />],
+    ["summary", appCopy.inspector.tabs.summary, <ListFilter size="md" />],
+    ["context", appCopy.inspector.tabs.context, <Command size="md" />],
+    ["artifacts", appCopy.inspector.tabs.artifacts, <FileText size="md" />],
+    ["automations", appCopy.inspector.tabs.automations, <Clock3 size="md" />],
+    ["workers", appCopy.inspector.tabs.workers, <Blocks size="md" />],
   ];
 
   return (

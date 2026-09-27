@@ -20,8 +20,10 @@ export function localModelPayload(
   manualDisplayName: string,
   manualContext: string,
   reasoningBudgetRatio?: number,
+  apiKey?: string,
 ): LocalModelRegistrationRequest {
   return {
+    api_key: apiKey,
     provider_id: "local",
     api_type: API_TYPE,
     platform,
@@ -39,12 +41,16 @@ export function localModelPayload(
 export async function discoverLocalModels(
   platform: LocalModelDiscoveryRequest["platform"],
   serverUrl: string,
+  apiKey?: string,
+  modelRef?: string,
 ): Promise<LocalModelDiscoveryResult> {
   const result = await api<LocalModelDiscoveryResult>(
     "/model-catalog/local/discover",
     {
       method: "POST",
       body: JSON.stringify({
+        model_ref: modelRef || undefined,
+        api_key: apiKey,
         provider_id: "local",
         api_type: API_TYPE,
         platform,

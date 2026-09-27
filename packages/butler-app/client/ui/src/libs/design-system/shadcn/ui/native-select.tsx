@@ -1,8 +1,10 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import * as React from "react";
 
 import { cn } from "../../lib/utils";
 import { ChevronDownIcon } from "../../components/Icons";
 import styles from "../../components/NativeSelect/NativeSelect.module.css";
+import { dsClass } from "../../lib/internal";
 
 function getNodeText(node: React.ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
@@ -76,7 +78,7 @@ function NativeSelect({
   stretch = false,
   value,
   ...props
-}: Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size"> & {
+}: Omit<DsBaseProps<React.SelectHTMLAttributes<HTMLSelectElement>>, "size"> & {
   size?: "default" | "sm";
   stretch?: boolean;
 }) {
@@ -129,7 +131,7 @@ function NativeSelect({
       </select>
       <ChevronDownIcon
         aria-hidden="true"
-        className={styles.icon}
+        className={dsClass(styles.icon)}
         data-slot="native-select-icon"
       />
     </div>
@@ -139,7 +141,7 @@ function NativeSelect({
 function NativeSelectOption({
   className,
   ...props
-}: React.OptionHTMLAttributes<HTMLOptionElement>) {
+}: DsBaseProps<React.OptionHTMLAttributes<HTMLOptionElement>>) {
   return (
     <option
       data-slot="native-select-option"
@@ -152,7 +154,7 @@ function NativeSelectOption({
 function NativeSelectOptGroup({
   className,
   ...props
-}: React.OptgroupHTMLAttributes<HTMLOptGroupElement>) {
+}: DsBaseProps<React.OptgroupHTMLAttributes<HTMLOptGroupElement>>) {
   return (
     <optgroup
       data-slot="native-select-optgroup"

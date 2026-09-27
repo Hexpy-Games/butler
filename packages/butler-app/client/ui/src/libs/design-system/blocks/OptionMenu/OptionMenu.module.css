@@ -38,11 +38,15 @@
 
 .sectionTitle {
   min-width: 0;
-  padding: 3px var(--space-2) 4px;
-  color: var(--text-primary);
-  font-size: var(--font-size-2);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-compact);
+  padding: var(--menu-group-label-padding);
+  color: var(--menu-group-label-color);
+  font-size: var(--menu-group-label-size);
+  font-weight: var(--menu-group-label-weight);
+  line-height: var(--menu-group-label-line-height);
+}
+
+.section:first-child .sectionTitle {
+  padding-top: var(--space-xs);
 }
 
 .sectionItems {
@@ -55,21 +59,28 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 28px;
+  min-height: var(--menu-item-height);
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1);
   align-items: center;
-  padding: 3px var(--space-2);
+  padding: 0 var(--space-2);
+  padding-block: var(--menu-item-padding-block);
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   font: inherit;
+  line-height: var(--menu-item-line-height);
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    color 120ms ease;
+    background-color var(--motion-fast) var(--motion-ease-standard),
+    color var(--motion-fast) var(--motion-ease-standard);
+}
+
+/* Two-line items keep the icon on the label line (the icon box is 1lh). */
+.item[data-description-placement="block"] {
+  align-items: start;
 }
 
 .item:not([data-has-icon="true"]) {
@@ -80,7 +91,11 @@
 .item:focus-visible,
 .item[data-selected="true"] {
   background: var(--selection);
+}
+
+.item:focus-visible {
   outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring-color);
 }
 
 .item[data-tone="accent"] {
@@ -135,7 +150,7 @@
   color: var(--text-primary);
   font-size: var(--font-size-3);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -148,7 +163,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-body);
+  line-height: var(--menu-item-line-height);
 }
 
 .item[data-description-placement="block"] .description {
@@ -162,4 +177,23 @@
   .item {
     transition: none;
   }
+}
+
+/* Permission tones (access modes): label and icon colors. */
+.item[data-permission-tone="full"] {
+  --option-menu-icon-color: var(--access-full);
+
+  color: var(--access-full);
+}
+
+.item[data-permission-tone="ask"] {
+  --option-menu-icon-color: var(--access-ask);
+
+  color: var(--access-ask);
+}
+
+.item[data-permission-tone="read"] {
+  --option-menu-icon-color: var(--access-read-icon);
+
+  color: var(--access-read);
 }

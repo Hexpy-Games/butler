@@ -1,6 +1,6 @@
 import { appCopy } from "@/app/copy.ts";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { api } from "@/app/api.ts";
+import { api, apiErrorCode } from "@/app/api.ts";
 import {
   firstRunCopy,
   type FirstRunLanguage,
@@ -134,13 +134,19 @@ export function useFirstRunAddedModelDefault({
         setSettingsDraft(nextSettings);
         setAddedDefaultModelRef(targetModel.model_ref);
         setModelSaveStatus("");
-      } catch {
-        if (!cancelled) {
-          setModelSaveStatus(copy.modelSaveFailed);
+      } catch (error) {
+        if (cancelled) return;
+        if (apiErrorCode(error) === "settings_model_unavailable") {
+          // Retrying the same model cannot succeed. Keep it marked as tried
+          // so it is not auto-saved again; the user picks another model.
+          setModelSaveStatus(copy.modelUnavailable);
+          return;
         }
-      } finally {
-        if (!cancelled) autoSavingModelRef.current = "";
+        setModelSaveStatus(copy.modelSaveFailed);
+        autoSavingModelRef.current = "";
+        return;
       }
+      if (!cancelled) autoSavingModelRef.current = "";
     }
 
     void saveAddedDefaultModel(targetModel);
@@ -150,6 +156,7 @@ export function useFirstRunAddedModelDefault({
   }, [
     addedDefaultSaved,
     copy.modelSaveFailed,
+    copy.modelUnavailable,
     copy.modelSaving,
     enabled,
     initialRegisteredModelRefs,

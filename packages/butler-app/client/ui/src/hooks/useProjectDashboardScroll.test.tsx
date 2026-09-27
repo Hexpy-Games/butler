@@ -8,7 +8,7 @@ import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
 
 test("dashboard restores per-project/tab position after content grows and yields to user scrolling", async () => {
   const dom = new JSDOM('<div id="root"></div>');
-  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as any)[key]]));
+  const saved = Object.fromEntries(["window", "document", "navigator", "HTMLElement", "Node", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, (globalThis as unknown as Record<string, unknown>)[key]]));
   const observers = new Set<() => void>();
   class Observer {
     constructor(private callback: () => void) {}
@@ -60,7 +60,7 @@ test("dashboard restores per-project/tab position after content grows and yields
     expect(observers.size).toBe(0);
     useProjectDashboardState.setState({ projects: initial });
     for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete (globalThis as any)[key]; else (globalThis as any)[key] = value;
+      if (value === undefined) delete (globalThis as unknown as Record<string, unknown>)[key]; else (globalThis as unknown as Record<string, unknown>)[key] = value;
     }
     dom.window.close();
   }

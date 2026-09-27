@@ -1,0 +1,98 @@
+/*
+ * Shared scroll-edge fade. Opt in with useScrollEdges(axis), which sets
+ * data-scroll-fade="x|y" and keeps data-overflowing / data-at-start /
+ * data-at-end current. Each edge fades only while content is clipped there.
+ *
+ * Per-scroller knobs:
+ *   --scroll-fade-gutter  scrollbar lane left unmasked (default 0px)
+ *   --scroll-fade-guard   fully transparent strip at an active edge (0px)
+ */
+@property --scroll-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --scroll-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+/* Zero-specificity defaults so component modules can override the knobs. */
+:where([data-scroll-fade]) {
+  --scroll-fade-gutter: 0px;
+  --scroll-fade-guard: 0px;
+  --scroll-fade-start: 0px;
+  --scroll-fade-end: 0px;
+  --scroll-fade-start-guard: 0px;
+  --scroll-fade-end-guard: 0px;
+  --scroll-fade-mask: linear-gradient(
+    var(--scroll-fade-direction),
+    transparent 0 var(--scroll-fade-start-guard),
+    var(--text-primary) var(--scroll-fade-start),
+    var(--text-primary) calc(100% - var(--scroll-fade-end)),
+    transparent calc(100% - var(--scroll-fade-end-guard)) 100%
+  );
+
+  -webkit-mask-image:
+    var(--scroll-fade-mask),
+    linear-gradient(var(--text-primary), var(--text-primary));
+  -webkit-mask-repeat: no-repeat;
+  mask-image:
+    var(--scroll-fade-mask),
+    linear-gradient(var(--text-primary), var(--text-primary));
+  mask-repeat: no-repeat;
+}
+
+[data-scroll-fade][data-overflowing="true"]:not([data-at-start="true"]) {
+  --scroll-fade-start: var(--scroll-fade-size);
+  --scroll-fade-start-guard: var(--scroll-fade-guard);
+}
+
+[data-scroll-fade][data-overflowing="true"]:not([data-at-end="true"]) {
+  --scroll-fade-end: var(--scroll-fade-size);
+  --scroll-fade-end-guard: var(--scroll-fade-guard);
+}
+
+[data-scroll-fade="y"] {
+  --scroll-fade-direction: to bottom;
+
+  -webkit-mask-position:
+    0 0,
+    right top;
+  -webkit-mask-size:
+    calc(100% - var(--scroll-fade-gutter)) 100%,
+    var(--scroll-fade-gutter) 100%;
+  mask-position:
+    0 0,
+    right top;
+  mask-size:
+    calc(100% - var(--scroll-fade-gutter)) 100%,
+    var(--scroll-fade-gutter) 100%;
+}
+
+[data-scroll-fade="x"] {
+  --scroll-fade-direction: to right;
+
+  -webkit-mask-position:
+    0 0,
+    left bottom;
+  -webkit-mask-size:
+    100% calc(100% - var(--scroll-fade-gutter)),
+    100% var(--scroll-fade-gutter);
+  mask-position:
+    0 0,
+    left bottom;
+  mask-size:
+    100% calc(100% - var(--scroll-fade-gutter)),
+    100% var(--scroll-fade-gutter);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-scroll-fade] {
+    transition:
+      --scroll-fade-start var(--motion-base) var(--motion-ease-decelerate),
+      --scroll-fade-end var(--motion-base) var(--motion-ease-decelerate);
+  }
+}

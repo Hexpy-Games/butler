@@ -26,3 +26,12 @@ Do not use it for settings navigation or full-page dashboards. Use SettingsShell
 
 ## Tags
 inspector, shell, tabs, side-panel, responsive
+
+## InspectorInset
+
+Full-width inspector content that is not an `InspectorPanel` card (a `Section`,
+an `ActivityFeed`) goes inside `InspectorInset`, which applies the inspector's
+`--inspector-inline-padding`. Pass `fill` when the content should take the
+remaining column height. Product code must not recreate the inset with
+`style={{ marginInline: ... }}`.
+

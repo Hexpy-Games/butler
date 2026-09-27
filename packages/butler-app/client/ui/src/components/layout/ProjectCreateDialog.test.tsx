@@ -1,9 +1,15 @@
 /// <reference types="bun" />
 
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+
+// mock.module is process-wide in bun; put the real module back for later test files.
+const originalButlerDs = { ...(await import("@/butler-ds")) };
+afterAll(() => {
+  mock.module("@/butler-ds", () => originalButlerDs);
+});
 
 mock.module("@/butler-ds", () => ({
   Button: ({

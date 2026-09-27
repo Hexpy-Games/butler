@@ -14,6 +14,11 @@
   background: transparent;
 }
 
+.elevation-subtle {
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+}
+
 .elevation-low {
   box-shadow: var(--shadow-control);
 }

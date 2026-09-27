@@ -1,6 +1,8 @@
+import type { DsPrivateStyleProps } from "../../lib/dsProps";
 import { useMemo, useState, type ReactNode } from "react";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
+import { useScrollEdges } from "../../lib/useScrollEdges";
 import { PromptFluidBackground } from "./PromptFluidBackground";
 import {
   PromptFluidPaletteControl,
@@ -9,6 +11,7 @@ import {
 import { PromptSuggestionCard } from "./PromptSuggestionCard";
 import type { FluidPalette, FluidTone, FluidVariant } from "./promptFluid";
 import styles from "./PromptSuggestionList.module.css";
+import { dsClass } from "../../lib/internal";
 
 export interface PromptSuggestionItem {
   id: string;
@@ -20,10 +23,9 @@ export interface PromptSuggestionItem {
   onSelect?: () => void;
 }
 
-export interface PromptSuggestionListProps {
+export interface PromptSuggestionListProps extends DsPrivateStyleProps {
   title: ReactNode;
   suggestions: PromptSuggestionItem[];
-  className?: string;
   description?: ReactNode;
   fluidBackground?: boolean;
   fluidPalette?: FluidPalette;
@@ -57,6 +59,7 @@ export function PromptSuggestionList({
     [fluidPaletteId, fluidPaletteOptions],
   );
   const titleIconState = titleIcon ? "true" : undefined;
+  const railFadeRef = useScrollEdges("x");
 
   return (
     <section
@@ -84,7 +87,7 @@ export function PromptSuggestionList({
             ) : null}
             {moment ? (
               <Typo.Caption
-                className={styles.moment}
+                className={dsClass(styles.moment)}
                 data-slot="prompt-suggestion-moment"
               >
                 {moment}
@@ -106,11 +109,11 @@ export function PromptSuggestionList({
             className={styles.titleCopy}
             data-slot="prompt-suggestion-title-copy"
           >
-            <Typo.H1 as="h2" className={styles.title}>
+            <Typo.H1 as="h2" className={dsClass(styles.title)}>
               {title}
             </Typo.H1>
             {description ? (
-              <Typo.Body className={styles.description}>
+              <Typo.Body className={dsClass(styles.description)}>
                 {description}
               </Typo.Body>
             ) : null}
@@ -125,6 +128,7 @@ export function PromptSuggestionList({
         ) : null}
       </header>
       <div
+        ref={railFadeRef}
         className={styles.railViewport}
         data-test-class="new-chat-suggestion-rail"
       >

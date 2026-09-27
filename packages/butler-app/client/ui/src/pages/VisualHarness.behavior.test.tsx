@@ -87,8 +87,10 @@ test("SS-03 VisualHarness render installs only its keyed observer surface", asyn
   expect(dialog).not.toBeNull();
   expect(dialog?.getAttribute("role")).toBe("dialog");
   expect(rendered.document.body.textContent).toContain("Review the activity surface");
+  // The composer capsule is a DS StatusCapsule: task · latest activity · Plan
+  // progress (3ea4c63f5), with separators drawn by the capsule itself.
   expect(rendered.container.textContent).toContain(
-    "작업 중 · 2/3 · Inspecting the activity surface",
+    "Review the activity surface·Validating the activity surface·2/3",
   );
   expect(dialog?.querySelector('[data-test-class*="composer"]')).toBeNull();
 });

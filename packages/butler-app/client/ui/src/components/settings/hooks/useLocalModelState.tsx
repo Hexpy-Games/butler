@@ -5,11 +5,12 @@ import type {
   LocalModelDiscoveryResult,
 } from "@/app/types.ts";
 
-const DEFAULT_PLATFORM = "llama_cpp" as const;
+const DEFAULT_PLATFORM = "custom" as const;
 type LocalModelPlatform = LocalModelDiscoveryRequest["platform"];
 
 export function useLocalModelState() {
   const [platform, setPlatform] = useState<LocalModelPlatform>(DEFAULT_PLATFORM);
+  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const [serverUrl, setServerUrl] = useState("");
   const [discovery, setDiscovery] = useState<LocalModelDiscoveryResult | null>(null);
   const [selectedModelRef, setSelectedModelRef] = useState("");
@@ -37,10 +38,11 @@ export function useLocalModelState() {
 
   function editModel(model: AppModelSummary) {
     setEditingModelRef(model.model_ref);
+    setApiKey(undefined);
     setDiscovery(null);
     setSelectedModelRef("");
     setPlatform(model.platform ?? DEFAULT_PLATFORM);
-    setServerUrl(model.server_url ?? "");
+    setServerUrl(model.api_base_url ?? model.server_url ?? "");
     setManualModelId(model.model_id);
     setManualDisplayName(model.display_name);
     setManualContext(String(model.context_window_tokens));
@@ -48,6 +50,8 @@ export function useLocalModelState() {
   }
 
   return {
+    apiKey,
+    setApiKey,
     platform,
     setPlatform,
     serverUrl,

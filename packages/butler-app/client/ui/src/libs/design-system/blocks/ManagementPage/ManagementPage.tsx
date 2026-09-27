@@ -1,11 +1,14 @@
+import type { DsBaseProps } from "../../lib/dsProps";
 import type { CSSProperties, FormHTMLAttributes, ReactNode, Ref } from "react";
-import { cn } from "../../lib/utils";
+import { PageContainer, type PageContainerWidth } from "../../components/PageContainer";
 import { ScrollArea } from "../ScrollArea";
 import styles from "./ManagementPage.module.css";
+import { dsClass } from "../../lib/internal";
+import { cn } from "../../lib/utils";
 
 type ManagementPageElement = "section" | "main" | "form";
 
-export interface ManagementPageProps extends FormHTMLAttributes<HTMLFormElement> {
+export interface ManagementPageProps extends DsBaseProps<FormHTMLAttributes<HTMLFormElement>> {
   children: ReactNode;
   footer?: ReactNode;
   footerPlacement?: "flow" | "overlay";
@@ -13,6 +16,8 @@ export interface ManagementPageProps extends FormHTMLAttributes<HTMLFormElement>
   scrollRef?: Ref<HTMLDivElement>;
   as?: ManagementPageElement;
   dataTestClass?: string;
+  /** Page width of the content (PageContainer); default caps at 72rem. */
+  width?: PageContainerWidth;
 }
 
 export function ManagementPage({
@@ -25,6 +30,7 @@ export function ManagementPage({
   className,
   dataTestClass,
   style,
+  width = "default",
   ...props
 }: ManagementPageProps) {
   return (
@@ -36,10 +42,12 @@ export function ManagementPage({
     >
       <ScrollArea
         scrollRef={scrollRef}
-        className={styles.scrollArea}
-        contentClassName={styles.content}
+        className={dsClass(styles.scrollArea)}
+        contentClassName={dsClass(styles.content)}
       >
-        {children}
+        <PageContainer width={width} className={dsClass(styles.pageContent)}>
+          {children}
+        </PageContainer>
       </ScrollArea>
       {footer && (footerPlacement === "overlay" ? footer : <div className={styles.footer}>{footer}</div>)}
     </Component>

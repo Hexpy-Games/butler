@@ -1,4 +1,4 @@
-import { appCopy } from "@/app/copy.ts";
+import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notifyError } from "@/app/notifications.ts";
 import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
@@ -32,9 +32,10 @@ export function useMessageList(
     [messages],
   );
 
+  const locale = useAppLocale();
   const assistantFooterMetaById = useMemo(
-    () => buildAssistantFooterMetaById(visibleMessages),
-    [visibleMessages],
+    () => buildAssistantFooterMetaById(visibleMessages, locale),
+    [locale, visibleMessages],
   );
 
   const anchoredStewardProgress = useMemo(

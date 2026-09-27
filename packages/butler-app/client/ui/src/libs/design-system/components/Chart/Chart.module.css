@@ -1,13 +1,15 @@
-.fixture {
-  min-width: 0;
-}
-
 .chart {
   justify-self: stretch;
   width: auto;
   height: 150px;
   min-width: 220px;
   max-width: 100%;
+}
+
+.chart[data-size="panel"] {
+  width: 100%;
+  height: var(--chart-height-panel);
+  min-width: 0;
 }
 
 .chart[data-density="compact"] {
@@ -23,7 +25,7 @@
 .chart:not([data-pointer-focus="true"]):has(
     svg[role="application"]:focus-visible
   ) {
-  outline: 2px solid var(--ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--space-xs);
   border-radius: var(--radius-control);
 }
@@ -55,4 +57,71 @@
   width: 8px;
   height: 8px;
   border-radius: var(--radius-pill);
+}
+
+/* ChartLegend: a wrapping row of labelled swatches. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: var(--space-sm);
+  height: var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--text-tertiary);
+}
+
+.swatch[data-shape="bar"] {
+  width: var(--space-md);
+  height: var(--space-xs);
+}
+
+.swatch[data-color="chart-1"] {
+  background: var(--context-chart-1);
+}
+
+.swatch[data-color="chart-2"] {
+  background: var(--context-chart-2);
+}
+
+.swatch[data-color="chart-3"] {
+  background: var(--context-chart-3);
+}
+
+.swatch[data-color="chart-4"] {
+  background: var(--context-chart-4);
+}
+
+.swatch[data-color="chart-5"] {
+  background: var(--context-chart-5);
+}
+
+.swatch[data-color="chart-6"] {
+  background: var(--context-chart-6);
+}
+
+.swatch[data-color="success"] {
+  background: var(--color-success);
+}
+
+.swatch[data-color="warning"] {
+  background: var(--color-warning);
+}
+
+.swatch[data-color="danger"] {
+  background: var(--color-danger);
 }
