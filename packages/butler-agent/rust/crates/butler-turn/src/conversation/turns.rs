@@ -9,6 +9,7 @@ use super::{
 use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
+    /// Begins (or replays) a turn.
     pub async fn begin_turn(&self, input: BeginTurnInput) -> ConversationResult<ConversationTurn> {
         let clock = self.identity_clock().clone();
         let now = input.now.clone().unwrap_or_else(|| clock.now_iso());
@@ -26,6 +27,7 @@ impl AgentConversationStore {
         })
         .await
     }
+    /// Finalizes a turn.
     pub async fn finalize_turn(
         &self,
         input: FinalizeTurnInput,
@@ -38,6 +40,7 @@ impl AgentConversationStore {
         self.execute(move |connection| finalize(connection, clock.as_ref(), input, &completed))
             .await
     }
+    /// A turn by id.
     pub async fn read_turn(&self, id: &str) -> ConversationResult<Option<ConversationTurn>> {
         let id = id.to_owned();
         self.execute(move |connection| get_turn(connection, &id))

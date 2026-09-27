@@ -7,6 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
+    /// Validates and records a checkpoint against the current plan.
     pub async fn record_checkpoint(&self, input: CheckpointInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_checkpoint(&input)?;
         let context = self
@@ -87,6 +88,7 @@ impl DurableWorkService {
         self.repository.record_checkpoint(command).await
     }
 
+    /// Validates and records a review with its stage transition.
     pub async fn record_review(&self, input: ReviewInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_review(&input)?;
         let context = self

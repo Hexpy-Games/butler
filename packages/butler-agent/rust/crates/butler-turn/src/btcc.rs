@@ -155,10 +155,12 @@ pub use work::{
     ReplacePlanCommand, ResolvedProjectWorkScope, ReviewCommand, StartWorkCommand,
 };
 
+/// The SHA-256 hex digest used for BTCC identities.
 pub fn digest_identity(value: &str) -> String {
     identity::digest(value)
 }
 
+/// The material snapshot of a project Work (what a disposition is decided on).
 pub fn build_project_work_material_snapshot(
     work: &WorkView,
     fingerprint: String,
@@ -169,37 +171,44 @@ pub fn build_project_work_material_snapshot(
         .map_err(BtccError::from)
 }
 
+/// Runs and stops turns through the turn coordinator.
 #[derive(Clone)]
 pub struct Btcc {
     inner: Arc<turn::Coordinator>,
 }
 
 impl Btcc {
+    /// Runs a turn to delivery, suspension or cancellation; concurrent requests for the same turn share one run.
     pub async fn run_turn(&self, request: TurnRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.run_turn(request).await
     }
 
+    /// Stops a turn and reports how it ended.
     pub async fn stop_turn(&self, request: StopRequest) -> Result<TurnOutcome, BtccError> {
         self.inner.stop_turn(&request.turn_id).await
     }
 }
 
+/// The shutdown handle of the turn coordinator.
 #[derive(Clone)]
 pub struct BtccHost {
     inner: Arc<turn::Coordinator>,
 }
 
 impl BtccHost {
+    /// Refuses new turns, waits for active ones and closes the dependencies.
     pub async fn close(&self) -> Result<(), BtccError> {
         self.inner.close_host().await
     }
 }
 
+/// The turn runtime and its host handle.
 pub struct BtccAssembly {
     pub btcc: Btcc,
     pub host: BtccHost,
 }
 
+/// Assembles the turn runtime from its dependencies.
 pub fn assemble(dependencies: &TurnFacadeDependencies) -> BtccAssembly {
     let inner = turn::assemble(dependencies);
     BtccAssembly {

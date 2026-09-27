@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use super::super::path_guard::GuardResult;
 
+/// Where a mutation may write.
 pub struct MutationContext {
     pub root: PathBuf,
     pub relative_only: bool,
@@ -10,6 +11,7 @@ pub struct MutationContext {
     pub protected_roots: Vec<PathBuf>,
 }
 
+/// A file write.
 pub struct WriteMutation {
     pub context: MutationContext,
     pub path: String,
@@ -19,6 +21,7 @@ pub struct WriteMutation {
     pub expected_sha256: Option<String>,
 }
 
+/// One exact-text edit.
 pub struct ExactEdit {
     pub index: usize,
     pub path: String,
@@ -28,6 +31,7 @@ pub struct ExactEdit {
     pub expected_sha256: Option<String>,
 }
 
+/// One edit or a batch of edits.
 pub struct EditMutation {
     pub context: MutationContext,
     pub edits: Vec<ExactEdit>,
@@ -51,6 +55,7 @@ pub(crate) struct Unobserved;
 
 impl CommitObserver for Unobserved {}
 
+/// A write or edit.
 pub enum MutationCommand {
     Write(WriteMutation),
     Edit(EditMutation),
@@ -120,6 +125,7 @@ pub struct ChangedLine {
     pub content: String,
 }
 
+/// The line diff of a changed file.
 #[derive(Clone, Debug)]
 pub struct ChangedFile {
     pub path: String,
@@ -131,6 +137,7 @@ pub struct ChangedFile {
     pub file_created: bool,
 }
 
+/// A committed file with its before and after digests.
 #[derive(Clone, Debug)]
 pub struct CommittedFile {
     pub path: String,
@@ -142,6 +149,7 @@ pub struct CommittedFile {
     pub changed_file: Option<ChangedFile>,
 }
 
+/// A committed edit.
 #[derive(Clone, Debug)]
 pub struct EditedFile {
     pub index: usize,
@@ -150,6 +158,7 @@ pub struct EditedFile {
     pub committed: CommittedFile,
 }
 
+/// Why an edit failed.
 #[derive(Clone, Debug)]
 pub struct EditFailure(Box<EditFailureData>);
 
@@ -204,6 +213,7 @@ impl EditFailure {
     }
 }
 
+/// A batch's applied, unchanged, failed and unattempted edits.
 #[derive(Clone, Debug)]
 pub struct BatchResult {
     pub applied: Vec<EditedFile>,
@@ -214,6 +224,7 @@ pub struct BatchResult {
     pub error: Option<&'static str>,
 }
 
+/// A write, single edit or batch outcome.
 pub enum MutationOutcome {
     Write(Result<CommittedFile, MutationFailure>),
     Single(Result<EditedFile, EditFailure>),

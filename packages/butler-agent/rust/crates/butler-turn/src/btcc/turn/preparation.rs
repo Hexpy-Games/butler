@@ -22,17 +22,21 @@ use crate::conversation::{
 };
 use crate::workspace::{SessionBindingStore, StoredSessionBinding};
 
+/// Assembles the context a turn is admitted with.
 pub trait AdmissionContextPort: Send + Sync {
+    /// The butler context of a request.
     fn build_butler<'a>(
         &'a self,
         request: &'a TurnRequest,
         binding: &'a StoredSessionBinding,
     ) -> PortFuture<'a, ContextAssembly>;
+    /// The steward context of a subsession request.
     fn build_steward<'a>(
         &'a self,
         request: &'a TurnRequest,
         binding: &'a StoredSessionBinding,
     ) -> PortFuture<'a, ContextAssembly>;
+    /// Adds the recent conversation to a butler context.
     fn include_recent<'a>(
         &'a self,
         request: &'a TurnRequest,
@@ -41,13 +45,16 @@ pub trait AdmissionContextPort: Send + Sync {
     ) -> PortFuture<'a, ContextAssembly>;
 }
 
+/// The model catalog admission selects from.
 pub trait AdmissionModelCatalogPort: Send + Sync {
+    /// Metadata of the requested models.
     fn snapshot(
         &self,
         requested_model_refs: Vec<String>,
     ) -> PortFuture<'_, AdmissionModelCatalogSnapshot>;
 }
 
+/// One section of an assembled context.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContextSection {
     pub id: String,
@@ -59,6 +66,7 @@ pub struct ContextSection {
     pub source: Option<Value>,
 }
 
+/// An assembled context by region.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ContextAssembly {
     pub static_context: Vec<ContextSection>,
@@ -71,6 +79,7 @@ pub struct ContextAssembly {
     pub live_config_hash: String,
 }
 
+/// Catalog metadata of a requested model.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AdmissionModelMetadata {
     pub requested_model_ref: String,
@@ -82,12 +91,14 @@ pub struct AdmissionModelMetadata {
     pub context_window_tokens: Option<f64>,
 }
 
+/// The catalog metadata admission decides on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AdmissionModelCatalogSnapshot {
     pub metadata: Vec<AdmissionModelMetadata>,
     pub retry_ceiling: Option<f64>,
 }
 
+/// Prepares turns: replays stored admissions or admits new ones with context and model.
 pub struct DefaultTurnPreparation {
     binding_store: SessionBindingStore,
     conversation_store: AgentConversationStore,
@@ -98,6 +109,7 @@ pub struct DefaultTurnPreparation {
 }
 
 impl DefaultTurnPreparation {
+    /// A preparation over the binding, conversation and turn stores and the context and catalog ports.
     pub fn new(
         binding_store: SessionBindingStore,
         conversation_store: AgentConversationStore,

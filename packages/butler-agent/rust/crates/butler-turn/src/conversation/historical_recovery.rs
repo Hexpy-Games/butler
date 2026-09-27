@@ -20,6 +20,7 @@ use self::classifier::classify_rows;
 use self::import::{Outcome, planned_outcome, planned_outcome_connection};
 use super::{AgentConversationStore, ConversationResult, ConversationSourceReader};
 
+/// Plans the recovery of historical rows into the conversation store (the JSON report).
 pub fn plan_historical_recovery(
     reader: Option<&ConversationSourceReader>,
     parse_timestamp: &dyn Fn(&str) -> Option<i64>,
@@ -34,6 +35,7 @@ pub fn plan_historical_recovery(
 }
 
 impl AgentConversationStore {
+    /// Plans and, unless `dry_run`, applies the historical recovery; returns its report.
     pub async fn run_historical_recovery(
         &self,
         input: HistoricalRecoveryInput,

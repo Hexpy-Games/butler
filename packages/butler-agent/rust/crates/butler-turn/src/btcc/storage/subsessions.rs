@@ -8,6 +8,7 @@ use serde_json::Value;
 use super::{BtccStorage, StorageError};
 use crate::btcc::StorageCode;
 
+/// A new subsession delegation to persist.
 #[derive(Clone, Debug)]
 pub struct SubsessionCreate {
     pub relation_id: String,
@@ -25,6 +26,7 @@ pub struct SubsessionCreate {
     pub created_at: String,
 }
 
+/// A persisted subsession delegation (packet and dispatch intent are passthrough JSON).
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDelegation {
     pub relation_id: String,
@@ -43,6 +45,7 @@ pub struct StoredSubsessionDelegation {
     pub created_at: String,
 }
 
+/// A direction sent to a subsession.
 #[derive(Clone, Debug)]
 pub struct StoredSubsessionDirection {
     pub instruction_id: String,
@@ -69,18 +72,21 @@ pub struct PendingParentInput {
     pub input: Value,
 }
 
+/// Where a child result is delivered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParentResultRoute {
     StewardQueue,
     ButlerApp,
 }
 
+/// The SQLite subsession store.
 #[derive(Clone)]
 pub struct SqliteSubsessionRepository {
     storage: BtccStorage,
 }
 
 impl SqliteSubsessionRepository {
+    /// A repository over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
@@ -134,6 +140,7 @@ impl SqliteSubsessionRepository {
             .await
     }
 
+    /// The parent's delegations.
     pub async fn relations_for_parent(
         &self,
         parent: String,
@@ -303,6 +310,7 @@ impl SqliteSubsessionRepository {
             .await
     }
 
+    /// Whether the parent has a child without a result.
     pub async fn has_active_child(&self, parent: String) -> Result<bool, StorageError> {
         self.storage
             .execute(move |db| {
@@ -386,6 +394,7 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
+    /// Child results waiting to be delivered to parents.
     pub async fn pending_parent_inputs(&self) -> Result<Vec<PendingParentInput>, StorageError> {
         self.storage.execute(move |db| {
             let mut statement=db.prepare("SELECT result_id,parent_session_id,input_json FROM btcc_subsession_outbox WHERE status='pending' ORDER BY created_at").map_err(StorageError::sqlite)?;
@@ -403,6 +412,7 @@ impl SqliteSubsessionRepository {
         }).await
     }
 
+    /// Marks a child result delivered.
     pub async fn mark_delivered(&self, result: String, now: String) -> Result<(), StorageError> {
         self.storage.execute(move|db| { db.execute("UPDATE btcc_subsession_outbox SET status='delivered',delivered_at=?2 WHERE result_id=?1 AND status='pending'",params![result,now]).map_err(StorageError::sqlite)?; Ok(()) }).await
     }

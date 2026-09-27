@@ -3,6 +3,7 @@ use rusqlite::{params, params_from_iter, types::Value};
 use super::{PublicMemoryScope, PublicMemorySnapshot};
 use crate::conversation::{ConversationError, ConversationMessageWithParts, ConversationResult};
 
+/// A session as public memory lists it.
 #[derive(Clone, Debug)]
 pub struct PublicSessionRow {
     pub id: String,
@@ -17,6 +18,7 @@ pub struct PublicSessionRow {
 }
 
 impl PublicMemorySnapshot {
+    /// A page of sessions in scope.
     pub fn session_page(
         &self,
         scope: &PublicMemoryScope,
@@ -94,6 +96,7 @@ impl PublicMemorySnapshot {
             .map_err(ConversationError::sqlite)
     }
 
+    /// Preview messages of a session.
     pub fn preview_messages(
         &self,
         session_id: &str,
@@ -137,6 +140,7 @@ impl PublicMemorySnapshot {
         Ok(messages)
     }
 
+    /// A session's external id for a gateway.
     pub fn external_session_id(
         &self,
         session_id: &str,

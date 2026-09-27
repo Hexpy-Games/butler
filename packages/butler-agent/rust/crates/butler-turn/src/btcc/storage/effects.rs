@@ -12,12 +12,14 @@ use crate::btcc::effects::contracts::*;
 
 use super::BtccStorage;
 
+/// The SQLite effect journal.
 #[derive(Clone)]
 pub struct StorageEffectJournal {
     storage: BtccStorage,
     clock: Arc<dyn Fn() -> String + Send + Sync>,
 }
 impl StorageEffectJournal {
+    /// A journal over the store and clock.
     pub fn new(storage: BtccStorage, clock: Arc<dyn Fn() -> String + Send + Sync>) -> Self {
         Self { storage, clock }
     }
@@ -41,6 +43,7 @@ impl StorageEffectJournal {
             .map_err(EffectFailure::from)
     }
 
+    /// Records the state of a restart handoff.
     pub async fn record_restart_handoff(
         &self,
         key: String,

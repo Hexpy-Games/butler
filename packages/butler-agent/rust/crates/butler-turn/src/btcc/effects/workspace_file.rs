@@ -15,16 +15,19 @@ use crate::workspace::{
     EffectFileObservation, EffectFileScope, guard_effect_file, observe_effect_file,
 };
 
+/// Workspace file writes as effects.
 pub struct WorkspaceFileEffectAdapter {
     scope: EffectFileScope,
     registered: Arc<dyn RegisteredWritePort>,
 }
 impl WorkspaceFileEffectAdapter {
+    /// An adapter confined to `scope` that writes through the registered port.
     pub fn new(scope: EffectFileScope, registered: Arc<dyn RegisteredWritePort>) -> Self {
         Self { scope, registered }
     }
 }
 
+/// The contained workspace path an effect targets.
 pub fn normalized_workspace_effect_path(
     scope: &EffectFileScope,
     path: &str,

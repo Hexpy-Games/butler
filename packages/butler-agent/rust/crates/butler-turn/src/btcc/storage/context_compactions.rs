@@ -12,6 +12,7 @@ const LOAD: &str = "SELECT source_digest, covered_units, summary \
 const SAVE: &str = "INSERT OR REPLACE INTO btcc_context_compactions \
     (turn_id, source_digest, covered_units, summary) VALUES (?1,?2,?3,?4)";
 
+/// A stored summary of the first units of a turn's context.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContextCompactionRecord {
     pub source_digest: String,
@@ -19,16 +20,19 @@ pub struct ContextCompactionRecord {
     pub summary: Arc<str>,
 }
 
+/// Stores context compactions per turn.
 #[derive(Clone)]
 pub struct ContextCompactionRepository {
     storage: BtccStorage,
 }
 
 impl ContextCompactionRepository {
+    /// A repository over the store.
     pub fn new(storage: BtccStorage) -> Self {
         Self { storage }
     }
 
+    /// The turn's compactions in order.
     pub async fn load(
         &self,
         turn_id: &str,
@@ -41,6 +45,7 @@ impl ContextCompactionRepository {
             .map_err(BtccError::from)
     }
 
+    /// Stores a compaction for the turn.
     pub async fn save(
         &self,
         turn_id: &str,

@@ -13,6 +13,7 @@ use crate::workspace::WorkspaceCode;
 use crate::workspace::{SessionBindingStore, WorkspaceClock, WorkspaceError, WorkspaceResult};
 
 impl SessionBindingStore {
+    /// Inserts or updates a session binding.
     pub async fn upsert(
         &self,
         binding: UpsertSessionBinding,
@@ -31,6 +32,7 @@ impl SessionBindingStore {
             .await
     }
 
+    /// Updates a session's execution context if unchanged since `expected_updated_at`.
     pub async fn compare_and_set_execution_context(
         &self,
         input: ExecutionContextInput,
@@ -40,6 +42,7 @@ impl SessionBindingStore {
             .await
     }
 
+    /// Sets a session's lifecycle state.
     pub async fn update_lifecycle_state(
         &self,
         session_id: &str,
@@ -90,6 +93,7 @@ impl SessionBindingStore {
         .await
     }
 
+    /// Deletes a session binding.
     pub async fn delete_session(&self, session_id: &str) -> WorkspaceResult<()> {
         let session_id = session_id.to_owned();
         self.execute(move |connection| {

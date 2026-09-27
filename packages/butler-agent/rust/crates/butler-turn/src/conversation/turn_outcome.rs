@@ -12,6 +12,7 @@ use super::{
 use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
+    /// A turn's outcome capsule.
     pub async fn read_turn_outcome(
         &self,
         turn_id: &str,

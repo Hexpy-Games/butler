@@ -4,6 +4,7 @@ use super::{DurableWorkService, fingerprint, object_mut, serialized};
 use crate::btcc::work::contracts::*;
 
 impl DurableWorkService {
+    /// Validates and records a disposition.
     pub async fn record_disposition(&self, input: DispositionInput) -> Result<WorkView, BtccError> {
         super::super::validation::validate_disposition(&input)?;
         let mut identity = serialized(&input)?;
@@ -23,6 +24,7 @@ impl DurableWorkService {
         self.repository.record_disposition(command).await
     }
 
+    /// Claims the closeout correction of a Work.
     pub async fn claim_closeout_correction(
         &self,
         input: ClaimCloseoutCorrectionInput,

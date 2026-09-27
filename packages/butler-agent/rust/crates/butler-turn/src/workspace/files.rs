@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::path_guard::{GuardInput, resolve_workspace_path_guard, safe_cursor_path};
 
+/// A window read of one workspace file.
 #[derive(Debug)]
 pub struct ReadFileInput {
     pub root: PathBuf,
@@ -16,6 +17,7 @@ pub struct ReadFileInput {
     pub max_bytes: usize,
     pub offset_bytes: Option<usize>,
 }
+/// A file read's model-facing result and cursor facts.
 #[derive(Debug)]
 pub struct WorkspaceFileRead {
     pub result: Value,
@@ -324,6 +326,7 @@ fn line_range_end(text: &str, start: usize, limit: Option<usize>) -> usize {
     }
     text.len()
 }
+/// The end of the longest prefix of at most `max_bytes` that ends on a char boundary.
 pub fn utf8_prefix_end(text: &str, max_bytes: usize) -> usize {
     if text.len() <= max_bytes {
         return text.len();
@@ -337,6 +340,7 @@ pub fn utf8_prefix_end(text: &str, max_bytes: usize) -> usize {
     }
     end
 }
+/// The path when it is safe to put in a cursor.
 pub fn cursor_path(path: &str) -> Option<&str> {
     safe_cursor_path(path).then_some(path)
 }

@@ -9,6 +9,8 @@
 
 // Production code reads slices, strings and JSON with checked accessors.
 #![deny(clippy::indexing_slicing)]
+// Every public item says what it is for.
+#![deny(missing_docs)]
 
 /// Declares a domain's closed set of wire error codes.
 ///

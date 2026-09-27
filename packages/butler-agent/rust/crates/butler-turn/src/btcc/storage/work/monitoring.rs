@@ -4,6 +4,7 @@ use crate::btcc::BtccError;
 
 use super::{SessionWorkRepository, StorageError};
 
+/// Monitor facts of one Work.
 #[derive(Clone, Debug)]
 pub struct WorkStatusObservation {
     pub work_id: String,

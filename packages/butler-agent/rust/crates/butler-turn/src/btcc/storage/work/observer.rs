@@ -22,6 +22,7 @@ pub enum SessionPlanObservation {
 }
 
 impl SessionWorkRepository {
+    /// The plan observation of the session's current Work.
     pub async fn observe_session_plan(
         &self,
         session_id: String,

@@ -2,9 +2,11 @@
 
 mod completion;
 mod continuation;
+/// Model-round, tool and continuation contracts of the loop.
 pub mod contracts;
 mod driver;
 mod guided_policy;
+/// The ports a guided turn is composed of.
 pub mod guided_ports;
 mod guided_types;
 mod model_round;
@@ -87,6 +89,7 @@ pub use ports::{
 
 use driver::run;
 
+/// The agent loop used in production: binds a guided turn, routes its model and runs the loop.
 pub struct ProductionAgentLoop {
     model: Arc<dyn ModelRoundPort>,
     execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,
@@ -95,6 +98,7 @@ pub struct ProductionAgentLoop {
 }
 
 impl ProductionAgentLoop {
+    /// A loop over the model port, route execution factory and guided turn factory.
     pub fn native(
         model: Arc<dyn ModelRoundPort>,
         execution_factory: Arc<dyn crate::btcc::model_route::ModelExecutionFactory>,

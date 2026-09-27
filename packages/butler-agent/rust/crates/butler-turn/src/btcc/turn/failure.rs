@@ -12,8 +12,8 @@ pub(super) fn runtime_failure_message_for_work(
     failure: &RuntimeFailure,
     accepted_work: Option<&crate::btcc::AcceptedWorkResult>,
 ) -> String {
-    let work_completed = accepted_work
-        .is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
+    let work_completed =
+        accepted_work.is_some_and(|value| value.status == crate::btcc::AcceptedWorkStatus::Success);
     let korean = original.chars().any(|value| ('가'..='힣').contains(&value));
     let cause = match (failure.code.as_str(), korean) {
         ("provider_rate_limited", true) => "모델 제공자의 요청 한도에 걸려",

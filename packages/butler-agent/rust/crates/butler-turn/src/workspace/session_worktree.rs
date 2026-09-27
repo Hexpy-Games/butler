@@ -28,12 +28,14 @@ pub use relocation::{
     RelocationWorkspaceInput, RelocationWorkspaceMarker, RelocationWorkspacePlan,
 };
 
+/// Whether to create or select a session worktree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionWorktreeAction {
     Create,
     Select,
 }
 
+/// Binds a session to a git worktree of a branch.
 pub struct BindSessionWorktreeInput {
     pub action: SessionWorktreeAction,
     pub branch: String,
@@ -44,6 +46,7 @@ pub struct BindSessionWorktreeInput {
     pub abort: CancellationToken,
 }
 
+/// A bound worktree, or why binding failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BindSessionWorktreeResult {
     Bound {
@@ -75,6 +78,7 @@ fn failure(
 
 type SessionLock = tokio::sync::Mutex<()>;
 
+/// Binds sessions to git worktrees, one operation per session at a time.
 #[derive(Clone)]
 pub struct SessionWorktrees {
     inner: Arc<Owner>,
@@ -98,6 +102,7 @@ struct State {
 }
 
 impl SessionWorktrees {
+    /// An owner over the bindings, commands, files and Butler data.
     pub fn new(
         bindings: SessionBindingStore,
         commands: Commands,
@@ -124,6 +129,7 @@ impl SessionWorktrees {
         }
     }
 
+    /// Binds (creating or selecting) a session worktree.
     pub async fn bind(
         &self,
         input: BindSessionWorktreeInput,
@@ -149,6 +155,7 @@ impl SessionWorktrees {
         })?
     }
 
+    /// Refuses new operations and waits for running ones.
     pub async fn close(&self) {
         {
             let mut state = self.inner.state.lock();

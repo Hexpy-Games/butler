@@ -29,6 +29,7 @@ const EXCLUDED_DIRS: &[&str] = &[
     "vendor",
 ];
 
+/// A bounded listing of workspace files.
 pub struct WorkspaceListInput {
     pub root: PathBuf,
     pub requested_root: String,
@@ -41,6 +42,7 @@ pub struct WorkspaceListInput {
     pub limits: WorkspaceListLimits,
 }
 
+/// The limits of a listing.
 #[derive(Clone, Copy)]
 pub struct WorkspaceListLimits {
     pub max_results: usize,
@@ -50,12 +52,14 @@ pub struct WorkspaceListLimits {
     pub elapsed_ms: u64,
 }
 
+/// Why the listing root was refused.
 pub struct WorkspaceListRejection {
     pub reason: &'static str,
     pub safe_path: Option<String>,
     pub guard: Value,
 }
 
+/// One listed file.
 pub struct WorkspaceListEntry {
     pub path: String,
     pub bytes: u64,
@@ -74,6 +78,7 @@ pub enum ListStop {
 }
 
 impl ListStop {
+    /// The reported reason.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ElapsedMs => "elapsed_ms",
@@ -86,6 +91,7 @@ impl ListStop {
     }
 }
 
+/// The listed files and why the listing stopped, if it did.
 pub struct WorkspaceListResult {
     pub root: String,
     pub files: Vec<WorkspaceListEntry>,
@@ -98,6 +104,7 @@ pub struct WorkspaceListResult {
     pub last_path: Option<String>,
 }
 
+/// A refused or completed listing.
 pub enum WorkspaceListOutcome {
     Rejected(WorkspaceListRejection),
     Listed(WorkspaceListResult),

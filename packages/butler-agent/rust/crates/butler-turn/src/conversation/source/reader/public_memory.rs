@@ -14,6 +14,7 @@ use crate::conversation::{
     ConversationRole, ConversationSession, ConversationSummary, ReadAroundInput,
 };
 
+/// The runtime session and turn a memory read is made for.
 #[derive(Clone, Debug)]
 pub struct CanonicalMemoryReadBinding {
     pub runtime_session_id: String,
@@ -21,6 +22,7 @@ pub struct CanonicalMemoryReadBinding {
     pub project_id: Option<String>,
 }
 
+/// Which sessions a public memory read may see.
 #[derive(Clone, Debug)]
 pub struct PublicMemoryScope {
     pub current_session_id: String,
@@ -32,6 +34,7 @@ pub struct PublicMemoryScope {
     pub include_internal: bool,
 }
 
+/// A consistent read transaction over public conversation memory.
 pub struct PublicMemorySnapshot {
     reader: ConversationSourceReader,
     turn_id: String,
@@ -39,6 +42,7 @@ pub struct PublicMemorySnapshot {
 }
 
 impl PublicMemorySnapshot {
+    /// Opens a read snapshot for the binding.
     pub fn open(path: &Path, binding: &CanonicalMemoryReadBinding) -> ConversationResult<Self> {
         let reader = ConversationSourceReader::open(path)?;
         reader
@@ -133,10 +137,12 @@ impl PublicMemorySnapshot {
             .then_some(message.id))
     }
 
+    /// Ends the snapshot.
     pub fn close(self) -> ConversationResult<()> {
         self.reader.close()
     }
 
+    /// The public source revision the snapshot reads at.
     pub fn revision(&self) -> ConversationResult<u64> {
         self.reader
             .connection()?
@@ -150,14 +156,17 @@ impl PublicMemorySnapshot {
             .map_err(ConversationError::sqlite)
     }
 
+    /// A session by id.
     pub fn session(&self, id: &str) -> ConversationResult<Option<ConversationSession>> {
         self.reader.read_session(id)
     }
 
+    /// A message by id.
     pub fn message(&self, id: &str) -> ConversationResult<Option<ConversationMessageWithParts>> {
         self.reader.read_message(id)
     }
 
+    /// Messages around an anchor in a direction.
     pub fn context_rows(
         &self,
         session_id: &str,
@@ -177,6 +186,7 @@ impl PublicMemorySnapshot {
         )
     }
 
+    /// A session's summaries whose covered range still hashes as stored.
     pub fn summaries(&self, session_id: &str) -> ConversationResult<Vec<ConversationSummary>> {
         let summaries =
             crate::conversation::summaries::query_summaries(self.reader.connection()?, session_id)?;
@@ -197,6 +207,7 @@ impl PublicMemorySnapshot {
         Ok(summaries)
     }
 
+    /// Whether the scope's current session and project still permit the read.
     pub fn validate_scope(&self, scope: &PublicMemoryScope) -> ConversationResult<bool> {
         let Some(current) = self.session(&scope.current_session_id)? else {
             return Ok(false);
@@ -236,6 +247,7 @@ impl PublicMemorySnapshot {
         Ok(true)
     }
 
+    /// Whether the scope may read a session of a project.
     pub fn permits(
         &self,
         scope: &PublicMemoryScope,
@@ -259,6 +271,7 @@ impl PublicMemorySnapshot {
             }
     }
 
+    /// A page of public messages in scope.
     pub fn message_page(
         &self,
         scope: &PublicMemoryScope,

@@ -48,6 +48,7 @@ pub(crate) use host::Coordinator;
 use runtime::TurnRuntime;
 use supervisor::TurnExecutionSupervisor;
 
+/// What the turn runtime is assembled from.
 pub struct TurnFacadeDependencies {
     pub preparation: Arc<dyn TurnPreparation>,
     pub store: Arc<dyn TurnStore>,

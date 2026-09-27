@@ -14,12 +14,14 @@ pub struct ContextAtomRef {
     pub serialized_tokens: f64,
 }
 
+/// How request context size is measured.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestContextMeasurement {
     ModelTokenEstimate,
 }
 
+/// Whether a request fits: as is, after reduction, or not at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestContextAdmission {
@@ -28,6 +30,7 @@ pub enum RequestContextAdmission {
     CannotFitRequired,
 }
 
+/// The measured context plan of a model request.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ModelRequestContextPlan {
     pub request_id: String,
@@ -48,6 +51,7 @@ pub struct ModelRequestContextPlan {
     pub admission: RequestContextAdmission,
 }
 
+/// Why a model request was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelRequestAdmissionCode {
     #[serde(rename = "model_request_metadata_unknown")]
@@ -58,6 +62,7 @@ pub enum ModelRequestAdmissionCode {
     ContextCapacityExceeded,
 }
 
+/// A refused model request with its plan.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelRequestAdmissionError {
     pub code: ModelRequestAdmissionCode,

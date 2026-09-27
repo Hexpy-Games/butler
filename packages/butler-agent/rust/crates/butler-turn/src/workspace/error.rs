@@ -96,6 +96,7 @@ pub enum WorkspaceError {
 }
 
 impl WorkspaceError {
+    /// A detected failure with its code.
     pub fn new(code: WorkspaceCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
@@ -142,6 +143,7 @@ impl WorkspaceError {
         }
     }
 
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Sqlite { .. } => WorkspaceCode::WorkspaceSqliteError.as_str(),

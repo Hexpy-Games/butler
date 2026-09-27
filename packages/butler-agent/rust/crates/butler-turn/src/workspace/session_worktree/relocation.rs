@@ -33,6 +33,7 @@ fn unmanaged_plan(
     }
 }
 
+/// A session relocation to plan a workspace for.
 #[derive(Clone, Debug)]
 pub struct RelocationWorkspaceInput {
     pub runtime_session_id: String,
@@ -41,6 +42,7 @@ pub struct RelocationWorkspaceInput {
     pub project_name: Option<String>,
 }
 
+/// Where a relocated session will work (persisted by the relocation owner).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelocationWorkspacePlan {
@@ -51,6 +53,7 @@ pub struct RelocationWorkspacePlan {
     pub created: bool,
 }
 
+/// The worktree marker a relocated session records.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelocationWorkspaceMarker {
@@ -62,6 +65,7 @@ pub struct RelocationWorkspaceMarker {
 }
 
 impl SessionWorktrees {
+    /// Plans the workspace of a relocation.
     pub async fn plan_relocation(
         &self,
         input: RelocationWorkspaceInput,
@@ -70,6 +74,7 @@ impl SessionWorktrees {
             .await
     }
 
+    /// Creates the planned worktree.
     pub async fn prepare_relocation(
         &self,
         plan: RelocationWorkspacePlan,
@@ -78,6 +83,7 @@ impl SessionWorktrees {
             .await
     }
 
+    /// Discards a prepared worktree the plan owns.
     pub async fn discard_relocation(&self, plan: RelocationWorkspacePlan) -> WorkspaceResult<bool> {
         self.submit(move |owner| async move { cleanup::discard(owner.as_ref(), plan).await })
             .await

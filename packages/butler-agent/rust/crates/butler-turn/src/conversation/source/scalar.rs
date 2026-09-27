@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 
 use super::super::{ConversationMessageWithParts, ConversationPart, ConversationPartKind};
 
+/// A text scalar inside a message part, addressed by JSON pointer.
 #[derive(Debug)]
 pub struct ConversationScalar<'a> {
     pub message: &'a ConversationMessageWithParts,
@@ -12,6 +13,7 @@ pub struct ConversationScalar<'a> {
     pub hash: String,
 }
 
+/// The text scalars of a message.
 pub fn decode_message_scalars(
     message: &ConversationMessageWithParts,
 ) -> Vec<ConversationScalar<'_>> {
@@ -49,6 +51,7 @@ pub fn decode_message_scalars(
     output
 }
 
+/// The text scalar at `pointer` in a part.
 pub fn scalar_for_part<'a>(part: &'a ConversationPart, pointer: &str) -> Option<&'a str> {
     if pointer == "/text" {
         return part

@@ -6,12 +6,14 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use super::{WorkspaceError, WorkspaceResult};
 use crate::workspace::WorkspaceCode;
 
+/// The active butler session shown in status.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StatusSessionIdentity {
     pub session_id: String,
     pub model_ref: String,
 }
 
+/// The active butler session in the session store, if any.
 pub fn read_active_butler_session(path: &Path) -> WorkspaceResult<Option<StatusSessionIdentity>> {
     match std::fs::metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

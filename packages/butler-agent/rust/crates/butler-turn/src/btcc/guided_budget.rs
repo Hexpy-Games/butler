@@ -13,9 +13,12 @@ use super::{
 };
 use crate::btcc::BtccCode;
 
+/// A turn's continuation budget, charged per request, output and tool round.
 pub trait TurnContinuationBudgetPort: Send + Sync {
+    /// The limits the turn runs under.
     fn limits(&self) -> &TurnContinuationBudgetLimits;
 
+    /// Admits a request of `model_facing_bytes`, or exhausts the budget.
     fn admit_request<'a>(
         &'a self,
         round_id: &'a str,
@@ -23,17 +26,21 @@ pub trait TurnContinuationBudgetPort: Send + Sync {
         model_facing_bytes: u64,
     ) -> PortFuture<'a, ()>;
 
+    /// Charges a round's output.
     fn record_output<'a>(&'a self, round_id: &'a str, output_bytes: u64) -> PortFuture<'a, ()>;
 
+    /// Charges a tool round.
     fn record_tool_round<'a>(&'a self, round_id: &'a str) -> PortFuture<'a, ()>;
 }
 
+/// Binds continuation budgets to turns.
 pub struct GuidedContinuationBudgetFactory {
     store: Option<Arc<dyn TurnStore>>,
     clock: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
 impl GuidedContinuationBudgetFactory {
+    /// A factory over the turn store and clock; without a store budgets are off.
     pub fn new(
         store: Option<Arc<dyn TurnStore>>,
         clock: Arc<dyn Fn() -> u64 + Send + Sync>,
@@ -41,6 +48,7 @@ impl GuidedContinuationBudgetFactory {
         Self { store, clock }
     }
 
+    /// The budget of a turn under its claim, if the turn has one.
     pub fn bind(
         &self,
         turn: &TurnRecord,

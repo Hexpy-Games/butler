@@ -23,12 +23,14 @@ use super::types::*;
 use super::{AgentConversationStore, ConversationError, ConversationResult};
 use crate::conversation::ConversationCode;
 
+/// Whether a runtime event is shown to the user.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmissionEventVisibility {
     Public,
     Internal,
 }
 
+/// A runtime event offered to conversation admission.
 #[derive(Clone, Copy, Debug)]
 pub struct RuntimeAdmissionEvent<'a> {
     pub kind: &'a str,
@@ -36,18 +38,24 @@ pub struct RuntimeAdmissionEvent<'a> {
     pub visibility: Option<AdmissionEventVisibility>,
 }
 
+/// A boxed admission-observer call.
 pub type ConversationObserverFuture<'a> =
     Pin<Box<dyn Future<Output = ConversationResult<()>> + Send + 'a>>;
 
+/// Receives admission and completion metrics (diagnostic only).
 pub trait ConversationAdmissionObserver: Send + Sync {
+    /// Records how an event was classified.
     fn admission_metric(&self, metric: AdmissionMetric) -> ConversationObserverFuture<'_>;
+    /// Records a completed turn for downstream observers.
     fn completion_observation(
         &self,
         observation: CompletionObservation,
     ) -> ConversationObserverFuture<'_>;
+    /// Records whether a turn completed.
     fn completion_metric(&self, metric: CompletionMetric) -> ConversationObserverFuture<'_>;
 }
 
+/// How one event was classified for admission.
 #[derive(Clone, Debug)]
 pub struct AdmissionMetric {
     pub session_id: String,
@@ -59,6 +67,7 @@ pub struct AdmissionMetric {
     pub reason: &'static str,
 }
 
+/// A completed turn and its canonical identities.
 #[derive(Clone, Debug)]
 pub struct CompletionObservation {
     pub project_id: Option<String>,
@@ -71,12 +80,14 @@ pub struct CompletionObservation {
     pub completed_at: String,
 }
 
+/// Whether a turn completed and whether it was project-scoped.
 #[derive(Clone, Debug)]
 pub struct CompletionMetric {
     pub project_scoped: bool,
     pub succeeded: bool,
 }
 
+/// The durable session a turn is admitted into.
 #[derive(Clone, Debug)]
 pub struct DurableSessionBinding {
     pub session_id: String,
@@ -85,6 +96,7 @@ pub struct DurableSessionBinding {
     pub model_ref: String,
 }
 
+/// The inbound envelope of a turn.
 #[derive(Clone, Debug)]
 pub struct ConversationEnvelope {
     pub transport: String,
@@ -93,6 +105,7 @@ pub struct ConversationEnvelope {
     pub content_parts: Option<Value>,
 }
 
+/// What a conversation admission turn needs.
 pub struct ConversationAdmissionTurnInput {
     pub store: AgentConversationStore,
     pub binding: DurableSessionBinding,
@@ -112,6 +125,7 @@ struct AdmissionState {
     public_assistant_message_id: Option<String>,
 }
 
+/// Admits one turn's inbound message, runtime events and final answer into the canonical conversation.
 pub struct ConversationAdmissionTurn {
     input: ConversationAdmissionTurnInput,
     turn: ConversationTurn,
@@ -119,6 +133,7 @@ pub struct ConversationAdmissionTurn {
 }
 
 impl ConversationAdmissionTurn {
+    /// Begins the conversation turn; the origin must be classified user input or internal control.
     pub async fn begin(input: ConversationAdmissionTurnInput) -> ConversationResult<Self> {
         if input.origin.reference.as_deref().is_none_or(str::is_empty)
             || !matches!(
@@ -159,6 +174,7 @@ impl ConversationAdmissionTurn {
         })
     }
 
+    /// Admits the inbound user message.
     pub async fn admit_inbound(&self) -> ConversationResult<()> {
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::Gateway,
@@ -193,6 +209,7 @@ impl ConversationAdmissionTurn {
         .await
     }
 
+    /// Admits the final assistant answer.
     pub async fn admit_final(&self, text: &str, source_ref: &str) -> ConversationResult<()> {
         self.apply(ConversationAdmissionInput {
             source: AdmissionSource::Gateway,
@@ -208,6 +225,7 @@ impl ConversationAdmissionTurn {
         .await
     }
 
+    /// Finalizes the turn with its outcome capsule.
     pub async fn finalize(&self, status: &str, completed_at: &str) -> ConversationResult<()> {
         let (state_request, state_assistant, evidence) = {
             let state = self.state.lock().await;

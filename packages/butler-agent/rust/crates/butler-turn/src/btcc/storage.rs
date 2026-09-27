@@ -74,6 +74,7 @@ const OPERATION_QUEUE_CAPACITY: usize = 64;
 type StorageResult<T> = Result<T, StorageError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection, &RuntimeOwner) + Send + 'static>;
 
+/// Whether storage is a durable file (or an in-memory test database).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StorageProfile {
     Durable,
@@ -81,11 +82,13 @@ pub enum StorageProfile {
     Ephemeral,
 }
 
+/// The activated storage manifest storage must match.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StorageActivation {
     pub manifest_id: String,
 }
 
+/// How to open BTCC storage.
 pub struct BtccStorageConfig {
     pub path: PathBuf,
     pub profile: StorageProfile,
@@ -94,6 +97,7 @@ pub struct BtccStorageConfig {
     pub process_liveness: Arc<dyn ProcessLiveness>,
 }
 
+/// The BTCC SQLite store; every operation runs on its single owner thread.
 #[derive(Clone)]
 pub struct BtccStorage {
     inner: Arc<StorageInner>,
@@ -115,6 +119,7 @@ struct LaneState {
 }
 
 impl BtccStorage {
+    /// Opens the store, verifying its activation and runtime owner.
     pub async fn open(config: BtccStorageConfig) -> StorageResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
         let (initialized_tx, initialized_rx) = oneshot::channel();
@@ -228,6 +233,7 @@ impl BtccStorage {
         })?
     }
 
+    /// Closes the store once; every caller receives the owner thread's result.
     pub async fn close(&self) -> StorageResult<()> {
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;

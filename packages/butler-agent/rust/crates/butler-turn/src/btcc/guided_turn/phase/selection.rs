@@ -17,6 +17,7 @@ use super::visibility::{
 
 const REVISION: &str = "butler.btcc-tool-instruction-policy.v2";
 
+/// What phase selection reads: the turn, catalog and feature flags.
 #[derive(Clone, Copy)]
 pub struct GuidedPhaseInput<'a> {
     pub turn: &'a TurnRecord,

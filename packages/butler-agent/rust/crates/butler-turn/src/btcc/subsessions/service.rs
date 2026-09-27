@@ -25,6 +25,7 @@ use crate::btcc::{
 };
 use crate::workspace::{OwnOptional, SessionBindingStore, SessionRole, UpsertSessionBinding};
 
+/// A child dispatch that was interrupted and can be recovered.
 #[derive(Clone, Debug)]
 pub struct InterruptedSubsessionEvent {
     pub event_id: String,
@@ -33,14 +34,18 @@ pub struct InterruptedSubsessionEvent {
     pub recovery_id: String,
 }
 
+/// A child-session envelope to enqueue (passthrough JSON for the gateway queue).
 #[derive(Clone, Debug)]
 pub struct SubsessionEnqueue {
     pub envelope: Value,
     pub metadata: Map<String, Value>,
 }
 
+/// The inbound queue child sessions are dispatched through.
 pub trait SubsessionChildQueue: Send + Sync {
+    /// Enqueues a child envelope.
     fn enqueue(&self, input: SubsessionEnqueue) -> Result<(), BtccError>;
+    /// The interrupted event of a child turn, if its dispatch was interrupted.
     fn interrupted_event(
         &self,
         event_id: &str,
@@ -49,6 +54,7 @@ pub trait SubsessionChildQueue: Send + Sync {
     ) -> Result<Option<InterruptedSubsessionEvent>, BtccError>;
 }
 
+/// A configured worker: its model, reasoning effort, prompt and job.
 #[derive(Clone, Debug)]
 pub struct WorkerProfile {
     pub id: String,
@@ -60,11 +66,15 @@ pub struct WorkerProfile {
     pub job: Value,
 }
 
+/// Reads configured worker profiles.
 pub trait WorkerProfileReader: Send + Sync {
+    /// Every configured profile.
     fn list(&self) -> PortFuture<'_, Vec<WorkerProfile>>;
+    /// The profile with `profile_id`, or the default profile.
     fn read(&self, profile_id: Option<String>) -> PortFuture<'_, WorkerProfile>;
 }
 
+/// A butler's request to delegate reviewed Work to a steward.
 #[derive(Clone, Debug)]
 pub struct StewardDelegationRequest {
     pub parent_session_id: String,
@@ -77,6 +87,7 @@ pub struct StewardDelegationRequest {
     pub access_mode: String,
 }
 
+/// A steward's request to delegate one plan action to a worker.
 #[derive(Clone, Debug)]
 pub struct WorkerDelegationRequest {
     pub parent_session_id: String,
@@ -92,6 +103,7 @@ pub struct WorkerDelegationRequest {
     pub access_mode: String,
 }
 
+/// Orchestrates durable steward and worker subsessions and routes their results.
 #[derive(Clone)]
 pub struct SubsessionService {
     repository: SqliteSubsessionRepository,
@@ -103,6 +115,7 @@ pub struct SubsessionService {
 }
 
 impl SubsessionService {
+    /// A service over the subsession store, bindings, child queue and Work.
     pub fn new(
         repository: SqliteSubsessionRepository,
         bindings: SessionBindingStore,
@@ -343,6 +356,7 @@ impl SubsessionService {
             .await
             .map_err(BtccError::from)
     }
+    /// Makes sure a child turn is bound to its relation's root Work.
     pub async fn ensure_child_work(&self, session: &str, turn: &str) -> Result<(), BtccError> {
         let stored = self
             .repository
@@ -405,6 +419,7 @@ impl SubsessionService {
         }
         Ok(())
     }
+    /// Commits a child's result with its evidence and delivers worker results.
     pub async fn complete_child(
         &self,
         session: &str,
@@ -446,6 +461,7 @@ impl SubsessionService {
             .map_err(BtccError::from)?;
         self.deliver_worker_results().await
     }
+    /// Re-dispatches pending children, directions and worker results after a restart.
     pub async fn recover_dispatches(&self) -> Result<(), BtccError> {
         for stored in self
             .repository
@@ -459,21 +475,25 @@ impl SubsessionService {
         self.recover_directions().await?;
         self.deliver_worker_results().await
     }
+    /// Whether the parent session has an active child to wait for.
     pub async fn should_wait_for_child(&self, parent: &str) -> Result<bool, BtccError> {
         self.repository
             .has_active_child(parent.to_owned())
             .await
             .map_err(BtccError::from)
     }
+    /// Whether the session has unfinished subsession execution.
     pub async fn has_unfinished_execution(&self, session_id: &str) -> Result<bool, BtccError> {
         self.repository
             .has_unfinished_execution(session_id.to_owned())
             .await
             .map_err(BtccError::from)
     }
+    /// The subsession store.
     pub fn repository(&self) -> SqliteSubsessionRepository {
         self.repository.clone()
     }
+    /// The configured worker profiles that are enabled.
     pub async fn enabled_worker_profiles(&self) -> Result<Vec<WorkerProfile>, BtccError> {
         Ok(self
             .profiles

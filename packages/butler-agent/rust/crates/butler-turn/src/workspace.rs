@@ -63,10 +63,12 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 
 const OPERATION_QUEUE_CAPACITY: usize = 64;
 
+/// The session store file under the Butler data directory.
 pub fn session_store_path(butler_data: &Path) -> PathBuf {
     butler_data.join("runtime/session-store.sqlite")
 }
 
+/// Whether the session store is a durable file (or in-memory for tests).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorkspaceStorageProfile {
     Durable,
@@ -74,21 +76,28 @@ pub enum WorkspaceStorageProfile {
     Ephemeral,
 }
 
+/// Time source of the session store.
 pub trait WorkspaceClock: Send + Sync {
+    /// The current time in epoch milliseconds.
     fn now_epoch_millis(&self) -> i64;
+    /// Parses an ISO timestamp.
     fn parse_iso_millis(&self, value: &str) -> Option<i64>;
+    /// Formats epoch milliseconds as ISO.
     fn iso_from_epoch_millis(&self, value: i64) -> WorkspaceResult<String>;
 }
 
+/// The result of a workspace operation.
 pub type WorkspaceResult<T> = Result<T, WorkspaceError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
+/// How to open the session store.
 pub struct SessionBindingStoreConfig {
     pub path: PathBuf,
     pub storage_profile: WorkspaceStorageProfile,
     pub clock: Arc<dyn WorkspaceClock>,
 }
 
+/// The session binding store; every operation runs on its owner thread.
 #[derive(Clone)]
 pub struct SessionBindingStore {
     inner: Arc<StoreInner>,
@@ -107,6 +116,7 @@ struct LaneState {
 }
 
 impl SessionBindingStore {
+    /// Opens the store.
     pub async fn open(config: SessionBindingStoreConfig) -> WorkspaceResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
         let (initialized_tx, initialized_rx) = oneshot::channel();
@@ -183,6 +193,7 @@ impl SessionBindingStore {
         })?
     }
 
+    /// Closes the store once; every caller receives the owner thread's result.
     pub async fn close(&self) -> WorkspaceResult<()> {
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;

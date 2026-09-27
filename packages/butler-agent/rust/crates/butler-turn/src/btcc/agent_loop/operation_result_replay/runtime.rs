@@ -26,6 +26,7 @@ const READERS: &[&str] = &[
     "read_tool_evidence_artifact",
 ];
 
+/// Binds operation-result replay runtimes to turns.
 pub struct OperationResultReplayFactory {
     selection: ExactResultReplaySelection,
     journal: Arc<ToolJournalRepository>,
@@ -33,6 +34,7 @@ pub struct OperationResultReplayFactory {
 }
 
 impl OperationResultReplayFactory {
+    /// A factory over the tool journal and result store.
     pub fn new(
         selection: ExactResultReplaySelection,
         journal: Arc<ToolJournalRepository>,

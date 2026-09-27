@@ -7,6 +7,7 @@ use super::{BtccRepositories, StorageError, StorageResult};
 use crate::btcc::identity::digest;
 use crate::btcc::{PortFuture, StorageCode};
 
+/// A context document to persist, content-addressed by scope and revision.
 #[derive(Clone, Debug)]
 pub struct ContextDocumentInput {
     pub scope_kind: String,
@@ -17,6 +18,7 @@ pub struct ContextDocumentInput {
     pub content: String,
 }
 
+/// A stored context document.
 #[derive(Debug, PartialEq)]
 pub struct ContextDocumentRead {
     pub context_ref: String,
@@ -30,6 +32,7 @@ pub struct ContextDocumentRead {
 }
 
 impl BtccRepositories {
+    /// Persists a context document and returns its reference.
     pub fn persist_context_document(&self, input: ContextDocumentInput) -> PortFuture<'_, String> {
         Box::pin(async move {
             self.storage
@@ -50,6 +53,7 @@ impl BtccRepositories {
         })
     }
 
+    /// Reads a context document by reference.
     pub fn read_context_document(&self, reference: String) -> PortFuture<'_, ContextDocumentRead> {
         Box::pin(async move {
             self.storage

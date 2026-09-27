@@ -16,6 +16,7 @@ use super::{
 };
 use crate::btcc::StorageCode;
 
+/// The turn store and the repositories that share its storage.
 #[derive(Clone)]
 pub struct BtccRepositories {
     pub(super) storage: BtccStorage,
@@ -225,6 +226,7 @@ impl HostDependencies for BtccRepositories {
 }
 
 impl BtccRepositories {
+    /// Repositories over the store with the configured continuation limits.
     pub fn new(
         storage: BtccStorage,
         continuation_limits: Option<TurnContinuationBudgetLimits>,
@@ -235,10 +237,12 @@ impl BtccRepositories {
         }
     }
 
+    /// The context compaction repository.
     pub fn context_compactions(&self) -> super::ContextCompactionRepository {
         super::ContextCompactionRepository::new(self.storage.clone())
     }
 
+    /// Closes the shared store.
     pub async fn close(&self) -> Result<(), StorageError> {
         self.storage.close().await
     }

@@ -299,6 +299,7 @@ fn existing_target_rejection(
     })
 }
 
+/// A trimmed relative path without traversal, home or drive prefixes.
 pub fn safe_workspace_path(path: &str) -> Option<&str> {
     let trimmed = butler_core::public_text::trim_js_whitespace(path);
     if trimmed.is_empty()

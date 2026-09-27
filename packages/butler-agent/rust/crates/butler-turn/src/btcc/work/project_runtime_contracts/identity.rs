@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// A project resolved to its App and ledger ids.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedProjectWorkScope {
     pub app_project_id: String,
@@ -8,6 +9,7 @@ pub struct ResolvedProjectWorkScope {
     pub ledger_root: PathBuf,
 }
 
+/// The kind of a project Work operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectWorkOperationKind {
     MutationCall,
@@ -17,6 +19,7 @@ pub enum ProjectWorkOperationKind {
     LegacyImport,
 }
 
+/// Identifies a project Work operation and its request.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectWorkOperationIdentity {
     pub kind: ProjectWorkOperationKind,
@@ -31,6 +34,7 @@ pub struct ProjectWorkCanonicalLocation {
     pub binding_work_id: Option<String>,
 }
 
+/// A turn's binding revision to a project Work.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectWorkBinding {

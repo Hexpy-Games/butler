@@ -7,6 +7,7 @@ use crate::btcc::BtccCode;
 use crate::btcc::{BtccError, StoredSubsessionDelegation, StoredSubsessionDirection};
 use crate::workspace::SessionRole;
 
+/// A parent's new direction for one of its subsessions.
 #[derive(Clone, Debug)]
 pub struct SubsessionDirectionRequest {
     pub parent_session_id: String,
@@ -20,6 +21,7 @@ pub struct SubsessionDirectionRequest {
     pub access_mode: String,
 }
 
+/// A parent's request to cancel one of its subsessions.
 #[derive(Clone, Debug)]
 pub struct SubsessionCancelRequest {
     pub parent_session_id: String,
@@ -30,6 +32,7 @@ pub struct SubsessionCancelRequest {
     pub child_role: SessionRole,
 }
 
+/// A parent's request to resume a subsession.
 #[derive(Clone, Debug)]
 pub struct SubsessionResumeRequest {
     pub parent_session_id: String,
@@ -37,6 +40,7 @@ pub struct SubsessionResumeRequest {
 }
 
 impl SubsessionService {
+    /// Resumes a subsession.
     pub async fn resume(&self, request: SubsessionResumeRequest) -> Result<Value, BtccError> {
         let relation = self
             .repository
@@ -108,6 +112,7 @@ impl SubsessionService {
         )
     }
 
+    /// Sends new direction to a subsession.
     pub async fn steer(&self, request: SubsessionDirectionRequest) -> Result<Value, BtccError> {
         let instruction = butler_core::public_text::trim_js_whitespace(&request.instruction);
         if instruction.is_empty() {
@@ -172,6 +177,7 @@ impl SubsessionService {
         )
     }
 
+    /// Cancels an unfinished subsession.
     pub async fn cancel(&self, request: SubsessionCancelRequest) -> Result<Value, BtccError> {
         let relation = self
             .select_relation(RelationQuery {
@@ -228,6 +234,7 @@ impl SubsessionService {
         )
     }
 
+    /// Takes the next unconsumed direction for a child turn.
     pub async fn consume_direction(
         &self,
         child_session_id: &str,

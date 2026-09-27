@@ -16,6 +16,7 @@ pub struct GrepLine {
     pub text: String,
 }
 
+/// A matching line with its context.
 #[derive(Clone, Serialize)]
 pub struct GrepMatch {
     pub path: String,
@@ -26,6 +27,7 @@ pub struct GrepMatch {
     pub payload_truncated: Option<bool>,
 }
 
+/// A listed file to search within deadline and budgets.
 pub struct GrepCandidate {
     pub root: PathBuf,
     pub path: String,
@@ -39,6 +41,7 @@ pub struct GrepCandidate {
     pub deadline: Instant,
 }
 
+/// A candidate's matches, or why it was skipped.
 pub struct GrepRead {
     pub skipped: bool,
     pub reason: Option<&'static str>,

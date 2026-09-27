@@ -97,6 +97,7 @@ pub enum ConversationError {
 }
 
 impl ConversationError {
+    /// A detected failure with its code.
     pub fn new(code: ConversationCode, message: impl Into<String>) -> Self {
         Self::Detected {
             code,
@@ -143,6 +144,7 @@ impl ConversationError {
         }
     }
 
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Sqlite { .. } => ConversationCode::ConversationSqliteError.as_str(),
@@ -152,6 +154,7 @@ impl ConversationError {
         }
     }
 
+    /// The public message.
     pub fn message(&self) -> String {
         match self {
             Self::Detected { message, .. }

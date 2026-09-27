@@ -18,6 +18,7 @@ use super::{
 use crate::conversation::ConversationCode;
 
 impl AgentConversationStore {
+    /// Appends a user message.
     pub async fn append_user_message(
         &self,
         mut input: AppendMessageInput,
@@ -26,6 +27,7 @@ impl AgentConversationStore {
         self.append_message(input).await
     }
 
+    /// Appends an assistant message.
     pub async fn append_assistant_message(
         &self,
         mut input: AppendMessageInput,

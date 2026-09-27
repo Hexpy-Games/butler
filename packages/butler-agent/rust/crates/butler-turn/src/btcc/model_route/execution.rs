@@ -17,12 +17,14 @@ use super::support::{selected, validate};
 use super::{hooks::RouteHooks, routed::RoutedRound};
 use crate::btcc::BtccCode;
 
+/// Creates route executions backed by the turn store.
 pub struct TurnModelExecutionFactory {
     store: Arc<dyn TurnStore>,
     retry: ModelRouteRetryConfig,
 }
 
 impl TurnModelExecutionFactory {
+    /// A factory over the store and retry config.
     pub fn new(store: Arc<dyn TurnStore>, retry: ModelRouteRetryConfig) -> Self {
         Self { store, retry }
     }

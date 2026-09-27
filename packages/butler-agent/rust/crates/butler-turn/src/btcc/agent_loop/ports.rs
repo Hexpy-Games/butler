@@ -78,7 +78,9 @@ pub enum ContextProjectionError {
 pub(crate) type ContextProjectionFuture<'a> =
     Pin<Box<dyn Future<Output = Result<ContextProjection, ContextProjectionError>> + Send + 'a>>;
 
+/// Sends one model round to a provider.
 pub trait ModelRoundPort: Send + Sync {
+    /// How much message context the model can take for a request, if known.
     fn context_sizing<'a>(
         &'a self,
         _request: crate::btcc::model_route::ContextSizingRequest<'a>,
@@ -86,6 +88,7 @@ pub trait ModelRoundPort: Send + Sync {
         Ok(None)
     }
 
+    /// The serialized size of a first request, if measurable.
     fn initial_request_bytes(
         &self,
         _prompt: &str,
@@ -95,6 +98,7 @@ pub trait ModelRoundPort: Send + Sync {
         Ok(None)
     }
 
+    /// The serialized size of messages sent without provider state, if measurable.
     fn stateless_message_bytes(
         &self,
         _messages: &[super::contracts::ModelRoundMessage],
@@ -103,6 +107,7 @@ pub trait ModelRoundPort: Send + Sync {
         Ok(None)
     }
 
+    /// Runs the round and returns the provider's accepted response.
     fn run_round<'a>(
         &'a self,
         request: ModelRoundRequest<'a>,
@@ -114,6 +119,7 @@ pub(crate) type ModelRoundObservationFuture<'a> = Pin<Box<dyn Future<Output = ()
 /// Per-execution observer for the last model request, response, and terminal failure.
 /// Implementations are diagnostic-only and must not return errors into model execution.
 pub trait ModelRoundObserver: Send + Sync {
+    /// Observes the request about to be sent.
     fn request<'a>(
         &'a self,
         _request: &'a super::contracts::ModelRoundRequest<'_>,
@@ -121,6 +127,7 @@ pub trait ModelRoundObserver: Send + Sync {
         Box::pin(async {})
     }
 
+    /// Observes the response received.
     fn response<'a>(
         &'a self,
         _response: &'a super::contracts::ModelRoundResult,
@@ -128,6 +135,7 @@ pub trait ModelRoundObserver: Send + Sync {
         Box::pin(async {})
     }
 
+    /// Observes the round's terminal failure.
     fn failure<'a>(&'a self, _error: &'a ModelRoundError) -> ModelRoundObservationFuture<'a> {
         Box::pin(async {})
     }
@@ -139,7 +147,9 @@ pub struct NoopModelRoundObserver;
 #[cfg(any(test, feature = "test-support"))]
 impl ModelRoundObserver for NoopModelRoundObserver {}
 
+/// Reads admitted image bytes for a provider request.
 pub trait VerifiedImagePayloadPort: Send + Sync {
+    /// The bytes behind an admitted image reference (passthrough JSON).
     fn read<'a>(&'a self, reference: &'a Value) -> PortFuture<'a, Vec<u8>>;
 }
 
@@ -147,13 +157,16 @@ pub trait VerifiedImagePayloadPort: Send + Sync {
 /// The implementation captures the admitted round/digest; the provider only
 /// reports the byte count, as in boundedContinuation.admitProviderBody.
 pub trait ProviderBodyAdmissionPort: Send + Sync {
+    /// Admits a serialized request body of `serialized_bytes` against the budget.
     fn admit(
         &self,
         serialized_bytes: usize,
     ) -> Pin<Box<dyn Future<Output = Result<(), ModelRoundError>> + Send + '_>>;
 }
 
+/// Observes raw provider stream events (diagnostic only).
 pub trait ProviderStreamObserver: Send + Sync {
+    /// Observes one stream event (provider passthrough JSON).
     fn event(&self, event: &Value);
 }
 
@@ -282,7 +295,9 @@ pub(crate) trait GuidedPolicyPort: Send + Sync {
     ) -> PortFuture<'a, GuidedCloseout>;
 }
 
+/// Observes agent-loop events (diagnostic only).
 pub trait AgentLoopObserver: Send + Sync {
+    /// Observes one loop event.
     fn event(&self, event: &AgentLoopEvent);
 }
 

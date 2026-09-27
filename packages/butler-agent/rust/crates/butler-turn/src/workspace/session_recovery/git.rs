@@ -12,6 +12,7 @@ use crate::workspace::{
     WorkspaceFiles, WorkspaceResult,
 };
 
+/// A project workspace: a folder, a git checkout, or unavailable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectWorkspaceInspection {
     Folder,

@@ -47,6 +47,7 @@ use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
 
 const OPERATION_QUEUE_CAPACITY: usize = 64;
 
+/// The conversation store file under the Butler data directory.
 pub fn conversation_store_path(butler_data: &Path) -> PathBuf {
     butler_data.join("runtime/conversation-store.sqlite")
 }
@@ -54,12 +55,17 @@ pub fn conversation_store_path(butler_data: &Path) -> PathBuf {
 type ConversationResult<T> = Result<T, ConversationError>;
 type DatabaseOperation = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
 
+/// Ids and timestamps of the conversation store.
 pub trait ConversationIdentityClock: Send + Sync {
+    /// A new id with `prefix`.
     fn id(&self, prefix: &'static str) -> String;
+    /// The current time as an ISO timestamp.
     fn now_iso(&self) -> String;
 }
 
+/// The collation conversation ordering uses.
 pub trait ConversationLocaleCollation: Send + Sync {
+    /// Orders two strings.
     fn compare(&self, left: &str, right: &str) -> Ordering;
 }
 
@@ -69,12 +75,14 @@ impl ConversationLocaleCollation for butler_core::locale::LocaleCollation {
     }
 }
 
+/// How to open the conversation store.
 pub struct ConversationStoreConfig {
     pub path: PathBuf,
     pub identity_clock: Arc<dyn ConversationIdentityClock>,
     pub collation: Arc<dyn ConversationLocaleCollation>,
 }
 
+/// The canonical conversation store; every operation runs on its owner thread.
 #[derive(Clone)]
 pub struct AgentConversationStore {
     inner: Arc<StoreInner>,
@@ -94,6 +102,7 @@ struct LaneState {
 }
 
 impl AgentConversationStore {
+    /// Opens the store.
     pub async fn open(config: ConversationStoreConfig) -> ConversationResult<Self> {
         let (sender, receiver) = mpsc::channel(OPERATION_QUEUE_CAPACITY);
         let (initialized_tx, initialized_rx) = oneshot::channel();
@@ -136,6 +145,7 @@ impl AgentConversationStore {
         }
     }
 
+    /// The store's id and time source.
     pub fn identity_clock(&self) -> &Arc<dyn ConversationIdentityClock> {
         &self.inner.identity_clock
     }
@@ -178,6 +188,7 @@ impl AgentConversationStore {
         })?
     }
 
+    /// Closes the store once; every caller receives the owner thread's result.
     pub async fn close(&self) -> ConversationResult<()> {
         let (waiter_tx, waiter_rx) = oneshot::channel();
         let mut lane = self.inner.lane.lock().await;

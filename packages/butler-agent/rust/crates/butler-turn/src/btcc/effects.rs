@@ -1,6 +1,7 @@
 //! Durable reviewed effects over accepted session Work.
 
 mod blockers;
+/// Effect journal, adapter and outcome contracts.
 pub mod contracts;
 mod execution;
 mod identity;
