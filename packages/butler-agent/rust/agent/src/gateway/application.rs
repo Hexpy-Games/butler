@@ -13,6 +13,7 @@ mod gateway_mutations;
 mod gateway_session_controls_impl;
 mod handle;
 mod internal_continuation;
+mod mcp_servers;
 mod message_files;
 mod message_projection;
 mod model_catalog;

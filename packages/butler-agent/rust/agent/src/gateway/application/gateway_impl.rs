@@ -228,12 +228,11 @@ impl GatewayApplication for AppApplication {
         let client = self.dependencies.mcp_client.clone();
         Box::pin(async move {
             client.list_servers().map_err(|source| {
-                GatewayApplicationError::Public {
-                    status: 500,
-                    code: "mcp_registry_unavailable".into(),
-                    message: "MCP server registry is unavailable.".into(),
-                    source: None,
-                }
+                GatewayApplicationError::public(
+                    500,
+                    "mcp_registry_unavailable",
+                    "MCP server registry is unavailable.",
+                )
                 .with_source(source)
             })
         })
@@ -246,57 +245,28 @@ impl GatewayApplication for AppApplication {
         Box::pin(async move {
             Box::pin(client.list_capabilities(true, &shutdown))
                 .await
-                .map_err(|error| GatewayApplicationError::Public {
-                    status: 500,
-                    code: error.code.into(),
-                    message: error.message.into(),
-                    source: None,
+                .map_err(|error| {
+                    GatewayApplicationError::public(500, error.code, error.message)
+                        .with_source(error)
                 })
         })
     }
     fn create_mcp_server(&self, input: serde_json::Value) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            client
-                .upsert_server(input)
-                .await
-                .map(|server| serde_json::json!({"server": server}))
-                .map_err(|error| {
-                    GatewayApplicationError::Public {
-                        status: 400,
-                        code: "mcp_server_save_failed".into(),
-                        message: error.to_string(),
-                        source: None,
-                    }
-                    .with_source(error)
-                })
-        })
+        self.create_mcp_server_owned(input)
     }
     fn update_mcp_server(
         &self,
         id: String,
         input: serde_json::Value,
     ) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            client
-                .update_server(id, input)
-                .await
-                .map(|server| serde_json::json!({"server": server}))
-                .map_err(|error| GatewayApplicationError::Public {
-                    status: if matches!(
-                        error,
-                        crate::mcp_client::McpRegistryError::ServerNotFound(_)
-                    ) {
-                        404
-                    } else {
-                        400
-                    },
-                    code: "mcp_server_update_failed".into(),
-                    message: error.to_string(),
-                    source: None,
-                })
-        })
+        self.update_mcp_server_owned(id, input)
+    }
+    fn probe_mcp_server(
+        &self,
+        id: String,
+        shutdown: tokio_util::sync::CancellationToken,
+    ) -> ApplicationFuture<serde_json::Value> {
+        self.probe_mcp_server_owned(id, shutdown)
     }
     fn delete_mcp_server(&self, id: String) -> ApplicationFuture<serde_json::Value> {
         let client = self.dependencies.mcp_client.clone();
@@ -305,28 +275,6 @@ impl GatewayApplication for AppApplication {
                 .delete_server(id)
                 .await
                 .map_err(GatewayApplicationError::internal_from)
-        })
-    }
-    fn probe_mcp_server(
-        &self,
-        id: String,
-        shutdown: tokio_util::sync::CancellationToken,
-    ) -> ApplicationFuture<serde_json::Value> {
-        let client = self.dependencies.mcp_client.clone();
-        Box::pin(async move {
-            Box::pin(client.probe_server(&id, &shutdown))
-                .await
-                .map(|server| serde_json::json!({"servers": [server]}))
-                .map_err(|error| GatewayApplicationError::Public {
-                    status: if error.code == "mcp_server_not_found" {
-                        404
-                    } else {
-                        500
-                    },
-                    code: error.code.into(),
-                    message: error.message.into(),
-                    source: None,
-                })
         })
     }
     fn send_message(&self, command: SendMessageCommand) -> ApplicationFuture<MessageSendResult> {
