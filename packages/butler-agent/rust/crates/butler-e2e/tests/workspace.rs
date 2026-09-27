@@ -6,9 +6,13 @@
     reason = "test assertions"
 )]
 
-use butler_e2e::e2e::HarnessError;
-use butler_e2e::e2e::gateway::Reply;
+use std::fs;
+use std::path::Path;
+
+use butler_e2e::e2e::faults::{ArgsMutation, Fault, Transform};
+use butler_e2e::e2e::gateway::{Reply, tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::{HarnessError, nonce, sha256_hex};
 use serde_json::{Value, json};
 
 async fn new_chat(s: &Scenario, title: &str) -> Result<String, HarnessError> {
@@ -156,5 +160,203 @@ async fn ws_02_sidebar_groups_moves_pins_undo() -> Result<(), HarnessError> {
     s.restart().await?;
     assert_eq!(space(&s).await?, view, "space changed across restart");
     assert!(pinned(&s, &beta).await?, "pin lost across restart");
+    s.finish().await
+}
+
+/// Relative path + content hash of every file under `root`.
+fn tree(root: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(root).unwrap().flatten() {
+        let path = entry.path();
+        out.push((
+            entry.file_name().to_string_lossy().into_owned(),
+            sha256_hex(&fs::read(&path).unwrap_or_default()),
+        ));
+    }
+    out.sort();
+    out
+}
+
+const WS_01_PROMPT: &str = "In the ws folder of your workspace: list the files, read utf8.txt, crlf.txt and binary.bin, and read only the beginning of large.log. Tell me the code words in utf8.txt and crlf.txt, the marker at the top of large.log, and what binary.bin is.";
+
+/// `W/ws` with a multi-byte UTF-8 file, a CRLF file, a binary file and a
+/// 50 MB log, each text file carrying its own per-run code.
+struct EdgeFiles {
+    setup: Setup,
+    utf8: String,
+    crlf_code: String,
+    large_code: String,
+}
+
+fn edge_files(id: &str) -> Result<EdgeFiles, HarnessError> {
+    let (utf8_code, crlf_code, large_code) = (nonce(), nonce(), nonce());
+    let setup = Setup::new(id)?
+        .cassette("WS-01")
+        .placeholder("NONCE", &utf8_code)
+        .placeholder("NONCE_CRLF", &crlf_code)
+        .placeholder("NONCE_LARGE", &large_code);
+    let dir = setup.sandbox.data.join("ws");
+    fs::create_dir_all(&dir)?;
+    let utf8 = format!("정원 일지 🌱 — code word: {utf8_code}\nCafé crème, naïve façade.\n");
+    fs::write(dir.join("utf8.txt"), &utf8)?;
+    fs::write(
+        dir.join("crlf.txt"),
+        format!("first line\r\ncode word: {crlf_code}\r\nlast line\r\n"),
+    )?;
+    let binary: Vec<u8> = (0..4096u32)
+        .map(|i| i.wrapping_mul(2_654_435_761).to_be_bytes()[1])
+        .collect();
+    fs::write(dir.join("binary.bin"), &binary)?;
+    let mut large = format!("marker: {large_code}\n");
+    let line = "2026-09-27T00:00:00Z INFO garden sensor reading ok, humidity 61 percent\n";
+    while large.len() < 50 * 1024 * 1024 {
+        large.push_str(line);
+    }
+    fs::write(dir.join("large.log"), &large)?;
+    Ok(EdgeFiles {
+        setup,
+        utf8,
+        crlf_code,
+        large_code,
+    })
+}
+
+/// Per-file results of the turn's `read_file` call.
+async fn read_results(s: &Scenario, turn_id: &str) -> Result<Vec<Value>, HarnessError> {
+    let rows = tool_rows(&s.gw.messages("general").await?, turn_id);
+    let read = rows
+        .iter()
+        .find(|row| row["safe_tool_name"] == "read_file")
+        .unwrap_or_else(|| panic!("no read_file call: {rows:#?}"));
+    let output: Value = serde_json::from_str(&s.gw.operation_output(turn_id, read).await?)
+        .unwrap_or_else(|error| panic!("read_file output is not JSON: {error}"));
+    Ok(output["files"].as_array().cloned().unwrap_or_default())
+}
+
+fn file<'a>(results: &'a [Value], path: &str) -> &'a Value {
+    results
+        .iter()
+        .find(|result| result["path"] == path)
+        .unwrap_or_else(|| panic!("{path} not read: {results:#?}"))
+}
+
+/// No replacement characters anywhere the user sees the turn.
+async fn assert_no_mojibake(s: &Scenario) -> Result<(), HarnessError> {
+    let messages = s.gw.get("/messages?chat_id=general").await?;
+    assert!(
+        !messages.text.contains('\u{FFFD}'),
+        "mojibake in the transcript"
+    );
+    Ok(())
+}
+
+/// WS-01 — Workspace file edge cases: every file is listed with its size,
+/// multi-byte UTF-8 and CRLF text read exactly, the 50 MB log is read in a
+/// bounded slice, and nothing is written to the workspace.
+#[tokio::test]
+async fn ws_01_workspace_file_edge_cases() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let files = edge_files("WS-01")?;
+    let dir = files.setup.sandbox.data.join("ws");
+    let before = tree(&dir);
+    let s = files.setup.start().await?;
+    let (turn_id, turn) = s.turn("general", WS_01_PROMPT).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+
+    let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
+    let list = rows
+        .iter()
+        .find(|row| row["safe_tool_name"] == "list_files")
+        .unwrap_or_else(|| panic!("no list_files call: {rows:#?}"));
+    let listed: Value = serde_json::from_str(&s.gw.operation_output(&turn_id, list).await?)?;
+    let sizes: Vec<(String, u64)> = listed["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|entry| {
+            (
+                entry["path"].as_str().unwrap_or_default().to_owned(),
+                entry["bytes"].as_u64().unwrap_or_default(),
+            )
+        })
+        .collect();
+    for (name, _) in &before {
+        let size = fs::metadata(dir.join(name))?.len();
+        assert!(
+            sizes.contains(&(format!("ws/{name}"), size)),
+            "{name} ({size} bytes) not listed: {sizes:?}"
+        );
+    }
+
+    let results = read_results(&s, &turn_id).await?;
+    assert_eq!(
+        file(&results, "ws/utf8.txt")["content"],
+        files.utf8.as_str()
+    );
+    let crlf = file(&results, "ws/crlf.txt")["content"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        crlf.contains(&format!("code word: {}", files.crlf_code)),
+        "{crlf:?}"
+    );
+    let large = file(&results, "ws/large.log");
+    let content = large["content"].as_str().unwrap_or_default();
+    assert!(
+        content.starts_with(&format!("marker: {}", files.large_code)),
+        "{large}"
+    );
+    assert!(content.len() < 64 * 1024, "the 50 MB read was not bounded");
+    assert_no_mojibake(&s).await?;
+    assert_eq!(tree(&dir), before, "the workspace changed");
+    s.finish().await
+}
+
+/// WS-01 (inject) — the recorded `read_file` call rewritten to request the
+/// binary file and an unbounded slice of the 50 MB log: the binary file is
+/// reported as not UTF-8 (no mojibake), and the log read is cut at the
+/// output budget and says so.
+#[tokio::test]
+async fn ws_01_binary_and_oversized_reads_are_reported() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let files = edge_files("WS-01-INJECT")?;
+    let s = files.setup.replay_only().start().await?;
+    s.provider()?.inject(Fault::first_call(
+        "In the ws folder",
+        Transform::MutateToolArgs(ArgsMutation::OnlyTool {
+            tool: "read_file".into(),
+            mutation: Box::new(ArgsMutation::Edits(vec![
+                ("ws/crlf.txt".into(), "ws/binary.bin".into()),
+                (
+                    r#""limit_lines":8,"max_bytes":2048"#.into(),
+                    r#""limit_lines":1000000"#.into(),
+                ),
+            ])),
+        }),
+    ))?;
+    let (turn_id, turn) = s.turn("general", WS_01_PROMPT).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let results = read_results(&s, &turn_id).await?;
+    let binary = file(&results, "ws/binary.bin");
+    assert_eq!(binary["ok"], false, "{binary}");
+    assert_eq!(binary["error"], "binary_file_not_supported", "{binary}");
+    assert!(
+        binary["content"].is_null(),
+        "binary bytes shown as text: {binary}"
+    );
+    let large = file(&results, "ws/large.log");
+    assert_eq!(large["truncated"], true, "{large}");
+    let content = large["content"].as_str().unwrap_or_default();
+    assert!(content.starts_with(&format!("marker: {}", files.large_code)));
+    assert!(content.len() < 64 * 1024, "the 50 MB read was not bounded");
+    // The slice says where it stopped, so the next page can be requested.
+    let end = large["end_line"].as_u64().unwrap_or_default();
+    assert!(end > 1 && end < 1_000_000, "{large}");
+    assert_eq!(
+        content.lines().count() as u64,
+        end,
+        "end_line does not match the slice"
+    );
+    assert_no_mojibake(&s).await?;
     s.finish().await
 }

@@ -276,6 +276,7 @@ async fn mig_03_personalization_migration_import() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("MIG-03-PROFILE")?
         .cassette("PRO-02")
+        .replay_only()
         .start()
         .await?;
     let enabled =

@@ -48,6 +48,7 @@ pub struct Setup {
     model: Option<ModelChoice>,
     stub_credential: bool,
     record_into: Option<std::path::PathBuf>,
+    replay_only: bool,
 }
 
 /// A running scenario. Field order is drop order: agent before sandbox.
@@ -77,6 +78,7 @@ impl Setup {
             model: None,
             stub_credential: true,
             record_into: None,
+            replay_only: false,
         })
     }
 
@@ -114,6 +116,14 @@ impl Setup {
         self
     }
 
+    /// Always replays the cassette, also under `BUTLER_E2E_RECORD=1`: for
+    /// scenarios that reuse another scenario's recording or inject faults
+    /// into it, so a record run can never overwrite that cassette.
+    pub fn replay_only(mut self) -> Self {
+        self.replay_only = true;
+        self
+    }
+
     /// Replay without the placeholder Codex credential (no provider auth).
     pub fn without_credential(mut self) -> Self {
         self.stub_credential = false;
@@ -136,6 +146,7 @@ impl Setup {
             model,
             stub_credential,
             record_into,
+            replay_only,
         } = self;
         let mut launch = Launch::new(&sandbox)?;
         let default_model = ModelChoice {
@@ -160,7 +171,9 @@ impl Setup {
                         .map(|c| (live_provider.provider.clone(), c)),
                 )
             }
-            Source::Cassette(name) if flag("BUTLER_E2E_RECORD") || record_into.is_some() => {
+            Source::Cassette(name)
+                if (flag("BUTLER_E2E_RECORD") && !replay_only) || record_into.is_some() =>
+            {
                 let live_provider = live::gate(&format!("record {name}"))?.ok_or_else(|| {
                     harness_error(
                         "BUTLER_E2E_RECORD=1 needs BUTLER_E2E_TIER=live|all and credentials",
