@@ -4,24 +4,42 @@ use serde_json::Value;
 
 use super::contained_root;
 
+/// A Project Ledger CLI command run on the Ledger owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LedgerCommand {
+    /// Summarize the index, counts and next actions.
     Status,
+    /// List records of a kind or a derived view.
     Query,
+    /// Show one record.
     Show,
+    /// Validate records, views and privacy.
     Check,
+    /// Rebuild the compact index.
     Index,
+    /// Render the dashboard, handoff or roadmap view.
     Render,
+    /// Create a top-level record.
     RecordCreate,
+    /// Update any record's metadata or body.
     RecordUpdate,
+    /// Create a Work record.
     WorkCreate,
+    /// Update a Work record.
     WorkUpdate,
+    /// Complete a Work record through its gate.
     WorkComplete,
+    /// Create a Task under a Work.
     TaskCreate,
+    /// Update a Task.
     TaskUpdate,
+    /// Complete a Task.
     TaskComplete,
+    /// Start an Attempt on a Task.
     AttemptStart,
+    /// Mark an Attempt succeeded.
     AttemptSucceed,
+    /// Mark an Attempt failed.
     AttemptFail,
 }
 
@@ -43,9 +61,12 @@ impl LedgerCommand {
     }
 }
 
+/// One command with its options, scoped to one Ledger project.
 #[derive(Clone, Debug)]
 pub struct LedgerCommandRequest {
+    /// The Ledger project root the command runs in.
     pub project_root: PathBuf,
+    /// The command to run.
     pub command: LedgerCommand,
     /// Source parseArgs option keys remain dashed; body is an owned inline string.
     pub options: Value,

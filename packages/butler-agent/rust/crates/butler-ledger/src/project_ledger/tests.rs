@@ -273,6 +273,10 @@ async fn before_image_remains_authoritative_until_claim_release() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::excessive_nesting,
+    reason = "the read blocks inside a spawned task's owner closure"
+)]
 async fn dropped_caller_keeps_admitted_read_owned_and_close_drains() {
     let fixture = Fixture::new();
     let native = fixture.native();

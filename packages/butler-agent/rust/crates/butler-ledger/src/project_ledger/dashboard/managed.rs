@@ -47,6 +47,8 @@ impl DashboardManagedWorkView {
     }
 }
 
+/// The public view of one managed Work: its manifest and current children
+/// are decoded and proven, then projected without private payloads.
 pub(super) fn read_current(
     root: &Path,
     binding: &ProjectLedgerBinding,
@@ -62,39 +64,26 @@ pub(super) fn read_current(
         collation,
     )?;
     proof::validate_official_work(root, binding, work, exact, &manifest)?;
+    let pointed = |pointer: &str, schema: &str| {
+        manifest
+            .get(pointer)
+            .and_then(Value::as_str)
+            .map(|id| child::read_child(root, binding, &work.id, id, schema, collation))
+            .transpose()
+    };
     let plan = manifest
         .get("currentPlanRevisionId")
         .and_then(Value::as_str)
         .map(|id| child::read_plan(root, binding, &work.id, id, collation))
         .transpose()?;
-    let checkpoint = manifest
-        .get("latestCheckpointRevisionId")
-        .and_then(Value::as_str)
-        .map(|id| {
-            child::read_child(
-                root,
-                binding,
-                &work.id,
-                id,
-                "butler.btcc-project-work-checkpoint.v1",
-                collation,
-            )
-        })
-        .transpose()?;
-    let disposition = manifest
-        .get("latestDispositionRevisionId")
-        .and_then(Value::as_str)
-        .map(|id| {
-            child::read_child(
-                root,
-                binding,
-                &work.id,
-                id,
-                "butler.btcc-project-work-disposition.v1",
-                collation,
-            )
-        })
-        .transpose()?;
+    let checkpoint = pointed(
+        "latestCheckpointRevisionId",
+        "butler.btcc-project-work-checkpoint.v1",
+    )?;
+    let disposition = pointed(
+        "latestDispositionRevisionId",
+        "butler.btcc-project-work-disposition.v1",
+    )?;
     let reviews = proof::validate_current_children(proof::CurrentChildrenInput {
         root,
         binding,
@@ -105,25 +94,36 @@ pub(super) fn read_current(
         disposition: disposition.as_ref(),
         collation,
     })?;
+    project(
+        &manifest,
+        plan,
+        checkpoint.as_ref(),
+        disposition.as_ref(),
+        reviews,
+    )
+}
+
+/// The dashboard projection of a proven manifest and its children.
+fn project(
+    manifest: &Value,
+    plan: Option<ManagedPlanView>,
+    checkpoint: Option<&Value>,
+    disposition: Option<&Value>,
+    reviews: proof::CurrentReviewCorrections,
+) -> Result<DashboardManagedWorkView, ProjectLedgerReadError> {
     let public_summary = disposition
-        .as_ref()
         .and_then(|item| item.get("disposition"))
         .and_then(|item| item.get("summary"))
         .and_then(Value::as_str)
         .or_else(|| {
             checkpoint
-                .as_ref()
                 .and_then(|item| item.get("checkpoint"))
                 .and_then(|item| item.get("publicSummary"))
                 .and_then(Value::as_str)
         })
         .map(str::to_owned);
-    let latest_checkpoint = checkpoint
-        .as_ref()
-        .map(projection::checkpoint_summary)
-        .transpose()?;
+    let latest_checkpoint = checkpoint.map(projection::checkpoint_summary).transpose()?;
     let latest_disposition = disposition
-        .as_ref()
         .map(projection::disposition_summary)
         .transpose()?;
     let remaining_actions = latest_disposition
@@ -145,9 +145,9 @@ pub(super) fn read_current(
         })
         .collect::<Result<Vec<_>, ProjectLedgerReadError>>()?;
     Ok(DashboardManagedWorkView {
-        objective: required_string(&manifest, "objective")?.into(),
-        session_id: required_string(&manifest, "sessionId")?.into(),
-        status: required_string(&manifest, "status")?.into(),
+        objective: required_string(manifest, "objective")?.into(),
+        session_id: required_string(manifest, "sessionId")?.into(),
+        status: required_string(manifest, "status")?.into(),
         current_stage: manifest
             .get("currentStage")
             .and_then(Value::as_str)
@@ -220,6 +220,45 @@ pub(in crate::project_ledger) fn decode_child_body(
     child::decode_body(body, work_id, id, schema, collation)
 }
 
+const MANIFEST_REQUIRED: [&str; 23] = [
+    "schema",
+    "workId",
+    "sessionId",
+    "scope",
+    "origin",
+    "objective",
+    "status",
+    "sessionHead",
+    "allowedNextStages",
+    "actionProgress",
+    "resultRefs",
+    "bindingRefs",
+    "planRevision",
+    "checkpointRevision",
+    "checkpointResultSequence",
+    "reviewRevision",
+    "dispositionRevision",
+    "resultSequence",
+    "materialFingerprint",
+    "materialSnapshot",
+    "operationIdentity",
+    "createdAt",
+    "updatedAt",
+];
+
+const MANIFEST_OPTIONAL: [&str; 7] = [
+    "currentStage",
+    "currentPlanRevisionId",
+    "latestCheckpointRevisionId",
+    "latestPlanReviewRevisionId",
+    "latestResultReviewRevisionId",
+    "latestCompletionValidationRevisionId",
+    "latestDispositionRevisionId",
+];
+
+/// The manifest's shape, identity and counters: this Work in this binding,
+/// exactly the known keys, bounded lists, and pointers present exactly when
+/// their revision counter is positive.
 fn validate_manifest(
     value: &Value,
     work_id: &str,
@@ -237,44 +276,12 @@ fn validate_manifest(
     {
         return Err(invalid());
     }
-    let required = [
-        "schema",
-        "workId",
-        "sessionId",
-        "scope",
-        "origin",
-        "objective",
-        "status",
-        "sessionHead",
-        "allowedNextStages",
-        "actionProgress",
-        "resultRefs",
-        "bindingRefs",
-        "planRevision",
-        "checkpointRevision",
-        "checkpointResultSequence",
-        "reviewRevision",
-        "dispositionRevision",
-        "resultSequence",
-        "materialFingerprint",
-        "materialSnapshot",
-        "operationIdentity",
-        "createdAt",
-        "updatedAt",
-    ];
-    let optional = [
-        "currentStage",
-        "currentPlanRevisionId",
-        "latestCheckpointRevisionId",
-        "latestPlanReviewRevisionId",
-        "latestResultReviewRevisionId",
-        "latestCompletionValidationRevisionId",
-        "latestDispositionRevisionId",
-    ];
-    if required.iter().any(|key| !object.contains_key(*key))
-        || object
-            .keys()
-            .any(|key| !required.contains(&key.as_str()) && !optional.contains(&key.as_str()))
+    if MANIFEST_REQUIRED
+        .iter()
+        .any(|key| !object.contains_key(*key))
+        || object.keys().any(|key| {
+            !MANIFEST_REQUIRED.contains(&key.as_str()) && !MANIFEST_OPTIONAL.contains(&key.as_str())
+        })
         || required_string(value, "schema")? != "butler.btcc-project-work.v1"
         || required_string(value, "workId")? != work_id
         || value.pointer("/scope/appProjectId").and_then(Value::as_str) != Some(app_project_id)
@@ -293,58 +300,54 @@ fn validate_manifest(
     required_string(value, "sessionId")?;
     required_string(value, "objective")?;
     required_string(value, "materialFingerprint")?;
-    for name in [
+    manifest_counters(value)
+}
+
+fn manifest_counters(value: &Value) -> Result<(), ProjectLedgerReadError> {
+    let lists = [
         "allowedNextStages",
         "actionProgress",
         "resultRefs",
         "bindingRefs",
-    ] {
-        if value
-            .get(name)
+    ];
+    if lists.iter().any(|name| {
+        value
+            .get(*name)
             .and_then(Value::as_array)
             .is_none_or(|items| items.len() > 512)
-        {
-            return Err(invalid());
-        }
+    }) {
+        return Err(invalid());
     }
-    for name in [
+    let counter = |name: &str| value.get(name).and_then(Value::as_u64);
+    let counters = [
         "planRevision",
         "checkpointRevision",
         "checkpointResultSequence",
         "reviewRevision",
         "dispositionRevision",
         "resultSequence",
-    ] {
-        if value.get(name).and_then(Value::as_u64).is_none() {
-            return Err(invalid());
-        }
+    ];
+    if counters.iter().any(|name| counter(name).is_none()) {
+        return Err(invalid());
     }
-    if value.get("resultSequence").and_then(Value::as_u64)
+    if counter("resultSequence")
         != value
             .get("resultRefs")
             .and_then(Value::as_array)
             .map(|items| items.len() as u64)
-        || value
-            .get("checkpointResultSequence")
-            .and_then(Value::as_u64)
-            > value.get("resultSequence").and_then(Value::as_u64)
+        || counter("checkpointResultSequence") > counter("resultSequence")
     {
         return Err(invalid());
     }
-    for (pointer, counter) in [
+    let pointers = [
         ("currentPlanRevisionId", "planRevision"),
         ("latestCheckpointRevisionId", "checkpointRevision"),
         ("latestDispositionRevisionId", "dispositionRevision"),
-    ] {
-        if value.get(pointer).is_some()
-            != (value
-                .get(counter)
-                .and_then(Value::as_u64)
-                .unwrap_or_default()
-                > 0)
-        {
-            return Err(invalid());
-        }
+    ];
+    if pointers.iter().any(|(pointer, name)| {
+        value.get(*pointer).is_some() != (counter(name).unwrap_or_default() > 0)
+    }) {
+        return Err(invalid());
     }
     Ok(())
 }

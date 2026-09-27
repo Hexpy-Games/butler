@@ -7,10 +7,12 @@ pub(in crate::project_ledger) mod state;
 
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::contracts::{CliFailure, LedgerCommand, LedgerCommandRequest};
 use super::{envelope, refresh_index_after_mutation};
+use crate::project_ledger::events::Event;
+use crate::project_ledger::status::Lifecycle;
 use butler_core::locale::LocaleCollation;
 
 pub(super) fn execute(
@@ -22,11 +24,15 @@ pub(super) fn execute(
         LedgerCommand::RecordCreate => records::create_top_level(project_root, &request.options),
         LedgerCommand::RecordUpdate => records::update_generic(project_root, &request.options),
         LedgerCommand::WorkCreate => records::create_work(project_root, &request.options),
-        LedgerCommand::WorkUpdate => update_work(project_root, &request.options, false),
-        LedgerCommand::WorkComplete => update_work(project_root, &request.options, true),
+        LedgerCommand::WorkUpdate => update_work(project_root, &request.options, Change::Update),
+        LedgerCommand::WorkComplete => {
+            update_work(project_root, &request.options, Change::Complete)
+        }
         LedgerCommand::TaskCreate => records::create_task(project_root, &request.options),
-        LedgerCommand::TaskUpdate => update_task(project_root, &request.options, false),
-        LedgerCommand::TaskComplete => update_task(project_root, &request.options, true),
+        LedgerCommand::TaskUpdate => update_task(project_root, &request.options, Change::Update),
+        LedgerCommand::TaskComplete => {
+            update_task(project_root, &request.options, Change::Complete)
+        }
         LedgerCommand::AttemptStart => start_attempt(project_root, &request.options),
         LedgerCommand::AttemptSucceed => {
             update_attempt(project_root, &request.options, "succeeded")
@@ -40,7 +46,15 @@ pub(super) fn execute(
     envelope(request.command.label(), result)
 }
 
-fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, CliFailure> {
+/// Whether a Work or Task command updates the record or completes it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Change {
+    Update,
+    Complete,
+}
+
+fn update_work(root: &Path, options: &Value, change: Change) -> Result<Value, CliFailure> {
+    let complete = change == Change::Complete;
     let id = options::required(options, "id")?;
     let current = super::show::resolve_record(root, &id, Some("work"))?;
     if complete && current.record.get("status").and_then(Value::as_str) == Some("done") {
@@ -81,7 +95,7 @@ fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
     };
     let mut updates = options::updates(options, fields)?;
     if let Some(status) = status {
-        state::transition("work", &current.record, status, &id)?;
+        state::transition(Lifecycle::Work, &current.record, status, &id)?;
         updates.insert("status".into(), Value::String(status.into()));
         if status == "done" {
             state::work_completion_gate(&current.record, &updates)?;
@@ -89,22 +103,29 @@ fn update_work(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
     }
     let body = options::body(options)?;
     markdown::update(&current.path, &updates, body.as_deref())?;
+    let report = updates
+        .get("report")
+        .or_else(|| current.record.get("report"))
+        .unwrap_or(&Value::Null);
     let event = if complete {
-        let report = updates
-            .get("report")
-            .cloned()
-            .or_else(|| current.record.get("report").cloned())
-            .unwrap_or(Value::Null);
-        json!({"type":"work_completed","id":id,"report":report,"source":"project-ledger"})
+        Event::Completed {
+            r#type: "work_completed",
+            id: &id,
+            report,
+        }
     } else {
-        json!({"type":"work_updated","id":id,"source":"project-ledger"})
+        Event::Changed {
+            r#type: "work_updated",
+            id: &id,
+        }
     };
-    markdown::append_event(root, &event)?;
+    markdown::append_event(root, event)?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))
 }
 
-fn update_task(root: &Path, options: &Value, complete: bool) -> Result<Value, CliFailure> {
+fn update_task(root: &Path, options: &Value, change: Change) -> Result<Value, CliFailure> {
+    let complete = change == Change::Complete;
     let id = options::required(options, "id")?;
     let current = super::show::resolve_record(root, &id, Some("task"))?;
     let status = if complete {
@@ -117,14 +138,17 @@ fn update_task(root: &Path, options: &Value, complete: bool) -> Result<Value, Cl
         &["title", "validation", "review", "report", "reason"],
     )?;
     if let Some(status) = status {
-        state::transition("task", &current.record, status, &id)?;
+        state::transition(Lifecycle::Task, &current.record, status, &id)?;
         updates.insert("status".into(), Value::String(status.into()));
     }
     let body = options::body(options)?;
     markdown::update(&current.path, &updates, body.as_deref())?;
     markdown::append_event(
         root,
-        &json!({"type":"task_updated","id":id,"source":"project-ledger"}),
+        Event::Changed {
+            r#type: "task_updated",
+            id: &id,
+        },
     )?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))
@@ -188,10 +212,13 @@ fn start_attempt(root: &Path, options: &Value) -> Result<Value, CliFailure> {
     let record = read_back(root, &path)?;
     markdown::append_event(
         root,
-        &json!({
-            "type":"attempt_started","id":id,"kind":"attempt","status":"started",
-            "path":record.get("path").cloned().unwrap_or(Value::Null),"source":"project-ledger"
-        }),
+        Event::Created {
+            r#type: "attempt_started",
+            id: &id,
+            kind: "attempt",
+            status: &Value::String("started".into()),
+            path: record.get("path").unwrap_or(&Value::Null),
+        },
     )?;
     Ok(refresh_index_after_mutation(root, record))
 }
@@ -207,7 +234,7 @@ fn update_attempt(root: &Path, options: &Value, target: &str) -> Result<Value, C
             format!("Cannot infer task id for attempt: {id}"),
         ));
     }
-    state::transition("attempt", &current.record, target, &id)?;
+    state::transition(Lifecycle::Attempt, &current.record, target, &id)?;
     let mut updates = serde_json::Map::new();
     updates.insert("status".into(), Value::String(target.into()));
     updates.extend(options::updates(
@@ -218,7 +245,10 @@ fn update_attempt(root: &Path, options: &Value, target: &str) -> Result<Value, C
     markdown::update(&current.path, &updates, body.as_deref())?;
     markdown::append_event(
         root,
-        &json!({"type":format!("attempt_{target}"),"id":id,"source":"project-ledger"}),
+        Event::Changed {
+            r#type: &format!("attempt_{target}"),
+            id: &id,
+        },
     )?;
     let record = read_back(root, &current.path)?;
     Ok(refresh_index_after_mutation(root, record))

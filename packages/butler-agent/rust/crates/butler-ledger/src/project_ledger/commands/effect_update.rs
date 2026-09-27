@@ -8,6 +8,7 @@ use super::{LedgerCommand, execute_candidate, show};
 use crate::project_ledger::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
 };
+use crate::project_ledger::status::Lifecycle;
 use butler_core::locale::LocaleCollation;
 
 pub(in crate::project_ledger) fn apply(
@@ -21,7 +22,7 @@ pub(in crate::project_ledger) fn apply(
     let current = show::resolve_record(
         root,
         &update.id,
-        update.kind.as_ref().map(ProjectLedgerRecordKind::as_str),
+        update.kind.map(ProjectLedgerRecordKind::as_str),
     )
     .map_err(|_| ())?;
     let kind = current
@@ -31,25 +32,25 @@ pub(in crate::project_ledger) fn apply(
         .ok_or(())?;
     let mut options = options(update)?;
     options.insert("kind".into(), Value::String(kind.into()));
-    if current.record.get("spec").is_some_and(truthy) && update.spec_exemption == Some(true) {
+    if current.record.get("spec").is_some_and(truthy)
+        && update.evidence.spec_exemption == Some(true)
+    {
         options.shift_remove("spec-exemption");
     }
-    let status = update.status.as_deref();
-    if status.is_none() || !matches!(kind, "work" | "task" | "attempt") {
+    let (Some(status), Some(lifecycle)) = (update.status.as_deref(), Lifecycle::parse(kind)) else {
         return command(root, LedgerCommand::RecordUpdate, options, collation);
-    }
-    let status = status.ok_or(())?;
+    };
     let from = current
         .record
         .get("status")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let path = super::lifecycle::state::plan_transition_path(kind, from, status).map_err(|_| ())?;
+    let path = super::lifecycle::state::plan_transition_path(lifecycle, from, status).ok_or(())?;
     for step in path.iter().take(path.len().saturating_sub(1)) {
         let mut intermediate = Map::new();
         intermediate.insert("id".into(), Value::String(update.id.clone()));
         intermediate.insert("kind".into(), Value::String(kind.into()));
-        intermediate.insert("status".into(), Value::String(step.clone()));
+        intermediate.insert("status".into(), Value::String(step.as_str().into()));
         command(root, LedgerCommand::RecordUpdate, intermediate, collation)?;
     }
     if !path.is_empty() || has_non_status(update) {
@@ -99,19 +100,19 @@ fn create(
         extras.insert("id".into(), Value::String(update.id.clone()));
         extras.insert("kind".into(), Value::String(kind.as_str().into()));
         for (field, value) in [
-            ("spec", update.spec.as_ref()),
-            ("acceptance", update.acceptance.as_ref()),
-            ("implementation", update.implementation.as_ref()),
-            ("mitigation", update.mitigation.as_ref()),
-            ("reason", update.reason.as_ref()),
-            ("code-commits", update.code_commits.as_ref()),
-            ("ledger-commits", update.ledger_commits.as_ref()),
+            ("spec", update.sections.spec.as_ref()),
+            ("acceptance", update.sections.acceptance.as_ref()),
+            ("implementation", update.sections.implementation.as_ref()),
+            ("mitigation", update.sections.mitigation.as_ref()),
+            ("reason", update.sections.reason.as_ref()),
+            ("code-commits", update.evidence.code_commits.as_ref()),
+            ("ledger-commits", update.evidence.ledger_commits.as_ref()),
         ] {
             if let Some(value) = value {
                 extras.insert(field.into(), Value::String(value.clone()));
             }
         }
-        if update.requires_commit_evidence == Some(true) {
+        if update.evidence.requires_commit_evidence == Some(true) {
             extras.insert("requires-commit-evidence".into(), Value::Bool(true));
         }
         if extras.len() > 2 {
@@ -144,19 +145,19 @@ fn options(update: &ProjectLedgerRecordUpdate) -> Result<Map<String, Value>, ()>
 fn has_non_status(update: &ProjectLedgerRecordUpdate) -> bool {
     update.title.is_some()
         || update.body.is_some()
-        || update.spec.is_some()
-        || update.acceptance.is_some()
-        || update.validation.is_some()
-        || update.review.is_some()
-        || update.report.is_some()
-        || update.implementation.is_some()
-        || update.mitigation.is_some()
-        || update.reason.is_some()
-        || update.code_commits.is_some()
-        || update.ledger_commits.is_some()
+        || update.sections.spec.is_some()
+        || update.sections.acceptance.is_some()
+        || update.sections.validation.is_some()
+        || update.sections.review.is_some()
+        || update.sections.report.is_some()
+        || update.sections.implementation.is_some()
+        || update.sections.mitigation.is_some()
+        || update.sections.reason.is_some()
+        || update.evidence.code_commits.is_some()
+        || update.evidence.ledger_commits.is_some()
         || update.priority.is_some()
-        || update.requires_commit_evidence.is_some()
-        || update.spec_exemption.is_some()
+        || update.evidence.requires_commit_evidence.is_some()
+        || update.evidence.spec_exemption.is_some()
 }
 
 fn truthy(value: &Value) -> bool {

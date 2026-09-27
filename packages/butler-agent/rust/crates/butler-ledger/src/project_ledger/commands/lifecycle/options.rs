@@ -98,26 +98,22 @@ pub(super) fn updates(options: &Value, fields: &[&str]) -> Result<Map<String, Va
     }
     for field in ["priority", "revision", "supersedesRevision"] {
         if let Some(value) = options.get(field) {
-            let number = butler_core::json::coerce_number(value).map_err(|source| {
-                CliFailure::new("invalid_arguments", format!("--{field} must be a number"))
-                    .with_source(source)
-            })?;
-            if !number.is_finite() {
-                return Err(CliFailure::new(
-                    "invalid_arguments",
-                    format!("--{field} must be a number"),
-                ));
-            }
-            let json_number =
-                if number.fract() == 0.0 && number >= i64::MIN as f64 && number < i64::MAX as f64 {
-                    Number::from(butler_core::json::saturating_i64(number))
-                } else {
-                    Number::from_f64(number).ok_or_else(|| {
-                        CliFailure::new("invalid_arguments", format!("--{field} must be a number"))
-                    })?
-                };
-            updates.insert(field.into(), Value::Number(json_number));
+            updates.insert(field.into(), Value::Number(number_option(value, field)?));
         }
     }
     Ok(updates)
+}
+
+/// A numeric option as JSON: an integer when it is one, else a float.
+fn number_option(value: &Value, field: &str) -> Result<Number, CliFailure> {
+    let invalid = || CliFailure::new("invalid_arguments", format!("--{field} must be a number"));
+    let number =
+        butler_core::json::coerce_number(value).map_err(|source| invalid().with_source(source))?;
+    if !number.is_finite() {
+        return Err(invalid());
+    }
+    if number.fract() == 0.0 && number >= i64::MIN as f64 && number < i64::MAX as f64 {
+        return Ok(Number::from(butler_core::json::saturating_i64(number)));
+    }
+    Number::from_f64(number).ok_or_else(invalid)
 }

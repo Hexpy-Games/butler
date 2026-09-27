@@ -1,0 +1,96 @@
+name: Rust agent setup
+description: >-
+  Pinned Rust toolchain, the native dependencies a job needs (only protoc to
+  check, or the static ONNX Runtime to link), and a Cargo cache keyed per job.
+  Every Rust agent job (and future E2E jobs that build the binary) starts here.
+
+inputs:
+  components:
+    description: Extra rustup components, comma separated (for example "clippy").
+    required: false
+    default: ""
+  native-deps:
+    description: >-
+      "protoc" for check/clippy (build scripts only need protoc) or "ort" for
+      anything that links the agent (tests, E2E): the pinned static ONNX
+      Runtime plus protoc, restored from and saved to the ORT cache.
+    required: true
+  cache-key:
+    description: The rust-cache shared key; one per job so caches do not evict each other.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.91.0
+        components: ${{ inputs.components }}
+
+    - name: Set up Python for the ORT recipe
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    # Checking never links ORT; the Lance build scripts only need protoc.
+    - name: Prepare pinned protoc
+      if: inputs.native-deps == 'protoc'
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        CARGO_TARGET_DIR: ${{ runner.temp }}/ort-cache
+      run: |
+        set -euo pipefail
+        prepared="$(python scripts/prepare-static-ort-macos-arm64.py --protoc-only)"
+        echo "PROTOC=$(jq -r .protoc <<<"$prepared")" >> "$GITHUB_ENV"
+
+    # The recipe's own fingerprint (lock, script, toolchain, SDK, clang,
+    # Python) is the cache key, so a runner image update that changes none
+    # of them still hits the cache.
+    - name: Fingerprint static ONNX Runtime
+      if: inputs.native-deps == 'ort'
+      id: ort
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      run: echo "fingerprint=$(python scripts/prepare-static-ort-macos-arm64.py --fingerprint)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore static ONNX Runtime cache
+      if: inputs.native-deps == 'ort'
+      id: ort-cache
+      uses: actions/cache/restore@v4
+      with:
+        # Outside the Cargo target so rust-cache and `cargo clean` never touch it.
+        path: ${{ runner.temp }}/ort-cache/native-deps
+        key: static-ort-${{ runner.os }}-${{ runner.arch }}-${{ steps.ort.outputs.fingerprint }}
+
+    - name: Prepare pinned static ONNX Runtime and protoc
+      if: inputs.native-deps == 'ort'
+      shell: bash
+      working-directory: packages/butler-agent/rust
+      env:
+        ORT_CACHE_TARGET: ${{ runner.temp }}/ort-cache
+      run: |
+        set -euo pipefail
+        prepared="$(CARGO_TARGET_DIR="$ORT_CACHE_TARGET" python scripts/prepare-static-ort-macos-arm64.py)"
+        echo "$prepared"
+        {
+          echo "ORT_LIB_PATH=$(jq -r .ort_lib_path <<<"$prepared")"
+          echo "PROTOC=$(jq -r .protoc <<<"$prepared")"
+          echo "ORT_PREFER_DYNAMIC_LINK=0"
+          echo "ORT_SKIP_DOWNLOAD=1"
+        } >> "$GITHUB_ENV"
+
+    - name: Save static ONNX Runtime cache
+      if: inputs.native-deps == 'ort' && steps.ort-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/ort-cache/native-deps
+        key: ${{ steps.ort-cache.outputs.cache-primary-key }}
+
+    - name: Cache Cargo build
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: packages/butler-agent/rust
+        shared-key: ${{ inputs.cache-key }}
+        cache-on-failure: true

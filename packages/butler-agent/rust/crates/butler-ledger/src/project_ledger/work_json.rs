@@ -44,3 +44,11 @@ fn normalize(value: &Value) -> Result<Value, ProjectLedgerReadError> {
 fn invalid() -> ProjectLedgerReadError {
     ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
 }
+
+/// Sets `key` on a JSON object. Values the Ledger builds or has validated are
+/// objects here; anything else is left unchanged instead of panicking.
+pub(super) fn set_field(value: &mut Value, key: &str, item: Value) {
+    if let Some(object) = value.as_object_mut() {
+        object.insert(key.into(), item);
+    }
+}

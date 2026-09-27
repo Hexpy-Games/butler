@@ -1,0 +1,757 @@
+=== ensure_project_ledger
+Ok(
+    (),
+)
+=== apply first
+Ok(
+    Object {
+        "schema": String("butler.btcc-project-ledger-effect-result.v1"),
+        "publicationId": String("<sha:1>"),
+        "effectKey": String("effect-1"),
+        "updatedRecords": Array [
+            Object {
+                "id": String("DEC-7"),
+                "kind": String("decision"),
+            },
+            Object {
+                "id": String("W-7"),
+                "kind": String("work"),
+            },
+            Object {
+                "id": String("T-7"),
+                "kind": String("task"),
+            },
+        ],
+        "baseHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:2>"),
+            "sourceFileCount": Number(1),
+            "storageSha256": String("<sha:3>"),
+            "storageEntryCount": Number(14),
+        },
+        "currentHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:4>"),
+            "sourceFileCount": Number(4),
+            "storageSha256": String("<sha:5>"),
+            "storageEntryCount": Number(23),
+        },
+        "promotion": Object {
+            "status": String("promoted"),
+        },
+        "observation": Object {
+            "status": String("observed"),
+        },
+    },
+)
+=== apply first again
+Ok(
+    Object {
+        "schema": String("butler.btcc-project-ledger-effect-result.v1"),
+        "publicationId": String("<sha:1>"),
+        "effectKey": String("effect-1"),
+        "updatedRecords": Array [
+            Object {
+                "id": String("DEC-7"),
+                "kind": String("decision"),
+            },
+            Object {
+                "id": String("W-7"),
+                "kind": String("work"),
+            },
+            Object {
+                "id": String("T-7"),
+                "kind": String("task"),
+            },
+        ],
+        "baseHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:2>"),
+            "sourceFileCount": Number(1),
+            "storageSha256": String("<sha:3>"),
+            "storageEntryCount": Number(14),
+        },
+        "currentHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:4>"),
+            "sourceFileCount": Number(4),
+            "storageSha256": String("<sha:5>"),
+            "storageEntryCount": Number(23),
+        },
+        "promotion": Object {
+            "status": String("promoted"),
+        },
+        "observation": Object {
+            "status": String("observed"),
+        },
+    },
+)
+=== apply first conflicting
+Err(
+    Conflict,
+)
+=== apply second
+Ok(
+    Object {
+        "schema": String("butler.btcc-project-ledger-effect-result.v1"),
+        "publicationId": String("<sha:6>"),
+        "effectKey": String("effect-2"),
+        "updatedRecords": Array [
+            Object {
+                "id": String("DEC-7"),
+            },
+            Object {
+                "id": String("W-7"),
+                "kind": String("work"),
+            },
+        ],
+        "baseHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:4>"),
+            "sourceFileCount": Number(4),
+            "storageSha256": String("<sha:5>"),
+            "storageEntryCount": Number(23),
+        },
+        "currentHead": Object {
+            "schema": String("butler.btcc-project-ledger-head.v1"),
+            "sourceSha256": String("<sha:7>"),
+            "sourceFileCount": Number(4),
+            "storageSha256": String("<sha:8>"),
+            "storageEntryCount": Number(23),
+        },
+        "promotion": Object {
+            "status": String("promoted"),
+        },
+        "observation": Object {
+            "status": String("observed"),
+        },
+    },
+)
+=== apply invalid
+Err(
+    Uncertain {
+        source: None,
+    },
+)
+=== reconcile first
+Ok(
+    Applied(
+        Object {
+            "schema": String("butler.btcc-project-ledger-effect-result.v1"),
+            "publicationId": String("<sha:1>"),
+            "effectKey": String("effect-1"),
+            "updatedRecords": Array [
+                Object {
+                    "id": String("DEC-7"),
+                    "kind": String("decision"),
+                },
+                Object {
+                    "id": String("W-7"),
+                    "kind": String("work"),
+                },
+                Object {
+                    "id": String("T-7"),
+                    "kind": String("task"),
+                },
+            ],
+            "baseHead": Object {
+                "schema": String("butler.btcc-project-ledger-head.v1"),
+                "sourceSha256": String("<sha:2>"),
+                "sourceFileCount": Number(1),
+                "storageSha256": String("<sha:3>"),
+                "storageEntryCount": Number(14),
+            },
+            "currentHead": Object {
+                "schema": String("butler.btcc-project-ledger-head.v1"),
+                "sourceSha256": String("<sha:7>"),
+                "sourceFileCount": Number(4),
+                "storageSha256": String("<sha:8>"),
+                "storageEntryCount": Number(23),
+            },
+            "promotion": Object {
+                "status": String("promoted"),
+            },
+            "observation": Object {
+                "status": String("observed"),
+            },
+        },
+    ),
+)
+=== reconcile invalid
+Ok(
+    NotApplied,
+)
+=== reconcile unknown
+Ok(
+    NotApplied,
+)
+=== check
+{
+  "ok": true,
+  "command": "project-ledger check",
+  "data": {
+    "ok": true,
+    "issueCount": 0,
+    "issues": [],
+    "counts": {
+      "records": 5,
+      "initiative": 0,
+      "work": 1,
+      "task": 1,
+      "attempt": 0,
+      "decision": 1,
+      "risk": 0,
+      "spec": 0,
+      "report": 0,
+      "plan": 0,
+      "handoff": 0,
+      "reference": 0,
+      "roadmap": 0
+    }
+  },
+  "error": null,
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+
+##### files
+--- file runtime/mutation-lock-shards/*.sqlite3
+index sqlite_autoindex_active_lock_1: 
+table active_lock: CREATE TABLE active_lock(lock_key TEXT PRIMARY KEY, ownership_token TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL)
+table shard_fence: CREATE TABLE shard_fence(singleton INTEGER PRIMARY KEY CHECK(singleton=1), generation INTEGER NOT NULL)
+fence generations: 2
+held locks: 0
+--- file project-ledger/projects/demo/decisions/dec-7.md
+---
+schema: "project-ledger.decision.v1"
+kind: "decision"
+id: "DEC-7"
+title: "Use SQLite"
+status: "superseded"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+reason: "Embedded"
+priority: 2
+implementation: "W-7"
+mitigation: "n/a"
+codeCommits: "[]"
+ledgerCommits: "none"
+specExemption: true
+---
+
+Decision body
+<no trailing newline>
+--- file project-ledger/projects/demo/index/project.json
+{
+  "schema": "project-ledger.index.v1",
+  "generatedAt": "<ts>",
+  "project": {
+    "id": "demo",
+    "name": "Demo Project",
+    "status": "active",
+    "path": "project-ledger/projects/<sha:6>/project.json"
+  },
+  "counts": {
+    "records": 5,
+    "initiative": 0,
+    "work": 1,
+    "task": 1,
+    "attempt": 0,
+    "decision": 1,
+    "risk": 0,
+    "spec": 0,
+    "report": 0,
+    "plan": 0,
+    "handoff": 0,
+    "reference": 0,
+    "roadmap": 0
+  },
+  "records": [
+    {
+      "id": "DEC-7",
+      "kind": "decision",
+      "title": "Use SQLite",
+      "status": "superseded",
+      "priority": 2.0,
+      "parentId": null,
+      "spec": null,
+      "specExemption": true,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": "[]",
+      "ledgerCommits": "none",
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": "W-7",
+      "mitigation": "n/a",
+      "reason": "Embedded",
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/<sha:6>/decisions/dec-7.md"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/<sha:6>/project.json"
+    },
+    {
+      "id": "demo",
+      "kind": "project",
+      "title": "Demo Project",
+      "status": "active",
+      "priority": 100,
+      "parentId": null,
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": null,
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/<sha:6>/project.json"
+    },
+    {
+      "id": "T-7",
+      "kind": "task",
+      "title": "Write schema",
+      "status": "todo",
+      "priority": 100,
+      "parentId": "W-7",
+      "spec": null,
+      "specExemption": false,
+      "acceptance": null,
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": false,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": null,
+      "review": null,
+      "validation": "unit",
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/<sha:6>/work/W-7/tasks/T-7.md"
+    },
+    {
+      "id": "W-7",
+      "kind": "work",
+      "title": "Adopt SQLite",
+      "status": "scoped",
+      "priority": 100,
+      "parentId": null,
+      "spec": "SPEC-7",
+      "specExemption": false,
+      "acceptance": "Queries run",
+      "acceptanceExemption": false,
+      "requiresCommitEvidence": true,
+      "codeCommits": null,
+      "ledgerCommits": null,
+      "report": "r",
+      "review": "ok",
+      "validation": "v",
+      "implementation": null,
+      "mitigation": null,
+      "reason": null,
+      "updatedAt": "<ts>",
+      "path": "project-ledger/projects/<sha:6>/work/W-7/work.md"
+    }
+  ],
+  "issues": [],
+  "views": [
+    {
+      "name": "dashboard",
+      "path": "project-ledger/projects/<sha:6>/views/dashboard.md",
+      "exists": true,
+      "stale": false,
+      "updatedAt": "<ts>"
+    },
+    {
+      "name": "handoff",
+      "path": "project-ledger/projects/<sha:6>/views/handoff.md",
+      "exists": true,
+      "stale": false,
+      "updatedAt": "<ts>"
+    },
+    {
+      "name": "roadmap",
+      "path": "project-ledger/projects/<sha:6>/views/roadmap.md",
+      "exists": true,
+      "stale": false,
+      "updatedAt": "<ts>"
+    }
+  ],
+  "index": {
+    "available": true,
+    "stale": false,
+    "generatedAt": "<ts>",
+    "path": "project-ledger/projects/<sha:6>/index/project.json"
+  },
+  "privacy": {
+    "rawTextIncluded": false,
+    "secretsIncluded": false
+  }
+}
+--- file project-ledger/projects/demo/ledger.jsonl
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"project_initialized","projectId":"demo","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"decision_created","id":"DEC-7","kind":"decision","status":"accepted","path":"project-ledger/projects/<sha:1>/decisions/dec-7.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":3,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_created","id":"W-7","kind":"work","status":"proposed","path":"project-ledger/projects/<sha:1>/work/W-7/work.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":4,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"task_created","id":"T-7","kind":"task","status":"todo","path":"project-ledger/projects/<sha:1>/work/W-7/tasks/T-7.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"dashboard","path":"project-ledger/projects/<sha:1>/views/dashboard.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"handoff","path":"project-ledger/projects/<sha:1>/views/handoff.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"roadmap","path":"project-ledger/projects/<sha:1>/views/roadmap.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"decision_updated","id":"DEC-7","kind":"decision","path":"project-ledger/projects/<sha:6>/decisions/dec-7.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"work_updated","id":"W-7","kind":"work","path":"project-ledger/projects/<sha:6>/work/W-7/work.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"dashboard","path":"project-ledger/projects/<sha:6>/views/dashboard.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"handoff","path":"project-ledger/projects/<sha:6>/views/handoff.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"view_rendered","view":"roadmap","path":"project-ledger/projects/<sha:6>/views/roadmap.md","source":"project-ledger"}
+{"schema":"project-ledger.event.v1","ts":"<ts>","type":"index_written","records":5,"issues":0,"source":"project-ledger"}
+--- file project-ledger/projects/demo/project.json
+{
+  "schema": "project-ledger.project.v1",
+  "id": "demo",
+  "name": "Demo Project",
+  "status": "active",
+  "createdAt": "<ts>",
+  "updatedAt": "<ts>"
+}
+--- file project-ledger/projects/demo/views/dashboard.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Dashboard
+
+Generated: <ts>
+
+Project: Demo Project (demo)
+
+## Counts
+
+- Work: 1
+- Tasks: 1
+- Attempts: 0
+- Decisions: 1
+- Risks: 0
+- Issues: 0
+
+## Next Actions
+
+- W-7 [scoped] Adopt SQLite (project-ledger/projects/<sha:6>/work/W-7/work.md)
+- T-7 [todo] Write schema (project-ledger/projects/<sha:6>/work/W-7/tasks/T-7.md)
+
+## Blocked
+
+- None
+
+## Missing Spec
+
+- None
+
+## Completion Gaps
+
+- None
+<no trailing newline>
+--- file project-ledger/projects/demo/views/handoff.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Handoff
+
+Generated: <ts>
+
+## Start Here
+
+- Run `project-ledger status --json`.
+- Run `project-ledger query --kind next-actions --json`.
+- Read only referenced source records and specs.
+
+## Next Actions
+
+- W-7 [scoped] Adopt SQLite (project-ledger/projects/<sha:6>/work/W-7/work.md)
+- T-7 [todo] Write schema (project-ledger/projects/<sha:6>/work/W-7/tasks/T-7.md)
+
+## Risks And Blockers
+
+- None
+<no trailing newline>
+--- file project-ledger/projects/demo/views/roadmap.md
+<!-- generated by project-ledger; do not edit -->
+# Project Ledger Roadmap
+
+Generated: <ts>
+
+## Work
+
+- W-7 [scoped] Adopt SQLite (project-ledger/projects/<sha:6>/work/W-7/work.md)
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-7/tasks/T-7.md
+---
+schema: "project-ledger.task.v1"
+kind: "task"
+id: "T-7"
+title: "Write schema"
+status: "todo"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+parentId: "W-7"
+validation: "unit"
+---
+
+# Write schema
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file project-ledger/projects/demo/work/W-7/work.md
+---
+schema: "project-ledger.work.v1"
+kind: "work"
+id: "W-7"
+title: "Adopt SQLite"
+status: "scoped"
+createdAt: "<ts>"
+updatedAt: "<ts>"
+spec: "SPEC-7"
+acceptance: "Queries run"
+requiresCommitEvidence: true
+validation: "v"
+review: "ok"
+report: "r"
+---
+
+# Adopt SQLite
+
+Managed by Project Ledger.
+<no trailing newline>
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:1>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:1>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:1>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:1>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:2>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:3>",
+    "storageEntryCount": 14
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-authoritative-v2",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:1>",
+    "sourceSha256": "<sha:4>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:5>",
+    "storageEntryCount": 23
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/journals/<sha:6>.json
+{
+  "schema": "project-ledger.publication-transaction.v1",
+  "publicationId": "<sha:6>",
+  "canonicalRoot": "$DATA/project-ledger/projects/demo",
+  "candidateRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:6>",
+  "journalPath": "$DATA/runtime/btcc-project-ledger-effects-v2/journals/<sha:6>.json",
+  "claimPath": "$DATA/project-ledger/projects/.project-ledger-locks/demo.lock",
+  "base": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:4>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:5>",
+    "storageEntryCount": 23
+  },
+  "status": "observed",
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-authoritative-v2",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:6>",
+    "sourceSha256": "<sha:7>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:8>",
+    "storageEntryCount": 23
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:9>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "effect-1"
+  },
+  "occurrenceId": "<sha:9>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:10>",
+      "publicationId": "<sha:1>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:2>",
+        "sourceFileCount": 1,
+        "storageSha256": "<sha:3>",
+        "storageEntryCount": 14
+      },
+      "targetPreconditions": [
+        {
+          "id": "DEC-7",
+          "kind": "decision",
+          "path": "project-ledger/projects/demo/decisions/dec-7.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "W-7",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/W-7/work.md",
+          "parentId": null,
+          "state": "absent"
+        },
+        {
+          "id": "T-7",
+          "kind": "task",
+          "path": "project-ledger/projects/demo/work/W-7/tasks/T-7.md",
+          "parentId": "W-7",
+          "state": "absent"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/occurrences/<sha:11>.json
+{
+  "schema": "butler.btcc-project-ledger-effect-occurrence.v2",
+  "ledgerProjectId": "demo",
+  "ledgerRoot": "$DATA/project-ledger/projects/demo",
+  "operationIdentity": {
+    "kind": "mutation_call",
+    "id": "effect-2"
+  },
+  "occurrenceId": "<sha:11>",
+  "status": "pending",
+  "attempts": [
+    {
+      "number": 1,
+      "status": "admitted",
+      "requestSha256": "<sha:12>",
+      "publicationId": "<sha:6>",
+      "expectedBase": {
+        "schema": "butler.btcc-project-ledger-head.v1",
+        "projectRoot": "$DATA/project-ledger/projects/demo",
+        "sourceSha256": "<sha:4>",
+        "sourceFileCount": 4,
+        "storageSha256": "<sha:5>",
+        "storageEntryCount": 23
+      },
+      "targetPreconditions": [
+        {
+          "id": "DEC-7",
+          "kind": "decision",
+          "path": "project-ledger/projects/demo/decisions/dec-7.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:13>"
+        },
+        {
+          "id": "W-7",
+          "kind": "work",
+          "path": "project-ledger/projects/demo/work/W-7/work.md",
+          "parentId": null,
+          "state": "present",
+          "rawRecordSha256": "<sha:14>"
+        }
+      ]
+    }
+  ]
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:1>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:9>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:10>",
+  "publicationId": "<sha:1>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:2>",
+    "sourceFileCount": 1,
+    "storageSha256": "<sha:3>",
+    "storageEntryCount": 14
+  },
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-authoritative-v2",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:1>",
+    "sourceSha256": "<sha:4>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:5>",
+    "storageEntryCount": 23
+  }
+}
+--- file runtime/btcc-project-ledger-effects-v2/receipts/<sha:6>.json
+{
+  "schema": "butler.btcc-project-ledger-publication-receipt.v1",
+  "occurrenceId": "<sha:11>",
+  "attemptNumber": 1,
+  "requestSha256": "<sha:12>",
+  "publicationId": "<sha:6>",
+  "status": "observed",
+  "baseHead": {
+    "schema": "butler.btcc-project-ledger-head.v1",
+    "projectRoot": "$DATA/project-ledger/projects/demo",
+    "sourceSha256": "<sha:4>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:5>",
+    "storageEntryCount": 23
+  },
+  "candidateHead": {
+    "schema": "project-ledger.source-head.v1",
+    "storageAuthority": "project-ledger-authoritative-v2",
+    "projectRoot": "$DATA/runtime/btcc-project-ledger-effects-v2/candidates/<sha:6>",
+    "sourceSha256": "<sha:7>",
+    "sourceFileCount": 4,
+    "storageSha256": "<sha:8>",
+    "storageEntryCount": 23
+  }
+}

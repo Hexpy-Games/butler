@@ -4,17 +4,25 @@ use serde_json::Value;
 
 use super::super::contracts::ProjectLedgerRecordUpdate;
 
+/// A reviewed generic record effect to publish exactly once.
 #[derive(Clone, Debug)]
 pub struct LedgerEffectRequest {
+    /// The Ledger project root.
     pub project_root: PathBuf,
+    /// The effect's idempotency key.
     pub effect_key: String,
+    /// The record updates, in order.
     pub updates: Vec<ProjectLedgerRecordUpdate>,
 }
 
+/// Whether an effect was applied.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LedgerEffectReconciliation {
+    /// It was; the value is its result.
     Applied(Value),
+    /// It provably was not.
     NotApplied,
+    /// It cannot be told.
     Uncertain,
 }
 
@@ -32,6 +40,7 @@ pub enum LedgerEffectError {
     /// read, write or encode when there was one.
     #[error("{}", self.message())]
     Uncertain {
+        /// The failed read, write or encode, when there was one.
         #[source]
         source: Option<std::sync::Arc<dyn std::error::Error + Send + Sync>>,
     },
@@ -41,6 +50,7 @@ pub enum LedgerEffectError {
 }
 
 impl LedgerEffectError {
+    /// The wire code.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Conflict => "project_ledger_effect_occurrence_conflict",
@@ -57,6 +67,7 @@ impl LedgerEffectError {
         }
     }
 
+    /// The wire message.
     pub fn message(&self) -> &'static str {
         match self {
             Self::Conflict => "Project Ledger effect occurrence conflicts with an earlier request.",

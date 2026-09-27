@@ -4,6 +4,7 @@ use butler_turn::btcc::{
     BtccError, ProjectWorkMaterialInput, ProjectWorkOperationIdentity, WorkView,
 };
 
+use super::super::ProjectLedgerReadError;
 use super::super::publication::{
     ProjectLedgerRecordKind, ProjectLedgerRecordOperation, ProjectLedgerRecordUpdate,
 };
@@ -23,7 +24,7 @@ impl ProjectWorkRepository {
             identity,
             revisions,
             children,
-            create,
+            operation,
             leading,
         } = input;
         let mut updates = leading;
@@ -43,7 +44,7 @@ impl ProjectWorkRepository {
                     .and_then(Value::as_bool)
                     .unwrap_or(true),
                 revisions,
-                create,
+                operation,
             })
             .await?,
         );
@@ -70,7 +71,7 @@ impl ProjectWorkRepository {
             binding_refs,
             session_head,
             revisions,
-            create,
+            operation,
         } = input;
         let material = self
             .shared
@@ -90,9 +91,11 @@ impl ProjectWorkRepository {
             material: &material,
             revisions,
         })?;
-        codec::work_update(&manifest, create, &self.shared.ledger.collation)
+        codec::work_update(&manifest, operation, &self.shared.ledger.collation)
     }
 
+    /// The create update for an immutable child record, or `None` when the
+    /// identical child already exists; a conflicting one is an error.
     pub(super) async fn child_update(
         &self,
         work_id: &str,
@@ -110,71 +113,89 @@ impl ProjectWorkRepository {
             .ok_or_else(|| invalid("project_work_managed_record_invalid"))?
             .insert("recordSha256".into(), Value::String(digest));
         let scope = self.scope.clone();
-        let id = id.to_owned();
-        let work_id = work_id.to_owned();
+        let child = ChildRecord {
+            id: id.to_owned(),
+            work_id: work_id.to_owned(),
+            kind,
+            title,
+            value: child,
+        };
         let collation = self.shared.ledger.collation.clone();
         self.shared
             .ledger
-            .run(move |_, _| {
-                let directory = if kind == ProjectLedgerRecordKind::Plan {
-                    "plans"
-                } else {
-                    "references"
-                };
-                let other = if kind == ProjectLedgerRecordKind::Plan {
-                    "references"
-                } else {
-                    "plans"
-                };
-                let path = format!("{directory}/{}.md", id.to_lowercase());
-                let other_path = format!("{other}/{}.md", id.to_lowercase());
-                if committed::read_selected(&scope.ledger_root, &other_path)?.is_some() {
-                    return Err(super::super::ProjectLedgerReadError::record_show(
-                        "project_work_immutable_identity_ambiguous",
-                    ));
-                }
-                let body = super::super::work_json::canonical(&child, &collation)?;
-                if let Some(raw) = committed::read_selected(&scope.ledger_root, &path)? {
-                    let data = records::frontmatter(&raw).ok_or(
-                        super::super::ProjectLedgerReadError::record_show(
-                            "project_work_immutable_metadata_conflict",
-                        ),
-                    )?;
-                    let expected_kind = if kind == ProjectLedgerRecordKind::Plan {
-                        "plan"
-                    } else {
-                        "reference"
-                    };
-                    if data.get("id").and_then(Value::as_str) != Some(&id)
-                        || data.get("kind").and_then(Value::as_str) != Some(expected_kind)
-                        || data.get("parentId").and_then(Value::as_str) != Some(&work_id)
-                        || data.get("spec").and_then(Value::as_str) != Some(codec::SPEC)
-                        || data.get("schema").and_then(Value::as_str)
-                            != Some(format!("project-ledger.{expected_kind}.v1").as_str())
-                    {
-                        return Err(super::super::ProjectLedgerReadError::record_show(
-                            "project_work_immutable_metadata_conflict",
-                        ));
-                    }
-                    if records::frontmatter_body_ref(&raw) != body {
-                        return Err(super::super::ProjectLedgerReadError::record_show(
-                            "project_work_immutable_content_conflict",
-                        ));
-                    }
-                    return Ok(None);
-                }
-                let mut update = ProjectLedgerRecordUpdate::new(id);
-                update.operation = Some(ProjectLedgerRecordOperation::Create);
-                update.kind = Some(kind);
-                update.parent_id = Some(work_id);
-                update.title = Some(title);
-                update.status = Some("active".into());
-                update.spec = Some(codec::SPEC.into());
-                update.body = Some(body);
-                Ok(Some(update))
-            })
+            .run(move |_, _| child.update(&scope.ledger_root, &collation))
             .await
             .map_err(read_error)
+    }
+}
+
+/// An immutable Work child to publish as a plan or reference record.
+struct ChildRecord {
+    id: String,
+    work_id: String,
+    kind: ProjectLedgerRecordKind,
+    title: String,
+    value: Value,
+}
+
+impl ChildRecord {
+    fn update(
+        self,
+        root: &std::path::Path,
+        collation: &butler_core::locale::LocaleCollation,
+    ) -> Result<Option<ProjectLedgerRecordUpdate>, ProjectLedgerReadError> {
+        let (directory, other, expected_kind) = if self.kind == ProjectLedgerRecordKind::Plan {
+            ("plans", "references", "plan")
+        } else {
+            ("references", "plans", "reference")
+        };
+        let file = format!("{}.md", self.id.to_lowercase());
+        if committed::read_selected(root, &format!("{other}/{file}"))?.is_some() {
+            return Err(ProjectLedgerReadError::record_show(
+                "project_work_immutable_identity_ambiguous",
+            ));
+        }
+        let body = super::super::work_json::canonical(&self.value, collation)?;
+        if let Some(raw) = committed::read_selected(root, &format!("{directory}/{file}"))? {
+            self.same_as_existing(&raw, expected_kind, &body)?;
+            return Ok(None);
+        }
+        let mut update = ProjectLedgerRecordUpdate::new(self.id);
+        update.operation = Some(ProjectLedgerRecordOperation::Create);
+        update.kind = Some(self.kind);
+        update.parent_id = Some(self.work_id);
+        update.title = Some(self.title);
+        update.status = Some("active".into());
+        update.sections.spec = Some(codec::SPEC.into());
+        update.body = Some(body);
+        Ok(Some(update))
+    }
+
+    /// The existing record has this child's identity and exact body.
+    fn same_as_existing(
+        &self,
+        raw: &str,
+        expected_kind: &str,
+        body: &str,
+    ) -> Result<(), ProjectLedgerReadError> {
+        let conflict =
+            || ProjectLedgerReadError::record_show("project_work_immutable_metadata_conflict");
+        let data = records::frontmatter(raw).ok_or_else(conflict)?;
+        let text = |key: &str| data.get(key).and_then(Value::as_str);
+        if text("id") != Some(&self.id)
+            || text("kind") != Some(expected_kind)
+            || text("parentId") != Some(&self.work_id)
+            || text("spec") != Some(codec::SPEC)
+            || text("schema") != Some(format!("project-ledger.{expected_kind}.v1").as_str())
+        {
+            return Err(conflict());
+        }
+        if records::frontmatter_body_ref(raw) != body {
+            return Err(ProjectLedgerReadError::record_show(
+                "project_work_immutable_content_conflict",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -182,9 +203,9 @@ pub(super) struct WorkViewUpdates<'a> {
     pub current: &'a Snapshot,
     pub view: &'a WorkView,
     pub identity: &'a ProjectWorkOperationIdentity,
-    pub revisions: &'a Value,
+    pub revisions: &'a codec::Revisions,
     pub children: Vec<Value>,
-    pub create: bool,
+    pub operation: ProjectLedgerRecordOperation,
     pub leading: Vec<ProjectLedgerRecordUpdate>,
 }
 
@@ -194,8 +215,8 @@ pub(super) struct ManifestPublicationInput<'a> {
     pub identity: &'a ProjectWorkOperationIdentity,
     pub binding_refs: Value,
     pub session_head: bool,
-    pub revisions: &'a Value,
-    pub create: bool,
+    pub revisions: &'a codec::Revisions,
+    pub operation: ProjectLedgerRecordOperation,
 }
 
 pub(super) fn child_metadata(

@@ -19,12 +19,17 @@ pub struct DashboardLedgerEvent {
     pub at: String,
 }
 
+/// The Ledger's record events at one revision of `ledger.jsonl`.
 #[derive(Clone, Debug)]
 pub struct DashboardLedgerHistory {
+    /// The log file's identity, size and times, or `absent`.
     pub revision: String,
+    /// Record events, newest first.
     pub events: Vec<DashboardLedgerEvent>,
 }
 
+/// The Ledger's record events, newest first, read from one unchanged
+/// `ledger.jsonl`; a missing log is an empty, "absent" history.
 pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerReadError> {
     let path = root.join("ledger.jsonl");
     let path_metadata = match fs::symlink_metadata(&path) {
@@ -44,7 +49,18 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         return Err(unavailable());
     }
     let revision = file_revision(&path_metadata);
-    let mut file = File::open(&path).map_err(|source| unavailable().with_source(source))?;
+    let bytes = read_unchanged(&path, &path_metadata, &revision)?;
+    let events = parse_events(&bytes, path_identity(&path_metadata))?;
+    Ok(DashboardLedgerHistory { revision, events })
+}
+
+/// The log's bytes, when the file stayed at `revision` throughout the read.
+fn read_unchanged(
+    path: &Path,
+    path_metadata: &Metadata,
+    revision: &str,
+) -> Result<Vec<u8>, ProjectLedgerReadError> {
+    let file = File::open(path).map_err(|source| unavailable().with_source(source))?;
     let opened_metadata = file
         .metadata()
         .map_err(|source| unavailable().with_source(source))?;
@@ -56,7 +72,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
     limited
         .read_to_end(&mut bytes)
         .map_err(|source| unavailable().with_source(source))?;
-    file = limited.into_inner();
+    let file = limited.into_inner();
     if bytes.len() as u64 > MAX_HISTORY_BYTES {
         return Err(unavailable());
     }
@@ -64,7 +80,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
         .metadata()
         .map_err(|source| unavailable().with_source(source))?;
     let final_path_metadata =
-        fs::symlink_metadata(&path).map_err(|source| changed().with_source(source))?;
+        fs::symlink_metadata(path).map_err(|source| changed().with_source(source))?;
     if !final_path_metadata.is_file()
         || final_path_metadata.file_type().is_symlink()
         || file_revision(&descriptor_metadata) != revision
@@ -73,7 +89,15 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
     {
         return Err(changed());
     }
+    Ok(bytes)
+}
 
+/// Record events from the newest line back; any unparsable non-blank line
+/// makes the history incomplete.
+fn parse_events(
+    bytes: &[u8],
+    inode: u64,
+) -> Result<Vec<DashboardLedgerEvent>, ProjectLedgerReadError> {
     let mut events = Vec::new();
     let mut invalid_lines = 0;
     let mut offset = bytes.len();
@@ -86,17 +110,17 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
             ));
         }
         let raw = String::from_utf8_lossy(line);
-        match serde_json::from_str::<Value>(&raw) {
-            Ok(value) => {
-                if let Some(event) = event(&value, path_identity(&path_metadata), offset) {
-                    events.push(event);
-                    if events.len() > MAX_HISTORY_EVENTS {
-                        return Err(unavailable());
-                    }
-                }
+        let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+            if !raw.trim().is_empty() {
+                invalid_lines += 1;
             }
-            Err(_) if !raw.trim().is_empty() => invalid_lines += 1,
-            Err(_) => {}
+            continue;
+        };
+        if let Some(event) = event(&value, inode, offset) {
+            events.push(event);
+            if events.len() > MAX_HISTORY_EVENTS {
+                return Err(unavailable());
+            }
         }
     }
     if invalid_lines > 0 {
@@ -104,7 +128,7 @@ pub(super) fn read(root: &Path) -> Result<DashboardLedgerHistory, ProjectLedgerR
             "dashboard_history_incomplete",
         ));
     }
-    Ok(DashboardLedgerHistory { revision, events })
+    Ok(events)
 }
 
 fn event(value: &Value, inode: u64, offset: usize) -> Option<DashboardLedgerEvent> {
@@ -159,9 +183,7 @@ fn file_revision(metadata: &Metadata) -> String {
         .and_then(epoch_millis)
         .map(number_string)
         .unwrap_or_else(|| "null".into());
-    let changed = change_time_millis(metadata)
-        .map(number_string)
-        .unwrap_or_else(|| "null".into());
+    let changed = change_time(metadata);
     format!(
         "{}:{}:{modified}:{changed}",
         path_identity(metadata),
@@ -169,15 +191,22 @@ fn file_revision(metadata: &Metadata) -> String {
     )
 }
 
+/// The inode change time in epoch milliseconds.
 #[cfg(unix)]
-fn change_time_millis(metadata: &Metadata) -> Option<f64> {
+fn change_time(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
-    Some(metadata.ctime() as f64 * 1000.0 + metadata.ctime_nsec() as f64 / 1_000_000.0)
+    number_string(metadata.ctime() as f64 * 1000.0 + metadata.ctime_nsec() as f64 / 1_000_000.0)
 }
 
+/// The creation time in epoch milliseconds, or `null`.
 #[cfg(not(unix))]
-fn change_time_millis(metadata: &Metadata) -> Option<f64> {
-    metadata.created().ok().and_then(epoch_millis)
+fn change_time(metadata: &Metadata) -> String {
+    metadata
+        .created()
+        .ok()
+        .and_then(epoch_millis)
+        .map(number_string)
+        .unwrap_or_else(|| "null".into())
 }
 
 fn epoch_millis(value: std::time::SystemTime) -> Option<f64> {

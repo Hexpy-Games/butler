@@ -6,6 +6,8 @@ The input URLs, revisions, archive SHA-256 digests and digest provenance are in 
 
 The cache lives under `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps/`, outside the packaged application. Its key includes the recipe, lock, Python/Rust toolchain, macOS SDK and clang identity. A cache is adopted only with a matching completion manifest, archive digests, all static-library digests, the configured arm64/static/nonminimal build, the `ort-sys` dependency layout and no ORT dylib. Incomplete or changed caches fail closed. The build stage is renamed after completion; its `_deps` link is relative, and Cargo consumes the final libraries and protoc path. The retained CMake cache is not reused for incremental rebuilding. The producer forces static linking and keeps its Mach-O dependency closure check before copying a payload; it never copies an ORT dylib.
 
+Two cheap modes serve CI. `--fingerprint` prints the cache key without preparing anything, so a CI cache keyed by it is reused exactly when the script would reuse the cache. `--protoc-only` prepares just the pinned protoc under the same root; `cargo check`/`clippy` need protoc for the Lance protobuf build scripts but never link ORT, so they skip the ORT build.
+
 Run the existing producer on a macOS arm64 build host:
 
 ```sh

@@ -46,21 +46,7 @@ fn visit_modules(
         } else {
             file.parent().ok_or("module parent missing")?
         };
-        let override_path = child.attrs.iter().find_map(|attribute| {
-            if !attribute.path().is_ident("path") {
-                return None;
-            }
-            let Meta::NameValue(value) = &attribute.meta else {
-                return None;
-            };
-            let syn::Expr::Lit(value) = &value.value else {
-                return None;
-            };
-            let syn::Lit::Str(value) = &value.lit else {
-                return None;
-            };
-            Some(attribute_base.join(value.value()))
-        });
+        let override_path = path_attribute(&child.attrs).map(|value| attribute_base.join(value));
         if let Some((_, children)) = &child.content {
             let child_directory = override_path.as_deref().unwrap_or(&child_directory);
             visit_modules(
@@ -74,29 +60,14 @@ fn visit_modules(
             )?;
             continue;
         }
-        let child_file = if let Some(path) = override_path {
-            path
-        } else {
-            let flat = directory.join(format!("{}.rs", child.ident));
-            let nested = child_directory.join("mod.rs");
-            match (flat.is_file(), nested.is_file()) {
-                (true, false) => flat,
-                (false, true) => nested,
-                (false, false) => {
-                    return Err(format!(
-                        "missing source module {} in {}",
-                        path.join("::"),
-                        file.display()
-                    ));
-                }
-                (true, true) => {
-                    return Err(format!(
-                        "ambiguous source module {} in {}",
-                        path.join("::"),
-                        file.display()
-                    ));
-                }
-            }
+        let child_file = match override_path {
+            Some(path) => path,
+            None => module_file(
+                &directory.join(format!("{}.rs", child.ident)),
+                &child_directory.join("mod.rs"),
+                &path,
+                file,
+            )?,
         };
         let contents = read(&child_file)?;
         if test_only(&contents.attrs) {
@@ -132,6 +103,45 @@ fn visit_modules(
         items,
     });
     Ok(())
+}
+
+/// The value of a `#[path = ".."]` attribute.
+fn path_attribute(attributes: &[Attribute]) -> Option<String> {
+    attributes.iter().find_map(|attribute| {
+        if !attribute.path().is_ident("path") {
+            return None;
+        }
+        let Meta::NameValue(value) = &attribute.meta else {
+            return None;
+        };
+        let syn::Expr::Lit(value) = &value.value else {
+            return None;
+        };
+        let syn::Lit::Str(value) = &value.lit else {
+            return None;
+        };
+        Some(value.value())
+    })
+}
+
+/// Exactly one of `name.rs` and `name/mod.rs` must exist.
+fn module_file(
+    flat: &Path,
+    nested: &Path,
+    path: &[String],
+    file: &Path,
+) -> Result<PathBuf, String> {
+    let problem = match (flat.is_file(), nested.is_file()) {
+        (true, false) => return Ok(flat.to_owned()),
+        (false, true) => return Ok(nested.to_owned()),
+        (false, false) => "missing",
+        (true, true) => "ambiguous",
+    };
+    Err(format!(
+        "{problem} source module {} in {}",
+        path.join("::"),
+        file.display()
+    ))
 }
 
 fn canonical(path: &Path) -> Result<PathBuf, String> {

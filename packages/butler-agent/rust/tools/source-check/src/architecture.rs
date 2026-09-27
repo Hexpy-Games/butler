@@ -17,10 +17,45 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
         return Ok(false);
     }
     let idents: BTreeSet<_> = crates.iter().map(|(ident, _)| ident.clone()).collect();
+    let mut errors = BTreeSet::new();
+    let (modules, owner) = load_crates(&crates, &mut errors)?;
+    let domains: BTreeSet<_> = owner.keys().cloned().collect();
+    for domain in &domains {
+        if policy::dependencies(domain).is_none() {
+            errors.insert(format!("domain {domain} has no reviewed dependency policy"));
+        }
+    }
+    let graph = Graph {
+        root,
+        idents: &idents,
+        domains: &domains,
+        owner: &owner,
+        children: modules
+            .iter()
+            .filter(|module| module.path.len() == 2)
+            .map(|module| module.path.clone())
+            .collect(),
+    };
+    let edges = graph.edges(&modules, &mut errors);
+    for source in &domains {
+        let mut path = vec![source.clone()];
+        let mut visited = BTreeSet::new();
+        if cycle(source, source, &edges, &mut path, &mut visited) {
+            errors.insert(format!("domain dependency cycle: {}", path.join(" -> ")));
+        }
+    }
+    report(&modules, &domains, &edges, &errors);
+    Ok(!errors.is_empty())
+}
+
+/// Every module of every crate, and the crate that owns each top-level domain.
+fn load_crates(
+    crates: &[(String, PathBuf)],
+    errors: &mut BTreeSet<String>,
+) -> Result<(Vec<modules::Module>, BTreeMap<String, String>), String> {
     let mut modules = Vec::new();
     let mut owner = BTreeMap::<String, String>::new();
-    let mut errors = BTreeSet::new();
-    for (ident, entry) in &crates {
+    for (ident, entry) in crates {
         for module in modules::load(entry)? {
             if let Some(domain) = module.path.first()
                 && let Some(other) = owner.insert(domain.clone(), ident.clone())
@@ -33,75 +68,97 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
             modules.push(module);
         }
     }
-    let domains: BTreeSet<_> = owner.keys().cloned().collect();
-    let children: BTreeSet<_> = modules
-        .iter()
-        .filter(|module| module.path.len() == 2)
-        .map(|module| module.path.clone())
-        .collect();
-    for domain in &domains {
-        if policy::dependencies(domain).is_none() {
-            errors.insert(format!("domain {domain} has no reviewed dependency policy"));
-        }
-    }
-    let mut edges = Edges::new();
-    for module in &modules {
-        let references = references::References::collect(module, &idents);
-        let file = module
-            .file
-            .strip_prefix(root)
-            .unwrap_or(&module.file)
-            .display();
-        for error in references.errors {
-            errors.insert(format!("{file}: {error}"));
-        }
-        let Some(source) = module.path.first() else {
-            continue;
-        };
-        for path in references.paths {
-            let Some(target) = path.first() else {
+    Ok((modules, owner))
+}
+
+/// What the domain edges are checked against.
+struct Graph<'a> {
+    root: &'a Path,
+    idents: &'a BTreeSet<String>,
+    domains: &'a BTreeSet<String>,
+    owner: &'a BTreeMap<String, String>,
+    children: BTreeSet<Vec<String>>,
+}
+
+impl Graph<'_> {
+    /// The domain edges every module's references imply, recording reference
+    /// errors and edges the policy does not allow.
+    fn edges(&self, modules: &[modules::Module], errors: &mut BTreeSet<String>) -> Edges {
+        let mut edges = Edges::new();
+        for module in modules {
+            let references = references::References::collect(module, self.idents);
+            let file = module
+                .file
+                .strip_prefix(self.root)
+                .unwrap_or(&module.file)
+                .display()
+                .to_string();
+            for error in references.errors {
+                errors.insert(format!("{file}: {error}"));
+            }
+            let Some(source) = module.path.first() else {
                 continue;
             };
-            if source == target || !domains.contains(target) {
-                continue;
-            }
-            edges
-                .entry(source.clone())
-                .or_default()
-                .insert(target.clone());
-            // Edges between crates are declared, and enforced, by Cargo; the
-            // policy reviews the directions between domains of one crate.
-            let same_crate = owner.get(source) == owner.get(target);
-            if same_crate
-                && !policy::dependencies(source)
-                    .is_some_and(|allowed| allowed.contains(&target.as_str()))
-            {
-                errors.insert(format!(
-                    "{file}: dependency {source} -> {target} is not allowed"
-                ));
-            }
-            if path.len() > 1 && children.contains(&path[..2]) {
-                errors.insert(format!(
-                    "{file}: cross-domain child access {}; use the {target} facade",
-                    path.join("::")
-                ));
+            for path in references.paths {
+                self.edge(&file, source, &path, &mut edges, errors);
             }
         }
+        edges
     }
-    for source in &domains {
-        let mut path = vec![source.clone()];
-        let mut visited = BTreeSet::new();
-        if cycle(source, source, &edges, &mut path, &mut visited) {
-            errors.insert(format!("domain dependency cycle: {}", path.join(" -> ")));
+
+    fn edge(
+        &self,
+        file: &str,
+        source: &String,
+        path: &[String],
+        edges: &mut Edges,
+        errors: &mut BTreeSet<String>,
+    ) {
+        let Some(target) = path.first() else {
+            return;
+        };
+        if source == target || !self.domains.contains(target) {
+            return;
+        }
+        edges
+            .entry(source.clone())
+            .or_default()
+            .insert(target.clone());
+        // Edges between crates are declared, and enforced, by Cargo; the
+        // policy reviews the directions between domains of one crate.
+        let same_crate = self.owner.get(source) == self.owner.get(target);
+        if same_crate
+            && !policy::dependencies(source)
+                .is_some_and(|allowed| allowed.contains(&target.as_str()))
+        {
+            errors.insert(format!(
+                "{file}: dependency {source} -> {target} is not allowed"
+            ));
+        }
+        if let Some(child) = path.get(..2)
+            && self.children.contains(child)
+        {
+            errors.insert(format!(
+                "{file}: cross-domain child access {}; use the {target} facade",
+                path.join("::")
+            ));
         }
     }
-    for (source, targets) in &edges {
+}
+
+fn report(
+    modules: &[modules::Module],
+    domains: &BTreeSet<String>,
+    edges: &Edges,
+    errors: &BTreeSet<String>,
+) {
+    for (source, targets) in edges {
         println!(
             "DEPENDENCY {source} -> {}",
             targets.iter().cloned().collect::<Vec<_>>().join(", ")
         );
     }
-    for error in &errors {
+    for error in errors {
         eprintln!("ARCHITECTURE ERROR {error}");
     }
     println!(
@@ -110,7 +167,6 @@ pub(super) fn check(root: &Path) -> Result<bool, String> {
         domains.len(),
         errors.len()
     );
-    Ok(!errors.is_empty())
 }
 
 /// Every `crates/<name>/src/lib.rs`, keyed by the crate's Rust identifier.
