@@ -23,7 +23,6 @@ impl RouteHooks {
         store: std::sync::Arc<dyn TurnStore>,
         turn: &TurnRecord,
         claim: &StateExecutionClaim,
-        route: RouteState,
         route_digest: String,
     ) -> Self {
         Self {
@@ -33,7 +32,8 @@ impl RouteHooks {
                 expected_revision: turn.revision,
                 execution_fence: turn.execution_fence,
                 claim_id: claim.claim_id.clone(),
-                route: Some(route),
+                // Events persist a route only when they change it (fallback).
+                route: None,
             },
             route_digest,
             checkpoint_id: claim.checkpoint_id.clone(),
