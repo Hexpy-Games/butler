@@ -20,13 +20,17 @@ const NON_IMAGE_ACCEPT = [
   ".env", ".pdf", ".docx", ".xlsx", ".pptx", ".zip",
 ].join(",");
 
+/** Why the selected model takes no images: declared text-only, or capability unknown. */
+export type ModelImageBlock = "model" | "unknown";
+
 export interface ComposerImagePolicy {
   accepts: boolean;
+  blockedBy?: ModelImageBlock;
   mimeTypes: string[];
   maxBytes?: number;
 }
 
-export type ImageRefusal = "model" | "type" | "size";
+export type ImageRefusal = ModelImageBlock | "type" | "size";
 export type AttachmentPickerKind = "files" | "images";
 export interface AttachmentPickerFilter {
   filter: "all-files" | "non-image" | "images";
@@ -40,19 +44,22 @@ interface FileLike {
 }
 
 /**
- * Only an explicit `unsupported` blocks images. Unknown or absent metadata is
- * allowed: the catalog declares text-only models explicitly, most models carry
- * no image metadata, and the gateway's visual admission stays authoritative.
+ * Only an explicit `supported` allows images. `unsupported` blocks them, and
+ * unknown or absent metadata (or no resolved model) blocks them too, matching
+ * the gateway, which rejects images at admission when capability is unknown.
  */
 export function composerImagePolicy(model?: AppModelSummary | null): ComposerImagePolicy {
-  if (model?.image_input_support === "unsupported") return { accepts: false, mimeTypes: [] };
-  const catalogTypes = model?.image_input_support === "supported" && model.image_accepted_mime_types?.length
+  if (model?.image_input_support !== "supported") {
+    const blockedBy = model?.image_input_support === "unsupported" ? "model" : "unknown";
+    return { accepts: false, blockedBy, mimeTypes: [] };
+  }
+  const catalogTypes = model.image_accepted_mime_types?.length
     ? model.image_accepted_mime_types.map((type) => type.toLowerCase())
     : null;
   const mimeTypes = catalogTypes
     ? GATEWAY_IMAGE_MIME_TYPES.filter((type) => catalogTypes.includes(DERIVATIVE_MIME[type] ?? type))
     : GATEWAY_IMAGE_MIME_TYPES;
-  const maxBytes = model?.image_input_support === "supported" && (model.image_max_inline_bytes ?? 0) > 0
+  const maxBytes = (model.image_max_inline_bytes ?? 0) > 0
     ? model.image_max_inline_bytes
     : undefined;
   return { accepts: true, mimeTypes, ...(maxBytes ? { maxBytes } : {}) };
@@ -72,15 +79,15 @@ export function isImageFile(file: FileLike): boolean {
 export function imageRefusal(file: FileLike, policy: ComposerImagePolicy): ImageRefusal | null {
   const mime = imageMime(file);
   if (!mime) return null;
-  if (!policy.accepts) return "model";
+  if (!policy.accepts) return policy.blockedBy ?? "model";
   if (!policy.mimeTypes.includes(mime)) return "type";
   if (policy.maxBytes !== undefined && (file.size ?? 0) > policy.maxBytes) return "size";
   return null;
 }
 
 export function attachmentPickerFilter(kind: AttachmentPickerKind, policy: ComposerImagePolicy): AttachmentPickerFilter {
-  if (kind === "images") return { filter: "images", accept: policy.mimeTypes.join(",") };
-  return policy.accepts ? { filter: "all-files" } : { filter: "non-image", accept: NON_IMAGE_ACCEPT };
+  if (!policy.accepts) return { filter: "non-image", accept: NON_IMAGE_ACCEPT };
+  return kind === "images" ? { filter: "images", accept: policy.mimeTypes.join(",") } : { filter: "all-files" };
 }
 
 export const NO_BLOCKED_ATTACHMENTS: ReadonlyMap<string, ImageRefusal> = new Map();
@@ -112,5 +119,6 @@ export function blockedImageAttachmentIds(
 /** Few-word reason for tooltips and the refusal toast (owner copy rule: no explanation). */
 export function imageRefusalLabel(refusal: ImageRefusal): string {
   if (refusal === "model") return appCopy.composer.imagesUnsupported;
+  if (refusal === "unknown") return appCopy.composer.imageSupportUnknown;
   return refusal === "type" ? appCopy.composer.imageTypeUnsupported : appCopy.composer.imageTooLarge;
 }

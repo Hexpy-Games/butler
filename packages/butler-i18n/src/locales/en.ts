@@ -755,6 +755,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     attachFile: "Attach file",
     attachImage: "Attach image",
     imagesUnsupported: "Model doesn't accept images",
+    imageSupportUnknown: "Image support unknown for this model",
     imageTypeUnsupported: "Image type not supported",
     imageTooLarge: "Image too large",
     featureDrawer: "More options",

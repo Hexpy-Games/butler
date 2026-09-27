@@ -33,7 +33,9 @@ Use `descriptionPlacement="block"` when descriptions are explanatory sentence
 copy, such as permission help text. Keep the default inline placement for short
 metadata such as provider and context window.
 Pass `disabledReason` to disable an item the current context cannot use (for
-example "Attach image" with a text-only model). The item is `aria-disabled`
+example "Attach image" with a text-only model, or one whose image support is
+unknown, which gets its own reason such as "Image support unknown for this
+model"). The item is `aria-disabled`
 rather than natively disabled, so hover and keyboard focus still open a tooltip
 with the reason; clicks do nothing.
 

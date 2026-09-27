@@ -787,6 +787,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     attachFile: "파일 첨부",
     attachImage: "이미지 첨부",
     imagesUnsupported: "이미지 미지원 모델",
+    imageSupportUnknown: "이미지 지원 여부를 확인할 수 없는 모델",
     imageTypeUnsupported: "지원하지 않는 이미지 형식",
     imageTooLarge: "이미지 용량 초과",
     featureDrawer: "추가 기능",

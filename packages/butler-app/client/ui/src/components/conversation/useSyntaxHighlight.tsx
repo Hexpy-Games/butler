@@ -1,7 +1,10 @@
 import { createElement, useEffect, useState, type ReactNode } from "react";
-import type { ElementContent, Root } from "hast";
 
 type Lowlight = typeof import("./syntaxHighlighter").lowlight;
+// hast types come through lowlight: "hast" is not a direct dependency, so a
+// bare import does not resolve under bun's isolated install.
+type Root = ReturnType<Lowlight["highlight"]>;
+type ElementContent = Exclude<Root["children"][number], { type: "doctype" }>;
 
 let lowlightPromise: Promise<Lowlight> | null = null;
 
