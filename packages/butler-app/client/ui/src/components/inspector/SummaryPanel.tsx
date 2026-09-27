@@ -102,7 +102,7 @@ function workspaceValue(
     return appCopy.interfacePanels.worktree;
   }
   if (branch.workspace_binding === "project") {
-    return appCopy.settings.options.local;
+    return appCopy.composer.workspaceLocal;
   }
   if (branch.workspace_mode === "none") return appCopy.interfacePanels.noWorkspace;
   if (branch.workspace_mode === "folder") return appCopy.interfacePanels.projectFolder;

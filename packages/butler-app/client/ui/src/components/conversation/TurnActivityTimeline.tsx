@@ -113,13 +113,13 @@ function ActivityBlock({
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
           {sameActivityText(activity.title, activity.summary) ? null : (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel}{activity.summary}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.contentLabel} {activity.summary}</Typo.Caption>
           )}
           {activity.rationale ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel}{activity.rationale}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.intentLabel} {activity.rationale}</Typo.Caption>
           ) : null}
           {activity.nextStep ? (
-            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel}{activity.nextStep}</Typo.Caption>
+            <Typo.Caption as="span">{appCopy.interfaceDetails.nextLabel} {activity.nextStep}</Typo.Caption>
           ) : null}
         </Stack>
       }
